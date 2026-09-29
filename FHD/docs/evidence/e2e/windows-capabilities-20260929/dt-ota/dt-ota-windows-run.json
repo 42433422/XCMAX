@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "dt-ota",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 dt-ota 对应的 Windows 客户端页面 /settings",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「设置 - XCAGI」，主标题「系统设置」，地址 /settings。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 系统设置 SUNBIRD 副窗 ◈ 工作区 SUNBIRD 登录后同步修茈市场 登录 系统设置 角色与权限 管理本企业的角色、权限和用户分配 模型服务 钱包 · 套餐 模型服务 余",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/desktop/status=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=213321 mp4=193048 title=设置 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-ota/dt-ota.log",
+    "sha256": "bcec072f044da2a62ff4e345cb9d5b7077b626db1331b179a16791378dab61e7",
+    "bytes": 2914
+  },
+  "media": [
+    {
+      "feature": "dt-ota",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-ota/dt-ota.png",
+      "sha256": "3d0daf3fc6889a58065c291d695231da72fe197b28cb5648ccdfd93044d074d5",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「设置 - XCAGI」，主标题「系统设置」，地址 /settings。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 系统设置 SUNBIRD 副窗 ◈ 工作区 SUNBIRD 登录后同步修茈市场 登录 系统设置 角色与权限 管理本企业的角色、权限和用户分配 模型服务 钱包 · 套餐 模型服务 余",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "dt-ota",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-ota/dt-ota.mp4",
+      "sha256": "9d23315af1124b25e2c0a490d6295dde80757db1ab32f77e4d83bc0a65db5a21",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「设置 - XCAGI」，主标题「系统设置」，地址 /settings。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 系统设置 SUNBIRD 副窗 ◈ 工作区 SUNBIRD 登录后同步修茈市场 登录 系统设置 角色与权限 管理本企业的角色、权限和用户分配 模型服务 钱包 · 套餐 模型服务 余",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

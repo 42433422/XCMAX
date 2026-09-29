@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "erp-print-agent",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 erp-print-agent 对应的 Windows 客户端页面 /mod/xcagi-erp-domain-bridge/printer-list",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「打印机列表 - XCAGI」，主标题「打印机列表」，地址 /mod/xcagi-erp-domain-bridge/printer-list。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 打印机列表 SUNBIRD 副窗 ◈ 工作区 打印机列表 刷新 打印机分类 发货单打印机 未设置（自动识别） 状态：- 标签打印机 未设置（自动识别） 状态：- 保存自定",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=608722 mp4=145739 title=打印机列表 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-print-agent/erp-print-agent.log",
+    "sha256": "efdb3541624223286371f87938b2f1791233a1a6f073b7c5c24e73747f584b4c",
+    "bytes": 1345
+  },
+  "media": [
+    {
+      "feature": "erp-print-agent",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-print-agent/erp-print-agent.png",
+      "sha256": "f1670dc9ddf710d979969d9c6d868e90732f68a5a3424e9e5c6b5fc117d5a4df",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「打印机列表 - XCAGI」，主标题「打印机列表」，地址 /mod/xcagi-erp-domain-bridge/printer-list。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 打印机列表 SUNBIRD 副窗 ◈ 工作区 打印机列表 刷新 打印机分类 发货单打印机 未设置（自动识别） 状态：- 标签打印机 未设置（自动识别） 状态：- 保存自定",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-print-agent",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-print-agent/erp-print-agent.mp4",
+      "sha256": "ab32f4e4e33fe99a67466f47e87a6e0eb5f67fa046ee3dde951a3e53fd785d98",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「打印机列表 - XCAGI」，主标题「打印机列表」，地址 /mod/xcagi-erp-domain-bridge/printer-list。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 打印机列表 SUNBIRD 副窗 ◈ 工作区 打印机列表 刷新 打印机分类 发货单打印机 未设置（自动识别） 状态：- 标签打印机 未设置（自动识别） 状态：- 保存自定",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

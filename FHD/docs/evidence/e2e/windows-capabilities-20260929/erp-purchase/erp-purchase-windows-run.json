@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "erp-purchase",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 erp-purchase 对应的 Windows 客户端页面 /purchase",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「耗材申领 - XCAGI」，主标题「耗材申领」，地址 /purchase。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 耗材申领 SUNBIRD 副窗 ◈ 工作区 采购管理 新建采购订单 全部状态 草稿 已审核 部分入库 已完成 已取消 全部供应商 ACC202609271717-供应商 ",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/purchase/summary=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=709953 mp4=206268 title=耗材申领 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-purchase/erp-purchase.log",
+    "sha256": "3b763e71c183e105749b77fa3f8d1ac1caf58fe3db7ebfa08ee3cf7836eb4ef4",
+    "bytes": 1661
+  },
+  "media": [
+    {
+      "feature": "erp-purchase",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-purchase/erp-purchase.png",
+      "sha256": "bc2552e4c9684c1102c96f142f8d6e412f0978c5424d21b47e8fd27c4f5a64a1",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「耗材申领 - XCAGI」，主标题「耗材申领」，地址 /purchase。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 耗材申领 SUNBIRD 副窗 ◈ 工作区 采购管理 新建采购订单 全部状态 草稿 已审核 部分入库 已完成 已取消 全部供应商 ACC202609271717-供应商 ",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-purchase",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-purchase/erp-purchase.mp4",
+      "sha256": "9ca08154332fbc13436ca98a0f6e7f8a741d844808647230888fd299e5ab1483",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「耗材申领 - XCAGI」，主标题「耗材申领」，地址 /purchase。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 耗材申领 SUNBIRD 副窗 ◈ 工作区 采购管理 新建采购订单 全部状态 草稿 已审核 部分入库 已完成 已取消 全部供应商 ACC202609271717-供应商 ",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

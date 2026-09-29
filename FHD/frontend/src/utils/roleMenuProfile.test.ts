@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile'
+import { buildRoleMenuProfile, canShowCoreMenuKey, tenantScopedBusinessPath } from '@/utils/roleMenuProfile'
 
 describe('roleMenuProfile', () => {
   it('keeps enterprise users on the generic host menu without an industry mod', () => {
@@ -44,11 +44,15 @@ describe('roleMenuProfile', () => {
     expect(canShowCoreMenuKey(buildRoleMenuProfile({ ...member, permissions: ['etl.read'] }), 'business-docking')).toBe(true)
   })
 
-  it('hides unscoped host business entries from an enterprise founder with a tenant', () => {
+  it('keeps industry business entries visible for an enterprise founder with a tenant', () => {
     const profile = buildRoleMenuProfile({ accountKind: 'enterprise', marketIsEnterprise: true, tenantId: 7 }, true)
-    expect(canShowCoreMenuKey(profile, 'products')).toBe(false)
-    expect(canShowCoreMenuKey(profile, 'printer-list')).toBe(false)
+    expect(canShowCoreMenuKey(profile, 'products')).toBe(true)
+    expect(canShowCoreMenuKey(profile, 'orders')).toBe(true)
+    expect(canShowCoreMenuKey(profile, 'printer-list')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'business-docking')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'mod-store')).toBe(true)
+    expect(tenantScopedBusinessPath('orders')).toBe('/mod/xcagi-erp-domain-bridge/orders')
+    expect(tenantScopedBusinessPath('tools')).toBe('/mod/xcagi-office-employee-pack-bridge/tools')
+    expect(tenantScopedBusinessPath('chat')).toBeNull()
   })
 })

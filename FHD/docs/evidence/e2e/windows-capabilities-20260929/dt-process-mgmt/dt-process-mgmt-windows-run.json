@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "dt-process-mgmt",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 dt-process-mgmt 对应的 Windows 客户端页面 /desktop-runtime",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「桌面运行时 - XCAGI」，主标题「桌面运行时」，地址 /desktop-runtime。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 桌面运行时 SUNBIRD 副窗 ◈ 工作区 桌面运行时 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 刷新状态检查桌面更新 运行状态 桌面模式 是",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/desktop/status=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=296212 mp4=203397 title=桌面运行时 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-process-mgmt/dt-process-mgmt.log",
+    "sha256": "ffa5de839de0ede1bb7d3d9cdaf89f6ae5f287d19a559652b27438741140aec3",
+    "bytes": 1576
+  },
+  "media": [
+    {
+      "feature": "dt-process-mgmt",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-process-mgmt/dt-process-mgmt.png",
+      "sha256": "409d830b6843d24d3507208cc33b6f237473bad79e5079910ba7f780694c920d",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「桌面运行时 - XCAGI」，主标题「桌面运行时」，地址 /desktop-runtime。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 桌面运行时 SUNBIRD 副窗 ◈ 工作区 桌面运行时 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 刷新状态检查桌面更新 运行状态 桌面模式 是",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "dt-process-mgmt",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-process-mgmt/dt-process-mgmt.mp4",
+      "sha256": "b7d7c12912e42515e4d861e379dd4286163636a0b0911eaca757a3530778f2cb",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「桌面运行时 - XCAGI」，主标题「桌面运行时」，地址 /desktop-runtime。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 桌面运行时 SUNBIRD 副窗 ◈ 工作区 桌面运行时 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 刷新状态检查桌面更新 运行状态 桌面模式 是",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

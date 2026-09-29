@@ -1,0 +1,10 @@
+feature=mods-webhook
+at=2026-09-29T11:09:57.499Z
+route=/settings
+landed=/settings
+title=设置 - XCAGI
+heading=系统设置
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 系统设置 SUNBIRD 副窗 ◈ 工作区 S 更换 SUNBIRD SUNBIRD 退出登录 系统设置 个人主页 SUNBIRD · 头像与资料 展示名称 邮箱 登录名 SUNBIRD 由修茈市场/本机账号绑定，此处不可修改。 保存资料 角色与权限 管理本企业的角色、权限和用户分配 模型服务 钱包 · 套餐 模型服务 余额与充值走修茈市场；本页汇总展示，支付在 钱包 / 套餐 完成。 打开修茈钱包 会员套餐 刷新 账户余额 ¥ 账户余额（本机汇总） 修茈钱包 已同步修茈市场钱包与会员信息（刚刚更新） ¥ 97.06 CNY 会员 普通用户 累计权益参考 — 经验 99 BYOK 未开通 快捷充值（跳转修茈钱包） 修茈会员套餐（10 档，点击跳转购买） 模型支持 21 家供应商 语言大模型124 · 视觉7 · 图像生成8 · 视频生成11 · 语音4 · 向量嵌入8 AI 意图能力 饰品包装行业 · 天 基础意图 已接入 考勤与单据通用意图：创建、查询、修改、导出、审批 考勤 查询 导出 请假 加班 修改 创建 统计 行业特定 已接入 当前组织的考勤制度用语与业务词汇 录考勤 登记出勤 排班 生成考勤单 天 考勤表 工时单 标签 员工识别 已接入 工号、姓名、部门等员工信息的识别与解析 工号 姓名 部门 岗位 职级 工时解析 已接入 出勤天数、工时小时数及中文数字的智能解析 天 小时 半天 次 二十三 一十 组织识别 已接入 部门名称、上下级关系与办公地点等信息的识别 部门 科室 班组 分公司 联系人 拟人 Persy 系统 业务管家 · 互动 0 业务管家 ENFJ 互动 0 轮 亲切度 50 详细度 50 主动度 50 结构度 50 触发推断 全部 待确认 已确认 已拒绝 已删除 全部类型 偏好 实体 任务 刷新 偏好 实体 任务 写入候选 【MemoryV2】无已确认记忆。 暂无记忆 基本设置 修茈 · 安全模式 侧栏样式 Office（浅色顶栏与底栏） 深海军蓝 深岩灰 深靛紫 深冷灰 企业品牌名 保存 助手名称 界面语言 简体中文 English 系统名称 SUNBIRD 交付工作台 数据存储 本地数据库（SQLite） 数据库路径 C:\Users\97088\AppData\Roaming\XCAGI\data\xcagi.db AI 部署模式 绝对安全模式（1级） 安全模式（2级） 性能模式（3级） 网络与性能 2级 · 解放 AI 能力，业务数据仍保留在本机 SQLite。 python scripts/migrate_sqlite_to_postgr

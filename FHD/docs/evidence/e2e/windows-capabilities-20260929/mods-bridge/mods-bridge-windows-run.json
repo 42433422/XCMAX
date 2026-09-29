@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "mods-bridge",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 mods-bridge 对应的 Windows 客户端页面 /mod-store",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「能力库 - XCAGI」，主标题「能力库」，地址 /mod-store。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 能力库 SUNBIRD 副窗 ◈ 工作区 返回 AI 生态 XCAGI · 能力库 AI 员工市场 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/mods=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=178990 mp4=171174 title=能力库 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-bridge/mods-bridge.log",
+    "sha256": "d50a8f71d338dc3c981a14103a213373d02ae9a17c56142e1fdde1cf0afb99ac",
+    "bytes": 1659
+  },
+  "media": [
+    {
+      "feature": "mods-bridge",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-bridge/mods-bridge.png",
+      "sha256": "b9731a67010fa78451f7b1db2b1900565dfb4cbdb37753131325b24dc90376e3",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「能力库 - XCAGI」，主标题「能力库」，地址 /mod-store。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 能力库 SUNBIRD 副窗 ◈ 工作区 返回 AI 生态 XCAGI · 能力库 AI 员工市场 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "mods-bridge",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-bridge/mods-bridge.mp4",
+      "sha256": "bf6d01da9f3cf206850f11d5c5d0141d11c1183466b030ccf8bb07ab450dc7c3",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「能力库 - XCAGI」，主标题「能力库」，地址 /mod-store。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 能力库 SUNBIRD 副窗 ◈ 工作区 返回 AI 生态 XCAGI · 能力库 AI 员工市场 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}
