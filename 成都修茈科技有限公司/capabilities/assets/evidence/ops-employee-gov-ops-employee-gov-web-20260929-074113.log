@@ -1,0 +1,8 @@
+[07:41:13] feature=ops-employee-gov base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-employee-gov
+[07:41:25] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:41:30] case G1: passed - 创始人自治七维策略快照真实读取
+[07:41:35] case G2: passed - 企业员工分组与成员数真实读取
+[07:41:41] case G3: passed - 本地编制在岗健康真实读取
+[07:41:45] case G4: passed - 无会话访问自治快照被拒（负例）
+[07:41:46] video: ops-employee-gov-web-20260929-074113.webm (1979977 bytes)
+[07:41:46] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-employee-gov/log/ops-employee-gov-web-20260929-074113.log

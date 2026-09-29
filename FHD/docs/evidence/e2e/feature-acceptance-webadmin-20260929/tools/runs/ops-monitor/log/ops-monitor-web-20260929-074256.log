@@ -1,0 +1,8 @@
+[07:42:56] feature=ops-monitor base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-monitor
+[07:43:08] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:43:19] case M1: passed - 系统健康总览与运行时组件真实读取
+[07:43:25] case M2: passed - 逐组件健康明细（数据库/Redis/AI 服务）真实读取
+[07:43:31] case M3: passed - NeuroBus 运行统计真实读取
+[07:43:34] case M4: passed - 无会话访问健康接口被拒（负例）
+[07:43:34] video: ops-monitor-web-20260929-074256.webm (2441492 bytes)
+[07:43:34] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-monitor/log/ops-monitor-web-20260929-074256.log

@@ -1,0 +1,10 @@
+[06:28:39] feature=ai-vector-rag base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag
+[06:28:51] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:28:51] case V1: passed - RAG 引擎与向量后端健康
+[06:28:51] case V2: passed - 知识入库真实写入切片
+[06:28:51] case V3: passed - 语义召回命中本轮入库内容
+[06:28:51] case V4: passed - 缺 query 被拒（负例/边界）
+[06:28:51] case V5: passed - Excel 向量查询缺 index_id 被拒（负例/边界）
+[06:28:53] case V6: passed - 全知知识网络页真实渲染
+[06:28:54] video: ai-vector-rag-web-20260929-062839.webm (689855 bytes)
+[06:28:54] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/log/ai-vector-rag-web-20260929-062839.log

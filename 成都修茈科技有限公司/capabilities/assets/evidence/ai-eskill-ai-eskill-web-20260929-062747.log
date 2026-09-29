@@ -1,0 +1,10 @@
+[06:27:47] feature=ai-eskill base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-eskill
+[06:27:59] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:27:59] case E1: passed - 工作流员工编制目录真实读取
+[06:27:59] case E2: passed - 工作流可视化桥状态
+[06:27:59] case E3: passed - ESkill 执行路由真实执行
+[06:27:59] case E4: passed - 空请求被拒（负例/边界）
+[06:27:59] case E5: passed - 工作流定义 REST 探面（如实记录注册状态）
+[06:28:01] case E6: passed - 流程可视化页面真实渲染
+[06:28:02] video: ai-eskill-web-20260929-062747.webm (950179 bytes)
+[06:28:02] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-eskill/log/ai-eskill-web-20260929-062747.log

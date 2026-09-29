@@ -1,0 +1,379 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "dt-mac-control",
+  "platform": "macos",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-094829",
+  "generated_at": "2026-09-29 09:48:54",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 6,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。",
+    "本轮真实运行两端：企业端（FHD，web 模式）http://127.0.0.1:42423；市场端（MODstore，modstore_server）http://127.0.0.1:8790。双方 /api/health 自报 git_sha 均为 8d1fd8f686884c7fc637ef2fa3e3e048a0074bec。",
+    "市场端以 MODSTORE_MAC_CONTROL_ENABLED=1 与 XCMAX_FACTORY_CAPABILITY_TOKEN 启用 mac-control；机队来源为 para:/api/devices（本机未接真实 para，故 devices 为空数组，freshness=missing、error=not_observed，均为市场真实应答，未做任何伪造）。",
+    "企业端会话绑定到本机市场管理员（account_kind=admin + market_is_admin=true）后才放行代理路由；未绑定时返回 401「尚未绑定修茈服务器账号」，即代理通道本身是 fail-closed 的。",
+    "本轮在市场侧真实下达了 3 个 review 任务（D2/D3/D4 各一个，request_key 以本轮时间戳唯一化），其中 D4 的任务经代理取消后其 state 由 queued 变为非 queued。"
+  ],
+  "visible_content": "真实浏览器在企业端管理控制台走通 macOS 桌面控制代理通道：经代理读取真实市场 mac-control 的机队（controller=mac）、任务列表与事实数据；在市场侧真实下达一个 review 任务后，经代理读回该任务详情并取消，再读回确认状态变化；并含未认证与不存在任务的拒绝路径。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "healthy",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 1896,
+        "processed": 1896,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.mine",
+                "error.occurred",
+                "evolution.export",
+                "evolution.reflect",
+                "evolution.index",
+                "evolution.search"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/dt-mac-control/dt-mac-control-macos-identity.json"
+  },
+  "media": [
+    {
+      "feature": "dt-mac-control",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-mac-control/shot/00-login-form.png",
+      "sha256": "8ddfd873dd2dc0d9761112b2b0a00ae98d8e7e8bc2fdc34407870a5e7806d740",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "dt-mac-control",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-mac-control/shot/D1-mac-control-fleet.png",
+      "sha256": "c79e3f574d7e2dde663746b911770172b56db23eac2d832e937995f93e8375af",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染代理返回的真实机队 JSON：success=true、enabled=true、controller=\"mac\"、source=\"para:/api/devices\"、freshness 与 devices 数组。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "dt-mac-control",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-mac-control/shot/D2-mac-control-create-list.png",
+      "sha256": "aa73302f4c49e7aae1dfc6f97c01ae9cd8fbd37a4f0bee21fa23f6ba91495772",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染市场侧真实建任务（202 queued）与经代理读回的任务列表 JSON（含本轮新建任务 id）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "dt-mac-control",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-mac-control/shot/D3-mac-control-detail.png",
+      "sha256": "e2fed82dbb1d2e9ba5704ee75ff806710d02e09bc077479ce912346a4f785f98",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染经代理读回的任务详情 JSON（id、state、request.message/target/tool/mode 与本轮下达内容一致）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "dt-mac-control",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-mac-control/shot/D4-mac-control-cancel.png",
+      "sha256": "8a3f58988c8c1049d2d12e3a850d2169b2c7e13062a231b3064f0c42aed07464",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染经代理取消任务后的真实响应与随后读回的任务状态（state 已非 queued）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "dt-mac-control",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-mac-control/shot/D5-mac-control-facts.png",
+      "sha256": "8a3f58988c8c1049d2d12e3a850d2169b2c7e13062a231b3064f0c42aed07464",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染代理返回的真实事实数据 JSON：source=\"customer_service_tickets+standard_delivery_api\"、observed_at、tickets/deliveries 数组。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "dt-mac-control",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-mac-control/shot/D6-mac-control-negative.png",
+      "sha256": "8a3f58988c8c1049d2d12e3a850d2169b2c7e13062a231b3064f0c42aed07464",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染不存在任务（404 任务不存在）与无会话访问（401）的真实拒绝响应。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "dt-mac-control",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-mac-control/video/dt-mac-control-macos-20260929-094829.webm",
+      "sha256": "91010b98d35ce28d8badb6f9035822a41ddc6aa1b86a4463eb6cf438305eb9d5",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → 代理读取机队 → 市场侧建任务并经代理读回 → 详情 → 取消 → 事实数据 → 负例。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "D1",
+      "title": "经代理读取真实市场 mac-control 机队",
+      "input": "企业端管理控制台（web 模式，已绑定市场管理员）与已建立的管理端会话。",
+      "actions": "在真实浏览器页面上下文 fetch GET /api/xcmax/admin/mac-control/fleet。",
+      "expected": "HTTP 200；success=true、enabled=true、controller=mac，devices 为数组（来自市场真实应答）。",
+      "observed": "{\"http_status\": 200, \"success\": true, \"enabled\": true, \"controller\": \"mac\", \"primary_device_id\": \"local-mac-probe\", \"source\": \"para:/api/devices\", \"freshness\": \"missing\", \"devices_count\": 0}",
+      "result": "passed"
+    },
+    {
+      "id": "D2",
+      "title": "市场侧真实下达任务后，经代理在任务列表读回",
+      "input": "市场端（MODstore，127.0.0.1:8790）管理员会话与本轮唯一 request_key。",
+      "actions": "先在市场侧 POST /api/admin/mac-control/tasks 真实建任务，再经企业端代理 GET /tasks 读列表。",
+      "expected": "市场建任务返回 202 且拿到任务 id；代理任务列表 200 且包含本轮新建的任务 id。",
+      "observed": "{\"market_login_status\": 200, \"create_status\": 202, \"task_id\": \"840092b9558b48ddb65a2e13e00d8e25\", \"state\": \"queued\", \"target\": \"mac\", \"tool\": \"codex\", \"mode\": \"review\", \"message\": \"验收：macOS 控制代理通道真机贯通（review 模式，只读检查）\", \"enterprise_list_http\": 200, \"enterprise_task_count\": 5, \"created_task_visible_via_proxy\": true, \"enterprise_list_source\": \"mac_control_tasks\"}",
+      "result": "passed"
+    },
+    {
+      "id": "D3",
+      "title": "经代理读取任务详情且内容与本轮下达一致",
+      "input": "同 D2。",
+      "actions": "经代理 fetch GET /tasks/{task_id}?after=0，比对任务 id 与 request.message。",
+      "expected": "HTTP 200；返回的任务 id 相同，request.message 与本轮市场侧下达的文案一致。",
+      "observed": "{\"task_id\": \"2e81e9f5a6d24719a7f2b1e6f830c3bd\", \"detail_http\": 200, \"detail_state\": \"queued\", \"detail_message\": \"验收：macOS 控制代理通道真机贯通（review 模式，只读检查）\", \"detail_target\": \"mac\", \"events_count\": null, \"raw_keys\": [\"attempt_id\", \"created_at\", \"delivery\", \"delivery_trace\", \"device_id\", \"execution\", \"id\", \"para_task_id\", \"reason\", \"request\", \"state\", \"updated_at\"]}",
+      "result": "passed"
+    },
+    {
+      "id": "D4",
+      "title": "经代理取消任务并读回状态变化",
+      "input": "同 D2。",
+      "actions": "经代理 POST /tasks/{task_id}/cancel（带 CSRF 头），随后再次 fetch 任务详情。",
+      "expected": "取消返回 200/202；随后详情中任务 state 不再为 queued（市场真实状态已变更）。",
+      "observed": "{\"task_id\": \"47f3db592c6d46499cddc0a338e2a5e0\", \"cancel_http\": 200, \"cancel_body\": \"{'success': True, 'task': {'id': '47f3db592c6d46499cddc0a338e2a5e0', 'state': 'cancelled', 'reason': '', 'request': {'customer_id': None, 'message': '验收：macOS 控制代理通道真机贯通（review 模式，只读检查）', 'mode': 'rev\", \"state_after_cancel\": \"cancelled\", \"detail_after_cancel_http\": 200, \"cancel_reason\": \"\"}",
+      "result": "passed"
+    },
+    {
+      "id": "D5",
+      "title": "经代理读取真实事实数据",
+      "input": "已建立的管理端会话。",
+      "actions": "fetch GET /api/xcmax/admin/mac-control/facts。",
+      "expected": "HTTP 200；success=true，返回真实 source 与 tickets/deliveries 数组。",
+      "observed": "{\"http_status\": 200, \"success\": true, \"source\": \"customer_service_tickets+standard_delivery_api\", \"observed_at\": 1790646532.120932, \"customer_id\": null, \"tickets_count\": 0, \"deliveries_count\": 0}",
+      "result": "passed"
+    },
+    {
+      "id": "D6",
+      "title": "不存在任务与未认证会话均被拒（负例）",
+      "input": "不存在的任务 id；全新的无会话浏览器上下文。",
+      "actions": "经代理读取/取消不存在的任务；在无会话上下文 fetch fleet/tasks/facts。",
+      "expected": "不存在任务返回 404（转发到市场真实「任务不存在」）；无会话三个接口均 401/403。",
+      "observed": "{\"nonexistent_task\": {\"status\": 404, \"body\": \"{'success': False, 'message': '任务不存在', 'data': {'detail': '任务不存在'}}\"}, \"cancel_nonexistent_task\": {\"status\": 404, \"body\": \"{'success': False, 'message': '任务不存在', 'data': {'detail': '任务不存在'}}\"}, \"unauthenticated\": {\"fleet\": 401, \"tasks\": 401, \"facts\": 401}}",
+      "result": "passed"
+    }
+  ]
+}

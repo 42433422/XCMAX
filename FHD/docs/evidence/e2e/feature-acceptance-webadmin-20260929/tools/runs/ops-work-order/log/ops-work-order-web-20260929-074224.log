@@ -1,0 +1,8 @@
+[07:42:24] feature=ops-work-order base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-work-order
+[07:42:36] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:42:39] case W1: passed - 共享工单列表真实读取
+[07:42:46] case W2: passed - 非法 limit 参数被参数校验拒绝（负例）
+[07:42:52] case W3: passed - 非 Owner 提交工单决策被越权拒绝（负例）
+[07:42:56] case W4: passed - 无会话访问工单列表被拒（负例）
+[07:42:56] video: ops-work-order-web-20260929-074224.webm (2026663 bytes)
+[07:42:56] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-work-order/log/ops-work-order-web-20260929-074224.log

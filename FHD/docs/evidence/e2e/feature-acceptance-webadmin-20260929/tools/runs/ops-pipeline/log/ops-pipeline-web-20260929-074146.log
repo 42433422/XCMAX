@@ -1,0 +1,8 @@
+[07:41:46] feature=ops-pipeline base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-pipeline
+[07:41:57] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:42:03] case P1: passed - 时间轨运行状态与节点覆盖真实读取
+[07:42:08] case P2: passed - 时间轨编排图（P 相节点）真实读取
+[07:42:20] case P3: passed - 事件轨路由与运营线 O1–O10 步骤健康真实读取
+[07:42:24] case P4: passed - 非法查询参数被参数校验拒绝（负例）
+[07:42:24] video: ops-pipeline-web-20260929-074146.webm (2567674 bytes)
+[07:42:24] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-pipeline/log/ops-pipeline-web-20260929-074146.log

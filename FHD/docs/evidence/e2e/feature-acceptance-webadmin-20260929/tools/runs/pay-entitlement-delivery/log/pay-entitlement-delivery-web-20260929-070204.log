@@ -1,0 +1,8 @@
+[07:02:04] feature=pay-entitlement-delivery base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement-delivery
+[07:02:15] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:02:22] case PD1: passed - 「客户交付中心」页真实渲染（权益开通与交付口径）
+[07:02:22] case PD2: passed - 套餐推荐档位与账号等级随预算区间派生
+[07:02:22] case PD3: passed - 非法/未知预算回退默认档（边界）
+[07:02:23] case PD4: passed - 用户已授权 Mod（资产交付清单）未绑定市场账号被拒
+[07:02:23] video: pay-entitlement-delivery-web-20260929-070204.webm (1370818 bytes)
+[07:02:23] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement-delivery/log/pay-entitlement-delivery-web-20260929-070204.log

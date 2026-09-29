@@ -1,0 +1,360 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "pay-refund",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-070024",
+  "generated_at": "2026-09-29 07:00:43",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 5,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端完成：管理员登录 → 业务审批页真实渲染 → 退款/对账审核调度状态真实读取（auto_confirm_enabled=false，不做自动确认）→ 退款申请缺少 out_trade_no 被校验拒绝（400）→ 退款查询因支付服务不可用被如实拒绝（success=false）→ 待审退款列表与退款审核入口在未绑定市场账号时被拒（401）。全程仅查询/校验/被拒，无任何真实资金动作。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 47410,
+        "processed": 47371,
+        "errors": 0,
+        "dropped": 39,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 3,
+            "max_cache_size": 1000,
+            "hits": 8,
+            "misses": 3,
+            "hit_rate": 0.7272727272727273,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "error.occurred",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "evolution.search"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/pay-refund/pay-refund-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "pay-refund",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-refund/shot/00-login-form.png",
+      "sha256": "9595ac74f775d10826c297d4805ed442657e48c368668f6d747c716a4fa75583",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号 admin、密码为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-refund",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-refund/shot/PF1-approval-hub.png",
+      "sha256": "3c4c1820c9efb8eb1f09797e3b5a82eff998eccf9785add144fdd1539ad01b4e",
+      "visual_review": "accepted",
+      "visible_result": "「自治审批中心」页（产品问题工单审批）：说明「共享 Work Order 与完整闸门时间线；每 30 秒刷新」，含 更新时间与「刷新工单」按钮，主体显示「当前没有共享工单」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-refund",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-refund/shot/PF2-refund-application-validation.png",
+      "sha256": "91d20a4543f2fb5bff90fbf9f36f45f285fbe33f4634f33fa12cbb7b2a444b79",
+      "visual_review": "accepted",
+      "visible_result": "本工具在真实浏览器中渲染的本轮响应：POST /api/model-payment/refund 空 body 返回 400，success=false，message=out_trade_no 必填。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-refund",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-refund/shot/PF3-refund-query-rejected.png",
+      "sha256": "aad1fea3951d5c9b5c2245cfc313686683c8c38b6d294eb98e07e0f65a2e874f",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/model-payment/refund/query?out_trade_no=PF-PROBE-NOT-EXIST-0001 返回 200，success=false，message=支付宝服务暂时不可用（纯查询，无资金动作）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-refund",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-refund/shot/PF4-pending-refunds-denied.png",
+      "sha256": "b57b47514781314e4fb5148e7aa2c821f924890c5e1e6ed2d6ab5a4b5b39dc5b",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/xcmax/admin/market/commerce/refunds/pending 返回 401，success=false，message=尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-refund",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-refund/shot/PF5-refund-review-denied.png",
+      "sha256": "9a36fee9a92e2557aa7e67906d9096102e7e524bc0d9fd9ea869bb7c314a082e",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：POST /api/xcmax/admin/market/commerce/refunds/999999/review 返回 401，success=false，同一未绑定市场账号消息（审核未执行）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-refund",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-refund/video/pay-refund-web-20260929-070024.webm",
+      "sha256": "371f4ac4cf6a658e109ac48b303fad33fe61107940661f2fb3ce6165a569a1ba",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，17.72s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 审批中心页渲染 → 审核调度状态读取 → 退款申请缺参 400 → 退款查询被拒 → 待审列表/审核入口 401。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "PF1",
+      "title": "退款/对账审核调度状态真实读取，且审批页真实渲染",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/operations-line/reconciliation/status；随后导航 /admin/autonomy-approval-hub。",
+      "expected": "200 且 data.success=true、auto_confirm_enabled=false、含 last_run 字段；审批中心页渲染成功。",
+      "observed": "{\"status\": 200, \"auto_confirm_enabled\": false, \"last_run\": null, \"ui_has_approval_hub\": true, \"ui_url\": \"http://127.0.0.1:42423/admin/autonomy-approval-hub\"}",
+      "result": "passed"
+    },
+    {
+      "id": "PF2",
+      "title": "退款申请缺少 out_trade_no 被校验拒绝",
+      "input": "带 CSRF 的管理员会话，空 body。",
+      "actions": "页面上下文 POST /api/model-payment/refund。",
+      "expected": "HTTP 400，success=false，提示 out_trade_no 必填（调用校验即返回，不发起任何退款）。",
+      "observed": "{\"status\": 400, \"csrf_sent\": true, \"message\": \"out_trade_no 必填\"}",
+      "result": "passed"
+    },
+    {
+      "id": "PF3",
+      "title": "退款查询（只读）被如实拒绝",
+      "input": "不存在的 out_trade_no。",
+      "actions": "页面上下文 fetch GET /api/model-payment/refund/query。",
+      "expected": "200 且 success=false，返回明确失败原因，不伪造退款结果。",
+      "observed": "{\"status\": 200, \"success\": false, \"message\": \"支付宝服务暂时不可用\"}",
+      "result": "passed"
+    },
+    {
+      "id": "PF4",
+      "title": "待审退款列表未绑定市场账号被拒",
+      "input": "已建立的管理员会话，但未绑定市场 Authorization。",
+      "actions": "页面上下文 fetch GET /api/xcmax/admin/market/commerce/refunds/pending。",
+      "expected": "HTTP 401，success=false，不返回退款数据。",
+      "observed": "{\"status\": 401, \"message\": \"尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization\"}",
+      "result": "passed"
+    },
+    {
+      "id": "PF5",
+      "title": "退款审核入口未绑定市场账号被拒",
+      "input": "带 CSRF 的管理员会话，refund_id=999999，action=approve。",
+      "actions": "页面上下文 POST /api/xcmax/admin/market/commerce/refunds/999999/review。",
+      "expected": "HTTP 401，success=false（审核请求未被执行、未产生任何资金动作）。",
+      "observed": "{\"status\": 401, \"csrf_sent\": true, \"message\": \"尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization\", \"refund_reviewed\": false}",
+      "result": "passed"
+    }
+  ]
+}

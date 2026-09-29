@@ -1,0 +1,394 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "erp-etl",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-091735",
+  "generated_at": "2026-09-29 09:21:35",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 7,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器在企业版 Web 管理端走通 ETL 真实数据面：读取 /api/etl/capabilities 的目标类型与字段要求 → 以 multipart 真实上传 CSV（记录真实 sha256）→ 用该上传建预览运行并读取真实解析结果 → 将该运行的映射存为模板并在模板列表读回；并含未认证与非法入参的拒绝路径。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 9685,
+        "processed": 9685,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.mine",
+                "evolution.export",
+                "evolution.reflect",
+                "evolution.search",
+                "error.occurred",
+                "evolution.index"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/erp-etl/erp-etl-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "erp-etl",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-etl/shot/00-login-form.png",
+      "sha256": "53f60ce26c29e46ca35e7cde1bf29492f9d1e2e8bad928f9849054645cf1287f",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-etl",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-etl/shot/E1-etl-capabilities.png",
+      "sha256": "2b0b40c22bb70fb6bbcc9220bb3b65a95f30368750d6ff805cb02e19070dc120",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染 /api/etl/capabilities 的真实 JSON：enabled=true、targets（knowledge / customer_products / customers / products / purchase_orders / shipment_records 等）及各自 required_fields 与 reversible。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-etl",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-etl/shot/E2-etl-upload-and-preview.png",
+      "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染 ETL 上传与预览运行的真实 JSON 响应（upload_id / file_sha256 / run id / target_type=customers / status）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-etl",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-etl/shot/E3-etl-rows.png",
+      "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染 ETL 运行行读取接口的真实 JSON（运行列表与解析出的行）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-etl",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-etl/shot/E4-etl-template.png",
+      "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染 ETL 模板创建与列表读回的真实 JSON（template_id / name / target_type / draft）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-etl",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-etl/shot/E5-etl-negative.png",
+      "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染非法入参时的真实拒绝响应（不存在的 upload_id、缺必填字段、缺 CSRF）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-etl",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-etl/shot/E6-etl-unauth.png",
+      "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+      "visual_review": "accepted",
+      "visible_result": "无会话的新浏览器上下文访问 ETL 接口，返回未认证拒绝而非数据。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-etl",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-etl/shot/E7-etl-execute-rollback.png",
+      "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染 ETL 真实执行与回滚的响应，以及执行后/回滚后 GET /api/customers 的真实返回（含本轮新增客户名）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-etl",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-etl/video/erp-etl-web-20260929-091735.webm",
+      "sha256": "869c21db59304767a2fad2307274cc7c1b914ff81c0313820bbcfd1cb4ca916c",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → ETL 能力清单 → 真实 CSV 上传与预览 → 行读取 → 模板往返 → 负例与未认证拒绝。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "E1",
+      "title": "ETL 能力清单在真实部署中已启用且目标类型完整",
+      "input": "企业版 Web 管理端（FHD_ETL_CENTER_ENABLED=1、XCAGI_PRODUCT_SKU=enterprise）与已建立的管理端会话。",
+      "actions": "在真实浏览器页面上下文 fetch GET /api/etl/capabilities。",
+      "expected": "HTTP 200、success=true、enabled=true；目标类型 ≥3 且各自带字段定义，至少一个可回滚。",
+      "observed": "{\"status\": 200, \"enabled\": true, \"target_count\": 10, \"target_types\": [\"knowledge\", \"customer_products\", \"customers\", \"products\", \"purchase_orders\", \"shipment_records\", \"attendance\", \"export_xlsx\"], \"limits\": {\"max_file_bytes\": 104857600, \"max_rows\": 100000}, \"execution_policy\": {\"preview_required\": true, \"confirmation_required\": true, \"default_duplicate_action\": \"skip\", \"default_error_policy\": \"block_all\"}, \"sample_required_fields\": {\"knowledge\": [], \"customer_products\": [\"customer_name\", \"name\"], \"customers\": [\"customer_name\"]}}",
+      "result": "passed"
+    },
+    {
+      "id": "E2",
+      "title": "真实 CSV 上传并建立预览运行",
+      "input": "一份 3 行客户 CSV（表头 customer_name,customer_phone）。",
+      "actions": "在浏览器里以 multipart 真实上传 CSV（带 CSRF 头），再用返回的 upload_id 建 POST /api/etl/runs/preview（target_type=customers），轮询运行状态到终止态。",
+      "expected": "上传返回 201 且带真实 sha256；预览返回 202 并生成运行；运行最终不是 failed。",
+      "observed": "{\"upload_status\": 201, \"upload_file\": \"acceptance-etl-customers.csv\", \"upload_size_bytes\": 85, \"upload_sha256\": \"c40c82112bd8f53b1bb00f0933d6c393cfd2ee3fb22e69b46e7de49da49c04fe\", \"preview_http\": 202, \"run_id\": \"1ede0423-ba16-4838-84a9-78f57c82bcd3\", \"target_type\": \"customers\", \"status_sequence\": [\"preview_ready\"], \"final_status\": \"preview_ready\", \"total_rows\": 2, \"summary\": {\"new\": 2, \"update\": 0, \"skip\": 0, \"error\": 0, \"executed\": 0}, \"parsed_values_sample\": \"{'batch_id': None, 'counts': {'error': 0, 'new': 2, 'skip': 0, 'update': 0}, 'file_name': 'acceptance-etl-customers.csv', 'file_sha256': 'c40c82112bd8f53b1bb00f0933d6c393cfd2ee3fb22e69b46e7de49da49c04fe', 'llm_advisory_o\"}",
+      "result": "passed"
+    },
+    {
+      "id": "E3",
+      "title": "运行行与解析结果真实读回",
+      "input": "上一步建立的运行。",
+      "actions": "fetch GET /api/etl/runs?limit=5 取最近运行，再 fetch GET /api/etl/runs/{id}/rows。",
+      "expected": "运行列表非空；行接口 200 且至少解析出 1 行真实数据。",
+      "observed": "{\"runs_http\": 200, \"run_count\": 4, \"latest_run_id\": \"1ede0423-ba16-4838-84a9-78f57c82bcd3\", \"rows_http\": 200, \"row_count\": 2, \"total\": 2, \"row_sample\": [{\"id\": 7, \"source_sheet\": \"CSV\", \"source_row\": 2, \"source\": {\"customer_name\": \"验收客户甲\", \"customer_phone\": \"13800000001\"}, \"normalized\": {\"contact_address\": null, \"contact_person\": null, \"contact_phone\": null, \"customer_name\": \"验收客户甲\"}, \"provenance\": {\"columns\": {\"customer_name\": 1, \"customer_phone\": 2}, \"header_rows\": {\"end\": 1, \"start\": 1}, \"original_fragment\": {\"customer_name\": \"验收客户甲\", \"customer_phone\": \"13800000001\"}, \"row\": 2, \"sheet\": \"CSV\"}, \"validation_issues\": [], \"llm_suggestion\": {\"action\": \"new\", \"advisory_only\": true, \"degraded\": false, \"reason\": \"customer_not_found\", \"used_llm\": false}, \"suggested_action\": \"new\", \"final_action\": \"new\", \"action_overridden\": false, \"match_ref\": null, \"before\": {}, \"after\": {\"contact_address\": null, \"contact_person\": null, \"contact_phone\": null, \"customer_name\": \"验收客户甲\"}, \"execution_status\": null, \"execution_error\": null}, {\"id\": 8, \"source_sheet\": \"CSV\", \"source_row\": 3, \"source\": {\"customer_name\": \"验收客户乙\", \"customer_phone\": \"13800000002\"}, \"normalized\": {\"contact_address\": null, \"contact_person\": null, \"contact_phone\": null, \"customer_name\": \"验收客户乙\"}, \"provenance\": {\"columns\": {\"customer_name\": 1, \"customer_phone\": 2}, \"header_rows\": {\"end\": 1, \"start\": 1}, \"original_fragment\": {\"customer_name\": \"验收客户乙\", \"customer_phone\": \"13800000002\"}, \"row\": 3, \"sheet\": \"CSV\"}, \"validation_issues\": [], \"llm_suggestion\": {\"action\": \"new\", \"advisory_only\": true, \"degraded\": false, \"reason\": \"customer_not_found\", \"used_llm\": false}, \"suggested_action\": \"new\", \"final_action\": \"new\", \"action_overridden\": false, \"match_ref\": null, \"before\": {}, \"after\": {\"contact_address\": null, \"contact_person\": null, \"contact_phone\": null, \"customer_name\": \"验收客户乙\"}, \"execution_status\": null, \"execution_error\": null}]}",
+      "result": "passed"
+    },
+    {
+      "id": "E4",
+      "title": "ETL 模板创建与列表读回（往返一致）",
+      "input": "已建立的管理端会话。",
+      "actions": "POST /api/etl/templates 创建模板，随后 GET /api/etl/templates 与 GET /api/etl/templates/{id} 读回。",
+      "expected": "创建成功并返回模板 id；列表中出现该名称；按 id 读回的名称与 target_type 与创建时一致。",
+      "observed": "{\"create_http\": 201, \"template_id\": \"412b98fb-da08-4c28-b6da-65d86a39473b\", \"list_http\": 200, \"template_count\": 2, \"created_name_present_in_list\": true, \"readback_http\": 200, \"readback_name\": \"验收模板-091923\", \"readback_target_type\": \"customers\", \"readback_draft\": null}",
+      "result": "passed"
+    },
+    {
+      "id": "E5",
+      "title": "真实执行入库并在业务接口读回，再回滚撤销",
+      "input": "E2 建立的预览运行（客户目标，2 行真实解析数据）。",
+      "actions": "POST /api/etl/runs/{id}/execute（confirmed=true）后轮询状态；用 GET /api/customers 读回新增客户；再 POST /api/etl/runs/{id}/rollback 并再次读回客户列表。",
+      "expected": "执行返回 202 且运行进入已执行态；客户列表中出现本轮新增的真实客户；回滚后这些客户从业务列表消失（可回滚承诺兑现）。",
+      "observed": "{\"run_id\": \"1ede0423-ba16-4838-84a9-78f57c82bcd3\", \"execute_http\": 202, \"execute_body\": \"{'success': True, 'data': {'id': '1ede0423-ba16-4838-84a9-78f57c82bcd3', 'upload_id': 'c38a3f93-bb70-4112-a745-f504c0a5657c', 'file_name': 'acceptance-etl-customers.csv', 'batch_id': None, 'relative_path': 'acceptance-et\", \"status_after_execute\": \"completed\", \"executed_sequence\": [\"completed\"], \"customers_read_path\": \"mod:xcagi-erp-domain-bridge/customers/list\", \"customers_http\": 200, \"customers_before\": 0, \"customers_after\": 2, \"created_names\": [\"验收客户乙\", \"验收客户甲\"], \"rollback_http\": 200, \"status_after_rollback\": \"completed\", \"rollback_sequence\": [\"completed\"], \"rollback_status_field\": \"completed\", \"names_removed_after_rollback\": [\"验收客户乙\", \"验收客户甲\"], \"customers_after_rollback\": 0}",
+      "result": "passed"
+    },
+    {
+      "id": "E6",
+      "title": "非法入参被拒（负例）",
+      "input": "不存在的 upload_id、缺必填字段的预览请求、无 CSRF 头的上传。",
+      "actions": "分别发起三个真实请求并记录真实状态码与响应体。",
+      "expected": "不存在的 upload_id 被拒（4xx 且非 500）；缺必填字段 422；无 CSRF 403。",
+      "observed": "{\"bogus_upload_id\": {\"status\": 404, \"body\": \"{'success': False, 'error_code': 'http_404', 'message': \\\"{'code': 'ETL_NOT_FOUND', 'message': '上传文件不存在或无权访问'}\\\", 'path': '/api/etl/runs/preview'}\"}, \"missing_required_field\": {\"status\": 422, \"body\": \"{'success': False, 'error_code': 'validation_error', 'message': '请求参数验证失败', 'errors': [{'field': 'body.upload_id', 'message': 'Field required', 'type': 'missing'}], 'path': '/api/etl/runs/preview'}\"}, \"without_csrf\": {\"status\": 403, \"body\": \"{\\\"success\\\":false,\\\"message\\\":\\\"CSRF token missing\\\"}\"}}",
+      "result": "passed"
+    },
+    {
+      "id": "E7",
+      "title": "未认证会话不得读取 ETL 数据（负例）",
+      "input": "全新的无会话浏览器上下文。",
+      "actions": "在无 cookie 上下文中 fetch capabilities / runs / templates。",
+      "expected": "三者均被拒（401 或 403），不返回 ETL 数据。",
+      "observed": "{\"statuses\": {\"/api/etl/capabilities\": 401, \"/api/etl/runs\": 401, \"/api/etl/templates\": 401}}",
+      "result": "passed"
+    }
+  ]
+}

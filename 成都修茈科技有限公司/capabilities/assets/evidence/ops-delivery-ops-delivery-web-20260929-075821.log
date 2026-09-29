@@ -1,0 +1,8 @@
+[07:58:21] feature=ops-delivery base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery
+[07:58:33] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:58:36] case OD1: passed - 「客户交付中心」页真实渲染专属交付台账
+[07:58:37] case OD2: passed - 提交客户定制需求未绑定市场账号被拒（负例）
+[07:58:39] case OD3: passed - 定制需求 kind 非法被参数校验拒绝（边界）
+[07:58:39] case OD4: passed - 客户交付进度与里程碑真实读取
+[07:58:39] video: ops-delivery-web-20260929-075821.webm (1163669 bytes)
+[07:58:39] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery/log/ops-delivery-web-20260929-075821.log

@@ -1,0 +1,8 @@
+[08:00:07] feature=ops-issue-runtime base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-issue-runtime
+[08:00:20] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:00:20] case IR1: passed - 客户确认修复但未填结果说明被拒（边界）
+[08:00:20] case IR2: passed - 读取待确认修复交付未登录市场账号被拒（负例）
+[08:00:20] case IR3: passed - 提交修复结果未登录市场账号被拒（负例）
+[08:00:20] case IR4: passed - 交付回执重试未登录市场账号被拒（负例）
+[08:00:21] video: ops-issue-runtime-web-20260929-080007.webm (624755 bytes)
+[08:00:21] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-issue-runtime/log/ops-issue-runtime-web-20260929-080007.log

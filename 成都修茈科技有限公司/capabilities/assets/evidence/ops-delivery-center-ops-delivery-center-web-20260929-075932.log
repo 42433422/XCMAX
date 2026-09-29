@@ -1,0 +1,7 @@
+[07:59:32] feature=ops-delivery-center base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery-center
+[07:59:43] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:59:50] case DC1: passed - 「客户交付中心」页真实渲染并触发同步
+[07:59:50] case DC2: passed - 交付同步未绑定市场账号被拒（负例）
+[07:59:51] case DC3: passed - 交付同步缺少 CSRF 令牌被拒（边界）
+[07:59:51] video: ops-delivery-center-web-20260929-075932.webm (1324126 bytes)
+[07:59:51] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery-center/log/ops-delivery-center-web-20260929-075932.log

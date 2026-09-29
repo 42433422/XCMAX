@@ -1,0 +1,7 @@
+[08:25:38] feature=base-help base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-help
+[08:25:50] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:25:50] case BH1: passed - 教程练习工作簿真实下发
+[08:25:50] case BH2: passed - 未绑定企业时教程课程返回业务前置拒绝
+[08:25:50] case BH3: passed - 无会话访问教程接口被拒（负例）
+[08:25:51] video: base-help-web-20260929-082538.webm (552096 bytes)
+[08:25:51] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-help/log/base-help-web-20260929-082538.log

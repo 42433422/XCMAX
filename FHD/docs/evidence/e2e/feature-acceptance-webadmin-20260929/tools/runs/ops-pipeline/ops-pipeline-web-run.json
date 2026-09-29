@@ -1,0 +1,343 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ops-pipeline",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-074146",
+  "generated_at": "2026-09-29 07:42:24",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：读取时间轨运行状态（/api/admin/production-line/time-rail/status，节点覆盖）→ 读取时间轨编排图（/api/admin/production-line/time-rail/graph，P 相节点）→ 读取事件轨路由状态与运营线 O1–O10 步骤健康 → 非法查询参数被参数校验拒绝（422）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 1852,
+        "processed": 1852,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.search",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "error.occurred",
+                "evolution.index"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/ops-pipeline/ops-pipeline-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ops-pipeline",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-pipeline/shot/00-login-form.png",
+      "sha256": "232179d8c5b909897f0e9e1553ac0dd5f0c059e81b5af44bb714aebeb39affd8",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-pipeline",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-pipeline/shot/P1-time-rail.png",
+      "sha256": "5f09dadb17833eaef0a24d0149f47756ce87e71798694c86e56b2e296bc026b0",
+      "visual_review": "accepted",
+      "visible_result": "「同时完成时间架构」页真实渲染：副标题「日更时间壳 · Mermaid 全景（XCAGI-Full-Pipeline 嵌入）」，首屏显示正在加载。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-pipeline",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-pipeline/shot/P2-time-rail-graph.png",
+      "sha256": "61b7b7577fe31c8de31d51a7ab370ddab3d1917d87090fa8d7526cdc172291bc",
+      "visual_review": "accepted",
+      "visible_result": "「员工图谱」页真实渲染：顶部「在岗员工节点图 编制 55 岗」，含中心图/六部门/物理分区/客户端车间/自进化 Loop 视图切换。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-pipeline",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-pipeline/shot/P3-event-rail.png",
+      "sha256": "4e56cae97f50285eae7d592a13daa881d07a874c3e365aa725007c72eac7de14",
+      "visual_review": "accepted",
+      "visible_result": "「服务器后台总览」页真实渲染：本地节点「异常」、本地地址 127.0.0.1:42423、远端服务器「离线」、自治健康「不可达」、模块注册表异步显示 0 个模块。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-pipeline",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-pipeline/shot/P4-invalid-param.png",
+      "sha256": "c0d568c29f64a66fa161d3055a28315366487884287f40c61065a2e814de4247",
+      "visual_review": "accepted",
+      "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块列表。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-pipeline",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-pipeline/video/ops-pipeline-web-20260929-074146.webm",
+      "sha256": "6973296562a2db6995abe8ce34696fcd028de2954285788005712ac441abe893",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，36.96s，1600x1000 25fps，ffmpeg 实测）：管理员登录 → 时间架构 → 员工图谱 → 总览 → 服务器功能模块，并 fetch 复核时间轨/事件轨/运营线接口与 422 参数校验。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "P1",
+      "title": "时间轨运行状态与节点覆盖真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器打开 /admin/duty-time-architecture，随后 fetch GET /api/admin/production-line/time-rail/status。",
+      "expected": "HTTP 200、success=true，contract_version=time_rail_runtime_status/*，coverage.total_nodes>0。",
+      "observed": "{\"status\": 200, \"contract_version\": \"time_rail_runtime_status/v2\", \"graph_schema\": \"time_rail_workflow_graph/v1\", \"total_nodes\": 68, \"status_nodes\": 68, \"status_coverage_pct\": 100, \"ui_has_time_arch\": true, \"ui_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能力未就绪 版本检测中 平台运维 · 系统管理 同时完成时间架构 副窗 ◈ 工作区\"}",
+      "result": "passed"
+    },
+    {
+      "id": "P2",
+      "title": "时间轨编排图（P 相节点）真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器打开 /admin/duty-roster-graph，随后 fetch GET /api/admin/production-line/time-rail/graph。",
+      "expected": "HTTP 200、data.ok=true，含 ≥3 个 P 相节点与 phase_colors。",
+      "observed": "{\"status\": 200, \"ok\": true, \"schema\": \"time_rail_workflow_graph/v1\", \"center_id\": \"daily-hub\", \"node_count\": 22, \"phase_nodes_sample\": [\"P3\", \"P4\", \"P5\", \"P6\", \"P6G\", \"P6POP\", \"P6PW\", \"P7\"], \"ui_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 员工空间 员工图谱 用户管理 运维数据源 运维工具 系统\"}",
+      "result": "passed"
+    },
+    {
+      "id": "P3",
+      "title": "事件轨路由与运营线 O1–O10 步骤健康真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器打开 /admin/xcmax-admin，随后 fetch GET /api/admin/production-line/event-rail/status 与 GET /api/operations-line/health。",
+      "expected": "均 HTTP 200；event-rail operations_routes>0；运营线 steps 覆盖 O1…O10。",
+      "observed": "{\"event_rail_status\": 200, \"operations_routes\": 12, \"cross_line_routes\": 3, \"ops_line_status\": 200, \"pipeline_count\": 0, \"step_ids\": [\"O1\", \"O10\", \"O2\", \"O3\", \"O4\", \"O5\", \"O6\", \"O7\", \"O8\", \"O9\"], \"ui_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能\"}",
+      "result": "passed"
+    },
+    {
+      "id": "P4",
+      "title": "非法查询参数被参数校验拒绝（负例）",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器打开 /admin/server-functions，随后 POST /api/operations-line/contracts/scan-expiry?days_ahead=abc。",
+      "expected": "HTTP 422、error_code=validation_error，指明 query.days_ahead 解析失败。",
+      "observed": "{\"status\": 422, \"error_code\": \"validation_error\", \"message\": \"请求参数验证失败\", \"errors\": [{\"field\": \"query.days_ahead\", \"message\": \"Input should be a valid integer, unable to parse string as an integer\", \"type\": \"int_parsing\"}], \"ui_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能\"}",
+      "result": "passed"
+    }
+  ]
+}

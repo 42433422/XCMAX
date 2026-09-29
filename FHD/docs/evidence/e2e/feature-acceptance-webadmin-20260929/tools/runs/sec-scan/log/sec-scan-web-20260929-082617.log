@@ -1,0 +1,7 @@
+[08:26:17] feature=sec-scan base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-scan
+[08:26:29] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:26:29] case S1: passed - 安全/发布门禁员工就绪
+[08:26:29] case S2: passed - 安全密钥守卫执行脱敏审计（真实响应）
+[08:26:29] case S3: passed - 缺少 CSRF 的扫描门禁触发被拒（负例）
+[08:26:30] video: sec-scan-web-20260929-082617.webm (595044 bytes)
+[08:26:30] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-scan/log/sec-scan-web-20260929-082617.log

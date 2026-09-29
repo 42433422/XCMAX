@@ -1,0 +1,328 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ai-model-access",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-062451",
+  "generated_at": "2026-09-29 06:25:09",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 5,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium，真实鼠标键盘）在自托管 Web 管理端建立管理员会话后：读取模型用量账本（本机 JSON ledger）→ 读取 token 用量与成本汇总（含 Codex 会话账本）→ 未绑定修茈市场账号时模型目录被 fail-closed 拒绝 → 无会话上下文访问用量接口被拒；并在系统设置·模型服务页真实渲染会员套餐与账户区。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 15398,
+        "processed": 15359,
+        "errors": 0,
+        "dropped": 39,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 2,
+            "max_cache_size": 1000,
+            "hits": 4,
+            "misses": 2,
+            "hit_rate": 0.6666666666666666,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "error.occurred",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "evolution.search"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/ai-model-access/ai-model-access-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ai-model-access",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-model-access/shot/00-login-form.png",
+      "sha256": "3f0f3fe64ca4d651e4d3c6bdec51c96ed3f0fba1a5141e53f7f7c37833b497ff",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「管理员登录」：左侧蓝色品牌栏「XCMAX 服务器后台 · 平台运维 / 服务器后台与自动化治理」；右侧账号框已填 admin、密码框为掩码（●●●●●●●●），可点「登 录」，含忘记账号/忘记密码/帮助链接。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ai-model-access",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-model-access/shot/M-settings-model-payment.png",
+      "sha256": "a917718e93dc4f9cd70abad8d7d90d8bbc2572bdd747f3b1e94fbdef3e7dafde",
+      "visual_review": "accepted",
+      "visible_result": "登录后进入「系统设置」，右侧「模型服务」区：副标题「余额与充值走修茈市场；本页汇总展示，支付在 钱包/套餐 完成」，含「打开修茈钱包 / 会员套餐 / 刷新」按钮、账户余额（本机汇总）与「尚未绑定修茈市场账号，请先登录软件」提示、快捷充值、修茈会员套餐（3 档）与「模型支持」条目。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ai-model-access",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-model-access/video/ai-model-access-web-20260929-062451.webm",
+      "sha256": "e0ceb034fdb64da3a2da3f69d8a1f232adc5b600a64f8c04307db4b00535b0f6",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，17.28s，1600x1000，ffmpeg 实测）：管理员登录 → 用量账本/token 用量读取 → 市场模型目录被拒 → 无会话被拒 → 模型服务页渲染。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "M1",
+      "title": "模型用量账本真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "在页面上下文 fetch GET /api/model-payment/usage。",
+      "expected": "HTTP 200、success=true，返回本机账本 backend=json 且带 ledger_path。",
+      "observed": "{\"status\": 200, \"success\": true, \"backend\": \"json\", \"ledger_path\": \"/private/tmp/xcmax-verifycenter-main/FHD/data/model_usage_ledger.json\", \"entry_count\": 0, \"wallet_backend\": \"local\", \"entries_sample\": []}",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "title": "模型调用 token 用量与成本汇总",
+      "input": "已建立的管理员会话。",
+      "actions": "在页面上下文 fetch GET /api/xcmax/admin/token-usage。",
+      "expected": "HTTP 200、success=true，grand_total_tokens>0，sources.local.available=true。",
+      "observed": "{\"status\": 200, \"success\": true, \"grand_total_tokens\": 12686010874, \"grand_prompt_tokens\": 12457397662, \"grand_completion_tokens\": 147991307, \"grand_cost_usd\": 53109.08, \"sources\": {\"local\": {\"available\": true, \"source\": \"FHD 本地账本\", \"total_tokens\": 0}, \"cursor\": {\"available\": false, \"source\": null, \"total_tokens\": null}, \"codex\": {\"available\": true, \"source\": \"Codex (~/.codex/archived_sessions)\", \"total_tokens\": 10232388969}, \"trae\": {\"available\": true, \"source\": \"Trae (state.vscdb + 轮次估算)\", \"total_tokens\": 2373000000}, \"mimo\": {\"available\": true, \"source\": \"mimo (小米 MiMo, 手动输入)\", \"total_tokens\": 80621905}}}",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "title": "未绑定市场账号时模型目录 fail-closed 拒绝（负例/边界）",
+      "input": "已建立的管理员会话（本机未绑定修茈市场账号）。",
+      "actions": "在页面上下文 fetch GET /api/market/llm-catalog。",
+      "expected": "HTTP 401、success=false 且提示需绑定市场账号，不返回模型目录。",
+      "observed": "{\"status\": 401, \"success\": false, \"message\": \"尚未绑定市场账号；请重新登录软件以自动同步\"}",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
+      "title": "无会话访问用量接口被拒（负例）",
+      "input": "全新的无会话浏览器上下文。",
+      "actions": "在无 cookie 的上下文中 fetch GET /api/xcmax/admin/token-usage。",
+      "expected": "被拒绝（401/403），不返回用量数据。",
+      "observed": "{\"status\": 401, \"body\": {\"success\": false, \"message\": \"请先登录\"}}",
+      "result": "passed"
+    },
+    {
+      "id": "M5",
+      "title": "系统设置·模型服务页真实渲染",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器导航到 /admin/settings?section=model-payment，等待渲染模型服务与会员套餐区。",
+      "expected": "页面渲染「模型服务」与「会员套餐」区块。",
+      "observed": "{\"final_url\": \"http://127.0.0.1:42423/admin/settings?section=model-payment\", \"has_model_service\": true, \"has_membership\": true, \"text_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能力未就绪 版本检测中 平台运维 · 系统管理 系统设置 副窗 ◈ 工作区 2 管 更换  管理员  admin  退出登录 系统设置 个人主页 管理员 · 头像与资料 展示名称 邮箱 登录名 admin  由修茈市场/本机账号绑定，此处不可修改。  保存资料 模型服务 钱包 · \"}",
+      "result": "passed"
+    }
+  ]
+}
