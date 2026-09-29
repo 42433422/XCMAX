@@ -7,8 +7,8 @@
     "total": 158,
     "by_status": {
       "verified": 55,
-      "partial": 89,
-      "implemented": 10,
+      "partial": 90,
+      "implemented": 9,
       "planned": 4
     },
     "cancelled_count": 0,
@@ -40,9 +40,9 @@
       },
       "web": {
         "applicable": 128,
-        "verified": 124,
+        "verified": 127,
         "partial": 0,
-        "pending": 4,
+        "pending": 1,
         "last_verified_at": "2026-09-29"
       },
       "android": {
@@ -1583,10 +1583,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "销售订单创建与流转。",
@@ -1743,10 +1743,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "多计量单位与换算。",
@@ -2926,7 +2926,7 @@
             {
               "id": "ch-realtime-voice",
               "name": "实时语音对话",
-              "status": "implemented",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -2952,10 +2952,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "实时语音交互与语音模型源管理。",

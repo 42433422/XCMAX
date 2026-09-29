@@ -1,0 +1,9 @@
+[22:21:26] feature=erp-uom platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom
+[22:21:40] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[22:21:41] case UOM1: passed - 单位读面：采购单位清单与产品计量单位
+[22:21:42] case UOM2: passed - 桶↔公斤换算一致（核心正向）
+[22:21:44] case UOM3: failed - 换算随量线性（3桶 → 60 公斤）
+[22:21:46] case UOM4: passed - 换算结果写入发货单文档
+[22:21:47] case UOM5: failed - 不存在客户 fail-closed（边界/负例）
+[22:21:47] video: erp-uom-web-20260929-222126.webm (1311502 bytes)
+[22:21:47] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/log/erp-uom-web-20260929-222126.log
