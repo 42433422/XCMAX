@@ -48,7 +48,7 @@ def _request_tenant_key(request: Request | None) -> str | None:
         from app.infrastructure.auth.dependencies import get_logged_in_user
 
         user = get_logged_in_user(request)
-    except (HTTPException, *RECOVERABLE_ERRORS):
+    except (HTTPException, *RECOVERABLE_ERRORS):  # type: ignore[misc]
         return None
     tenant_id = getattr(user, "tenant_id", None)
     if isinstance(tenant_id, bool) or not isinstance(tenant_id, int):

@@ -22,7 +22,7 @@ def remember_business_shipment(payload: dict) -> dict:
             str(payload.get("contact_phone") or ""),
             "",
         )
-    except _QUIET:
+    except _QUIET:  # type: ignore[misc]
         pass
     try:
         saved = get_shipment_application_service_core().record_created_shipment(
@@ -31,6 +31,6 @@ def remember_business_shipment(payload: dict) -> dict:
             contact_person=str(payload.get("contact_person") or ""),
             contact_phone=str(payload.get("contact_phone") or ""),
         )
-    except _QUIET:
+    except _QUIET:  # type: ignore[misc]
         return {"success": False}
     return saved if isinstance(saved, dict) else {"success": False}
