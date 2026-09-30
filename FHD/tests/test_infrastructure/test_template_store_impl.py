@@ -11,13 +11,11 @@ from app.infrastructure.templates.template_store_impl import FileSystemTemplateS
 
 @pytest.fixture
 def store(tmp_path):
-    """创建使用临时目录的模板库实例。"""
     return FileSystemTemplateStore(str(tmp_path))
 
 
 @pytest.fixture
 def store_with_files(tmp_path):
-    """创建包含模板文件的模板库实例。"""
     (tmp_path / "发货单模板.xlsx").write_bytes(b"PK fake xlsx")
     (tmp_path / "产品清单.xlsx").write_bytes(b"PK fake xlsx2")
     templates_dir = tmp_path / "templates"
@@ -105,17 +103,14 @@ class TestDiscoverExcelTemplates:
         assert len(templates) == 0
 
     def test_dedup_by_path(self, tmp_path):
-        # Same file in base_dir and templates/ should be deduped
         (tmp_path / "test.xlsx").write_bytes(b"PK")
         templates_dir = tmp_path / "templates"
         templates_dir.mkdir()
-        # Different file with same name in templates dir
         (templates_dir / "test.xlsx").write_bytes(b"PK2")
         store = FileSystemTemplateStore(str(tmp_path))
         templates = store._discover_excel_templates()
-        # Should have 2 entries since they're different paths
         filenames = [t["filename"] for t in templates]
-        assert filenames.count("test.xlsx") >= 1
+        assert filenames.count("test.xlsx") == 2
 
 
 class TestDiscoverWordTemplates:
@@ -157,40 +152,26 @@ class TestListTemplates:
     @patch.object(FileSystemTemplateStore, "_db_templates", return_value=[])
     def test_deduplication(self, mock_db, store_with_files):
         templates = store_with_files.list_templates()
-        # Check no duplicate paths
         paths = [t.get("path") for t in templates if t.get("path")]
         assert len(paths) == len(set(paths))
 
 
 class TestListByType:
-    @patch.object(FileSystemTemplateStore, "_db_templates", return_value=[])
-    def test_no_matching_type(self, mock_db, store):
-        result = store.list_by_type("不存在")
-        assert result == []
-
-    @patch.object(
-        FileSystemTemplateStore,
-        "_db_templates",
-        return_value=[
-            {"id": "db:1", "template_type": "发货单", "is_active": 1, "name": "发货模板"},
+    @pytest.mark.parametrize(
+        "kind,active_only,expected",
+        [
+            ("不存在", True, []),
+            ("发货单", True, ["db:2"]),
+            ("发货单", False, ["db:1", "db:2"]),
         ],
     )
-    def test_matching_type(self, mock_db, store):
-        result = store.list_by_type("发货单")
-        assert len(result) == 1
-
-    @patch.object(
-        FileSystemTemplateStore,
-        "_db_templates",
-        return_value=[
+    def test_filter(self, store, kind, active_only, expected):
+        rows = [
             {"id": "db:1", "template_type": "发货单", "is_active": 0, "name": "旧模板"},
             {"id": "db:2", "template_type": "发货单", "is_active": 1, "name": "新模板"},
-        ],
-    )
-    def test_active_only_filter(self, mock_db, store):
-        result = store.list_by_type("发货单", active_only=True)
-        assert len(result) == 1
-        assert result[0]["name"] == "新模板"
+        ]
+        with patch.object(store, "_db_templates", return_value=rows):
+            assert [t["id"] for t in store.list_by_type(kind, active_only)] == expected
 
 
 class TestGetDefaultForType:
@@ -208,8 +189,6 @@ class TestGetDefaultForType:
     )
     def test_db_template_no_path(self, mock_db, store):
         result = store.get_default_for_type("发货单")
-        # No path, falls through to legacy
-        # Legacy also has no file, so returns None
         assert result is None
 
     @patch.object(FileSystemTemplateStore, "_db_templates", return_value=[])

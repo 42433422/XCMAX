@@ -9,7 +9,7 @@
 
 **未闭环。** 版本 1.0.0.5，stable OTA 关闭。2026-09-30 客户指针实测为 main 83939363、SHA-256 92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf；其说明仍误写 macOS 稳定版。本轮最终安装器尚未冻结。
 #2103/#2104 已进入 83939363，私有包 clean/upgrade runner 验证了 API 登录、同账号 tenant/记录读回、版本、备份执行与产物。原始记录位于 `C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`；不能核销 GUI 业务或恢复后应用读取。
-#2096 的路由映射与 Mod 注册竞态由 #2107 进入 main e5b2412；服务器磁盘耗尽导致的配对 503 已恢复，预发 36715937308 已运行同 SHA。36712593205 attempt 2 实装通过，私有包 SHA-256 59019c31309dc1803546afc06d221745e28b9856f17b6f0aceab1da0fe3e3733；隔离验收 36729760481 首装与旧版登录均超时，36731164250 确认 30 秒 HttpClient.Timeout。全源扫描 36716312096 有 3 严重、61 高危阻塞；#2109 修复待保护检查，最终包未冻结。没有可用干净测试机/快照，GUI、AI、真实升级和 A/B/C 均未完成。
+#2096 的路由映射与 Mod 注册竞态由 #2107 进入 main e5b2412；服务器磁盘耗尽导致的配对 503 已恢复，预发 36715937308 已运行同 SHA。36712593205 attempt 2 实装通过，私有包 SHA-256 59019c31309dc1803546afc06d221745e28b9856f17b6f0aceab1da0fe3e3733；隔离验收 36729760481 首装与旧版登录均超时，36731164250 确认 30 秒 HttpClient.Timeout。全源扫描 36716312096 有 3 严重、61 高危阻塞；#2109 修复待保护检查，最终包未冻结。没有可用客户测试机/快照；独立 Windows runner 已验证部分 GUI 业务，AI、真实旧版业务升级和 A/B/C 仍未完成。
 
 ## 3. Release Gate 定义（G1–G13 覆盖构建身份、首装、登录绑定、业务、升级、重开、备份恢复及更新）
 
