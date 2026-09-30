@@ -39,6 +39,8 @@ const ERP_DOMAIN_PREFIX_MAP: ReadonlyArray<readonly [hostPrefix: string, facadeP
 
 /** 客户 Mod（太阳鸟等）未实现的 API，继续走宿主 /api */
 const HOST_ONLY_API_PREFIXES: readonly string[] = [
+  '/api/shipment/shipment-records/record',
+  '/api/shipment/shipment-records/export',
   '/api/materials',
   '/api/print',
   '/api/printers',
@@ -170,7 +172,6 @@ export function resolveErpApiBase(installedModIds?: string[]): string {
   return '/api'
 }
 
-/** 将宿主路径 /api/... 映射到 Mod 门面或保持宿主（与 DOMAIN_SPECS + blueprints 一致） */
 export function resolveErpApiPath(hostPath: string, installedModIds?: string[]): string {
   const raw = hostPath.startsWith('/') ? hostPath : `/${hostPath}`
   const pathOnly = normalizeApiPath(raw)
@@ -219,7 +220,6 @@ export function useErpDomainModFacade(): boolean {
   return readErpDomainModFacadeEnabled()
 }
 
-/** Mod 门面 HTTP 探针路径 */
 export function erpDomainModStatusPath(): string {
   return `${MOD_FACADE_BASE}/status`
 }

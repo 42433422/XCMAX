@@ -265,7 +265,7 @@ async function main() {
   })
   await step('ai_business', async () => {
     await nav('chat', '#view-chat')
-    const input = page.locator('#chatInput')
+    const input = page.locator('#view-chat textarea')
     await input.fill(`请创建客户，客户名称“${names.ai}”，联系人“AI验收员”，电话13800000002。请执行到客户记录保存成功并给出记录编号。`)
     await click(/^发送$/)
     const card = page.getByTestId('chat-approval-inline-card').last()

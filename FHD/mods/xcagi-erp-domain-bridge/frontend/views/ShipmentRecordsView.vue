@@ -116,7 +116,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ordersApi from '@/api/orders';
 import templatePreviewApi from '@/api/templatePreview';
 import { appAlert, appConfirm } from '@/utils/appDialog';
@@ -452,8 +452,8 @@ function onTemplatesUpdated() {
   loadTemplateOptions();
 }
 
+onActivated(loadUnits);
 onMounted(() => {
-  loadUnits();
   loadTemplateOptions();
   window.addEventListener('xcagi:shipment-record-updated', onShipmentRecordUpdated);
   window.addEventListener('xcagi:templates-updated', onTemplatesUpdated);

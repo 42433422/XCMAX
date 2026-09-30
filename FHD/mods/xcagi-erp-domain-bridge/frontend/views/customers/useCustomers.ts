@@ -5,6 +5,7 @@ import templatePreviewApi from '@/api/templatePreview'
 import { appAlert } from '@/utils/appDialog'
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel'
 import type { CustomerCreateDTO, CustomerUpdateDTO } from '@/types/customer'
+import type { ApiResponse } from '@/types/api'
 
 interface CustomerRow {
   id?: number | string
@@ -27,10 +28,7 @@ interface CustomerEditForm extends CustomerAddForm {
   id?: number | string | null
 }
 
-interface CustomersListResponse {
-  success: boolean
-  total?: number
-  data?: CustomerRow[]
+interface CustomersListResponse extends ApiResponse<CustomerRow[]> {
   customers?: CustomerRow[]
 }
 
@@ -166,8 +164,8 @@ export function useCustomers() {
         ...(pu ? { purchase_unit: pu } : {})
       });
       if (data.success) {
-        const incoming = data.data || data.customers || [];
-        const total = Number(data.total ?? incoming.length ?? 0);
+        const incoming = data.data ?? data.customers ?? [];
+        const total = Number(data.total ?? incoming.length);
         totalCustomers.value = Number.isFinite(total) ? total : incoming.length;
 
         if (reset) {
