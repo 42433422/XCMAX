@@ -17,6 +17,7 @@ const names = { customer: `${marker}-客户`, product: `${marker}-产品`, suppl
 const required = ['normal_login', 'tenant_identity', 'customer', 'product', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business']
 if (phase === 'seed') required.splice(4)
 if (seed) required.splice(2, 0, 'old_ui_readback')
+if (phase === 'readback') required.splice(3)
 const observedRows = new Map()
 const evidence = { run, phase, started_at: new Date().toISOString(), marker, names, cases: [], observations: [], result: 'running' }
 let browser, page
@@ -81,6 +82,7 @@ async function save(name, endpoint) {
   return object
 }
 async function main() {
+  if (phase === 'readback' && !seed) throw new Error('GUI recovery readback requires original business evidence')
   browser = await chromium.connectOverCDP(process.env.XCAGI_CDP || 'http://127.0.0.1:9222', { timeout: 60000 })
   const context = browser.contexts()[0]
   page = context.pages().find(p => p.url().includes('127.0.0.1:17500')) || context.pages()[0]
@@ -119,12 +121,14 @@ async function main() {
       const view = kind === 'customer' ? 'customers' : 'products'
       await nav(view, `#view-${view}`)
       const row = page.locator(`#view-${view} tbody tr`).filter({ hasText: name })
-      await expect(row).toContainText(kind === 'customer' ? '13800000001' : '¥12.50')
+      for (const value of kind === 'customer' ? ['验收员', '13800000001', `${seed.marker}隔离验收地址`] : [seed.marker, '¥12.50']) await expect(row).toContainText(value)
+      if (kind === 'product') await expect(row.locator('td').nth(3)).toHaveText('10')
       await expect.poll(() => observedRows.get(name)?.id).toBe(seed.cases.find(c => c.id === kind).actual.id)
       records[kind] = observedRows.get(name)
     }
     return { original_run: seed.run, tenant_id: login.tenant_id, workspace_id: login.workspace_id, records }
   })
+  if (phase === 'readback') { evidence.result = 'gui_readback_passed'; return }
   await step('customer', async () => {
     await nav('customers', '#view-customers')
     await click('+ 新建客户')

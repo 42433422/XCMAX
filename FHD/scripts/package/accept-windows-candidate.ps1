@@ -160,6 +160,7 @@ function Backup-And-Version {
     $restoredAuth = Login 'backup_restore'
     Check ($restoredAuth.tenant -eq $newAuth.tenant) 'backup_restore_enterprise' "tenant_sha256=$(Digest $restoredAuth.tenant)"
     Read-Record $restoredAuth.session $marker $marker 'backup_restore'
+    if ($candidateGuiProof) { Run-Gui 'readback' (Join-Path $EvidenceDir 'restored-gui') $candidateGuiProof | Out-Null }
   } finally {
     $env:XCAGI_DESKTOP_USER_DATA_DIR = $previousUserData
     Stop-App
@@ -200,7 +201,7 @@ try {
     $newAuth = Login 'candidate'
     Check ($newAuth.tenant -eq $oldAuth.tenant) 'same_enterprise' "tenant_sha256=$(Digest $newAuth.tenant)"
     Read-Record $newAuth.session $recordId $marker 'after_upgrade'
-    Run-Gui 'after-upgrade' (Join-Path $EvidenceDir 'after-upgrade-gui') $oldGuiSeed | Out-Null
+    $candidateGuiProof = Run-Gui 'after-upgrade' (Join-Path $EvidenceDir 'after-upgrade-gui') $oldGuiSeed
   } else {
     Install $CandidatePath 'candidate'
     $newProcess = Start-App 'candidate'

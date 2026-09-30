@@ -57,25 +57,14 @@ class TestModelToDict:
     def test_none_returns_empty(self):
         assert InventoryService._model_to_dict(None) == {}
 
-    def test_model_converted(self):
+    @pytest.mark.parametrize("column,value,expected", [("id", 42, 42), ("price", Decimal("99.99"), 99.99)])
+    def test_model_converted(self, column, value, expected):
         mock_model = MagicMock()
         mock_col = MagicMock()
-        mock_col.name = "id"
-        mock_model.__table__ = MagicMock()
-        mock_model.__table__.columns = [mock_col]
-        mock_model.id = 42
-        result = InventoryService._model_to_dict(mock_model)
-        assert result["id"] == 42
-
-    def test_decimal_in_model(self):
-        mock_model = MagicMock()
-        mock_col = MagicMock()
-        mock_col.name = "price"
-        mock_model.__table__ = MagicMock()
-        mock_model.__table__.columns = [mock_col]
-        mock_model.price = Decimal("99.99")
-        result = InventoryService._model_to_dict(mock_model)
-        assert result["price"] == 99.99
+        mock_col.name = column
+        mock_model.__table__ = MagicMock(columns=[mock_col])
+        setattr(mock_model, column, value)
+        assert InventoryService._model_to_dict(mock_model)[column] == expected
 
 
 # ---------------------------------------------------------------------------
