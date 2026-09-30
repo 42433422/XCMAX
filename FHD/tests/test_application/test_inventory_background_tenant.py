@@ -53,14 +53,23 @@ def test_fresh_thread_inventory_executor_writes_only_recorded_tenant(tmp_path, m
             )
         assert response["success"], response
         assert unscoped["success"] is False
+        product_id, warehouse_id = identities[2]
+        outbound = AgentToolExecutor().execute(
+            AgentStep(node_id="out", tool_id="inventory", action="stock_out", params={
+                "product_id": product_id, "warehouse_id": warehouse_id,
+                "quantity": 2, "unit_price": 12.5, "remark": "实际出货",
+            }), runtime_context={"tenant_id": "2"},
+        )
+        assert outbound["success"] and outbound["data"]["remaining_quantity"] == 48
         for tenant in (1, 2):
             with tenant_scope(tenant), factory() as db:
                 ledgers = db.query(InventoryLedger).all()
                 movements = db.query(InventoryTransaction).all()
-                assert len(ledgers) == len(movements) == (1 if tenant == 2 else 0)
+                assert len(ledgers) == (1 if tenant == 2 else 0)
+                assert len(movements) == (2 if tenant == 2 else 0)
                 if tenant == 2:
                     assert (ledgers[0].product_id, ledgers[0].warehouse_id) == identities[2]
-                    assert float(ledgers[0].quantity) == 50
-                    assert float(movements[0].quantity) == 50
+                    assert float(ledgers[0].quantity) == float(ledgers[0].available_quantity) == 48
+                    assert {float(m.quantity) for m in movements} == {50, -2}
     finally:
         engine.dispose()

@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from fastapi import Request
+
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 ERP_DOMAIN_BRIDGE_MOD_ID = "xcagi-erp-domain-bridge"
@@ -198,3 +200,33 @@ __all__ = [
     "load_erp_domains_config",
     "resolve_host_api_path",
 ]
+
+
+def register_tenant_shipment_routes(router) -> None:
+    """Expose shipment writes/files with host authorization and authenticated tenant scope."""
+    from fastapi import Body, Depends, HTTPException
+
+    from app.infrastructure.auth.dependencies import require_permission
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    @router.post("/shipment/generate")
+    def mod_shipment_generate(
+        request: Request,
+        body: dict = Body(default_factory=dict),
+        user=Depends(require_permission("shipment.edit")),
+    ):
+        from app.fastapi_routes.shipment_orders import shipment_generate
+
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_generate(request, body)
+
+    @router.get("/shipment/download/{filename:path}")
+    def mod_shipment_download(filename: str, user=Depends(require_permission("shipment.view"))):
+        from app.fastapi_routes.shipment_orders import shipment_download
+
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_download(filename)

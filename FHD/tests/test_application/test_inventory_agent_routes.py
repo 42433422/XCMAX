@@ -143,7 +143,7 @@ def test_inventory_stock_mutation_routes_execute_through_agent_orchestrator(
 
     assert svc.inventory_in.call_args.kwargs["unit_price"] is None
     assert svc.inventory_in.call_args.kwargs["quantity"] == 3.0
-    assert svc.inventory_out.call_args.kwargs["unit_price"] == 5.0
+    assert "unit_price" not in svc.inventory_out.call_args.kwargs
     assert svc.inventory_transfer.call_args.kwargs["from_warehouse_id"] == 2
     assert svc.inventory_transfer.call_args.kwargs["quantity"] == 1.0
 
