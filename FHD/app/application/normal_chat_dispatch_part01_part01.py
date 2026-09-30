@@ -1,5 +1,4 @@
 # mypy: disable-error-code="no-any-return, valid-type"
-"""Implementation extracted from the public facade module."""
 
 from __future__ import annotations
 
@@ -215,7 +214,8 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     if _facade().re.search(
         r"(?:桌面|Mac|Windows|系统|电脑).{0,80}(?:打开|启动|关闭|切换|运行)"
         r"|(?:打开|启动|关闭|切换|运行).{0,40}(?:应用|软件|程序|浏览器|TextEdit|文本编辑|Finder|访达|终端)",
-        text, _facade().re.IGNORECASE,
+        text,
+        _facade().re.IGNORECASE,
     ):
         return {"intent": "unknown", "slots": {}}
     if is_negation(text, action_keywords=["打印", "标签", "贴标", "商标"]):
