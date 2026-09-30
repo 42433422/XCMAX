@@ -15,7 +15,9 @@ from app.application.private_mod_delivery_artifacts import custom_delivery_remot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_REPORT_RE = re.compile(r"(问题|故障|缺陷|报错|失败|不能用|没反应|异常|crash|bug)", re.I)
+_REPORT_RE = re.compile(
+    r"(?i)(问题|故障|缺陷|报错|失败|不能用(?![^。！？\n]{0,40}(?:代替|替代))|没反应|异常|crash|bug)"
+)
 
 
 def looks_like_issue_report(message: str) -> bool:

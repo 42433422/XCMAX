@@ -31,18 +31,13 @@ def intake_env(tmp_path, monkeypatch):
     path = tmp_path / "support.zip"
     path.write_bytes(raw)
     sha = hashlib.sha256(raw).hexdigest()
-    monkeypatch.setattr(
-        support_bundle,
-        "build_evidence_ref",
-        lambda: {"kind": "support_bundle", "path": str(path), "sha256": sha, "bytes": len(raw)},
-    )
+    evidence = {"kind": "support_bundle", "path": str(path), "sha256": sha, "bytes": len(raw)}
+    monkeypatch.setattr(support_bundle, "build_evidence_ref", lambda: evidence)
 
-    async def _token():
+    async def _token(_request):
         return "test-account-token"
 
-    monkeypatch.setattr(
-        private_mod_delivery_context, "_private_delivery_market_token", lambda _r: _token()
-    )
+    monkeypatch.setattr(private_mod_delivery_context, "_private_delivery_market_token", _token)
 
     def identity(*, instance: str, version: str, git_sha: str) -> None:
         monkeypatch.setattr(desktop_delivery_receipt, "desktop_installation_id", lambda: instance)
@@ -81,6 +76,8 @@ def test_report_classifier_requires_structured_product_defect():
     assert calls[0]["response_format"] == {"type": "json_object"}
     assert looks_like_issue_report("保存时报错")
     assert not looks_like_issue_report("怎么导出报表？")
+    assert looks_like_issue_report("登录后软件不能用")
+    assert not looks_like_issue_report("请写入验收文本。不能用排队或待审批代替完成。")
 
 
 def test_report_classifier_does_not_escalate_usage_question_or_bad_json():
