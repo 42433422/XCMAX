@@ -1,11 +1,4 @@
-"""Branch-coverage tests for app.infrastructure.llm.client.
-
-Covers: _env_mode, _initial_mode, _resolve_openai_timeout_seconds,
-_resolve_openai_max_retries, resolve_mode, set_mode, require_api_key,
-get_llm_client, dispose_llm_client, get_offline_status,
-get_openai_compatible_client, resolve_chat_model.
-Focus on env-var parsing, mode switching, and error branches.
-"""
+"""LLM client configuration, fallback, and request-scope regression tests."""
 
 from __future__ import annotations
 
@@ -15,10 +8,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.infrastructure.llm import client as llm_client
-
-# ---------------------------------------------------------------------------
-# _env_mode / _initial_mode
-# ---------------------------------------------------------------------------
 
 
 class TestEnvMode:
@@ -70,11 +59,6 @@ class TestInitialMode:
         assert llm_client._initial_mode() == "online"
 
 
-# ---------------------------------------------------------------------------
-# _resolve_openai_timeout_seconds
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     ("env", "resolve", "value", "expected"),
     [
@@ -103,11 +87,6 @@ def test_timeout_and_retry_bounds(monkeypatch, env, resolve, value, expected):
     else:
         monkeypatch.setenv(env, value)
     assert resolve() == expected
-
-
-# ---------------------------------------------------------------------------
-# set_mode / resolve_mode
-# ---------------------------------------------------------------------------
 
 
 class TestSetResolveMode:
@@ -150,11 +129,6 @@ class TestSetResolveMode:
         assert llm_client._openai_client is None
 
 
-# ---------------------------------------------------------------------------
-# require_api_key
-# ---------------------------------------------------------------------------
-
-
 class TestRequireApiKey:
     def test_offline_mode_skips_check(self):
         llm_client.set_mode("offline")
@@ -177,11 +151,6 @@ class TestRequireApiKey:
         ):
             with pytest.raises(RuntimeError, match="未配置"):
                 llm_client.require_api_key()
-
-
-# ---------------------------------------------------------------------------
-# get_llm_client
-# ---------------------------------------------------------------------------
 
 
 class TestGetLlmClient:
@@ -237,11 +206,6 @@ class TestGetLlmClient:
                 llm_client.get_llm_client()
 
 
-# ---------------------------------------------------------------------------
-# dispose_llm_client
-# ---------------------------------------------------------------------------
-
-
 class TestDisposeLlmClient:
     def test_dispose_clears_client(self):
         llm_client._openai_client = MagicMock()
@@ -252,11 +216,6 @@ class TestDisposeLlmClient:
         llm_client._openai_client = None
         llm_client.dispose_llm_client()
         assert llm_client._openai_client is None
-
-
-# ---------------------------------------------------------------------------
-# get_offline_status
-# ---------------------------------------------------------------------------
 
 
 class TestGetOfflineStatus:
@@ -347,11 +306,6 @@ class TestGetOfflineStatus:
         assert status["ollama_host"] == "http://127.0.0.1:11434"
 
 
-# ---------------------------------------------------------------------------
-# get_openai_compatible_client
-# ---------------------------------------------------------------------------
-
-
 class TestGetOpenaiCompatibleClient:
     def test_offline_raises(self):
         llm_client.set_mode("offline")
@@ -374,11 +328,6 @@ class TestGetOpenaiCompatibleClient:
         llm_client.dispose_llm_client()
 
 
-# ---------------------------------------------------------------------------
-# resolve_chat_model
-# ---------------------------------------------------------------------------
-
-
 class TestResolveChatModel:
     def test_delegates_to_credentials(self):
         with patch(
@@ -388,11 +337,6 @@ class TestResolveChatModel:
             result = llm_client.resolve_chat_model()
         assert result == "gpt-4"
         mock_fn.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Cleanup fixture
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
