@@ -24,6 +24,7 @@ async function step(id, action) {
     record.actual = await action()
     record.status = 'passed'
     await page.screenshot({ path: path.join(dir, `${id}.png`), fullPage: true })
+    return record.actual
   } catch (error) {
     record.status = 'failed'
     record.error = String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]')
@@ -55,6 +56,13 @@ async function choose(label, text, scope) {
   await expect(option).toHaveCount(1)
   await select.selectOption(await option.getAttribute('value'))
 }
+async function dismissSuccessAlert() {
+  const dialog = page.locator('.app-dialog-host-panel')
+  await dialog.waitFor({ state: 'visible', timeout: 2000 }).catch(() => {})
+  if (!await dialog.isVisible()) return
+  await expect(dialog.locator('.app-dialog-host-message')).toContainText(/成功/)
+  await dialog.locator('.app-dialog-host-btn-primary').click()
+}
 async function save(name, endpoint) {
   const waiting = page.waitForResponse(r => r.request().method() === 'POST' && endpoint.test(new URL(r.url()).pathname), { timeout: 30000 })
   await click(name, modal())
@@ -65,6 +73,7 @@ async function save(name, endpoint) {
   const object = { endpoint: new URL(response.url()).pathname, status: response.status(), id: data.id || data.customer_id || data.product_id || data.order_id || data.inbound_id || data.order_no || data.order_number }
   if (!object.id) throw new Error(`Saved business response has no record identity: ${object.endpoint}`)
   evidence.observations.push(object)
+  await dismissSuccessAlert()
   await expect(modal()).toHaveCount(0)
   return object
 }
@@ -125,7 +134,13 @@ async function main() {
     const order = page.locator('tr').filter({ hasText: names.supplier }).first()
     await click('审核', order)
     const confirm = page.getByRole('button', { name: /^确定$|^确认$/ }).first()
-    if (await confirm.isVisible()) await confirm.click()
+    await expect(confirm).toBeVisible()
+    const approval = page.waitForResponse(r => r.request().method() === 'POST' && /purchase\/orders\/\d+\/approve/.test(new URL(r.url()).pathname))
+    await confirm.click()
+    const approved = await approval
+    if (!approved.ok() || (await approved.json()).success === false) throw new Error('Purchase approval rejected')
+    await dismissSuccessAlert()
+    await expect(order).toContainText('已审核')
     return purchase
   })
   await step('purchase_inbound', async () => {
@@ -162,6 +177,14 @@ async function main() {
     const filename = path.basename(download.suggestedFilename()); const target = path.join(dir, filename)
     await download.saveAs(target)
     if ((await download.failure()) || fs.statSync(target).size === 0) throw new Error('Delivery document export did not produce a file')
+    if (!/\.xlsx?$/i.test(filename)) throw new Error('Delivery output requires a format-specific content verifier before acceptance')
+    const XLSX = require('xlsx'); const workbook = XLSX.readFile(target)
+    const contents = workbook.SheetNames.map(name => XLSX.utils.sheet_to_csv(workbook.Sheets[name])).join('\n')
+    if (!contents.includes(names.customer) || !contents.includes(names.product)) throw new Error('Exported delivery note does not contain the expected customer and product')
+    const rows = workbook.SheetNames.flatMap(name => XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1 }))
+    const productRow = rows.find(row => row.some(cell => String(cell).includes(names.product)))
+    const values = (productRow || []).map(cell => Number(String(cell).replace(/[￥¥,元]/g, '')))
+    if (![2, 20, 12.5, 250].every(value => values.includes(value))) throw new Error('Delivery row quantity, unit price or amount differs from the submitted business input')
     return { filename, bytes: fs.statSync(target).size, sha256: digest(fs.readFileSync(target)) }
   })
   await step('ui_readback', async () => {
