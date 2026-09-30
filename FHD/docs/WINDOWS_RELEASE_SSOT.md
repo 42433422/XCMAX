@@ -7,34 +7,31 @@
 
 ## 1. 当前版本信息
 
-**未闭环。** 产品版本 1.0.0.5；Windows stable OTA 关闭。公开临时下载指针目前指向非 main 构建 3ab4874b17974fae2b52dcabc033f07092206771，SHA-256 9f081078d116859a6ad36eb17aaceb07a86963f9fe6b1449ce7b6092fab0b834。该包的候选清单为 acceptance=NOT_RERUN，不能作为本轮验收包。
+**未闭环。** 产品版本 1.0.0.5；Windows stable OTA 关闭。公开临时下载指针目前指向非 main 构建 3ab4874b17974fae2b52dcabc033f07092206771，SHA-256 9f081078d116859a6ad36eb17aaceb07a86963f9fe6b1449ce7b6092fab0b834。该包的候选清单为 acceptance=NOT_RERUN，不能作为本轮验收包；当前机旧包的备份失败不能外推到主线候选。
 
 #2103 已合并（37fbabed），#2104 已合并（main 83939363）。它们修复市场 API 登录与租户数据读回、首次启动就绪、备份任务注册/参数和解析随包 backend、安装器版本显示及 build-info。对应 exact-main 私有候选 SHA-256 为 92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf；隔离 Windows runner 的 clean 与 upgrade 检查通过，含同账号租户身份、记录读回、安装器显示版本、计划任务执行和非空备份文件。原始记录：`C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`。这些是 runner/API 验收，不等于客户 GUI 业务链验收，也没有验证恢复后应用读回。
 
 #2096 仍 OPEN 且与 main 冲突。其租户业务页映射和登录后 Mod 路由注册竞态尚未进入 main/上述候选。本轮在 codex/windows-route-backup-fix 从 main 83939363 适配该修复，并补充应用读取备份恢复记录的候选回归；合并并重建前不冻结本轮 RELEASE_SHA。
 
-当前机器实际运行的是旧分支包 3ab4874b，不是 main 候选；其自定义安装目录下备份触发失败不能用于否定 #2104 的主线修复。最新候选的备份脚本从随包脚本目录解析 backend，runner 已成功执行计划任务并生成数据库文件。
-
-## 3. Release Gate 定义
-
-G1–G13 覆盖构建身份、首装、登录绑定、业务、升级、重开、备份恢复及更新；stable OTA 另行保持关闭。
+## 3. Release Gate 定义（G1–G13 覆盖构建身份、首装、登录绑定、业务、升级、重开、备份恢复及更新）
 
 ## 4. Release Gate 状态
 
-| Gate | 状态 | 当前证据 / 缺口 |
-|---|---|---|
-| G1 构建与身份 | YELLOW | main 83939363 私有候选有回执；本轮路由修复尚未合并、未重建 |
-| G2 首装 | YELLOW | runner clean 安装通过；客户入口重下及 GUI 首装未完成 |
-| G3 签名 | YELLOW | 过渡包未签名，风险接受有效；安装时须核 SHA-256 |
-| G4 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |
-| G5 登录、企业与设备绑定 | YELLOW | runner API 登录及 tenant 身份通过；GUI 绑定未验证 |
-| G6 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
-| G7 真实业务与 AI 任务 | UNKNOWN | 当前候选未完成客户/产品、采购、销售、出货、送货单、导出及审批后 AI 执行 |
-| G8–G9 stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
-| G10 覆盖升级读回 | YELLOW | runner 同账号读回原记录通过；真实受支持旧版客户数据 GUI 读回未完成 |
-| G11 升级后业务 | UNKNOWN | 未在最终候选上完成客户 GUI 业务 |
-| G12 退出重开 | UNKNOWN | 旧包历史证据不能替代最终候选复验 |
-| G13 备份恢复 | YELLOW | runner 任务产物存在；候选恢复回归待运行，恢复后应用查询及业务界面读取未完成 |
+| Gate | 项目 | 状态 | 当前证据 / 缺口 |
+|---|---|---|---|
+| G1 | 构建与身份 | YELLOW | main 83939363 私有候选有回执；本轮路由修复尚未合并、未重建 |
+| G2 | 首装 | YELLOW | runner clean 安装通过；客户入口重下及 GUI 首装未完成 |
+| G3 | 签名 | YELLOW | 过渡包未签名，风险接受有效；安装时须核 SHA-256 |
+| G4 | 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |
+| G5 | 登录、企业与设备绑定 | YELLOW | runner API 登录及 tenant 身份通过；GUI 绑定未验证 |
+| G6 | 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
+| G7 | 真实业务与 AI 任务 | UNKNOWN | 当前候选未完成客户/产品、采购、销售、出货、送货单、导出及审批后 AI 执行 |
+| G8 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
+| G9 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
+| G10 | 覆盖升级读回 | YELLOW | runner 同账号读回原记录通过；真实受支持旧版客户数据 GUI 读回未完成 |
+| G11 | 升级后业务 | UNKNOWN | 未在最终候选上完成客户 GUI 业务 |
+| G12 | 退出重开 | UNKNOWN | 旧包历史证据不能替代最终候选复验 |
+| G13 | 备份恢复 | YELLOW | runner 任务产物存在；候选恢复回归待运行，恢复后应用查询及业务界面读取未完成 |
 
 ## 6. 实机验收任务
 

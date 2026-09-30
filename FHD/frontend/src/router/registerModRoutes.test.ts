@@ -57,14 +57,6 @@ describe('registerModRoutes', () => {
     expect(addSpy).not.toHaveBeenCalled()
   })
 
-  it('shares concurrent glob registration for a router', async () => {
-    const router = createRouter({ history: createMemoryHistory(), routes: [] })
-    await Promise.all([ensureGlobModRoutes(router), ensureGlobModRoutes(router)])
-    const { modRouteGlob } = await import('@/constants/modRouteGlob')
-    expect(modRouteGlob['/mods/glob-once-mod/frontend/routes.js']).toHaveBeenCalledTimes(1)
-    expect(router.resolve('/mod/glob-once-mod/hello').matched).toHaveLength(1)
-  })
-
   it('registers routes from glob loader', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
@@ -133,5 +125,13 @@ describe('registerModRoutes', () => {
     await registerModRoutes(router, [{ mod_id: 'refresh-home-mod', routes_path: '/mods/refresh-home-mod/frontend/routes.js' }])
 
     expect(replaceSpy).toHaveBeenCalledWith('/refresh-home-mod')
+  })
+
+  it('shares concurrent glob registration for a router', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] })
+    await Promise.all([ensureGlobModRoutes(router), ensureGlobModRoutes(router)])
+    const { modRouteGlob } = await import('@/constants/modRouteGlob')
+    expect(modRouteGlob['/mods/glob-once-mod/frontend/routes.js']).toHaveBeenCalledTimes(1)
+    expect(router.resolve('/mod/glob-once-mod/hello').matched).toHaveLength(1)
   })
 })
