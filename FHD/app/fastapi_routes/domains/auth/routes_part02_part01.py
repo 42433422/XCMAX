@@ -190,13 +190,9 @@ async def auth_login(
         jit_create_fn=_facade()._jit_create_local_user_for_enterprise,
         market_user_email_from_raw=_facade()._market_user_email_from_raw,
         login_market_fn=login_market_with_password,
-        **({"background_tasks": background_tasks} if background_tasks is not None else {}),
+        background_tasks=background_tasks,
         totp_code=str(body.get("totp_code") or "").strip() or None,
-        **(
-            {"invitation_code": str(body.get("invitation_code") or "").strip()}
-            if body.get("invitation_code")
-            else {}
-        ),
+        invitation_code=str(body.get("invitation_code") or "").strip(),
     )
     if err:
         auth_login_duration_seconds.labels(auth_method="password").observe(
@@ -270,7 +266,7 @@ async def auth_login_with_phone_code(
         jit_create_fn=_facade()._jit_create_local_user_for_enterprise,
         market_user_email_from_raw=_facade()._market_user_email_from_raw,
         login_market_fn=None,
-        **({"background_tasks": background_tasks} if background_tasks is not None else {}),
+        background_tasks=background_tasks,
     )
     if err:
         auth_login_duration_seconds.labels(auth_method="phone_code").observe(
@@ -368,7 +364,7 @@ async def auth_oidc_callback(
     payload = await finalize_auth_after_oidc(
         auth_result=auth_result,
         oidc_profile=profile,
-        **({"background_tasks": background_tasks} if background_tasks is not None else {}),
+        background_tasks=background_tasks,
         oidc_access_token=str(oidc_session.get("access_token") or ""),
         account_kind=account_kind,
         sku=sku,

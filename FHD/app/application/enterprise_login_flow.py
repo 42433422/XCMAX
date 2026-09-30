@@ -309,11 +309,7 @@ async def run_market_first_login(
                             username=login_username,
                             sku=sku,
                             skip_market_sync=True,
-                            **(
-                                {"background_tasks": background_tasks}
-                                if background_tasks is not None
-                                else {}
-                            ),
+                            background_tasks=background_tasks,
                         )
                         # finalize skip_market_sync 分支不写 market_is_admin/market_is_enterprise，此处补充
                         # enterprise SKU 管理员默认拥有企业版权益（市场不可达时）
@@ -422,7 +418,7 @@ async def run_market_first_login(
             username=login_username,
             sku=sku,
             invitation_code=invitation_code,
-            **({"background_tasks": background_tasks} if background_tasks is not None else {}),
+            background_tasks=background_tasks,
         )
     return result, None
 
@@ -465,5 +461,5 @@ async def finalize_auth_after_oidc(
         username=username,
         sku=sku,
         skip_market_sync=not bool(market_result.get("success")),
-        **({"background_tasks": background_tasks} if background_tasks is not None else {}),
+        background_tasks=background_tasks,
     )
