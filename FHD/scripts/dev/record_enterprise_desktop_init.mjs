@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/** Installed Windows UI regression. No mocks, API writes, storage injection or synthetic video. */
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -65,7 +64,7 @@ async function dismissSuccessAlert() {
 }
 async function save(name, endpoint) {
   const waiting = page.waitForResponse(r => r.request().method() === 'POST' && endpoint.test(new URL(r.url()).pathname), { timeout: 30000 })
-  const button = modal().getByRole('button', { name, exact: typeof name === 'string' }).first(), actualText = await button.innerText(); await button.click(); evidence.observations.push({ action: 'save_button_clicked', name: String(name), actualText, observed_at: new Date().toISOString() })
+  const button = modal().getByRole('button', { name, exact: typeof name === 'string' }).first(), actualText = await button.innerText(); await button.evaluate(el => el.addEventListener('click', () => console.info('WIN_UI_CLICK:' + el.textContent), { once: true })); await button.click(); evidence.observations.push({ action: 'save_button_clicked', name: String(name), actualText, observed_at: new Date().toISOString() })
   const response = await waiting
   const body = await response.json()
   if (!response.ok() || body.success === false || body.ok === false) throw new Error(`Business save rejected: HTTP ${response.status()}`)
@@ -81,6 +80,7 @@ async function main() {
   const context = browser.contexts()[0]
   page = context.pages().find(p => p.url().includes('127.0.0.1:17500')) || context.pages()[0]
   page.on('response', r => { const endpoint = new URL(r.url()).pathname; if (r.request().method() === 'POST' && /purchase|inventory|customers|products|orders|shipment/.test(endpoint)) evidence.observations.push({ endpoint, method: r.request().method(), status: r.status(), observed_at: new Date().toISOString() }) })
+  page.on('console', msg => { const text = msg.text().split('\n')[0]; if (/WIN_UI_CLICK:|TypeError|ReferenceError|Unhandled error/.test(text) && !/token|password|secret|authorization|cookie/i.test(text)) evidence.observations.push({ browser_console: text.slice(0, 512), observed_at: new Date().toISOString() }) })
   page.on('pageerror', error => evidence.observations.push({ browser_error: String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'), observed_at: new Date().toISOString() })); page.setDefaultTimeout(20000)
   await page.waitForURL(/127\.0\.0\.1:17500/, { timeout: 240000 })
   const login = await step('normal_login', async () => {
