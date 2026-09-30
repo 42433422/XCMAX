@@ -42,6 +42,10 @@ function Write-Log([string]$msg) {
 
 # --- 定位 xcagi-backend.exe ---
 function Find-BackendExe {
+  # Resolve the executable shipped beside this script, including custom NSIS /D paths.
+  $packagedBackendDir = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
+  $packagedBackendExe = Join-Path $packagedBackendDir 'xcagi-backend.exe'
+  if (Test-Path $packagedBackendExe) { return $packagedBackendExe }
   # 1. 注册表（NSIS 安装）
   $regPaths = @(
     "HKCU:\Software\XCAGI",

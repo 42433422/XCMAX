@@ -105,7 +105,9 @@ function Backup-And-Version {
   Start-ScheduledTask -TaskName XcagiDailyBackup
   $deadline = (Get-Date).AddMinutes(2)
   do { Start-Sleep -Seconds 3; $task = Get-ScheduledTaskInfo -TaskName XcagiDailyBackup } while ($task.LastRunTime -lt $started -and (Get-Date) -lt $deadline)
-  Check ($task.LastRunTime -ge $started -and $task.LastTaskResult -eq 0) 'backup_task_run' "last_result=$($task.LastTaskResult)"
+  $backupLog = Join-Path $dataRoot 'logs/backup.log'
+  $logTail = if (Test-Path $backupLog) { ((Get-Content $backupLog -Tail 8) -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>') -join ' | ' } else { 'backup.log absent' }
+  Check ($task.LastRunTime -ge $started -and $task.LastTaskResult -eq 0) 'backup_task_run' "last_result=$($task.LastTaskResult); log=$logTail"
   $backup = Get-ChildItem (Join-Path $dataRoot 'backups') -Filter 'xcagi-*.db' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   Check ($null -ne $backup -and $backup.Length -gt 0) 'backup_file' "bytes=$($backup.Length)"
 }
