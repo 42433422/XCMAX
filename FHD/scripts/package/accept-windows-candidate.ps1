@@ -95,8 +95,8 @@ function Backup-And-Version {
   $infoPath = Join-Path $installRoot 'resources/build-info.json'
   $info = Get-Content $infoPath -Raw | ConvertFrom-Json
   Check ($info.gitSha -eq $CandidateSha -and $info.version -eq $productVersion) 'build_info' "sha=$($info.gitSha); version=$($info.version)"
-  $display = @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*') | ForEach-Object { Get-ItemProperty $_ -ErrorAction SilentlyContinue } | Where-Object { $_.InstallLocation -eq $installRoot } | Select-Object -First 1
-  Check ($display.DisplayVersion -eq $productVersion) 'installer_display_version' "display=$($display.DisplayVersion)"
+  $display = @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*') | ForEach-Object { Get-ItemProperty $_ -ErrorAction SilentlyContinue } | Where-Object { $_.DisplayName -like 'XCAGI*' } | Select-Object -First 1
+  Check ($display.DisplayVersion -eq $productVersion) 'installer_display_version' "display=$($display.DisplayVersion); expected=$productVersion"
   $daily = Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction Stop
   $weekly = Get-ScheduledTask -TaskName XcagiWeeklyBackup -ErrorAction Stop
   Check ($daily.Actions[0].Execute -match 'powershell.exe' -and $daily.Actions[0].Arguments -match 'XcagiBackup.ps1') 'backup_task_action' 'daily and weekly tasks registered; daily action points to packaged backup script'
