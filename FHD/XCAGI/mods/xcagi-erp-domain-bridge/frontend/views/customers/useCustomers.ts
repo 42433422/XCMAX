@@ -5,8 +5,8 @@ import templatePreviewApi from '@/api/templatePreview'
 import { appAlert } from '@/utils/appDialog'
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel'
 import type { CustomerCreateDTO, CustomerUpdateDTO } from '@/types/customer'
+import type { ApiResponse } from '@/types/api'
 
-// 客户行数据（字段以 DataTable 列、合并逻辑与编辑弹窗实际访问项为准）
 interface CustomerRow {
   id?: number | string
   customer_name?: string
@@ -32,9 +32,7 @@ interface CustomerEditForm {
   address: string
 }
 
-interface CustomersListResponse {
-  success: boolean
-  total?: number
+interface CustomersListResponse extends ApiResponse<CustomerRow[]> {
   customers?: CustomerRow[]
 }
 
@@ -177,8 +175,8 @@ export function useCustomers() {
         ...(pu ? { purchase_unit: pu } : {})
       });
       if (data.success) {
-        const incoming = data.customers || [];
-        const total = Number(data.total ?? incoming.length ?? 0);
+        const incoming = data.data ?? data.customers ?? [];
+        const total = Number(data.total ?? incoming.length);
         totalCustomers.value = Number.isFinite(total) ? total : incoming.length;
 
         if (reset) {
