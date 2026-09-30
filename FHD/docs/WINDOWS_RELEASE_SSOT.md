@@ -9,7 +9,7 @@
 
 **未闭环。** 版本 1.0.0.5，stable OTA 关闭。2026-09-30 客户指针实测为 main 83939363、SHA-256 92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf；其说明仍误写 macOS 稳定版。本轮最终安装器尚未冻结。
 #2103/#2104 已进入 83939363，私有包 clean/upgrade runner 验证了 API 登录、同账号 tenant/记录读回、版本、备份执行与产物。原始记录位于 `C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`；不能核销 GUI 业务或恢复后应用读取。
-#2096 的路由映射与 Mod 注册竞态由 #2107 进入 main e5b2412；服务器磁盘耗尽导致的配对 503 已恢复，预发 36715937308 已运行同 SHA。36712593205 attempt 2 实装通过，私有包 SHA-256 59019c31309dc1803546afc06d221745e28b9856f17b6f0aceab1da0fe3e3733；隔离验收 36729760481 首装与旧版登录均超时，36731164250 确认 30 秒 HttpClient.Timeout。全源扫描 36716312096 有 3 严重、61 高危阻塞；#2109 修复待保护检查，最终包未冻结。没有可用客户测试机/快照；独立 Windows runner 已验证部分 GUI 业务，AI、真实旧版业务升级和 A/B/C 仍未完成。
+#2096 的路由映射与 Mod 注册竞态由 #2107 进入 main e5b2412；main #2111/#2112 已纳入本轮 #2109 集成分支；服务器磁盘耗尽导致的配对 503 已恢复，预发 36715937308 已运行同 SHA。36712593205 attempt 2 实装通过，私有包 SHA-256 59019c31309dc1803546afc06d221745e28b9856f17b6f0aceab1da0fe3e3733；隔离验收 36729760481 首装与旧版登录均超时，36731164250 确认 30 秒 HttpClient.Timeout。全源扫描 36716312096 有 3 严重、61 高危阻塞；#2109 修复待保护检查，最终包未冻结。没有可用客户测试机/快照；独立 Windows runner 已验证部分 GUI 业务，AI、真实旧版业务升级和 A/B/C 仍未完成。
 
 ## 3. Release Gate 定义（G1–G13 覆盖构建身份、首装、登录绑定、业务、升级、重开、备份恢复及更新）
 
@@ -29,7 +29,7 @@
 | G10 | 覆盖升级读回 | YELLOW | runner 同账号读回原记录通过；真实受支持旧版客户数据 GUI 读回未完成 |
 | G11 | 升级后业务 | UNKNOWN | 未在最终候选上完成客户 GUI 业务 |
 | G12 | 退出重开 | UNKNOWN | 旧包历史证据不能替代最终候选复验 |
-| G13 | 备份恢复 | YELLOW | [36732341444](evidence/e2e/windows-closeout-20260930/upgrade-36732341444.json)：正式 daily 执行、产物及隔离恢复后同账号 API 读回通过；weekly 执行及 GUI 读取未完成 |
+| G13 | 备份恢复 | YELLOW | [36775708452](https://github.com/42433422/XCMAX/actions/runs/36775708452)：私有917包 Daily/Weekly正式调度均产生1691648字节备份；隔离恢复应用的实际数据目录、同账号同企业API读回通过。最终候选未冻结，GUI恢复读取已补入升级流程但尚待实跑，不能判C轮通过 |
 
 ## 6. 实机验收任务
 
