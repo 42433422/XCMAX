@@ -49,7 +49,6 @@ function Start-App([string]$label) {
   Check ($health.status -ne 'unhealthy' -and @($health.runtime.blockers).Count -eq 0 -and $status.readyForUi -eq $true) "$label.first_start_ready" "health=$($health.status); blockers=$(@($health.runtime.blockers).Count); readyForUi=$($status.readyForUi); pid=$($p.Id)"
   $p.Refresh()
   Check (-not $p.HasExited) "$label.no_restart" "original pid=$($p.Id)"
-  return $p
 }
 function Login([string]$label) {
   Check ([bool]$env:XCAGI_TEST_USER -and [bool]$env:XCAGI_TEST_PASS) "$label.credentials" 'CI test credentials are configured'
@@ -85,9 +84,8 @@ function Create-Record($session, [string]$marker, [string]$label) {
   Check ([bool]$csrf) "$label.csrf_cookie" 'safe request established a CSRF cookie'
   $r = Invoke-WebRequest "$base/api/agent/tasks" -Method Post -Body $body -ContentType 'application/json' -Headers @{'X-CSRF-Token'=$csrf} -WebSession $session -TimeoutSec 20
   Check ([int]$r.StatusCode -in @(200,202)) "$label.create_record" "http=$($r.StatusCode); marker_sha256=$(Digest $marker)"
-  $id = $marker
-  Read-Record $session $id $marker $label
-  return $id
+  Read-Record $session $marker $marker $label
+  return $marker
 }
 function Backup-And-Version {
   $infoPath = Join-Path $installRoot 'resources/build-info.json'
@@ -185,6 +183,8 @@ try {
   $evidence.failure = $_.Exception.Message
   throw
 } finally {
+  $backendLog = Join-Path $dataRoot 'logs/electron-backend.log'
+  if (Test-Path $backendLog) { Get-Content -LiteralPath $backendLog | Where-Object { $_ -notmatch '(?i)token|password|secret|authorization|cookie|username|[a-z0-9_-]{40,}' -and (-not $env:XCAGI_TEST_USER -or -not $_.Contains($env:XCAGI_TEST_USER)) -and (-not $env:XCAGI_TEST_PASS -or -not $_.Contains($env:XCAGI_TEST_PASS)) } | Set-Content (Join-Path $EvidenceDir 'backend-redacted.log') -Encoding utf8 }
   $evidence.finished_at = (Get-Date).ToUniversalTime().ToString('o')
   $evidence | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $EvidenceDir 'acceptance.json') -Encoding utf8
   Stop-App
