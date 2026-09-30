@@ -82,7 +82,10 @@ function Read-Record($session, [int]$id, [string]$marker, [string]$label) {
 }
 function Create-Record($session, [string]$marker, [string]$label) {
   $body = @{unit_name=$marker; contact_name='Acceptance'; phone=''; address=''} | ConvertTo-Json -Compress
-  $r = Invoke-WebRequest "$base/api/customers" -Method Post -Body $body -ContentType 'application/json' -WebSession $session -TimeoutSec 20
+  Invoke-WebRequest "$base/api/health?lite=true" -WebSession $session -TimeoutSec 15 | Out-Null
+  $csrf = @($session.Cookies.GetCookies([Uri]$base) | Where-Object { $_.Name -eq 'csrf_token' } | Select-Object -First 1)[0].Value
+  Check ([bool]$csrf) "$label.csrf_cookie" 'safe request established a CSRF cookie'
+  $r = Invoke-WebRequest "$base/api/customers" -Method Post -Body $body -ContentType 'application/json' -Headers @{'X-CSRF-Token'=$csrf} -WebSession $session -TimeoutSec 20
   Check ([int]$r.StatusCode -eq 200) "$label.create_record" "http=$($r.StatusCode); marker_sha256=$(Digest $marker)"
   $id = [int](($r.Content | ConvertFrom-Json).data.id)
   Check ($id -gt 0) "$label.record_id" "id=$id"
