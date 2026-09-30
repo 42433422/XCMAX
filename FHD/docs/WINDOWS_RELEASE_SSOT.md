@@ -3,8 +3,9 @@
 > 登记于 [SSOT_INDEX.md](SSOT_INDEX.md)「windows-release」域。每轮按本文件回填事实；实机证据不足不得标记交付完成。
 > 判据：[desktop-real-machine-acceptance-protocol.md](e2e/desktop-real-machine-acceptance-protocol.md)；签名风险决策：[windows_signing_acceptance.json](../config/windows_signing_acceptance.json)。
 > macOS 发布状态见 [MACOS_RELEASE_SSOT.md](MACOS_RELEASE_SSOT.md)。
+> Gate 状态仅用 `GREEN`/`YELLOW`/`RED`/`UNKNOWN`；`RED` 须附复现步骤、证据链接及修复 PR/commit，修复后重测，不得直接改状态。
 
-## 当前状态（2026-09-30）
+## 1. 当前版本信息
 
 **未闭环。** 产品版本 1.0.0.5；Windows stable OTA 关闭。公开临时下载指针目前指向非 main 构建 3ab4874b17974fae2b52dcabc033f07092206771，SHA-256 9f081078d116859a6ad36eb17aaceb07a86963f9fe6b1449ce7b6092fab0b834。该包的候选清单为 acceptance=NOT_RERUN，不能作为本轮验收包。
 
@@ -14,7 +15,11 @@
 
 当前机器实际运行的是旧分支包 3ab4874b，不是 main 候选；其自定义安装目录下备份触发失败不能用于否定 #2104 的主线修复。最新候选的备份脚本从随包脚本目录解析 backend，runner 已成功执行计划任务并生成数据库文件。
 
-## 发布门状态
+## 3. Release Gate 定义
+
+G1–G13 覆盖构建身份、首装、登录绑定、业务、升级、重开、备份恢复及更新；stable OTA 另行保持关闭。
+
+## 4. Release Gate 状态
 
 | Gate | 状态 | 当前证据 / 缺口 |
 |---|---|---|
@@ -25,13 +30,13 @@
 | G5 登录、企业与设备绑定 | YELLOW | runner API 登录及 tenant 身份通过；GUI 绑定未验证 |
 | G6 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
 | G7 真实业务与 AI 任务 | UNKNOWN | 当前候选未完成客户/产品、采购、销售、出货、送货单、导出及审批后 AI 执行 |
-| G8–G9 stable OTA | CLOSED | stable OTA 保持关闭；覆盖升级不计 OTA |
+| G8–G9 stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G10 覆盖升级读回 | YELLOW | runner 同账号读回原记录通过；真实受支持旧版客户数据 GUI 读回未完成 |
 | G11 升级后业务 | UNKNOWN | 未在最终候选上完成客户 GUI 业务 |
 | G12 退出重开 | UNKNOWN | 旧包历史证据不能替代最终候选复验 |
 | G13 备份恢复 | YELLOW | runner 任务产物存在；候选恢复回归待运行，恢复后应用查询及业务界面读取未完成 |
 
-## 本轮必须补齐
+## 6. 实机验收任务
 
 | 轮次 | 必测范围 | 状态 |
 |---|---|---|
@@ -41,6 +46,6 @@
 
 三轮必须各自记录运行号、时间、输入、结果和原始证据，且使用同一最终安装器 SHA。stable OTA 不参与本轮。
 
-## 交付规则
+## 8. 发版复用 Runbook
 
 候选包使用 release-desktop.yml 的 windows_installer_only=true、candidate_only=true 私下构建；验收全过后才按风险接受授权发布临时下载指针，并从客户入口完整下载核对 SHA-256、版本、build-info、说明与证据。未发布只能报告「候选验收通过，发布未完成」。最终 INTERIM_CLOSED 只表示未签名过渡交付验收闭环，不代表 stable OTA 开放。
