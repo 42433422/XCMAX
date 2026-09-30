@@ -1,0 +1,100 @@
+{
+  "mode": "Clean",
+  "candidate_sha": "83939363ca2ccf7776c97f5c7895e29c1e5bc453",
+  "started_at": "2026-09-30T03:07:05.2740741Z",
+  "checks": [
+    {
+      "detail": "fresh user data and install path",
+      "passed": true,
+      "name": "isolated_runner"
+    },
+    {
+      "detail": "no prior daily task",
+      "passed": true,
+      "name": "isolated_tasks"
+    },
+    {
+      "detail": "exit=0",
+      "passed": true,
+      "name": "candidate.install"
+    },
+    {
+      "detail": "installed executable exists",
+      "passed": true,
+      "name": "candidate.exe"
+    },
+    {
+      "detail": "health=healthy; blockers=0; readyForUi=True; pid=6408",
+      "passed": true,
+      "name": "candidate.first_start_ready"
+    },
+    {
+      "detail": "original pid=6408",
+      "passed": true,
+      "name": "candidate.no_restart"
+    },
+    {
+      "detail": "CI test credentials are configured",
+      "passed": true,
+      "name": "candidate.credentials"
+    },
+    {
+      "detail": "http=200; success=True",
+      "passed": true,
+      "name": "candidate.login"
+    },
+    {
+      "detail": "kind=enterprise; tenant_sha256=6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+      "passed": true,
+      "name": "candidate.enterprise"
+    },
+    {
+      "detail": "safe request established a CSRF cookie",
+      "passed": true,
+      "name": "clean.csrf_cookie"
+    },
+    {
+      "detail": "http=202; marker_sha256=5038de456f3ac8e0f1a4f002bbce5406a965dff99af49f425bdefd7e4ddd0430",
+      "passed": true,
+      "name": "clean.create_record"
+    },
+    {
+      "detail": "http=200; marker_sha256=5038de456f3ac8e0f1a4f002bbce5406a965dff99af49f425bdefd7e4ddd0430; seen=True",
+      "passed": true,
+      "name": "clean.read_record"
+    },
+    {
+      "detail": "sha=83939363ca2ccf7776c97f5c7895e29c1e5bc453; version=1.0.0.5",
+      "passed": true,
+      "name": "build_info"
+    },
+    {
+      "detail": "display=1.0.0.5; expected=1.0.0.5",
+      "passed": true,
+      "name": "installer_display_version"
+    },
+    {
+      "detail": "daily and weekly tasks registered; daily action points to packaged backup script",
+      "passed": true,
+      "name": "backup_task_action"
+    },
+    {
+      "detail": "weekly trigger exists",
+      "passed": true,
+      "name": "backup_weekly_trigger"
+    },
+    {
+      "detail": "last_result=0; log=[2026-09-30 03:08:19] === XcagiBackup start === | [2026-09-30 03:08:19] invoking: D:\\a\\_temp\\xcagi-candidate-Clean\\resources\\backend\\xcagi-backend.exe --desktop --migrate-only --backup | [2026-09-30 03:08:23] latest backup: xcagi-unknown-20260930030822.db (1691648 bytes) | [2026-09-30 03:08:23] === XcagiBackup done ===",
+      "passed": true,
+      "name": "backup_task_run"
+    },
+    {
+      "detail": "bytes=1691648",
+      "passed": true,
+      "name": "backup_file"
+    }
+  ],
+  "result": "passed",
+  "candidate_sha256": "92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf",
+  "finished_at": "2026-09-30T03:08:25.8092222Z"
+}

@@ -57,7 +57,7 @@ make -f Makefile.win dev
 
 ### 发版口径
 
-当前主发版目标是 **企业桌面端可交付**。双 SKU 打包能力仍保留，见 [`FHD/docs/guides/RELEASE_TWO_SKUS.md`](../FHD/docs/guides/RELEASE_TWO_SKUS.md)；个人版处于冻结状态，不进入当前路线图承诺。
+当前主发版目标是 **企业桌面端可交付**。版本与 SKU 边界见 [`FHD/VERSION.md`](../FHD/VERSION.md)；个人版处于冻结状态，不进入当前路线图承诺。
 
 ## 只读归档（勿作日常入口）
 

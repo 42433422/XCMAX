@@ -112,7 +112,7 @@ CVM 或编排宿主需：
 | -------------------------- | ------------------------------------------------- | -------------------------------------------- |
 | Windows/macOS/Android 构建 | GitHub Actions secrets                            | `release-desktop.yml`                        |
 | macOS 公证                 | `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / 证书 | 可选，未配则 allow_unsigned                  |
-| Android 签名               | keystore 在 CI secrets                            | `RELEASE_TWO_SKUS.md`                        |
+| Android 签名               | keystore 在 CI secrets                            | `FHD/VERSION.md`                            |
 | COS + CDN                  | 腾讯云 CAM + `dl.xiu-ci.com` 预热                 | `deploy/docs/runbooks/xcagi-download-cdn.md` |
 
 **人工**：installer 日后在 CDN 控制台对 `dl.xiu-ci.com` 做**缓存预热**（脚本输出会提示路径）。

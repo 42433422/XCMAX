@@ -125,11 +125,6 @@
       .header-nav .product-link {
         color: var(--ink);
       }
-      .header-nav .market-link {
-        margin-left: 5px;
-        border: 1px solid var(--line-dark);
-        color: var(--ink);
-      }
 
       .xcagi-hero {
         overflow: hidden;
@@ -372,14 +367,7 @@
         margin-right: 6px;
         color: var(--ink);
       }
-.section-label {
-        margin: 0 0 13px;
-        color: var(--green);
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-      }
+
       .section-head {
         max-width: 760px;
       }
@@ -396,19 +384,6 @@
         line-height: 1.75;
       }
 
-
-
-      .joint-badge {
-        display: inline-flex;
-        margin-left: 8px;
-        padding: 4px 8px;
-        border-radius: 999px;
-        color: var(--green);
-        background: var(--green-soft);
-        font-size: 9px;
-        font-weight: 750;
-        vertical-align: middle;
-      }
       .feature-list {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -443,27 +418,6 @@
         line-height: 1.62;
       }
 
-.release-chip {
-        padding: 5px 8px;
-        border-radius: 999px;
-        color: var(--green);
-        background: var(--green-soft);
-        font-size: 10px;
-        font-weight: 750;
-      }
-
-
-
-      .platform-pending {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 9px;
-        padding: 13px 16px;
-        border: 1px dashed var(--line-dark);
-        border-radius: 11px;
-        color: #8a939e;
-        font-size: 11px;
-      }
       .test-note {
         margin: 18px 0 0;
         padding-top: 17px;
@@ -475,13 +429,7 @@
       .test-note b {
         color: #9a6816;
       }
-      .checksum {
-        margin: 12px 0 0;
-        color: #98a0aa;
-        font-size: 9px;
-        line-height: 1.55;
-        overflow-wrap: anywhere;
-      }
+
       .card-actions {
         display: flex;
         flex-wrap: wrap;
@@ -815,7 +763,11 @@
         function activeWindowsHotfix() {
           var hotfix = state.windowsHotfix
           if (!hotfix || hotfix.schema !== 'xcagi.windows_interim_release/v1') return null
-          if (!hotfix.download_allowed || hotfix.stable_auto_update !== false || hotfix.signature_status !== 'signed') return null
+          var unsignedAccepted = hotfix.signature_status === 'unsigned' && hotfix.risk_acceptance &&
+            Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()
+          if (!hotfix.download_allowed || hotfix.stable_auto_update !== false ||
+            (hotfix.signature_status !== 'signed' && !unsignedAccepted) ||
+            !hotfix.artifact || !/^[a-f0-9]{64}$/i.test(hotfix.artifact.sha256 || '')) return null
           return !hotfix.artifact || !hotfix.artifact.url || !hotfix.artifact.filename || compareVersions(hotfix.version, state.version) < 0 ? null : hotfix
         }
 
