@@ -105,7 +105,7 @@ function Backup-And-Version {
   $weeklyScriptArg = ([string]$weekly.Actions[0].Arguments).Replace('/', '\')
   Check ($daily.Actions[0].Execute -match 'powershell.exe' -and $dailyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\')) -and $dailyScriptArg -match '-NoProfile.*-NonInteractive.*-ExecutionPolicy Bypass' -and $weekly.Actions[0].Execute -match 'powershell.exe' -and $weeklyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\')) -and $weeklyScriptArg -match '-NoProfile.*-NonInteractive.*-ExecutionPolicy Bypass') 'backup_task_action' 'daily and weekly task actions use noninteractive policy flags and the packaged backup script'
   $taskUser = ([string]$daily.Principal.UserId -split '\\')[-1]
-  Check ($taskUser -eq $env:USERNAME -and $weekly.Principal.UserId -eq $daily.Principal.UserId -and $daily.Principal.LogonType -eq 'Interactive' -and $daily.Principal.RunLevel -eq 'Limited') 'backup_task_identity' "user=$taskUser; logon=$($daily.Principal.LogonType); level=$($daily.Principal.RunLevel)"
+  Check ($taskUser -eq $env:USERNAME -and $weekly.Principal.UserId -eq $daily.Principal.UserId -and $daily.Principal.LogonType -eq 'Interactive' -and $weekly.Principal.LogonType -eq 'Interactive' -and $daily.Principal.RunLevel -eq 'Limited' -and $weekly.Principal.RunLevel -eq 'Limited') 'backup_task_identity' "user=$taskUser; daily=$($daily.Principal.LogonType)/$($daily.Principal.RunLevel); weekly=$($weekly.Principal.LogonType)/$($weekly.Principal.RunLevel)"
   Check ($weekly.Triggers.Count -gt 0) 'backup_weekly_trigger' 'weekly trigger exists'
   $started = Get-Date
   $runThreshold = $started.AddSeconds(-2)
@@ -118,9 +118,15 @@ function Backup-And-Version {
     }
   }
   try {
-    Start-ScheduledTask -TaskName XcagiDailyBackup
-    $deadline = (Get-Date).AddMinutes(2)
-    do { Start-Sleep -Seconds 3; $task = Get-ScheduledTaskInfo -TaskName XcagiDailyBackup; $taskState = (Get-ScheduledTask -TaskName XcagiDailyBackup).State } while (($task.LastRunTime -lt $runThreshold -or $taskState -eq 'Running' -or $task.LastTaskResult -eq 267009) -and (Get-Date) -lt $deadline)
+    foreach ($taskName in @('XcagiDailyBackup', 'XcagiWeeklyBackup')) {
+      $runThreshold = (Get-Date).AddSeconds(-2)
+      Start-ScheduledTask -TaskName $taskName
+      $deadline = (Get-Date).AddMinutes(2)
+      do { Start-Sleep -Seconds 3; $task = Get-ScheduledTaskInfo -TaskName $taskName; $taskState = (Get-ScheduledTask -TaskName $taskName).State } while (($task.LastRunTime -lt $runThreshold -or $taskState -eq 'Running' -or $task.LastTaskResult -eq 267009) -and (Get-Date) -lt $deadline)
+      Check ($task.LastRunTime -ge $runThreshold -and $task.LastTaskResult -eq 0) "${taskName}_run" "last_result=$($task.LastTaskResult); last_run=$($task.LastRunTime.ToUniversalTime().ToString('o'))"
+      $produced = Get-ChildItem (Join-Path $dataRoot 'backups') -Filter 'xcagi-*.db' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+      Check ($produced -and $produced.Length -gt 0 -and $produced.LastWriteTime -ge $runThreshold) "${taskName}_artifact" "bytes=$($produced.Length); sha256=$((Get-FileHash -LiteralPath $produced.FullName -Algorithm SHA256).Hash.ToLowerInvariant())"
+    }
   } finally {
     if ($originalInstallPath) {
       Set-ItemProperty -Path $installRegistryPath -Name InstallPath -Value $originalInstallPath
@@ -128,7 +134,6 @@ function Backup-And-Version {
   }
   $backupLog = Join-Path $dataRoot 'logs/backup.log'
   $logTail = if (Test-Path $backupLog) { ((Get-Content $backupLog -Tail 8) -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>') -join ' | ' } else { 'backup.log absent' }
-  Check ($task.LastRunTime -ge $runThreshold -and $task.LastTaskResult -eq 0) 'backup_task_run' "last_result=$($task.LastTaskResult); log=$logTail"
   $packagedBackend = Join-Path $installRoot 'resources/backend/xcagi-backend.exe'
   $expectedBackendLog = $packagedBackend -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>'
   Check ($logTail.Contains($expectedBackendLog)) 'backup_packaged_backend' 'scheduled task resolved the backend beside its packaged script without the registry install path'
