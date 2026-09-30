@@ -23,7 +23,7 @@
 | G4 | 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |
 | G5 | 登录、企业与设备绑定 | YELLOW | 原生 PostgreSQL 恢复后，同包 36732341444 clean/upgrade 通过；[36737817121 正常 GUI 登录及租户 1](evidence/e2e/windows-closeout-20260930/gui-36737817121.json)通过；设备绑定未核销 |
 | G6 | 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
-| G7 | 真实业务与 AI 任务 | RED | [36748365998](evidence/e2e/windows-closeout-20260930/gui-36748365998.json)：分支私有包 d85c4ff3/18D4B30A 的客户 ID=1、产品 ID=1 创建和界面读回通过；采购入口被行业画像及企业菜单过滤。#2109 补菜单/租户路由映射，45 项针对性测试通过，待新包；销售、出货、导出、AI 未测 |
+| G7 | 真实业务与 AI 任务 | RED | [36748365998](evidence/e2e/windows-closeout-20260930/gui-36748365998.json)：分支私有包 d85c4ff3/18D4B30A 的客户 ID=1、产品 ID=1 创建和界面读回通过；复现步骤：正常登录→创建客户/产品→侧栏查找采购，入口被行业画像及企业菜单过滤；原始日志/截图见该运行证据。#2109 补菜单/租户路由映射，138 项针对性测试通过，待新包；销售、出货、导出、AI 未测 |
 | G8 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G9 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G10 | 覆盖升级读回 | YELLOW | runner 同账号读回原记录通过；真实受支持旧版客户数据 GUI 读回未完成 |

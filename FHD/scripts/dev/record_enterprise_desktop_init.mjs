@@ -122,7 +122,6 @@ async function main() {
     await expect(cells.nth(4)).toHaveText('¥12.50')
     return saved
   })
-  let purchase
   await step('purchase', async () => {
     await nav('purchase', '#view-purchase')
     await click('供应商'); await click('添加供应商')
@@ -136,7 +135,7 @@ async function main() {
     await product.selectOption(await product.locator('option').filter({ hasText: names.product }).getAttribute('value'))
     await row.locator('input[type=number]').nth(0).fill('10'); await row.locator('input[type=number]').nth(1).fill('12.50')
     await fill('备注', marker)
-    purchase = await save('保存', /purchase\/orders/)
+    const purchase = await save('保存', /purchase\/orders/)
     const order = page.locator('tr').filter({ hasText: names.supplier }).first()
     await click('审核', order)
     const confirm = page.getByRole('button', { name: /^确定$|^确认$/ }).first()
