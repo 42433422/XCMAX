@@ -344,7 +344,7 @@ export function useCreateOrder() {
     showStatus('正在生成发货单...', 'processing')
 
     try {
-      const data = await api.post<ShipmentResult>('/api/shipment/generate', {
+      const data = await api.post<ShipmentResult>(resolveErpApiPath('/api/shipment/generate'), {
         unit_name: form.purchaseUnit,
         date: form.purchaseDate,
         order_number: form.orderNumber,
@@ -374,7 +374,7 @@ export function useCreateOrder() {
     const filename = result.value?.doc_name
     if (!filename) return
     try {
-      const response = await api.download(`/api/shipment/download/${encodeURIComponent(filename)}`)
+      const response = await api.download(resolveErpApiPath(`/api/shipment/download/${encodeURIComponent(filename)}`))
       downloadBlob(await response.blob(), filename)
     } catch (error) {
       showStatus('下载失败: ' + (error as Error).message, 'error')

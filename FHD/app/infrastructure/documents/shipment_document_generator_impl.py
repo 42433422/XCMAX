@@ -27,7 +27,7 @@ from app.infrastructure.lookups.purchase_unit_resolver import (
 from app.legacy.documents.legacy_shipment_document import (
     load_legacy_shipment_document_generator,
 )
-from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir, get_resource_path
+from app.utils.path_io.path_utils import get_base_dir, get_resource_path, get_shipment_output_dir
 
 logger = logging.getLogger(__name__)
 
@@ -270,8 +270,11 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         self.template_dir = (
             resources_template_dir if os.path.isdir(resources_template_dir) else legacy_template_dir
         )
-        self.output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
         os.makedirs(self.output_dir, exist_ok=True)
+
+    @property
+    def output_dir(self) -> str:
+        return get_shipment_output_dir()
 
     def _load_products_from_main_db(self) -> list[dict[str, Any]]:
         products: list[dict[str, Any]] = []

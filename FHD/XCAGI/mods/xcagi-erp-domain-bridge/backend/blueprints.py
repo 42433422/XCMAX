@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+
+from app.infrastructure.auth.dependencies import require_permission
+from app.infrastructure.tenant_scope import tenant_scope
 
 logger = logging.getLogger(__name__)
 
@@ -157,11 +160,27 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     def mod_shipment_units():
         return _invoke("shipment", "records_units")
 
+    @router.post("/shipment/generate")
+    def mod_shipment_generate(
+        request: Request,
+        body: dict = Body(default_factory=dict),
+        user=Depends(require_permission("shipment.edit")),
+    ):
+        from app.mod_sdk.host_services import shipment_generate
+
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_generate(request, body)
+
     @router.get("/shipment/download/{filename:path}")
-    def mod_shipment_download(filename: str):
+    def mod_shipment_download(filename: str, user=Depends(require_permission("shipment.view"))):
         from app.mod_sdk.host_services import shipment_download
 
-        return shipment_download(filename)
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_download(filename)
 
     @router.get("/orders")
     def mod_orders_list(limit: int = Query(default=100, ge=1, le=5000)):

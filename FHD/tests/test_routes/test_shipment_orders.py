@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes import shipment_orders
+from app.utils.path_io.path_utils import get_shipment_output_dir
 
 
 @pytest.fixture
@@ -23,7 +24,7 @@ def client() -> TestClient:
 def _mock_svc(tmp_path, monkeypatch: pytest.MonkeyPatch):
     """默认 mock shipment application service。"""
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    (tmp_path / "shipment_outputs").mkdir(exist_ok=True)
+    Path(get_shipment_output_dir()).mkdir(parents=True, exist_ok=True)
     mock = MagicMock()
     with patch.object(shipment_orders, "_svc", return_value=mock):
         yield mock
@@ -140,21 +141,21 @@ class TestShipmentPrint:
         assert r.status_code == 404
 
     def test_with_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
+        test_file = Path(get_shipment_output_dir()) / "test.xlsx"
         test_file.write_bytes(b"fake")
         _mock_svc.mark_as_printed.return_value = {"success": True}
         r = client.post("/api/shipment/print", json={"file_path": str(test_file), "order_id": 1})
         assert r.status_code == 200
 
     def test_without_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
+        test_file = Path(get_shipment_output_dir()) / "test.xlsx"
         test_file.write_bytes(b"fake")
         r = client.post("/api/shipment/print", json={"file_path": str(test_file)})
         assert r.status_code == 200
         assert r.json()["updated"] is False
 
     def test_invalid_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
+        test_file = Path(get_shipment_output_dir()) / "test.xlsx"
         test_file.write_bytes(b"fake")
         r = client.post(
             "/api/shipment/print", json={"file_path": str(test_file), "order_id": "abc"}
@@ -172,7 +173,7 @@ class TestShipmentPrint:
 
 class TestShipmentDownload:
     def test_unicode_download_stays_inside_outputs(self, client: TestClient, tmp_path):
-        outputs = tmp_path / "shipment_outputs"
+        outputs = Path(get_shipment_output_dir())
         from openpyxl import load_workbook
 
         from app.legacy.documents.legacy_shipment_document import (
