@@ -8,3 +8,8 @@ Filesystem      Size  Used Avail Use% Mounted on
 5.4.241-24.0017.41.5
 kernel-5.4.241-24.0017.28.tl3.x86_64
 kernel-5.4.241-24.0017.41.5.tl3.x86_64
+2026-09-30T15:01:52Z: Native PostgreSQL on 5432 recovered via systemctl start postgresql.service; payment health db=UP. Existing data preserved. Previous failure: database service stopped after ENOSPC, login membership query timed out (HTTP 499).
+Wed Sep 30 15:02:45 UTC 2026
+active
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1       124G  120G  3.1G  98% /

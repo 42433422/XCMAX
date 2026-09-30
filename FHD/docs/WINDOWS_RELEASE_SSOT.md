@@ -21,7 +21,7 @@
 | G2 | 首装 | YELLOW | runner clean 安装通过；客户入口重下及 GUI 首装未完成 |
 | G3 | 签名 | YELLOW | 过渡包未签名，风险接受有效；安装时须核 SHA-256 |
 | G4 | 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |
-| G5 | 登录、企业与设备绑定 | RED | 复现：main e5b2412ace 隔离首装 POST auth/login 超时 30 秒，旧版亦失败；[原始运行](https://github.com/42433422/XCMAX/actions/runs/36731164250)，#2109 补诊断，原因待定位；GUI 未测 |
+| G5 | 登录、企业与设备绑定 | RED | 复现：main e5b2412ace 隔离首装 POST auth/login 超时 30 秒，旧版亦失败；[脱敏后端日志](evidence/e2e/windows-closeout-20260930/backend-36732341444.log)，#2109 补诊断，支付服务原生 PostgreSQL 5432 未恢复导致会员查询超时，已恢复待同包复验；GUI 未测 |
 | G6 | 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
 | G7 | 真实业务与 AI 任务 | UNKNOWN | 当前候选未完成客户/产品、采购、销售、出货、送货单、导出及审批后 AI 执行 |
 | G8 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
