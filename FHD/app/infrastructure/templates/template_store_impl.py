@@ -109,7 +109,21 @@ class FileSystemTemplateStore(TemplateStorePort):
                             "file_path": file_path,
                             "template_type": template_type,
                             "category": self._map_category(template_type),
-                            "business_scope": self._business_scope(template_type),
+                            "business_scope": (
+                                "orders"
+                                if norm_path
+                                == os.path.normcase(
+                                    os.path.abspath(
+                                        os.path.join(
+                                            self._base_dir,
+                                            "resources",
+                                            "templates",
+                                            "标准发货单.xlsx",
+                                        )
+                                    )
+                                )
+                                else self._business_scope(template_type)
+                            ),
                             "preview_capable": True,
                             "is_active": 1,
                             "source": "fs_scan",
@@ -230,11 +244,7 @@ class FileSystemTemplateStore(TemplateStorePort):
         return out
 
     def list_templates(self) -> list[dict]:
-        # DB 为主，自动发现文件模板为辅，再补 legacy（仅存在的文件）。
-        # 注意：历史上这里还会拼接 `_system_default_export_templates()` 产生的
-        # "导出默认模板" 占位条目，但它们带的都是假样例数据（M001/示例产品等），
-        # 在前端模板预览页看起来像占位；按产品要求已移除——无真实模板时由前端
-        # 的 "虚拟占位/快速创建" 流程兜底，而不再由后端塞入硬编码假数据。
+        # Real files only; bundled standard forms contain headers without customer data.
         templates = self._db_templates()
         templates.extend(self._discover_excel_templates())
         templates.extend(self._discover_word_templates())

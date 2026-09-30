@@ -33,6 +33,7 @@ def add_data(relative_path: str):
 for required_resource in (
     "resources/fonts/NotoSansSC-Regular.ttf",
     "resources/fonts/OFL-NotoSansSC.txt",
+    "resources/templates/标准发货单.xlsx",
 ):
     if not (ROOT / required_resource).is_file():
         raise FileNotFoundError(f"missing required label font resource: {required_resource}")

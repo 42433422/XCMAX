@@ -23,7 +23,7 @@
 | G4 | 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |
 | G5 | 登录、企业与设备绑定 | YELLOW | 原生 PostgreSQL 恢复后，同包 36732341444 clean/upgrade 通过；[36737817121 正常 GUI 登录及租户 1](evidence/e2e/windows-closeout-20260930/gui-36737817121.json)通过；设备绑定未核销 |
 | G6 | 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
-| G7 | 真实业务与 AI 任务 | RED | [36755955078](evidence/e2e/windows-closeout-20260930/gui-36755955078.json)：分支私有包 979b7e4f/90F90A04 的客户、产品、供应商、采购 ID=1 创建、采购 ¥125 审核和界面读回通过。复现步骤：正常登录→创建业务→采购确认收货→新建仓库→确认入库，30 秒内未收到入库响应；文件 SQLite 复现嵌套写事务锁等待及库存失败误报成功，#2109 改为同事务提交/回滚，145 项采购/库存/路由回归全部通过，待新包实测；[日志](evidence/e2e/windows-closeout-20260930/gui-36755955078-backend.log)/[截图](evidence/e2e/windows-closeout-20260930/gui-36755955078-inbound-failed.png)。#2109 继续诊断；销售、出货、导出、AI 未测 |
+| G7 | 真实业务与 AI 任务 | RED | [36766804335](https://github.com/42433422/XCMAX/actions/runs/36766804335)：私有 f22cf047/5A473C76 实装正常登录、客户/产品/供应商/采购/入库 ID=1 通过；入库 ¥125、采购已完成、库存与可用数量 10 均经界面读回，嵌套 SQLite 写锁修复核销。销售因干净安装没有发货单模板失败；#2109 补随包空白标准模板并验证实际填入业务字段，56 项模板回归通过，待新包 GUI 回归。出货、导出、AI、三轮完整验收仍未完成；[历史原始复现](evidence/e2e/windows-closeout-20260930/gui-36755955078.json)保留 |
 | G8 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G9 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G10 | 覆盖升级读回 | YELLOW | runner 同账号读回原记录通过；真实受支持旧版客户数据 GUI 读回未完成 |
