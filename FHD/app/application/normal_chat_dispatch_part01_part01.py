@@ -193,17 +193,7 @@ def _mentions_other_business_entity(text: str) -> bool:
 
 
 def _requires_llm_planning(text: str, entity_markers: tuple[str, ...]) -> bool:
-    """单关键词槽位路由是否必须让位给 LLM 规划。
-
-    仅当请求**同时**出现具体业务实体、且槽位路径无法完整表达时才让位，否则会出现
-    M11：请求被降级为一次只读查询，第二个业务实体被静默丢弃，且产物类工具
-    （reports(action=export)）永远不会被调用（artifacts 恒为空）。
-      ① 要产物 + 具体实体 —— 槽位路径不落 artifact，且产物背后的实体选择被丢弃；
-      ② 客户类实体 + 另一个业务实体 —— 单一 intent 无法表达，必然丢实体。
-    单实体的只读查询（「导出报表」「客户列表」「库存报表」）仍由槽位路径处理：
-    mainline 契约 test_negated_request_no_write_plan.py 明确要求「导出报表」→
-    reports_query，本修复不得回退该行为，故产物判定必须与实体同时命中才让位。
-    """
+    """具体实体的产物或跨实体任务交给规划；单实体查询保留槽位路由。"""
     has_entity = any(k in text for k in entity_markers) or _mentions_other_business_entity(text)
     if not has_entity:
         return False
@@ -222,6 +212,12 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     lower = text.lower()
     from app.services.intent_service import is_negation
 
+    if _facade().re.search(
+        r"(?:桌面|Mac|Windows|系统|电脑).{0,80}(?:打开|启动|关闭|切换|运行)"
+        r"|(?:打开|启动|关闭|切换|运行).{0,40}(?:应用|软件|程序|浏览器|TextEdit|文本编辑|Finder|访达|终端)",
+        text, _facade().re.IGNORECASE,
+    ):
+        return {"intent": "unknown", "slots": {}}
     if is_negation(text, action_keywords=["打印", "标签", "贴标", "商标"]):
         return {"intent": "unknown", "slots": {}}
     shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单")
