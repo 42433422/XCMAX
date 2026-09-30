@@ -87,6 +87,8 @@ def create_unified_task(
         raise UnifiedTaskError("task_id 不能为空、不能含 /，且长度不能超过 160")
     if not isinstance(params, dict):
         raise UnifiedTaskError("params 必须是对象")
+    if not str(tool_id or "").strip():
+        raise UnifiedTaskError("任务参数无效: tool_id 不能为空")
 
     validation = validate_tool_call(tool_id, action, params)
     spec = validation.spec
