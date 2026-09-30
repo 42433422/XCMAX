@@ -4,7 +4,7 @@
   [Parameter(Mandatory=$true)][string]$CandidateSha,
   [Parameter(Mandatory=$true)][string]$EvidenceDir,
   [string]$OldPath = '',
-  [string]$OldSha256 = '95b8d6b11adc204cc7b6f5e3ae62af648f6be0ee94604ad850d5b9a978e98e99'
+  [string]$OldSha256 = 'ed957f9db9940bcbc323f217c1b95bfe045b7f0d9aa2bb023aa175587ef66b56'
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'product-version.ps1')
@@ -33,7 +33,7 @@ function Stop-App {
 function Install([string]$path, [string]$label) {
   $p = Start-Process -FilePath $path -ArgumentList @('/S',"/D=$installRoot") -Wait -PassThru
   Check ($p.ExitCode -eq 0) "$label.install" "exit=$($p.ExitCode)"
-  Check (Test-Path (Join-Path $installRoot 'XCAGI.exe')) "$label.exe" 'installed executable exists'
+  Check (Test-Path (Join-Path $installRoot 'XCAGI.exe')) "$label.exe" "installed executable exists; build_info=$(Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw)"
 }
 function Start-App([string]$label) {
   $launch = @{FilePath=(Join-Path $installRoot 'XCAGI.exe'); WorkingDirectory=$installRoot; PassThru=$true; WindowStyle='Hidden'}

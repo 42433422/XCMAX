@@ -54,7 +54,7 @@ jobs:
         if: matrix.mode == 'Upgrade'
         shell: pwsh
         run: |
-          $url = 'https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/ac10f29f1d2ad5d53123200070e81d406cb587ca/95b8d6b11adc204cc7b6f5e3ae62af648f6be0ee94604ad850d5b9a978e98e99/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe'
+          $url = 'https://xiu-ci.com/xcagi-v1.0.0.1/XCAGI-Enterprise-Setup-1.0.0.1-x64-macalign.exe'
           Invoke-WebRequest -Uri $url -OutFile candidate/old-installer.exe -TimeoutSec 600
       - uses: actions/setup-node@v4
         if: matrix.mode == 'Gui' || matrix.mode == 'Upgrade'
