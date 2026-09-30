@@ -1,68 +1,36 @@
 import { app } from 'electron'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
   launchWindowsFullRollback,
   type WindowsRollbackAppliedRecord,
 } from './rollback-windows.js'
+import { launchMacOSFullRollback } from './rollback-macos.js'
 
-/**
- * 自动更新回滚机制
- *
- * 设计：
- * 1. beforeInstall 钩子中（quitAndInstall 之前）调用 prepareRollback()
- *    - 把当前版本号、可执行文件路径、关键资源路径写入 rollback-marker.json
- *    - Windows 在 userData/rollback/ 下备份完整安装目录
- *    - 其他平台保留 backend 目录备份
- * 2. 更新后首次启动时，checkPendingRollback() 检测 marker 是否存在
- *    - 如果存在，说明是"更新后首次启动"，进入观察期
- * 3. 启动成功后（后端 health 通过 + 窗口创建成功）调用 commitRollback()
- *    - 删除 marker，保留备份（供下次更新用）
- * 4. 启动失败时（后端 health 超时、createWindow 抛错）调用 triggerRollback()
- *    - Windows 由安装目录外的 PowerShell helper 在进程退出后恢复完整应用
- *    - 其他平台从备份还原 backend 可执行文件
- *    - 如迁移前生成了数据库备份，Windows 同时恢复数据库
- *    - 写入 rollback-applied.json，下次启动提示用户
- *    - 退出 app，让用户重启
- *
- * 安全边界：
- * - Windows 的更新准备必须成功备份完整安装目录，否则阻断 quitAndInstall
- * - 数据库迁移前备份失败时同样阻断更新
- * - 回滚 helper 使用同盘 staging + rename，并在替换失败时恢复新版本目录
- * - 非 Windows 平台仍是 backend-only，不能宣称完整应用回滚
- */
+/** Snapshot the prior app and database, then commit only after startup stabilizes. */
 
 const ROLLBACK_DIR = 'rollback'
 const ROLLBACK_MARKER = 'rollback-marker.json'
 const ROLLBACK_APPLIED = 'rollback-applied.json'
 
 export interface RollbackMarker {
-  mode?: 'backend' | 'windows-full'
-  /** 触发回滚准备时的版本号（来自 app.getVersion 或 version.txt） */
+  mode?: 'backend' | 'windows-full' | 'macos-full'
   fromVersion: string
-  /** 即将安装的新版本号（来自 update-downloaded 事件） */
   toVersion: string
-  /** 备份时间戳 ISO */
   preparedAt: string
-  /** 打包后的 backend 可执行文件路径（resourcesPath/backend/xcagi-backend[.exe]） */
   backendPath: string
-  /** 备份文件在 userData/rollback/ 下的相对路径 */
   backupRelPath?: string
-  /** Windows 完整安装目录中的主可执行文件 */
   appPath?: string
-  /** Windows 完整安装目录备份在 rollback/ 下的相对路径 */
   appBackupRelPath?: string
-  /** 迁移前 SQLite 备份及其恢复目标 */
+  appBundlePath?: string
   databaseBackupPath?: string
   databasePath?: string
 }
 
 export interface RollbackApplied {
-  /** 回滚发生时间 */
   appliedAt: string
-  /** 回滚原因 */
   reason: string
-  /** 从哪个版本回滚到哪个版本 */
   fromVersion: string
   toVersion: string
 }
@@ -102,13 +70,14 @@ function isPathInside(root: string, candidate: string): boolean {
   return candidateKey === rootKey || candidateKey.startsWith(`${rootKey}${path.sep}`)
 }
 
-function replaceDirectoryFromStaging(source: string, destination: string): void {
+function replaceDirectoryFromStaging(source: string, destination: string, appBundle = false): void {
   const staging = `${destination}.tmp-${process.pid}-${Date.now()}`
   const failed = `${destination}.failed-${process.pid}-${Date.now()}`
   try {
     fs.rmSync(staging, { recursive: true, force: true })
     fs.rmSync(failed, { recursive: true, force: true })
-    fs.cpSync(source, staging, { recursive: true, force: true })
+    if (appBundle) execFileSync('/usr/bin/ditto', [source, staging], { stdio: 'ignore' })
+    else fs.cpSync(source, staging, { recursive: true, force: true })
     if (fs.existsSync(destination)) {
       fs.renameSync(destination, failed)
     }
@@ -130,7 +99,6 @@ function replaceDirectoryFromStaging(source: string, destination: string): void 
   }
 }
 
-/** 解析打包后的 backend 可执行文件路径（与 main.ts findPackagedBackendExecutable 一致） */
 export function resolvePackagedBackendPath(): string {
   if (!app.isPackaged) return ''
   const backendDir = path.join(process.resourcesPath, 'backend')
@@ -149,6 +117,15 @@ export function resolvePackagedBackendPath(): string {
 export function resolvePackagedAppPath(): string {
   if (!app.isPackaged) return ''
   return app.getPath('exe')
+}
+
+function resolveMacOSAppBundlePath(appPath: string): string {
+  let current = path.resolve(appPath)
+  while (current !== path.dirname(current)) {
+    if (current.endsWith('.app')) return current
+    current = path.dirname(current)
+  }
+  throw new Error(`回滚备份失败：可执行文件不在 .app 包内 ${appPath}`)
 }
 
 function currentVersionIdentity(): string {
@@ -173,14 +150,9 @@ function currentVersionIdentity(): string {
   return version
 }
 
-/**
- * 在 quitAndInstall 之前调用：Windows 备份完整安装目录，其他平台备份 backend，
- * 然后写入 marker。
- * 如果备份失败，抛出错误（应阻止更新继续）。
- */
+/** Back up the current packaged app before electron-updater replaces it. */
 export async function prepareRollback(toVersion: string): Promise<void> {
   if (!app.isPackaged) {
-    // dev 模式无需回滚（无打包产物）
     return
   }
   const backendPath = resolvePackagedBackendPath()
@@ -218,6 +190,27 @@ export async function prepareRollback(toVersion: string): Promise<void> {
       appPath,
       appBackupRelPath: path.relative(dir, appBackupRoot),
     }
+  } else if (process.platform === 'darwin') {
+    const appPath = resolvePackagedAppPath()
+    if (!appPath || !fs.existsSync(appPath)) {
+      throw new Error(`回滚备份失败：找不到当前 XCAGI 可执行文件 ${appPath}`)
+    }
+    const appBundlePath = resolveMacOSAppBundlePath(appPath)
+    const appBackupRoot = path.join(dir, 'macos-app-current.app')
+    if (isPathInside(appBundlePath, appBackupRoot) || isPathInside(appBackupRoot, appBundlePath)) {
+      throw new Error(`回滚备份失败：应用包与备份目录不能互相嵌套（app=${appBundlePath}, backup=${appBackupRoot}）`)
+    }
+    replaceDirectoryFromStaging(appBundlePath, appBackupRoot, true)
+    marker = {
+      mode: 'macos-full',
+      fromVersion,
+      toVersion,
+      preparedAt: new Date().toISOString(),
+      backendPath,
+      appPath,
+      appBundlePath,
+      appBackupRelPath: path.relative(dir, appBackupRoot),
+    }
   } else {
     const backendDir = path.dirname(backendPath)
     const backupRoot = path.join(dir, `backend-${fromVersion}`)
@@ -233,7 +226,6 @@ export async function prepareRollback(toVersion: string): Promise<void> {
   }
   fs.writeFileSync(markerPath(), JSON.stringify(marker, null, 2), 'utf8')
 
-  // 清理旧的 applied 标记
   try { fs.unlinkSync(appliedPath()) } catch {}
 }
 
@@ -260,10 +252,6 @@ export function cancelPreparedRollback(): void {
   try { fs.unlinkSync(markerPath()) } catch {}
 }
 
-/**
- * 启动时检查是否有 pending rollback marker。
- * 返回 marker 表示处于"更新后首次启动观察期"。
- */
 export function checkPendingRollback(): RollbackMarker | null {
   try {
     const raw = fs.readFileSync(markerPath(), 'utf8')
@@ -273,17 +261,10 @@ export function checkPendingRollback(): RollbackMarker | null {
   }
 }
 
-/**
- * 启动成功后调用：删除 marker，保留备份（下次更新覆盖）。
- * 同时清理旧的 rollback-applied 标记（如果存在，提示用户已恢复）。
- */
 export function commitRollback(): void {
   try { fs.unlinkSync(markerPath()) } catch {}
 }
 
-/**
- * 检查上次启动是否触发过回滚（用于 UI 提示）。
- */
 export function checkRollbackApplied(): RollbackApplied | null {
   try {
     const raw = fs.readFileSync(appliedPath(), 'utf8')
@@ -302,17 +283,14 @@ export function consumeRollbackApplied(): RollbackApplied | null {
 }
 
 export interface RollbackTriggerResult {
-  mode: 'none' | 'backend' | 'windows-full'
+  mode: 'none' | 'backend' | 'windows-full' | 'macos-full'
   scheduled: boolean
 }
 
-/**
- * 启动失败时调用：从备份还原 backend，写入 applied 标记，退出 app。
- */
+/** Restore the prior release after an unsuccessful post-update startup. */
 export async function triggerRollback(reason: string): Promise<RollbackTriggerResult> {
   const marker = checkPendingRollback()
   if (!marker) {
-    // 无 marker 说明不是更新后首次启动，无法回滚
     return { mode: 'none', scheduled: false }
   }
 
@@ -354,6 +332,24 @@ export async function triggerRollback(reason: string): Promise<RollbackTriggerRe
     return { mode: 'windows-full', scheduled: true }
   }
 
+  if (process.platform === 'darwin' && marker.mode === 'macos-full' && marker.appBundlePath && marker.appBackupRelPath) {
+    const backupRoot = resolveInside(dir, marker.appBackupRelPath)
+    if (!fs.existsSync(backupRoot)) throw new Error(`回滚失败：完整应用备份目录不存在 ${backupRoot}`)
+    await launchMacOSFullRollback({
+      currentPid: process.pid,
+      appPath: marker.appBundlePath,
+      backupRoot,
+      markerPath: markerPath(),
+      appliedPath: appliedPath(),
+      logPath: helperLogPath(),
+      applied,
+      ...(marker.databasePath && marker.databaseBackupPath
+        ? { databasePath: marker.databasePath, databaseBackupPath: marker.databaseBackupPath }
+        : {}),
+    })
+    return { mode: 'macos-full', scheduled: true }
+  }
+
   if (!marker.backupRelPath) {
     throw new Error('回滚失败：marker 缺少 backend 备份路径')
   }
@@ -362,13 +358,11 @@ export async function triggerRollback(reason: string): Promise<RollbackTriggerRe
     throw new Error(`回滚失败：备份目录不存在 ${backupRoot}`)
   }
 
-  // 还原 backend 目录
   const backendDir = path.dirname(marker.backendPath)
   replaceDirectoryFromStaging(backupRoot, backendDir)
 
   fs.writeFileSync(appliedPath(), JSON.stringify(applied, null, 2), 'utf8')
 
-  // 删除 marker（已应用回滚）
   try { fs.unlinkSync(markerPath()) } catch {}
   return { mode: 'backend', scheduled: false }
 }
