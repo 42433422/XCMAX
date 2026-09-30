@@ -168,9 +168,7 @@ async def finalize_enterprise_login(
                             persist_session_membership_tier(str(session_id), membership_tier)
                             result["market_membership_tier"] = membership_tier
                     except _DELIVERY_ERRORS:
-                        logger.warning(
-                            "Membership sync deferred until the next authenticated retry"
-                        )
+                        logger.warning("Membership sync deferred until next authenticated retry")
 
                 if background_tasks is None:
                     await sync_membership()
