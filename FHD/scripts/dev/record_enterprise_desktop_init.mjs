@@ -146,7 +146,14 @@ async function main() {
   await step('purchase_inbound', async () => {
     const row = page.locator('tr').filter({ hasText: names.supplier }).first()
     await click(/^入库$|确认收货/, row)
-    await fill('数量', '10')
+    await click('新建收货仓库', modal())
+    const prompt = page.locator('.app-dialog-panel')
+    await prompt.locator('input').fill(`${marker}-收货仓库`)
+    const warehouse = page.waitForResponse(r => r.request().method() === 'POST' && /inventory\/warehouses/.test(new URL(r.url()).pathname))
+    await prompt.locator('.app-dialog-btn-primary').click()
+    const warehouseResponse = await warehouse
+    if (!warehouseResponse.ok() || !(await warehouseResponse.json()).data?.id) throw new Error('Normal UI warehouse creation failed')
+    await modal().getByLabel('数量').fill('10')
     const saved = await save(/^确认入库$|^保存$/, /purchase\/inbounds/)
     await click('采购入库')
     await expect(page.locator('#view-purchase')).toContainText(names.supplier)
@@ -194,17 +201,19 @@ async function main() {
     return { customer: names.customer, product: names.product }
   })
   await step('ai_business', async () => {
-    await page.locator('[data-tour="sidebar-im"]').click()
-    const input = page.locator('textarea:visible').last()
+    await nav('chat', '#view-chat')
+    const input = page.locator('#chatInput')
     await input.fill(`请创建客户，客户名称“${names.ai}”，联系人“AI验收员”，电话13800000002。请执行到客户记录保存成功并给出记录编号。`)
     await click(/^发送$/)
     const approve = page.getByRole('button', { name: /^批准$|^同意执行$|^确认执行$/ }).first()
     await approve.waitFor({ state: 'visible', timeout: 30000 }).catch(() => {})
     if (await approve.isVisible()) await approve.click()
-    await expect(page.locator('body')).toContainText(/执行成功|已完成|创建成功/, { timeout: 180000 })
+    const receipt = page.locator('#chatMessages .message.ai').last()
+    await expect(receipt).toContainText(/执行成功|已完成|创建成功|任务执行完成/, { timeout: 180000 })
+    const receiptText = await receipt.innerText()
     await nav('customers', '#view-customers')
     await expect(page.locator('#view-customers')).toContainText(names.ai, { timeout: 30000 })
-    return { created_customer: names.ai }
+    return { created_customer: names.ai, receipt: receiptText }
   })
   evidence.result = 'business_regression_passed'
 }

@@ -38,42 +38,17 @@ describe('customersApi', () => {
     wrapper.unmount()
   })
 
-  it('getCustomers calls GET /customers/list', async () => {
-    await customersApi.getCustomers({ page: 1 })
+  it.each([
+    ['list', () => customersApi.getCustomers({ page: 1 }), 'get', ['/api/erp/customers/list', { page: 1 }]],
+    ['detail', () => customersApi.getCustomer(42), 'get', ['/api/erp/customers/42']],
+    ['create', () => customersApi.createCustomer({ name: 'Test' } as any), 'post', ['/api/erp/customers', { name: 'Test' }]],
+    ['update', () => customersApi.updateCustomer(42, { name: 'Updated' } as any), 'put', ['/api/erp/customers/42', { name: 'Updated' }]],
+    ['delete', () => customersApi.deleteCustomer(42), 'delete', ['/api/erp/customers/42']],
+    ['batch delete', () => customersApi.batchDeleteCustomers([1, 2, 3]), 'post', ['/api/erp/customers/batch-delete', { ids: [1, 2, 3] }]],
+  ] as const)('%s uses the customer API contract', async (_name, call, method, args) => {
+    await call()
     const { api } = await import('./core')
-    expect(api.get).toHaveBeenCalledWith('/api/erp/customers/list', { page: 1 })
-  })
-
-  it('getCustomer calls GET /customers/:id', async () => {
-    await customersApi.getCustomer(42)
-    const { api } = await import('./core')
-    expect(api.get).toHaveBeenCalledWith('/api/erp/customers/42')
-  })
-
-  it('createCustomer calls POST /customers', async () => {
-    const data = { name: 'Test' } as any
-    await customersApi.createCustomer(data)
-    const { api } = await import('./core')
-    expect(api.post).toHaveBeenCalledWith('/api/erp/customers', data)
-  })
-
-  it('updateCustomer calls PUT /customers/:id', async () => {
-    const data = { name: 'Updated' } as any
-    await customersApi.updateCustomer(42, data)
-    const { api } = await import('./core')
-    expect(api.put).toHaveBeenCalledWith('/api/erp/customers/42', data)
-  })
-
-  it('deleteCustomer calls DELETE /customers/:id', async () => {
-    await customersApi.deleteCustomer(42)
-    const { api } = await import('./core')
-    expect(api.delete).toHaveBeenCalledWith('/api/erp/customers/42')
-  })
-
-  it('batchDeleteCustomers calls POST /customers/batch-delete', async () => {
-    await customersApi.batchDeleteCustomers([1, 2, 3])
-    const { api } = await import('./core')
-    expect(api.post).toHaveBeenCalledWith('/api/erp/customers/batch-delete', { ids: [1, 2, 3] })
+    expect(api[method]).toHaveBeenCalledWith(...args)
   })
 
   it.each([undefined, 'tmpl-1'])('exports with optional template %s', async (template) => {
