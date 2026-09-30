@@ -27,7 +27,7 @@ async function step(id, action) {
     return record.actual
   } catch (error) {
     record.status = 'failed'
-    record.error = String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]')
+    record.error = String(error.stack || error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]')
     if (page) {
       await page.screenshot({ path: path.join(dir, `${id}-failed.png`), fullPage: true }).catch(() => {})
       const text = await page.locator('body').innerText().catch(() => '')
@@ -72,7 +72,6 @@ async function save(name, endpoint) {
   const data = body.data || body
   const object = { endpoint: new URL(response.url()).pathname, status: response.status(), id: data.id || data.customer_id || data.product_id || data.order_id || data.inbound_id || data.order_no || data.order_number, fields: data }
   if (!object.id) throw new Error(`Saved business response has no record identity: ${object.endpoint}`)
-  evidence.observations.push(object)
   await dismissSuccessAlert()
   await expect(modal()).toHaveCount(0)
   return object
@@ -81,6 +80,7 @@ async function main() {
   browser = await chromium.connectOverCDP(process.env.XCAGI_CDP || 'http://127.0.0.1:9222', { timeout: 60000 })
   const context = browser.contexts()[0]
   page = context.pages().find(p => p.url().includes('127.0.0.1:17500')) || context.pages()[0]
+  page.on('response', r => { const endpoint = new URL(r.url()).pathname; if (r.request().method() === 'POST' && /purchase|inventory|customers|products|orders|shipment/.test(endpoint)) evidence.observations.push({ endpoint, method: r.request().method(), status: r.status(), observed_at: new Date().toISOString() }) })
   page.setDefaultTimeout(20000)
   await page.waitForURL(/127\.0\.0\.1:17500/, { timeout: 240000 })
   const login = await step('normal_login', async () => {
