@@ -11,6 +11,7 @@ export type IndustryBusinessMenuKey =
   | 'shipment-records'
   | 'materials'
   | 'inventory'
+  | 'purchase'
   | 'approval-hub'
   | 'data-sources'
   | 'print'
@@ -30,8 +31,11 @@ export type IndustryNavigationProfile = {
   deferredCapabilities: string[]
 }
 
-function withDefaultTemplateLibrary<T extends IndustrySidebarPreviewKey>(keys: T[]): Array<T | 'template-preview'> {
-  return keys.some((key) => key === 'template-preview') ? [...keys] : [...keys, 'template-preview']
+function withDefaultTemplateLibrary<T extends IndustrySidebarPreviewKey>(keys: T[]): Array<T | 'template-preview' | 'purchase'> {
+  const items: Array<T | 'template-preview' | 'purchase'> = [...keys]
+  if (keys.some(key => key === 'inventory') && !keys.some(key => key === 'purchase')) items.splice(items.findIndex(key => key === 'inventory') + 1, 0, 'purchase')
+  if (!items.some(key => key === 'template-preview')) items.push('template-preview')
+  return items
 }
 
 const categoryLabelById = Object.fromEntries(ONBOARDING_INDUSTRY_CATEGORIES.map((item) => [item.id, item.label])) as Record<

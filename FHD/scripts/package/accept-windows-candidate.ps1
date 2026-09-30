@@ -13,7 +13,9 @@ $installRoot = Join-Path $env:RUNNER_TEMP "xcagi-candidate-$Mode"
 $dataRoot = Join-Path $env:APPDATA 'XCAGI'
 $base = 'http://127.0.0.1:17500'
 git merge-base --is-ancestor $CandidateSha origin/main
+if ($LASTEXITCODE -gt 1) { throw 'Unable to verify candidate mainline ancestry' }
 $evidence = [ordered]@{ mode=$Mode; candidate_sha=$CandidateSha; candidate_on_main=($LASTEXITCODE -eq 0); customer_acceptance='not_verified'; started_at=(Get-Date).ToUniversalTime().ToString('o'); checks=@(); result='running' }
+$global:LASTEXITCODE = 0
 New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
 function Check([bool]$ok, [string]$name, [string]$detail) {
   $script:evidence.checks += @{ name=$name; passed=$ok; detail=$detail }

@@ -20,12 +20,6 @@ export type AccountRoleSource = {
   tenantId?: number | null
 }
 
-export const UNSCOPED_HOST_BUSINESS_KEYS = new Set([
-  'products', 'customers', 'orders', 'orders-create', 'shipment-records',
-  'materials', 'inventory', 'print', 'printer-list', 'template-preview',
-  'traditional-mode', 'approval-hub', 'tools',
-])
-
 /** Host routes above are not tenant-scoped. Enterprise tenants land on these Mod pages instead of settings. */
 export const TENANT_SCOPED_BUSINESS_PATHS: Record<string, string> = {
   products: '/mod/xcagi-erp-domain-bridge/products',
@@ -35,6 +29,7 @@ export const TENANT_SCOPED_BUSINESS_PATHS: Record<string, string> = {
   'shipment-records': '/mod/xcagi-erp-domain-bridge/shipment-records',
   materials: '/mod/xcagi-erp-domain-bridge/materials',
   inventory: '/mod/xcagi-erp-domain-bridge/inventory',
+  purchase: '/mod/xcagi-erp-domain-bridge/purchase',
   print: '/mod/xcagi-erp-domain-bridge/print',
   'printer-list': '/mod/xcagi-erp-domain-bridge/printer-list',
   'template-preview': '/mod/xcagi-erp-domain-bridge/template-preview',
@@ -42,6 +37,8 @@ export const TENANT_SCOPED_BUSINESS_PATHS: Record<string, string> = {
   'approval-hub': '/mod/xcagi-approval-bridge/approval-hub/workspace',
   tools: '/mod/xcagi-office-employee-pack-bridge/tools',
 }
+
+export const UNSCOPED_HOST_BUSINESS_KEYS = new Set(Object.keys(TENANT_SCOPED_BUSINESS_PATHS))
 
 export function tenantScopedBusinessPath(routeName: string): string | null {
   return TENANT_SCOPED_BUSINESS_PATHS[routeName] || null
@@ -66,18 +63,7 @@ const ENTERPRISE_GENERIC_CORE_KEYS = new Set([
   'orders-create',
 ])
 
-const ENTERPRISE_BUSINESS_CORE_KEYS = new Set([
-  'products',
-  'materials',
-  'traditional-mode',
-  'orders',
-  'orders-create',
-  'shipment-records',
-  'customers',
-  'inventory',
-  'print',
-  'approval-hub',
-])
+const ENTERPRISE_BUSINESS_CORE_KEYS = new Set([...UNSCOPED_HOST_BUSINESS_KEYS].filter(key => !ENTERPRISE_GENERIC_CORE_KEYS.has(key)))
 
 export function buildRoleMenuProfile(source: AccountRoleSource, hasIndustryBusinessMod = false): RoleMenuProfile {
   const isAdmin = source.isAdminAccount === true || (source.accountKind === 'admin' && source.marketIsAdmin === true)

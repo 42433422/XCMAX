@@ -134,7 +134,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       path: '/purchase',
       name: 'purchase',
       component: () => import('../../views/PurchaseView.vue'),
-      meta: { title: '耗材申领' },
+      meta: { title: '采购管理' },
     },
     {
       path: '/batch-analyze',

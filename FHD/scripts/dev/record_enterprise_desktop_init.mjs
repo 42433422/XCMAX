@@ -70,7 +70,7 @@ async function save(name, endpoint) {
   const body = await response.json()
   if (!response.ok() || body.success === false || body.ok === false) throw new Error(`Business save rejected: HTTP ${response.status()}`)
   const data = body.data || body
-  const object = { endpoint: new URL(response.url()).pathname, status: response.status(), id: data.id || data.customer_id || data.product_id || data.order_id || data.inbound_id || data.order_no || data.order_number }
+  const object = { endpoint: new URL(response.url()).pathname, status: response.status(), id: data.id || data.customer_id || data.product_id || data.order_id || data.inbound_id || data.order_no || data.order_number, fields: data }
   if (!object.id) throw new Error(`Saved business response has no record identity: ${object.endpoint}`)
   evidence.observations.push(object)
   await dismissSuccessAlert()
@@ -106,6 +106,8 @@ async function main() {
     await fill('客户名称', names.customer); await fill('联系人', '验收员'); await fill('电话', '13800000001'); await fill('地址', `${marker}隔离验收地址`)
     const saved = await save('创建', /customers|purchase.units/)
     await expect(page.locator('#view-customers')).toContainText(names.customer)
+    const row = page.locator('#view-customers tbody tr').filter({ hasText: names.customer })
+    for (const value of ['验收员', '13800000001', `${marker}隔离验收地址`]) await expect(row).toContainText(value)
     return saved
   })
   await step('product', async () => {
@@ -114,6 +116,10 @@ async function main() {
     await fill('产品型号', marker); await fill('产品名称', names.product); await fill('规格', '10'); await fill('价格', '12.50')
     const saved = await save('保存', /products/)
     await expect(page.locator('#view-products')).toContainText(names.product)
+    const cells = page.locator('#view-products tbody tr').filter({ hasText: names.product }).locator('td')
+    await expect(cells.nth(1)).toHaveText(marker)
+    await expect(cells.nth(3)).toHaveText('10')
+    await expect(cells.nth(4)).toHaveText('¥12.50')
     return saved
   })
   let purchase
