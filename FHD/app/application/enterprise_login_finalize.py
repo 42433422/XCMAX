@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 
 from app.application.session_account_meta import AccountKind
 from app.application.tenant_rbac_app_service import TenantIdentityError
@@ -34,6 +35,7 @@ async def finalize_enterprise_login(
     sku: str,
     skip_market_sync: bool = False,
     invitation_code: str = "",
+    background_tasks: BackgroundTasks | None = None,
 ) -> dict[str, Any]:
     """Bind market tokens, account metadata, MOD entitlements, and tenant state."""
     from app.fastapi_routes.market_account import (
@@ -46,13 +48,10 @@ async def finalize_enterprise_login(
     flow = _login_flow_module()
     market_token = ""
     local_demo_market = False
+    membership_sync: Callable[[], Awaitable[None]] | None = None
     try:
-        if skip_market_sync:
+        if skip_market_sync or (market_result is None and sku == "enterprise"):
             market_result = market_result or {"success": False}
-        elif market_result is None and sku != "enterprise":
-            pass
-        elif market_result is None:
-            market_result = {"success": False}
 
         market_token = str((market_result or {}).get("token") or "").strip()
         market_refresh = str((market_result or {}).get("refresh_token") or "").strip()
@@ -75,6 +74,8 @@ async def finalize_enterprise_login(
             company_brand = flow.company_brand_from_user_blob(user_blob)
             tenant_id: int | None = None
             tenant_name = company_brand
+            market_is_admin = bool(market_result.get("is_market_admin"))
+            market_is_enterprise = bool(market_result.get("is_enterprise"))
             user_id = (result.get("user") or {}).get("id")
             if user_id is not None:
                 from app.application.tenant_rbac_app_service import (
@@ -83,8 +84,6 @@ async def finalize_enterprise_login(
                 )
 
                 verified_username = flow.resolve_market_username(market_result) or username
-                market_is_admin = bool(market_result.get("is_market_admin"))
-                market_is_enterprise = bool(market_result.get("is_enterprise"))
                 if not invitation_code and market_token and not local_demo_market:
                     bind_verified_market_identity(
                         user_id=int(user_id),
@@ -138,8 +137,6 @@ async def finalize_enterprise_login(
                     if apply_paid_plan_for_user(user_id=int(user_id), plan_id=active_plan_id):
                         result["account_license_plan_id"] = active_plan_id
                         result["account_tier"] = str(market_result.get("account_tier") or "normal")
-            market_is_admin = bool(market_result.get("is_market_admin"))
-            market_is_enterprise = bool(market_result.get("is_enterprise"))
             account_kind = flow._derive_and_heal_account_kind(
                 user_id=user_id,
                 market_is_admin=market_is_admin,
@@ -164,10 +161,21 @@ async def finalize_enterprise_login(
                     persist_session_membership_tier,
                 )
 
-                membership_tier = await fetch_market_membership_tier(market_token)
-                if membership_tier:
-                    persist_session_membership_tier(str(session_id), membership_tier)
-                    result["market_membership_tier"] = membership_tier
+                async def sync_membership() -> None:
+                    try:
+                        membership_tier = await fetch_market_membership_tier(market_token)
+                        if membership_tier:
+                            persist_session_membership_tier(str(session_id), membership_tier)
+                            result["market_membership_tier"] = membership_tier
+                    except _DELIVERY_ERRORS:
+                        logger.warning(
+                            "Membership sync deferred until the next authenticated retry"
+                        )
+
+                if background_tasks is None:
+                    await sync_membership()
+                else:
+                    membership_sync = sync_membership
         elif skip_market_sync:
             user_id = (result.get("user") or {}).get("id")
             if user_id is not None:
@@ -297,6 +305,8 @@ async def finalize_enterprise_login(
     )
     if denied is not None:
         return cast(dict[str, Any], denied)
+    if background_tasks is not None and membership_sync is not None:
+        background_tasks.add_task(membership_sync)
     if (
         market_result
         and market_result.get("success")
@@ -308,17 +318,23 @@ async def finalize_enterprise_login(
             report_desktop_login_delivery_receipt,
         )
 
-        result["delivery_receipt"] = await report_desktop_login_delivery_receipt(market_token)
-        try:
-            from app.application.mod_delivery_receipt_outbox import (
-                retry_delivery_receipts_for_session,
-            )
-
-            async with asyncio.timeout(3):
-                result["mod_delivery_receipts"] = await retry_delivery_receipts_for_session(
-                    str(session_id),
-                    market_token,
+        async def sync_delivery_receipts() -> None:
+            result["delivery_receipt"] = await report_desktop_login_delivery_receipt(market_token)
+            try:
+                from app.application.mod_delivery_receipt_outbox import (
+                    retry_delivery_receipts_for_session,
                 )
-        except _DELIVERY_ERRORS:
-            logger.warning("Mod delivery receipts deferred until the next authenticated retry")
+
+                async with asyncio.timeout(3):
+                    result["mod_delivery_receipts"] = await retry_delivery_receipts_for_session(
+                        str(session_id),
+                        market_token,
+                    )
+            except _DELIVERY_ERRORS:
+                logger.warning("Mod delivery receipts deferred until the next authenticated retry")
+
+        if background_tasks is None:
+            await sync_delivery_receipts()
+        else:
+            background_tasks.add_task(sync_delivery_receipts)
     return result
