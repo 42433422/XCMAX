@@ -360,6 +360,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     ),
     "set_pipeline_stage": ("app.services.user_cs_pipeline", "set_pipeline_stage"),
     "setup_neuro_bus": ("app.neuro_bus.bus_setup", "setup_neuro_bus"),
+    "shipment_download": ("app.fastapi_routes.shipment_orders", "shipment_download"),
     "shipment_records_units": (
         "app.legacy.routes.product.compat_routes",
         "shipment_records_units",
@@ -408,8 +409,7 @@ def __getattr__(name: str) -> Any:
     except KeyError as exc:
         raise AttributeError(name) from exc
     module = import_module(module_name)
-    value = getattr(module, attribute) if attribute else module
-    return value
+    return getattr(module, attribute) if attribute else module
 
 
 def __dir__() -> list[str]:
