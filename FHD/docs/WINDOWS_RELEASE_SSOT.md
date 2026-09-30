@@ -7,11 +7,10 @@
 
 ## 1. 当前版本信息
 
-**未闭环。** 产品版本 1.0.0.5；Windows stable OTA 关闭。公开临时下载指针目前指向非 main 构建 3ab4874b17974fae2b52dcabc033f07092206771，SHA-256 9f081078d116859a6ad36eb17aaceb07a86963f9fe6b1449ce7b6092fab0b834。该包的候选清单为 acceptance=NOT_RERUN，不能作为本轮验收包；当前机旧包的备份失败不能外推到主线候选。
-
-#2103 已合并（37fbabed），#2104 已合并（main 83939363）。它们修复市场 API 登录与租户数据读回、首次启动就绪、备份任务注册/参数和解析随包 backend、安装器版本显示及 build-info。对应 exact-main 私有候选 SHA-256 为 92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf；隔离 Windows runner 的 clean 与 upgrade 检查通过，含同账号租户身份、记录读回、安装器显示版本、计划任务执行和非空备份文件。原始记录：`C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`。这些是 runner/API 验收，不等于客户 GUI 业务链验收，也没有验证恢复后应用读回。
-
-#2096 仍 OPEN 且与 main 冲突。其租户业务页映射和登录后 Mod 路由注册竞态尚未进入 main/上述候选。本轮在 codex/windows-route-backup-fix 从 main 83939363 适配该修复，并补充应用读取备份恢复记录的候选回归；合并并重建前不冻结本轮 RELEASE_SHA。
+**未闭环。** 版本 1.0.0.5，stable OTA 关闭。2026-09-30 客户指针实测为 main 83939363、SHA-256 92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf；其说明仍误写 macOS 稳定版。本轮最终安装器尚未冻结。
+#2103/#2104 已进入 83939363，私有包 clean/upgrade runner 验证了 API 登录、同账号 tenant/记录读回、版本、备份执行与产物。原始记录位于 `C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`；不能核销 GUI 业务或恢复后应用读取。
+#2096 的路由映射与 Mod 注册竞态已由 #2107 适配进入 main e5b2412，并加入恢复读回回归。该 SHA 安装器运行 36710607724/36712593205 均因设备配对 503 失败；没有通过候选或冻结哈希。预发运行 36715937308 仍执行中。
+全源安全扫描 36716312096 的有效阻塞为依赖与生产主机的 3 项严重、61 项高危。测试机/快照目前不可用；最终同包 GUI、AI、升级和 A/B/C 验收均未完成。
 
 ## 3. Release Gate 定义（G1–G13 覆盖构建身份、首装、登录绑定、业务、升级、重开、备份恢复及更新）
 
@@ -19,11 +18,11 @@
 
 | Gate | 项目 | 状态 | 当前证据 / 缺口 |
 |---|---|---|---|
-| G1 | 构建与身份 | YELLOW | main 83939363 私有候选有回执；本轮路由修复尚未合并、未重建 |
+| G1 | 构建与身份 | RED | main e5b2412ace：复现运行 36712593205 的实装冒烟，配对 503；[日志](evidence/e2e/windows-closeout-20260930/installer-36712593205.log)，待修复/重建 |
 | G2 | 首装 | YELLOW | runner clean 安装通过；客户入口重下及 GUI 首装未完成 |
 | G3 | 签名 | YELLOW | 过渡包未签名，风险接受有效；安装时须核 SHA-256 |
 | G4 | 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |
-| G5 | 登录、企业与设备绑定 | YELLOW | runner API 登录及 tenant 身份通过；GUI 绑定未验证 |
+| G5 | 登录、企业与设备绑定 | RED | 复现：main e5b2412ace 首装后 POST pairing/issue 返回 503；[原始日志](evidence/e2e/windows-closeout-20260930/installer-36712593205.log)，修复待定位；GUI 未测 |
 | G6 | 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
 | G7 | 真实业务与 AI 任务 | UNKNOWN | 当前候选未完成客户/产品、采购、销售、出货、送货单、导出及审批后 AI 执行 |
 | G8 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |

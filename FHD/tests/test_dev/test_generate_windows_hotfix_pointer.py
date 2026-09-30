@@ -18,15 +18,14 @@ def _metadata(path: Path, version: str = "1.0.0.1") -> None:
             {
                 "version_lock": version,
                 "download_version": version,
-                "release_history": [
-                    {
-                        "version": version,
-                        "date": "2026-09-01",
-                        "title": "Windows 临时交付",
-                        "channel": "交付候选版",
-                        "notes": ["明确显示未签名风险。"],
-                    }
-                ],
+                "release_history": [{"version": version, "title": "macOS 稳定版"}],
+                "windows_interim_release": {
+                    "version": version,
+                    "date": "2026-09-01",
+                    "title": "Windows 临时交付",
+                    "channel": "交付候选版",
+                    "notes": ["明确显示未签名风险。"],
+                },
             },
             ensure_ascii=False,
         ),
@@ -75,6 +74,7 @@ def test_generates_fail_closed_unsigned_quarantine_metadata(tmp_path: Path) -> N
     assert pointer["artifact"]["size"] == len(b"MZ-interim")
     assert pointer["artifact"]["sha256"] == hashlib.sha256(b"MZ-interim").hexdigest()
     assert pointer["release"]["version"] == version
+    assert pointer["release"]["title"] == "Windows 临时交付"
 
 
 def _acceptance(path: Path, **overrides) -> Path:
