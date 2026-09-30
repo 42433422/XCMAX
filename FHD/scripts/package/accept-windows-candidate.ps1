@@ -98,18 +98,61 @@ function Backup-And-Version {
   Check ($display.DisplayVersion -eq $productVersion) 'installer_display_version' "display=$($display.DisplayVersion); expected=$productVersion"
   $daily = Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction Stop
   $weekly = Get-ScheduledTask -TaskName XcagiWeeklyBackup -ErrorAction Stop
-  Check ($daily.Actions[0].Execute -match 'powershell.exe' -and $daily.Actions[0].Arguments -match 'XcagiBackup.ps1') 'backup_task_action' 'daily and weekly tasks registered; daily action points to packaged backup script'
+  $backupScript = Join-Path $installRoot 'resources/backend/_internal/scripts/backup/XcagiBackup.ps1'
+  $dailyScriptArg = ([string]$daily.Actions[0].Arguments).Replace('/', '\')
+  $weeklyScriptArg = ([string]$weekly.Actions[0].Arguments).Replace('/', '\')
+  Check ($daily.Actions[0].Execute -match 'powershell.exe' -and $dailyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\')) -and $dailyScriptArg -match '-NoProfile.*-NonInteractive.*-ExecutionPolicy Bypass' -and $weekly.Actions[0].Execute -match 'powershell.exe' -and $weeklyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\')) -and $weeklyScriptArg -match '-NoProfile.*-NonInteractive.*-ExecutionPolicy Bypass') 'backup_task_action' 'daily and weekly task actions use noninteractive policy flags and the packaged backup script'
+  $taskUser = ([string]$daily.Principal.UserId -split '\\')[-1]
+  Check ($taskUser -eq $env:USERNAME -and $weekly.Principal.UserId -eq $daily.Principal.UserId -and $daily.Principal.LogonType -eq 'Interactive' -and $daily.Principal.RunLevel -eq 'Limited') 'backup_task_identity' "user=$taskUser; logon=$($daily.Principal.LogonType); level=$($daily.Principal.RunLevel)"
   Check ($weekly.Triggers.Count -gt 0) 'backup_weekly_trigger' 'weekly trigger exists'
   $started = Get-Date
   $runThreshold = $started.AddSeconds(-2)
-  Start-ScheduledTask -TaskName XcagiDailyBackup
-  $deadline = (Get-Date).AddMinutes(2)
-  do { Start-Sleep -Seconds 3; $task = Get-ScheduledTaskInfo -TaskName XcagiDailyBackup; $taskState = (Get-ScheduledTask -TaskName XcagiDailyBackup).State } while (($task.LastRunTime -lt $runThreshold -or $taskState -eq 'Running' -or $task.LastTaskResult -eq 267009) -and (Get-Date) -lt $deadline)
+  $installRegistryPath = 'HKCU:\Software\XCAGI'
+  $originalInstallPath = $null
+  if (Test-Path $installRegistryPath) {
+    $originalInstallPath = (Get-ItemProperty -Path $installRegistryPath -ErrorAction Stop).InstallPath
+    if ($originalInstallPath) {
+      Remove-ItemProperty -Path $installRegistryPath -Name InstallPath -ErrorAction Stop
+    }
+  }
+  try {
+    Start-ScheduledTask -TaskName XcagiDailyBackup
+    $deadline = (Get-Date).AddMinutes(2)
+    do { Start-Sleep -Seconds 3; $task = Get-ScheduledTaskInfo -TaskName XcagiDailyBackup; $taskState = (Get-ScheduledTask -TaskName XcagiDailyBackup).State } while (($task.LastRunTime -lt $runThreshold -or $taskState -eq 'Running' -or $task.LastTaskResult -eq 267009) -and (Get-Date) -lt $deadline)
+  } finally {
+    if ($originalInstallPath) {
+      Set-ItemProperty -Path $installRegistryPath -Name InstallPath -Value $originalInstallPath
+    }
+  }
   $backupLog = Join-Path $dataRoot 'logs/backup.log'
   $logTail = if (Test-Path $backupLog) { ((Get-Content $backupLog -Tail 8) -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>') -join ' | ' } else { 'backup.log absent' }
   Check ($task.LastRunTime -ge $runThreshold -and $task.LastTaskResult -eq 0) 'backup_task_run' "last_result=$($task.LastTaskResult); log=$logTail"
+  $packagedBackend = Join-Path $installRoot 'resources/backend/xcagi-backend.exe'
+  $expectedBackendLog = $packagedBackend -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>'
+  Check ($logTail.Contains($expectedBackendLog)) 'backup_packaged_backend' 'scheduled task resolved the backend beside its packaged script without the registry install path'
   $backup = Get-ChildItem (Join-Path $dataRoot 'backups') -Filter 'xcagi-*.db' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   Check ($null -ne $backup -and $backup.Length -gt 0) 'backup_file' "bytes=$($backup.Length)"
+  $restoreRoot = Join-Path $env:RUNNER_TEMP "xcagi-backup-restore-$Mode"
+  Check (-not (Test-Path $restoreRoot)) 'backup_restore_isolated' 'restore destination is fresh'
+  $restoreDataDir = Join-Path $restoreRoot 'data'
+  New-Item -ItemType Directory -Force -Path $restoreDataDir | Out-Null
+  $restoredDb = Join-Path $restoreDataDir 'xcagi.db'
+  Copy-Item -LiteralPath $backup.FullName -Destination $restoredDb
+  $backupSha = (Get-FileHash -LiteralPath $backup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+  $restoredSha = (Get-FileHash -LiteralPath $restoredDb -Algorithm SHA256).Hash.ToLowerInvariant()
+  Check ($backupSha -eq $restoredSha) 'backup_restore_copy' "sha256=$restoredSha; bytes=$((Get-Item $restoredDb).Length)"
+  $previousUserData = $env:XCAGI_DESKTOP_USER_DATA_DIR
+  try {
+    Stop-App
+    $env:XCAGI_DESKTOP_USER_DATA_DIR = $restoreRoot
+    $restoredProcess = Start-App 'backup_restore'
+    $restoredAuth = Login 'backup_restore'
+    Check ($restoredAuth.tenant -eq $newAuth.tenant) 'backup_restore_enterprise' "tenant_sha256=$(Digest $restoredAuth.tenant)"
+    Read-Record $restoredAuth.session $marker $marker 'backup_restore'
+  } finally {
+    $env:XCAGI_DESKTOP_USER_DATA_DIR = $previousUserData
+    Stop-App
+  }
 }
 try {
   Check (-not (Test-Path $dataRoot) -and -not (Test-Path $installRoot)) 'isolated_runner' 'fresh user data and install path'

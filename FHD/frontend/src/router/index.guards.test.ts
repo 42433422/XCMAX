@@ -83,6 +83,7 @@ vi.mock('@/utils/roleMenuProfile', () => ({
   buildRoleMenuProfile: vi.fn(),
   canShowCoreMenuKey: () => true,
   UNSCOPED_HOST_BUSINESS_KEYS: new Set(),
+  tenantScopedBusinessPath: () => null,
 }))
 
 vi.mock('@/constants/adminOperatorNav', () => ({

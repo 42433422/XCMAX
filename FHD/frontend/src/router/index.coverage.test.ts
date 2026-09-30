@@ -205,6 +205,7 @@ vi.mock('@/utils/roleMenuProfile', () => ({
   buildRoleMenuProfile: mockBuildRoleMenuProfile,
   canShowCoreMenuKey: mockCanShowCoreMenuKey,
   UNSCOPED_HOST_BUSINESS_KEYS: new Set(['products', 'customers', 'orders', 'orders-create', 'shipment-records', 'materials', 'inventory', 'print', 'printer-list', 'template-preview', 'traditional-mode', 'approval-hub', 'tools']),
+  tenantScopedBusinessPath: () => null,
 }))
 
 vi.mock('@/constants/adminOperatorNav', () => ({

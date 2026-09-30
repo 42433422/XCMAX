@@ -23,7 +23,7 @@ test.describe('Login flow', () => {
     expect(loginVisible || readyVisible).toBeTruthy()
   })
 
-  test('full stack form login reaches authorized ETL and blocks unscoped business pages', async ({ page, request }) => {
+  test('full stack form login reaches authorized ETL and tenant business mods', async ({ page, request }) => {
     test.skip(!isFullStack(), 'covered by the mandatory release full-stack job')
     const ownerId = await prepareErpSession(request)
     await page.goto('/login?redirect=%2Forders', {
@@ -42,7 +42,7 @@ test.describe('Login flow', () => {
     const loginText = await loginResponse.text()
     expect(loginResponse.status(), loginText).toBe(200)
     expect(JSON.parse(loginText || '{}')?.success, loginText).toBe(true)
-    await expect(page).toHaveURL((url) => url.pathname === '/settings', { timeout: 45_000 })
+    await expect(page).toHaveURL((url) => url.pathname === '/mod/xcagi-erp-domain-bridge/orders', { timeout: 45_000 })
     const prefsResponse = await page.request.get('/api/workspace/prefs')
     expect(prefsResponse.ok(), await prefsResponse.text()).toBe(true)
     expect(await prefsResponse.json()).toMatchObject({
@@ -71,7 +71,7 @@ test.describe('Login flow', () => {
     await expect(page).toHaveURL((url) => url.pathname === '/business-docking')
     await expect(page.locator('#view-business-docking')).toBeVisible({ timeout: 25_000 })
     await page.goto('/materials', { waitUntil: 'domcontentloaded' })
-    await expect(page).toHaveURL((url) => url.pathname === '/settings')
+    await expect(page).toHaveURL((url) => url.pathname === '/mod/xcagi-erp-domain-bridge/materials')
     await expect(page.locator('body')).not.toContainText('正在登录')
   })
 })
