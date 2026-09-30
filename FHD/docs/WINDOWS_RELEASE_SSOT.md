@@ -23,7 +23,7 @@
 | G4 | 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |
 | G5 | 登录、企业与设备绑定 | YELLOW | 原生 PostgreSQL 恢复后，同包 36732341444 clean/upgrade 通过；[36737817121 正常 GUI 登录及租户 1](evidence/e2e/windows-closeout-20260930/gui-36737817121.json)通过；设备绑定未核销 |
 | G6 | 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
-| G7 | 真实业务与 AI 任务 | YELLOW | [36778477756 原始记录](evidence/e2e/windows-closeout-20260930/gui-36778477756.json)、[日志](evidence/e2e/windows-closeout-20260930/backend-36778477756.log)、[截图](evidence/e2e/windows-closeout-20260930/ai-36778477756.png)：私有 92e04bdf4/2F549E51 正常登录、客户/产品、采购/入库10、订单26-09-00001A、送货单导出及实际出库2、界面库存8和业务读回通过。#2109 出库错误参数修复由安装包重测核销；AI尚未发送，脚本旧输入框定位失败，已改正常textarea待重跑。97项修复回归及合入main #2112后的路由回归通过；中文下载通过，符号链接 WinError1314 未核销。A/B/C未完成 |
+| G7 | 真实业务与 AI 任务 | RED | 复现：私有92包从正常对话创建“WIN-GUI-36779224876-1-business-AI客户”→持久化审批详情；[原始记录](evidence/e2e/windows-closeout-20260930/gui-36779224876.json)、[日志](evidence/e2e/windows-closeout-20260930/backend-36779224876.log)、[截图](evidence/e2e/windows-closeout-20260930/ai-36779224876.png)：参数丢失“客户”后缀，未批准。#2109 保留引号内原文，265项相关回归通过，待新包完成实际AI对象和回执。36778477756正常客户/产品、采购入库10、订单、文件内容导出、出库2及界面库存8已通过；A/B/C未完成，符号链接WinError1314未核销 |
 | G8 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G9 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G10 | 覆盖升级读回 | YELLOW | runner 同账号读回原记录通过；真实受支持旧版客户数据 GUI 读回未完成 |

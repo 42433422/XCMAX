@@ -38,35 +38,14 @@ from app.application.workflow.planner import (
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
 
-class TestCleanDbSlotValue:
-    """_clean_db_slot_value 分支覆盖。"""
-
-    @pytest.mark.parametrize("value", [None, ""])
-    def test_empty_returns_empty(self, value: str | None) -> None:
-        assert _clean_db_slot_value(value) == ""
-
-    def test_strips_database_tokens(self) -> None:
-        assert _clean_db_slot_value("客户到数据库") == ""
-        assert _clean_db_slot_value("产品写入数据库") == ""
-        assert _clean_db_slot_value("入库原材料") == "原材料"
-
-    def test_strips_prefix_keywords(self) -> None:
-        # prefix "新增" stripped → "客户A", suffix "客户" not at end → "客户A"
-        assert _clean_db_slot_value("新增客户A") == "客户A"
-        # prefix "添加" stripped → "产品B", suffix "产品" not at end → "产品B"
-        assert _clean_db_slot_value("添加产品B") == "产品B"
-        # prefix "创建" stripped → "单位C", suffix "单位" not at end → "单位C"
-        assert _clean_db_slot_value("创建单位C") == "单位C"
-
-    def test_strips_suffix_keywords(self) -> None:
-        assert _clean_db_slot_value("ABC客户") == "ABC"
-        assert _clean_db_slot_value("XYZ产品") == "XYZ"
-        assert _clean_db_slot_value("DEF单位") == "DEF"
-
-    def test_strips_punctuation(self) -> None:
-        assert _clean_db_slot_value("，客户，") == ""
-        assert _clean_db_slot_value("：产品：") == ""
-        assert _clean_db_slot_value(";单位;") == ""
+@pytest.mark.parametrize("value,expected", [
+    (None, ""), ("", ""), ("客户到数据库", ""), ("产品写入数据库", ""),
+    ("入库原材料", "原材料"), ("新增客户A", "客户A"), ("添加产品B", "产品B"),
+    ("创建单位C", "单位C"), ("ABC客户", "ABC"), ("XYZ产品", "XYZ"), ("DEF单位", "DEF"),
+    ("，客户，", ""), ("：产品：", ""), (";单位;", ""),
+])
+def test_clean_db_slot_value(value, expected):
+    assert _clean_db_slot_value(value) == expected
 
 
 class TestExtractNamedSlot:
@@ -189,15 +168,20 @@ class TestExtractBusinessDbWriteNode:
         assert node.params["payload"]["unit_name"] == "CHATCRUD-TEST-涂料门店"
         assert node.params["payload"]["contact_person"] == "张三"
 
-    def test_customer_explicit_name_label_does_not_leak_into_value(self) -> None:
+    @pytest.mark.parametrize("name,quotes", [
+        ("安装验收客户-20260822-0112", ""),
+        ("WIN-GUI-36779224876-1-business-AI客户", "“”"),
+        ("客户到数据库", "「」"), ("创建方客户", "\"\""), ("甲,乙客户", "''"),
+    ])
+    def test_customer_explicit_name_label_does_not_leak_into_value(self, name, quotes) -> None:
         node = _extract_business_db_write_node(
-            "请新建一个测试客户。客户名称：安装验收客户-20260822-0112；"
+            f"请新建一个测试客户。客户名称：{quotes[:1]}{name}{quotes[1:]}；"
             "联系人：最终验收；联系电话：13800000112；地址：成都市最终验收路112号。"
         )
 
         assert node is not None
-        assert node.params["payload"]["unit_name"] == "安装验收客户-20260822-0112"
-        assert node.params["payload"]["customer_name"] == "安装验收客户-20260822-0112"
+        assert node.params["payload"]["unit_name"] == name
+        assert node.params["payload"]["customer_name"] == name
         assert node.params["payload"]["contact_person"] == "最终验收"
         assert node.params["payload"]["contact_phone"] == "13800000112"
         assert node.params["payload"]["contact_address"] == "成都市最终验收路112号"
