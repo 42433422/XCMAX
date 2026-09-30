@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import { registerModRoutes } from './registerModRoutes'
+import { ensureGlobModRoutes, registerModRoutes } from './registerModRoutes'
 
 vi.mock('@/constants/modRouteGlob', () => ({
   modRouteGlob: {
@@ -15,6 +15,9 @@ vi.mock('@/constants/modRouteGlob', () => ({
     }),
     '/mods/empty-mod/frontend/routes.js': vi.fn().mockResolvedValue({
       default: [],
+    }),
+    '/mods/glob-once-mod/frontend/routes.js': vi.fn().mockResolvedValue({
+      default: [{ path: '/mod/glob-once-mod/hello', name: 'glob-once-mod-hello', component: () => import('@/views/LoginView.vue') }],
     }),
     '/mods/refresh-mod/frontend/routes.js': vi.fn().mockResolvedValue({
       default: [
@@ -52,6 +55,14 @@ describe('registerModRoutes', () => {
     await registerModRoutes(router, [])
     await registerModRoutes(router, null)
     expect(addSpy).not.toHaveBeenCalled()
+  })
+
+  it('shares concurrent glob registration for a router', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] })
+    await Promise.all([ensureGlobModRoutes(router), ensureGlobModRoutes(router)])
+    const { modRouteGlob } = await import('@/constants/modRouteGlob')
+    expect(modRouteGlob['/mods/glob-once-mod/frontend/routes.js']).toHaveBeenCalledTimes(1)
+    expect(router.resolve('/mod/glob-once-mod/hello').matched).toHaveLength(1)
   })
 
   it('registers routes from glob loader', async () => {
