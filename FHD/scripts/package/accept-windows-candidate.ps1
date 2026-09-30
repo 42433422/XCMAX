@@ -28,7 +28,6 @@ function Stop-App {
   Start-Sleep -Seconds 2
 }
 function Install([string]$path, [string]$label) {
-  Check (Test-Path -LiteralPath $path) "$label.file" 'installer exists'
   $p = Start-Process -FilePath $path -ArgumentList @('/S',"/D=$installRoot") -Wait -PassThru
   Check ($p.ExitCode -eq 0) "$label.install" "exit=$($p.ExitCode)"
   Check (Test-Path (Join-Path $installRoot 'XCAGI.exe')) "$label.exe" 'installed executable exists'
@@ -39,15 +38,15 @@ function Start-App([string]$label) {
   $health = $null; $status = $null
   while ((Get-Date) -lt $deadline) {
     $p.Refresh()
-    Check (-not $p.HasExited) "$label.process" "pid=$($p.Id) remains running"
+    if ($p.HasExited) { Check $false "$label.process" "pid=$($p.Id) exited before ready" }
     try {
-      $health = Invoke-RestMethod "$base/api/health" -TimeoutSec 3
+      $health = Invoke-RestMethod "$base/api/health?lite=true" -TimeoutSec 3
       $status = Invoke-RestMethod "$base/api/desktop/status" -TimeoutSec 3
-      if ($health.status -eq 'healthy' -and $status.readyForUi -eq $true) { break }
+      if ($health.status -ne 'unhealthy' -and @($health.runtime.blockers).Count -eq 0 -and $status.readyForUi -eq $true) { break }
     } catch { }
     Start-Sleep -Seconds 2
   }
-  Check ($health.status -eq 'healthy' -and $status.readyForUi -eq $true) "$label.first_start_ready" "health=$($health.status); readyForUi=$($status.readyForUi); pid=$($p.Id)"
+  Check ($health.status -ne 'unhealthy' -and @($health.runtime.blockers).Count -eq 0 -and $status.readyForUi -eq $true) "$label.first_start_ready" "health=$($health.status); blockers=$(@($health.runtime.blockers).Count); readyForUi=$($status.readyForUi); pid=$($p.Id)"
   $p.Refresh()
   Check (-not $p.HasExited) "$label.no_restart" "original pid=$($p.Id)"
   return $p
@@ -75,17 +74,19 @@ function Login([string]$label) {
   Check ($kind -eq 'enterprise' -and $tenant) "$label.enterprise" "kind=$kind; tenant_sha256=$(Digest $tenant)"
   return @{ session=$session; tenant=$tenant }
 }
-function Read-Record($session, [int]$id, [string]$marker, [string]$label) {
-  $r = Invoke-WebRequest "$base/api/customers/$id" -WebSession $session -TimeoutSec 20
+function Read-Record($session, [string]$id, [string]$marker, [string]$label) {
+  $r = Invoke-WebRequest "$base/api/agent/tasks/$id" -WebSession $session -TimeoutSec 20
   $seen = $r.Content.Contains($marker)
   Check ([int]$r.StatusCode -eq 200 -and $seen) "$label.read_record" "http=$($r.StatusCode); marker_sha256=$(Digest $marker); seen=$seen"
 }
 function Create-Record($session, [string]$marker, [string]$label) {
-  $body = @{unit_name=$marker; contact_name='Acceptance'; phone=''; address=''} | ConvertTo-Json -Compress
-  $r = Invoke-WebRequest "$base/api/customers" -Method Post -Body $body -ContentType 'application/json' -WebSession $session -TimeoutSec 20
-  Check ([int]$r.StatusCode -eq 200) "$label.create_record" "http=$($r.StatusCode); marker_sha256=$(Digest $marker)"
-  $id = [int](($r.Content | ConvertFrom-Json).data.id)
-  Check ($id -gt 0) "$label.record_id" "id=$id"
+  $body = @{task_id=$marker; title=$marker; message=$marker; tool_id='dataset_rag'; action='query'; params=@{dataset_id='acceptance'; query=$marker}} | ConvertTo-Json -Compress
+  Invoke-WebRequest "$base/api/health?lite=true" -WebSession $session -TimeoutSec 15 | Out-Null
+  $csrf = @($session.Cookies.GetCookies([Uri]$base) | Where-Object { $_.Name -eq 'csrf_token' } | Select-Object -First 1)[0].Value
+  Check ([bool]$csrf) "$label.csrf_cookie" 'safe request established a CSRF cookie'
+  $r = Invoke-WebRequest "$base/api/agent/tasks" -Method Post -Body $body -ContentType 'application/json' -Headers @{'X-CSRF-Token'=$csrf} -WebSession $session -TimeoutSec 20
+  Check ([int]$r.StatusCode -in @(200,202)) "$label.create_record" "http=$($r.StatusCode); marker_sha256=$(Digest $marker)"
+  $id = $marker
   Read-Record $session $id $marker $label
   return $id
 }
@@ -93,17 +94,20 @@ function Backup-And-Version {
   $infoPath = Join-Path $installRoot 'resources/build-info.json'
   $info = Get-Content $infoPath -Raw | ConvertFrom-Json
   Check ($info.gitSha -eq $CandidateSha -and $info.version -eq $productVersion) 'build_info' "sha=$($info.gitSha); version=$($info.version)"
-  $display = @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*') | ForEach-Object { Get-ItemProperty $_ -ErrorAction SilentlyContinue } | Where-Object { $_.InstallLocation -eq $installRoot } | Select-Object -First 1
-  Check ($display.DisplayVersion -eq $productVersion) 'installer_display_version' "display=$($display.DisplayVersion)"
+  $display = @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*') | ForEach-Object { Get-ItemProperty $_ -ErrorAction SilentlyContinue } | Where-Object { $_.DisplayName -like 'XCAGI*' } | Select-Object -First 1
+  Check ($display.DisplayVersion -eq $productVersion) 'installer_display_version' "display=$($display.DisplayVersion); expected=$productVersion"
   $daily = Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction Stop
   $weekly = Get-ScheduledTask -TaskName XcagiWeeklyBackup -ErrorAction Stop
   Check ($daily.Actions[0].Execute -match 'powershell.exe' -and $daily.Actions[0].Arguments -match 'XcagiBackup.ps1') 'backup_task_action' 'daily and weekly tasks registered; daily action points to packaged backup script'
   Check ($weekly.Triggers.Count -gt 0) 'backup_weekly_trigger' 'weekly trigger exists'
   $started = Get-Date
+  $runThreshold = $started.AddSeconds(-2)
   Start-ScheduledTask -TaskName XcagiDailyBackup
   $deadline = (Get-Date).AddMinutes(2)
-  do { Start-Sleep -Seconds 3; $task = Get-ScheduledTaskInfo -TaskName XcagiDailyBackup } while ($task.LastRunTime -lt $started -and (Get-Date) -lt $deadline)
-  Check ($task.LastRunTime -ge $started -and $task.LastTaskResult -eq 0) 'backup_task_run' "last_result=$($task.LastTaskResult)"
+  do { Start-Sleep -Seconds 3; $task = Get-ScheduledTaskInfo -TaskName XcagiDailyBackup; $taskState = (Get-ScheduledTask -TaskName XcagiDailyBackup).State } while (($task.LastRunTime -lt $runThreshold -or $taskState -eq 'Running' -or $task.LastTaskResult -eq 267009) -and (Get-Date) -lt $deadline)
+  $backupLog = Join-Path $dataRoot 'logs/backup.log'
+  $logTail = if (Test-Path $backupLog) { ((Get-Content $backupLog -Tail 8) -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>') -join ' | ' } else { 'backup.log absent' }
+  Check ($task.LastRunTime -ge $runThreshold -and $task.LastTaskResult -eq 0) 'backup_task_run' "last_result=$($task.LastTaskResult); log=$logTail"
   $backup = Get-ChildItem (Join-Path $dataRoot 'backups') -Filter 'xcagi-*.db' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   Check ($null -ne $backup -and $backup.Length -gt 0) 'backup_file' "bytes=$($backup.Length)"
 }

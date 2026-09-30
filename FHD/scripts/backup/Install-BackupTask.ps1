@@ -1,16 +1,4 @@
-# 注册 XCMAX 桌面端定时备份 Windows 计划任务
-# =============================================================================
-# 作用：安装时调用，注册两个计划任务：
-#   1. XcagiDailyBackup  —— 每日 12:30 触发 XcagiBackup.ps1（业务低峰）
-#   2. XcagiWeeklyBackup —— 每周日 12:30 触发 XcagiBackup.ps1（额外 weekly 副本）
-#
-# 幂等：重复执行不会重复注册（同名任务先删除再创建）。
-# 运行身份：当前交互用户，Limited。触发：每天 12:30，以及每周日 12:30。
-#
-# 用法（NSIS 安装时 / 运维手动执行）：
-#   powershell -ExecutionPolicy Bypass -File Install-BackupTask.ps1
-#   powershell -ExecutionPolicy Bypass -File Install-BackupTask.ps1 -ExternalDir "E:\XCAGI-Backup"
-# =============================================================================
+# Registers daily and weekly backups at 12:30 for the interactive user.
 [CmdletBinding()]
 param(
   [string]$ExternalDir = "",
