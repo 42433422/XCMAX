@@ -683,6 +683,45 @@ def footer_html() -> str:
     return """<footer class="site-footer"><div class="container footer-inner"><div><a class="brand-mark" href="/index.html"><span class="brand-name"><strong>XCAGI</strong><span>企业业务自动化平台</span></span></a><p class="footer-copy">© <span id="year"></span> 成都修茈科技有限公司</p><p class="footer-meta">产品咨询：<a href="mailto:970882904@qq.com">970882904@qq.com</a></p><p class="footer-meta"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026014056号-3A</a></p></div><nav class="footer-links" aria-label="页脚导航"><a href="/index.html#product">产品</a><a href="/solutions.html">解决方案</a><a href="/cases.html">客户案例</a><a href="/index.html#pricing">价格</a><a href="/download">下载</a><a href="/capabilities/">验证中心</a><a href="/contact.html">联系我们</a><details class="footer-secondary"><summary>技术与透明度</summary><a href="/developer.html">开发者中心</a><a href="/world-will">世界意志</a><a href="/download/breakpoints">断点清单</a><a href="/download/goals">工作目标</a></details></nav></div></footer><button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button><script src="/main.js?v=20260925a"></script></body></html>"""
 
 
+def windows_delivery_panel() -> str:
+    root = REPO_ROOT / "FHD" / "docs" / "evidence" / "e2e" / "windows-final-candidate-83939363"
+    public = EVIDENCE_ASSET_DIR
+    for name in ("windows-delivery-clean.json", "windows-delivery-upgrade.json", "windows-delivery-receipt.json"):
+        if hashlib.sha256((root / name).read_bytes()).digest() != hashlib.sha256((public / name).read_bytes()).digest():
+            raise ValueError(f"Windows public evidence differs from source: {name}")
+    receipt = json.loads((root / "windows-delivery-receipt.json").read_text(encoding="utf-8"))
+    runs = {mode: json.loads((root / f"windows-delivery-{mode}.json").read_text(encoding="utf-8"))
+            for mode in ("clean", "upgrade")}
+    sha, build, version = receipt["sha256"], receipt["git_sha"], receipt["version"]
+    required = {
+        "clean": {"candidate.install", "candidate.first_start_ready", "candidate.no_restart", "candidate.login",
+                  "clean.create_record", "clean.read_record", "build_info", "installer_display_version",
+                  "backup_task_action", "backup_weekly_trigger", "backup_task_run", "backup_file"},
+        "upgrade": {"old.install", "before_upgrade.create_record", "before_upgrade.read_record",
+                    "candidate.install", "candidate.first_start_ready", "candidate.no_restart", "candidate.login",
+                    "same_enterprise", "after_upgrade.read_record", "build_info", "installer_display_version",
+                    "backup_task_action", "backup_weekly_trigger", "backup_task_run", "backup_file"},
+    }
+    for mode, run in runs.items():
+        checks = {item["name"]: item["passed"] for item in run["checks"]}
+        if (run["result"] != "passed" or run["candidate_sha"] != build
+                or run["candidate_sha256"] != sha or not required[mode].issubset(checks)
+                or not all(checks.values())):
+            raise ValueError(f"Windows {mode} evidence does not match the frozen installer")
+    if receipt["signature_status"] != "unsigned" or receipt["stable_auto_update"] is not False:
+        raise ValueError("Windows delivery disclosure is inconsistent with its receipt")
+    links = " ".join(f'<a href="/capabilities/assets/evidence/windows-delivery-{mode}.json">'
+                     f'{label}脱敏记录（{len(runs[mode]["checks"])} 项）</a>'
+                     for mode, label in (("clean", "干净首装"), ("upgrade", "保留数据升级")))
+    return (f'<section class="section"><div class="container"><h2>Windows 安装与升级验收</h2>'
+            f'<p>同一企业版 v{esc(version)} 安装包在两台隔离 Windows 测试机通过干净首装与保留数据升级。'
+            '覆盖登录、同企业测试任务记录回读、首次启动无需重开、计划备份创建与执行，以及安装器版本和 build-info 核对。'
+            '此项是安装链路验收，不代表矩阵中全部 Windows 能力或客户真实业务数据已验收。</p>'
+            f'<p>构建 SHA <code>{esc(build)}</code>；安装包 SHA-256 <code>{esc(sha)}</code>。</p>'
+            f'<p>{links} · <a href="/capabilities/assets/evidence/windows-delivery-receipt.json">交付回执</a>'
+            ' · <a href="/download">查看 Windows 版本下载</a></p>'
+            '<p>Windows 安装包未签名，仅供核对来源后手动安装；稳定自动更新未开放。</p></div></section>')
+
 def render_index(data: dict, domains_full: list[dict]) -> str:
     s = data["stats"]
     version = data.get("product_version") or ""
@@ -798,6 +837,7 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
     return f"""{header_html("capabilities", "XCAGI 产品验证中心", "查看 XCAGI 已验证能力、正式支持平台与由证据自动生成的完整技术验证矩阵。", "/capabilities/")}
 <main>
   {customer_view}
+  {windows_delivery_panel()}
   <details class="cap-engineering" id="technical-matrix">
     <summary>查看完整技术验证矩阵（{s['total']} 项 · {s['completion']}% 加权工程进度）</summary>
     <p class="cap-engineering-intro">{s['completion']}% 是目录中不同实现/验证状态的加权工程进度，不表示“产品只有 39% 已开发”。所有状态、覆盖率和证据都由能力 SSOT、平台验收记录及 CI 门禁生成。</p>

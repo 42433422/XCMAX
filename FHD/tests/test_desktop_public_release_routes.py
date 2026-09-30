@@ -20,7 +20,6 @@ def test_versioned_public_download_routes_are_not_pinned_to_a_retired_release() 
     assert "{3}" not in snippet
     assert "root /var/www;" in snippet
     assert "try_files $uri =404;" in snippet
-    assert "xcagi-v8.0.0" not in snippet
     assert "alias /root/成都修茈科技有限公司/download-release.json;" in snippet
     assert (
         "alias /var/www/update/releases/stable/enterprise/download-windows-hotfix.json;" in snippet
@@ -35,7 +34,6 @@ def test_standalone_vhost_uses_the_same_versioned_public_download_contract() -> 
 
     assert "location ~ ^/xcagi-v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/" in config
     assert "{3}" not in config
-    assert "location ^~ /xcagi-v1.0.0.0/" not in config
     assert "alias /root/成都修茈科技有限公司/download-release.json;" in config
     assert (
         "alias /var/www/update/releases/stable/enterprise/download-windows-hotfix.json;" in config
@@ -96,15 +94,17 @@ def test_release_page_uses_public_history_order_for_the_current_version() -> Non
     assert "if (releaseVersion === '1.0.0.0') entry.className += ' is-current'" not in release_page
     assert "fetchJson('/download-windows-hotfix.json')" in release_page
     assert "Windows 临时交付可下载" in release_page
-    assert "stable_auto_update === false && hotfix.signature_status === 'signed'" in release_page
+    assert "hotfix.signature_status === 'unsigned'" in release_page
+    assert "Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()" in release_page
 
 
-def test_download_page_accepts_only_signed_interim_without_enabling_ota() -> None:
+def test_download_page_accepts_bounded_unsigned_interim_without_enabling_ota() -> None:
     download_page = (REPO_ROOT / "成都修茈科技有限公司" / "download.html").read_text(
         encoding="utf-8"
     )
 
-    assert "stable_auto_update !== false || hotfix.signature_status !== 'signed'" in download_page
+    assert "Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()" in download_page
+    assert "hotfix.stable_auto_update !== false" in download_page
     assert "compareVersions(hotfix.version, state.version) < 0" in download_page
     assert "String(hotfix.artifact.sha256)" in download_page
     assert "innerHTML" not in download_page

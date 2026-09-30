@@ -39,7 +39,7 @@
 | 2 | [`guides/快速启动说明.md`](guides/快速启动说明.md) | 桌面 / Docker 命令速查 |
 | 3 | [`guides/PRODUCT_USER_FLOW.md`](guides/PRODUCT_USER_FLOW.md) | 安装 → 首启 → 行业 MOD → 日常使用 |
 | 4 | [`DELIVERABLE_PRODUCT.md`](DELIVERABLE_PRODUCT.md) | 交付物清单与验收 API |
-| 5 | [`guides/RELEASE_TWO_SKUS.md`](guides/RELEASE_TWO_SKUS.md) | enterprise 为当前主发版；personal 仅兼容 / 冻结 |
+| 5 | [`../VERSION.md`](../VERSION.md) | 当前产品版本与企业版交付边界 |
 | 6 | [`guides/DESKTOP_DATABASE_DELIVERY.md`](guides/DESKTOP_DATABASE_DELIVERY.md) | 桌面 SQLite 交付 |
 | 7 | [`ops/README.md`](../../ops/README.md) | 生产服务与发布运维 |
 | 8 | [`customer/CUSTOMER_SUPPORT.md`](customer/CUSTOMER_SUPPORT.md) | 客户升级 / 日志 / 回滚 |

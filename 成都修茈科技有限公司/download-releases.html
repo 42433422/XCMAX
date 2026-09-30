@@ -117,12 +117,6 @@
         color: var(--blue);
         background: var(--blue-soft);
       }
-      .header-nav .market-link {
-        margin-left: 5px;
-        border: 1px solid var(--line-dark);
-        color: var(--ink);
-        background: #fff;
-      }
 
       .release-hero {
         overflow: hidden;
@@ -1345,7 +1339,9 @@
             hotfix &&
             hotfix.schema === 'xcagi.windows_interim_release/v1' &&
             hotfix.download_allowed === true &&
-            hotfix.stable_auto_update === false && hotfix.signature_status === 'signed' &&
+            hotfix.stable_auto_update === false &&
+            (hotfix.signature_status === 'signed' || (hotfix.signature_status === 'unsigned' &&
+              hotfix.risk_acceptance && Date.parse(hotfix.risk_acceptance.expires_at) > Date.now())) &&
             hotfix.release &&
             compareVersions(hotfix.version, history[0].version) >= 0
           if (interimActive) {

@@ -31,6 +31,14 @@ on:
         required: false
         default: false
         type: boolean
+      candidate_run_id:
+        description: "Existing frozen installer run ID; publish its exact artifact without rebuilding"
+        required: false
+        type: string
+      acceptance_run_id:
+        description: "Successful clean and upgrade acceptance run ID for the frozen installer"
+        required: false
+        type: string
       frontend_run_id:
         description: "Run ID of the orchestrator's build-frontend job producing the shared xcagi-vue-dist artifact"
         required: false
@@ -65,7 +73,7 @@ env:
 
 jobs:
   windows-installer-delivery:
-    if: ${{ inputs.windows_installer_only == true && inputs.verify_only != true }}
+    if: ${{ inputs.windows_installer_only == true && inputs.verify_only != true && inputs.candidate_run_id == '' }}
     runs-on: windows-latest
     timeout-minutes: 90
     env:
@@ -180,7 +188,8 @@ jobs:
       inputs.windows_installer_only == true &&
       inputs.verify_only != true &&
       inputs.candidate_only != true &&
-      needs.windows-installer-delivery.result == 'success'
+      (needs.windows-installer-delivery.result == 'success' ||
+        (needs.windows-installer-delivery.result == 'skipped' && inputs.candidate_run_id != '' && inputs.acceptance_run_id != ''))
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -196,6 +205,29 @@ jobs:
         with:
           name: xcagi-windows-installer-${{ inputs.release_sha }}
           path: ${{ runner.temp }}/delivery
+          run-id: ${{ inputs.candidate_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.candidate_run_id != '' }}
+        with:
+          pattern: windows-candidate-evidence-*-${{ inputs.release_sha }}
+          path: ${{ runner.temp }}/acceptance
+          run-id: ${{ inputs.acceptance_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify the frozen candidate passed both isolated install paths
+        if: ${{ inputs.candidate_run_id != '' }}
+        run: |
+          set -euo pipefail
+          receipt="${RUNNER_TEMP}/delivery/delivery-receipt.json"
+          for mode in Clean Upgrade; do
+            evidence="${RUNNER_TEMP}/acceptance/windows-candidate-evidence-${mode}-${{ inputs.release_sha }}/acceptance.json"
+            test -f "$evidence"
+            jq -e --arg mode "$mode" --arg sha "${{ inputs.release_sha }}" \
+              --arg hash "$(jq -r .sha256 "$receipt")" '
+              .mode == $mode and .result == "passed" and .candidate_sha == $sha
+              and .candidate_sha256 == $hash and (.checks | length) > 0
+              and all(.checks[]; .passed == true)' "$evidence" >/dev/null
+          done
       - name: Assert truthful Windows delivery receipt
         run: |
           set -euo pipefail
