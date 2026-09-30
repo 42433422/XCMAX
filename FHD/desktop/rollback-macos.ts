@@ -15,9 +15,7 @@ export interface MacOSRollbackLaunchOptions {
   waitTimeoutSeconds?: number
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`
-}
+const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`
 
 export function buildMacOSRollbackScript(options: MacOSRollbackLaunchOptions): string {
   const pid = Math.trunc(options.currentPid)
