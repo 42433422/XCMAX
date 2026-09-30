@@ -104,7 +104,7 @@ function Backup-And-Version {
   $runThreshold = $started.AddSeconds(-2)
   Start-ScheduledTask -TaskName XcagiDailyBackup
   $deadline = (Get-Date).AddMinutes(2)
-  do { Start-Sleep -Seconds 3; $task = Get-ScheduledTaskInfo -TaskName XcagiDailyBackup } while ($task.LastRunTime -lt $runThreshold -and (Get-Date) -lt $deadline)
+  do { Start-Sleep -Seconds 3; $task = Get-ScheduledTaskInfo -TaskName XcagiDailyBackup; $taskState = (Get-ScheduledTask -TaskName XcagiDailyBackup).State } while (($task.LastRunTime -lt $runThreshold -or $taskState -eq 'Running' -or $task.LastTaskResult -eq 267009) -and (Get-Date) -lt $deadline)
   $backupLog = Join-Path $dataRoot 'logs/backup.log'
   $logTail = if (Test-Path $backupLog) { ((Get-Content $backupLog -Tail 8) -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>') -join ' | ' } else { 'backup.log absent' }
   Check ($task.LastRunTime -ge $runThreshold -and $task.LastTaskResult -eq 0) 'backup_task_run' "last_result=$($task.LastTaskResult); log=$logTail"
