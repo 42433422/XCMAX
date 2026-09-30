@@ -54,7 +54,9 @@ function Start-App([string]$label) {
   Check ($health.status -ne 'unhealthy' -and @($health.runtime.blockers).Count -eq 0 -and $status.readyForUi -eq $true) "$label.first_start_ready" "health=$($health.status); blockers=$(@($health.runtime.blockers).Count); readyForUi=$($status.readyForUi); pid=$($p.Id)"
   $listener = Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction Stop | Select-Object -First 1
   $backend = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)"
-  Check ($backend.ExecutablePath -match ('^' + [regex]::Escape($installRoot))) "$label.port_owner" "pid=$($backend.ProcessId); exe=$($backend.ExecutablePath); data=$dataRoot"
+  $dataArgument = [regex]::Match($backend.CommandLine, '--data-dir\s+(?:"([^"]+)"|(\S+))'); $actualDataRoot = if ($dataArgument.Groups[1].Success) { $dataArgument.Groups[1].Value } else { $dataArgument.Groups[2].Value }
+  $expectedDataRoot = if ($env:XCAGI_DESKTOP_USER_DATA_DIR) { $env:XCAGI_DESKTOP_USER_DATA_DIR } else { $dataRoot }
+  Check (($backend.ExecutablePath -match ('^' + [regex]::Escape($installRoot + [IO.Path]::DirectorySeparatorChar))) -and $dataArgument.Success -and $actualDataRoot -eq $expectedDataRoot) "$label.port_owner" "pid=$($backend.ProcessId); exe=$($backend.ExecutablePath); actual_data=$actualDataRoot; expected_data=$expectedDataRoot"
   $p.Refresh()
   Check (-not $p.HasExited) "$label.no_restart" "original pid=$($p.Id)"
 }

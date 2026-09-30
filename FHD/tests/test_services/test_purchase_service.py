@@ -533,11 +533,6 @@ class TestCancelPurchaseOrder:
         assert result["success"] is False
 
 
-# ---------------------------------------------------------------------------
-# Purchase Inbound
-# ---------------------------------------------------------------------------
-
-
 class TestCreatePurchaseInbound:
     @pytest.mark.parametrize("warehouse_id, expected", [(1, True), (2, False)])
     def test_file_sqlite_receipt_and_stock_are_atomic(
