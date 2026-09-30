@@ -2,7 +2,6 @@ import { ref, onMounted, onActivated, type Ref } from 'vue'
 import { get, post, productsApi } from '@/api'
 import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog'
 
-// 实体类型（字段以 PurchaseView 模板与表单赋值实际访问项为准）
 interface OrderItem {
   id?: number
   received_quantity?: number
