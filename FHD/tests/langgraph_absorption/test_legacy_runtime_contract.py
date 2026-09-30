@@ -681,7 +681,9 @@ class TestInterruptApproval:
             def __init__(self):
                 self.requests: dict[str, ApprovalRequest] = {}
 
-            def create_approval_request(self, plan_id, node, runtime_context=None, plan=None):
+            def create_approval_request(
+                self, plan_id, node, runtime_context=None, plan=None, require_persistence=False
+            ):
                 req = ApprovalRequest(
                     request_id="req-1",
                     plan_id=plan_id,
