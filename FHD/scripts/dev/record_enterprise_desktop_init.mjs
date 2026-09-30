@@ -65,7 +65,7 @@ async function dismissSuccessAlert() {
 }
 async function save(name, endpoint) {
   const waiting = page.waitForResponse(r => r.request().method() === 'POST' && endpoint.test(new URL(r.url()).pathname), { timeout: 30000 })
-  await click(name, modal()); evidence.observations.push({ action: 'save_button_clicked', name: String(name), observed_at: new Date().toISOString() })
+  const button = modal().getByRole('button', { name, exact: typeof name === 'string' }).first(), actualText = await button.innerText(); await button.click(); evidence.observations.push({ action: 'save_button_clicked', name: String(name), actualText, observed_at: new Date().toISOString() })
   const response = await waiting
   const body = await response.json()
   if (!response.ok() || body.success === false || body.ok === false) throw new Error(`Business save rejected: HTTP ${response.status()}`)
@@ -158,8 +158,8 @@ async function main() {
     await prompt.locator('.app-dialog-host-btn-primary').click()
     const warehouseResponse = await warehouse
     if (!warehouseResponse.ok() || !(await warehouseResponse.json()).data?.id) throw new Error('Normal UI warehouse creation failed')
-    await modal().getByLabel('数量').fill('10')
-    const saved = await save(/^确认入库$|^保存$/, /purchase\/inbounds/)
+    await expect(field('收货仓库').locator('select')).toHaveValue(String((await warehouseResponse.json()).data.id)); await modal().getByLabel('数量').fill('10')
+    const saved = await save('确认入库', /purchase\/inbounds/)
     await click('采购入库')
     await expect(page.locator('#view-purchase')).toContainText(names.supplier)
     return saved
