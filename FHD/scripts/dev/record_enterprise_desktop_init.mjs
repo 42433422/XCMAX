@@ -79,6 +79,7 @@ async function main() {
   browser = await chromium.connectOverCDP(process.env.XCAGI_CDP || 'http://127.0.0.1:9222', { timeout: 60000 })
   const context = browser.contexts()[0]
   page = context.pages().find(p => p.url().includes('127.0.0.1:17500')) || context.pages()[0]
+  page.on('request', r => { const endpoint = new URL(r.url()).pathname; if (r.method() === 'POST' && /purchase|inventory|customers|products|orders|shipment/.test(endpoint)) evidence.observations.push({ endpoint, method: r.method(), event: 'request_started', observed_at: new Date().toISOString() }) })
   page.on('response', r => { const endpoint = new URL(r.url()).pathname; if (r.request().method() === 'POST' && /purchase|inventory|customers|products|orders|shipment/.test(endpoint)) evidence.observations.push({ endpoint, method: r.request().method(), status: r.status(), observed_at: new Date().toISOString() }) })
   page.on('console', msg => { const text = msg.text().split('\n')[0]; if (/WIN_UI_CLICK:|TypeError|ReferenceError|Unhandled error/.test(text) && !/token|password|secret|authorization|cookie/i.test(text)) evidence.observations.push({ browser_console: text.slice(0, 512), observed_at: new Date().toISOString() }) })
   page.on('pageerror', error => evidence.observations.push({ browser_error: String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'), observed_at: new Date().toISOString() })); page.setDefaultTimeout(20000)

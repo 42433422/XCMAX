@@ -539,86 +539,88 @@ class TestCancelPurchaseOrder:
 
 
 class TestCreatePurchaseInbound:
-    def test_creates_inbound_with_items(self, svc):
-        mock_product = MagicMock()
-        mock_product.name = "产品A"
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_product
-        with (
-            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
-            patch("app.services.purchase_service.InventoryService") as MockInvSvc,
-        ):
-            MockInvSvc.return_value.inventory_in.return_value = {"success": True}
-            result = svc.create_purchase_inbound(
-                {
-                    "supplier_id": 1,
-                    "warehouse_id": 1,
-                    "items": [{"product_id": 1, "quantity": 10, "unit_price": 100}],
-                }
+    @pytest.mark.parametrize("warehouse_id, expected", [(1, True), (2, False)])
+    def test_file_sqlite_receipt_and_stock_are_atomic(
+        self, svc, tmp_path, request, warehouse_id, expected
+    ):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import Session
+
+        from app.db.base import Base
+        from app.db.models import (
+            InventoryLedger,
+            InventoryTransaction,
+            Product,
+            Supplier,
+            Warehouse,
+        )
+        from app.db.models.purchase import PurchaseInbound, PurchaseInboundItem, PurchaseOrderItem
+
+        engine = create_engine(
+            f"sqlite:///{tmp_path / 'receipt.db'}", connect_args={"timeout": 0.1}
+        )
+        request.addfinalizer(engine.dispose)
+        Base.metadata.create_all(engine)
+        with Session(engine) as db:
+            db.add_all(
+                [
+                    Product(id=1, name="验收产品", unit="个"),
+                    Warehouse(id=1, code="W1", name="收货仓库", status="active"),
+                    Supplier(id=1, code="S1", name="供应商"),
+                    Warehouse(id=2, code="W2", name="停用仓库", status="disabled"),
+                ]
             )
-        assert result["success"] is True
-        assert "入库成功" in result["message"]
-
-    def test_creates_inbound_without_items(self, svc):
-        mock_db = MagicMock()
-        with (
-            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
-            patch("app.services.purchase_service.InventoryService"),
-        ):
-            result = svc.create_purchase_inbound({"supplier_id": 1, "warehouse_id": 1})
-        assert result["success"] is True
-
-    def test_returns_failure_on_db_error(self, svc):
-        mock_db = MagicMock()
-        mock_db.add.side_effect = OSError("db error")
-        with (
-            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
-            patch("app.services.purchase_service.InventoryService"),
-        ):
-            result = svc.create_purchase_inbound({"supplier_id": 1})
-        assert result["success"] is False
-
-    def test_logs_warning_when_inventory_in_fails(self, svc):
-        mock_product = MagicMock()
-        mock_product.name = "产品A"
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_product
-        with (
-            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
-            patch("app.services.purchase_service.InventoryService") as MockInvSvc,
-        ):
-            MockInvSvc.return_value.inventory_in.return_value = {
-                "success": False,
-                "message": "库存不足",
-            }
-            result = svc.create_purchase_inbound(
-                {
-                    "supplier_id": 1,
-                    "warehouse_id": 1,
-                    "items": [{"product_id": 1, "quantity": 10, "unit_price": 100}],
-                }
+            db.add(
+                PurchaseOrder(
+                    id=1, order_no="PO1", supplier_id=1, status="approved", order_date=date.today()
+                )
             )
-        assert result["success"] is True
+            db.add(
+                PurchaseOrderItem(
+                    id=1,
+                    order_id=1,
+                    product_id=1,
+                    quantity=10,
+                    unit_price=12.5,
+                    received_quantity=0,
+                )
+            )
+            db.commit()
 
-    def test_updates_order_received_quantity(self, svc):
-        mock_product = MagicMock()
-        mock_product.name = "产品A"
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_product
+        @contextlib.contextmanager
+        def database():
+            with Session(engine) as db:
+                yield db
+
         with (
-            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
-            patch("app.services.purchase_service.InventoryService") as MockInvSvc,
+            patch("app.services.purchase_service.get_db", database),
+            patch("app.services.inventory_service.get_db", database),
+            patch(
+                "app.services.accounting_services.create_journal_entry",
+                return_value={"success": True},
+            ),
+            patch.object(svc, "_publish_event"),
         ):
-            MockInvSvc.return_value.inventory_in.return_value = {"success": True}
             result = svc.create_purchase_inbound(
                 {
-                    "supplier_id": 1,
-                    "warehouse_id": 1,
                     "order_id": 1,
-                    "items": [{"product_id": 1, "quantity": 10, "unit_price": 100}],
+                    "supplier_id": 1,
+                    "warehouse_id": warehouse_id,
+                    "items": [
+                        {"order_item_id": 1, "product_id": 1, "quantity": 10, "unit_price": 12.5}
+                    ],
                 }
             )
-        assert result["success"] is True
+        assert result["success"] is expected
+        with Session(engine) as db:
+            assert db.query(PurchaseInbound).count() == int(expected)
+            assert db.query(PurchaseInboundItem).count() == int(expected)
+            assert db.query(InventoryTransaction).count() == int(expected)
+            ledger = db.query(InventoryLedger).first()
+            assert (float(ledger.quantity) if ledger else 0) == (10 if expected else 0)
+            order = db.get(PurchaseOrder, 1)
+            assert order.status == ("completed" if expected else "approved")
+            assert float(order.items[0].received_quantity) == (10 if expected else 0)
 
     def test_creates_ap_posting_with_balanced_lines(self, svc):
         """采购入库后生成『借：库存 / 贷：应付账款』复式分录，借贷平衡。"""
@@ -639,12 +641,6 @@ class TestCreatePurchaseInbound:
         mock_db.query.return_value.filter.return_value.first.return_value = mock_product
         mock_db.refresh.side_effect = lambda obj: obj
 
-        captured = {}
-
-        def _fake_create_journal_entry(data):
-            captured["data"] = data
-            return {"success": True, "data": {"entry_no": "JE-001"}}
-
         with (
             patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
             patch("app.services.purchase_service.InventoryService") as MockInvSvc,
@@ -654,7 +650,7 @@ class TestCreatePurchaseInbound:
             ),
             patch(
                 "app.services.accounting_services.create_journal_entry",
-                side_effect=_fake_create_journal_entry,
+                return_value={"success": True, "data": {"entry_no": "JE-001"}},
             ) as MockCreateEntry,
         ):
             MockInvSvc.return_value.inventory_in.return_value = {"success": True}
@@ -671,7 +667,7 @@ class TestCreatePurchaseInbound:
             )
         assert result["success"] is True
         MockCreateEntry.assert_called_once()
-        data = captured["data"]
+        data = MockCreateEntry.call_args.args[0]
         assert data["description"] == "采购入库: PTEST"
         assert data["reference_type"] == "purchase_inbound"
         assert data["reference_id"] == 1
@@ -679,22 +675,14 @@ class TestCreatePurchaseInbound:
         debit_total = sum(line.get("debit", 0) for line in data["lines"])
         credit_total = sum(line.get("credit", 0) for line in data["lines"])
         assert debit_total == credit_total == 2000.0
-        # 借：库存商品 1401
-        assert any(
-            line.get("account_code") == "1401"
-            and line.get("debit") == 2000.0
-            and line.get("credit") == 0
-            for line in data["lines"]
-        )
-        # 贷：应付账款 2201，带 partner 信息
-        assert any(
-            line.get("account_code") == "2201"
-            and line.get("credit") == 2000.0
-            and line.get("debit") == 0
-            and line.get("partner_id") == 1
-            and line.get("partner_name") == "供应商A"
-            for line in data["lines"]
-        )
+        assert data["lines"][0] == {"account_code": "1401", "debit": 2000.0, "credit": 0}
+        assert data["lines"][1] == {
+            "account_code": "2201",
+            "debit": 0,
+            "credit": 2000.0,
+            "partner_id": 1,
+            "partner_name": "供应商A",
+        }
 
     def test_skips_ap_posting_when_total_is_zero(self, svc):
         """total_amount 为 0 时不触发应付记账。"""
