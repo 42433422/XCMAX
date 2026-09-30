@@ -722,7 +722,6 @@ def windows_delivery_panel() -> str:
             ' · <a href="/download">查看 Windows 版本下载</a></p>'
             '<p>Windows 安装包未签名，仅供核对来源后手动安装；稳定自动更新未开放。</p></div></section>')
 
-
 def render_index(data: dict, domains_full: list[dict]) -> str:
     s = data["stats"]
     version = data.get("product_version") or ""
