@@ -12,7 +12,7 @@ fs.mkdirSync(dir, { recursive: true })
 const run = `${process.env.GITHUB_RUN_ID || Date.now()}-${process.env.GITHUB_RUN_ATTEMPT || 1}`
 const marker = `WIN-GUI-${run}`
 const names = { customer: `${marker}-客户`, product: `${marker}-产品`, supplier: `${marker}-供应商`, ai: `${marker}-AI客户` }
-const required = ['normal_login', 'tenant_identity', 'customer', 'product', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'ui_readback', 'ai_business']
+const required = ['normal_login', 'tenant_identity', 'customer', 'product', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business']
 const evidence = { run, started_at: new Date().toISOString(), marker, names, cases: [], observations: [], result: 'running' }
 let browser, page
 const digest = value => crypto.createHash('sha256').update(Buffer.isBuffer(value) ? value : String(value)).digest('hex')
@@ -69,7 +69,7 @@ async function save(name, endpoint) {
   const body = await response.json()
   if (!response.ok() || body.success === false || body.ok === false) throw new Error(`Business save rejected: HTTP ${response.status()}`)
   const data = body.data || body
-  const object = { endpoint: new URL(response.url()).pathname, status: response.status(), id: data.id || data.customer_id || data.product_id || data.order_id || data.inbound_id || data.order_no || data.order_number, fields: data }
+  const object = { endpoint: new URL(response.url()).pathname, status: response.status(), id: data.id || data.customer_id || data.product_id || data.order_id || data.inbound_id || data.ledger_id || data.order_no || data.order_number, fields: data }
   if (!object.id) throw new Error(`Saved business response has no record identity: ${object.endpoint}`)
   await dismissSuccessAlert()
   await expect(modal()).toHaveCount(0)
@@ -206,6 +206,18 @@ async function main() {
     const values = (productRow || []).map(cell => Number(String(cell).replace(/[￥¥,元]/g, '')))
     if (![2, 20, 12.5, 250].every(value => values.includes(value))) throw new Error('Delivery row quantity, unit price or amount differs from the submitted business input')
     return { filename, bytes: fs.statSync(target).size, sha256: digest(fs.readFileSync(target)) }
+  })
+  await step('stock_out', async () => {
+    await nav('inventory', '#view-inventory'); await click('出库')
+    await choose('产品', names.product); await choose('仓库', `${marker}-收货仓库`)
+    await fill('数量', '2')
+    const order = evidence.cases.find(c => c.id === 'sales_order').actual
+    await fill('备注', `${marker} 送货单 ${order.order_number}`)
+    const saved = await save('确认出库', /inventory\/out$/)
+    if (saved.fields.quantity !== 2 || saved.fields.remaining_quantity !== 8) throw new Error('Actual stock movement differs from the submitted shipment quantity')
+    const cells = page.locator('#view-inventory tbody tr').filter({ hasText: names.product }).locator('td')
+    await expect(cells.nth(4)).toHaveText('8'); await expect(cells.nth(5)).toHaveText('8')
+    return { ...saved, order_number: order.order_number, expected_remaining_quantity: 8 }
   })
   await step('ui_readback', async () => {
     await nav('orders', '#view-orders'); await expect(page.locator('#view-orders')).toContainText(names.customer)

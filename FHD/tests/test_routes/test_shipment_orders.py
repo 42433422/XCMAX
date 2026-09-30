@@ -34,35 +34,23 @@ def _mock_svc(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
 
 class TestOrdersNextNumber:
-    def test_root_path(self, client: TestClient):
-        with patch.object(shipment_orders, "query_service") as mock_q:
-            mock_q.count.return_value = 5
-            r = client.get("/orders/next_number")
-            assert r.status_code == 200
-            data = r.json()["data"]
-            assert "order_number" in data
-            assert data["sequence"] == 6
-
-    def test_under_api(self, client: TestClient):
-        with patch.object(shipment_orders, "query_service") as mock_q:
-            mock_q.count.return_value = 0
-            r = client.get("/api/orders/next_number")
-            assert r.status_code == 200
-            assert r.json()["data"]["sequence"] == 1
-
-    def test_under_shipment_validates_suffix(self, client: TestClient):
-        with patch.object(shipment_orders, "query_service") as mock_q:
-            mock_q.count.return_value = 0
-            r = client.get("/api/shipment/orders/next_number", params={"suffix": "B"})
-            assert r.status_code == 200
-            assert r.json()["data"]["order_number"].endswith("B")
-
-    def test_under_shipment_invalid_suffix_fallback(self, client: TestClient):
-        with patch.object(shipment_orders, "query_service") as mock_q:
-            mock_q.count.return_value = 0
-            r = client.get("/api/shipment/orders/next_number", params={"suffix": "12"})
-            assert r.status_code == 200
-            assert r.json()["data"]["order_number"].endswith("A")
+    @pytest.mark.parametrize(
+        "url,count,suffix,expected_suffix",
+        [
+            ("/orders/next_number", 5, "A", "A"),
+            ("/api/orders/next_number", 0, "A", "A"),
+            ("/api/shipment/orders/next_number", 0, "B", "B"),
+            ("/api/shipment/orders/next_number", 0, "12", "A"),
+        ],
+    )
+    def test_number(self, client, url, count, suffix, expected_suffix):
+        with patch.object(shipment_orders, "query_service") as query:
+            query.count.return_value = count
+            response = client.get(url, params={"suffix": suffix})
+            assert response.status_code == 200
+            data = response.json()["data"]
+            assert data["sequence"] == count + 1
+            assert data["order_number"].endswith(expected_suffix)
 
 
 # shipment generate
@@ -126,9 +114,6 @@ class TestShipmentGenerateBatch:
         r = client.post("/api/shipment/generate-batch", json={"shipments": [{"unit_name": "A"}]})
         assert r.status_code == 200
         assert len(r.json()["data"]["errors"]) > 0
-
-
-# shipment print
 
 
 class TestShipmentPrint:
