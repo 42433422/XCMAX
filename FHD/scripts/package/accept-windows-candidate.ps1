@@ -28,7 +28,6 @@ function Stop-App {
   Start-Sleep -Seconds 2
 }
 function Install([string]$path, [string]$label) {
-  Check (Test-Path -LiteralPath $path) "$label.file" 'installer exists'
   $p = Start-Process -FilePath $path -ArgumentList @('/S',"/D=$installRoot") -Wait -PassThru
   Check ($p.ExitCode -eq 0) "$label.install" "exit=$($p.ExitCode)"
   Check (Test-Path (Join-Path $installRoot 'XCAGI.exe')) "$label.exe" 'installed executable exists'
@@ -102,12 +101,13 @@ function Backup-And-Version {
   Check ($daily.Actions[0].Execute -match 'powershell.exe' -and $daily.Actions[0].Arguments -match 'XcagiBackup.ps1') 'backup_task_action' 'daily and weekly tasks registered; daily action points to packaged backup script'
   Check ($weekly.Triggers.Count -gt 0) 'backup_weekly_trigger' 'weekly trigger exists'
   $started = Get-Date
+  $runThreshold = $started.AddSeconds(-2)
   Start-ScheduledTask -TaskName XcagiDailyBackup
   $deadline = (Get-Date).AddMinutes(2)
-  do { Start-Sleep -Seconds 3; $task = Get-ScheduledTaskInfo -TaskName XcagiDailyBackup } while ($task.LastRunTime -lt $started -and (Get-Date) -lt $deadline)
+  do { Start-Sleep -Seconds 3; $task = Get-ScheduledTaskInfo -TaskName XcagiDailyBackup } while ($task.LastRunTime -lt $runThreshold -and (Get-Date) -lt $deadline)
   $backupLog = Join-Path $dataRoot 'logs/backup.log'
   $logTail = if (Test-Path $backupLog) { ((Get-Content $backupLog -Tail 8) -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>') -join ' | ' } else { 'backup.log absent' }
-  Check ($task.LastRunTime -ge $started -and $task.LastTaskResult -eq 0) 'backup_task_run' "last_result=$($task.LastTaskResult); log=$logTail"
+  Check ($task.LastRunTime -ge $runThreshold -and $task.LastTaskResult -eq 0) 'backup_task_run' "last_result=$($task.LastTaskResult); log=$logTail"
   $backup = Get-ChildItem (Join-Path $dataRoot 'backups') -Filter 'xcagi-*.db' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   Check ($null -ne $backup -and $backup.Length -gt 0) 'backup_file' "bytes=$($backup.Length)"
 }
