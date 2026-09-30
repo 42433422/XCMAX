@@ -1,5 +1,5 @@
 ﻿param(
-  [Parameter(Mandatory=$true)][ValidateSet('Clean','Upgrade')][string]$Mode,
+  [Parameter(Mandatory=$true)][ValidateSet('Clean','Upgrade','Gui')][string]$Mode,
   [Parameter(Mandatory=$true)][string]$CandidatePath,
   [Parameter(Mandatory=$true)][string]$CandidateSha,
   [Parameter(Mandatory=$true)][string]$EvidenceDir,
@@ -33,7 +33,9 @@ function Install([string]$path, [string]$label) {
   Check (Test-Path (Join-Path $installRoot 'XCAGI.exe')) "$label.exe" 'installed executable exists'
 }
 function Start-App([string]$label) {
-  $p = Start-Process -FilePath (Join-Path $installRoot 'XCAGI.exe') -WorkingDirectory $installRoot -PassThru
+  $launch = @{FilePath=(Join-Path $installRoot 'XCAGI.exe'); WorkingDirectory=$installRoot; PassThru=$true; WindowStyle='Hidden'}
+  if ($Mode -eq 'Gui') { $launch.ArgumentList = @('--remote-debugging-port=9222') }
+  $p = Start-Process @launch
   $deadline = (Get-Date).AddMinutes(4)
   $health = $null; $status = $null
   while ((Get-Date) -lt $deadline) {
@@ -47,6 +49,9 @@ function Start-App([string]$label) {
     Start-Sleep -Seconds 2
   }
   Check ($health.status -ne 'unhealthy' -and @($health.runtime.blockers).Count -eq 0 -and $status.readyForUi -eq $true) "$label.first_start_ready" "health=$($health.status); blockers=$(@($health.runtime.blockers).Count); readyForUi=$($status.readyForUi); pid=$($p.Id)"
+  $listener = Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction Stop | Select-Object -First 1
+  $backend = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)"
+  Check ($backend.ExecutablePath -match ('^' + [regex]::Escape($installRoot))) "$label.port_owner" "pid=$($backend.ProcessId); exe=$($backend.ExecutablePath); data=$dataRoot"
   $p.Refresh()
   Check (-not $p.HasExited) "$label.no_restart" "original pid=$($p.Id)"
 }
@@ -156,6 +161,15 @@ try {
   Check (-not (Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction SilentlyContinue)) 'isolated_tasks' 'no prior daily task'
   $candidateHash = (Get-FileHash -LiteralPath $CandidatePath -Algorithm SHA256).Hash.ToLowerInvariant()
   $evidence.candidate_sha256 = $candidateHash
+  if ($Mode -eq 'Gui') {
+    Install $CandidatePath 'candidate'
+    Start-App 'candidate'
+    $env:XCAGI_GUI_EVIDENCE = (Resolve-Path $EvidenceDir).Path
+    & node (Join-Path $PSScriptRoot '../dev/record_enterprise_desktop_init.mjs')
+    Check ($LASTEXITCODE -eq 0) 'normal_gui_business' 'normal UI workflow must produce and read back real business records and files'
+    $evidence.result = 'gui_regression_passed'
+    return
+  }
   if ($Mode -eq 'Upgrade') {
     Check ((Get-FileHash -LiteralPath $OldPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $OldSha256) 'old_installer_hash' "sha256=$OldSha256"
     Install $OldPath 'old'

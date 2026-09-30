@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [Clean, Upgrade]
+        mode: [Clean, Upgrade, Gui]
     defaults:
       run:
         working-directory: FHD
@@ -49,6 +49,16 @@ jobs:
         run: |
           $url = 'https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/ac10f29f1d2ad5d53123200070e81d406cb587ca/95b8d6b11adc204cc7b6f5e3ae62af648f6be0ee94604ad850d5b9a978e98e99/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe'
           Invoke-WebRequest -Uri $url -OutFile candidate/old-installer.exe -TimeoutSec 600
+      - uses: actions/setup-node@v4
+        if: matrix.mode == 'Gui'
+        with:
+          node-version: '22'
+      - name: Install UI automation dependencies on the test runner
+        if: matrix.mode == 'Gui'
+        shell: pwsh
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci --prefix frontend --registry=https://registry.npmjs.org
       - name: Verify candidate and run customer installation path
         shell: pwsh
         env:
