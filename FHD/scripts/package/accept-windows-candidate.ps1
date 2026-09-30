@@ -107,8 +107,6 @@ function Backup-And-Version {
   $taskUser = ([string]$daily.Principal.UserId -split '\\')[-1]
   Check ($taskUser -eq $env:USERNAME -and $weekly.Principal.UserId -eq $daily.Principal.UserId -and $daily.Principal.LogonType -eq 'Interactive' -and $weekly.Principal.LogonType -eq 'Interactive' -and $daily.Principal.RunLevel -eq 'Limited' -and $weekly.Principal.RunLevel -eq 'Limited') 'backup_task_identity' "user=$taskUser; daily=$($daily.Principal.LogonType)/$($daily.Principal.RunLevel); weekly=$($weekly.Principal.LogonType)/$($weekly.Principal.RunLevel)"
   Check ($weekly.Triggers.Count -gt 0) 'backup_weekly_trigger' 'weekly trigger exists'
-  $started = Get-Date
-  $runThreshold = $started.AddSeconds(-2)
   $installRegistryPath = 'HKCU:\Software\XCAGI'
   $originalInstallPath = $null
   if (Test-Path $installRegistryPath) {
