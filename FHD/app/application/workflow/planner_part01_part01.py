@@ -37,7 +37,10 @@ def _extract_named_slot(message: str, patterns: tuple[str, ...]) -> str:
     for pattern in patterns:
         match = _facade().re.search(pattern, message, flags=_facade().re.I)
         if match:
-            value = _facade()._clean_db_slot_value(match.group(1))
+            value = match.group(1)
+            if (value[:1], value[-1:]) in (("「", "」"), ("“", "”"), ('"', '"'), ("'", "'")):
+                value = value[1:-1]
+            value = _facade()._clean_db_slot_value(value)
             if value:
                 return value
     quoted = _facade().re.search("[「“\\\"']([^」”\\\"']+)[」”\\\"']", message)

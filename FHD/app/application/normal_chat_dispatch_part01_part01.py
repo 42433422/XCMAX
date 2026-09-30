@@ -376,7 +376,7 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
             text,
         )
     )
-    if (
+    if not _is_artifact_request(text) and (
         any(k in text for k in query_keywords)
         and (product_subject or model_token)
         or model_signal

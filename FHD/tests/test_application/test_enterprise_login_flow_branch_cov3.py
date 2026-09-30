@@ -281,37 +281,22 @@ class TestFinalizeEnterpriseLogin:
         assert out is result
 
     @pytest.mark.asyncio
-    async def test_market_result_none_personal_sku_sets_password_for_market(self):
-        """market_result=None 且 sku != enterprise → password_for_market=True 分支。"""
-        result = {"user": {"id": 1}}
-        with patch("app.fastapi_routes.market_account.save_session_market_token") as mock_save:
+    @pytest.mark.parametrize("sku", ["personal", "enterprise"])
+    async def test_missing_market_result(self, sku):
+        with patch("app.fastapi_routes.market_account.save_session_market_token") as save:
             out = await finalize_enterprise_login(
-                result=result,
+                result={"user": {"id": 1}},
                 session_id="sid",
                 market_result=None,
-                account_kind="personal",
+                account_kind=sku,
                 username="alice",
-                sku="personal",
+                sku=sku,
             )
-        # market_result is None → no token save, no market_account key
-        mock_save.assert_not_called()
-        assert "market_account" not in out or out.get("market_account") is None
-
-    @pytest.mark.asyncio
-    async def test_market_result_none_enterprise_sku_sets_failed(self):
-        """market_result=None 且 sku == enterprise → market_result = {"success": False}。"""
-        result = {"user": {"id": 1}}
-        out = await finalize_enterprise_login(
-            result=result,
-            session_id="sid",
-            market_result=None,
-            account_kind="enterprise",
-            username="alice",
-            sku="enterprise",
-        )
-        # market_result becomes {"success": False} → market_account added
-        assert out.get("market_account") is not None
-        assert out["market_account"]["success"] is False
+        save.assert_not_called()
+        if sku == "enterprise":
+            assert out["market_account"]["success"] is False
+        else:
+            assert out.get("market_account") is None
 
     @pytest.mark.asyncio
     async def test_skip_market_sync_sets_failed_market(self):
@@ -434,48 +419,8 @@ class TestFinalizeEnterpriseLogin:
         assert out["account_tier"] == "pro"
 
     @pytest.mark.asyncio
-    async def test_market_success_no_refresh_token(self):
-        """market_result.success=True 且有 token 但无 refresh_token。"""
-        result = {"user": {"id": 1}}
-        market = {"success": True, "token": "mtok"}
-        with (
-            patch("app.fastapi_routes.market_account.save_session_market_token"),
-            patch(
-                "app.application.enterprise_login_flow.extract_market_user_blob",
-                return_value={"id": 10},
-            ),
-            patch(
-                "app.application.enterprise_login_flow.company_brand_from_user_blob",
-                return_value="",
-            ),
-            patch(
-                "app.application.enterprise_login_flow.bind_tenant_for_login",
-                return_value={"tenant_id": None, "tenant_name": ""},
-            ),
-            patch(
-                "app.application.enterprise_login_flow._derive_and_heal_account_kind",
-                return_value="personal",
-            ),
-            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
-            patch(
-                "app.fastapi_routes.market_account.fetch_market_membership_tier",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-        ):
-            out = await finalize_enterprise_login(
-                result=result,
-                session_id="sid",
-                market_result=market,
-                account_kind="personal",
-                username="alice",
-                sku="personal",
-            )
-        assert out["market_access_token"] == "mtok"
-        assert "market_refresh_token" not in out
-
-    @pytest.mark.asyncio
-    async def test_market_success_persists_membership_tier(self):
+    @pytest.mark.parametrize("tier", [None, "premium"])
+    async def test_market_success_persists_membership_tier(self, tier):
         """market_result.success=True 且 fetch_market_membership_tier 返回值 → 持久化。"""
         result = {"user": {"id": 1}}
         market = {"success": True, "token": "mtok"}
@@ -501,7 +446,7 @@ class TestFinalizeEnterpriseLogin:
             patch(
                 "app.fastapi_routes.market_account.fetch_market_membership_tier",
                 new_callable=AsyncMock,
-                return_value="premium",
+                return_value=tier,
             ),
             patch(
                 "app.application.session_account_meta.persist_session_membership_tier"
@@ -515,8 +460,13 @@ class TestFinalizeEnterpriseLogin:
                 username="alice",
                 sku="personal",
             )
-        mock_persist_tier.assert_called_once_with("sid", "premium")
-        assert out["market_membership_tier"] == "premium"
+        assert out["market_access_token"] == "mtok"
+        assert "market_refresh_token" not in out
+        if tier:
+            mock_persist_tier.assert_called_once_with("sid", tier)
+            assert out["market_membership_tier"] == tier
+        else:
+            mock_persist_tier.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_market_success_user_id_none_skips_tenant(self):

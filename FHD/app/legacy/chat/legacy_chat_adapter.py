@@ -1,11 +1,4 @@
-"""Legacy planner chat adapter (absorbed).
-
-Phase 4B 从 ``app.legacy.planner`` 吸收实现。``chat`` / ``chat_stream_sse_events``
-两个主入口直接在此承载; xcagi_compat 以及其它应用服务通过本模块调用对话链。
-
-内部工具执行仍走 :mod:`app.application.tools`,LLM 客户端与 runtime context
-分别走 :mod:`app.infrastructure.llm.client` 与 :mod:`app.domain.context.session_context`。
-"""
+"""Absorbed planner chat adapter with request-scoped tool execution."""
 
 from __future__ import annotations
 
@@ -15,7 +8,7 @@ import os
 import threading
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
-from contextvars import ContextVar
+from contextvars import Context, ContextVar, copy_context
 from typing import Any, cast
 
 from app.application.workflow.multimodal_user_content import (
@@ -430,10 +423,17 @@ def append_tool_messages(
         )
         return idx, json.loads(raw)
 
+    def _execute_in_context(
+        context: Context, item: tuple[int, str, str]
+    ) -> tuple[int, dict[str, Any]]:
+        return context.run(_execute_idx, *item)
+
     if to_run:
         workers = min(max_workers, len(to_run))
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            for idx, mapped_payload in pool.map(lambda t: _execute_idx(*t), to_run):
+            futures = [pool.submit(_execute_in_context, copy_context(), t) for t in to_run]
+            for future in futures:
+                idx, mapped_payload = future.result()
                 payloads[idx] = mapped_payload
 
     for i, (tc, _name, _raw_eff, _key) in enumerate(parsed):

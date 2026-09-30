@@ -97,37 +97,69 @@ def test_loader_falls_back_to_bundled_employee_pack(employee_mods_root, tmp_path
     assert Path(pack["pack_dir"]) == pack_dir.resolve()
 
 
-def test_loader_prefers_user_employee_pack_over_bundle(employee_mods_root, tmp_path, monkeypatch):
-    user_pack = _write_csv_read_pack(employee_mods_root)
-    bundled_mods = tmp_path / "bundled-mods"
-    _write_csv_read_pack(bundled_mods)
+@pytest.mark.parametrize(
+    ("receipt_kind", "changed", "use_bundle", "trusted"),
+    [
+        (None, False, True, True),
+        (None, True, False, False),
+        ("valid", False, False, True),
+        ("valid", True, False, True),
+        ("tampered", True, False, False),
+        ("invalid", False, False, False),
+    ],
+)
+def test_employee_override_trust(
+    employee_mods_root, tmp_path, monkeypatch, receipt_kind, changed, use_bundle, trusted
+):
+    from app.application.employee_runtime.loader import (
+        load_employee_pack_from_disk,
+        verify_direct_python_pack_trust,
+    )
+    from app.infrastructure.mods.package import compute_directory_hash
     from app.mod_sdk import edition_policy
 
+    user_pack = _write_csv_read_pack(employee_mods_root)
+    bundled_mods = tmp_path / "bundled-mods"
+    bundled_pack = _write_csv_read_pack(bundled_mods)
     monkeypatch.setattr(edition_policy, "bundled_mods_dir", lambda: bundled_mods)
-    from app.application.employee_runtime.loader import load_employee_pack_from_disk
-
+    before = compute_directory_hash(str(user_pack))
+    if changed:
+        worker = next((user_pack / "backend").rglob("*.py"))
+        worker.write_text(
+            worker.read_text(encoding="utf-8") + "\n# customization\n", encoding="utf-8"
+        )
+    if receipt_kind:
+        receipt = {
+            "schema_version": 1,
+            "signature_verified": receipt_kind != "invalid",
+            "content_sha256": before
+            if receipt_kind == "tampered"
+            else compute_directory_hash(str(user_pack)),
+        }
+        (user_pack / ".xcagi-install-receipt.json").write_text(
+            json.dumps(receipt), encoding="utf-8"
+        )
     pack = load_employee_pack_from_disk("csv-full-read-employee")
-    assert Path(pack["pack_dir"]) == user_pack.resolve()
+    selected = Path(pack["pack_dir"])
+    assert selected == (bundled_pack if use_bundle else user_pack).resolve()
+    assert verify_direct_python_pack_trust(selected)[0] is trusted
+    assert user_pack.is_dir()
+    from app.application.employee_runtime.executor import execute_employee_task_local
 
-
-def test_signed_install_receipt_detects_post_install_tampering(tmp_path):
-    pack_dir = _write_csv_read_pack(tmp_path / "outside-source")
-    from app.application.employee_runtime.loader import verify_direct_python_pack_trust
-    from app.infrastructure.mods.package import compute_directory_hash
-
-    receipt = {
-        "schema_version": 1,
-        "signature_verified": True,
-        "content_sha256": compute_directory_hash(str(pack_dir)),
-    }
-    (pack_dir / ".xcagi-install-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
-    assert verify_direct_python_pack_trust(pack_dir)[0] is True
-
-    worker = next((pack_dir / "backend").rglob("*.py"))
-    worker.write_text(worker.read_text(encoding="utf-8") + "\n# tampered\n", encoding="utf-8")
-    trusted, reason = verify_direct_python_pack_trust(pack_dir)
-    assert trusted is False
-    assert reason == "installed_pack_content_hash_mismatch"
+    csv_file = tmp_path / "sample.csv"
+    csv_file.write_text("a,b\n1,2\n", encoding="utf-8")
+    result = execute_employee_task_local(
+        "csv-full-read-employee",
+        "读取 CSV",
+        {"file_path": str(csv_file)},
+        workspace_root=str(tmp_path),
+    )
+    assert result.get("success") is trusted
+    if trusted:
+        output = Path(result["result"]["outputs"][0]["output_path"])
+        assert json.loads(output.read_text(encoding="utf-8"))["rows"] == [{"a": "1", "b": "2"}]
+    else:
+        assert result["result"]["outputs"][0]["error_code"] == "employee_python_pack_untrusted"
 
 
 def test_tool_registry_uses_pack_id_as_tool_name(employee_mods_root):

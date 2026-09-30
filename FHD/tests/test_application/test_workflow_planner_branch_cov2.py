@@ -41,18 +41,13 @@ from app.application.workflow.types import PlanGraph, WorkflowNode
 class TestCleanDbSlotValue:
     """_clean_db_slot_value 分支覆盖。"""
 
-    def test_none_returns_empty(self) -> None:
-        assert _clean_db_slot_value(None) == ""
-
-    def test_empty_string(self) -> None:
-        assert _clean_db_slot_value("") == ""
+    @pytest.mark.parametrize("value", [None, ""])
+    def test_empty_returns_empty(self, value: str | None) -> None:
+        assert _clean_db_slot_value(value) == ""
 
     def test_strips_database_tokens(self) -> None:
-        # "到数据库" is replaced → "客户", then prefix "客户" is stripped → ""
         assert _clean_db_slot_value("客户到数据库") == ""
-        # "写入数据库" is replaced → "产品", then prefix "产品" is stripped → ""
         assert _clean_db_slot_value("产品写入数据库") == ""
-        # "入库" is replaced → "原材料", no prefix/suffix match → "原材料"
         assert _clean_db_slot_value("入库原材料") == "原材料"
 
     def test_strips_prefix_keywords(self) -> None:
@@ -69,19 +64,19 @@ class TestCleanDbSlotValue:
         assert _clean_db_slot_value("DEF单位") == "DEF"
 
     def test_strips_punctuation(self) -> None:
-        # "，客户，" → strip → "客户" → prefix "客户" stripped → ""
         assert _clean_db_slot_value("，客户，") == ""
-        # "：产品：" → strip → "产品" → prefix "产品" stripped → ""
         assert _clean_db_slot_value("：产品：") == ""
-        # ";单位;" → strip → "单位" → prefix "单位" stripped → ""
         assert _clean_db_slot_value(";单位;") == ""
 
 
 class TestExtractNamedSlot:
     """_extract_named_slot 分支覆盖。"""
 
-    def test_pattern_match_returns_cleaned_value(self) -> None:
-        result = _extract_named_slot("客户：七彩乐园", (r"客户\s*[:：是为]?\s*([^\s，,。；;]+)",))
+    @pytest.mark.parametrize(
+        "name", ["七彩乐园", "“七彩乐园”", "「七彩乐园」", '"七彩乐园"', "'七彩乐园'"]
+    )
+    def test_pattern_match_returns_cleaned_value(self, name: str) -> None:
+        result = _extract_named_slot(f"客户：{name}", (r"客户\s*[:：是为]?\s*([^\s，,。；;]+)",))
         assert result == "七彩乐园"
 
     def test_pattern_match_with_prefix_keyword(self) -> None:
@@ -91,9 +86,9 @@ class TestExtractNamedSlot:
         )
         assert result == "ABC"
 
-    def test_no_pattern_match_falls_back_to_quoted(self) -> None:
-        result = _extract_named_slot("请处理「七彩乐园」", (r"不存在的模式",))
-        assert result == "七彩乐园"
+    @pytest.mark.parametrize("name", ["「七彩乐园」", '"七彩乐园"', "'七彩乐园'"])
+    def test_no_pattern_match_falls_back_to_quoted(self, name: str) -> None:
+        assert _extract_named_slot(f"请处理{name}", (r"不存在的模式",)) == "七彩乐园"
 
     def test_no_match_no_quotes_returns_empty(self) -> None:
         result = _extract_named_slot("普通文本无引号", (r"不存在的模式",))
@@ -103,14 +98,6 @@ class TestExtractNamedSlot:
         # pattern matches but cleaned value is empty
         result = _extract_named_slot("客户：数据库", (r"客户\s*[:：是为]?\s*([^\s，,。；;]+)",))
         assert result == ""
-
-    def test_double_quote_fallback(self) -> None:
-        result = _extract_named_slot('请处理"七彩乐园"', (r"不存在的模式",))
-        assert result == "七彩乐园"
-
-    def test_single_quote_fallback(self) -> None:
-        result = _extract_named_slot("请处理'七彩乐园'", (r"不存在的模式",))
-        assert result == "七彩乐园"
 
 
 class TestLooksLikeBusinessDbWrite:
@@ -176,8 +163,15 @@ class TestInferBusinessDbEntity:
 class TestExtractBusinessDbWriteNode:
     """_extract_business_db_write_node 分支覆盖。"""
 
-    def test_customers_with_unit_name(self) -> None:
-        node = _extract_business_db_write_node("新增客户：七彩乐园")
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "新增客户：七彩乐园",
+            "请新增客户“七彩乐园”，其他可选字段留空。当前是手动模式，请等待人工批准后执行，返回实际客户ID。",
+        ],
+    )
+    def test_customers_with_unit_name(self, message: str) -> None:
+        node = _extract_business_db_write_node(message)
         assert node is not None
         assert node.tool_id == "business_db"
         assert node.action == "write"

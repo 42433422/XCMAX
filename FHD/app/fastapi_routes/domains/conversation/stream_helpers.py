@@ -37,15 +37,18 @@ def _xcagi_guarded_planner_stream_events(
 
     def _worker() -> None:
         try:
-            for ev in _facade().chat_stream_sse_events(
-                body.message,
-                runtime_context=runtime_context or None,
-                system_prompt=body.system_prompt,
-                workspace_root=workspace_root,
-                db_write_token=body.db_write_token,
-                client=client,
-            ):
-                event_queue.put(ev)
+            from app.infrastructure.tenant_scope import tenant_scope
+
+            with tenant_scope((runtime_context or {}).get("tenant_id")):
+                for ev in _facade().chat_stream_sse_events(
+                    body.message,
+                    runtime_context=runtime_context or None,
+                    system_prompt=body.system_prompt,
+                    workspace_root=workspace_root,
+                    db_write_token=body.db_write_token,
+                    client=client,
+                ):
+                    event_queue.put(ev)
         except BOUNDARY_ERRORS as exc:
             event_queue.put(exc)
         finally:

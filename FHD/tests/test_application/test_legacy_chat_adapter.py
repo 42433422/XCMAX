@@ -347,16 +347,32 @@ class TestAppendToolMessages:
         payload = json.loads(messages2[0]["content"])
         assert payload.get("error") == "duplicate_tool_call"
 
-    def test_parallel_execution(self):
-        execute_tool = MagicMock(return_value='{"success": true}')
+    @pytest.mark.parametrize("tenant_id", [1, 2])
+    def test_parallel_execution(self, tenant_id):
+        from app.infrastructure.llm.client import (
+            get_openai_compatible_client,
+            llm_client_scope,
+            resolve_chat_model,
+        )
+        from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
+
+        client = object()
+
+        def execute_tool(*args, **kwargs):
+            assert current_tenant_id() == tenant_id
+            assert get_openai_compatible_client() is client
+            assert resolve_chat_model() == f"account-{tenant_id}/model"
+            return '{"success": true}'
+
         tcs = [
             _Tc("tc1", "excel_analysis", '{"q":"a"}'),
             _Tc("tc2", "excel_chart_recommend", '{"q":"b"}'),
         ]
         messages: list = []
-        result = append_tool_messages(
-            messages, tcs, workspace_root="/tmp", execute_tool=execute_tool
-        )
+        with tenant_scope(tenant_id), llm_client_scope(client, f"account-{tenant_id}/model"):
+            result = append_tool_messages(
+                messages, tcs, workspace_root="/tmp", execute_tool=execute_tool
+            )
         assert result is None
         assert len(messages) == 2
 

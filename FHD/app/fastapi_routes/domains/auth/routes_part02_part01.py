@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 import importlib
+from typing import cast
+
+from fastapi import BackgroundTasks
 
 
 def _facade():
@@ -146,7 +149,11 @@ async def auth_register(
 
 
 @_facade().router.post("/api/auth/login")
-async def auth_login(request: _facade().Request, body: dict = _facade().Body(default_factory=dict)):
+async def auth_login(
+    request: _facade().Request,
+    body: dict = _facade().Body(default_factory=dict),
+    background_tasks: BackgroundTasks = cast(BackgroundTasks, None),
+):
     import time
 
     from app.utils.metrics import auth_login_duration_seconds
@@ -183,12 +190,9 @@ async def auth_login(request: _facade().Request, body: dict = _facade().Body(def
         jit_create_fn=_facade()._jit_create_local_user_for_enterprise,
         market_user_email_from_raw=_facade()._market_user_email_from_raw,
         login_market_fn=login_market_with_password,
+        background_tasks=background_tasks,
         totp_code=str(body.get("totp_code") or "").strip() or None,
-        **(
-            {"invitation_code": str(body.get("invitation_code") or "").strip()}
-            if body.get("invitation_code")
-            else {}
-        ),
+        invitation_code=str(body.get("invitation_code") or "").strip(),
     )
     if err:
         auth_login_duration_seconds.labels(auth_method="password").observe(
@@ -220,7 +224,9 @@ async def auth_login(request: _facade().Request, body: dict = _facade().Body(def
 
 @_facade().router.post("/api/auth/login-with-phone-code")
 async def auth_login_with_phone_code(
-    request: _facade().Request, body: dict = _facade().Body(default_factory=dict)
+    request: _facade().Request,
+    body: dict = _facade().Body(default_factory=dict),
+    background_tasks: BackgroundTasks = cast(BackgroundTasks, None),
 ):
     import time
 
@@ -260,6 +266,7 @@ async def auth_login_with_phone_code(
         jit_create_fn=_facade()._jit_create_local_user_for_enterprise,
         market_user_email_from_raw=_facade()._market_user_email_from_raw,
         login_market_fn=None,
+        background_tasks=background_tasks,
     )
     if err:
         auth_login_duration_seconds.labels(auth_method="phone_code").observe(
@@ -301,7 +308,10 @@ async def auth_oidc_start(request: _facade().Request):
 
 
 @_facade().router.get("/api/auth/oidc/callback")
-async def auth_oidc_callback(request: _facade().Request):
+async def auth_oidc_callback(
+    request: _facade().Request,
+    background_tasks: BackgroundTasks = cast(BackgroundTasks, None),
+):
     from urllib.parse import quote
 
     from fastapi.responses import RedirectResponse
@@ -354,6 +364,7 @@ async def auth_oidc_callback(request: _facade().Request):
     payload = await finalize_auth_after_oidc(
         auth_result=auth_result,
         oidc_profile=profile,
+        background_tasks=background_tasks,
         oidc_access_token=str(oidc_session.get("access_token") or ""),
         account_kind=account_kind,
         sku=sku,

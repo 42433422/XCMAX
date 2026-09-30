@@ -3,6 +3,41 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import Mock
+
+import pytest
+
+
+@pytest.mark.parametrize("persisted", [False, True])
+def test_capability_only_reports_durable_approval(monkeypatch, persisted: bool) -> None:
+    from app.application.tools.registered_capabilities import execute_registered_capability
+    from app.application.workflow.approval_service import ApprovalService
+
+    service = ApprovalService()
+    monkeypatch.setattr(
+        service, "_persist_request_to_db", lambda *a, **k: {"id": 1} if persisted else None
+    )
+    monkeypatch.setattr(
+        "app.application.workflow.approval_gated_engine.get_approval_service", lambda: service
+    )
+    dispatch = Mock()
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities._dispatch_registered_tool", dispatch
+    )
+    result = json.loads(
+        execute_registered_capability(
+            {
+                "tool_id": "generate_office_document",
+                "action": "execute",
+                "params": {"user_request": "文档验收", "output_format": "docx"},
+            },
+            runtime_context={"local_user_id": 3, "tenant_id": 2},
+        )
+    )
+    assert bool(result.get("pending_approval")) is persisted
+    assert result["success"] is False
+    assert len(service._pending_requests) == int(persisted)
+    dispatch.assert_not_called()
 
 
 def test_capability_catalog_matches_workflow_registry_ssot() -> None:

@@ -1,10 +1,4 @@
-"""AI Agent V1 写操作门控引擎（基于 HybridRiskGate + ApprovalService）。
-
-V0 → V1 升级点：
-- V0 只能跑只读链；V1 允许写操作（订单/客户/发货等），但**必经审批门控**。
-- 集成现有 HybridRiskGate + ApprovalService，无缝衔接 /api/approval 工作台。
-- 支持：自动审批（CLI 演示用）、人工审批（生产用）、批量审批。
-"""
+"""Workflow risk and approval gates with optional mandatory durable persistence."""
 
 from __future__ import annotations
 
@@ -79,16 +73,7 @@ class GatedPlanDecision:
 
 
 class ApprovalGatedEngine:
-    """
-    在 HybridRiskGate + ApprovalService 之上做"先审批、后执行"的门控执行。
-
-    流程：
-      1) gate = HybridRiskGate().evaluate(plan, context) — 决策是否需要确认
-      2) 对每个 blocking_node，调用 ApprovalService.create_approval_request()
-      3) 若 strategy=auto_approve，则自动 approve；strategy=reject 自动 reject
-      4) 若 strategy=interactive，返回 pending 状态（等人工调 /api/approval/approve）
-      5) 全部通过后调用 resume_after_approval() 继续执行
-    """
+    """Evaluate risk, collect required approvals, then execute approved plans."""
 
     APPROVAL_STRATEGY_AUTO = "auto"
     APPROVAL_STRATEGY_INTERACTIVE = "interactive"
@@ -99,10 +84,13 @@ class ApprovalGatedEngine:
         engine: WorkflowEngine,
         risk_gate: HybridRiskGate | None = None,
         approval_service: ApprovalService | None = None,
+        *,
+        require_persistence: bool = False,
     ) -> None:
         self._engine = engine
         self._risk_gate = risk_gate or HybridRiskGate()
         self._approval_service = approval_service or get_approval_service()
+        self._require_persistence = require_persistence
 
     def evaluate_plan(
         self,
@@ -132,6 +120,7 @@ class ApprovalGatedEngine:
                     node=node,
                     runtime_context=runtime_context,
                     plan=plan,
+                    require_persistence=self._require_persistence,
                 )
                 nd.approval_request_id = req.request_id
                 decision.approval_request_ids.append(req.request_id)

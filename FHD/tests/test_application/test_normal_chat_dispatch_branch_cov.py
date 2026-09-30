@@ -317,6 +317,7 @@ class TestRouteNormalModeMessageProductQuery:
             "翻翻往来的单位，找出名字里带测试甲的那个",
             "帮我找一下昨天没处理完的事情",
             "看看我还能用哪些功能",
+            "请保存为 UTF-8 文本文件。验收编号：MAC-A-20260930-WXH-2309。",
         ],
     )
     def test_generic_query_defers_to_intent_gate(self, message):
@@ -327,46 +328,11 @@ class TestRouteNormalModeMessageProductQuery:
             assert route_normal_mode_message(message) == predicted
         gate.assert_called_once_with(message)
 
-    def test_product_query_with_query_keyword(self):
-        """单独的查询动词没有产品依据，应保持未知。"""
-        result = route_normal_mode_message("查询")
-        assert result["intent"] == "unknown"
-
-    def test_product_query_with_查一下_keyword(self):
-        result = route_normal_mode_message("查一下")
-        assert result["intent"] == "unknown"
-
-    def test_product_query_with_查下_keyword(self):
-        result = route_normal_mode_message("查下")
-        assert result["intent"] == "unknown"
-
-    def test_product_query_with_查_keyword(self):
-        result = route_normal_mode_message("查")
-        assert result["intent"] == "unknown"
-
-    def test_product_query_with_看看_keyword(self):
-        result = route_normal_mode_message("看看")
-        assert result["intent"] == "unknown"
-
-    def test_product_query_with_看下_keyword(self):
-        result = route_normal_mode_message("看下")
-        assert result["intent"] == "unknown"
-
-    def test_product_query_with_搜索_keyword(self):
-        result = route_normal_mode_message("搜索")
-        assert result["intent"] == "unknown"
-
-    def test_product_query_with_找下_keyword(self):
-        result = route_normal_mode_message("找下")
-        assert result["intent"] == "unknown"
-
-    def test_product_query_with_找_keyword(self):
-        result = route_normal_mode_message("找")
-        assert result["intent"] == "unknown"
-
-    def test_product_query_with_检索_keyword(self):
-        result = route_normal_mode_message("检索")
-        assert result["intent"] == "unknown"
+    @pytest.mark.parametrize(
+        "message", ["查询", "查一下", "查下", "查", "看看", "看下", "搜索", "找下", "找", "检索"]
+    )
+    def test_query_verb_without_product_subject(self, message):
+        assert route_normal_mode_message(message)["intent"] == "unknown"
 
     def test_product_query_keyword_stripped_to_nonempty(self):
         """泛化的产品列表问法必须查询全量，而不是把“产品”当筛选词。"""
