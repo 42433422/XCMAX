@@ -96,15 +96,15 @@ def test_release_page_uses_public_history_order_for_the_current_version() -> Non
     assert "if (releaseVersion === '1.0.0.0') entry.className += ' is-current'" not in release_page
     assert "fetchJson('/download-windows-hotfix.json')" in release_page
     assert "Windows 临时交付可下载" in release_page
-    assert "stable_auto_update === false && hotfix.signature_status === 'signed'" in release_page
+    assert "hotfix.signature_status === 'unsigned'" in release_page and "Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()" in release_page
 
 
-def test_download_page_accepts_only_signed_interim_without_enabling_ota() -> None:
+def test_download_page_accepts_bounded_unsigned_interim_without_enabling_ota() -> None:
     download_page = (REPO_ROOT / "成都修茈科技有限公司" / "download.html").read_text(
         encoding="utf-8"
     )
 
-    assert "stable_auto_update !== false || hotfix.signature_status !== 'signed'" in download_page
+    assert "Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()" in download_page and "hotfix.stable_auto_update !== false" in download_page
     assert "compareVersions(hotfix.version, state.version) < 0" in download_page
     assert "String(hotfix.artifact.sha256)" in download_page
     assert "innerHTML" not in download_page
