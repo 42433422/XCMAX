@@ -167,20 +167,17 @@ export function extractLikelyProductQueryKeyword(raw: string): string | null {
   const patterns: RegExp[] = [
     /^查询\s*(.+)$/u,
     /^查一下\s*(.+?)\s*的?(?:价格|价钱|多少钱)?\s*[。！？…]*$/iu,
-    /^帮我查(?:询)?\s*(.+?)\s*(?:的)?(?:价格|多少钱)?\s*[。！？…]*$/iu,
   ]
   for (const re of patterns) {
     const m = t.match(re)
     if (m?.[1]) {
-      let k = String(m[1])
-        .trim()
-        .replace(/[。！？…]+$/g, '')
-        .trim()
+      let k = String(m[1]).trim().replace(/[。！？…]+$/g, '').trim()
       if ((k.startsWith('「') && k.endsWith('」')) || (k.startsWith('"') && k.endsWith('"')) || (k.startsWith('『') && k.endsWith('』'))) {
         k = k.slice(1, -1).trim()
       }
       k = k.replace(/^(产品|型号|货号)[是为：:\s]+/i, '').trim()
       k = k.replace(/^([a-z0-9][a-z0-9._/-]*)\s*的(?:名称|单价|价格|库存)(?:(?:[、，,和及与\s]+)(?:名称|单价|价格|库存))*$/i, '$1')
+      if (!/(产品|型号|货号|价格|价钱|单价|库存|多少钱)/.test(t) && !/^[a-z0-9][a-z0-9._/-]*$/i.test(k)) return null
       if (k.length >= 1 && k.length <= 120) return k
     }
   }
