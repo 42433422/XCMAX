@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
+from fastapi.responses import JSONResponse
 
 from app.application.desktop_delivery_receipt import (
     desktop_installation_id,
@@ -61,59 +63,50 @@ async def test_login_receipt_does_not_block_without_market_token():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("background", [False, True])
+@pytest.mark.parametrize("denied", [False, True])
 @pytest.mark.parametrize(
-    "retry_error", [None, HTTPException(401, "session unavailable"), ConnectionError("offline")]
+    "retry_error", [None, HTTPException(401, "unavailable"), ConnectionError("offline")]
 )
-async def test_desktop_login_finalize_reports_delivery_receipt(retry_error):
+async def test_desktop_login_finalize_reports_delivery_receipt(background, denied, retry_error):
     from app.application.enterprise_login_finalize import finalize_enterprise_login
 
     receipt = {"reported": True, "duplicate": False, "source": "desktop_login"}
-    with (
-        patch("app.fastapi_routes.market_account.save_session_market_token"),
-        patch(
-            "app.fastapi_routes.market_account.fetch_market_membership_tier",
-            new_callable=AsyncMock,
-            return_value=None,
-        ),
-        patch(
-            "app.application.enterprise_login_flow.extract_market_user_blob",
-            return_value={"id": 29, "username": "SUNBIRD"},
-        ),
-        patch(
-            "app.application.enterprise_login_flow.company_brand_from_user_blob",
-            return_value="SUNBIRD",
-        ),
-        patch(
-            "app.application.enterprise_login_flow.bind_tenant_for_login",
-            return_value={"tenant_id": None, "tenant_name": "SUNBIRD"},
-        ),
-        # 市场身份绑定需要真实宿主库账号；本用例只验证回执上报链路，故旁路绑定
-        patch("app.application.tenant_rbac_app_service.bind_verified_market_identity"),
-        patch(
-            "app.application.enterprise_login_flow._derive_and_heal_account_kind",
-            return_value="enterprise",
-        ),
-        patch("app.application.enterprise_login_flow.persist_session_account_meta"),
-        patch(
-            "app.application.enterprise_login_flow._reject_admin_on_desktop",
-            return_value=None,
-        ),
-        patch(
-            "app.application.enterprise_login_flow._is_desktop_runtime",
-            return_value=True,
-        ),
-        patch(
-            "app.application.desktop_delivery_receipt.report_desktop_login_delivery_receipt",
-            new_callable=AsyncMock,
-            return_value=receipt,
-        ) as report,
-        patch(
-            "app.application.mod_delivery_receipt_outbox.retry_delivery_receipts_for_session",
-            new_callable=AsyncMock,
-            return_value={"installed_reported": 0, "runtime_reported": 0, "pending": 0},
-            side_effect=retry_error,
-        ) as retry,
-    ):
+    tasks = BackgroundTasks() if background else None
+    flow = "app.application.enterprise_login_flow."
+    market = "app.fastapi_routes.market_account."
+    values = {
+        market + "save_session_market_token": None,
+        flow + "extract_market_user_blob": {"id": 29, "username": "SUNBIRD"},
+        flow + "company_brand_from_user_blob": "SUNBIRD",
+        flow + "bind_tenant_for_login": {"tenant_id": None, "tenant_name": "SUNBIRD"},
+        "app.application.tenant_rbac_app_service.bind_verified_market_identity": None,
+        flow + "_derive_and_heal_account_kind": "enterprise",
+        flow + "persist_session_account_meta": None,
+        "app.application.session_account_meta.persist_session_membership_tier": None,
+        flow + "_reject_admin_on_desktop": {"success": False} if denied else None,
+        flow + "_is_desktop_runtime": True,
+    }
+    with ExitStack() as stack:
+        mocks = {
+            path: stack.enter_context(patch(path, return_value=value))
+            for path, value in values.items()
+        }
+        membership = stack.enter_context(
+            patch(market + "fetch_market_membership_tier", new=AsyncMock(return_value="premium"))
+        )
+        report = stack.enter_context(
+            patch(
+                "app.application.desktop_delivery_receipt.report_desktop_login_delivery_receipt",
+                new=AsyncMock(return_value=receipt),
+            )
+        )
+        retry = stack.enter_context(
+            patch(
+                "app.application.mod_delivery_receipt_outbox.retry_delivery_receipts_for_session",
+                new=AsyncMock(return_value={}, side_effect=retry_error),
+            )
+        )
         result = await finalize_enterprise_login(
             result={"success": True, "user": {"id": 25}},
             session_id="session-id",
@@ -126,9 +119,31 @@ async def test_desktop_login_finalize_reports_delivery_receipt(retry_error):
             account_kind="enterprise",
             username="SUNBIRD",
             sku="personal",
+            background_tasks=tasks,
         )
+        if background:
+            membership.assert_not_awaited()
+            report.assert_not_awaited()
+            assert len(tasks.tasks) == (0 if denied else 2)
+            sent = []
 
-    report.assert_awaited_once_with("market-token")
-    assert result["delivery_receipt"] == receipt
-    retry.assert_awaited_once_with("session-id", "market-token")
-    assert result["success"] is True
+            async def send(message):
+                sent.append(message)
+                if message["type"] == "http.response.body":
+                    membership.assert_not_awaited()
+                    report.assert_not_awaited()
+
+            await JSONResponse(result, background=tasks)({"type": "http"}, AsyncMock(), send)
+            assert sent[-1]["type"] == "http.response.body"
+        if denied:
+            report.assert_not_awaited()
+            assert result["success"] is False
+        else:
+            membership.assert_awaited_once_with("market-token")
+            mocks[
+                "app.application.session_account_meta.persist_session_membership_tier"
+            ].assert_called_once_with("session-id", "premium")
+            report.assert_awaited_once_with("market-token")
+            retry.assert_awaited_once_with("session-id", "market-token")
+            assert result["delivery_receipt"] == receipt
+            assert result["success"] is True

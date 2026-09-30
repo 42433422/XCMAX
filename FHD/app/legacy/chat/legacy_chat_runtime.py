@@ -6,6 +6,8 @@ import json
 from collections.abc import Iterable
 from typing import Any
 
+from app.infrastructure.llm.client import llm_client_scope
+
 
 def _facade() -> Any:
     from app.legacy.chat import legacy_chat_adapter
@@ -82,13 +84,14 @@ def chat(
                 tool_name = str(getattr(fn, "name", "") or "").strip()
                 if tool_name:
                     tool_outputs.append(f"[调用工具: {tool_name}]")
-            token_request = _facade().append_tool_messages(
-                messages,
-                tcs,
-                workspace_root=workspace_root,
-                runtime_context=runtime_context,
-                db_write_token=db_write_token,
-            )
+            with llm_client_scope(cli, mdl):
+                token_request = _facade().append_tool_messages(
+                    messages,
+                    tcs,
+                    workspace_root=workspace_root,
+                    runtime_context=runtime_context,
+                    db_write_token=db_write_token,
+                )
             if token_request and token_request.get("requires_token"):
                 return json.dumps(
                     _facade()._attach_last_tool_records(
@@ -248,13 +251,14 @@ def chat_stream_text(
             messages.append(
                 {"role": "assistant", "content": "", "tool_calls": formatted_tool_calls}
             )
-            token_request = _facade().append_tool_messages(
-                messages,
-                tcs,
-                workspace_root=workspace_root,
-                runtime_context=runtime_context,
-                db_write_token=db_write_token,
-            )
+            with llm_client_scope(cli, mdl):
+                token_request = _facade().append_tool_messages(
+                    messages,
+                    tcs,
+                    workspace_root=workspace_root,
+                    runtime_context=runtime_context,
+                    db_write_token=db_write_token,
+                )
             if token_request and token_request.get("requires_token"):
                 yield {
                     "_planner_sse": "requires_token",

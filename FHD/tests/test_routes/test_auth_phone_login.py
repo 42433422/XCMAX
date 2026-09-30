@@ -5,20 +5,17 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import BackgroundTasks, FastAPI
 from fastapi.testclient import TestClient
 
 
-@pytest.fixture(autouse=True)
-def _disable_lan_guard(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LAN_GUARD_ENABLED", "0")
-    from app.security.lan_config import reset_lan_config_cache
-    from app.security.lan_settings_store import LanSettingsOverride
+@pytest.fixture
+def client():
+    from app.fastapi_routes.domains.auth.routes import router
 
-    monkeypatch.setattr(
-        "app.security.lan_settings_store.load_overrides",
-        lambda: LanSettingsOverride(enabled=False),
-    )
-    reset_lan_config_cache()
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
 
 
 def test_login_with_phone_code_invalid_input(client: TestClient) -> None:
@@ -41,12 +38,13 @@ def test_login_with_phone_code_market_fail(
     with patch(
         "app.application.enterprise_login_flow.run_market_first_login",
         new=AsyncMock(return_value=(None, err_resp)),
-    ):
+    ) as login:
         resp = client.post(
             "/api/auth/login-with-phone-code",
             json={"phone": "13800138000", "code": "123456", "account_kind": "enterprise"},
         )
     assert resp.status_code == 401
+    assert isinstance(login.call_args.kwargs["background_tasks"], BackgroundTasks)
 
 
 def test_market_send_phone_code_proxy() -> None:

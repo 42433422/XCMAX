@@ -261,7 +261,7 @@ def execute_registered_capability(
     context.setdefault("message", str(params.get("user_request") or params.get("message") or ""))
     try:
         decision, run_result = ApprovalGatedEngine(
-            WorkflowEngine(tool_dispatcher=_dispatch_registered_tool)
+            WorkflowEngine(tool_dispatcher=_dispatch_registered_tool), require_persistence=True
         ).run(plan, runtime_context=context, strategy="interactive")
     except RECOVERABLE_ERRORS:
         return json.dumps(

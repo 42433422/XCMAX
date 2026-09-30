@@ -5,12 +5,7 @@ vi.mock('@/utils/apiBase', () => ({ apiFetch }))
 
 import { aiModBriefFromChat, generateAndInstallAiMod } from './aiModDeliveryApi'
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
+const jsonResponse = (body: unknown, status = 200): Response => Response.json(body, { status })
 
 describe('aiModDeliveryApi', () => {
   beforeEach(() => apiFetch.mockReset())
@@ -19,6 +14,9 @@ describe('aiModDeliveryApi', () => {
     expect(aiModBriefFromChat('帮我做一个请假审批流')).toBe('帮我做一个请假审批流')
     expect(aiModBriefFromChat('生成一个库存 MOD')).toBe('生成一个库存 MOD')
     expect(aiModBriefFromChat('请假审批流是什么')).toBe('')
+    expect(aiModBriefFromChat('请创建一份验收文本文件。审批后实际生成文件并返回真实文件路径。不要修改应用安装目录。')).toBe('')
+    expect(aiModBriefFromChat('不要创建应用，请导出工具执行记录')).toBe('')
+    expect(aiModBriefFromChat('审批流帮我创建')).toBe('审批流帮我创建')
   })
 
   it('runs generate, validate and install as one user flow', async () => {

@@ -6,6 +6,7 @@ import logging
 import secrets
 from typing import Any
 
+from fastapi import BackgroundTasks
 from fastapi.responses import JSONResponse
 
 from app.application.desktop_admin_gate import (
@@ -271,6 +272,7 @@ async def run_market_first_login(
     login_market_fn: Any | None = None,
     totp_code: str | None = None,
     invitation_code: str = "",
+    background_tasks: BackgroundTasks | None = None,
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """企业 SKU：市场先行，再本地 session + finalize。"""
     # 桌面端：显式 admin 入口直接拒绝（即使市场可达也不开管理员会话）
@@ -307,6 +309,7 @@ async def run_market_first_login(
                             username=login_username,
                             sku=sku,
                             skip_market_sync=True,
+                            background_tasks=background_tasks,
                         )
                         # finalize skip_market_sync 分支不写 market_is_admin/market_is_enterprise，此处补充
                         # enterprise SKU 管理员默认拥有企业版权益（市场不可达时）
@@ -415,6 +418,7 @@ async def run_market_first_login(
             username=login_username,
             sku=sku,
             invitation_code=invitation_code,
+            background_tasks=background_tasks,
         )
     return result, None
 
@@ -426,6 +430,7 @@ async def finalize_auth_after_oidc(
     oidc_access_token: str = "",
     account_kind: AccountKind,
     sku: str,
+    background_tasks: BackgroundTasks | None = None,
 ) -> dict[str, Any]:
     """OIDC 本地会话创建后，自动桥接 MODstore JWT 并走统一 finalize。"""
     from app.fastapi_routes.market_account import login_market_for_oidc_profile
@@ -456,4 +461,5 @@ async def finalize_auth_after_oidc(
         username=username,
         sku=sku,
         skip_market_sync=not bool(market_result.get("success")),
+        background_tasks=background_tasks,
     )
