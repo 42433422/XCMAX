@@ -37,7 +37,7 @@ function Install([string]$path, [string]$label) {
 }
 function Start-App([string]$label) {
   $launch = @{FilePath=(Join-Path $installRoot 'XCAGI.exe'); WorkingDirectory=$installRoot; PassThru=$true; WindowStyle='Hidden'}
-  if ($Mode -eq 'Gui') { $launch.ArgumentList = @('--remote-debugging-port=9222') }
+  if ($Mode -in @('Gui','Upgrade')) { $launch.ArgumentList = @('--remote-debugging-port=9222') }
   $p = Start-Process @launch
   $deadline = (Get-Date).AddMinutes(4)
   $health = $null; $status = $null
@@ -165,6 +165,15 @@ function Backup-And-Version {
     Stop-App
   }
 }
+function Run-Gui([string]$phase, [string]$directory, [string]$seed = '') {
+  New-Item -ItemType Directory -Force -Path $directory | Out-Null
+  $env:XCAGI_GUI_EVIDENCE = (Resolve-Path $directory).Path
+  $env:XCAGI_GUI_PHASE = $phase
+  $env:XCAGI_GUI_SEED = $seed
+  & node (Join-Path $PSScriptRoot '../dev/record_enterprise_desktop_init.mjs')
+  Check ($LASTEXITCODE -eq 0) "normal_gui_$phase" 'normal UI must save and read back actual business records'
+  return (Join-Path $env:XCAGI_GUI_EVIDENCE 'gui-business.json')
+}
 try {
   Check (-not (Test-Path $dataRoot) -and -not (Test-Path $installRoot)) 'isolated_runner' 'fresh user data and install path'
   Check (-not (Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction SilentlyContinue)) 'isolated_tasks' 'no prior daily task'
@@ -173,9 +182,7 @@ try {
   if ($Mode -eq 'Gui') {
     Install $CandidatePath 'candidate'
     Start-App 'candidate'
-    $env:XCAGI_GUI_EVIDENCE = (Resolve-Path $EvidenceDir).Path
-    & node (Join-Path $PSScriptRoot '../dev/record_enterprise_desktop_init.mjs')
-    Check ($LASTEXITCODE -eq 0) 'normal_gui_business' 'normal UI workflow must produce and read back real business records and files'
+    Run-Gui 'business' $EvidenceDir | Out-Null
     $evidence.result = 'gui_regression_passed'
     return
   }
@@ -183,6 +190,7 @@ try {
     Check ((Get-FileHash -LiteralPath $OldPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $OldSha256) 'old_installer_hash' "sha256=$OldSha256"
     Install $OldPath 'old'
     $oldProcess = Start-App 'old'
+    $oldGuiSeed = Run-Gui 'seed' (Join-Path $EvidenceDir 'old-gui')
     $oldAuth = Login 'old'
     $marker = "ACCEPT-UPGRADE-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
     $recordId = Create-Record $oldAuth.session $marker 'before_upgrade'
@@ -192,6 +200,7 @@ try {
     $newAuth = Login 'candidate'
     Check ($newAuth.tenant -eq $oldAuth.tenant) 'same_enterprise' "tenant_sha256=$(Digest $newAuth.tenant)"
     Read-Record $newAuth.session $recordId $marker 'after_upgrade'
+    Run-Gui 'after-upgrade' (Join-Path $EvidenceDir 'after-upgrade-gui') $oldGuiSeed | Out-Null
   } else {
     Install $CandidatePath 'candidate'
     $newProcess = Start-App 'candidate'

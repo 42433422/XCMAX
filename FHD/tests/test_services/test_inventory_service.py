@@ -45,21 +45,9 @@ def test_session(test_engine):
 # ---------------------------------------------------------------------------
 # _decimal_to_float
 # ---------------------------------------------------------------------------
-class TestDecimalToFloat:
-    def test_decimal_converted(self):
-        assert InventoryService._decimal_to_float(Decimal("10.5")) == 10.5
-
-    def test_int_unchanged(self):
-        assert InventoryService._decimal_to_float(42) == 42
-
-    def test_float_unchanged(self):
-        assert InventoryService._decimal_to_float(3.14) == 3.14
-
-    def test_string_unchanged(self):
-        assert InventoryService._decimal_to_float("hello") == "hello"
-
-    def test_none_unchanged(self):
-        assert InventoryService._decimal_to_float(None) is None
+@pytest.mark.parametrize("value,expected", [(Decimal("10.5"), 10.5), (42, 42), (3.14, 3.14), ("hello", "hello"), (None, None)])
+def test_decimal_to_float(value, expected):
+    assert InventoryService._decimal_to_float(value) == expected
 
 
 # ---------------------------------------------------------------------------

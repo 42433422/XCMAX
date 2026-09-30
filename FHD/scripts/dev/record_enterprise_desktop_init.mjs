@@ -10,10 +10,15 @@ const { chromium, expect } = require('@playwright/test')
 const dir = path.resolve(process.env.XCAGI_GUI_EVIDENCE || 'candidate/evidence-Gui')
 fs.mkdirSync(dir, { recursive: true })
 const run = `${process.env.GITHUB_RUN_ID || Date.now()}-${process.env.GITHUB_RUN_ATTEMPT || 1}`
-const marker = `WIN-GUI-${run}`
+const phase = process.env.XCAGI_GUI_PHASE || 'business'
+const seed = process.env.XCAGI_GUI_SEED ? JSON.parse(fs.readFileSync(process.env.XCAGI_GUI_SEED, 'utf8')) : null
+const marker = `WIN-GUI-${run}-${phase}`
 const names = { customer: `${marker}-客户`, product: `${marker}-产品`, supplier: `${marker}-供应商`, ai: `${marker}-AI客户` }
 const required = ['normal_login', 'tenant_identity', 'customer', 'product', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business']
-const evidence = { run, started_at: new Date().toISOString(), marker, names, cases: [], observations: [], result: 'running' }
+if (phase === 'seed') required.splice(4)
+if (seed) required.splice(2, 0, 'old_ui_readback')
+const observedRows = new Map()
+const evidence = { run, phase, started_at: new Date().toISOString(), marker, names, cases: [], observations: [], result: 'running' }
 let browser, page
 const digest = value => crypto.createHash('sha256').update(Buffer.isBuffer(value) ? value : String(value)).digest('hex')
 async function step(id, action) {
@@ -79,6 +84,11 @@ async function main() {
   browser = await chromium.connectOverCDP(process.env.XCAGI_CDP || 'http://127.0.0.1:9222', { timeout: 60000 })
   const context = browser.contexts()[0]
   page = context.pages().find(p => p.url().includes('127.0.0.1:17500')) || context.pages()[0]
+  page.on('response', async r => {
+    if (r.request().method() !== 'GET' || !/\/(customers|products)\/list$/.test(new URL(r.url()).pathname) || !r.ok()) return
+    const body = await r.json().catch(() => ({})), rows = body.data || body.customers || body.products || []
+    if (Array.isArray(rows)) for (const row of rows) observedRows.set(row.customer_name || row.name || row.product_name, row)
+  })
   page.on('request', r => { const endpoint = new URL(r.url()).pathname; if (r.method() === 'POST' && /purchase|inventory|customers|products|orders|shipment/.test(endpoint)) evidence.observations.push({ endpoint, method: r.method(), event: 'request_started', observed_at: new Date().toISOString() }) })
   page.on('response', r => { const endpoint = new URL(r.url()).pathname; if (r.request().method() === 'POST' && /purchase|inventory|customers|products|orders|shipment/.test(endpoint)) evidence.observations.push({ endpoint, method: r.request().method(), status: r.status(), observed_at: new Date().toISOString() }) })
   page.on('console', msg => { const text = msg.text().split('\n')[0]; if (/WIN_UI_CLICK:|TypeError|ReferenceError|Unhandled error/.test(text) && !/token|password|secret|authorization|cookie/i.test(text)) evidence.observations.push({ browser_console: text.slice(0, 512), observed_at: new Date().toISOString() }) })
@@ -95,11 +105,25 @@ async function main() {
     const data = body.data || body
     if (body.success === false || data.success === false || !response.ok()) throw new Error('Normal UI login rejected')
     await expect(page.locator('#lv-password')).toHaveCount(0, { timeout: 30000 })
-    return { status: response.status(), account_kind: data.account_kind || data.user?.account_kind, tenant_id: data.tenant_id || data.tenant?.id, workspace_id: data.workspace_id || data.user?.workspace_id, account_sha256: digest(process.env.XCAGI_TEST_USER || '') }
+    return { status: response.status(), account_kind: data.account_kind || data.user?.account_kind, tenant_id: data.tenant_id || data.tenant?.id, workspace_id: data.workspace_id || data.user?.workspace_id || null, account_sha256: digest(process.env.XCAGI_TEST_USER || '') }
   })
   await step('tenant_identity', async () => {
     if (login.account_kind !== 'enterprise' || !login.tenant_id) throw new Error('UI login did not bind an enterprise tenant')
     return login
+  })
+  if (seed) await step('old_ui_readback', async () => {
+    const originalLogin = seed.cases.find(c => c.id === 'normal_login').actual
+    if (login.account_sha256 !== originalLogin.account_sha256 || login.tenant_id !== originalLogin.tenant_id || login.workspace_id !== originalLogin.workspace_id) throw new Error('Upgrade changed the original account, enterprise or workspace')
+    const records = {}
+    for (const [kind, name] of [['customer', seed.names.customer], ['product', seed.names.product]]) {
+      const view = kind === 'customer' ? 'customers' : 'products'
+      await nav(view, `#view-${view}`)
+      const row = page.locator(`#view-${view} tbody tr`).filter({ hasText: name })
+      await expect(row).toContainText(kind === 'customer' ? '13800000001' : '¥12.50')
+      await expect.poll(() => observedRows.get(name)?.id).toBe(seed.cases.find(c => c.id === kind).actual.id)
+      records[kind] = observedRows.get(name)
+    }
+    return { original_run: seed.run, tenant_id: login.tenant_id, workspace_id: login.workspace_id, records }
   })
   await step('customer', async () => {
     await nav('customers', '#view-customers')
@@ -123,6 +147,16 @@ async function main() {
     await expect(cells.nth(4)).toHaveText('¥12.50')
     return saved
   })
+  if (phase === 'seed') {
+    await nav('settings', '#view-settings'); await click('退出登录')
+    const confirmation = page.locator('.app-dialog-host-panel')
+    await expect(confirmation).toContainText('退出登录')
+    const signedOut = page.waitForResponse(r => new URL(r.url()).pathname === '/api/auth/logout')
+    await confirmation.locator('.app-dialog-host-btn-primary').click()
+    if (!(await signedOut).ok()) throw new Error('Normal sign-out failed before upgrade')
+    await expect(page.locator('#lv-username')).toBeVisible()
+    evidence.result = 'old_ui_seed_passed'; return
+  }
   await step('purchase', async () => {
     await nav('purchase', '#view-purchase')
     await click('供应商'); await click('添加供应商')
