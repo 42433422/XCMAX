@@ -281,7 +281,6 @@ async function main() {
     await expect(detail).toContainText(requestNos[0])
     await expect(detail).toContainText(names.ai)
     const approve = page.locator('[data-tutorial-id="approval-approve-action"]')
-    await expect(approve).toBeVisible()
     await approve.click()
     const dialog = page.locator('.app-dialog-host-panel')
     await expect(dialog).toContainText('请输入审批意见')
@@ -291,10 +290,10 @@ async function main() {
     const response = await execution, body = await response.json(), result = body.data?.workflow_execution
     if (!response.ok() || body.success !== true || result?.workflow_executed !== true || result.success !== true) throw new Error('Approval did not complete the real AI workflow')
     await expect(dialog).toContainText('执行完成', { timeout: 180000 })
-    const receiptText = await dialog.innerText()
+    const receiptText = await dialog.innerText(); evidence.observations.push({ action: 'ai_execution_receipt', approval_request: requestNos[0], execution: result, receipt: receiptText, observed_at: new Date().toISOString() })
     await dialog.locator('.app-dialog-host-btn-primary').click()
     if (await modal().isVisible()) await modal().getByRole('button', { name: /关闭/ }).first().click()
-    await nav('customers', '#view-customers')
+    await page.reload(); evidence.observations.push({ action: 'normal_ui_reload_before_ai_readback', observed_at: new Date().toISOString() }); await nav('customers', '#view-customers')
     await expect(page.locator('#view-customers')).toContainText(names.ai, { timeout: 30000 })
     return { created_customer: names.ai, approval_request: requestNos[0], execution: result, receipt: receiptText }
   })
