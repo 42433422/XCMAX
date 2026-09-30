@@ -8,10 +8,7 @@
 ## 1. 当前版本信息
 
 **未闭环。** 版本 1.0.0.5，stable OTA 关闭。2026-09-30 客户指针实测为 main 83939363、SHA-256 92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf；其说明仍误写 macOS 稳定版。本轮最终安装器尚未冻结。
-#2103/#2104 已进入 83939363，私有包 clean/upgrade runner 验证了 API 登录、同账号 tenant/记录读回、版本、备份执行与产物。原始记录位于 `C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`；不能核销 GUI 业务或恢复后应用读取。
-#2096 的路由映射与 Mod 注册竞态由 #2107 进入 main e5b2412；main #2111/#2112 已纳入本轮 #2109 集成分支；服务器磁盘耗尽导致的配对 503 已恢复，预发 36715937308 已运行同 SHA。36712593205 attempt 2 实装通过，私有包 SHA-256 59019c31309dc1803546afc06d221745e28b9856f17b6f0aceab1da0fe3e3733；隔离验收 36729760481 首装与旧版登录均超时，36731164250 确认 30 秒 HttpClient.Timeout。全源扫描 36716312096 有 3 严重、61 高危阻塞；#2109 修复待保护检查，最终包未冻结。没有可用客户测试机/快照；独立 Windows runner 已验证部分 GUI 业务，AI、真实旧版业务升级和 A/B/C 仍未完成。
-
-## 3. Release Gate 定义（G1–G13 覆盖构建身份、首装、登录绑定、业务、升级、重开、备份恢复及更新）
+#2103/#2104 已进入83939363；#2096由#2107进入main e5b2412替代；main #2111/#2112已纳入#2109集成分支，待保护检查与合入。历史API诊断原始记录在 `C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`，不能核销GUI业务。配对503已恢复；全源扫描36716312096仍有3严重、61高危，最终SHA复扫未完成。用户无可用客户测试机/快照，独立Windows runner继续实装验证；最终包、A/B/C和客户发布未完成。
 
 ## 4. Release Gate 状态
 
@@ -23,10 +20,10 @@
 | G4 | 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |
 | G5 | 登录、企业与设备绑定 | YELLOW | 原生 PostgreSQL 恢复后，同包 36732341444 clean/upgrade 通过；[36737817121 正常 GUI 登录及租户 1](evidence/e2e/windows-closeout-20260930/gui-36737817121.json)通过；设备绑定未核销 |
 | G6 | 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
-| G7 | 真实业务与 AI 任务 | RED | 复现：私有92包从正常对话创建“WIN-GUI-36779224876-1-business-AI客户”→持久化审批详情；[原始记录](evidence/e2e/windows-closeout-20260930/gui-36779224876.json)、[日志](evidence/e2e/windows-closeout-20260930/backend-36779224876.log)、[截图](evidence/e2e/windows-closeout-20260930/ai-36779224876.png)：参数丢失“客户”后缀，未批准。#2109 保留引号内原文，265项相关回归通过，待新包完成实际AI对象和回执。36778477756正常客户/产品、采购入库10、订单、文件内容导出、出库2及界面库存8已通过；A/B/C未完成，符号链接WinError1314未核销 |
+| G7 | 真实业务与 AI 任务 | RED | 私有86包36792475338已核对SHA-256 091dfb1e77c98b5df0d99b26b502815253a61d343ab8f6ba7eed902804eb17f5；[记录](evidence/e2e/windows-closeout-20260930/gui-36792475338.json)、[日志](evidence/e2e/windows-closeout-20260930/backend-36792475338.log)、[截图](evidence/e2e/windows-closeout-20260930/ai-36792475338.png)：正常采购入库10、订单、文件内容导出、出库2及界面库存8通过；AI审批名称正确且回执称执行完成，返回客户列表未读回新记录。保留完整回执、正常界面刷新后的同包复验36793733617进行中；A/B/C未完成，WinError1314未核销 |
 | G8 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G9 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
-| G10 | 覆盖升级读回 | YELLOW | runner 同账号读回原记录通过；真实受支持旧版客户数据 GUI 读回未完成 |
+| G10 | 覆盖升级读回 | YELLOW | 36792475338旧版1.0.0.1安装身份2e6f03bf、哈希ed957f9d核对通过；正常GUI创建客户后地址显示“-”，建数验证中止，尚未覆盖升级。后续记录旧版实际原始字段并逐字段验证保留，旧版输入地址丢失须显式保留为历史缺陷证据 |
 | G11 | 升级后业务 | UNKNOWN | 未在最终候选上完成客户 GUI 业务 |
 | G12 | 退出重开 | UNKNOWN | 旧包历史证据不能替代最终候选复验 |
 | G13 | 备份恢复 | YELLOW | [36775708452](https://github.com/42433422/XCMAX/actions/runs/36775708452)：私有917包 Daily/Weekly正式调度均产生1691648字节备份；隔离恢复应用的实际数据目录、同账号同企业API读回通过。最终候选未冻结，GUI恢复读取已补入升级流程但尚待实跑，不能判C轮通过 |

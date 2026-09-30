@@ -121,9 +121,10 @@ async function main() {
       const view = kind === 'customer' ? 'customers' : 'products'
       await nav(view, `#view-${view}`)
       const row = page.locator(`#view-${view} tbody tr`).filter({ hasText: name })
-      for (const value of kind === 'customer' ? ['验收员', '13800000001', `${seed.marker}隔离验收地址`] : [seed.marker, '¥12.50']) await expect(row).toContainText(value)
+      for (const value of kind === 'customer' ? Object.values(seed.cases.find(c => c.id === kind).actual.original_fields).filter(Boolean) : [seed.marker, '¥12.50']) await expect(row).toContainText(value)
       if (kind === 'product') await expect(row.locator('td').nth(3)).toHaveText('10')
       await expect.poll(() => observedRows.get(name)?.id).toBe(seed.cases.find(c => c.id === kind).actual.id)
+      if (kind === 'customer') for (const [key, value] of Object.entries(seed.cases.find(c => c.id === kind).actual.original_fields)) await expect.poll(() => observedRows.get(name)?.[key] ?? '').toBe(value)
       records[kind] = observedRows.get(name)
     }
     return { original_run: seed.run, tenant_id: login.tenant_id, workspace_id: login.workspace_id, records }
@@ -136,8 +137,9 @@ async function main() {
     const saved = await save('创建', /customers|purchase.units/)
     await expect(page.locator('#view-customers')).toContainText(names.customer)
     const row = page.locator('#view-customers tbody tr').filter({ hasText: names.customer })
-    for (const value of ['验收员', '13800000001', `${marker}隔离验收地址`]) await expect(row).toContainText(value)
-    return saved
+    for (const value of ['验收员', '13800000001', ...(phase === 'seed' ? [] : [`${marker}隔离验收地址`])]) await expect(row).toContainText(value)
+    await expect.poll(() => observedRows.get(names.customer)?.id).toBe(saved.id)
+    return { ...saved, original_fields: Object.fromEntries(['contact_person', 'contact_phone', 'contact_address'].map(key => [key, observedRows.get(names.customer)?.[key] ?? ''])), input_address: `${marker}隔离验收地址` }
   })
   await step('product', async () => {
     await nav('products', '#view-products')
