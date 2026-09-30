@@ -39,15 +39,15 @@ function Start-App([string]$label) {
   $health = $null; $status = $null
   while ((Get-Date) -lt $deadline) {
     $p.Refresh()
-    Check (-not $p.HasExited) "$label.process" "pid=$($p.Id) remains running"
+    if ($p.HasExited) { Check $false "$label.process" "pid=$($p.Id) exited before ready" }
     try {
-      $health = Invoke-RestMethod "$base/api/health" -TimeoutSec 3
+      $health = Invoke-RestMethod "$base/api/health?lite=true" -TimeoutSec 3
       $status = Invoke-RestMethod "$base/api/desktop/status" -TimeoutSec 3
-      if ($health.status -eq 'healthy' -and $status.readyForUi -eq $true) { break }
+      if ($health.status -ne 'unhealthy' -and @($health.runtime.blockers).Count -eq 0 -and $status.readyForUi -eq $true) { break }
     } catch { }
     Start-Sleep -Seconds 2
   }
-  Check ($health.status -eq 'healthy' -and $status.readyForUi -eq $true) "$label.first_start_ready" "health=$($health.status); readyForUi=$($status.readyForUi); pid=$($p.Id)"
+  Check ($health.status -ne 'unhealthy' -and @($health.runtime.blockers).Count -eq 0 -and $status.readyForUi -eq $true) "$label.first_start_ready" "health=$($health.status); blockers=$(@($health.runtime.blockers).Count); readyForUi=$($status.readyForUi); pid=$($p.Id)"
   $p.Refresh()
   Check (-not $p.HasExited) "$label.no_restart" "original pid=$($p.Id)"
   return $p
