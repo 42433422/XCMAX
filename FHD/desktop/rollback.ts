@@ -8,8 +8,6 @@ import {
 } from './rollback-windows.js'
 import { launchMacOSFullRollback } from './rollback-macos.js'
 
-/** Snapshot the prior app and database, then commit only after startup stabilizes. */
-
 const ROLLBACK_DIR = 'rollback'
 const ROLLBACK_MARKER = 'rollback-marker.json'
 const ROLLBACK_APPLIED = 'rollback-applied.json'
@@ -287,7 +285,6 @@ export interface RollbackTriggerResult {
   scheduled: boolean
 }
 
-/** Restore the prior release after an unsuccessful post-update startup. */
 export async function triggerRollback(reason: string): Promise<RollbackTriggerResult> {
   const marker = checkPendingRollback()
   if (!marker) {
