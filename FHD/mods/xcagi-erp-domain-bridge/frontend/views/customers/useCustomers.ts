@@ -6,7 +6,6 @@ import { appAlert } from '@/utils/appDialog'
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel'
 import type { CustomerCreateDTO, CustomerUpdateDTO } from '@/types/customer'
 
-// 客户行数据（字段以 DataTable 列、合并逻辑与编辑弹窗实际访问项为准）
 interface CustomerRow {
   id?: number | string
   customer_name?: string
@@ -24,27 +23,20 @@ interface CustomerAddForm {
   address: string
 }
 
-interface CustomerEditForm {
+interface CustomerEditForm extends CustomerAddForm {
   id?: number | string | null
-  customer_name: string
-  contact_person: string
-  contact_phone: string
-  address: string
 }
 
 interface CustomersListResponse {
   success: boolean
   total?: number
+  data?: CustomerRow[]
   customers?: CustomerRow[]
 }
 
 // 购买单位下拉项：接口可能返回字符串或对象（多字段名兼容）
-interface UnitOptionObject {
-  id?: number | string
-  name?: string
+interface UnitOptionObject extends CustomerRow {
   symbol?: string
-  unit_name?: string
-  customer_name?: string
   unitName?: string
 }
 
@@ -57,7 +49,6 @@ interface UnitsPayload {
   units?: unknown[]
 }
 
-// 客户导出模板（templatePreviewApi.listTemplates 响应）
 interface ExportTemplateItem {
   id: number | string
   name: string
@@ -72,8 +63,6 @@ interface ExportTemplatesResponse {
   templates?: ExportTemplateItem[]
 }
 
-// 拆分自 CustomersView.vue script（原第 200–508 行）；逻辑逐字迁移，行为不变。
-// DataTable / ConfirmDialog 组件仍在入口 SFC 中导入。
 export function useCustomers() {
   const pageNavTitle = useCoreNavLabel('customers');
   const productsNavLabel = useCoreNavLabel('products');
@@ -177,7 +166,7 @@ export function useCustomers() {
         ...(pu ? { purchase_unit: pu } : {})
       });
       if (data.success) {
-        const incoming = data.customers || [];
+        const incoming = data.data || data.customers || [];
         const total = Number(data.total ?? incoming.length ?? 0);
         totalCustomers.value = Number.isFinite(total) ? total : incoming.length;
 

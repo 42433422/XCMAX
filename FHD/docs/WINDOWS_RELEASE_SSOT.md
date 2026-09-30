@@ -23,7 +23,7 @@
 | G4 | 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |
 | G5 | 登录、企业与设备绑定 | YELLOW | 原生 PostgreSQL 恢复后，同包 36732341444 clean/upgrade 通过；[36737817121 正常 GUI 登录及租户 1](evidence/e2e/windows-closeout-20260930/gui-36737817121.json)通过；设备绑定未核销 |
 | G6 | 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
-| G7 | 真实业务与 AI 任务 | RED | [36737817121](evidence/e2e/windows-closeout-20260930/gui-36737817121.json)：正常新建客户，POST 成功 ID=1，列表总数 1 却无行；Mod 错读 customers 而接口返回 data；#2109 修复，11 项针对性回归通过，待新安装器实测；后续业务/AI 未测 |
+| G7 | 真实业务与 AI 任务 | RED | [36744895942](evidence/e2e/windows-closeout-20260930/gui-36744895942.json)：分支私有包 2c7ffc99/B471B552 仍复现新建 ID=1、总数 1 无行；修复误落 XCAGI/mods 导出副本，实际编译源 mods/ 未包含。#2109 已落权威源并同步，12 项加载实际源回归通过，待新包实测；采购/后续业务/AI 未核销 |
 | G8 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G9 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G10 | 覆盖升级读回 | YELLOW | runner 同账号读回原记录通过；真实受支持旧版客户数据 GUI 读回未完成 |

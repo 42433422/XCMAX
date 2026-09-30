@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PurchaseView from '../../../XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PurchaseView.vue'
+import PurchaseView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/PurchaseView.vue'
 const mocks = vi.hoisted(() => ({ get: vi.fn(async () => ({ success: true, data: [] })), post: vi.fn(), alert: vi.fn(async () => {}), prompt: vi.fn(), confirm: vi.fn() }))
 vi.mock('@/api', () => ({ get: mocks.get, post: mocks.post, productsApi: { getProducts: mocks.get } }))
 vi.mock('@/utils/appDialog', () => ({ appAlert: mocks.alert, appConfirm: mocks.confirm, appPrompt: mocks.prompt }))

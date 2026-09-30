@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { customersApi } from './customers'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent } from 'vue'
-import { useCustomers } from '../../../XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/customers/useCustomers'
+import { useCustomers } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/customers/useCustomers'
 
 vi.mock('./core', () => ({
   api: {

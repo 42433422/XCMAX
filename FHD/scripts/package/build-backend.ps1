@@ -13,6 +13,8 @@ $ErrorActionPreference = "Stop"
 $Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $Root
+& python scripts/dev/mods_ssot.py check
+if ($LASTEXITCODE -ne 0) { throw 'Mod source/export drift; synchronize the authoritative mods/ source before packaging.' }
 $Version = $Version.TrimStart("v", "V")
 
 $skuFrontendMap = @{

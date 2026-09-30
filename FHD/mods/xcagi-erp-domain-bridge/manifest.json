@@ -1,7 +1,7 @@
 {
   "id": "xcagi-erp-domain-bridge",
   "name": "XCAGI 通用业务领域门面 Mod",
-  "version": "1.0.0.0",
+  "version": "1.0.0.1",
   "author": "成都修茈科技有限公司",
   "description": "通用业务 API 门面 + Repository 可插拔 + Mod 业务页（K+/O+ 物理视图；L 仓储边界）。",
   "primary": false,
@@ -15,6 +15,7 @@
   "frontend": {
     "routes": "frontend/routes",
     "menu": [
+      { "id": "mod-erp-purchase", "label": "采购管理", "icon": "fa-shopping-cart", "path": "/mod/xcagi-erp-domain-bridge/purchase" },
       {
         "id": "mod-erp-products",
         "label": "业务对象",

@@ -100,6 +100,7 @@ function Backup-And-Version {
   Check ($display.DisplayVersion -eq $productVersion) 'installer_display_version' "display=$($display.DisplayVersion); expected=$productVersion"
   $daily = Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction Stop
   $weekly = Get-ScheduledTask -TaskName XcagiWeeklyBackup -ErrorAction Stop
+  $script:evidence.backup_tasks = @($daily, $weekly) | ForEach-Object { @{ name=$_.TaskName; user=$_.Principal.UserId; logon=[string]$_.Principal.LogonType; run_level=[string]$_.Principal.RunLevel; actions=@($_.Actions | Select-Object Execute,Arguments,WorkingDirectory); triggers=@($_.Triggers | Select-Object StartBoundary,Enabled,DaysOfWeek,WeeksInterval) } }
   $backupScript = Join-Path $installRoot 'resources/backend/_internal/scripts/backup/XcagiBackup.ps1'
   $dailyScriptArg = ([string]$daily.Actions[0].Arguments).Replace('/', '\')
   $weeklyScriptArg = ([string]$weekly.Actions[0].Arguments).Replace('/', '\')
