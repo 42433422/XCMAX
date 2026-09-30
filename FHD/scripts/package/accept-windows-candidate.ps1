@@ -60,8 +60,7 @@ function Login([string]$label) {
     $http = [int]$r.StatusCode
     $j = $r.Content | ConvertFrom-Json
   } catch {
-    $http = [int]$_.Exception.Response.StatusCode
-    Check $false "$label.login" "http=$http"
+    Check $false "$label.login" "http=$([int]$_.Exception.Response.StatusCode); error=$($_.Exception.GetType().Name): $($_.Exception.Message)"
   }
   Check ($http -eq 200 -and $j.success -eq $true) "$label.login" "http=$http; success=$($j.success)"
   $me = Invoke-RestMethod "$base/api/auth/me" -WebSession $session -TimeoutSec 15
