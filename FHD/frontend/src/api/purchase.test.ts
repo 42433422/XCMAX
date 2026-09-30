@@ -24,7 +24,7 @@ describe('purchase receipt', () => {
     await vm.createWarehouse()
     expect(mocks.post).not.toHaveBeenCalled()
     mocks.post.mockResolvedValueOnce({ success: true, data: { id: 12 } })
-    await vm.saveOrder()
+    await wrapper.find('.modal-footer .btn-primary').trigger('click'); await flushPromises()
     expect(mocks.post).toHaveBeenCalledWith('/api/purchase/inbounds', expect.objectContaining({ order_id: 8, supplier_id: 3, warehouse_id: 5, items: [expect.objectContaining({ order_item_id: 9, quantity: 8 })] }))
     expect(vm.activeTab).toBe('inbounds')
     expect(mocks.get).toHaveBeenCalledWith('/api/purchase/inbounds', {})

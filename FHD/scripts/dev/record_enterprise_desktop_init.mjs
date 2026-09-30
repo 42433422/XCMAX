@@ -65,7 +65,7 @@ async function dismissSuccessAlert() {
 }
 async function save(name, endpoint) {
   const waiting = page.waitForResponse(r => r.request().method() === 'POST' && endpoint.test(new URL(r.url()).pathname), { timeout: 30000 })
-  await click(name, modal())
+  await click(name, modal()); evidence.observations.push({ action: 'save_button_clicked', name: String(name), observed_at: new Date().toISOString() })
   const response = await waiting
   const body = await response.json()
   if (!response.ok() || body.success === false || body.ok === false) throw new Error(`Business save rejected: HTTP ${response.status()}`)
@@ -81,7 +81,7 @@ async function main() {
   const context = browser.contexts()[0]
   page = context.pages().find(p => p.url().includes('127.0.0.1:17500')) || context.pages()[0]
   page.on('response', r => { const endpoint = new URL(r.url()).pathname; if (r.request().method() === 'POST' && /purchase|inventory|customers|products|orders|shipment/.test(endpoint)) evidence.observations.push({ endpoint, method: r.request().method(), status: r.status(), observed_at: new Date().toISOString() }) })
-  page.setDefaultTimeout(20000)
+  page.on('pageerror', error => evidence.observations.push({ browser_error: String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'), observed_at: new Date().toISOString() })); page.setDefaultTimeout(20000)
   await page.waitForURL(/127\.0\.0\.1:17500/, { timeout: 240000 })
   const login = await step('normal_login', async () => {
     if (!await page.locator('#lv-username').isVisible()) await click(/^登录$|企业登录/)
