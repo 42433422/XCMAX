@@ -622,7 +622,8 @@ class TestCreatePurchaseInbound:
             assert order.status == ("completed" if expected else "approved")
             assert float(order.items[0].received_quantity) == (10 if expected else 0)
 
-    def test_creates_ap_posting_with_balanced_lines(self, svc):
+    @pytest.mark.parametrize("journal_success", [True, False])
+    def test_creates_ap_posting_with_balanced_lines(self, svc, journal_success):
         """采购入库后生成『借：库存 / 贷：应付账款』复式分录，借贷平衡。"""
         mock_supplier = MagicMock()
         mock_supplier.name = "供应商A"
@@ -650,7 +651,7 @@ class TestCreatePurchaseInbound:
             ),
             patch(
                 "app.services.accounting_services.create_journal_entry",
-                return_value={"success": True, "data": {"entry_no": "JE-001"}},
+                return_value={"success": journal_success, "data": {"entry_no": "JE-001"}},
             ) as MockCreateEntry,
         ):
             MockInvSvc.return_value.inventory_in.return_value = {"success": True}
@@ -697,31 +698,6 @@ class TestCreatePurchaseInbound:
             result = svc.create_purchase_inbound({"supplier_id": 1})
         assert result["success"] is True
         MockCreateEntry.assert_not_called()
-
-    def test_ap_posting_failure_does_not_block_inbound(self, svc):
-        """应付记账失败仅告警，不阻断入库主流程。"""
-        mock_product = MagicMock()
-        mock_product.name = "产品A"
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_product
-        with (
-            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
-            patch("app.services.purchase_service.InventoryService") as MockInvSvc,
-            patch(
-                "app.services.accounting_services.create_journal_entry",
-                return_value={"success": False, "message": "借贷不平衡"},
-            ),
-        ):
-            MockInvSvc.return_value.inventory_in.return_value = {"success": True}
-            result = svc.create_purchase_inbound(
-                {
-                    "supplier_id": 1,
-                    "warehouse_id": 1,
-                    "items": [{"product_id": 1, "quantity": 10, "unit_price": 100}],
-                }
-            )
-        assert result["success"] is True
-        assert "入库成功" in result["message"]
 
 
 class TestUpdateOrderReceivedQuantity:

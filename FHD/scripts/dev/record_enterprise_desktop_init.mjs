@@ -162,7 +162,15 @@ async function main() {
     await expect(field('收货仓库').locator('select')).toHaveValue(String((await warehouseResponse.json()).data.id)); await modal().getByLabel('数量').fill('10')
     const saved = await save('确认入库', /purchase\/inbounds/)
     await click('采购入库')
-    await expect(page.locator('#view-purchase')).toContainText(names.supplier)
+    const receipt = page.locator('#view-purchase tbody tr').filter({ hasText: names.supplier })
+    await expect(receipt).toContainText('¥125.00')
+    await expect(receipt).toContainText('completed')
+    await click('采购订单')
+    await expect(page.locator('#view-purchase tbody tr').filter({ hasText: names.supplier })).toContainText('已完成')
+    await nav('inventory', '#view-inventory')
+    const stock = page.locator('#view-inventory tbody tr').filter({ hasText: names.product }).locator('td')
+    await expect(stock.nth(4)).toHaveText('10')
+    await expect(stock.nth(5)).toHaveText('10')
     return saved
   })
   await step('sales_order', async () => {
