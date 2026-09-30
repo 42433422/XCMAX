@@ -145,10 +145,16 @@ def test_empty_tenant_does_not_deduplicate_another_tenants_task():
     assert repeated.json()["data"]["run_id"] == unscoped.json()["data"]["run_id"]
 
 
-@pytest.mark.parametrize("body, message", [
-    ({"task_id": "bad-tool", "title": "x", "tool_id": "nope", "action": "run"}, "未注册的工具动作"),
-    ({"task_id": "missing-tool", "title": "x"}, "任务参数无效: tool_id 不能为空"),
-])
+@pytest.mark.parametrize(
+    "body, message",
+    [
+        (
+            {"task_id": "bad-tool", "title": "x", "tool_id": "nope", "action": "run"},
+            "未注册的工具动作",
+        ),
+        ({"task_id": "missing-tool", "title": "x"}, "任务参数无效: tool_id 不能为空"),
+    ],
+)
 def test_create_task_reports_invalid_tool_reason(body, message):
     response = _client().post("/api/agent/tasks", json=body)
     assert response.status_code == 400
