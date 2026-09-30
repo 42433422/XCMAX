@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-09-30 09:25 UTC",
+  "generated_at": "2026-09-30 14:22 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -217,11 +217,11 @@
           "source": "FHD/docs/WINDOWS_RELEASE_SSOT.md",
           "section": "4. Release Gate 状态",
           "gates": {
-            "G1": "YELLOW",
+            "G1": "RED",
             "G2": "YELLOW",
             "G3": "YELLOW",
             "G4": "YELLOW",
-            "G5": "YELLOW",
+            "G5": "RED",
             "G6": "UNKNOWN",
             "G7": "UNKNOWN",
             "G8": "YELLOW",
@@ -233,8 +233,8 @@
           },
           "summary": {
             "GREEN": 0,
-            "YELLOW": 9,
-            "RED": 0,
+            "YELLOW": 7,
+            "RED": 2,
             "UNKNOWN": 4,
             "total": 13
           }

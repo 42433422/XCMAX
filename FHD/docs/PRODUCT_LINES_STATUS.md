@@ -4,7 +4,7 @@
      声明式输入：FHD/config/product_lines.yaml；本域登记在 FHD/config/ssot.yaml。
      数字漂移由 CI（ssot_cli.py gate → product-lines 域）阻断。 -->
 
-> 生成时间：2026-09-30 09:25 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
+> 生成时间：2026-09-30 14:22 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
 
 > 本文件是 XCMAX 三产品线状态（版本 / 发布 / 能力 / 三线成熟度）的**单一事实来源**，全部数字自动生成，禁止手改；任何文档引用这些数字都应指向本文件或原始权威源。
 
@@ -43,7 +43,7 @@
 
 | 产品线 | 优先级 | 定位 | 能力（已验证/总数） | 状态分布 | 平台门禁 | 入口可达 |
 |--------|--------|------|---------------------|----------|----------|----------|
-| **企业桌面 ERP + AI** | P0 | 主交付 | 41/102 | verified 41 / partial 58 / implemented 1 / planned 2 | macos: GREEN 10 / YELLOW 3 / RED 0 / 未复测 0；windows: GREEN 0 / YELLOW 9 / RED 0 / 未复测 4 | 是 |
+| **企业桌面 ERP + AI** | P0 | 主交付 | 41/102 | verified 41 / partial 58 / implemented 1 / planned 2 | macos: GREEN 10 / YELLOW 3 / RED 0 / 未复测 0；windows: GREEN 0 / YELLOW 7 / RED 2 / 未复测 4 | 是 |
 | **AI 员工商店** | P1 | 商业化线 | 14/39 | verified 14 / partial 24 / implemented 0 / planned 1 | — | 是 |
 | **移动 AI 协同 App** | P2 | 配套线 | 0/17 | verified 0 / partial 13 / implemented 3 / planned 1 | — | 是 |
 
@@ -56,7 +56,7 @@
 - 能力域：`base`、`ai`、`erp`、`desktop`、`sec`、`ops`
 - CI 主 workflow：`.github/workflows/fhd-ci-cd.yml`、`.github/workflows/fhd-release-desktop.yml`、`.github/workflows/fhd-release-desktop-mac-ota.yml`
 - macos Release Gate（来源 `FHD/docs/MACOS_RELEASE_SSOT.md`，小节「6. Release Gate 状态（2026-09-18 实跑 1.0.0.5 @ `54325894c`；证据目录 [evidence/e2e/macos-release-1.0.0.5/](evidence/e2e/macos-release-1.0.0.5/)）」）：G1 YELLOW、G10 GREEN、G11 GREEN、G12 GREEN、G13 GREEN、G2 YELLOW、G3 GREEN、G4 YELLOW、G5 GREEN、G6 GREEN、G7 GREEN、G8 GREEN、G9 GREEN
-- windows Release Gate（来源 `FHD/docs/WINDOWS_RELEASE_SSOT.md`，小节「4. Release Gate 状态」）：G1 YELLOW、G10 YELLOW、G11 UNKNOWN、G12 UNKNOWN、G13 YELLOW、G2 YELLOW、G3 YELLOW、G4 YELLOW、G5 YELLOW、G6 UNKNOWN、G7 UNKNOWN、G8 YELLOW、G9 YELLOW
+- windows Release Gate（来源 `FHD/docs/WINDOWS_RELEASE_SSOT.md`，小节「4. Release Gate 状态」）：G1 RED、G10 YELLOW、G11 UNKNOWN、G12 UNKNOWN、G13 YELLOW、G2 YELLOW、G3 YELLOW、G4 YELLOW、G5 RED、G6 UNKNOWN、G7 UNKNOWN、G8 YELLOW、G9 YELLOW
 
 #### AI 员工商店（`ai-store` · P1 · 商业化线）
 
