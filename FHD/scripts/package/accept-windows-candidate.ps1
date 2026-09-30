@@ -75,21 +75,19 @@ function Login([string]$label) {
   Check ($kind -eq 'enterprise' -and $tenant) "$label.enterprise" "kind=$kind; tenant_sha256=$(Digest $tenant)"
   return @{ session=$session; tenant=$tenant }
 }
-function Read-Record($session, [int]$id, [string]$marker, [string]$label) {
-  $r = Invoke-WebRequest "$base/api/workflow-definitions?active_only=false" -WebSession $session -TimeoutSec 20
-  $rows = @((($r.Content | ConvertFrom-Json).data))
-  $seen = @($rows | Where-Object { [int]$_.id -eq $id -and $_.name -eq $marker }).Count -eq 1
-  Check ([int]$r.StatusCode -eq 200 -and $seen) "$label.read_record" "http=$($r.StatusCode); marker_sha256=$(Digest $marker); id=$id; seen=$seen"
+function Read-Record($session, [string]$id, [string]$marker, [string]$label) {
+  $r = Invoke-WebRequest "$base/api/agent/tasks/$id" -WebSession $session -TimeoutSec 20
+  $seen = $r.Content.Contains($marker)
+  Check ([int]$r.StatusCode -eq 200 -and $seen) "$label.read_record" "http=$($r.StatusCode); marker_sha256=$(Digest $marker); seen=$seen"
 }
 function Create-Record($session, [string]$marker, [string]$label) {
-  $body = @{name=$marker; trigger_type='manual'; nodes=@(); edges=@()} | ConvertTo-Json -Compress
+  $body = @{task_id=$marker; title=$marker; message=$marker; tool_id='dataset_rag'; action='query'; params=@{dataset_id='acceptance'; query=$marker}} | ConvertTo-Json -Compress
   Invoke-WebRequest "$base/api/health?lite=true" -WebSession $session -TimeoutSec 15 | Out-Null
   $csrf = @($session.Cookies.GetCookies([Uri]$base) | Where-Object { $_.Name -eq 'csrf_token' } | Select-Object -First 1)[0].Value
   Check ([bool]$csrf) "$label.csrf_cookie" 'safe request established a CSRF cookie'
-  $r = Invoke-WebRequest "$base/api/workflow-definitions" -Method Post -Body $body -ContentType 'application/json' -Headers @{'X-CSRF-Token'=$csrf} -WebSession $session -TimeoutSec 20
-  Check ([int]$r.StatusCode -eq 201) "$label.create_record" "http=$($r.StatusCode); marker_sha256=$(Digest $marker)"
-  $id = [int](($r.Content | ConvertFrom-Json).data.id)
-  Check ($id -gt 0) "$label.record_id" "id=$id"
+  $r = Invoke-WebRequest "$base/api/agent/tasks" -Method Post -Body $body -ContentType 'application/json' -Headers @{'X-CSRF-Token'=$csrf} -WebSession $session -TimeoutSec 20
+  Check ([int]$r.StatusCode -in @(200,202)) "$label.create_record" "http=$($r.StatusCode); marker_sha256=$(Digest $marker)"
+  $id = $marker
   Read-Record $session $id $marker $label
   return $id
 }
