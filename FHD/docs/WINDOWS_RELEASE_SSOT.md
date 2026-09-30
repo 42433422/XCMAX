@@ -21,15 +21,15 @@
 | G2 | 首装 | YELLOW | runner clean 安装通过；客户入口重下及 GUI 首装未完成 |
 | G3 | 签名 | YELLOW | 过渡包未签名，风险接受有效；安装时须核 SHA-256 |
 | G4 | 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |
-| G5 | 登录、企业与设备绑定 | RED | 复现：main e5b2412ace 隔离首装 POST auth/login 超时 30 秒，旧版亦失败；[脱敏后端日志](evidence/e2e/windows-closeout-20260930/backend-36732341444.log)，#2109 补诊断，支付服务原生 PostgreSQL 5432 未恢复导致会员查询超时，已恢复待同包复验；GUI 未测 |
+| G5 | 登录、企业与设备绑定 | YELLOW | 原生 PostgreSQL 恢复后，同包 36732341444 clean/upgrade 通过；[36737817121 正常 GUI 登录及租户 1](evidence/e2e/windows-closeout-20260930/gui-36737817121.json)通过；设备绑定未核销 |
 | G6 | 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
-| G7 | 真实业务与 AI 任务 | UNKNOWN | 当前候选未完成客户/产品、采购、销售、出货、送货单、导出及审批后 AI 执行 |
+| G7 | 真实业务与 AI 任务 | RED | [36737817121](evidence/e2e/windows-closeout-20260930/gui-36737817121.json)：正常新建客户，POST 成功 ID=1，列表总数 1 却无行；Mod 错读 customers 而接口返回 data；#2109 修复，11 项针对性回归通过，待新安装器实测；后续业务/AI 未测 |
 | G8 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G9 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G10 | 覆盖升级读回 | YELLOW | runner 同账号读回原记录通过；真实受支持旧版客户数据 GUI 读回未完成 |
 | G11 | 升级后业务 | UNKNOWN | 未在最终候选上完成客户 GUI 业务 |
 | G12 | 退出重开 | UNKNOWN | 旧包历史证据不能替代最终候选复验 |
-| G13 | 备份恢复 | YELLOW | runner 任务产物存在；候选恢复回归待运行，恢复后应用查询及业务界面读取未完成 |
+| G13 | 备份恢复 | YELLOW | [36732341444](evidence/e2e/windows-closeout-20260930/upgrade-36732341444.json)：正式 daily 执行、产物及隔离恢复后同账号 API 读回通过；weekly 执行及 GUI 读取未完成 |
 
 ## 6. 实机验收任务
 

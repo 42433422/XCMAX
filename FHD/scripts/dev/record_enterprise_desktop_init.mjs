@@ -38,7 +38,7 @@ async function step(id, action) {
 }
 async function click(name, scope = page) { await scope.getByRole('button', { name, exact: typeof name === 'string' }).first().click() }
 async function nav(key, rootId) {
-  const entry = page.locator(`[data-tour="sidebar-${key}"]`).first()
+  const entry = page.locator(`[data-tour="sidebar-${key}"]:visible,[data-tour="sidebar-mod-erp-${key}"]:visible`).first()
   if (!await entry.isVisible()) {
     for (const parent of await page.locator('.sidebar .menu-item.has-children:not(.expanded)').all()) await parent.click()
   }
