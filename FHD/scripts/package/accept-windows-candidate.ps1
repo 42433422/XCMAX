@@ -101,7 +101,7 @@ function Backup-And-Version {
   $backupScript = Join-Path $installRoot 'resources/backend/_internal/scripts/backup/XcagiBackup.ps1'
   $dailyScriptArg = ([string]$daily.Actions[0].Arguments).Replace('/', '\')
   $weeklyScriptArg = ([string]$weekly.Actions[0].Arguments).Replace('/', '\')
-  Check ($daily.Actions[0].Execute -match 'powershell.exe' -and $dailyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\')) -and $weekly.Actions[0].Execute -match 'powershell.exe' -and $weeklyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\'))) 'backup_task_action' 'daily and weekly task actions point to the packaged backup script'
+  Check ($daily.Actions[0].Execute -match 'powershell.exe' -and $dailyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\')) -and $dailyScriptArg -match '-NoProfile.*-NonInteractive.*-ExecutionPolicy Bypass' -and $weekly.Actions[0].Execute -match 'powershell.exe' -and $weeklyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\')) -and $weeklyScriptArg -match '-NoProfile.*-NonInteractive.*-ExecutionPolicy Bypass') 'backup_task_action' 'daily and weekly task actions use noninteractive policy flags and the packaged backup script'
   $taskUser = ([string]$daily.Principal.UserId -split '\\')[-1]
   Check ($taskUser -eq $env:USERNAME -and $weekly.Principal.UserId -eq $daily.Principal.UserId -and $daily.Principal.LogonType -eq 'Interactive' -and $daily.Principal.RunLevel -eq 'Limited') 'backup_task_identity' "user=$taskUser; logon=$($daily.Principal.LogonType); level=$($daily.Principal.RunLevel)"
   Check ($weekly.Triggers.Count -gt 0) 'backup_weekly_trigger' 'weekly trigger exists'
