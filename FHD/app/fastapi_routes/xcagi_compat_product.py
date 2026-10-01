@@ -31,6 +31,7 @@ from app.infrastructure.persistence.compat_db.product_queries import (
 from app.infrastructure.persistence.compat_db.queries import (
     _merged_purchase_unit_entries,
     _products_units_for_select,
+    _shipment_units_for_select,
 )
 from app.infrastructure.persistence.compat_db.writes import (
     products_pg_batch_delete_rows,
@@ -267,7 +268,7 @@ def products_units(request: Request) -> dict:
 @router.get("/shipment/shipment-records/units")
 @router.get("/shipment/shipment-records/units/")
 def shipment_records_units() -> dict:
-    return cast("dict[Any, Any]", _products_units_for_select())
+    return _shipment_units_for_select()
 
 
 @router.get("/mod/taiyangniao-pro/shipment/shipment-records/units")

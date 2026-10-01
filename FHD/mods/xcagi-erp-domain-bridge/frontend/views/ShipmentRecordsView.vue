@@ -366,6 +366,8 @@ async function saveCreate() {
   try {
     const data = await ordersApi.createShipmentRecord({ ...createForm.value, products: [product] });
     if (!data?.success) throw new Error(data?.message || '创建失败');
+    selectedUnit.value = unitName;
+    await loadUnits();
     closeCreateModal();
     await appAlert(`${recordsNavTitle.value}创建成功`);
     await loadRecords();
