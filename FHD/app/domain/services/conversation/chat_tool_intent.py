@@ -39,12 +39,10 @@ _UNAMBIGUOUS_BUSINESS_DB_MUTATION_KEYWORDS = frozenset(
     }
 )
 
-# 拒绝类请求（2026-09-09 审计 R02）：否定词直接紧邻动作动词时视为“不要做 X”，
-# 不得进入写入/打印/开单等执行计划。只认紧邻形态，避免「特别好用」「别的客户」
-# 这类词内假阳性；与 intent_config.yaml negation 段口径保持一致。
+# 输入先去空白；只认否定词紧邻动作，避免「特别好用」「别的客户」假阳性。
 _NEGATED_ACTION_RE = re.compile(
-    r"(?:不要|不用|不需要|不必|不想|不想再|别再|禁止|千万别|别|不)\s*"
-    r"(?:再|先|马上|立刻|帮我|给我|帮|给|去|来)?\s*"
+    r"(?:不要|不用|不需要|不必|不想|不想再|别再|禁止|千万别|别|不)"
+    r"(?:再|先|马上|立刻|帮我|给我|帮|给|去|来)?"
     r"(?:打印|打单|开单|发货|送货|出货|导出|导入|上传|下载|生成|制作|"
     r"删除|移除|删掉|删了|新增|添加|创建|新建|修改|更新|改为|改成|写入|入库|"
     r"发送|发微信|通知|登记|录入|安排|取消|撤销|打印标签|贴标|打开|启动|关闭|切换|运行)"
@@ -71,8 +69,7 @@ def tiered_confidence(basic: dict[str, bool], rule_result: dict[str, Any]) -> fl
     return (0.85 if priority >= 10 else 0.7) if hit else 0.0
 
 
-# 原始 SQL 语句形态检测：动词+目标词同现的组合正则，降低对普通业务话术的误伤。
-# 输入统一小写并把全角空格归一为半角，允许中英文夹杂（如「执行DELETE FROM customers」）。
+# 原始SQL检测组合动词和目标词；输入归一小写与全角空格，允许中英文夹杂。
 _RAW_SQL_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?<![a-z0-9_])delete\s+from(?![a-z0-9_])"),
     re.compile(r"(?<![a-z0-9_])insert\s+into(?![a-z0-9_])"),
@@ -105,7 +102,6 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
     # 原始 SQL 永不进入写规划：安全闸从执行层前移到规划层（审计 safety.raw_sql.reject_021）。
     if looks_like_raw_sql(value):
         return False
-    # 拒绝类请求（审计 R02）：「不要删除客户X」不得判定为数据库写操作。
     if is_negated_action_request(value):
         return False
     normalized = str(lower if lower is not None else value.lower())

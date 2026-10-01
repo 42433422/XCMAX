@@ -37,6 +37,7 @@ NEGATED_REQUESTS = (
     "不用帮我删除客户",
     "不想再开单了",
     "别再删除客户了",
+    "别\t 帮我\u3000删除客户",
 )
 
 
@@ -81,6 +82,8 @@ def test_delete_entity_still_routes_when_affirmative() -> None:
         "分别查询两个客户",
         "识别一下这张发票",
         "保存好了吗",
+        pytest.param("别" + "\t" * 100_000, id="whitespace-only-refusal"),
+        pytest.param("别" + "\t" * 100_000 + "x", id="whitespace-without-action"),
     ],
 )
 def test_negation_detector_has_no_word_internal_false_positive(message: str) -> None:
