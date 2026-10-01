@@ -115,7 +115,7 @@ async function main() {
   page.on('pageerror', error => evidence.observations.push({ browser_error: String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'), observed_at: new Date().toISOString() })); page.setDefaultTimeout(20000)
   await page.waitForURL(/127\.0\.0\.1:17500/, { timeout: 240000 })
   const login = await step('normal_login', async () => {
-    if (!await page.locator('#lv-username').isVisible()) await click(/^登录$|企业登录/)
+    await expect(page.locator('#lv-username')).toBeVisible({ timeout: 60000 })
     await page.locator('#lv-username').fill(process.env.XCAGI_TEST_USER || '')
     await page.locator('#lv-password').fill(process.env.XCAGI_TEST_PASS || '')
     const waiting = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/auth/login')
@@ -161,7 +161,7 @@ async function main() {
   await step('product', async () => {
     await nav('products', '#view-products')
     await click('+ 添加产品')
-    await fill('产品型号', marker); await fill('产品名称', names.product); await fill('规格', '10'); await fill('价格', '12.50')
+    await fill(/产品型号|货号/, marker); await fill('产品名称', names.product); await fill('规格', '10'); await fill(/价格|单价/, '12.50')
     const saved = await save('保存', /products/)
     const cells = page.locator('#view-products tbody tr').filter({ hasText: names.product }).locator('td')
     await expect(cells.nth(1)).toHaveText(marker)
