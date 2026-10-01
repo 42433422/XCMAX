@@ -73,11 +73,6 @@ function normalizeApiPath(path: string): string {
   return raw.slice(0, end) || raw
 }
 
-function pathSuffix(path: string): string {
-  const raw = path.startsWith('/') ? path : `/${path}`
-  return raw.slice(normalizeApiPath(raw).length)
-}
-
 export function readActiveExtensionModId(): string {
   try {
     return readActiveExtensionModIdFromStorage()
@@ -164,7 +159,7 @@ export function resolveErpApiBase(installedModIds?: string[]): string {
 export function resolveErpApiPath(hostPath: string, installedModIds?: string[]): string {
   const raw = hostPath.startsWith('/') ? hostPath : `/${hostPath}`
   const pathOnly = normalizeApiPath(raw)
-  const suffix = pathSuffix(raw)
+  const suffix = raw.slice(pathOnly.length)
   const ids = readInstalledModIds(installedModIds)
 
   if (isHostOnlyApiPath(pathOnly)) {

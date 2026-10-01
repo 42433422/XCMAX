@@ -295,8 +295,10 @@ async function main() {
     await dialog.locator('.app-dialog-host-btn-primary').click()
     if (await modal().isVisible()) await modal().getByRole('button', { name: /关闭/ }).first().click()
     await page.reload(); evidence.observations.push({ action: 'normal_ui_reload_before_ai_readback', observed_at: new Date().toISOString() }); await nav('customers', '#view-customers')
-    await expect(page.locator('#view-customers')).toContainText(names.ai, { timeout: 30000 })
-    return { created_customer: names.ai, approval_request: requestNos[0], execution: result, receipt: receiptText }
+    const row = page.locator('#view-customers tbody tr').filter({ hasText: names.ai })
+    for (const value of [names.ai, 'AI验收员', '13800000002']) await expect(row).toContainText(value, { timeout: 30000 })
+    await expect.poll(() => observedRows.get(names.ai)?.id).toBeTruthy()
+    return { created_customer: names.ai, id: observedRows.get(names.ai).id, fields: observedRows.get(names.ai), approval_request: requestNos[0], execution: result, receipt: receiptText }
   })
   evidence.result = 'business_regression_passed'
 }
