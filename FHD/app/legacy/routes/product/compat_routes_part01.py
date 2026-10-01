@@ -233,7 +233,7 @@ def products_units(request: _facade().Request) -> dict:
 @_facade().router.get("/shipment/shipment-records/units")
 @_facade().router.get("/shipment/shipment-records/units/", include_in_schema=False)
 def shipment_records_units() -> dict:
-    return _facade().cast("dict[Any, Any]", _facade()._products_units_for_select())
+    return _facade()._shipment_units_for_select()
 
 
 @_facade().router.get("/mod/taiyangniao-pro/shipment/shipment-records/units")

@@ -32,6 +32,7 @@ from app.infrastructure.persistence.compat_db.product_queries import (
 from app.infrastructure.persistence.compat_db.queries import (
     _merged_purchase_unit_entries,
     _products_units_for_select,
+    _shipment_units_for_select,
 )
 from app.infrastructure.persistence.compat_db.writes import (
     products_pg_batch_delete_rows,
