@@ -1,13 +1,5 @@
 # mypy: disable-error-code="arg-type, index, no-any-return, var-annotated"
-"""COVERAGE_RAMP Phase 6 round 15: backend low-coverage modules.
-
-Targets:
-- ``app/fastapi_routes/market_account.py`` (667 行，未覆盖 81 行，cov 85.4%)
-- ``app/services/skills/label_template_generator/label_template_generator.py`` (359 行，未覆盖 80 行，cov 72.5%)
-- ``app/services/tools_workflow_registered.py`` (399 行，未覆盖 79 行，cov 75.9%)
-- ``app/fastapi_routes/mod_store_routes.py`` (475 行，未覆盖 76 行，cov 79.2%)
-- ``app/infrastructure/mods/catalog_client.py`` (153 行，未覆盖 76 行，cov 40.1%)
-"""
+"""Regression coverage for market, Mod catalog/store, labels, and workflow routers."""
 
 from __future__ import annotations
 
@@ -2935,6 +2927,7 @@ class TestTWRExecuteRegisteredWorkflowTool:
 
     def test_execute_registered_router_dict_contains_keys(self) -> None:
         expected_keys = {
+            "desktop_automation",
             "normal_slot_dispatch",
             "customers",
             "products",
