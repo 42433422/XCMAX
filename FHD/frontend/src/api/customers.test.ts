@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { customersApi } from './customers'
 import { mount, flushPromises } from '@vue/test-utils'
-import { defineComponent } from 'vue'
+import { defineComponent, ref } from 'vue'
 import { useCustomers } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/customers/useCustomers'
 
 vi.mock('./core', () => ({
@@ -25,6 +25,17 @@ vi.mock('@/api/templatePreview', () => ({ default: { listTemplates: vi.fn().mock
 describe('customersApi', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+  it('refreshes customer readback when returning from approval', async () => {
+    const { api } = await import('./core'), visible = ref(true)
+    const View = defineComponent({ setup: useCustomers, template: '<p v-for="row in customers">{{ row.customer_name }}</p>' })
+    vi.mocked(api.get).mockResolvedValue({ success: true, data: [{ id: 1, customer_name: '原客户' }] })
+    const wrapper = mount(defineComponent({ components: { View }, setup: () => ({ visible }), template: '<KeepAlive><View v-if="visible" /></KeepAlive>' }))
+    await flushPromises(); expect(wrapper.text()).toBe('原客户')
+    visible.value = false; await flushPromises()
+    vi.mocked(api.get).mockResolvedValue({ success: true, data: [{ id: 2, customer_name: 'AI客户' }] })
+    visible.value = true; await flushPromises(); expect(wrapper.text()).toBe('AI客户')
+    wrapper.unmount()
   })
 
   it.each(['data', 'customers'])('renders customer records from the %s list envelope', async (key) => {

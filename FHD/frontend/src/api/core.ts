@@ -3,6 +3,7 @@ import { getApiBase } from '@/utils/apiBase'
 import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCookie'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { clientShellRequestHeaders } from '@/utils/clientShell'
+import { resolveErpApiPathWhenReady } from '@/utils/erpDomainPaths'
 
 /**
  * 后端 LanLicenseGuard 返回 401 + error=license_* 时派发；
@@ -103,7 +104,7 @@ export interface RequestOptions extends RequestInit {
 export type { ApiResponse } from '@/types/api'
 
 async function request<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
-  const fullUrl = buildApiUrl(url)
+  const fullUrl = buildApiUrl(await resolveErpApiPathWhenReady(url))
   const { skipDefaultJsonHeader = false, responseType = 'json', timeoutMs, signal: callerSignal, ...requestOptions } = options
   const timeoutController = typeof timeoutMs === 'number' && timeoutMs > 0 ? new AbortController() : null
   let timeoutId: ReturnType<typeof setTimeout> | null = null

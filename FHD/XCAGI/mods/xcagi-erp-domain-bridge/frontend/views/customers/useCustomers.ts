@@ -1,4 +1,4 @@
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onActivated, watch } from 'vue'
 import customersApi from '@/api/customers'
 import ordersApi from '@/api/orders'
 import templatePreviewApi from '@/api/templatePreview'
@@ -357,11 +357,13 @@ export function useCustomers() {
     loadCustomers({ reset: true });
   });
 
-  onMounted(() => {
+  const refreshCustomersView = () => {
     loadPurchaseUnitOptions();
     loadCustomers({ reset: true });
     loadTemplateOptions();
-  });
+  };
+  onMounted(refreshCustomersView);
+  onActivated(refreshCustomersView);
 
   return {
     pageNavTitle,
