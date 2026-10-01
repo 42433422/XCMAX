@@ -75,16 +75,16 @@ def test_concurrent_import_waits_for_initialized_handler(tmp_path, monkeypatch):
         assert loaded.run_domain_handler() == {"success": True}
 
 
-def test_failed_import_does_not_poison_retry(tmp_path):
+@pytest.mark.parametrize("error", [RuntimeError, SystemExit, KeyboardInterrupt])
+def test_failed_import_does_not_poison_retry(tmp_path, error):
     from app.infrastructure.mods.mod_manager import import_mod_backend_py
 
     backend = tmp_path / "backend"
     backend.mkdir()
     source = backend / f"{STEM}.py"
-    source.write_text("raise RuntimeError('initialization failed')\n")
-    with pytest.raises(RuntimeError, match="initialization failed"):
+    source.write_text(f"raise {error.__name__}('initialization failed')\n")
+    with pytest.raises(error, match="initialization failed"):
         import_mod_backend_py(str(tmp_path), MOD_ID, STEM)
     source.write_text("def run_domain_handler(*args): return {'success': True}\n")
-    assert import_mod_backend_py(str(tmp_path), MOD_ID, STEM).run_domain_handler() == {
-        "success": True
-    }
+    module = import_mod_backend_py(str(tmp_path), MOD_ID, STEM)
+    assert module.run_domain_handler() == {"success": True}

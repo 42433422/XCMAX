@@ -157,7 +157,7 @@ def _trusted_relative_file(parent: str, relative_path: str) -> str | None:
 
 
 def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
-    """Load a path-isolated Mod backend module, including nested stems like employees/name."""
+    """Load a fully initialized, path-isolated Mod backend module, including nested stems."""
     backend_path = _facade()._trusted_child_path(mod_path, "backend", directory=True)
     path = _facade()._trusted_relative_file(backend_path, f"{stem}.py") if backend_path else None
     if path is None:
@@ -165,11 +165,9 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)
     import hashlib
 
-    path_digest = hashlib.sha256(
-        _facade().os.path.normpath(_facade().os.path.abspath(mod_path)).encode()
-    ).hexdigest()[:16]
+    normalized_path = _facade().os.path.normpath(_facade().os.path.abspath(mod_path))
+    path_digest = hashlib.sha256(normalized_path.encode()).hexdigest()[:16]
     spec_name = f"_xcagi_mod_{safe}_{path_digest}_{stem}"
-    # Other requests must wait until module execution has completed.
     with _MOD_IMPORT_LOCK:
         existing = _facade().sys.modules.get(spec_name)
         if existing is not None:
@@ -179,11 +177,13 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
             raise ImportError(f"Cannot load spec for {path}")
         module = _facade().importlib.util.module_from_spec(spec)
         _facade().sys.modules[spec_name] = module
+        initialized = False
         try:
             spec.loader.exec_module(module)
-        except BaseException:
-            _facade().sys.modules.pop(spec_name, None)
-            raise
+            initialized = True
+        finally:
+            if not initialized:
+                _facade().sys.modules.pop(spec_name, None)
         return module
 
 
