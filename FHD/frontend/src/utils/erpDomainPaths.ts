@@ -129,18 +129,13 @@ function isHostOnlyApiPath(pathOnly: string): boolean {
  * ERP 领域 API 根路径（不含尾部路径段）。
  * 优先级：当前选中的客户 Mod > 通用领域门面 Mod > 宿主 /api
  */
-function readHostClientPrimaryErpModId(): string {
-  const pol = clientModPolicies.value
-  return String(pol?.client_primary_erp_mod_id || CLIENT_PRIMARY_ERP_MOD_ID).trim()
-}
-
 export function resolveErpApiBase(installedModIds?: string[]): string {
   const ids = readInstalledModIds(installedModIds)
   const activeClient = readActiveExtensionModId()
   if (activeClient && isRoutableClientErpModId(activeClient)) {
     return resolveErpBaseForClientMod(activeClient, ids)
   }
-  const primary = readHostClientPrimaryErpModId()
+  const primary = String(clientModPolicies.value?.client_primary_erp_mod_id || CLIENT_PRIMARY_ERP_MOD_ID).trim()
   if (!activeClient && primary && isRoutableClientErpModId(primary) && ids.includes(primary)) {
     return resolveErpBaseForClientMod(primary, ids)
   }

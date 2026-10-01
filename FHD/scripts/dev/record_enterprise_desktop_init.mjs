@@ -95,7 +95,7 @@ async function openAiApproval(name) {
   if (requestNos.length !== 1) throw new Error('AI task must expose one correlated durable approval request')
   await card.getByRole('link', { name: '前往审批' }).click()
   const detail = page.locator('[data-tutorial-id="approval-detail"]')
-  if (!await detail.isVisible()) await page.locator('.request-item').filter({ hasText: requestNos[0] }).click()
+  await expect(detail).toBeVisible({ timeout: 30000 })
   await expect(detail).toContainText(requestNos[0]); await expect(detail).toContainText(name)
   return { requestNo: requestNos[0], detail }
 }
@@ -173,7 +173,7 @@ async function main() {
   if (phase === 'seed') {
     await nav('settings', '#view-settings'); await click('退出登录')
     const confirmation = page.locator('.app-dialog-host-panel')
-    await expect(confirmation).toContainText('退出登录')
+    await expect(confirmation).toContainText(/退出登录|退出本机账号/)
     const signedOut = page.waitForResponse(r => new URL(r.url()).pathname === '/api/auth/logout')
     await confirmation.locator('.app-dialog-host-btn-primary').click()
     if (!(await signedOut).ok()) throw new Error('Normal sign-out failed before upgrade')
@@ -309,10 +309,10 @@ async function main() {
       await choose('产品', names.product); await choose('仓库', `${marker}-收货仓库`); await fill('数量', '999')
       const rejected = page.waitForResponse(r => r.request().method() === 'POST' && /inventory\/out$/.test(new URL(r.url()).pathname))
       await modal().getByRole('button', { name: '确认出库', exact: true }).click()
-      const response = await rejected, body = await response.json()
+      const response = await rejected, body = await response.json(); evidence.observations.push({ action: 'controlled_stock_failure_response', http_status: response.status(), result: body, observed_at: new Date().toISOString() })
       if (body.success !== false || !/库存不足/.test(JSON.stringify(body))) throw new Error('Overdraw did not reject with a real insufficient-stock result')
       const dialog = page.locator('.app-dialog-host-panel'); await expect(dialog).toContainText('出库失败')
-      await dialog.locator('.app-dialog-host-btn-primary').click(); await modal().getByRole('button', { name: '×', exact: true }).click()
+      await dialog.locator('.app-dialog-host-btn-primary').click(); await modal().getByRole('button', { name: '取消', exact: true }).click()
       await nav('products', '#view-products'); await nav('inventory', '#view-inventory')
       const cells = page.locator('#view-inventory tbody tr').filter({ hasText: names.product }).locator('td')
       await expect(cells.nth(4)).toHaveText('8'); await expect(cells.nth(5)).toHaveText('8')

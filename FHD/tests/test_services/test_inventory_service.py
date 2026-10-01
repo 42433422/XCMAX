@@ -45,7 +45,10 @@ def test_session(test_engine):
 # ---------------------------------------------------------------------------
 # _decimal_to_float
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("value,expected", [(Decimal("10.5"), 10.5), (42, 42), (3.14, 3.14), ("hello", "hello"), (None, None)])
+@pytest.mark.parametrize(
+    "value,expected",
+    [(Decimal("10.5"), 10.5), (42, 42), (3.14, 3.14), ("hello", "hello"), (None, None)],
+)
 def test_decimal_to_float(value, expected):
     assert InventoryService._decimal_to_float(value) == expected
 
@@ -57,7 +60,9 @@ class TestModelToDict:
     def test_none_returns_empty(self):
         assert InventoryService._model_to_dict(None) == {}
 
-    @pytest.mark.parametrize("column,value,expected", [("id", 42, 42), ("price", Decimal("99.99"), 99.99)])
+    @pytest.mark.parametrize(
+        "column,value,expected", [("id", 42, 42), ("price", Decimal("99.99"), 99.99)]
+    )
     def test_model_converted(self, column, value, expected):
         mock_model = MagicMock()
         mock_col = MagicMock()

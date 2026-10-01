@@ -8,7 +8,11 @@
 ## 1. 当前版本信息
 
 **未闭环。** 版本 1.0.0.5，stable OTA 关闭。2026-09-30 客户指针实测为 main 83939363、SHA-256 92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf；其说明仍误写 macOS 稳定版。本轮最终安装器尚未冻结。
-#2103/#2104 已进入83939363；#2096由#2107进入main e5b2412替代；main #2111/#2112已纳入#2109集成分支，待保护检查与合入。历史API诊断原始记录在 `C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`，不能核销GUI业务。配对503已恢复；全源扫描36716312096仍有3严重、61高危，最终SHA复扫未完成。用户无可用客户测试机/快照，独立Windows runner继续实装验证；最终包、A/B/C和客户发布未完成。
+#2103/#2104 已进入83939363；#2096由#2107进入main e5b2412替代；main #2111/#2112已纳入#2109集成分支，待保护检查与合入。历史API诊断原始记录在 `C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`，不能核销GUI业务。配对503已恢复；最新诊断扫描36795652103仍有2严重、27高危，最终SHA复扫未完成。用户无可用客户测试机/快照，独立Windows runner继续实装验证；最终包、A/B/C和客户发布未完成。
+
+## 3. Release Gate 定义
+
+G1–G13 必须以同一最终安装包的实际结果核销；缺测、失败和阻塞均不得判交付通过。正式调度须核对备份产物，恢复须由应用读回；覆盖升级不计 OTA。
 
 ## 4. Release Gate 状态
 
@@ -20,7 +24,7 @@
 | G4 | 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |
 | G5 | 登录、企业与设备绑定 | YELLOW | 原生 PostgreSQL 恢复后，同包 36732341444 clean/upgrade 通过；[36737817121 正常 GUI 登录及租户 1](evidence/e2e/windows-closeout-20260930/gui-36737817121.json)通过；设备绑定未核销 |
 | G6 | 权益、Mod、AI 员工 | UNKNOWN | 本轮候选未完成界面核验 |
-| G7 | 真实业务与 AI 任务 | RED | 私有86包36792475338已核对SHA-256 091dfb1e77c98b5df0d99b26b502815253a61d343ab8f6ba7eed902804eb17f5；[记录](evidence/e2e/windows-closeout-20260930/gui-36792475338.json)、[日志](evidence/e2e/windows-closeout-20260930/backend-36792475338.log)、[截图](evidence/e2e/windows-closeout-20260930/ai-36792475338.png)：正常采购入库10、订单、文件内容导出、出库2及界面库存8通过；AI审批名称正确且回执称执行完成，返回客户列表未读回新记录。保留完整回执、正常界面刷新后的同包复验36793733617进行中；A/B/C未完成，WinError1314未核销 |
+| G7 | 真实业务与 AI 任务 | YELLOW | 同一28b0fc996私有安装包（SHA-256 c8194724a526c627bfe26eb465d900cc7e35c093407586ebf5e63c2e637d470f）运行36796220207：正常采购入库10、销售、送货单文件内容、出库2及界面库存8通过；正常对话审批82f6352882c74777ac0906b7f394d1e0执行后，界面读回AI客户ID2、原名、联系人AI验收员和电话13800000002。原始证据C:\xcagi-delivery-closeout\evidence-28-gui-36796220207；此前86包冷启动旧路由403已由28修复。最终主线包和A/B/C仍未完成 |
 | G8 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G9 | stable OTA | YELLOW | stable OTA 保持关闭；覆盖升级不计 OTA |
 | G10 | 覆盖升级读回 | YELLOW | 1.0.0.1安装身份2e6f03bf、哈希ed957f9d核对通过；36793964883客户ID1与姓名/联系人/电话/地址均已实际保存并由界面加载。旧界面地址列误显示“-”，并非数据丢失；产品保存响应不返回ID，后续从界面加载列表取得原始ID再覆盖升级，尚未通过 |

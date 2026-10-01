@@ -55,10 +55,19 @@ def test_fresh_thread_inventory_executor_writes_only_recorded_tenant(tmp_path, m
         assert unscoped["success"] is False
         product_id, warehouse_id = identities[2]
         outbound = AgentToolExecutor().execute(
-            AgentStep(node_id="out", tool_id="inventory", action="stock_out", params={
-                "product_id": product_id, "warehouse_id": warehouse_id,
-                "quantity": 2, "unit_price": 12.5, "remark": "实际出货",
-            }), runtime_context={"tenant_id": "2"},
+            AgentStep(
+                node_id="out",
+                tool_id="inventory",
+                action="stock_out",
+                params={
+                    "product_id": product_id,
+                    "warehouse_id": warehouse_id,
+                    "quantity": 2,
+                    "unit_price": 12.5,
+                    "remark": "实际出货",
+                },
+            ),
+            runtime_context={"tenant_id": "2"},
         )
         assert outbound["success"] and outbound["data"]["remaining_quantity"] == 48
         for tenant in (1, 2):

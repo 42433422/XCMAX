@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref } from 'vue'
+import { useModsStore } from '@/stores/mods'
 import { useShipmentTask, type ShipmentTask } from './useShipmentTask'
 
 function makeMessages() {
@@ -24,6 +25,7 @@ function mockFetchOnce(body: unknown, ok = true) {
 }
 
 beforeEach(() => {
+  useModsStore().isLoaded = true
   globalThis.fetch = vi.fn()
 })
 afterEach(() => {

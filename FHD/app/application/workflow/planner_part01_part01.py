@@ -88,7 +88,8 @@ def _extract_marked_value(message: str, labels: tuple[str, ...]) -> str:
     label_pattern = "|".join(_facade().re.escape(label) for label in labels)
     quoted = _facade().re.search(
         rf"""(?:{label_pattern})\s*[:：是为]?\s*(?:「([^」]*)」|“([^”]*)”|"([^"]*)"|'([^']*)')""",
-        message, flags=_facade().re.I,
+        message,
+        flags=_facade().re.I,
     )
     if quoted:
         return next(value for value in quoted.groups() if value is not None).strip()

@@ -32,15 +32,53 @@ def _assert_inventory_run(repo: InMemoryAgentRunRepository, run_id: str, action:
     }
 
 
-@pytest.mark.parametrize("action,method,path,payload,expected,result", [
-    ("create_storage_location", "POST", "/locations", {"code": "A-01"}, ({"code": "A-01"},), {"success": True, "id": 11}),
-    ("update_storage_location", "PUT", "/locations/10", {"status": "full"}, (10, {"status": "full"}), {"success": True, "data": {"id": 10}}),
-    ("create_warehouse", "POST", "/warehouses", {"name": "主仓"}, ({"name": "主仓"},), {"success": True, "data": {"id": 3}}),
-    ("update_warehouse", "PUT", "/warehouses/3", {"name": "副仓"}, (3, {"name": "副仓"}), {"success": True, "data": {"id": 3}}),
-    ("delete_warehouse", "DELETE", "/warehouses/3", None, (3,), {"success": True}),
-])
+@pytest.mark.parametrize(
+    "action,method,path,payload,expected,result",
+    [
+        (
+            "create_storage_location",
+            "POST",
+            "/locations",
+            {"code": "A-01"},
+            ({"code": "A-01"},),
+            {"success": True, "id": 11},
+        ),
+        (
+            "update_storage_location",
+            "PUT",
+            "/locations/10",
+            {"status": "full"},
+            (10, {"status": "full"}),
+            {"success": True, "data": {"id": 10}},
+        ),
+        (
+            "create_warehouse",
+            "POST",
+            "/warehouses",
+            {"name": "主仓"},
+            ({"name": "主仓"},),
+            {"success": True, "data": {"id": 3}},
+        ),
+        (
+            "update_warehouse",
+            "PUT",
+            "/warehouses/3",
+            {"name": "副仓"},
+            (3, {"name": "副仓"}),
+            {"success": True, "data": {"id": 3}},
+        ),
+        ("delete_warehouse", "DELETE", "/warehouses/3", None, (3,), {"success": True}),
+    ],
+)
 def test_inventory_structure_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path, monkeypatch, action, method, path, payload, expected, result,
+    tmp_path,
+    monkeypatch,
+    action,
+    method,
+    path,
+    payload,
+    expected,
+    result,
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
@@ -53,7 +91,9 @@ def test_inventory_structure_mutation_routes_execute_through_agent_orchestrator(
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
         return_value=repo,
     ):
-        response = client.request(method, "/api/inventory" + path, json=payload, headers={"X-User-Id": "tenant-a"})
+        response = client.request(
+            method, "/api/inventory" + path, json=payload, headers={"X-User-Id": "tenant-a"}
+        )
     assert response.status_code == 200
     getattr(svc, action).assert_called_once_with(*expected)
     _assert_inventory_run(repo, response.json()["run_id"], action)
