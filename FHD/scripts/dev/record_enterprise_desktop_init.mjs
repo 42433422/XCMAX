@@ -175,7 +175,7 @@ async function main() {
     const confirmation = page.locator('.app-dialog-host-panel')
     await expect(confirmation).toContainText(/退出登录|退出本机账号/)
     await step('old_sign_out', async () => {
-      const [response] = await Promise.all([page.waitForResponse(r => new URL(r.url()).pathname === '/api/auth/logout', { timeout: 60000 }), confirmation.locator('.app-dialog-host-btn-primary').click()])
+      const [response] = await Promise.all([page.waitForResponse(r => new URL(r.url()).pathname === '/api/auth/logout', { timeout: 60000 }), confirmation.getByRole('button', { name: '确定', exact: true }).click()])
       if (!response.ok()) throw new Error('Normal sign-out failed before upgrade')
       await expect(page.locator('#lv-username')).toBeVisible(); return { http_status: response.status(), login_ui_visible: true } })
     evidence.result = 'old_ui_seed_passed'; return
