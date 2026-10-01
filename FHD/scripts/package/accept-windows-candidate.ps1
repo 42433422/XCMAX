@@ -146,7 +146,7 @@ function Backup-And-Version {
     $restoredProcess = Start-App 'backup_restore'
     $restoredAuth = Login 'backup_restore'
     Check ($restoredAuth.tenant -eq $newAuth.tenant) 'backup_restore_enterprise' "tenant_sha256=$(Digest $restoredAuth.tenant)"
-    if ($candidateGuiProof) { Run-Gui 'readback' (Join-Path $EvidenceDir 'restored-gui') $candidateGuiProof | Out-Null }
+    if ($candidateGuiProof) { Run-Gui 'readback' (Join-Path $EvidenceDir 'restored-gui') $(if ($Mode -eq 'Upgrade') { $oldGuiSeed } else { $candidateGuiProof }) | Out-Null }
   } finally {
     $env:XCAGI_DESKTOP_USER_DATA_DIR = $previousUserData
     Stop-App
