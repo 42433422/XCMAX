@@ -1,0 +1,429 @@
+{
+  "run": 36852779407,
+  "result": "four_distinct_runners_same_candidate_verified",
+  "full_abc": "not_verified",
+  "runs": [
+    {
+      "independent_run_id": "36852779407-110338100391",
+      "mode": "Gui",
+      "runner": {
+        "completed_at": "2026-10-01T11:06:22Z",
+        "conclusion": "success",
+        "id": 110338100391,
+        "name": "Gui install on isolated Windows runner",
+        "runner_id": 1000198145,
+        "runner_name": "GitHub Actions 1000198145",
+        "started_at": "2026-10-01T11:01:48Z"
+      },
+      "acceptance": "gui_regression_passed",
+      "release_sha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+      "installer_sha256": "f7c5eb4a006267634e758b1abe0af20b6a6cb6643cd8964a4f6f928f340b7733",
+      "raw_files": [
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\acceptance.json",
+          "bytes": 2090,
+          "sha256": "daa6db6eeee98e8224feb15688986d9073f2aea1ce0c0dea048b627dffa70e50"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\ai_business.png",
+          "bytes": 292633,
+          "sha256": "05aee3468e2620d23a19ff2dde1a22b7973f1b805fd58e1970acafa91004cd41"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\backend-redacted.log",
+          "bytes": 84253,
+          "sha256": "81764bb4357449e1f1ccb4dee78b1be16b83defa98aeddff860b5fe2ac636573"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\customer.png",
+          "bytes": 300782,
+          "sha256": "9afceda99ceefe36b8c0bd6b12c262c04dc054368aae7c218c317f47f9d4f758"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\export-content-verified.json",
+          "bytes": 771,
+          "sha256": "ddac8de72141565390c8b84239a5af6584c8321a9205d99b6421925ec5dbe0de"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\gui-business.json",
+          "bytes": 15648,
+          "sha256": "14d379aa125a7a82df7999a7dd53586661bf83db72973766ddee9016e3f3e09a"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\normal_login.png",
+          "bytes": 277693,
+          "sha256": "e996bd6ee4cbccef833cd6647fbd425734403cf08efcc79ffdeba58e317760e6"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\product.png",
+          "bytes": 255042,
+          "sha256": "e8ef0e08ca76900ff1af93b41ce742bb50dee132640805057a53fd8410b904fc"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\purchase.png",
+          "bytes": 281778,
+          "sha256": "7f99f7a61044c337c47db1fbf66ba59c4f0469f9ccabffc881a4e42901a7c8a2"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\purchase_inbound.png",
+          "bytes": 247624,
+          "sha256": "26b9714c6b379b6d46618736e6c3a4935f3e6b65aa047b2708fbf3df7816a1fb"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\sales_order.png",
+          "bytes": 228430,
+          "sha256": "a8173556cfdec76c3c113a65c31e1870cdfec59e8c7070a25dbfc8c35e2a9e94"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\shipping_delivery_export.png",
+          "bytes": 181631,
+          "sha256": "c8cb60411506180c30409a189deeb3e37f7ef99ad2b29b5606cd0fc7ea03779c"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\stock_out.png",
+          "bytes": 248869,
+          "sha256": "e1ece4e97c0a11cad6d732716253b5dcc3513cf859531dbb3578ed0355d8b009"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\tenant_identity.png",
+          "bytes": 275245,
+          "sha256": "56ba114a95dff4d7844ef858c35144cbe14703ed197876e32fab2722e63ec17e"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\ui_readback.png",
+          "bytes": 254124,
+          "sha256": "b11806613e87ce559cd147cffb3cbb2630031d834a4a05c05a6798974f3f0b10"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\visible_version.png",
+          "bytes": 103500,
+          "sha256": "e67c7d0a1fbc7cef15dad49912c56c506e0f86cccf8262e0c5a5be3df44741ca"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\发货单_26-10-00001A_20261001_110459.xlsx",
+          "bytes": 4802,
+          "sha256": "90d62b5c154ffc05d04dfbca21375aecfbd078c7b89bc8bf9e5929360b3c6aa1"
+        }
+      ]
+    },
+    {
+      "independent_run_id": "36852779407-110338100571",
+      "mode": "Clean",
+      "runner": {
+        "completed_at": "2026-10-01T11:04:49Z",
+        "conclusion": "success",
+        "id": 110338100571,
+        "name": "Clean install on isolated Windows runner",
+        "runner_id": 1000198147,
+        "runner_name": "GitHub Actions 1000198147",
+        "started_at": "2026-10-01T11:01:48Z"
+      },
+      "acceptance": "passed",
+      "release_sha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+      "installer_sha256": "f7c5eb4a006267634e758b1abe0af20b6a6cb6643cd8964a4f6f928f340b7733",
+      "raw_files": [
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-clean-36852779407\\acceptance.json",
+          "bytes": 7275,
+          "sha256": "cfda850af9a9682856de56d36b9a34a5a2329c6fd92b46b095903cacc0c97ce8"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-clean-36852779407\\backend-redacted.log",
+          "bytes": 27146,
+          "sha256": "ffd5d5f754ed6d144bb7b8101f32de8c7ea289f292922d5c29452998b41469f7"
+        }
+      ]
+    },
+    {
+      "independent_run_id": "36852779407-110338100575",
+      "mode": "Recovery",
+      "runner": {
+        "completed_at": "2026-10-01T11:07:55Z",
+        "conclusion": "success",
+        "id": 110338100575,
+        "name": "Recovery install on isolated Windows runner",
+        "runner_id": 1000198148,
+        "runner_name": "GitHub Actions 1000198148",
+        "started_at": "2026-10-01T11:01:48Z"
+      },
+      "acceptance": "gui_recovery_regression_passed",
+      "release_sha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+      "installer_sha256": "f7c5eb4a006267634e758b1abe0af20b6a6cb6643cd8964a4f6f928f340b7733",
+      "raw_files": [
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\acceptance.json",
+          "bytes": 7624,
+          "sha256": "b364497eb63831e9362144caddd80b4cc43085b2138aba02470dfe9318299d1b"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\ai_business.png",
+          "bytes": 292750,
+          "sha256": "8c7a2388f69d5304ce319a8700796c800969c7e4116728edce54fb4f859b915e"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\authorization_cancel.png",
+          "bytes": 292750,
+          "sha256": "8c7a2388f69d5304ce319a8700796c800969c7e4116728edce54fb4f859b915e"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\backend-redacted.log",
+          "bytes": 89086,
+          "sha256": "3e86e8c498c5be87c8c14266b509d75afd565abee2e4a5f95a2feff509bfafd8"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\controlled_stock_failure.png",
+          "bytes": 249691,
+          "sha256": "589517a8e5ed1fe28dc325f1dadd960b789f0f3068c77648c3733997ed5a9a97"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\customer.png",
+          "bytes": 300753,
+          "sha256": "09f56753db9532f4375f42185124d41fb0b0bc508448a0a2a843275deef2b619"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\gui-business.json",
+          "bytes": 28823,
+          "sha256": "59398b2d4e4286d3ab35411d2f375b9c0a697cfd205427ceddd44f64468e5a31"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\normal_login.png",
+          "bytes": 270491,
+          "sha256": "0e356c72f5ea3a4c3efa8b570455e4af6ce526cf0fcaa325e669cf621f712bd3"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\product.png",
+          "bytes": 253839,
+          "sha256": "f2f59a055037129940a5dc22751c4f5ddac28c07d870de60e028bbf18bc02b98"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\purchase.png",
+          "bytes": 281529,
+          "sha256": "a6c5d21fe13c386d90a397c88b7dd47f115c142682e5667dab989d60a11e266e"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\purchase_inbound.png",
+          "bytes": 248746,
+          "sha256": "31bf35f368028cb88c9df018107860fb84576551aaf4e8e7f85f45dd9170ef00"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\restored-comparison-verified.json",
+          "bytes": 1096,
+          "sha256": "866c99d353ec411aea7ca7c39e1cc0132aa090e90d30660eb075ff249709a790"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\restored-gui\\gui-business.json",
+          "bytes": 3748,
+          "sha256": "adb01961840307361645fb667642a2254e8fe391b74746ada42075c170fba314"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\restored-gui\\normal_login.png",
+          "bytes": 275717,
+          "sha256": "18bda44d0d0b11a3bda02b7f1fa28ae42eea4f457a8290b56d07975749fb1975"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\restored-gui\\old_ui_readback.png",
+          "bytes": 254272,
+          "sha256": "c4feadacccae24846143b06b35aa35344cb0d19fcd1292b61c5be2340d27d2fa"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\restored-gui\\tenant_identity.png",
+          "bytes": 274705,
+          "sha256": "6112c83fffdd573c4963798957a2640c4d28e4db295bb0e2cc2fa84d6b0e47e8"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\sales_order.png",
+          "bytes": 228642,
+          "sha256": "e32ab58740f61360862ec749f3c98af5ba4e64e11a67f9f8a6f0bf6e8d8490f3"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\shipping_delivery_export.png",
+          "bytes": 181621,
+          "sha256": "fe0a08a2061ae2f627eeb393b7ec042decbd0d49a44656a0bd48e0cbcbfc1b27"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\stock_out.png",
+          "bytes": 248638,
+          "sha256": "72b4af98a079f03dd149953a5b7b239cd9b9d49a4cd1e8b1e8ef8b8a59955a8e"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\tenant_identity.png",
+          "bytes": 271528,
+          "sha256": "e512243d8bdcb03815f7a98d4c33f00e0e8ac214e93ce5e9c751cbaa46beab35"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\ui_readback.png",
+          "bytes": 252665,
+          "sha256": "b4012926f046d80f0bdf83f474cf85bfaeec28f5c4664d14a28b49c569354bb4"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\visible_version.png",
+          "bytes": 100803,
+          "sha256": "0578b8127e7631c22d784b093b1c99ab72f59a23bb19e00038ee9f6703ea9a33"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-recovery-36852779407\\发货单_26-10-00001A_20261001_110513.xlsx",
+          "bytes": 4798,
+          "sha256": "7ef3a2fa497e101a7412d498c612a970036d4da181d23424aea0c5439f730441"
+        }
+      ]
+    },
+    {
+      "independent_run_id": "36852779407-110338100667",
+      "mode": "Upgrade",
+      "runner": {
+        "completed_at": "2026-10-01T11:17:11Z",
+        "conclusion": "success",
+        "id": 110338100667,
+        "name": "Upgrade install on isolated Windows runner",
+        "runner_id": 1000198146,
+        "runner_name": "GitHub Actions 1000198146",
+        "started_at": "2026-10-01T11:01:49Z"
+      },
+      "acceptance": "passed",
+      "release_sha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+      "installer_sha256": "f7c5eb4a006267634e758b1abe0af20b6a6cb6643cd8964a4f6f928f340b7733",
+      "raw_files": [
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\acceptance.json",
+          "bytes": 9603,
+          "sha256": "6b1e330ebe4a6a66eb75981cccf267d5cea9223bb0adbdc3c6e950dd6b505e4a"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\ai_business.png",
+          "bytes": 288214,
+          "sha256": "b457c1785a069f6cc8e7f1dbc5c8e732791dc6625c04a645a56e49211493adf0"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\customer.png",
+          "bytes": 294223,
+          "sha256": "2921af551075323e20cacf106d6c7d87bfb57c7e02ca68475098a85dac5e3008"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\gui-business.json",
+          "bytes": 17694,
+          "sha256": "08516ca763f4f1d9104c68cb3d2967303b186de3c8c2426db66d82410842c177"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\normal_login.png",
+          "bytes": 277423,
+          "sha256": "717c1e3a0c8a802839d3070fc50aeb32e609dc9f44e18400ef9927558e711125"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\old_ui_readback.png",
+          "bytes": 254843,
+          "sha256": "d88ee292eae850625e369dd0d592aebb7d8a772f1f89c2f66e43604ef4112011"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\product.png",
+          "bytes": 246362,
+          "sha256": "bc8bc0168138eb8699fb0016f66d7b105887576b9a9faf77ec3dd2a65bd14eae"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\purchase.png",
+          "bytes": 269982,
+          "sha256": "c301dffec8aa4e745850c14aa9b406be763c4fa2455896a4e33fe06620f805c3"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\purchase_inbound.png",
+          "bytes": 249642,
+          "sha256": "48c3df8c5259783929994c63d24d53d1897a8da3b36029ff09d0fec13839b75e"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\sales_order.png",
+          "bytes": 228580,
+          "sha256": "bcfcbd63c835511593b86f1b9be446b4851b9ac4a456eb3715d0463447224408"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\shipping_delivery_export.png",
+          "bytes": 181629,
+          "sha256": "e366ad06866bba8b78320364213d1b16dd09c18bfa62fa27ee7293364bb5b702"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\stock_out.png",
+          "bytes": 249143,
+          "sha256": "8568d6c5ee1336faa29d1c789d8d70ac99c0bbea153fec5e1e7eac9766804eef"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\tenant_identity.png",
+          "bytes": 275222,
+          "sha256": "d257da50dc8738fbb52af9bcbf77f2315f8fafd9d079f2f896a4c324768d85fb"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\ui_readback.png",
+          "bytes": 246968,
+          "sha256": "ffb447461ac076dd325934901f9d6e9bcb29c940c2645dce96a8e23bf29915cb"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\visible_version.png",
+          "bytes": 109151,
+          "sha256": "d84828cdfa92b9f8973b2a0adf5f32d9a7d92d7f9ecab552b3950c9d1aacc3e0"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\after-upgrade-gui\\发货单_26-10-00001A_20261001_111459.xlsx",
+          "bytes": 4808,
+          "sha256": "9fe4421d47f4f7baa749f24386e6648c2782831ffd80e8958cc4e730a229dd44"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\backend-redacted.log",
+          "bytes": 178327,
+          "sha256": "adb079aecaf2dc3933da8e5d23cf67596d9740d326568758f27bc8a1b0edd002"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\legacy-comparison-verified.json",
+          "bytes": 1334,
+          "sha256": "9371363a780ceafc7cf75f92ea787e08d19710459a3eac2052940de673251901"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\old-gui\\customer.png",
+          "bytes": 280762,
+          "sha256": "4e7471d59eaf4b10897e024d80b294d8e7b5e415835b659de74dfa08792775c7"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\old-gui\\gui-business.json",
+          "bytes": 5831,
+          "sha256": "64d0cbb95d1e60609756ca8abed3b9c4edb30bc94b7e01c91f58487571e01411"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\old-gui\\normal_login.png",
+          "bytes": 253796,
+          "sha256": "d8bed332d8699f9066b73f70531e2c7b192223eb875143e0ea383201b232599d"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\old-gui\\old_sign_out.png",
+          "bytes": 249571,
+          "sha256": "294f7e680dd9ceee5113b3f5600e395e81a2a4f5653fad9381d6430a04c10845"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\old-gui\\product.png",
+          "bytes": 238212,
+          "sha256": "d4ab11b878b6aa532a3e1590c7b164eaf2e778126023d135a46a968cb1a1d821"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\old-gui\\tenant_identity.png",
+          "bytes": 253729,
+          "sha256": "ea97f46fb331816e7242535e46aa49791878f874c05c97d5ef28cd5731938d14"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\restored-gui\\gui-business.json",
+          "bytes": 3740,
+          "sha256": "ce5db902fef2763911dab5f52e6cfe95c0f5bba3a320e784cc2d34bffb2fa59f"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\restored-gui\\normal_login.png",
+          "bytes": 274198,
+          "sha256": "dd9c1aaa08e0cdb208cf8100c4c4b21aaa0ba9bd1a7ef41e8f4dd0721ca0714e"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\restored-gui\\old_ui_readback.png",
+          "bytes": 247089,
+          "sha256": "d58273c532db7026ce4b746a3d01670ca73a6d9f14df94a21a033d05487d8052"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-91c73-upgrade-36852779407\\restored-gui\\tenant_identity.png",
+          "bytes": 274198,
+          "sha256": "dd9c1aaa08e0cdb208cf8100c4c4b21aaa0ba9bd1a7ef41e8f4dd0721ca0714e"
+        }
+      ]
+    }
+  ]
+}

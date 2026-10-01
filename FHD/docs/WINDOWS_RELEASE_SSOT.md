@@ -4,11 +4,10 @@
 
 ## 1. 当前版本信息
 
-**未闭环。** 版本1.0.0.5、stable OTA关闭；历史已测候选RELEASE_SHA 5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30，安装器SHA-256 a9001626f0ad57fb7756cc66528b5f49286a60e151e6dfad5a91456d864798cf，250138370字节、未签名。构建36839932318；[冻结身份](evidence/e2e/windows-closeout-20260930/frozen-5197-36839932318.json)与[实际包内资源](evidence/e2e/windows-closeout-20260930/resources-5197-36839932318.json)一致。客户指针仍为83939363包（SHA-256 92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf），本轮未发布；#2115已合入主线91c73f2c576799f42c6d8600871d4bd497f9669a，修复新建租户发货单位读回、ERP Mod升至1.0.0.4，40项针对性回归通过，须重建并重新冻结候选。
-[历史纳入核对](evidence/e2e/windows-closeout-20260930/historical-inclusion-5197.json)：#2103/#2104、#2096的#2107替代及#2113/#2114已在冻结主线；#2116修复CodeQL3751，后端37962通过、69跳过。新包36841870956首装、GUI业务、独立恢复及[旧版升级读回](evidence/e2e/windows-closeout-20260930/legacy-comparison-36841870956.json)已实测；完整A/B/C、客户绑定与承诺权益、正常退出重开、自然调度备份未核销。两次全量扫描36840555907/36844785784相隔38.51分钟，均为[0严重、1高危](evidence/e2e/windows-closeout-20260930/security-gate-36840555907.json)，仅生产内核TSSA-2026:1026阻塞；CodeQL高危已清除。用户确认无可用客户测试机/快照；内核安装重启授权待答。[独立编号与原始证据索引](evidence/e2e/windows-closeout-20260930/independent-36841870956.json)确认四个不同runner与同一冻结包；历史36824523628未作为本轮素材。
+**未闭环。** 版本1.0.0.5、stable OTA关闭；当前已测候选RELEASE_SHA 91c73f2c576799f42c6d8600871d4bd497f9669a，安装器SHA-256 f7c5eb4a006267634e758b1abe0af20b6a6cb6643cd8964a4f6f928f340b7733，250135221字节、未签名。构建36850651269；[冻结身份](evidence/e2e/windows-closeout-20260930/frozen-91c73-36850651269.json)与[实际包内资源](evidence/e2e/windows-closeout-20260930/resources-91c73-36850651269.json)一致，#2115修复已入包、ERP Mod与行业种子均1.0.0.4。36852779407四个独立runner完成首装、GUI业务、故障取消与旧版升级恢复，[同包原始索引](evidence/e2e/windows-closeout-20260930/independent-36852779407.json)、[实际导出字段](evidence/e2e/windows-closeout-20260930/export-36852779407.json)、[旧版ID及归属读回](evidence/e2e/windows-closeout-20260930/legacy-comparison-36852779407.json)已核对；完整A/B/C、绑定权益、正常退出重开、自然调度及新建发货单位GUI回归未核销。客户指针仍为83939363包（SHA-256 92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf），本轮未发布。 历史两次全量扫描均仅生产内核TSSA-2026:1026高危阻塞，内核安装重启授权待答；用户确认无可用测试机/快照。#2096由#2107替代，#2103/#2104及#2113/#2114已纳入主线；历史5197原始证据保留。
 
 ## 3. Release Gate 定义
-G1–G13 必须以同一最终安装包的实际结果核销；缺测、失败和阻塞均不得判交付通过。正式调度须核对备份产物，恢复须由应用读回；覆盖升级不计 OTA。
+下表5197历史证据不得替代91c73复验；G1–G13必须以同一最终安装包核销；缺测、失败和阻塞均不得判交付通过。正式调度须核对备份产物，恢复须由应用读回；覆盖升级不计 OTA。
 ## 4. Release Gate 状态
 | Gate | 项目 | 状态 | 当前证据 / 缺口 |
 |---|---|---|---|
