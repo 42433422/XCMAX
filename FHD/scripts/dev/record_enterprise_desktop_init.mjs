@@ -322,7 +322,7 @@ async function main() {
       const { requestNo } = await openAiApproval(names.cancelled), dialog = page.locator('.app-dialog-host-panel')
       await page.locator('[data-tutorial-id="approval-approve-action"]').click(); await expect(dialog).toContainText('请输入审批意见')
       await dialog.locator('.app-dialog-host-btn-secondary').click(); await expect(dialog).not.toBeVisible()
-      await modal().getByRole('button', { name: '拒绝', exact: true }).click(); await dialog.locator('input').fill(`${marker} 取消本次业务授权`)
+      await page.getByRole('button', { name: '拒绝', exact: true }).click(); await dialog.locator('input').fill(`${marker} 取消本次业务授权`)
       const rejected = page.waitForResponse(r => r.request().method() === 'POST' && /approval.*reject/.test(new URL(r.url()).pathname))
       await dialog.locator('.app-dialog-host-btn-primary').click()
       const response = await rejected, body = await response.json()
