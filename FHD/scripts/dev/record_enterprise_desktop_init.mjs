@@ -36,7 +36,7 @@ async function step(id, action) {
     record.error = String(error.stack || error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]')
     if (page) {
       await page.screenshot({ path: path.join(dir, `${id}-failed.png`), fullPage: true }).catch(() => {})
-      const text = await page.locator('body').innerText().catch(() => '')
+      record.visible_buttons = await page.locator('button:visible').evaluateAll(buttons => buttons.map(b => ({ text: b.textContent, label: b.getAttribute('aria-label'), class: b.className, disabled: b.disabled }))).catch(() => []); const text = await page.locator('body').innerText().catch(() => '')
       fs.writeFileSync(path.join(dir, `${id}-ui.txt`), text.replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'))
     }
     throw error
@@ -322,7 +322,7 @@ async function main() {
       const { requestNo } = await openAiApproval(names.cancelled), dialog = page.locator('.app-dialog-host-panel')
       await page.locator('[data-tutorial-id="approval-approve-action"]').click(); await expect(dialog).toContainText('请输入审批意见')
       await dialog.locator('.app-dialog-host-btn-secondary').click(); await expect(dialog).not.toBeVisible()
-      await page.getByRole('button', { name: '拒绝', exact: true }).click(); await dialog.locator('input').fill(`${marker} 取消本次业务授权`)
+      await page.locator('.modal.visible .btn-reject').click(); await dialog.locator('input').fill(`${marker} 取消本次业务授权`)
       const rejected = page.waitForResponse(r => r.request().method() === 'POST' && /approval.*reject/.test(new URL(r.url()).pathname))
       await dialog.locator('.app-dialog-host-btn-primary').click()
       const response = await rejected, body = await response.json()
