@@ -31,6 +31,7 @@ from app.infrastructure.persistence.compat_db.product_queries import (
 from app.infrastructure.persistence.compat_db.queries import (
     _merged_purchase_unit_entries,
     _products_units_for_select,
+    _shipment_units_for_select,
 )
 from app.infrastructure.persistence.compat_db.writes import (
     products_pg_batch_delete_rows,
@@ -81,14 +82,10 @@ def _products_compat_agent_user_id(request: Request, payload: dict[str, Any]) ->
 def _products_compat_status_code(result: dict[str, Any]) -> int:
     if result.get("success"):
         return 200
-    status_code = result.get("status_code")
-    if status_code is None:
+    try:
+        parsed = int(result.get("status_code") or 0)
+    except RECOVERABLE_ERRORS:
         parsed = 0
-    else:
-        try:
-            parsed = int(status_code)
-        except RECOVERABLE_ERRORS:
-            parsed = 0
     if 400 <= parsed < 600:
         return parsed
     if str(result.get("error_code") or "") in {"tool_exception", "http_exception"}:
@@ -267,7 +264,7 @@ def products_units(request: Request) -> dict:
 @router.get("/shipment/shipment-records/units")
 @router.get("/shipment/shipment-records/units/")
 def shipment_records_units() -> dict:
-    return cast("dict[Any, Any]", _products_units_for_select())
+    return _shipment_units_for_select()
 
 
 @router.get("/mod/taiyangniao-pro/shipment/shipment-records/units")
