@@ -16,7 +16,7 @@ const marker = `WIN-GUI-${run}-${phase}`
 const names = { customer: `${marker}-客户`, product: `${marker}-产品`, supplier: `${marker}-供应商`, ai: `${marker}-AI客户`, cancelled: `${marker}-取消客户` }
 const required = ['normal_login', 'tenant_identity', ...(seed ? ['old_ui_readback'] : [])]
 if (phase !== 'readback') required.push('customer', 'product', ...(phase === 'seed' ? ['old_sign_out'] : []))
-if (!['seed', 'readback'].includes(phase)) required.push('visible_version', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business', ...(phase === 'faults' ? ['controlled_stock_failure', 'authorization_cancel'] : []))
+if (!['seed', 'readback'].includes(phase)) required.push('shipment_unit_readback', 'visible_version', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business', ...(phase === 'faults' ? ['controlled_stock_failure', 'authorization_cancel'] : []))
 const observedRows = new Map(), workspaceOwners = []
 const evidence = { run, phase, started_at: new Date().toISOString(), marker, names, cases: [], observations: [], result: 'running' }
 let browser, page
@@ -179,6 +179,15 @@ async function main() {
       await expect(page.locator('#lv-username')).toBeVisible(); return { http_status: response.status(), login_ui_visible: true } })
     evidence.result = 'old_ui_seed_passed'; return
   }
+  await step('shipment_unit_readback', async () => {
+    const unit = `${marker}-独立发货单位`; await nav('shipment-records', '#view-shipment-records'); await click('+ 新建')
+    await fill('购买单位', unit); await fill('联系人', '发货验收员'); await fill('联系电话', '13800000003'); for (const [label, value] of [['产品名称', names.product], ['型号', marker], ['数量 (桶)', 2], ['规格', 10], ['单价', 12.5], ['金额', 250]]) await fill(label, value)
+    const created = page.waitForResponse(r => r.request().method() === 'POST' && /shipment-records\/record$/.test(new URL(r.url()).pathname)); await modal().getByRole('button', { name: '创建', exact: true }).click(); const saved = await (await created).json(); if (saved.success !== true) throw new Error('Shipment record creation rejected')
+    await dismissSuccessAlert(); const select = page.locator('#view-shipment-records .sr-select-unit'); await expect(select).toHaveValue(unit); await expect(page.locator('#view-shipment-records tbody tr').filter({ hasText: unit })).toContainText(names.product)
+    await page.reload(); await nav('shipment-records', '#view-shipment-records'); await select.selectOption(unit); const reading = page.waitForResponse(r => r.request().method() === 'GET' && /shipment-records\/records$/.test(new URL(r.url()).pathname) && new URL(r.url()).searchParams.get('unit_name') === unit)
+    await click('查看记录'); const body = await (await reading).json(), row = (body.data || body.records || []).find(r => r.purchase_unit === unit && r.product_name === names.product); if (!row?.id || Number(row.quantity_tins) !== 2 || Number(row.tin_spec) !== 10 || Number(row.unit_price) !== 12.5 || Number(row.amount) !== 250) throw new Error('Shipment unit readback identity or fields mismatch')
+    await expect(page.locator('#view-shipment-records tbody tr').filter({ hasText: unit })).toContainText(names.product); return { unit, saved, record: row, reloaded_gui_readback: true }
+  })
   await step('purchase', async () => {
     await nav('purchase', '#view-purchase')
     await click('供应商'); await click('添加供应商')

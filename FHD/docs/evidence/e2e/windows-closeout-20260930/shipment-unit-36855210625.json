@@ -1,0 +1,81 @@
+{
+  "run": "36855210625-1",
+  "job": 110345984429,
+  "release_sha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+  "installer_sha256": "f7c5eb4a006267634e758b1abe0af20b6a6cb6643cd8964a4f6f928f340b7733",
+  "case": {
+    "id": "shipment_unit_readback",
+    "started_at": "2026-10-01T11:28:04.031Z",
+    "input": {
+      "customer": "WIN-GUI-36855210625-1-business-客户",
+      "product": "WIN-GUI-36855210625-1-business-产品",
+      "supplier": "WIN-GUI-36855210625-1-business-供应商",
+      "ai": "WIN-GUI-36855210625-1-business-AI客户",
+      "cancelled": "WIN-GUI-36855210625-1-business-取消客户"
+    },
+    "status": "passed",
+    "actual": {
+      "unit": "WIN-GUI-36855210625-1-business-独立发货单位",
+      "saved": {
+        "success": true,
+        "message": "发货单创建成功",
+        "shipment": {
+          "id": 1,
+          "order_number": "20261001112805",
+          "purchase_unit": "WIN-GUI-36855210625-1-business-独立发货单位",
+          "contact_person": "发货验收员",
+          "contact_phone": "13800000003",
+          "contact_address": null,
+          "items": [
+            {
+              "id": null,
+              "product_name": "WIN-GUI-36855210625-1-business-产品",
+              "model_number": "WIN-GUI-36855210625-1-business",
+              "quantity_tins": 2,
+              "quantity_kg": 20,
+              "spec_per_tin": 10,
+              "unit_price": 12.5,
+              "amount": 250
+            }
+          ],
+          "status": "pending",
+          "created_at": "2026-10-01T11:28:05.503690",
+          "updated_at": "2026-10-01T11:28:05.512740",
+          "printed_at": null,
+          "printer_name": null,
+          "total_amount": 250,
+          "total_quantity_tins": 2,
+          "total_quantity_kg": 20
+        },
+        "run_id": "run_873ecd35d1c04592aebb24205d78d65f",
+        "agent_run_id": "run_873ecd35d1c04592aebb24205d78d65f",
+        "agent_status": "completed"
+      },
+      "record": {
+        "purchase_unit": "WIN-GUI-36855210625-1-business-独立发货单位",
+        "unit_id": null,
+        "product_name": "WIN-GUI-36855210625-1-business-产品",
+        "model_number": "WIN-GUI-36855210625-1-business",
+        "quantity_kg": 20,
+        "quantity_tins": 2,
+        "tin_spec": 10,
+        "unit_price": 12.5,
+        "amount": 250,
+        "status": "pending",
+        "printed_at": null,
+        "printer_name": null,
+        "raw_text": "source=shipment_excel_etl",
+        "parsed_data": "{\"id\": null, \"order_number\": \"20261001112805\", \"purchase_unit\": \"WIN-GUI-36855210625-1-business-独立发货单位\", \"contact_person\": \"发货验收员\", \"contact_phone\": \"13800000003\", \"contact_address\": null, \"items\": [{\"id\": null, \"product_name\": \"WIN-GUI-36855210625-1-business-产品\", \"model_number\": \"WIN-GUI-36855210625-1-business\", \"quantity_tins\": 2, \"quantity_kg\": 20.0, \"spec_per_tin\": 10.0, \"unit_price\": 12.5, \"amount\": 250}], \"status\": \"pending\", \"created_at\": \"2026-10-01T11:28:05.503690\", \"updated_at\": \"2026-10-01T11:28:05.512740\", \"printed_at\": null, \"printer_name\": null, \"total_amount\": 250, \"total_quantity_tins\": 2, \"total_quantity_kg\": 20.0}",
+        "id": 1,
+        "created_at": "2026-10-01T11:28:05.503690",
+        "updated_at": "2026-10-01T11:28:05.512740",
+        "tenant_id": 1
+      },
+      "reloaded_gui_readback": true
+    },
+    "finished_at": "2026-10-01T11:28:12.427Z"
+  },
+  "result": "shipment_unit_gui_create_reload_query_verified",
+  "raw_gui_sha256": "653521cd47cc33a088baa0731941171eadb6e01230c2051d6e5ca0e2f576f383",
+  "raw_acceptance_sha256": "5b0512a35faabe5e3105414952b4c8514f73e03fcb3e4fe0110e7d4cb607fe34"
+}
