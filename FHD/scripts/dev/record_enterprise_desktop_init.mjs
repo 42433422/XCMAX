@@ -319,10 +319,10 @@ async function main() {
       return { requested_quantity: 999, rejected: body, actual_remaining_quantity: 8, http_status: response.status() }
     })
     await step('authorization_cancel', async () => {
-      const { requestNo, detail } = await openAiApproval(names.cancelled), dialog = page.locator('.app-dialog-host-panel')
-      await detail.getByRole('button', { name: '通过', exact: true }).click(); await expect(dialog).toContainText('请输入审批意见')
+      const { requestNo } = await openAiApproval(names.cancelled), dialog = page.locator('.app-dialog-host-panel')
+      await page.locator('[data-tutorial-id="approval-approve-action"]').click(); await expect(dialog).toContainText('请输入审批意见')
       await dialog.locator('.app-dialog-host-btn-secondary').click(); await expect(dialog).not.toBeVisible()
-      await detail.getByRole('button', { name: '拒绝', exact: true }).click(); await dialog.locator('input').fill(`${marker} 取消本次业务授权`)
+      await modal().getByRole('button', { name: '拒绝', exact: true }).click(); await dialog.locator('input').fill(`${marker} 取消本次业务授权`)
       const rejected = page.waitForResponse(r => r.request().method() === 'POST' && /approval.*reject/.test(new URL(r.url()).pathname))
       await dialog.locator('.app-dialog-host-btn-primary').click()
       const response = await rejected, body = await response.json()
