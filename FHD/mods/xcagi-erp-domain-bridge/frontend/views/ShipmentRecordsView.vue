@@ -6,7 +6,7 @@
         <div class="header-actions shipment-records-actions">
           <select v-model="selectedUnit" class="sr-select sr-select-unit">
             <option value="">请选择{{ unitFieldLabel }}</option>
-            <option v-for="(unit, idx) in units" :key="unitOptionKey(unit, idx)" :value="unitOptionValue(unit)">
+            <option v-for="(unit, idx) in units" :key="unitOptionKey(unit, idx)" :value="unitOptionLabel(unit)">
               {{ unitOptionLabel(unit) }}
             </option>
           </select>
@@ -86,7 +86,6 @@
         </div>
       </div>
 
-      <!-- 新建业务记录弹窗（出货/考勤等同一路由） -->
       <div v-if="showCreateModal" class="modal active">
         <div class="modal-content">
           <div class="modal-header">新建{{ recordsNavTitle }}</div>
@@ -171,7 +170,6 @@ const exportButtonTitle = computed(() => {
   return `按已选模板导出当前${unitFieldLabel.value}（支持状态筛选）${recordsNavTitle.value} Excel`;
 });
 
-// 固定列顺序 + 友好表头，避免动态 Object.keys 导致列错位
 const colLabels = computed(() => ({
   id: 'ID',
   purchase_unit: unitFieldLabel.value,
@@ -194,10 +192,6 @@ function unitOptionLabel(unit) {
   if (typeof unit === 'string' || typeof unit === 'number') return String(unit);
   const o = unit;
   return String(o.name || o.symbol || o.purchase_unit || o.unit_name || o.label || '').trim();
-}
-
-function unitOptionValue(unit) {
-  return unitOptionLabel(unit);
 }
 
 function unitOptionKey(unit, idx) {

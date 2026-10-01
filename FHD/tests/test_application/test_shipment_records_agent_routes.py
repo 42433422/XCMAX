@@ -188,6 +188,7 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(tmp_
         with tenant_scope(7):
             assert service.get_shipment_records() == []
             assert service._record_query.query_shipments()["total"] == 0
+            assert service.clear_all_orders()["success"]
         with tenant_scope(8):
             assert len(service.get_shipment_records()) == 1
     finally:

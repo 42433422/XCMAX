@@ -10,9 +10,14 @@ from app.application.ports.shipment_record_command import ShipmentRecordCommandP
 from app.db.models import ShipmentRecord
 from app.db.session import get_db
 from app.infrastructure.lookups import resolve_purchase_unit
+from app.infrastructure.tenant_scope import apply_tenant_filter
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _scoped_records(db):
+    return apply_tenant_filter(db.query(ShipmentRecord), ShipmentRecord)
 
 
 class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
@@ -25,8 +30,8 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                 if "shipment_records" not in inspector.get_table_names():
                     return {"success": False, "message": "数据库表不存在"}
 
-                count = db.query(ShipmentRecord).count()
-                db.query(ShipmentRecord).delete()
+                count = _scoped_records(db).count()
+                _scoped_records(db).delete()
                 db.commit()
 
             return {
@@ -55,7 +60,7 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                     return {"success": False, "message": "数据库表不存在"}
 
                 count = (
-                    db.query(ShipmentRecord)
+                    _scoped_records(db)
                     .filter(ShipmentRecord.purchase_unit == purchase_unit)
                     .count()
                 )
@@ -84,16 +89,16 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
 
                     if candidate_values:
                         count = (
-                            db.query(ShipmentRecord)
+                            _scoped_records(db)
                             .filter(ShipmentRecord.purchase_unit.in_(candidate_values))
                             .count()
                         )
-                        db.query(ShipmentRecord).filter(
+                        _scoped_records(db).filter(
                             ShipmentRecord.purchase_unit.in_(candidate_values)
                         ).delete(synchronize_session=False)
                         db.commit()
                 else:
-                    db.query(ShipmentRecord).filter(
+                    _scoped_records(db).filter(
                         ShipmentRecord.purchase_unit == purchase_unit
                     ).delete(synchronize_session=False)
                     db.commit()
@@ -120,7 +125,7 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                 if "shipment_records" not in inspector.get_table_names():
                     return {"success": False, "message": "数据库表不存在"}
 
-                record = db.query(ShipmentRecord).filter(ShipmentRecord.id == record_id).first()
+                record = _scoped_records(db).filter(ShipmentRecord.id == record_id).first()
                 if not record:
                     return {"success": False, "message": f"记录 {record_id} 不存在"}
 
@@ -161,7 +166,7 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                 if "shipment_records" not in inspector.get_table_names():
                     return {"success": False, "message": "数据库表不存在"}
 
-                record = db.query(ShipmentRecord).filter(ShipmentRecord.id == record_id).first()
+                record = _scoped_records(db).filter(ShipmentRecord.id == record_id).first()
                 if not record:
                     return {"success": False, "message": f"记录 {record_id} 不存在"}
 
