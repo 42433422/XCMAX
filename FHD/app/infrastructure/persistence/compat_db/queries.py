@@ -453,7 +453,11 @@ def _shipment_units_for_select() -> dict:
     data = _products_units_for_select()["data"]
     seen = {str(row["name"]).lower() for row in data}
     with get_db() as db:
-        rows = apply_tenant_filter(db.query(ShipmentRecord.purchase_unit), ShipmentRecord).distinct().all()
+        rows = (
+            apply_tenant_filter(db.query(ShipmentRecord.purchase_unit), ShipmentRecord)
+            .distinct()
+            .all()
+        )
     for (unit,) in rows:
         name = str(unit or "").strip()
         if name and name.lower() not in seen:
