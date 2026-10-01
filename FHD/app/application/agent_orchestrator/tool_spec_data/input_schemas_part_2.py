@@ -7,7 +7,10 @@ _BUSINESS_ENTITIES = ["customers", "products", "materials", "shipment_records"]
 SPECIAL_INPUT_SCHEMAS_PART_2: dict[tuple[str, str], dict[str, Any]] = {
     ("shipment_records", "create"): {
         "type": "object",
-        "required": ["unit_name"],
+        "allOf": [
+            {"anyOf": [{"required": ["unit_name"]}, {"required": ["purchase_unit"]}]},
+            {"anyOf": [{"required": ["products"]}, {"required": ["items"]}]},
+        ],
         "properties": {
             "unit_name": {"type": "string"},
             "purchase_unit": {"type": "string"},

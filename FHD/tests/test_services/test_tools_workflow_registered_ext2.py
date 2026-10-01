@@ -16,10 +16,6 @@ from app.services.tools_workflow_registered import (
     _registered_router_shipment_records,
 )
 
-# ---------------------------------------------------------------------------
-# customers — update / delete / batch_delete 分支
-# ---------------------------------------------------------------------------
-
 
 class TestCustomersRouterMissingBranches:
     def _mock_svc(self):
@@ -167,11 +163,6 @@ class TestCustomersRouterMissingBranches:
                 "",
             )
         assert result["success"] is True
-
-
-# ---------------------------------------------------------------------------
-# products — batch_create / batch_delete / update / delete / create-failure
-# ---------------------------------------------------------------------------
 
 
 class TestProductsRouterMissingBranches:
@@ -351,11 +342,6 @@ class TestProductsRouterMissingBranches:
         assert result["success"] is False
 
 
-# ---------------------------------------------------------------------------
-# shipment_records — create 分支
-# ---------------------------------------------------------------------------
-
-
 class TestShipmentRecordsRouterCreate:
     def test_create_success(self):
         svc = MagicMock()
@@ -365,7 +351,7 @@ class TestShipmentRecordsRouterCreate:
                 "create",
                 {
                     "unit_name": "TestCo",
-                    "products": [{"id": 1, "qty": 2}],
+                    "products": [{"product_name": "Test", "quantity_tins": 2}],
                     "contact_person": "Alice",
                     "contact_phone": "1234",
                 },
@@ -380,25 +366,19 @@ class TestShipmentRecordsRouterCreate:
         assert result["success"] is False
         assert "unit_name" in result["message"]
 
-    def test_create_non_list_products_defaults_to_empty(self):
+    def test_create_non_list_products_rejected(self):
         svc = MagicMock()
         svc.create_shipment.return_value = {"success": True}
         with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
-            _registered_router_shipment_records(
+            result = _registered_router_shipment_records(
                 "create", {"unit_name": "Co", "products": "not-a-list"}, {}, "admin", ""
             )
-        svc.create_shipment.assert_called_once()
-        call_kwargs = svc.create_shipment.call_args
-        assert call_kwargs.kwargs["items_data"] == []
+        assert result["success"] is False
+        svc.create_shipment.assert_not_called()
 
     def test_unknown_action(self):
         result = _registered_router_shipment_records("fly", {}, {}, "admin", "")
         assert result["success"] is False
-
-
-# ---------------------------------------------------------------------------
-# shipment_orders — 多分支
-# ---------------------------------------------------------------------------
 
 
 class TestShipmentOrdersRouterBranches:
@@ -582,11 +562,6 @@ class TestShipmentOrdersRouterBranches:
         assert result["success"] is False
 
 
-# ---------------------------------------------------------------------------
-# inventory
-# ---------------------------------------------------------------------------
-
-
 class TestInventoryRouterBranches:
     def _svc(self):
         return MagicMock()
@@ -675,11 +650,6 @@ class TestInventoryRouterBranches:
         assert result["success"] is False
 
 
-# ---------------------------------------------------------------------------
-# purchase
-# ---------------------------------------------------------------------------
-
-
 class TestPurchaseRouterBranches:
     def _svc(self):
         return MagicMock()
@@ -758,11 +728,6 @@ class TestPurchaseRouterBranches:
         ):
             result = _registered_router_purchase("fly", {}, {}, "admin", "")
         assert result["success"] is False
-
-
-# ---------------------------------------------------------------------------
-# materials — update returns non-dict / delete returns non-dict
-# ---------------------------------------------------------------------------
 
 
 class TestMaterialsRouterBranches:

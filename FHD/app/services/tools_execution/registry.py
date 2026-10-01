@@ -183,24 +183,26 @@ def _normalize_action(action: str, params: dict | None = None) -> str:
 
 
 def _validate_required_params(tool_id: str, action: str, params: dict | None) -> tuple[bool, str]:
+    if (tool_id, action) == ("shipment_records", "create"):
+        from app.application.shipment_inputs import missing_shipment_fields
+
+        missing = missing_shipment_fields(dict(params or {}))
+        return (False, "缺少有效出货参数：" + "、".join(missing)) if missing else (True, "")
     required = REQUIRED_PARAMS_BY_TOOL_ACTION.get(
         (str(tool_id or "").strip(), str(action or "").strip()), []
     )
     if not required:
         return True, ""
     payload = dict(params or {})
-    missing = []
-    for key in required:
-        value = payload.get(key)
-        if value is None:
-            missing.append(key)
-            continue
-        if isinstance(value, str) and not value.strip():
-            missing.append(key)
-            continue
-        if isinstance(value, list) and len(value) == 0:
-            missing.append(key)
-            continue
+    missing = [
+        key
+        for key in required
+        if payload.get(key) is None
+        or isinstance(payload.get(key), str)
+        and not payload[key].strip()
+        or isinstance(payload.get(key), list)
+        and not payload[key]
+    ]
     if missing:
         return False, f"缺少参数：{', '.join(missing)}"
     return True, ""

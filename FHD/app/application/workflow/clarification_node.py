@@ -115,12 +115,7 @@ def needs_clarification(
     plan: PlanGraph,
     tool_registry: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """对写/高风险节点检测"必填缺失 / 多候选歧义"，返回需澄清的字段/问题列表。
-
-    返回空列表表示无需澄清；每个元素为澄清描述：
-    ``node_id`` / ``tool_id`` / ``action`` / ``reason``（missing_required | ambiguous_target）
-    / ``field`` / ``question`` / 可选 ``candidates`` / ``missing_fields``。
-    """
+    """Detect missing write inputs and ambiguous targets before execution."""
     items: list[dict[str, Any]] = []
     for node in plan.nodes or []:
         if node.tool_id == "clarify":
@@ -182,6 +177,10 @@ def needs_clarification(
             continue
 
         missing = _missing_fields(params, required)
+        if (node.tool_id, node.action) == ("shipment_records", "create"):
+            from app.application.shipment_inputs import missing_shipment_fields
+
+            missing = missing_shipment_fields(params)
         if (node.tool_id, node.action) == ("inventory", "stock_in"):
             from app.application.inventory_inputs import missing_stock_in_fields
 
@@ -205,10 +204,6 @@ def needs_clarification(
     return items
 
 
-# ---------------------------------------------------------------------------
-# ERP 业务澄清（吸收 Odoo 18 业务深度，Task 6）
-# ---------------------------------------------------------------------------
-
 # 多单位换算：斤/公斤/吨/克/千克 等常见重量单位，出现多个单位字面量即视为换算歧义。
 _ERP_UNIT_RE = "斤|公斤|千克|克|吨|Kg|kg|KG|g|G|件|个|箱|包|瓶|米|卷"
 
@@ -219,18 +214,7 @@ def detect_erp_clarification(
     user_message: str = "",
     context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """对 ERP 业务场景做"业务澄清"检测，返回需反问的描述列表。
-
-    覆盖（吸收 Odoo 18 业务深度）：
-    - ``multi_unit`` 多单位换算歧义：同一数量出现多个单位字面量（如"出 500 斤"应确认是
-      斤/KG 还是按产品多单位换算），不直接执行。
-    - ``report_scope`` 报表口径缺失：销售/库存/采购报表未给日期范围或分组口径。
-    - ``reversal_confirm`` 冲销/盘点确认：冲销凭证、盘点调整、作废等破坏性操作需二次确认。
-    - ``batch_scope`` 批量操作范围：批量删除/导入未指明范围或数量过大时需确认。
-
-    返回元素：``node_id`` / ``reason`` / ``field`` / ``question`` / ``severity``。
-    复用 ``build_clarify_node`` 与 TTL 防堆积（调用方插入反问节点与 pending entry）。
-    """
+    """Detect unit ambiguity, missing report/batch scope and destructive confirmations."""
     items: list[dict[str, Any]] = []
     message = str(user_message or "").strip()
     ctx = context or {}
@@ -404,11 +388,7 @@ def _erp_clar(
 
 
 def _has_multi_unit_text(value: Any) -> bool:
-    """判断文本是否含"数量+单位"（斤/KG/吨等）的量词表达。
-
-    出现数字后紧跟单位（如"500 斤"、"出 500 斤"）即视为存在单位换算歧义——Agent 需确认
-    实际操作单位与换算口径，避免把斤当公斤执行。多个单位字面量同样命中。
-    """
+    """Detect quantity-and-unit expressions."""
     import re
 
     text = str(value or "")
