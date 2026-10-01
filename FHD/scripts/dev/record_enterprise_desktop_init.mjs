@@ -19,6 +19,7 @@ if (phase === 'seed') required.splice(4)
 if (seed) required.splice(2, 0, 'old_ui_readback')
 if (phase === 'readback') required.splice(3)
 if (phase === 'faults') required.push('controlled_stock_failure', 'authorization_cancel')
+if (!['seed', 'readback'].includes(phase)) required.push('visible_version')
 const observedRows = new Map()
 const evidence = { run, phase, started_at: new Date().toISOString(), marker, names, cases: [], observations: [], result: 'running' }
 let browser, page
@@ -71,7 +72,7 @@ async function dismissSuccessAlert() {
 }
 async function save(name, endpoint) {
   const waiting = page.waitForResponse(r => r.request().method() === 'POST' && endpoint.test(new URL(r.url()).pathname), { timeout: 30000 })
-  const button = modal().getByRole('button', { name, exact: typeof name === 'string' }).first(), actualText = await button.innerText(); await button.evaluate(el => el.addEventListener('click', () => console.info('WIN_UI_CLICK:' + el.textContent), { once: true })); await button.click(); evidence.observations.push({ action: 'save_button_clicked', name: String(name), actualText, observed_at: new Date().toISOString() })
+  await modal().getByRole('button', { name, exact: typeof name === 'string' }).first().click()
   const response = await waiting
   const body = await response.json()
   if (!response.ok() || body.success === false || body.ok === false) throw new Error(`Business save rejected: HTTP ${response.status()}`)
@@ -109,9 +110,6 @@ async function main() {
     const body = await r.json().catch(() => ({})), rows = body.data || body.customers || body.products || []
     if (Array.isArray(rows)) for (const row of rows) observedRows.set(row.customer_name || row.name || row.product_name, row)
   })
-  page.on('request', r => { const endpoint = new URL(r.url()).pathname; if (r.method() === 'POST' && /purchase|inventory|customers|products|orders|shipment/.test(endpoint)) evidence.observations.push({ endpoint, method: r.method(), event: 'request_started', observed_at: new Date().toISOString() }) })
-  page.on('response', r => { const endpoint = new URL(r.url()).pathname; if (r.request().method() === 'POST' && /purchase|inventory|customers|products|orders|shipment/.test(endpoint)) evidence.observations.push({ endpoint, method: r.request().method(), status: r.status(), observed_at: new Date().toISOString() }) })
-  page.on('console', msg => { const text = msg.text().split('\n')[0]; if (/WIN_UI_CLICK:|TypeError|ReferenceError|Unhandled error/.test(text) && !/token|password|secret|authorization|cookie/i.test(text)) evidence.observations.push({ browser_console: text.slice(0, 512), observed_at: new Date().toISOString() }) })
   page.on('pageerror', error => evidence.observations.push({ browser_error: String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'), observed_at: new Date().toISOString() })); page.setDefaultTimeout(20000)
   await page.waitForURL(/127\.0\.0\.1:17500/, { timeout: 240000 })
   const login = await step('normal_login', async () => {
@@ -148,6 +146,7 @@ async function main() {
     return { original_run: seed.run, tenant_id: login.tenant_id, workspace_id: login.workspace_id, records }
   })
   if (phase === 'readback') { evidence.result = 'gui_readback_passed'; return }
+  if (phase !== 'seed') await step('visible_version', async () => { await nav('settings', '#view-settings'); const expected = JSON.parse(fs.readFileSync(path.join(root, 'config/release_train.json'), 'utf8')).product_version; const label = page.locator('.settings-card--about summary .settings-row__meta'); await expect(label).toHaveText(expected); return { expected_version: expected, visible_version: await label.innerText() } })
   await step('customer', async () => {
     await nav('customers', '#view-customers')
     await click('+ 新建客户')
