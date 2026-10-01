@@ -1,34 +1,4 @@
-"""
-出货单 (Shipment) 聚合根 — 领域边界说明
-=========================================
-
-## Order（订单）vs Shipment（出货单）— 概念边界
-
-本业务中两个概念经常混用，明确定义如下：
-
-**Shipment（出货单 / 发货单）**  ← 本模块管理
-- 代表「一次向客户（购买单位）的实际发货动作」
-- 由 AI 助手或操作员录入，核心字段：purchase_unit、product_name、quantity、amount
-- 生命周期：pending → printed → completed/cancelled
-- 实体表：shipment_records；聚合根：Shipment（本文件）
-- 对应 API：/api/shipment/*、/api/orders/*（前端历史命名）
-
-**Order（采购订单 / 购买订单）**  ← app/domain/... 待建
-- 代表「向供应商下达的采购意向」
-- 由采购管理模块录入，核心字段：supplier、total_amount、status
-- 生命周期：draft → approved → inbound → completed
-- 实体表：purchase_orders；采购 API 当前复用 inventory facade 的 PurchaseService
-- 对应 API：/api/purchase/orders/*
-
-## 历史混淆来源
-前端路由 /api/orders/* 在 shipment_orders.py 中注册，实际操作的是 ShipmentRecord，
-而非 purchase_orders 表。这是历史遗留命名，后续迁移计划：
-- Phase 5：将前端"订单"页面明确拆分为「出货单」和「采购单」两个独立页面
-
-## 当前规则
-- 代码中 "order_number" 字段指出货单编号（YY-MM-NNNNN 格式），非采购订单号
-- 采购订单号字段为 PurchaseOrder.order_no
-"""
+"""出货单聚合：shipment_records 表，pending → printed → completed/cancelled。"""
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -107,6 +77,7 @@ class Shipment:
     printed_at: datetime | None = None
     printer_name: str | None = None
     raw_text: str | None = None
+    metadata: dict = field(default_factory=dict)
     total_amount: Money = field(default_factory=lambda: Money(0))
     total_quantity: Quantity = field(default_factory=lambda: Quantity(0, 0))
 

@@ -11,6 +11,23 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _registered_router_desktop_automation(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    from app.desktop_automation.service import get_desktop_automation_service
+
+    if not runtime_context.get("user_id"):
+        return {"success": False, "message": "桌面动作需要已登录账号"}
+    svc = get_desktop_automation_service()
+    if action == "list":
+        return {"success": True, "data": {"profiles": svc.list_profiles()}}
+    result = svc.run_workflow(str(params.get("app_id") or ""), action)
+    message = "应用正在运行" if result.get("running") else "应用未运行"
+    if action == "open_app":
+        message = "应用已打开" if result.get("success") else "应用未能打开"
+    return {**result, "message": result.get("error") or message}
+
+
 def _registered_router_template_preview(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:

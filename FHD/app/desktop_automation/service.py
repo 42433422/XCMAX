@@ -18,6 +18,36 @@ from app.desktop_automation.drivers import BUNDLE_ID_RE, MacDriver
 _UNAVAILABLE = "desktop automation backend not installed in this build"
 _APP_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 WORKFLOWS = frozenset({"open_app", "app_status"})
+_SYSTEM_APPS = {
+    "textedit": {"name": "文本编辑 TextEdit", "mac_bundle_id": "com.apple.TextEdit"},
+    "finder": {"name": "访达 Finder", "mac_bundle_id": "com.apple.finder"},
+    "calculator": {"name": "计算器 Calculator", "mac_bundle_id": "com.apple.calculator"},
+}
+
+
+def desktop_action_request(text: str) -> dict[str, str] | None:
+    from app.domain.services.conversation.chat_tool_intent import is_negated_action_request
+
+    if is_negated_action_request(text):
+        return None
+    action = re.search(r"打开|启动|运行|查看|检查|查询|关闭|切换", text)
+    if not action:
+        return None
+    target = text[action.end() :]
+    matches = [
+        p
+        for p in get_desktop_automation_service().list_profiles()
+        if any(
+            re.search(r"(?<![a-z0-9_])" + re.escape(name) + r"(?![a-z0-9_])", target, re.I)
+            for name in (p["app_id"], *str(p.get("name") or "").split())
+        )
+    ]
+    if not matches and not re.search(r"桌面|macOS|应用|软件|程序|浏览器|终端", target, re.I):
+        return None
+    workflow = "open_app" if action[0] in {"打开", "启动", "运行"} else "app_status"
+    if action[0] in {"关闭", "切换"}:
+        workflow = "unsupported"
+    return {"app_id": matches[0]["app_id"] if len(matches) == 1 else "", "workflow": workflow}
 
 
 def _default_path() -> Path:
@@ -40,13 +70,27 @@ class DesktopAutomationService:
             data = json.loads(self._path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return {}
-        return data if isinstance(data, dict) else {}
+        return (
+            {
+                k: v
+                for k, v in data.items()
+                if isinstance(v, dict)
+                and v.get("app_id") == k
+                and _APP_ID_RE.fullmatch(k)
+                and (not v.get("mac_bundle_id") or BUNDLE_ID_RE.fullmatch(str(v["mac_bundle_id"])))
+            }
+            if isinstance(data, dict)
+            else {}
+        )
 
     def list_profiles(self) -> list[dict[str, Any]]:
-        return [dict(v) for _k, v in sorted(self._load().items())]
+        return [dict(v) for _k, v in sorted(self._profiles().items())]
+
+    def _profiles(self) -> dict[str, dict[str, Any]]:
+        return {**{k: {"app_id": k, **v} for k, v in _SYSTEM_APPS.items()}, **self._load()}
 
     def get_profile(self, app_id: str) -> dict[str, Any] | None:
-        return self._load().get(app_id)
+        return self._profiles().get(app_id)
 
     def register_profile(self, profile: dict[str, Any]) -> dict[str, Any]:
         app_id = str(profile.get("app_id") or "").strip()

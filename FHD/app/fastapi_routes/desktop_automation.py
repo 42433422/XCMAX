@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,9 +9,6 @@ from pydantic import BaseModel, Field
 
 from app.desktop_automation.service import get_desktop_automation_service
 from app.infrastructure.auth.dependencies import get_logged_in_user
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/desktop/automation",
@@ -111,33 +107,7 @@ def find_element(app_id: str, element_id: str):
 @router.post("/bootstrap")
 async def bootstrap_app(body: BootstrapBody):
     svc = get_desktop_automation_service()
-    vision_call = None
-    if body.use_vision_api:
-
-        async def _vision(prompt: str, image_b64: str) -> Any:
-            try:
-                from app.mod_sdk.mod_employee_llm import mod_employee_complete
-
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": f"data:image/png;base64,{image_b64}"},
-                            },
-                        ],
-                    },
-                ]
-                return await mod_employee_complete(messages, max_tokens=2048, temperature=0.1)
-            except RECOVERABLE_ERRORS as exc:
-                logger.warning("vision api bootstrap failed: %s", exc)
-                return "{}"
-
-        vision_call = _vision
-
-    result = await svc.bootstrap_app(body.app_id, vision_call=vision_call)
+    result = await svc.bootstrap_app(body.app_id)
     return {"success": result.get("success", False), "data": result}
 
 

@@ -219,20 +219,15 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
         date: str | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        """
-        后台：更新出货记录。
-        兼容旧接口：products 参数保留但当前不会用于修改 parsed/products 字段（沿用旧实现的行为）。
-        """
+        """更新出货记录的标量字段；products 保留为兼容参数。"""
         if not self._record_command:
             return {"success": False, "message": "record_command 未配置"}
 
-        # 将旧实现里的 kwargs 全量传给 record 字段（排除 products/date/unit_name）
-        fields = dict(kwargs)
         return self._record_command.update_record(
             record_id,
             unit_name=unit_name,
             date=date,
-            fields=fields,
+            fields=dict(kwargs),
         )
 
     def delete_shipment_record(self, record_id: int) -> dict[str, Any]:

@@ -6,7 +6,9 @@ from typing import Any
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_spec import validate_tool_call, validate_tool_result
 
-_SQL_TENANT_SCOPED_TOOL_IDS = frozenset({"business_db", "inventory"})
+_SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
+    {"business_db", "inventory", "shipment_records", "shipment_orders"}
+)
 
 
 class AgentToolExecutor:

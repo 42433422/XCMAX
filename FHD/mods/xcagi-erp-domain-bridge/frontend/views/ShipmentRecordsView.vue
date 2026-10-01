@@ -6,7 +6,7 @@
         <div class="header-actions shipment-records-actions">
           <select v-model="selectedUnit" class="sr-select sr-select-unit">
             <option value="">请选择{{ unitFieldLabel }}</option>
-            <option v-for="(unit, idx) in units" :key="unitOptionKey(unit, idx)" :value="unitOptionValue(unit)">
+            <option v-for="(unit, idx) in units" :key="unitOptionKey(unit, idx)" :value="unitOptionLabel(unit)">
               {{ unitOptionLabel(unit) }}
             </option>
           </select>
@@ -86,7 +86,6 @@
         </div>
       </div>
 
-      <!-- 新建业务记录弹窗（出货/考勤等同一路由） -->
       <div v-if="showCreateModal" class="modal active">
         <div class="modal-content">
           <div class="modal-header">新建{{ recordsNavTitle }}</div>
@@ -103,7 +102,10 @@
               <label>联系电话</label>
               <input type="text" v-model="createForm.contact_phone" placeholder="联系电话">
             </div>
-            <p style="color:#999;font-size:12px;margin-top:8px">创建后可在记录中继续编辑明细字段。</p>
+            <div class="form-group" v-for="col in createProductFields" :key="col">
+              <label>{{ colLabels[col] || col }}{{ col === 'model_number' ? '' : ' *' }}</label>
+              <input :type="['product_name', 'model_number'].includes(col) ? 'text' : 'number'" step="any" v-model="createForm[col]">
+            </div>
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="closeCreateModal">取消</button>
@@ -143,6 +145,7 @@ const showEditModal = ref(false);
 const editRowId = ref(null);
 const editForm = ref({});
 const showCreateModal = ref(false);
+const createProductFields = ['product_name', 'model_number', 'quantity_tins', 'tin_spec', 'unit_price', 'amount'];
 const createForm = ref({ unit_name: '', contact_person: '', contact_phone: '' });
 
 const editableColumns = computed(() => columns.value.filter((c) => c !== 'id'));
@@ -167,7 +170,6 @@ const exportButtonTitle = computed(() => {
   return `按已选模板导出当前${unitFieldLabel.value}（支持状态筛选）${recordsNavTitle.value} Excel`;
 });
 
-// 固定列顺序 + 友好表头，避免动态 Object.keys 导致列错位
 const colLabels = computed(() => ({
   id: 'ID',
   purchase_unit: unitFieldLabel.value,
@@ -190,10 +192,6 @@ function unitOptionLabel(unit) {
   if (typeof unit === 'string' || typeof unit === 'number') return String(unit);
   const o = unit;
   return String(o.name || o.symbol || o.purchase_unit || o.unit_name || o.label || '').trim();
-}
-
-function unitOptionValue(unit) {
-  return unitOptionLabel(unit);
 }
 
 function unitOptionKey(unit, idx) {
@@ -357,9 +355,16 @@ function closeCreateModal() {
 async function saveCreate() {
   const unitName = (createForm.value.unit_name || '').trim();
   if (!unitName) { await appAlert(`请填写${unitFieldLabel.value}`); return; }
+  const product = Object.fromEntries(createProductFields.map((col) => [col,
+    ['product_name', 'model_number'].includes(col) ? String(createForm.value[col] || '').trim() : Number(createForm.value[col]),
+  ]));
+  if (!product.product_name || !Number.isInteger(product.quantity_tins) || product.quantity_tins <= 0 || product.tin_spec <= 0 ||
+      createProductFields.slice(2).some((col) => createForm.value[col] === '' || createForm.value[col] == null || !Number.isFinite(product[col]) || product[col] < 0)) {
+    await appAlert('请填写产品名称、正整数数量、正数规格，以及非负单价和金额'); return;
+  }
   loading.value = true;
   try {
-    const data = await ordersApi.createShipmentRecord(createForm.value);
+    const data = await ordersApi.createShipmentRecord({ ...createForm.value, products: [product] });
     if (!data?.success) throw new Error(data?.message || '创建失败');
     closeCreateModal();
     await appAlert(`${recordsNavTitle.value}创建成功`);

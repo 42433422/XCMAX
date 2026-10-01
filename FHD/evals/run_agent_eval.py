@@ -2760,30 +2760,7 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
                     headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
                 )
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,
@@ -2918,30 +2895,7 @@ def _run_dataset_rag_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             else:
                 response = client.post(path, json=body, headers=headers)
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,
@@ -3298,30 +3252,7 @@ def _run_inventory_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             else:
                 response = client.post(path, json=body, headers=headers)
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,
@@ -3430,30 +3361,7 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 else:
                     response = client.post(path, json=body, headers=headers)
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,
@@ -3537,30 +3445,7 @@ def _run_finance_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             else:
                 response = client.post(path, json=body, headers=headers)
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,
@@ -3635,30 +3520,7 @@ def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             else:
                 response = client.post(path, json=body, headers=headers)
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,
@@ -3763,30 +3625,7 @@ def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any
         finally:
             excel_imports.__dict__.pop("_parse_price", None)
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,
@@ -3901,6 +3740,23 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             else:
                 response = client.post(path, json=body, headers=headers)
 
+    payload, run, checks = _route_agent_checks(response, expected, repo)
+    return _result(
+        task,
+        checks,
+        {
+            "response": payload,
+            "run": run.to_dict() if run is not None else None,
+            "service_calls": {
+                "customer_pg_insert": insert_customer.call_count,
+                "customer_pg_update": update_customer.call_count,
+                "customer_delete_unified": len(deleted_ids),
+            },
+        },
+    )
+
+
+def _route_agent_checks(response, expected, repo):
     payload = response.json()
     run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
     checks: list[dict[str, Any]] = []
@@ -3925,19 +3781,7 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
-    return _result(
-        task,
-        checks,
-        {
-            "response": payload,
-            "run": run.to_dict() if run is not None else None,
-            "service_calls": {
-                "customer_pg_insert": insert_customer.call_count,
-                "customer_pg_update": update_customer.call_count,
-                "customer_delete_unified": len(deleted_ids),
-            },
-        },
-    )
+    return payload, run, checks
 
 
 def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
@@ -3991,6 +3835,12 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
                 )
             )
             stack.enter_context(patch.object(shipment_orders, "_svc", lambda: service))
+            stack.enter_context(
+                patch(
+                    "app.infrastructure.auth.agent_principal.resolve_session_user",
+                    return_value=SimpleNamespace(id=user_id, is_active=True, tenant_id=None),
+                )
+            )
             headers = {"X-User-Id": user_id}
             if method == "DELETE":
                 response = client.request("DELETE", path, json=body, headers=headers)
@@ -3999,30 +3849,7 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
             else:
                 response = client.post(path, json=body, headers=headers)
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,
@@ -4122,33 +3949,16 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
                 )
             )
             stack.enter_context(patch.object(shipment_orders, "_svc", lambda: service))
+            stack.enter_context(
+                patch(
+                    "app.infrastructure.auth.agent_principal.resolve_session_user",
+                    return_value=SimpleNamespace(id=user_id, is_active=True, tenant_id=None),
+                )
+            )
             headers = {"X-User-Id": user_id}
             response = client.request(method, path, json=body, headers=headers)
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,
@@ -4274,30 +4084,7 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             headers = {"X-User-Id": user_id}
             response = client.request(method, path, json=body, headers=headers)
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,
@@ -4778,30 +4565,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
                 headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,

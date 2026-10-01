@@ -209,15 +209,12 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     """普通版轻量槽位提取与任务分流。"""
     text = (message or "").strip()
     lower = text.lower()
+    from app.desktop_automation.service import desktop_action_request
     from app.services.intent_service import is_negation
 
-    if _facade().re.search(
-        r"(?:桌面|Mac|Windows|系统|电脑).{0,80}(?:打开|启动|关闭|切换|运行)"
-        r"|(?:打开|启动|关闭|切换|运行).{0,40}(?:应用|软件|程序|浏览器|TextEdit|文本编辑|Finder|访达|终端)",
-        text,
-        _facade().re.IGNORECASE,
-    ):
-        return {"intent": "unknown", "slots": {}}
+    desktop = desktop_action_request(text)
+    if desktop is not None:
+        return {"intent": "desktop", "slots": desktop}
     if is_negation(text, action_keywords=["打印", "标签", "贴标", "商标"]):
         return {"intent": "unknown", "slots": {}}
     shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单")

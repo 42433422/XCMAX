@@ -56,6 +56,7 @@ from app.services.tools_workflow_shipments_docs_ops import (
     _registered_router_label_template_generator,
 )
 from app.services.tools_workflow_workspace import (
+    _registered_router_desktop_automation,
     _registered_router_employee,
     _registered_router_print,
     _registered_router_printer_list,
@@ -101,6 +102,7 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "print": _registered_router_print,
         "printer_list": _registered_router_printer_list,
         "settings": _registered_router_settings,
+        "desktop_automation": _registered_router_desktop_automation,
         "employee": _registered_router_employee,
         "business_db": _registered_router_business_db,
         "dataset_rag": _registered_router_dataset_rag,

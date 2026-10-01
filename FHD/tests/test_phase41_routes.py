@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -58,6 +59,10 @@ def mock_shipment_svc() -> MagicMock:
 
 @pytest.fixture
 def shipment_client(mock_shipment_svc: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_principal.resolve_session_user",
+        lambda _request: SimpleNamespace(id="phase41-user", is_active=True, tenant_id=None),
+    )
     monkeypatch.setattr(
         shipment_routes, "get_shipment_application_service_core", lambda: mock_shipment_svc
     )

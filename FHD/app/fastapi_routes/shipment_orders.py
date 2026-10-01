@@ -37,7 +37,6 @@ from app.utils.security.safe_download_path import (
 )
 
 _agent_node_output = _shipment_agent_runtime.agent_node_output
-_shipment_agent_user_id = _shipment_agent_runtime.shipment_agent_user_id
 _run_shipment_records_agent = _shipment_agent_runtime.run_shipment_records_agent
 _run_shipment_orders_agent = _shipment_agent_runtime.run_shipment_orders_agent
 

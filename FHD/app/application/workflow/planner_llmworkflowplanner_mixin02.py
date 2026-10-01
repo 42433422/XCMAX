@@ -97,6 +97,11 @@ class _LLMWorkflowPlannerPart02Mixin:
         rejected = rejected_sql_plan(message, plan_id)
         if rejected is not None:
             return rejected
+        route = route_normal_mode_message(message)
+        if route.get("intent") == "desktop":
+            from app.application.workflow.planner_part03 import desktop_action_plan
+
+            return desktop_action_plan(plan_id, route, tool_registry)
         lower = (message or "").lower()
         nodes: list[_facade().WorkflowNode] = []
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]

@@ -56,3 +56,31 @@ def _filter_tool_registry_for_profile(
         new_spec["actions"] = kept_actions
         filtered[tool_id] = new_spec
     return filtered
+
+
+def desktop_action_plan(plan_id: str, route: dict, tool_registry: dict):
+    slots = route["slots"]
+    action = slots["workflow"]
+    if (
+        slots["app_id"]
+        and action in {"open_app", "app_status"}
+        and action in (tool_registry.get("desktop_automation", {}).get("actions") or {})
+    ):
+        risk = "medium" if action == "open_app" else "low"
+        node = _facade().WorkflowNode(
+            node_id="desktop_action",
+            tool_id="desktop_automation",
+            action=action,
+            params={"app_id": slots["app_id"]},
+            risk=risk,
+            idempotent=action == "app_status",
+            description=f"{'打开应用' if action == 'open_app' else '查询运行状态'}：{slots['app_id']}",
+        )
+    else:
+        node = _facade().build_clarify_node(
+            "请指定一个已登记应用；当前支持打开应用或查询运行状态，不支持关闭或切换。"
+        )
+        risk = "low"
+    return _facade().PlanGraph(
+        plan_id=plan_id, intent="desktop_action", nodes=[node], risk_level=risk
+    )

@@ -218,22 +218,36 @@ def test_stream_business_db_write_uses_stateful_approval_mainline():
     assert service.process_chat.call_args.kwargs["context"]["local_user_id"] == 17
 
 
-def test_sales_sentence_routes_to_app_service_no_llm_then_approval_pending():
-    """W1-10 精确验收句经活跃 compat SSE 直接进入真实应用服务，绝不创建 LLM 客户端、
-    不触碰 legacy planner stream，产出一个正常 done 事件（action=workflow_confirmation_required，
-    而非 error 事件），随后「确认」返回 approval_pending。
-
-    ``create_modstore_openai_client_from_request``（LLM 客户端创建）、
-    ``_xcagi_guarded_planner_stream_events``（legacy planner stream）、
-    ``AgentToolExecutor.execute``（业务工具执行）以及 planner 的
-    ``_plan_with_react_multiagent`` / ``request_planner_completion`` /
-    ``_get_planner_http_client`` 均安装炸弹：一旦被调用即抛错，测试失败。
-    """
+@pytest.mark.parametrize(
+    "message,source,node_id,tool_id,action,params",
+    [
+        (
+            EXACT_SENTENCE,
+            "pro",
+            "sales_execute_closed_loop",
+            "sales",
+            "execute_closed_loop",
+            {"payload": route_normal_mode_message(EXACT_SENTENCE)["payload"]},
+        ),
+        (
+            "请打开 macOS 文本编辑应用 TextEdit。验收标记 C4-DESKTOP-001",
+            "normal",
+            "desktop_action",
+            "desktop_automation",
+            "open_app",
+            {"app_id": "textedit"},
+        ),
+    ],
+)
+def test_executable_sse_request_uses_real_plan_and_waits_for_approval(
+    message, source, node_id, tool_id, action, params
+):
+    """The active SSE path must plan deterministically and execute no tool before approval."""
     svc = _make_real_app_service()
     request = MagicMock()
     request.headers = {}
     request.cookies = {}
-    body = ch.XcagiCompatChatBody(message=EXACT_SENTENCE, user_id="web_pro_session", source="pro")
+    body = ch.XcagiCompatChatBody(message=message, user_id="web_pro_session", source=source)
 
     def _bomb(*args, **kwargs):  # noqa: ANN002, ANN003
         raise AssertionError("LLM 客户端 / legacy planner / 工具执行路径不得被触达")
@@ -271,7 +285,7 @@ def test_sales_sentence_routes_to_app_service_no_llm_then_approval_pending():
         assert svc._pending_workflows["web_pro_session"]["approval_required"] is True
         # 同一服务实例在全部炸弹仍生效时驱动确认 → approval_pending（确认期间也不得执行工具）。
         resp2 = svc.process_chat(
-            user_id="web_pro_session", message="确认", context={}, source="pro"
+            user_id="web_pro_session", message="确认", context={}, source=source
         )
 
     events = _sse_payloads(chunks)
@@ -282,14 +296,14 @@ def test_sales_sentence_routes_to_app_service_no_llm_then_approval_pending():
 
     done_payload = done[0]["result"]
     assert done_payload["data"]["action"] == "workflow_confirmation_required"
-    # 首响应即进入待确认：恰好一个审批节点 sales.execute_closed_loop，获批前绝不分发业务。
+    # Exactly one approval node; no dispatch before the normal approval flow.
     inner = done_payload["data"]["data"]
     assert inner["approval_required"] is True
     assert inner["approval_nodes"] == [
         {
-            "node_id": "sales_execute_closed_loop",
-            "tool_id": "sales",
-            "action": "execute_closed_loop",
+            "node_id": node_id,
+            "tool_id": tool_id,
+            "action": action,
         }
     ]
 
@@ -301,15 +315,14 @@ def test_sales_sentence_routes_to_app_service_no_llm_then_approval_pending():
     request_ids = inner["approval_request_ids"]
     assert isinstance(request_ids, list) and len(request_ids) == 1
     assert str(request_ids[0]).strip()
-    # approval_pending 响应带完整 params：高风险/幂等生产图载荷原样保留。
+    # Pending approval retains the exact tool parameters.
     nodes = inner["approval_nodes"]
     assert len(nodes) == 1
     node = nodes[0]
-    assert node["node_id"] == "sales_execute_closed_loop"
-    assert node["tool_id"] == "sales"
-    assert node["action"] == "execute_closed_loop"
-    payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
-    assert node["params"]["payload"] == payload
+    assert node["node_id"] == node_id
+    assert node["tool_id"] == tool_id
+    assert node["action"] == action
+    assert node["params"] == params
 
 
 def test_casual_chat_not_diverted_to_app_service():

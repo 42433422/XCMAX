@@ -40,6 +40,8 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
         from app.application.normal_chat_dispatch import route_normal_mode_message
 
         _route = route_normal_mode_message(str(message or ""))
+        if _route.get("intent") == "desktop":
+            return self._fallback_plan(plan_id, message, registry_for_plan)
         if (
             "sales" in registry_for_plan
             and str(_route.get("intent") or "") == "sales_write"
