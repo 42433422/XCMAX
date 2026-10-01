@@ -110,7 +110,7 @@ test('真实 IPC 往返：getDataDir 返回主进程 userData 路径', async () 
   )
   expect(dataDir).toBe(userDataDir)
   const identity = await page.evaluate(() => (window as unknown as { xcagiDesktop: XcagiDesktopBridge }).xcagiDesktop.getAppIdentity())
-  expect(identity.version).toMatch(/^\d+\.\d+\.\d+\.\d+$/)
+  expect(identity).toMatchObject({ version: 'dev', isPackaged: false })
 })
 
 test('真实 IPC 往返：剪贴板写入后可读回', async () => {

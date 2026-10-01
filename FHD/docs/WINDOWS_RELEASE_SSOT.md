@@ -16,7 +16,7 @@ G1–G13 必须以同一最终安装包的实际结果核销；缺测、失败�
 
 | Gate | 项目 | 状态 | 当前证据 / 缺口 |
 |---|---|---|---|
-| G1 | 构建与身份 | YELLOW | fa63a729f私有包SHA-256 ead6b24e0d4f7def97c79f0f725533719c220cb76af1d776294fcad6be7ce4cb实算一致；36800629547/36802110909运行后端与安装身份相符。#2109未合入，最终主线包未冻结 |
+| G1 | 构建与身份 | RED | fa63a729f包安装/运行SHA一致，但36805608753复现：正常登录→系统设置→关于显示“—”，应为1.0.0.5；[原始JSON](evidence/e2e/windows-closeout-20260930/gui-36805608753.json)及[截图](evidence/e2e/windows-closeout-20260930/version-36805608753.png)。修复PR #2109补齐既有身份IPC的preload桥，新包待实测；最终主线包未冻结 |
 | G2 | 首装 | YELLOW | runner clean 安装通过；客户入口重下及 GUI 首装未完成 |
 | G3 | 签名 | YELLOW | 过渡包未签名，风险接受有效；安装时须核 SHA-256 |
 | G4 | 首次启动 | YELLOW | runner 健康并 readyForUi；客户界面和进程/端口核验未完成 |

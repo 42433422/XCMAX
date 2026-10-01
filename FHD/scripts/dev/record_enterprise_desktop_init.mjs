@@ -146,7 +146,7 @@ async function main() {
     return { original_run: seed.run, tenant_id: login.tenant_id, workspace_id: login.workspace_id, records }
   })
   if (phase === 'readback') { evidence.result = 'gui_readback_passed'; return }
-  if (phase !== 'seed') await step('visible_version', async () => { await nav('settings', '#view-settings'); const expected = JSON.parse(fs.readFileSync(path.join(root, 'config/release_train.json'), 'utf8')).product_version; const label = page.locator('.settings-card--about summary .settings-row__meta'); await expect(label).toHaveText(expected); return { expected_version: expected, visible_version: await label.innerText() } })
+  if (phase !== 'seed') await step('visible_version', async () => { await nav('settings', '#view-settings'); const expected = JSON.parse(fs.readFileSync(path.join(root, 'config/release_train.json'), 'utf8')).product_version; const label = page.locator('.settings-card--about summary .settings-row__meta'); await label.scrollIntoViewIfNeeded(); await expect(label).toHaveText(expected); return { expected_version: expected, visible_version: await label.innerText() } })
   await step('customer', async () => {
     await nav('customers', '#view-customers')
     await click('+ 新建客户')
