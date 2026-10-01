@@ -1,11 +1,4 @@
-"""Tests for app.infrastructure.mods.mod_manager — uncovered branches (ext3).
-
-Focus: list_mods, list_all_mods, get_routes, load_all_mods, get_mod_manager singleton,
-register_employee_pack_routes, load_employee_pack_routes, _register_single_mod_http_routes,
-_restore_entitlements_from_session_id, _mod_allowed_for_api_load, ensure_mod_api_ready,
-mount_on_disk_primary_client_mods, load_mod_routes, import_mod_backend_py edge cases,
-_all_mods_roots, _repo_layout_mods_candidates.
-"""
+"""Mod manager discovery, mounting, and import regressions."""
 
 from __future__ import annotations
 
@@ -138,19 +131,14 @@ class TestImportModBackendPyEdgeCases:
         assert result is not None
         assert hasattr(result, "HANDLER")
 
-    def test_import_nonexistent_module(self, tmp_path):
-        backend_dir = tmp_path / "nonexistent"
-        with pytest.raises(FileNotFoundError):
-            import_mod_backend_py(str(backend_dir), "nonexistent", "missing_module")
-
-    def test_import_with_syntax_error(self, tmp_path):
-        backend_dir = tmp_path / "bad_mod" / "backend"
-        backend_dir.mkdir(parents=True)
-        (backend_dir / "__init__.py").write_text("")
-        (backend_dir / "bad_syntax.py").write_text("def broken(\n")
-
-        with pytest.raises(SyntaxError):
-            import_mod_backend_py(str(tmp_path / "bad_mod"), "bad_mod", "bad_syntax")
+    @pytest.mark.parametrize("missing", [True, False], ids=["missing-module", "syntax-error"])
+    def test_invalid_import(self, tmp_path, missing):
+        backend = tmp_path / "backend"
+        backend.mkdir()
+        if not missing:
+            (backend / "entry.py").write_text("def broken(\n")
+        with pytest.raises(FileNotFoundError if missing else SyntaxError):
+            import_mod_backend_py(str(tmp_path), "bad_mod", "entry")
 
 
 # ========================= _all_mods_roots ================================
