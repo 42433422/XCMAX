@@ -103,7 +103,10 @@
               <label>联系电话</label>
               <input type="text" v-model="createForm.contact_phone" placeholder="联系电话">
             </div>
-            <p style="color:#999;font-size:12px;margin-top:8px">创建后可在记录中继续编辑明细字段。</p>
+            <div class="form-group" v-for="col in createProductFields" :key="col">
+              <label>{{ colLabels[col] || col }}{{ col === 'model_number' ? '' : ' *' }}</label>
+              <input :type="['product_name', 'model_number'].includes(col) ? 'text' : 'number'" step="any" v-model="createForm[col]">
+            </div>
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="closeCreateModal">取消</button>
@@ -143,6 +146,7 @@ const showEditModal = ref(false);
 const editRowId = ref(null);
 const editForm = ref({});
 const showCreateModal = ref(false);
+const createProductFields = ['product_name', 'model_number', 'quantity_tins', 'tin_spec', 'unit_price', 'amount'];
 const createForm = ref({ unit_name: '', contact_person: '', contact_phone: '' });
 
 const editableColumns = computed(() => columns.value.filter((c) => c !== 'id'));
@@ -357,9 +361,16 @@ function closeCreateModal() {
 async function saveCreate() {
   const unitName = (createForm.value.unit_name || '').trim();
   if (!unitName) { await appAlert(`请填写${unitFieldLabel.value}`); return; }
+  const product = Object.fromEntries(createProductFields.map((col) => [col,
+    ['product_name', 'model_number'].includes(col) ? String(createForm.value[col] || '').trim() : Number(createForm.value[col]),
+  ]));
+  if (!product.product_name || !Number.isInteger(product.quantity_tins) || product.quantity_tins <= 0 || product.tin_spec <= 0 ||
+      createProductFields.slice(2).some((col) => createForm.value[col] === '' || createForm.value[col] == null || !Number.isFinite(product[col]) || product[col] < 0)) {
+    await appAlert('请填写产品名称、正整数数量、正数规格，以及非负单价和金额'); return;
+  }
   loading.value = true;
   try {
-    const data = await ordersApi.createShipmentRecord(createForm.value);
+    const data = await ordersApi.createShipmentRecord({ ...createForm.value, products: [product] });
     if (!data?.success) throw new Error(data?.message || '创建失败');
     closeCreateModal();
     await appAlert(`${recordsNavTitle.value}创建成功`);

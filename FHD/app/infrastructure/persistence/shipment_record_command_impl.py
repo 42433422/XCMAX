@@ -130,7 +130,21 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                     record.created_at = datetime.strptime(date, "%Y-%m-%d")
 
                 for key, value in (fields or {}).items():
-                    if hasattr(record, key):
+                    if key in {
+                        "purchase_unit",
+                        "product_name",
+                        "model_number",
+                        "quantity_kg",
+                        "quantity_tins",
+                        "tin_spec",
+                        "unit_price",
+                        "amount",
+                        "status",
+                        "printed_at",
+                        "printer_name",
+                        "raw_text",
+                        "parsed_data",
+                    }:
                         setattr(record, key, value)
 
                 record.updated_at = datetime.now()
