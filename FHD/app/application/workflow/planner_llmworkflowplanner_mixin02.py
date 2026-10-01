@@ -462,8 +462,8 @@ class _LLMWorkflowPlannerPart02Mixin:
                         action="ask",
                         params={
                             "question": (
-                                f"无法确定「{message}」对应的业务操作，"
-                                "请补充说明要查询或操作的业务对象（如客户、产品、库存、出货等）。"
+                                f"无法将「{message}」解析为可执行的业务操作，"
+                                "请提供完整的业务对象和参数（如客户、产品、数量等）。"
                             ),
                             "answer_key": "confirmed",
                             "target_node_id": "",

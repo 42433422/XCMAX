@@ -1,17 +1,4 @@
-"""反问澄清门控（clarification gate）：写/高风险操作参数缺失或歧义时先反问，待用户确认后再执行。
-
-对标 MODstore ``retort_clarification_gate`` 与 LangGraph ``human-in-the-loop`` interrupt：
-
-- 写/高风险节点（``risk == "high"`` 或非幂等）若必填参数缺失，或多候选目标歧义（如同一客户
-  存在多个同名候选），则规划器/服务侧先插入一个"反问节点"。
-- 反问节点执行时**不调用业务工具**，仅产出 ``output`` 含 ``requires_confirmation=true`` 与
-  ``question``，从而暂停工作流（等价 interrupt）。
-- 用户回复后，服务侧用确认答案丰富目标节点参数，再经条件边（``branches`` 依据
-  ``answer_confirmed``）路由回原操作节点继续执行。
-- TTL 防堆积：过期未答的澄清会话被自动取消，避免积压队列。
-
-本模块为自包含实现，仅依赖 ``app.application.workflow.types`` 的 ``WorkflowNode``/``Branch``。
-"""
+"""Detect missing or ambiguous write inputs; lifecycle helpers pause and resume safely."""
 
 from __future__ import annotations
 
