@@ -14,13 +14,10 @@ const phase = process.env.XCAGI_GUI_PHASE || 'business'
 const seed = process.env.XCAGI_GUI_SEED ? JSON.parse(fs.readFileSync(process.env.XCAGI_GUI_SEED, 'utf8')) : null
 const marker = `WIN-GUI-${run}-${phase}`
 const names = { customer: `${marker}-客户`, product: `${marker}-产品`, supplier: `${marker}-供应商`, ai: `${marker}-AI客户`, cancelled: `${marker}-取消客户` }
-const required = ['normal_login', 'tenant_identity', 'customer', 'product', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business']
-if (phase === 'seed') required.splice(4)
-if (seed) required.splice(2, 0, 'old_ui_readback')
-if (phase === 'readback') required.splice(3)
-if (phase === 'faults') required.push('controlled_stock_failure', 'authorization_cancel')
-if (!['seed', 'readback'].includes(phase)) required.push('visible_version')
-const observedRows = new Map()
+const required = ['normal_login', 'tenant_identity', ...(seed ? ['old_ui_readback'] : [])]
+if (phase !== 'readback') required.push('customer', 'product', ...(phase === 'seed' ? ['old_sign_out'] : []))
+if (!['seed', 'readback'].includes(phase)) required.push('visible_version', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business', ...(phase === 'faults' ? ['controlled_stock_failure', 'authorization_cancel'] : []))
+const observedRows = new Map(), workspaceOwners = []
 const evidence = { run, phase, started_at: new Date().toISOString(), marker, names, cases: [], observations: [], result: 'running' }
 let browser, page
 const digest = value => crypto.createHash('sha256').update(Buffer.isBuffer(value) ? value : String(value)).digest('hex')
@@ -106,6 +103,7 @@ async function main() {
   const context = browser.contexts()[0]
   page = context.pages().find(p => p.url().includes('127.0.0.1:17500')) || context.pages()[0]
   page.on('response', async r => {
+    if (r.request().method() === 'GET' && new URL(r.url()).pathname === '/api/workspace/prefs' && r.ok()) { const body = await r.json().catch(() => ({})); if (body.success === true && body.owner_id) workspaceOwners.push(body.owner_id) }
     if (r.request().method() !== 'GET' || !/\/(customers|products)\/list$/.test(new URL(r.url()).pathname) || !r.ok()) return
     const body = await r.json().catch(() => ({})), rows = body.data || body.customers || body.products || []
     if (Array.isArray(rows)) for (const row of rows) observedRows.set(row.customer_name || row.name || row.product_name, row)
@@ -127,11 +125,12 @@ async function main() {
   })
   await step('tenant_identity', async () => {
     if (login.account_kind !== 'enterprise' || !login.tenant_id) throw new Error('UI login did not bind an enterprise tenant')
-    return login
+    await expect.poll(() => workspaceOwners.at(-1), { timeout: 30000 }).toBe(`tenant:${login.tenant_id}`)
+    return { ...login, workspace_owner_id: workspaceOwners.at(-1) }
   })
   if (seed) await step('old_ui_readback', async () => {
     const originalLogin = seed.cases.find(c => c.id === 'normal_login').actual
-    if (login.account_sha256 !== originalLogin.account_sha256 || login.tenant_id !== originalLogin.tenant_id || login.workspace_id !== originalLogin.workspace_id) throw new Error('Upgrade changed the original account, enterprise or workspace')
+    if (login.account_sha256 !== originalLogin.account_sha256 || login.tenant_id !== originalLogin.tenant_id || login.workspace_id !== originalLogin.workspace_id || workspaceOwners.at(-1) !== seed.cases.find(c => c.id === 'tenant_identity').actual.workspace_owner_id) throw new Error('Upgrade changed the original account, enterprise or workspace')
     const records = {}
     for (const [kind, name] of [['customer', seed.names.customer], ['product', seed.names.product]]) {
       const view = kind === 'customer' ? 'customers' : 'products'
@@ -143,7 +142,7 @@ async function main() {
       if (kind === 'customer') for (const [key, value] of Object.entries(seed.cases.find(c => c.id === kind).actual.original_fields)) await expect.poll(() => observedRows.get(name)?.[key] ?? '').toBe(value)
       records[kind] = observedRows.get(name)
     }
-    return { original_run: seed.run, tenant_id: login.tenant_id, workspace_id: login.workspace_id, records }
+    return { original_run: seed.run, tenant_id: login.tenant_id, workspace_id: login.workspace_id, workspace_owner_id: workspaceOwners.at(-1), records }
   })
   if (phase === 'readback') { evidence.result = 'gui_readback_passed'; return }
   if (phase !== 'seed') await step('visible_version', async () => { await nav('settings', '#view-settings'); const expected = JSON.parse(fs.readFileSync(path.join(root, 'config/release_train.json'), 'utf8')).product_version; const label = page.locator('.settings-card--about summary .settings-row__meta'); await label.scrollIntoViewIfNeeded(); await expect(label).toHaveText(expected); return { expected_version: expected, visible_version: await label.innerText() } })
