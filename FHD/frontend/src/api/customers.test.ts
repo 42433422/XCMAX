@@ -28,9 +28,9 @@ describe('customersApi', () => {
   })
   it('refreshes customer readback when returning from approval', async () => {
     const { api } = await import('./core'), visible = ref(true)
-    const View = defineComponent({ setup: useCustomers, template: '<p v-for="row in customers">{{ row.customer_name }}</p>' })
+    const CustomerHarness = defineComponent({ setup: useCustomers, template: '<p v-for="row in customers">{{ row.customer_name }}</p>' })
     vi.mocked(api.get).mockResolvedValue({ success: true, data: [{ id: 1, customer_name: '原客户' }] })
-    const wrapper = mount(defineComponent({ components: { View }, setup: () => ({ visible }), template: '<KeepAlive><View v-if="visible" /></KeepAlive>' }))
+    const wrapper = mount(defineComponent({ components: { CustomerHarness }, setup: () => ({ visible }), template: '<KeepAlive><CustomerHarness v-if="visible" /></KeepAlive>' }))
     await flushPromises(); expect(wrapper.text()).toBe('原客户')
     visible.value = false; await flushPromises()
     vi.mocked(api.get).mockResolvedValue({ success: true, data: [{ id: 2, customer_name: 'AI客户' }] })

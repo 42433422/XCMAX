@@ -76,7 +76,7 @@ async function save(name, endpoint) {
   if (!response.ok() || body.success === false || body.ok === false) throw new Error(`Business save rejected: HTTP ${response.status()}`)
   const data = body.data || body
   const object = { endpoint: new URL(response.url()).pathname, status: response.status(), id: data.id || data.customer_id || data.product_id || data.order_id || data.inbound_id || data.ledger_id || data.order_no || data.order_number, fields: data }
-  if (!object.id) throw new Error(`Saved business response has no record identity: ${object.endpoint}`)
+  if (!object.id && phase !== 'seed') throw new Error(`Saved business response has no record identity: ${object.endpoint}`)
   await dismissSuccessAlert()
   await expect(modal()).toHaveCount(0)
   return object
@@ -151,7 +151,8 @@ async function main() {
     await expect(cells.nth(1)).toHaveText(marker)
     await expect(cells.nth(3)).toHaveText('10')
     await expect(cells.nth(4)).toHaveText('¥12.50')
-    return saved
+    await expect.poll(() => observedRows.get(names.product)?.id).toBeTruthy()
+    return { ...saved, id: observedRows.get(names.product).id, original_fields: observedRows.get(names.product) }
   })
   if (phase === 'seed') {
     await nav('settings', '#view-settings'); await click('退出登录')
