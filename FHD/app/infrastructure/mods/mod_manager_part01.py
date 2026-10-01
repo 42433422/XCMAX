@@ -7,6 +7,7 @@ import importlib
 from threading import RLock
 
 _MOD_IMPORT_LOCK = RLock()
+_MOD_IMPORT_ERRORS = (BaseException,)  # Initialization boundary: clean cache and propagate.
 
 
 def _facade():
@@ -21,9 +22,6 @@ def is_mods_disabled() -> bool:
 
 def _default_mods_root() -> str:
     """Resolve the MOD root across source and packaged layouts."""
-    _facade().logger.debug(
-        "[_default_mods_root] Resolving mods root, CWD: %s", _facade().os.getcwd()
-    )
     env = (
         _facade().os.environ.get("XCAGI_MODS_ROOT")
         or _facade().os.environ.get("XCAGI_MODS_DIR")
@@ -181,7 +179,7 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
         _facade().sys.modules[spec_name] = module
         try:
             spec.loader.exec_module(module)
-        except BaseException:
+        except _MOD_IMPORT_ERRORS:
             _facade().sys.modules.pop(spec_name, None)
             raise
         return module
