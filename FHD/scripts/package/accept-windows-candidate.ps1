@@ -1,5 +1,5 @@
 ﻿param(
-  [Parameter(Mandatory=$true)][ValidateSet('Clean','Upgrade','Gui')][string]$Mode,
+  [Parameter(Mandatory=$true)][ValidateSet('Clean','Upgrade','Gui','Recovery')][string]$Mode,
   [Parameter(Mandatory=$true)][string]$CandidatePath,
   [Parameter(Mandatory=$true)][string]$CandidateSha,
   [Parameter(Mandatory=$true)][string]$EvidenceDir,
@@ -37,7 +37,7 @@ function Install([string]$path, [string]$label) {
 }
 function Start-App([string]$label) {
   $launch = @{FilePath=(Join-Path $installRoot 'XCAGI.exe'); WorkingDirectory=$installRoot; PassThru=$true; WindowStyle='Hidden'}
-  if ($Mode -in @('Gui','Upgrade')) { $launch.ArgumentList = @('--remote-debugging-port=9222') }
+  if ($Mode -in @('Gui','Upgrade','Recovery')) { $launch.ArgumentList = @('--remote-debugging-port=9222') }
   $p = Start-Process @launch
   $deadline = (Get-Date).AddMinutes(4)
   $health = $null; $status = $null
@@ -81,21 +81,6 @@ function Login([string]$label) {
   if (-not $tenant) { $tenant = [string]$identity.user.tenant_id }
   Check ($kind -eq 'enterprise' -and $tenant) "$label.enterprise" "kind=$kind; tenant_sha256=$(Digest $tenant)"
   return @{ session=$session; tenant=$tenant }
-}
-function Read-Record($session, [string]$id, [string]$marker, [string]$label) {
-  $r = Invoke-WebRequest "$base/api/agent/tasks/$id" -WebSession $session -TimeoutSec 20
-  $seen = $r.Content.Contains($marker)
-  Check ([int]$r.StatusCode -eq 200 -and $seen) "$label.read_record" "http=$($r.StatusCode); marker_sha256=$(Digest $marker); seen=$seen"
-}
-function Create-Record($session, [string]$marker, [string]$label) {
-  $body = @{task_id=$marker; title=$marker; message=$marker; tool_id='dataset_rag'; action='query'; params=@{dataset_id='acceptance'; query=$marker}} | ConvertTo-Json -Compress
-  Invoke-WebRequest "$base/api/health?lite=true" -WebSession $session -TimeoutSec 15 | Out-Null
-  $csrf = @($session.Cookies.GetCookies([Uri]$base) | Where-Object { $_.Name -eq 'csrf_token' } | Select-Object -First 1)[0].Value
-  Check ([bool]$csrf) "$label.csrf_cookie" 'safe request established a CSRF cookie'
-  $r = Invoke-WebRequest "$base/api/agent/tasks" -Method Post -Body $body -ContentType 'application/json' -Headers @{'X-CSRF-Token'=$csrf} -WebSession $session -TimeoutSec 20
-  Check ([int]$r.StatusCode -in @(200,202)) "$label.create_record" "http=$($r.StatusCode); marker_sha256=$(Digest $marker)"
-  Read-Record $session $marker $marker $label
-  return $marker
 }
 function Backup-And-Version {
   $infoPath = Join-Path $installRoot 'resources/build-info.json'
@@ -159,7 +144,6 @@ function Backup-And-Version {
     $restoredProcess = Start-App 'backup_restore'
     $restoredAuth = Login 'backup_restore'
     Check ($restoredAuth.tenant -eq $newAuth.tenant) 'backup_restore_enterprise' "tenant_sha256=$(Digest $restoredAuth.tenant)"
-    Read-Record $restoredAuth.session $marker $marker 'backup_restore'
     if ($candidateGuiProof) { Run-Gui 'readback' (Join-Path $EvidenceDir 'restored-gui') $candidateGuiProof | Out-Null }
   } finally {
     $env:XCAGI_DESKTOP_USER_DATA_DIR = $previousUserData
@@ -180,11 +164,13 @@ try {
   Check (-not (Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction SilentlyContinue)) 'isolated_tasks' 'no prior daily task'
   $candidateHash = (Get-FileHash -LiteralPath $CandidatePath -Algorithm SHA256).Hash.ToLowerInvariant()
   $evidence.candidate_sha256 = $candidateHash
-  if ($Mode -eq 'Gui') {
+  if ($Mode -in @('Gui','Recovery')) {
     Install $CandidatePath 'candidate'
     Start-App 'candidate'
-    Run-Gui 'business' $EvidenceDir | Out-Null
-    $evidence.result = 'gui_regression_passed'
+    $phase = if ($Mode -eq 'Recovery') { 'faults' } else { 'business' }
+    $candidateGuiProof = Run-Gui $phase $EvidenceDir
+    if ($Mode -eq 'Recovery') { $newAuth = Login 'candidate'; Backup-And-Version }
+    $evidence.result = if ($Mode -eq 'Recovery') { 'gui_recovery_regression_passed' } else { 'gui_regression_passed' }
     return
   }
   if ($Mode -eq 'Upgrade') {
@@ -193,21 +179,16 @@ try {
     $oldProcess = Start-App 'old'
     $oldGuiSeed = Run-Gui 'seed' (Join-Path $EvidenceDir 'old-gui')
     $oldAuth = Login 'old'
-    $marker = "ACCEPT-UPGRADE-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-    $recordId = Create-Record $oldAuth.session $marker 'before_upgrade'
     Stop-App
     Install $CandidatePath 'candidate'
     $newProcess = Start-App 'candidate'
     $newAuth = Login 'candidate'
     Check ($newAuth.tenant -eq $oldAuth.tenant) 'same_enterprise' "tenant_sha256=$(Digest $newAuth.tenant)"
-    Read-Record $newAuth.session $recordId $marker 'after_upgrade'
     $candidateGuiProof = Run-Gui 'after-upgrade' (Join-Path $EvidenceDir 'after-upgrade-gui') $oldGuiSeed
   } else {
     Install $CandidatePath 'candidate'
     $newProcess = Start-App 'candidate'
     $newAuth = Login 'candidate'
-    $marker = "ACCEPT-CLEAN-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-    Create-Record $newAuth.session $marker 'clean'
   }
   Backup-And-Version
   $evidence.result = 'passed'

@@ -13,11 +13,12 @@ const run = `${process.env.GITHUB_RUN_ID || Date.now()}-${process.env.GITHUB_RUN
 const phase = process.env.XCAGI_GUI_PHASE || 'business'
 const seed = process.env.XCAGI_GUI_SEED ? JSON.parse(fs.readFileSync(process.env.XCAGI_GUI_SEED, 'utf8')) : null
 const marker = `WIN-GUI-${run}-${phase}`
-const names = { customer: `${marker}-客户`, product: `${marker}-产品`, supplier: `${marker}-供应商`, ai: `${marker}-AI客户` }
+const names = { customer: `${marker}-客户`, product: `${marker}-产品`, supplier: `${marker}-供应商`, ai: `${marker}-AI客户`, cancelled: `${marker}-取消客户` }
 const required = ['normal_login', 'tenant_identity', 'customer', 'product', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business']
 if (phase === 'seed') required.splice(4)
 if (seed) required.splice(2, 0, 'old_ui_readback')
 if (phase === 'readback') required.splice(3)
+if (phase === 'faults') required.push('controlled_stock_failure', 'authorization_cancel')
 const observedRows = new Map()
 const evidence = { run, phase, started_at: new Date().toISOString(), marker, names, cases: [], observations: [], result: 'running' }
 let browser, page
@@ -80,6 +81,23 @@ async function save(name, endpoint) {
   await dismissSuccessAlert()
   await expect(modal()).toHaveCount(0)
   return object
+}
+async function openAiApproval(name) {
+  await nav('chat', '#view-chat')
+  const previousCardText = await page.getByTestId('chat-approval-inline-card').last().innerText().catch(() => '')
+  await page.locator('#view-chat textarea').fill(`请创建客户，客户名称“${name}”，联系人“AI验收员”，电话13800000002。请执行到客户记录保存成功并给出记录编号。`)
+  await click(/^发送$/)
+  const card = page.getByTestId('chat-approval-inline-card').last()
+  await expect.poll(() => card.innerText().then(text => Boolean(text && text !== previousCardText)).catch(() => false), { timeout: 60000 }).toBe(true)
+  const submit = card.getByRole('button', { name: /^提交审批$|^确认执行$/ })
+  if (await submit.isVisible()) await submit.click()
+  const requestNos = (await card.locator('.approval-request-nos').innerText()).replace(/^审批请求号：/, '').split('、').map(s => s.trim()).filter(Boolean)
+  if (requestNos.length !== 1) throw new Error('AI task must expose one correlated durable approval request')
+  await card.getByRole('link', { name: '前往审批' }).click()
+  const detail = page.locator('[data-tutorial-id="approval-detail"]')
+  if (!await detail.isVisible()) await page.locator('.request-item').filter({ hasText: requestNos[0] }).click()
+  await expect(detail).toContainText(requestNos[0]); await expect(detail).toContainText(name)
+  return { requestNo: requestNos[0], detail }
 }
 async function main() {
   if (phase === 'readback' && !seed) throw new Error('GUI recovery readback requires original business evidence')
@@ -265,22 +283,7 @@ async function main() {
     return { customer: names.customer, product: names.product }
   })
   await step('ai_business', async () => {
-    await nav('chat', '#view-chat')
-    const input = page.locator('#view-chat textarea')
-    await input.fill(`请创建客户，客户名称“${names.ai}”，联系人“AI验收员”，电话13800000002。请执行到客户记录保存成功并给出记录编号。`)
-    await click(/^发送$/)
-    const card = page.getByTestId('chat-approval-inline-card').last()
-    await expect(card).toBeVisible({ timeout: 60000 })
-    const submit = card.getByRole('button', { name: /^提交审批$|^确认执行$/ })
-    if (await submit.isVisible()) await submit.click()
-    await expect(card.getByRole('link', { name: '前往审批' })).toBeVisible({ timeout: 60000 })
-    const requestNos = (await card.locator('.approval-request-nos').innerText()).replace(/^审批请求号：/, '').split('、').map(s => s.trim()).filter(Boolean)
-    if (requestNos.length !== 1) throw new Error('AI task must expose one correlated durable approval request')
-    await card.getByRole('link', { name: '前往审批' }).click()
-    const detail = page.locator('[data-tutorial-id="approval-detail"]')
-    if (!await detail.isVisible()) await page.locator('.request-item').filter({ hasText: requestNos[0] }).click()
-    await expect(detail).toContainText(requestNos[0])
-    await expect(detail).toContainText(names.ai)
+    const { requestNo } = await openAiApproval(names.ai)
     const approve = page.locator('[data-tutorial-id="approval-approve-action"]')
     await approve.click()
     const dialog = page.locator('.app-dialog-host-panel')
@@ -291,15 +294,45 @@ async function main() {
     const response = await execution, body = await response.json(), result = body.data?.workflow_execution
     if (!response.ok() || body.success !== true || result?.workflow_executed !== true || result.success !== true) throw new Error('Approval did not complete the real AI workflow')
     await expect(dialog).toContainText('执行完成', { timeout: 180000 })
-    const receiptText = await dialog.innerText(); evidence.observations.push({ action: 'ai_execution_receipt', approval_request: requestNos[0], execution: result, receipt: receiptText, observed_at: new Date().toISOString() })
+    const receiptText = await dialog.innerText(); evidence.observations.push({ action: 'ai_execution_receipt', approval_request: requestNo, execution: result, receipt: receiptText, observed_at: new Date().toISOString() })
     await dialog.locator('.app-dialog-host-btn-primary').click()
     if (await modal().isVisible()) await modal().getByRole('button', { name: /关闭/ }).first().click()
     await page.reload(); evidence.observations.push({ action: 'normal_ui_reload_before_ai_readback', observed_at: new Date().toISOString() }); await nav('customers', '#view-customers')
     const row = page.locator('#view-customers tbody tr').filter({ hasText: names.ai })
     for (const value of [names.ai, 'AI验收员', '13800000002']) await expect(row).toContainText(value, { timeout: 30000 })
     await expect.poll(() => observedRows.get(names.ai)?.id).toBeTruthy()
-    return { created_customer: names.ai, id: observedRows.get(names.ai).id, fields: observedRows.get(names.ai), approval_request: requestNos[0], execution: result, receipt: receiptText }
+    return { created_customer: names.ai, id: observedRows.get(names.ai).id, fields: observedRows.get(names.ai), approval_request: requestNo, execution: result, receipt: receiptText }
   })
+  if (phase === 'faults') {
+    await step('controlled_stock_failure', async () => {
+      await nav('inventory', '#view-inventory'); await click('出库')
+      await choose('产品', names.product); await choose('仓库', `${marker}-收货仓库`); await fill('数量', '999')
+      const rejected = page.waitForResponse(r => r.request().method() === 'POST' && /inventory\/out$/.test(new URL(r.url()).pathname))
+      await modal().getByRole('button', { name: '确认出库', exact: true }).click()
+      const response = await rejected, body = await response.json()
+      if (body.success !== false || !/库存不足/.test(JSON.stringify(body))) throw new Error('Overdraw did not reject with a real insufficient-stock result')
+      const dialog = page.locator('.app-dialog-host-panel'); await expect(dialog).toContainText('出库失败')
+      await dialog.locator('.app-dialog-host-btn-primary').click(); await modal().getByRole('button', { name: '×', exact: true }).click()
+      await nav('products', '#view-products'); await nav('inventory', '#view-inventory')
+      const cells = page.locator('#view-inventory tbody tr').filter({ hasText: names.product }).locator('td')
+      await expect(cells.nth(4)).toHaveText('8'); await expect(cells.nth(5)).toHaveText('8')
+      return { requested_quantity: 999, rejected: body, actual_remaining_quantity: 8, http_status: response.status() }
+    })
+    await step('authorization_cancel', async () => {
+      const { requestNo, detail } = await openAiApproval(names.cancelled), dialog = page.locator('.app-dialog-host-panel')
+      await detail.getByRole('button', { name: '通过', exact: true }).click(); await expect(dialog).toContainText('请输入审批意见')
+      await dialog.locator('.app-dialog-host-btn-secondary').click(); await expect(dialog).not.toBeVisible()
+      await detail.getByRole('button', { name: '拒绝', exact: true }).click(); await dialog.locator('input').fill(`${marker} 取消本次业务授权`)
+      const rejected = page.waitForResponse(r => r.request().method() === 'POST' && /approval.*reject/.test(new URL(r.url()).pathname))
+      await dialog.locator('.app-dialog-host-btn-primary').click()
+      const response = await rejected, body = await response.json()
+      if (!response.ok() || body.success !== true || body.data?.status !== 'rejected' || body.data?.workflow_execution?.workflow_executed !== false) throw new Error('Cancelled authorization did not terminate without execution')
+      await expect(dialog).toContainText('已拒绝'); await dialog.locator('.app-dialog-host-btn-primary').click()
+      await page.reload(); await nav('customers', '#view-customers'); await expect(page.locator('#view-customers')).toContainText(names.ai)
+      await expect(page.locator('#view-customers')).not.toContainText(names.cancelled)
+      return { approval_request: requestNo, cancelled_customer: names.cancelled, rejection: body.data, gui_customer_absent: true }
+    })
+  }
   evidence.result = 'business_regression_passed'
 }
 try { await main() } catch (error) { evidence.result = 'failed'; evidence.failure = String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'); process.exitCode = 1 }

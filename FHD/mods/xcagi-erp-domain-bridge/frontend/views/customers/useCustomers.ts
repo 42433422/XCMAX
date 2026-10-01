@@ -97,8 +97,6 @@ export function useCustomers() {
     { key: 'customer_name', label: '客户名称' },
     { key: 'contact_person', label: '联系人' },
     { key: 'contact_phone', label: '电话' },
-    // 列 key 必须与接口返回字段一致（customers/list 返回 contact_address），
-    // 否则 DataTable 取不到值、#cell-* 槽位也不命中，地址列恒显示 '-'。
     { key: 'contact_address', label: '地址' }
   ];
 
