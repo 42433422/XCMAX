@@ -1,0 +1,14 @@
+{
+  "schema": "windows-candidate-freeze/v1",
+  "frozen_at": "2026-10-01T09:18:40.6064637Z",
+  "release_sha": "5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30",
+  "version": "1.0.0.5",
+  "installer_sha256": "a9001626f0ad57fb7756cc66528b5f49286a60e151e6dfad5a91456d864798cf",
+  "size": 250138370,
+  "build_run": 36839932318,
+  "acceptance_run": 36841870956,
+  "signature": "NotSigned",
+  "stable_ota": false,
+  "customer_acceptance": "not_verified",
+  "published": false
+}
