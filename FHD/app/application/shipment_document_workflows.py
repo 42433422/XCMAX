@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime
 from typing import Any, cast
+from uuid import uuid4
 
 from app.application.ports import ShipmentDocumentGeneratorPort, ShipmentRecordStorePort
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -72,7 +74,8 @@ class ShipmentDocumentWorkflowMixin:
                     ]
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            unit_prefix = unit_name if unit_name else "all"
+            unit_prefix = re.sub(r"[^\w\u4e00-\u9fff-]", "_", unit_name or "all")[:80]
+            unit_prefix += "_" + uuid4().hex
             filename = f"shipment_records_{unit_prefix}_{timestamp}.xlsx"
 
             export_dir = os.path.join(get_data_dir(), "exports")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,6 +14,10 @@ from app.fastapi_routes import shipment_orders
 
 def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(shipment_orders, "_svc", lambda: fake_service)
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_principal.resolve_session_user",
+        lambda _r: SimpleNamespace(id="tenant-a", is_active=True, tenant_id=None),
+    )
     app = FastAPI()
     app.include_router(shipment_orders.router)
     return TestClient(app, raise_server_exceptions=False)

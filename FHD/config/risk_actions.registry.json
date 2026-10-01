@@ -1496,6 +1496,32 @@
         }
       }
     },
+    "desktop_automation": {
+      "description": "已登记桌面应用：打开应用或查询运行状态；不执行任意命令或消息发送",
+      "availability": "shared",
+      "actions": {
+        "list": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": []
+        },
+        "open_app": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "app_id"
+          ],
+          "approval": "always"
+        },
+        "app_status": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "app_id"
+          ]
+        }
+      }
+    },
     "settings": {
       "description": "系统设置与运行环境配置",
       "availability": "shared",

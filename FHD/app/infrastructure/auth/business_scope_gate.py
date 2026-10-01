@@ -26,7 +26,12 @@ def _request_path(request: Request) -> str:
 
 def uses_tenant_scoped_store(request: Request) -> bool:
     path = _request_path(request)
-    if path == "/api/orders/webhooks":
+    if path in {
+        "/api/orders/webhooks",
+        "/api/shipment/shipment-records/records",
+        "/api/shipment/shipment-records/record",
+        "/api/shipment/shipment-records/export",
+    }:
         return True
     return any(
         path == prefix or path.startswith(prefix + "/") for prefix in _TENANT_SCOPED_PREFIXES

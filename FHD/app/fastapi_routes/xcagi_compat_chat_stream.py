@@ -145,6 +145,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     if (
         has_pending_workflow
         or sales_closed_loop_route
+        or _sales_route.get("intent") == "desktop"
         or (
             controlled_entity_named
             and _looks_like_business_db_write(

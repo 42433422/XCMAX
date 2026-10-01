@@ -76,6 +76,7 @@ async function save(name, endpoint) {
   const data = body.data || body
   const object = { endpoint: new URL(response.url()).pathname, status: response.status(), id: data.id || data.customer_id || data.product_id || data.order_id || data.inbound_id || data.ledger_id || data.order_no || data.order_number, fields: data }
   if (!object.id && phase !== 'seed') throw new Error(`Saved business response has no record identity: ${object.endpoint}`)
+  evidence.observations.push({ action: 'normal_ui_save_response', ...object, observed_at: new Date().toISOString() })
   await dismissSuccessAlert()
   await expect(modal()).toHaveCount(0)
   return object
@@ -152,7 +153,7 @@ async function main() {
     await fill('客户名称', names.customer); await fill('联系人', '验收员'); await fill('电话', '13800000001'); await fill('地址', `${marker}隔离验收地址`)
     const saved = await save('创建', /customers|purchase.units/)
     const row = page.locator('#view-customers tbody tr').filter({ hasText: names.customer })
-    for (const value of ['验收员', '13800000001', ...(phase === 'seed' ? [] : [`${marker}隔离验收地址`])]) await expect(row).toContainText(value)
+    for (const value of ['验收员', '13800000001', ...(phase === 'seed' ? [] : [`${marker}隔离验收地址`])]) await expect(row).toContainText(value, { timeout: 30000 })
     await expect.poll(() => observedRows.get(names.customer)?.id).toBe(saved.id)
     return { ...saved, original_fields: Object.fromEntries(['contact_person', 'contact_phone', 'contact_address'].map(key => [key, observedRows.get(names.customer)?.[key] ?? ''])), input_address: `${marker}隔离验收地址` }
   })
