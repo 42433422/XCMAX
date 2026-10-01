@@ -108,7 +108,7 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="closeCreateModal">取消</button>
+            <button class="btn btn-secondary" @click="showCreateModal = false">取消</button>
             <button class="btn btn-primary" @click="saveCreate" :disabled="loading">创建</button>
           </div>
         </div>
@@ -348,10 +348,6 @@ function openCreateModal() {
   showCreateModal.value = true;
 }
 
-function closeCreateModal() {
-  showCreateModal.value = false;
-}
-
 async function saveCreate() {
   const unitName = (createForm.value.unit_name || '').trim();
   if (!unitName) { await appAlert(`请填写${unitFieldLabel.value}`); return; }
@@ -368,7 +364,7 @@ async function saveCreate() {
     if (!data?.success) throw new Error(data?.message || '创建失败');
     selectedUnit.value = unitName;
     await loadUnits();
-    closeCreateModal();
+    showCreateModal.value = false;
     await appAlert(`${recordsNavTitle.value}创建成功`);
     await loadRecords();
   } catch (e) {
