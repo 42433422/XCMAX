@@ -1,13 +1,4 @@
-"""employee_pack 共享运行时：统一承载 67 个同构员工包的 HTTP 面与执行派发。
-
-历史上每个 ``mods/_employees/<pack>/backend/blueprints.py`` 都是 ~290 行的同构样板，
-仅 EMPLOYEE_ID / STEM / LABEL 三个常量不同（MODstore 生成）。本模块把样板收敛为
-``build_employee_pack`` 工厂，各包的 blueprints.py 退化为 ~10 行 shim：
-shim 传入自身 backend 目录以保持 workspace_root 与 mod 路径回退行为不变。
-
-注意：MODstore 侧 ``render_employee_pack_blueprints_py`` 仍生成自包含 blueprints
-（向下兼容旧宿主），两者运行时行为一致。
-"""
+"""Shared employee dispatch; runtime files belong in writable application data."""
 
 from __future__ import annotations
 
@@ -19,17 +10,13 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter
 
 from app.mod_sdk.errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
 
 def build_employee_pack(mod_id: str, stem: str, label: str, backend_dir: str) -> Dict[str, Any]:
-    """为单个员工包构建 blueprints 模块级属性（与历史生成样板逐行等价）。
-
-    ``backend_dir`` 必须传 shim 自身的 ``backend`` 目录绝对路径，用于：
-    - workspace_root 默认值（<mods>/_employees/workspace）
-    - mod 注册表不可用时的包目录回退解析
-    """
+    """Build employee routes; backend_dir locates bundled code when registry lookup fails."""
     emp_id = mod_id
 
     def _resolve_mod_path(mid: str) -> Optional[str]:
@@ -164,7 +151,7 @@ def build_employee_pack(mod_id: str, stem: str, label: str, backend_dir: str) ->
             ctx["http_get"] = _http_disabled
             ctx["http_post"] = _http_disabled
         _workspace_root = os.environ.get("EMPLOYEE_WORKSPACE_ROOT", "") or os.path.abspath(
-            os.path.join(backend_dir, "..", "..", "workspace")
+            os.path.join(get_app_data_dir(), "mods", "_employees", "workspace")
         )
         os.makedirs(_workspace_root, exist_ok=True)
         ctx["workspace_root"] = _workspace_root

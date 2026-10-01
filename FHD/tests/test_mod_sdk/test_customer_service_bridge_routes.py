@@ -1,10 +1,4 @@
-"""客户服务桥路由回归：微信域退役后不再引用已删除的服务。
-
-``/user-cs/analyze``、``/user-cs/delivery/check-payment``、``/user-cs/wechat/send``
-曾调用 39db69615（wechat 域退役）已删除的 ``app.services.wechat_*``；请求时会
-``ModuleNotFoundError`` 返回 500（Windows 真机取证里 ch-wechat-* 因此落 BLOCKED）。
-本用例挂载真实 Mod 蓝图、用宿主假实现驱动，锁住这些路由可跑通。
-"""
+"""Exercise customer-service routes and bundled employee dispatch."""
 
 from __future__ import annotations
 
@@ -76,6 +70,23 @@ def test_analyze_route_runs_without_retired_wechat_services(client):
     assert body["success"] is True
     assert body["data"]["pipeline"]["stage"] == "idle"
     assert body["data"]["message_count"] == 0
+
+
+@pytest.mark.parametrize("override", [False, True])
+def test_status_uses_writable_workspace(client, monkeypatch, tmp_path, override):
+    data_dir = tmp_path / "runtime-data"
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(data_dir))
+    root = data_dir / ("custom-workspace" if override else "mods/_employees/workspace")
+    if override:
+        monkeypatch.setenv("EMPLOYEE_WORKSPACE_ROOT", str(root))
+    else:
+        monkeypatch.delenv("EMPLOYEE_WORKSPACE_ROOT", raising=False)
+    response = client.get(f"/api/mod/{MOD_ID}/user-cs/status")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["success"] is True, body
+    assert body["data"]["status"] == "ready"
+    assert root.is_dir()
 
 
 def test_check_payment_route_runs_without_retired_wechat_services(client):
