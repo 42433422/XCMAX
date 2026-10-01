@@ -5,7 +5,6 @@ description = "XCAGI - 企业 AI 员工平台（桌面版 + Web 版并行交付�
 license = "Apache-2.0"
 requires-python = ">=3.11"
 # 运行时依赖见 optional-dependencies；CI/生产安装：requirements-server-api.txt（与 server-api extra 对齐）
-# LG-W1-T1：吸收的 LangGraph 运行时根依赖，全部经 [tool.uv.sources] 重定向到本地 XCAGI vendored 包。
 dependencies = [
     "langgraph==1.2.10",
     "langgraph-checkpoint==4.1.1",
@@ -32,7 +31,7 @@ server-api = [
     "python-docx>=1.1.0",
     "python-pptx>=1.0.2",
     "pdfplumber>=0.11.0",
-    "pypdf>=6.15,<7",
+    "pypdf>=6.19,<7",
     "reportlab>=5,<6",
     "Pillow>=12.3.0",
     "gunicorn>=22.0.0",
