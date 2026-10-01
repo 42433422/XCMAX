@@ -4,12 +4,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 
-/**
- * 真实端到端：启动完整 Electron 应用（dist/main.js），由 stub-backend.mjs
- * 充当本地后端，验证单测（mock electron）无法覆盖的真实链路：
- *   主进程 bootstrap → spawn 后端子进程 → /api/ping 就绪探测 → splash 进度
- *   → loadURL 主界面 → preload contextBridge → 渲染进程 IPC invoke → 主进程 handle。
- */
+// 实际 Electron + stub 后端覆盖启动、preload 与 IPC 往返；不代替安装包业务验收。
 
 let electronApp: ElectronApplication
 let page: Page
@@ -18,6 +13,7 @@ let backendPort: number
 
 type XcagiDesktopBridge = {
   getDataDir: () => Promise<string>
+  getAppIdentity: () => Promise<{ version: string; name: string; isPackaged: boolean }>
   clipboardWriteText: (text: string) => Promise<{ ok: boolean }>
   clipboardReadText: () => Promise<string>
   consumeDeepLink: () => Promise<string | null>
@@ -113,6 +109,8 @@ test('真实 IPC 往返：getDataDir 返回主进程 userData 路径', async () 
     (window as unknown as { xcagiDesktop: XcagiDesktopBridge }).xcagiDesktop.getDataDir(),
   )
   expect(dataDir).toBe(userDataDir)
+  const identity = await page.evaluate(() => (window as unknown as { xcagiDesktop: XcagiDesktopBridge }).xcagiDesktop.getAppIdentity())
+  expect(identity.version).toMatch(/^\d+\.\d+\.\d+\.\d+$/)
 })
 
 test('真实 IPC 往返：剪贴板写入后可读回', async () => {
