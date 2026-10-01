@@ -6,7 +6,7 @@
 ## 1. 当前版本信息
 
 **未闭环。** 版本 1.0.0.5，stable OTA 关闭。2026-09-30 客户指针实测为 main 83939363、SHA-256 92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf；其说明仍误写 macOS 稳定版。本轮最终安装器尚未冻结。
-#2103/#2104 已进入83939363；#2096由#2107进入main e5b2412替代；main #2111/#2112/#2113已纳入#2109集成分支，待保护检查与合入。历史API诊断原始记录在 `C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`，不能核销GUI业务。配对503已恢复；最新诊断扫描36802829978仍有2严重、23高危（7个子锁文件14项urllib3告警已复扫清零；主线Dependabot、CodeQL身份与生产内核仍阻塞），最终SHA复扫未完成。用户无可用客户测试机/快照，独立Windows runner继续实装验证；最终包、A/B/C和客户发布未完成。
+#2103/#2104 已进入83939363；#2096由#2107进入main e5b2412替代；main #2111/#2112/#2113/#2114已纳入#2109集成分支；Mod初始化清理采用#2114主线替代实现并保留三类异常重试回归，待保护检查与合入。历史API诊断原始记录在 `C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`，不能核销GUI业务。配对503已恢复；最新诊断扫描36802829978仍有2严重、23高危（7个子锁文件14项urllib3告警已复扫清零；主线Dependabot、CodeQL身份与生产内核仍阻塞），最终SHA复扫未完成。用户无可用客户测试机/快照，独立Windows runner继续实装验证；最终包、A/B/C和客户发布未完成。
 
 ## 3. Release Gate 定义
 
@@ -28,7 +28,7 @@ G1–G13 必须以同一最终安装包的实际结果核销；缺测、失败�
 | G10 | 覆盖升级读回 | YELLOW | b26ebf748同包36811187839：旧版1.0.0.1正常GUI创建客户/产品ID1；覆盖后同账号、租户1及workspace owner tenant:1读回原ID和名称、联系人、电话、地址、型号、规格、单价。[实装JSON](evidence/e2e/windows-closeout-20260930/gui-36811187839-upgrade.json)；最终包未冻结，不计最终B轮 |
 | G11 | 升级后业务 | YELLOW | 同包36811187839复测：GUI新建客户/产品ID2，完成采购入库10、销售、送货单导出、出库2与库存8；审批59491dc7b1ec4db48140532da7b6180d执行1/1后界面读回AI客户ID3。[原始JSON](evidence/e2e/windows-closeout-20260930/gui-36811187839-upgrade.json)。前次5秒列表加载失败证据保留，30秒诊断窗口复跑通过；最终主线包仍须复验 |
 | G12 | 退出重开 | UNKNOWN | 旧包历史证据不能替代最终候选复验 |
-| G13 | 备份恢复 | YELLOW | 19e8af2db包36812420025由计划任务引擎手动启动Daily/Weekly，产物1945600字节；隔离恢复SHA-256 b5713cb6a8a03cf9a6db7b7f79b13096399bc5edebfdefa72c902e1ca1cca366，实际应用同账号tenant:1读回本轮客户/产品ID1及原字段。[调度](evidence/e2e/windows-closeout-20260930/acceptance-36812420025-recovery.json)、[GUI读回](evidence/e2e/windows-closeout-20260930/gui-36812420025-restored.json)。999出库拒绝且库存8不变；拒绝授权7c4506f373ba4d6ab4d21008197568e4未执行且客户不存在。自然到点触发未测；升级恢复还须读回旧版原始ID，最终C轮未完成 |
+| G13 | 备份恢复 | YELLOW | 同一19e8af2db包36813277882：计划任务引擎手动启动Daily/Weekly生成1880064字节备份，SHA-256 6511d13e18e8d57ce09f2deb2957335e9f9c68fed80532a97fe5f136bd5446e4；隔离恢复实际应用同账号、租户1及workspace owner tenant:1读回旧版原始客户/产品ID1和关键字段。[调度证据](evidence/e2e/windows-closeout-20260930/acceptance-36813277882-upgrade.json)、[原数据GUI读回](evidence/e2e/windows-closeout-20260930/gui-36813277882-legacy-restored.json)。同包36812420025库存故障及拒绝授权未写入已验证；自然到点触发未测，最终C轮未完成 |
 
 ## 6. 实机验收任务
 
