@@ -37,9 +37,6 @@ def _make_service():
         return service
 
 
-# ========================= _default_purchase_unit_for_import ==============
-
-
 class TestDefaultPurchaseUnitForImport:
     def test_from_request_context_excel_customer_hint(self):
         result = AIChatApplicationService._default_purchase_unit_for_import(
@@ -86,9 +83,6 @@ class TestDefaultPurchaseUnitForImport:
         assert result == "高优先级"
 
 
-# ========================= _customer_hint_from_preview_grid ==============
-
-
 class TestCustomerHintFromPreviewGrid:
     def test_non_dict_preview(self):
         result = AIChatApplicationService._customer_hint_from_preview_grid(None)
@@ -107,9 +101,6 @@ class TestCustomerHintFromPreviewGrid:
         assert result == ""
 
 
-# ========================= _try_structured_reload_records =================
-
-
 class TestTryStructuredReloadRecords:
     def test_no_file_path(self):
         result = AIChatApplicationService._try_structured_reload_records({}, {})
@@ -126,9 +117,6 @@ class TestTryStructuredReloadRecords:
             {"file_path": ""}, {"file_path": ""}
         )
         assert result is None
-
-
-# ========================= _infer_excel_column_roles_with_llm ============
 
 
 class TestInferExcelColumnRolesWithLLM:
@@ -180,9 +168,6 @@ class TestInferExcelColumnRolesWithLLM:
         assert post.call_args.kwargs["headers"]["Authorization"] == "Bearer pat-xcauto"
         assert post.call_args.kwargs["json"]["model"] == "xcauto-account"
         assert post.call_args.args[0] == "https://xiu-ci.com/v1/chat/completions"
-
-
-# ========================= _extract_excel_import_records ==================
 
 
 class TestExtractExcelImportRecords:
@@ -264,10 +249,31 @@ class TestExtractExcelImportRecords:
         assert records == []
 
 
-# ========================= _try_handle_dynamic_workflow - more branches ===
-
-
 class TestTryHandleDynamicWorkflowExtended:
+    @pytest.mark.parametrize("message", ["请创建一条出货记录。", "请处理一个未知业务。"])
+    def test_standalone_clarification_asks_without_execution_confirmation(self, message):
+        from app.application.workflow.planner import LLMWorkflowPlanner
+
+        service = _make_service()
+        service.workflow_engine.run = Mock()
+        service.approval_service.create_approval_request = Mock()
+        planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
+        plan = planner._fallback_plan("missing-input", message, {})
+        result = service._open_clarification_gate(
+            user_id="u1",
+            plan=plan,
+            tool_registry={},
+            runtime_context={},
+            thinking_steps="",
+            message=message,
+        )
+        assert result["data"]["action"] == "clarification_required"
+        assert result["response"] == plan.nodes[0].params["question"]
+        assert message in result["response"]
+        assert not service._pending_workflows
+        service.workflow_engine.run.assert_not_called()
+        service.approval_service.create_approval_request.assert_not_called()
+
     def test_pro_import_with_db_file_success(self):
         service = _make_service()
         repo = InMemoryAgentRunRepository()
@@ -753,9 +759,6 @@ class TestTryHandleDynamicWorkflowExtended:
         assert "审批" in result["response"]
 
 
-# ========================= _build_workflow_thinking_steps =================
-
-
 class TestBuildWorkflowThinkingSteps:
     def test_basic(self):
         service = _make_service()
@@ -815,9 +818,6 @@ class TestBuildWorkflowThinkingSteps:
         assert "products.query" not in result
 
 
-# ========================= _workflow_products_float_query =================
-
-
 class TestWorkflowProductsFloatQuery:
     def test_from_node_params(self):
         service = _make_service()
@@ -858,9 +858,6 @@ class TestWorkflowProductsFloatQuery:
         mock_result.node_results = []
         q = service._workflow_products_float_query(mock_plan, mock_result, "查产品")
         assert q == ""
-
-
-# ========================= _format_workflow_run_response ==================
 
 
 class TestFormatWorkflowRunResponse:
@@ -934,9 +931,6 @@ class TestFormatWorkflowRunResponse:
         assert result["autoAction"]["type"] == "show_products_float"
 
 
-# ========================= _dispatch_workflow_tool ========================
-
-
 class TestDispatchWorkflowTool:
     def test_exception(self):
         service = _make_service()
@@ -946,9 +940,6 @@ class TestDispatchWorkflowTool:
         ):
             result = service._dispatch_workflow_tool("products", "query", {})
         assert result["success"] is False
-
-
-# ========================= _excel_analysis_payload_present - grid branch ==
 
 
 class TestExcelAnalysisPayloadPresentGridBranch:
@@ -973,9 +964,6 @@ class TestExcelAnalysisPayloadPresentGridBranch:
         )
 
 
-# ========================= _inject_excel_vector_context - more branches ==
-
-
 class TestInjectExcelVectorContextExtended:
     def test_with_non_dict_context(self):
         service = _make_service()
@@ -994,9 +982,6 @@ class TestInjectExcelVectorContextExtended:
         with patch("app.application.get_excel_vector_search_app_service", return_value=mock_svc):
             result = service._inject_excel_vector_context("hello", {"excel_index_id": "idx1"})
         assert "excel_vector_context" not in result
-
-
-# ========================= process_chat - more branches ===================
 
 
 class TestProcessChatExtended:
@@ -1135,9 +1120,6 @@ class TestProcessChatExtended:
         assert result["success"] is True
 
 
-# ========================= _resolve_unit_price_column - extended ==========
-
-
 class TestResolveUnitPriceColumnExtended:
     def test_forced_override_not_in_keys(self):
         col, err = AIChatApplicationService._resolve_unit_price_column(
@@ -1198,9 +1180,6 @@ class TestResolveUnitPriceColumnExtended:
         assert col == "调价后单价"
 
 
-# ========================= _handle_tool_call - extended ===================
-
-
 class TestHandleToolCallExtended:
     def test_no_tool_key(self):
         service = _make_service()
@@ -1213,9 +1192,6 @@ class TestHandleToolCallExtended:
         result_data = {"params": {}}
         result = service._handle_tool_call(response_data, ai_result, result_data, None, "")
         assert result["success"] is True
-
-
-# ========================= _execute_normal_mode_tools ====================
 
 
 class TestExecuteNormalModeTools:
@@ -1252,9 +1228,6 @@ class TestExecuteNormalModeTools:
         assert kwargs["raw_text"] == "客户闭环验收客户 发货单：产品A 5桶"
 
 
-# ========================= _execute_customers_query - extended ============
-
-
 class TestExecuteCustomersQueryExtended:
     def test_service_failure(self):
         service = _make_service()
@@ -1262,9 +1235,6 @@ class TestExecuteCustomersQueryExtended:
         with patch("app.bootstrap.get_customer_app_service", side_effect=RuntimeError("fail")):
             result = service._execute_customers_query(response_data)
         assert "失败" in result["response"]
-
-
-# ========================= _build_response - extended =====================
 
 
 class TestBuildResponseExtended:

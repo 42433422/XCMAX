@@ -191,10 +191,18 @@ class _AIChatApplicationServicePart03Mixin:
         thinking_steps: str,
         message: str,
     ) -> dict[str, _facade().Any] | None:
-        """写/高风险操作参数缺失或多候选歧义时：插入反问节点 → 执行暂停 → 记录待确认。
-
-        返回澄清响应；无需澄清则返回 None（继续正常流程）。
-        """
+        """显示独立澄清问题，或暂停缺参数的业务节点。"""
+        for node in plan.nodes or []:
+            if (node.tool_id, node.action) == ("clarify", "ask") and not node.params.get(
+                "target_node_id"
+            ):
+                question = str(node.params.get("question") or "请补充业务操作和参数。")
+                return {
+                    "success": True,
+                    "message": "需要澄清",
+                    "response": question,
+                    "data": {"text": question, "action": "clarification_required", "data": {}},
+                }
         from app.application.workflow.clarification_node import (
             build_clarify_node,
             insert_clarify_node,

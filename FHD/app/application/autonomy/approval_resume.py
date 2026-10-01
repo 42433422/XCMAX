@@ -8,7 +8,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from app.domain.autonomy.audit_log import append_autonomy_audit
 from app.domain.autonomy.autonomy_guard import RiskDecision, evaluate_risk
@@ -95,7 +95,7 @@ def _read_ledger() -> list[dict[str, Any]]:
 def _latest(action_id: str) -> dict[str, Any] | None:
     for item in reversed(_read_ledger()):
         if str(item.get("action_id") or "") == str(action_id):
-            return item
+            return cast("dict[str, Any]", item)
     return None
 
 
