@@ -52,6 +52,8 @@ function Start-App([string]$label) {
     Start-Sleep -Seconds 2
   }
   Check ($health.status -ne 'unhealthy' -and @($health.runtime.blockers).Count -eq 0 -and $status.readyForUi -eq $true) "$label.first_start_ready" "health=$($health.status); blockers=$(@($health.runtime.blockers).Count); readyForUi=$($status.readyForUi); pid=$($p.Id)"
+  $installed = Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw | ConvertFrom-Json
+  Check ($health.git_sha -eq $installed.gitSha -and ($label -like 'old*' -or $installed.gitSha -eq $CandidateSha)) "$label.runtime_build_identity" "installed=$($installed.gitSha); running=$($health.git_sha); release=$($health.release_id)"
   $listener = Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction Stop | Select-Object -First 1
   $backend = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)"
   $dataArgument = [regex]::Match($backend.CommandLine, '--data-dir\s+(?:"([^"]+)"|(\S+))'); $actualDataRoot = if ($dataArgument.Groups[1].Success) { $dataArgument.Groups[1].Value } else { $dataArgument.Groups[2].Value }

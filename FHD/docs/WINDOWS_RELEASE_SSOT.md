@@ -1,9 +1,7 @@
 # Windows 发布交付 SSOT
 
-> 登记于 [SSOT_INDEX.md](SSOT_INDEX.md)「windows-release」域。每轮按本文件回填事实；实机证据不足不得标记交付完成。
+> 登记于 [SSOT_INDEX.md](SSOT_INDEX.md)「windows-release」域。Gate 状态仅用 `GREEN`/`YELLOW`/`RED`/`UNKNOWN`；`RED` 须附复现步骤、证据链接及修复 PR/commit，修复后重测，不得直接改状态。实机证据不足不得标记交付完成。
 > 判据：[desktop-real-machine-acceptance-protocol.md](e2e/desktop-real-machine-acceptance-protocol.md)；签名风险决策：[windows_signing_acceptance.json](../config/windows_signing_acceptance.json)。
-> macOS 发布状态见 [MACOS_RELEASE_SSOT.md](MACOS_RELEASE_SSOT.md)。
-> Gate 状态仅用 `GREEN`/`YELLOW`/`RED`/`UNKNOWN`；`RED` 须附复现步骤、证据链接及修复 PR/commit，修复后重测，不得直接改状态。
 
 ## 1. 当前版本信息
 
