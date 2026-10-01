@@ -82,14 +82,10 @@ def _products_compat_agent_user_id(request: Request, payload: dict[str, Any]) ->
 def _products_compat_status_code(result: dict[str, Any]) -> int:
     if result.get("success"):
         return 200
-    status_code = result.get("status_code")
-    if status_code is None:
+    try:
+        parsed = int(result.get("status_code") or 0)
+    except RECOVERABLE_ERRORS:
         parsed = 0
-    else:
-        try:
-            parsed = int(status_code)
-        except RECOVERABLE_ERRORS:
-            parsed = 0
     if 400 <= parsed < 600:
         return parsed
     if str(result.get("error_code") or "") in {"tool_exception", "http_exception"}:
