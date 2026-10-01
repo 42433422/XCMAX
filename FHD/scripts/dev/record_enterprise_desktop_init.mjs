@@ -91,7 +91,7 @@ async function openAiApproval(name) {
   await expect.poll(() => card.innerText().then(text => Boolean(text && text !== previousCardText)).catch(() => false), { timeout: 60000 }).toBe(true)
   const submit = card.getByRole('button', { name: /^提交审批$|^确认执行$/ })
   if (await submit.isVisible()) await submit.click()
-  const requestNos = (await card.locator('.approval-request-nos').innerText()).replace(/^审批请求号：/, '').split('、').map(s => s.trim()).filter(Boolean)
+  const requestNos = (await card.locator('.approval-request-nos').innerText({ timeout: 90000 })).replace(/^审批请求号：/, '').split('、').map(s => s.trim()).filter(Boolean)
   if (requestNos.length !== 1) throw new Error('AI task must expose one correlated durable approval request')
   await card.getByRole('link', { name: '前往审批' }).click()
   const detail = page.locator('[data-tutorial-id="approval-detail"]')
