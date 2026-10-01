@@ -42,7 +42,6 @@ _WRITE_REQUIRED_FALLBACK: dict[tuple[str, str], list[str]] = {
     ("inventory", "stock_in"): ["quantity"],
     ("inventory", "stock_out"): ["product_id", "warehouse_id", "quantity"],
     ("business_db", "write"): ["entity", "operation", "payload"],
-    # ERP 工具（吸收 Odoo 18，Task 5/6）
     ("sales", "quote"): ["items"],
     ("sales", "create_order"): ["items"],
     ("sales", "confirm"): ["order_id"],
@@ -316,7 +315,6 @@ def detect_erp_clarification(
                     )
                 )
 
-    # 5) ERP 业务确认（Task 6：盘点差异复审 / 凭证冲销确认 / 信用额度超限）
     for node in plan.nodes or []:
         if node.tool_id == "clarify":
             continue

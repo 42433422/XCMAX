@@ -205,9 +205,7 @@ class TestClarificationTTL:
                 now=1000.0,
             )
         }
-        # 未过期
         assert entry_is_expired(pending["u1"], now=1000.0 + 60) is False
-        # 超过 TTL（默认 1800s）→ 过期
         assert entry_is_expired(pending["u1"], now=1000.0 + 2000) is True
         expired = sweep_expired(pending, now=1000.0 + 2000)
         assert expired == ["u1"]
@@ -343,14 +341,45 @@ class TestErpClarification:
         assert ("finance", "journal_entry_create") in _WRITE_REQUIRED_FALLBACK
 
 
+_SHIPMENT_ITEM = {
+    "product_name": "Paint",
+    "quantity_tins": 1,
+    "tin_spec": 10,
+    "unit_price": 1,
+    "amount": 10,
+}
+_SHIPMENT_ALIAS = {**_SHIPMENT_ITEM}
+_SHIPMENT_ALIAS["name"] = _SHIPMENT_ALIAS.pop("product_name")
+_SHIPMENT_ALIAS["spec_per_tin"] = _SHIPMENT_ALIAS.pop("tin_spec")
+
+
 @pytest.mark.parametrize(
     "params,expected",
     [
         ({"unit_name": "待用户提供"}, ["unit_name", "products"]),
-        ({"unit_name": "Co", "products": [{}]}, ["products.0"]),
+        ({"unit_name": "Co", "products": "invalid"}, ["products"]),
         ({"unit_name": "Co", "products": ["invalid"]}, ["products.0"]),
-        ({"unit_name": "Co", "products": [{"name": "Paint"}]}, []),
-        ({"purchase_unit": "Co", "items": [{"product_name": "Paint"}]}, []),
+        ({"unit_name": "Co", "products": [_SHIPMENT_ITEM]}, []),
+        ({"purchase_unit": "Co", "items": [_SHIPMENT_ALIAS]}, []),
+        *[
+            (
+                {"unit_name": "Co", "products": [{**_SHIPMENT_ITEM, key: value}]},
+                [f"products.0.{key}"],
+            )
+            for key, value in [
+                ("quantity_tins", None),
+                ("tin_spec", None),
+                ("unit_price", None),
+                ("amount", None),
+                ("product_name", "待用户提供"),
+                ("quantity_tins", 1.5),
+                ("amount", float("nan")),
+                ("quantity_tins", True),
+                ("amount", float("inf")),
+                ("unit_price", -1),
+                ("amount", 10**1000),
+            ]
+        ],
     ],
 )
 def test_shipment_inputs_shared_by_clarification_and_execution(params, expected):
@@ -360,28 +389,26 @@ def test_shipment_inputs_shared_by_clarification_and_execution(params, expected)
     from app.services.tools_execution.registry import _validate_required_params
     from app.services.tools_workflow_shipments_docs import _registered_router_shipment_records
 
-    plan = PlanGraph(
-        plan_id="shipment",
-        intent="create",
-        nodes=[
-            WorkflowNode(
-                node_id="create",
-                tool_id="shipment_records",
-                action="create",
-                params=params,
-                risk="high",
-                idempotent=False,
-            )
-        ],
+    params = {**params, "contact_person": "Alice", "contact_phone": "1234"}
+    node = WorkflowNode(
+        node_id="create",
+        tool_id="shipment_records",
+        action="create",
+        params=params,
+        risk="high",
+        idempotent=False,
     )
+    plan = PlanGraph(plan_id="shipment", intent="create", nodes=[node])
     clarification = needs_clarification(plan, {})
     assert (clarification[0]["missing_fields"] if clarification else []) == expected
     assert _validate_required_params("shipment_records", "create", params)[0] is (not expected)
-    if not expected:
-        assert validate_tool_call("shipment_records", "create", params).ok
+    assert validate_tool_call("shipment_records", "create", params).ok is (not expected)
     svc = MagicMock()
     svc.create_shipment.return_value = {"success": True}
     with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
         result = _registered_router_shipment_records("create", params, {}, "admin", "")
     assert result["success"] is (not expected)
     assert svc.create_shipment.call_count == (0 if expected else 1)
+    if not expected:
+        for key in ("contact_person", "contact_phone"):
+            assert svc.create_shipment.call_args.kwargs[key] == params[key]

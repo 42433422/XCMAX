@@ -503,7 +503,15 @@ _SPECIAL_TEST_FIXTURES: dict[tuple[str, str], list[dict[str, Any]]] = {
             "name": "create_shipment_record",
             "input": {
                 "unit_name": "星光贸易",
-                "products": [{"name": "5003", "qty": 2}],
+                "products": [
+                    {
+                        "name": "5003",
+                        "quantity_tins": 2,
+                        "tin_spec": 10,
+                        "unit_price": 3.5,
+                        "amount": 70,
+                    }
+                ],
                 "contact_person": "张三",
                 "contact_phone": "13900000000",
             },
