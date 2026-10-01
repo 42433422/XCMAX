@@ -222,20 +222,14 @@ export function backendExecutable(): { command: string; args: string[]; cwd: str
 
 export function readPackagedAppVersion(): string {
   if (!app.isPackaged) return 'dev'
-  const candidates = [
-    path.join(process.resourcesPath, 'backend', 'version.txt'),
-    path.join(process.resourcesPath, 'product-sku.json')
-  ]
-  for (const filePath of candidates) {
+  for (const relative of ['build-info.json', 'backend/version.txt', 'backend/_internal/version.txt']) {
     try {
-      if (!fs.existsSync(filePath)) continue
+      const filePath = path.join(process.resourcesPath, relative)
       const raw = readJsonTextFile(filePath).trim()
-      if (filePath.endsWith('version.txt')) return raw || 'unknown'
-      const json = JSON.parse(raw) as { sku?: string; schema_version?: number }
-      return `${json.sku || 'enterprise'}-${json.schema_version ?? 1}`
-    } catch {
-      /* ignore */
-    }
+      const value: unknown = relative.endsWith('.json') ? JSON.parse(raw).version : raw
+      const version = typeof value === 'string' ? value.trim() : ''
+      if (/^\d+(?:\.\d+){3}$/.test(version)) return version
+    } catch { /* Try the next packaged product identity, never the SKU schema. */ }
   }
   return app.getVersion()
 }
