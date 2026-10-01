@@ -6,7 +6,7 @@
 ## 1. 当前版本信息
 
 **未闭环。** 版本 1.0.0.5，stable OTA 关闭。2026-09-30 客户指针实测为 main 83939363、SHA-256 92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf；其说明仍误写 macOS 稳定版。本轮最终安装器尚未冻结。
-#2103/#2104 已进入83939363；#2096由#2107进入main e5b2412替代；main #2111/#2112/#2113/#2114已纳入#2109集成分支；Mod初始化清理采用#2114主线替代实现并保留三类异常重试回归，待保护检查与合入。历史API诊断原始记录在 `C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`，不能核销GUI业务。配对503已恢复；最新诊断扫描36802829978仍有2严重、23高危（7个子锁文件14项urllib3告警已复扫清零；主线Dependabot、CodeQL身份与生产内核仍阻塞），最终SHA复扫未完成。用户无可用客户测试机/快照，独立Windows runner继续实装验证；最终包、A/B/C和客户发布未完成。
+#2103/#2104 已进入83939363；#2096由#2107进入main e5b2412替代；main #2111/#2112/#2113/#2114已纳入#2109集成分支；Mod初始化清理采用#2114主线替代实现并保留三类异常重试回归，36815134200全量检查37956通过、2失败：评估打印夹具未使用租户输出路径、送货单断言仍按旧无模板行位；本轮修正夹具与标准模板业务值/合计断言，局部回归通过，完整保护检查与合入仍待完成。历史API诊断原始记录在 `C:\xcagi-delivery-closeout\evidence-final-clean\acceptance.json`、`C:\xcagi-delivery-closeout\evidence-final-upgrade\acceptance.json`，不能核销GUI业务。配对503已恢复；最新诊断扫描36802829978仍有2严重、23高危（7个子锁文件14项urllib3告警已复扫清零；主线Dependabot、CodeQL身份与生产内核仍阻塞），最终SHA复扫未完成。用户无可用客户测试机/快照，独立Windows runner继续实装验证；最终包、A/B/C和客户发布未完成。
 
 ## 3. Release Gate 定义
 

@@ -1545,9 +1545,7 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr("app.db.session.SessionLocal", factory)
     monkeypatch.setattr("app.db.SessionLocal", factory)
-    # 全量套件顺序敏感：DI 容器是全局单例，若更早的用例已按 conftest 固定数据目录
-    # 物化 shipment 服务，这里会拿到冻结了旧路径的缓存实例，生成文件不在本用例的
-    # 受控输出目录内 → 不登记 artifacts → KeyError。丢弃缓存容器，强制按当前环境重建。
+    # Rebuild cached services for this isolated data root.
     monkeypatch.setattr(_di_registry, "_registry", None)
     try:
         with tenant_scope(1):
@@ -1579,14 +1577,10 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
             try:
                 sheet = workbook["发货单"]
                 assert "下载测试客户" in sheet["A2"].value
-                assert [sheet[cell].value for cell in ["A5", "D5", "E5", "F5", "G5", "D7"]] == [
-                    "9803",
-                    "下载测试产品",
-                    3,
-                    12,
-                    36,
-                    900,
-                ]
+                assert [
+                    sheet[cell].value for cell in ["A4", "D4", "E4", "F4", "G4", "H4", "I4"]
+                ] == ["9803", "下载测试产品", 3, 12, 36, 25, 900]
+                assert [sheet[cell].value for cell in ["E15", "G15", "D16"]] == [3, 36, 900]
             finally:
                 workbook.close()
             assert _client("another-user").get(run.artifacts[0].uri).status_code in {403, 404}

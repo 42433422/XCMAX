@@ -3882,8 +3882,11 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
     method = "POST"
     path = "/api/shipment/generate"
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
-        shipment_output_dir = Path(tmp_dir) / "shipment_outputs"
-        shipment_output_dir.mkdir()
+        from app.utils.path_io.path_utils import get_shipment_output_dir
+
+        with patch.dict(os.environ, {"XCAGI_DATA_DIR": tmp_dir}):
+            shipment_output_dir = Path(get_shipment_output_dir())
+        shipment_output_dir.mkdir(parents=True)
         shipment_file = shipment_output_dir / "shipment.xlsx"
         shipment_file.write_bytes(b"fake")
         service.generate_shipment_document.return_value = {
