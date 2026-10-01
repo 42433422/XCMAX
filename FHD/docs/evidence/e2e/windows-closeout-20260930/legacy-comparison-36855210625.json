@@ -1,0 +1,124 @@
+{
+  "run": "36855210625-1",
+  "result": "old_upgrade_restore_gui_identity_and_fields_verified",
+  "identity": {
+    "status": 200,
+    "account_kind": "enterprise",
+    "tenant_id": 1,
+    "workspace_id": null,
+    "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23",
+    "workspace_owner_id": "tenant:1"
+  },
+  "old_records": {
+    "customer": {
+      "id": 1,
+      "customer_name": "WIN-GUI-36855210625-1-seed-客户",
+      "contact_person": "验收员",
+      "contact_phone": "13800000001",
+      "contact_address": "WIN-GUI-36855210625-1-seed隔离验收地址",
+      "created_at": "2026-10-01T11:35:46",
+      "updated_at": "2026-10-01T11:35:46"
+    },
+    "product": {
+      "id": 1,
+      "model_number": "WIN-GUI-36855210625-1-seed",
+      "name": "WIN-GUI-36855210625-1-seed-产品",
+      "specification": "10",
+      "price": 12.5,
+      "quantity": 0,
+      "description": "",
+      "category": "",
+      "brand": "",
+      "unit": "个",
+      "is_active": true,
+      "created_at": "2026-10-01T11:35:47.456873",
+      "updated_at": "2026-10-01T11:35:47.456873"
+    }
+  },
+  "new_customer_id": 2,
+  "new_product_id": 2,
+  "ai": {
+    "created_customer": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+    "id": 3,
+    "fields": {
+      "id": 3,
+      "customer_name": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+      "contact_person": "AI验收员",
+      "contact_phone": "13800000002",
+      "contact_address": "",
+      "created_at": "2026-10-01T11:39:19",
+      "updated_at": "2026-10-01T11:39:19"
+    },
+    "approval_request": "45593e0ba27d400f82c637b5d705e9b4",
+    "execution": {
+      "status": "approved",
+      "success": true,
+      "code": "workflow_execution_success",
+      "message": "AI 工作流执行完成",
+      "workflow_executed": true,
+      "nodes_executed": 1,
+      "nodes_total": 1
+    },
+    "receipt": "提示\n\n审批通过！\nAI 工作流：执行完成（节点 1/1），AI 工作流执行完成\n\n确定"
+  },
+  "shipment_unit": {
+    "unit": "WIN-GUI-36855210625-1-after-upgrade-独立发货单位",
+    "saved": {
+      "success": true,
+      "message": "发货单创建成功",
+      "shipment": {
+        "id": 1,
+        "order_number": "20261001113807",
+        "purchase_unit": "WIN-GUI-36855210625-1-after-upgrade-独立发货单位",
+        "contact_person": "发货验收员",
+        "contact_phone": "13800000003",
+        "contact_address": null,
+        "items": [
+          {
+            "id": null,
+            "product_name": "WIN-GUI-36855210625-1-after-upgrade-产品",
+            "model_number": "WIN-GUI-36855210625-1-after-upgrade",
+            "quantity_tins": 2,
+            "quantity_kg": 20,
+            "spec_per_tin": 10,
+            "unit_price": 12.5,
+            "amount": 250
+          }
+        ],
+        "status": "pending",
+        "created_at": "2026-10-01T11:38:07.371253",
+        "updated_at": "2026-10-01T11:38:07.393219",
+        "printed_at": null,
+        "printer_name": null,
+        "total_amount": 250,
+        "total_quantity_tins": 2,
+        "total_quantity_kg": 20
+      },
+      "run_id": "run_1ae4c9cef73a4c7a91046a6970266686",
+      "agent_run_id": "run_1ae4c9cef73a4c7a91046a6970266686",
+      "agent_status": "completed"
+    },
+    "record": {
+      "purchase_unit": "WIN-GUI-36855210625-1-after-upgrade-独立发货单位",
+      "unit_id": null,
+      "product_name": "WIN-GUI-36855210625-1-after-upgrade-产品",
+      "model_number": "WIN-GUI-36855210625-1-after-upgrade",
+      "quantity_kg": 20,
+      "quantity_tins": 2,
+      "tin_spec": 10,
+      "unit_price": 12.5,
+      "amount": 250,
+      "status": "pending",
+      "printed_at": null,
+      "printer_name": null,
+      "raw_text": "source=shipment_excel_etl",
+      "parsed_data": "{\"id\": null, \"order_number\": \"20261001113807\", \"purchase_unit\": \"WIN-GUI-36855210625-1-after-upgrade-独立发货单位\", \"contact_person\": \"发货验收员\", \"contact_phone\": \"13800000003\", \"contact_address\": null, \"items\": [{\"id\": null, \"product_name\": \"WIN-GUI-36855210625-1-after-upgrade-产品\", \"model_number\": \"WIN-GUI-36855210625-1-after-upgrade\", \"quantity_tins\": 2, \"quantity_kg\": 20.0, \"spec_per_tin\": 10.0, \"unit_price\": 12.5, \"amount\": 250}], \"status\": \"pending\", \"created_at\": \"2026-10-01T11:38:07.371253\", \"updated_at\": \"2026-10-01T11:38:07.393219\", \"printed_at\": null, \"printer_name\": null, \"total_amount\": 250, \"total_quantity_tins\": 2, \"total_quantity_kg\": 20.0}",
+      "id": 1,
+      "created_at": "2026-10-01T11:38:07.371253",
+      "updated_at": "2026-10-01T11:38:07.393219",
+      "tenant_id": 1
+    },
+    "reloaded_gui_readback": true
+  },
+  "stock_remaining": 8
+}

@@ -1,0 +1,575 @@
+{
+  "run": "36855210625-1",
+  "phase": "after-upgrade",
+  "started_at": "2026-10-01T11:37:31.042Z",
+  "marker": "WIN-GUI-36855210625-1-after-upgrade",
+  "names": {
+    "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+    "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+    "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+    "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+    "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+  },
+  "cases": [
+    {
+      "id": "normal_login",
+      "started_at": "2026-10-01T11:37:31.114Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23"
+      },
+      "finished_at": "2026-10-01T11:37:43.438Z"
+    },
+    {
+      "id": "tenant_identity",
+      "started_at": "2026-10-01T11:37:43.438Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23",
+        "workspace_owner_id": "tenant:1"
+      },
+      "finished_at": "2026-10-01T11:37:43.662Z"
+    },
+    {
+      "id": "old_ui_readback",
+      "started_at": "2026-10-01T11:37:43.662Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "original_run": "36855210625-1",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "workspace_owner_id": "tenant:1",
+        "records": {
+          "customer": {
+            "id": 1,
+            "customer_name": "WIN-GUI-36855210625-1-seed-客户",
+            "contact_person": "验收员",
+            "contact_phone": "13800000001",
+            "contact_address": "WIN-GUI-36855210625-1-seed隔离验收地址",
+            "created_at": "2026-10-01T11:35:46",
+            "updated_at": "2026-10-01T11:35:46"
+          },
+          "product": {
+            "id": 1,
+            "model_number": "WIN-GUI-36855210625-1-seed",
+            "name": "WIN-GUI-36855210625-1-seed-产品",
+            "specification": "10",
+            "price": 12.5,
+            "quantity": 0,
+            "description": "",
+            "category": "",
+            "brand": "",
+            "unit": "个",
+            "is_active": true,
+            "created_at": "2026-10-01T11:35:47.456873",
+            "updated_at": "2026-10-01T11:35:47.456873"
+          }
+        }
+      },
+      "finished_at": "2026-10-01T11:37:50.049Z"
+    },
+    {
+      "id": "visible_version",
+      "started_at": "2026-10-01T11:37:50.049Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "expected_version": "1.0.0.5",
+        "visible_version": "1.0.0.5"
+      },
+      "finished_at": "2026-10-01T11:37:50.771Z"
+    },
+    {
+      "id": "customer",
+      "started_at": "2026-10-01T11:37:50.771Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/mod/xcagi-erp-domain-bridge/customers",
+        "status": 200,
+        "id": 2,
+        "fields": {
+          "id": 2,
+          "customer_name": "WIN-GUI-36855210625-1-after-upgrade-客户",
+          "contact_person": "验收员",
+          "contact_phone": "13800000001",
+          "contact_address": "WIN-GUI-36855210625-1-after-upgrade隔离验收地址",
+          "created_at": "2026-10-01T11:37:56",
+          "updated_at": "2026-10-01T11:37:56"
+        },
+        "original_fields": {
+          "contact_person": "验收员",
+          "contact_phone": "13800000001",
+          "contact_address": "WIN-GUI-36855210625-1-after-upgrade隔离验收地址"
+        },
+        "input_address": "WIN-GUI-36855210625-1-after-upgrade隔离验收地址"
+      },
+      "finished_at": "2026-10-01T11:38:01.982Z"
+    },
+    {
+      "id": "product",
+      "started_at": "2026-10-01T11:38:01.982Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/mod/xcagi-erp-domain-bridge/products/add",
+        "status": 200,
+        "id": 2,
+        "fields": {
+          "id": 2
+        },
+        "original_fields": {
+          "id": 2,
+          "model_number": "WIN-GUI-36855210625-1-after-upgrade",
+          "name": "WIN-GUI-36855210625-1-after-upgrade-产品",
+          "specification": "10",
+          "price": 12.5,
+          "quantity": 0,
+          "description": "",
+          "category": "",
+          "brand": "",
+          "unit": "个",
+          "is_active": true,
+          "created_at": "2026-10-01T11:38:03.785674",
+          "updated_at": "2026-10-01T11:38:03.785674"
+        }
+      },
+      "finished_at": "2026-10-01T11:38:06.044Z"
+    },
+    {
+      "id": "shipment_unit_readback",
+      "started_at": "2026-10-01T11:38:06.044Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "unit": "WIN-GUI-36855210625-1-after-upgrade-独立发货单位",
+        "saved": {
+          "success": true,
+          "message": "发货单创建成功",
+          "shipment": {
+            "id": 1,
+            "order_number": "20261001113807",
+            "purchase_unit": "WIN-GUI-36855210625-1-after-upgrade-独立发货单位",
+            "contact_person": "发货验收员",
+            "contact_phone": "13800000003",
+            "contact_address": null,
+            "items": [
+              {
+                "id": null,
+                "product_name": "WIN-GUI-36855210625-1-after-upgrade-产品",
+                "model_number": "WIN-GUI-36855210625-1-after-upgrade",
+                "quantity_tins": 2,
+                "quantity_kg": 20,
+                "spec_per_tin": 10,
+                "unit_price": 12.5,
+                "amount": 250
+              }
+            ],
+            "status": "pending",
+            "created_at": "2026-10-01T11:38:07.371253",
+            "updated_at": "2026-10-01T11:38:07.393219",
+            "printed_at": null,
+            "printer_name": null,
+            "total_amount": 250,
+            "total_quantity_tins": 2,
+            "total_quantity_kg": 20
+          },
+          "run_id": "run_1ae4c9cef73a4c7a91046a6970266686",
+          "agent_run_id": "run_1ae4c9cef73a4c7a91046a6970266686",
+          "agent_status": "completed"
+        },
+        "record": {
+          "purchase_unit": "WIN-GUI-36855210625-1-after-upgrade-独立发货单位",
+          "unit_id": null,
+          "product_name": "WIN-GUI-36855210625-1-after-upgrade-产品",
+          "model_number": "WIN-GUI-36855210625-1-after-upgrade",
+          "quantity_kg": 20,
+          "quantity_tins": 2,
+          "tin_spec": 10,
+          "unit_price": 12.5,
+          "amount": 250,
+          "status": "pending",
+          "printed_at": null,
+          "printer_name": null,
+          "raw_text": "source=shipment_excel_etl",
+          "parsed_data": "{\"id\": null, \"order_number\": \"20261001113807\", \"purchase_unit\": \"WIN-GUI-36855210625-1-after-upgrade-独立发货单位\", \"contact_person\": \"发货验收员\", \"contact_phone\": \"13800000003\", \"contact_address\": null, \"items\": [{\"id\": null, \"product_name\": \"WIN-GUI-36855210625-1-after-upgrade-产品\", \"model_number\": \"WIN-GUI-36855210625-1-after-upgrade\", \"quantity_tins\": 2, \"quantity_kg\": 20.0, \"spec_per_tin\": 10.0, \"unit_price\": 12.5, \"amount\": 250}], \"status\": \"pending\", \"created_at\": \"2026-10-01T11:38:07.371253\", \"updated_at\": \"2026-10-01T11:38:07.393219\", \"printed_at\": null, \"printer_name\": null, \"total_amount\": 250, \"total_quantity_tins\": 2, \"total_quantity_kg\": 20.0}",
+          "id": 1,
+          "created_at": "2026-10-01T11:38:07.371253",
+          "updated_at": "2026-10-01T11:38:07.393219",
+          "tenant_id": 1
+        },
+        "reloaded_gui_readback": true
+      },
+      "finished_at": "2026-10-01T11:38:15.892Z"
+    },
+    {
+      "id": "purchase",
+      "started_at": "2026-10-01T11:38:15.892Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/purchase/orders",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1,
+          "order_no": "PO20261001113822",
+          "supplier_id": 1,
+          "warehouse_id": null,
+          "order_date": "2026-10-01",
+          "delivery_date": null,
+          "total_amount": 125,
+          "paid_amount": 0,
+          "status": "draft",
+          "approver": null,
+          "approve_date": null,
+          "remark": "WIN-GUI-36855210625-1-after-upgrade",
+          "created_at": "2026-10-01 11:38:22.419999",
+          "updated_at": "2026-10-01 11:38:22.419999",
+          "tenant_id": 1
+        }
+      },
+      "finished_at": "2026-10-01T11:38:23.832Z"
+    },
+    {
+      "id": "purchase_inbound",
+      "started_at": "2026-10-01T11:38:23.832Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/purchase/inbounds",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1,
+          "inbound_no": "PI20261001113826",
+          "order_id": 1,
+          "supplier_id": 1,
+          "warehouse_id": 1,
+          "inbound_date": "2026-10-01",
+          "total_amount": 125,
+          "status": "completed",
+          "handler": null,
+          "remark": "WIN-GUI-36855210625-1-after-upgrade",
+          "created_at": "2026-10-01 11:38:26.385921",
+          "updated_at": "2026-10-01 11:38:26.385921",
+          "tenant_id": 1
+        }
+      },
+      "finished_at": "2026-10-01T11:38:29.864Z"
+    },
+    {
+      "id": "sales_order",
+      "started_at": "2026-10-01T11:38:29.864Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "order_id": 2,
+        "order_number": "26-10-00002A",
+        "output_file": "C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI\\tenants\\1\\shipment_outputs\\发货单_26-10-00002A_20261001_113833.xlsx"
+      },
+      "finished_at": "2026-10-01T11:38:34.629Z"
+    },
+    {
+      "id": "shipping_delivery_export",
+      "started_at": "2026-10-01T11:38:34.629Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "filename": "发货单_26-10-00002A_20261001_113833.xlsx",
+        "bytes": 4808,
+        "sha256": "59db54c6ba67cf8e8d14bbd52c68d560431a7452c3b0895b2ca6aa3949d5f261"
+      },
+      "finished_at": "2026-10-01T11:38:35.708Z"
+    },
+    {
+      "id": "stock_out",
+      "started_at": "2026-10-01T11:38:35.708Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/inventory/out",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "ledger_id": 1,
+          "quantity": 2,
+          "remaining_quantity": 8
+        },
+        "order_number": "26-10-00002A",
+        "expected_remaining_quantity": 8
+      },
+      "finished_at": "2026-10-01T11:38:37.694Z"
+    },
+    {
+      "id": "ui_readback",
+      "started_at": "2026-10-01T11:38:37.694Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品"
+      },
+      "finished_at": "2026-10-01T11:38:40.500Z"
+    },
+    {
+      "id": "ai_business",
+      "started_at": "2026-10-01T11:38:40.500Z",
+      "input": {
+        "customer": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "product": "WIN-GUI-36855210625-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36855210625-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "created_customer": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+        "id": 3,
+        "fields": {
+          "id": 3,
+          "customer_name": "WIN-GUI-36855210625-1-after-upgrade-AI客户",
+          "contact_person": "AI验收员",
+          "contact_phone": "13800000002",
+          "contact_address": "",
+          "created_at": "2026-10-01T11:39:19",
+          "updated_at": "2026-10-01T11:39:19"
+        },
+        "approval_request": "45593e0ba27d400f82c637b5d705e9b4",
+        "execution": {
+          "status": "approved",
+          "success": true,
+          "code": "workflow_execution_success",
+          "message": "AI 工作流执行完成",
+          "workflow_executed": true,
+          "nodes_executed": 1,
+          "nodes_total": 1
+        },
+        "receipt": "提示\n\n审批通过！\nAI 工作流：执行完成（节点 1/1），AI 工作流执行完成\n\n确定"
+      },
+      "finished_at": "2026-10-01T11:39:27.597Z"
+    }
+  ],
+  "observations": [
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/customers",
+      "status": 200,
+      "id": 2,
+      "fields": {
+        "id": 2,
+        "customer_name": "WIN-GUI-36855210625-1-after-upgrade-客户",
+        "contact_person": "验收员",
+        "contact_phone": "13800000001",
+        "contact_address": "WIN-GUI-36855210625-1-after-upgrade隔离验收地址",
+        "created_at": "2026-10-01T11:37:56",
+        "updated_at": "2026-10-01T11:37:56"
+      },
+      "observed_at": "2026-10-01T11:37:56.713Z"
+    },
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/products/add",
+      "status": 200,
+      "id": 2,
+      "fields": {
+        "id": 2
+      },
+      "observed_at": "2026-10-01T11:38:03.850Z"
+    },
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/purchase/suppliers",
+      "status": 200,
+      "id": 1,
+      "fields": {
+        "id": 1,
+        "code": "WIN-GUI-36855210625-1-after-upgrade",
+        "name": "WIN-GUI-36855210625-1-after-upgrade-供应商",
+        "contact_person": "采购验收员",
+        "contact_phone": "",
+        "contact_email": "",
+        "address": "",
+        "payment_terms": "月结",
+        "credit_limit": 0,
+        "status": "active",
+        "rating": 3,
+        "remark": "",
+        "created_at": "2026-10-01 11:38:19.472362",
+        "updated_at": "2026-10-01 11:38:19.472362",
+        "tenant_id": 1
+      },
+      "observed_at": "2026-10-01T11:38:19.726Z"
+    },
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/purchase/orders",
+      "status": 200,
+      "id": 1,
+      "fields": {
+        "id": 1,
+        "order_no": "PO20261001113822",
+        "supplier_id": 1,
+        "warehouse_id": null,
+        "order_date": "2026-10-01",
+        "delivery_date": null,
+        "total_amount": 125,
+        "paid_amount": 0,
+        "status": "draft",
+        "approver": null,
+        "approve_date": null,
+        "remark": "WIN-GUI-36855210625-1-after-upgrade",
+        "created_at": "2026-10-01 11:38:22.419999",
+        "updated_at": "2026-10-01 11:38:22.419999",
+        "tenant_id": 1
+      },
+      "observed_at": "2026-10-01T11:38:22.557Z"
+    },
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/purchase/inbounds",
+      "status": 200,
+      "id": 1,
+      "fields": {
+        "id": 1,
+        "inbound_no": "PI20261001113826",
+        "order_id": 1,
+        "supplier_id": 1,
+        "warehouse_id": 1,
+        "inbound_date": "2026-10-01",
+        "total_amount": 125,
+        "status": "completed",
+        "handler": null,
+        "remark": "WIN-GUI-36855210625-1-after-upgrade",
+        "created_at": "2026-10-01 11:38:26.385921",
+        "updated_at": "2026-10-01 11:38:26.385921",
+        "tenant_id": 1
+      },
+      "observed_at": "2026-10-01T11:38:26.738Z"
+    },
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/inventory/out",
+      "status": 200,
+      "id": 1,
+      "fields": {
+        "ledger_id": 1,
+        "quantity": 2,
+        "remaining_quantity": 8
+      },
+      "observed_at": "2026-10-01T11:38:37.066Z"
+    },
+    {
+      "action": "ai_execution_receipt",
+      "approval_request": "45593e0ba27d400f82c637b5d705e9b4",
+      "execution": {
+        "status": "approved",
+        "success": true,
+        "code": "workflow_execution_success",
+        "message": "AI 工作流执行完成",
+        "workflow_executed": true,
+        "nodes_executed": 1,
+        "nodes_total": 1
+      },
+      "receipt": "提示\n\n审批通过！\nAI 工作流：执行完成（节点 1/1），AI 工作流执行完成\n\n确定",
+      "observed_at": "2026-10-01T11:39:20.317Z"
+    },
+    {
+      "action": "normal_ui_reload_before_ai_readback",
+      "observed_at": "2026-10-01T11:39:20.761Z"
+    }
+  ],
+  "result": "business_regression_passed",
+  "finished_at": "2026-10-01T11:39:27.597Z",
+  "unfinished": [],
+  "full_customer_acceptance": "not_verified"
+}
