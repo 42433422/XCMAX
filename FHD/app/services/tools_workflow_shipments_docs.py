@@ -187,10 +187,10 @@ def _registered_router_shipment_orders(
             from pathlib import Path
 
             from app.application.agent_orchestrator.artifact_files import store_spreadsheet
-            from app.utils.path_io.path_utils import get_app_data_dir
+            from app.utils.path_io.path_utils import get_shipment_output_dir
 
             generated = Path(str(result.get("file_path") or "")).resolve()
-            root = (Path(get_app_data_dir()) / "shipment_outputs").resolve()
+            root = Path(get_shipment_output_dir()).resolve()
             # 仅登记位于受控输出目录内的真实 xlsx：路径不在受控目录（例如自定义
             # 输出位置）时不登记 artifact，但保持生成结果原样返回。
             if generated.is_relative_to(root) and generated.suffix.lower() == ".xlsx":

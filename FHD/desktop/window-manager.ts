@@ -160,12 +160,8 @@ export async function createWindow(): Promise<void> {
     minHeight: 760,
     title: APP_NAME,
     autoHideMenuBar: process.platform !== 'darwin',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
-    }
+    show: true,
+    backgroundColor: '#f4f7fb'
   }
   if (fs.existsSync(icon)) {
     winOpts.icon = icon
@@ -184,16 +180,18 @@ export async function createWindow(): Promise<void> {
       height: 50
     }
   }
-  winOpts.show = true
-  winOpts.backgroundColor = '#f4f7fb'
-  const mainWindow = new BrowserWindow(winOpts)
+  const mainWindow = new BrowserWindow({ ...winOpts, webPreferences: {
+    preload: path.join(__dirname, 'preload.js'),
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true
+  } })
   desktopRuntime.mainWindow = mainWindow
   desktopRuntime.rendererFailedDuringStartup = false
-  const createdWindow = mainWindow
   let stateWriteTimer: NodeJS.Timeout | null = null
   const persistWindowState = () => {
-    if (createdWindow.isDestroyed() || createdWindow.isMinimized() || createdWindow.isFullScreen()) return
-    writeWindowState(statePath, createdWindow.getNormalBounds())
+    if (mainWindow.isDestroyed() || mainWindow.isMinimized() || mainWindow.isFullScreen()) return
+    writeWindowState(statePath, mainWindow.getNormalBounds())
   }
   const scheduleWindowStateWrite = () => {
     if (stateWriteTimer) clearTimeout(stateWriteTimer)
@@ -202,15 +200,15 @@ export async function createWindow(): Promise<void> {
       persistWindowState()
     }, 250)
   }
-  createdWindow.on('move', scheduleWindowStateWrite)
-  createdWindow.on('resize', scheduleWindowStateWrite)
+  mainWindow.on('move', scheduleWindowStateWrite)
+  mainWindow.on('resize', scheduleWindowStateWrite)
   // 常驻：非退出时关窗仅隐藏到托盘，后端保持常驻实现"秒开"；仅托盘"退出"或
   // app.quit() 才真正关闭（isQuitting 已在 before-quit 置位）。
-  createdWindow.on('close', (event) => {
+  mainWindow.on('close', (event) => {
     persistWindowState()
     if (!app.isQuitting) {
       event.preventDefault()
-      createdWindow.hide()
+      mainWindow.hide()
     }
   })
   if (process.platform !== 'darwin') {
@@ -257,7 +255,7 @@ export async function createWindow(): Promise<void> {
       return
     }
     if (!app.isQuitting && details.reason !== 'clean-exit') {
-      void dialog.showMessageBox(createdWindow, {
+      void dialog.showMessageBox(mainWindow, {
         type: 'error',
         title: APP_NAME,
         message: '界面进程意外退出',
@@ -266,7 +264,7 @@ export async function createWindow(): Promise<void> {
         defaultId: 0,
         cancelId: 1,
       }).then(({ response }) => {
-        if (response === 0 && !createdWindow.isDestroyed()) createdWindow.reload()
+        if (response === 0 && !mainWindow.isDestroyed()) mainWindow.reload()
         else app.quit()
       })
     }

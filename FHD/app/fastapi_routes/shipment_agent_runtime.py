@@ -88,6 +88,12 @@ def _run_shipment_agent(
         "route_confirmed": True,
         "service_source": f"fastapi_{source}",
     }
+    if str(request.url.path).startswith("/api/mod/"):
+        from app.infrastructure.auth.dependencies import get_logged_in_user
+
+        actor = get_logged_in_user(request)
+        user_id = str(actor.id)
+        runtime_context.update(user_id=user_id, tenant_id=str(actor.tenant_id))
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
         user_id=user_id,

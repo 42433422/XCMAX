@@ -409,8 +409,7 @@ def __getattr__(name: str) -> Any:
     except KeyError as exc:
         raise AttributeError(name) from exc
     module = import_module(module_name)
-    value = getattr(module, attribute) if attribute else module
-    return value
+    return getattr(module, attribute) if attribute else module
 
 
 def __dir__() -> list[str]:

@@ -119,13 +119,13 @@ describe('desktop crash reporting — M12 CSRF 豁免请求头', () => {
   })
 
   it('JSON 渲染错误上报携带专用头且保留 application/json', () => {
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }))
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({ ok: true, status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
     reportRendererError({ port: 17500, writeLog: vi.fn() }, { type: 'renderer', error: 'boom' })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('http://127.0.0.1:17500/api/desktop/crash-report')
     expect(init.method).toBe('POST')
     expect(init.headers).toEqual({
@@ -143,7 +143,7 @@ describe('desktop crash reporting — M12 CSRF 豁免请求头', () => {
       name === 'crashDumps' ? crashDir : tmpRoot,
     )
 
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }))
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({ ok: true, status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     vi.useFakeTimers()
 
@@ -152,11 +152,10 @@ describe('desktop crash reporting — M12 CSRF 豁免请求头', () => {
       await vi.advanceTimersByTimeAsync(30_001)
 
       expect(fetchMock).toHaveBeenCalledTimes(1)
-      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+      const [url, init] = fetchMock.mock.calls[0]
       expect(url).toBe('http://127.0.0.1:17500/api/desktop/crash-report')
       expect(init.headers).toEqual({ 'X-XCAGI-Desktop-Local': '1' })
       expect(Object.keys(init.headers as Record<string, string>)).not.toContain('Content-Type')
-      // 上报成功后写入 `.uploaded` 标记，避免下次启动重复上报
       expect(fs.existsSync(path.join(crashDir, '.uploaded-markers', 'crash-1.dmp.ok'))).toBe(true)
     } finally {
       vi.useRealTimers()

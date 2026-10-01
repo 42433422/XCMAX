@@ -157,11 +157,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     def mod_shipment_units():
         return _invoke("shipment", "records_units")
 
-    @router.get("/shipment/download/{filename:path}")
-    def mod_shipment_download(filename: str):
-        from app.mod_sdk.host_services import shipment_download
+    from app.mod_sdk.erp_domain_compat import register_tenant_shipment_routes
 
-        return shipment_download(filename)
+    register_tenant_shipment_routes(router)
 
     @router.get("/orders")
     def mod_orders_list(limit: int = Query(default=100, ge=1, le=5000)):

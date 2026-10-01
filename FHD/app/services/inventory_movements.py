@@ -5,8 +5,11 @@ from __future__ import annotations
 import importlib
 import logging
 import math
+from contextlib import nullcontext
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+
+from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator.business_write_guard import worker_write_guard
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -49,12 +52,16 @@ class InventoryMovementsMixin:
         remark: str | None = None,
         model_number: str | None = None,
         warehouse_name: str | None = None,
+        session: Session | None = None,
     ) -> dict[str, Any]:
         try:
             quantity = _positive_movement_quantity(quantity)
         except ValueError:
             return {"success": False, "message": "入库数量必须是有效正数"}
-        with _facade().get_db() as db, worker_write_guard(db):
+        with (
+            nullcontext(session) if session is not None else _facade().get_db() as db,
+            worker_write_guard(db),
+        ):
             try:
                 if product_id is None and model_number:
                     products = (
@@ -153,7 +160,8 @@ class InventoryMovementsMixin:
                     created_at=now,
                 )
                 db.add(transaction)
-                db.commit()
+                if session is None:
+                    db.commit()
                 return {
                     "success": True,
                     "message": "入库成功",
@@ -164,7 +172,8 @@ class InventoryMovementsMixin:
                     },
                 }
             except RECOVERABLE_ERRORS as e:
-                db.rollback()
+                if session is None:
+                    db.rollback()
                 _facade().logger.error("入库失败: %s", e)
                 return {"success": False, "message": str(e)}
 

@@ -1,21 +1,6 @@
-﻿# XCMAX 桌面端定时备份脚本（Windows 计划任务调用入口）
-# =============================================================================
-# 作用：在 XCAGI 应用未运行时（如午休），由 Windows 计划任务触发一次 SQLite
-#       在线热备份。复用 xcagi-backend.exe --desktop --migrate-only --backup
-#       子命令，内部调用 sqlite3.backup() API + integrity_check 校验。
-#
-# 与应用内 backup_scheduler.py 的关系：
-#   - 应用运行时：lifespan 启动 backup_scheduler 线程，每 24h 备份
-#   - 应用未运行：本脚本由计划任务触发，作为补充（双保险）
-#   - 两者文件名格式一致，清理策略一致（daily 7日 + weekly 28日）
-#
-# 用法：
-#   .\XcagiBackup.ps1                              # 仅本地备份
-#   .\XcagiBackup.ps1 -ExternalDir "E:\XCAGI-Backup"  # 同时备份到 USB 盘
-#   .\XcagiBackup.ps1 -DataDir "D:\XCAGI-Data"     # 指定数据目录
-#
-# 日志：%APPDATA%\XCAGI\logs\backup.log
-# =============================================================================
+﻿# Windows 计划任务入口：调用打包后端的 SQLite 在线备份及 integrity_check。
+# -DataDir 指定数据目录；-ExternalDir 同时写入外部位置。
+# 日志：%APPDATA%/XCAGI/logs/backup.log；保留策略由后端统一执行。
 [CmdletBinding()]
 param(
   [string]$DataDir = "",
@@ -46,38 +31,7 @@ function Find-BackendExe {
   $packagedBackendDir = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
   $packagedBackendExe = Join-Path $packagedBackendDir 'xcagi-backend.exe'
   if (Test-Path $packagedBackendExe) { return $packagedBackendExe }
-  # 1. 注册表（NSIS 安装）
-  $regPaths = @(
-    "HKCU:\Software\XCAGI",
-    "HKLM:\Software\XCAGI",
-    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XCAGI"
-  )
-  foreach ($rp in $regPaths) {
-    try {
-      if (Test-Path $rp) {
-        $v = Get-ItemProperty -Path $rp -ErrorAction SilentlyContinue
-        if ($v.InstallPath) {
-          $candidate = Join-Path $v.InstallPath "resources\backend\xcagi-backend.exe"
-          if (Test-Path $candidate) { return $candidate }
-        }
-        if ($v.UninstallString) {
-          $dir = Split-Path $v.UninstallString -Parent
-          $candidate = Join-Path $dir "resources\backend\xcagi-backend.exe"
-          if (Test-Path $candidate) { return $candidate }
-        }
-      }
-    } catch { }
-  }
-  # 2. 常见安装路径
-  $commonPaths = @(
-    Join-Path $env:LOCALAPPDATA "Programs\XCAGI\resources\backend\xcagi-backend.exe",
-    Join-Path $env:LOCALAPPDATA "Programs\xcagi\resources\backend\xcagi-backend.exe",
-    "C:\Program Files\XCAGI\resources\backend\xcagi-backend.exe",
-    "C:\Program Files (x86)\XCAGI\resources\backend\xcagi-backend.exe"
-  )
-  foreach ($p in $commonPaths) {
-    if ($p -and (Test-Path $p)) { return $p }
-  }
+  # Missing packaged backend is an error; never run a different installed instance.
   return $null
 }
 

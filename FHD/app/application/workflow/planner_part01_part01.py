@@ -39,13 +39,13 @@ def _extract_named_slot(message: str, patterns: tuple[str, ...]) -> str:
         if match:
             value = match.group(1)
             if (value[:1], value[-1:]) in (("「", "」"), ("“", "”"), ('"', '"'), ("'", "'")):
-                value = value[1:-1]
+                return value[1:-1].strip()
             value = _facade()._clean_db_slot_value(value)
             if value:
                 return value
     quoted = _facade().re.search("[「“\\\"']([^」”\\\"']+)[」”\\\"']", message)
     if quoted:
-        return _facade()._clean_db_slot_value(quoted.group(1))
+        return quoted.group(1).strip()
     return ""
 
 
@@ -86,6 +86,13 @@ def _extract_business_db_id(message: str) -> int | None:
 
 def _extract_marked_value(message: str, labels: tuple[str, ...]) -> str:
     label_pattern = "|".join(_facade().re.escape(label) for label in labels)
+    quoted = _facade().re.search(
+        rf"""(?:{label_pattern})\s*[:：是为]?\s*(?:「([^」]*)」|“([^”]*)”|"([^"]*)"|'([^']*)')""",
+        message,
+        flags=_facade().re.I,
+    )
+    if quoted:
+        return next(value for value in quoted.groups() if value is not None).strip()
     match = _facade().re.search(
         f"""(?:{label_pattern})\\s*[:：是为]?\\s*[「“\\"']?([^，,。；;\\n]+?)[」”\\"']?(?=\\s+(?:联系人|电话|地址|型号|规格|单价|价格|数量|库存|单位|状态|客户|产品|原材料|物料|发货单|ID|id)\\s*[:：是为]?|[，,。；;]|$)""",
         message,

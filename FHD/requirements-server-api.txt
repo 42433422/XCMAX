@@ -33,6 +33,7 @@ python-dotenv>=1.2.2
 httpx==0.26.0
 socksio>=1.0.0
 requests>=2.33.0
+urllib3>=2.8.0
 python-alipay-sdk>=3.3.0
 edge-tts>=6.1.10
 faster-whisper>=1.0.0
@@ -62,5 +63,5 @@ pydantic>=2.0.0
 pydantic-settings>=2.11.0
 email-validator>=2.0.0
 passlib[bcrypt]>=1.7.4
-PyJWT>=2.8.0
+PyJWT>=2.15.0
 PyYAML>=6.0.2

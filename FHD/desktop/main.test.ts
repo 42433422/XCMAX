@@ -113,6 +113,20 @@ const updaterMocks = vi.hoisted(() => ({
 vi.mock('electron', () => electronMocks)
 vi.mock('electron-updater', () => ({ autoUpdater: updaterMocks.autoUpdater }))
 
+async function withPackagedResources(files: Record<string, string | Buffer>, verify: () => Promise<void>) {
+  const resources = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-test-resources-'))
+  const previous = process.resourcesPath
+  Object.assign(process, { resourcesPath: resources }); electronMocks.app.isPackaged = true
+  try {
+    for (const [name, content] of Object.entries(files)) { const target = path.join(resources, name); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, content) }
+    await verify()
+  } finally {
+    Object.assign(process, { resourcesPath: previous }); electronMocks.app.isPackaged = false
+    if (path.dirname(resources) !== path.resolve(os.tmpdir()) || !path.basename(resources).startsWith('xcagi-test-resources-')) throw new Error('Unexpected temporary resource path')
+    fs.rmSync(resources, { recursive: true, force: true })
+  }
+}
+
 describe('main — resolveDefaultDesktopPort', () => {
   beforeEach(() => {
     delete process.env.XCAGI_DESKTOP_PORT
@@ -395,43 +409,17 @@ describe('main — readPackagedProductSku', () => {
   })
 
   it('returns null when packaged but product-sku.json missing (graceful fallback)', async () => {
-    // 模拟 packaged 模式，但 resourcesPath 下没有 product-sku.json
-    electronMocks.app.isPackaged = true
-    const tmpResources = path.join(os.tmpdir(), `xcagi-test-resources-${Date.now()}`)
-    fs.mkdirSync(tmpResources, { recursive: true })
-    const savedResourcesPath = (process as { resourcesPath?: string }).resourcesPath
-    ;(process as { resourcesPath?: string }).resourcesPath = tmpResources
-    try {
+    await withPackagedResources({}, async () => {
       const { readPackagedProductSku } = await import('./main.js')
       expect(readPackagedProductSku()).toBeNull()
-    } finally {
-      if (savedResourcesPath === undefined) {
-        delete (process as { resourcesPath?: string }).resourcesPath
-      } else {
-        (process as { resourcesPath?: string }).resourcesPath = savedResourcesPath
-      }
-      electronMocks.app.isPackaged = false
-    }
+    })
   })
 
   it('uses official API root for packaged enterprise SKU', async () => {
-    electronMocks.app.isPackaged = true
-    const tmpResources = path.join(os.tmpdir(), `xcagi-test-resources-${Date.now()}-${Math.random().toString(36).slice(2)}`)
-    fs.mkdirSync(tmpResources, { recursive: true })
-    fs.writeFileSync(path.join(tmpResources, 'product-sku.json'), JSON.stringify({ sku: 'enterprise' }))
-    const savedResourcesPath = (process as { resourcesPath?: string }).resourcesPath
-    ;(process as { resourcesPath?: string }).resourcesPath = tmpResources
-    try {
+    await withPackagedResources({ 'product-sku.json': JSON.stringify({ sku: 'enterprise' }) }, async () => {
       const { backendEditionEnv } = await import('./main.js')
       expect(backendEditionEnv().XCAGI_MARKET_BASE_URL).toBe('https://xiu-ci.com')
-    } finally {
-      if (savedResourcesPath === undefined) {
-        delete (process as { resourcesPath?: string }).resourcesPath
-      } else {
-        (process as { resourcesPath?: string }).resourcesPath = savedResourcesPath
-      }
-      electronMocks.app.isPackaged = false
-    }
+    })
   })
 })
 
@@ -600,6 +588,21 @@ describe('main — trusted external account URLs', () => {
 })
 
 describe('main — readPackagedAppVersion', () => {
+  it.each<[Record<string, string | Buffer>, string]>([
+    [{ 'build-info.json': '{"version":"1.0.0.5"}', 'backend/version.txt': '1.0.0.4', 'product-sku.json': '{"sku":"enterprise","schema_version":1}' }, '1.0.0.5'],
+    [{ 'backend/_internal/version.txt': '1.0.0.1' }, '1.0.0.1'],
+    [{ 'backend/version.txt': '1.0.0.2' }, '1.0.0.2'],
+    [{ 'product-sku.json': '{"sku":"enterprise","schema_version":1}' }, '10.0.0'],
+    [{ 'build-info.json': '{"version":5}', 'backend/_internal/version.txt': Buffer.from('\uFEFF1.0.0.5', 'utf16le') }, '1.0.0.5'],
+    [{ 'build-info.json': '{', 'backend/version.txt': 'unknown' }, '10.0.0'],
+    [{ 'build-info.json': '{"version":""}', 'backend/version.txt': '1.0.0' }, '10.0.0'],
+  ])('reads packaged product identity %j as %s', async (files, expected) => {
+    await withPackagedResources(files, async () => {
+      const { readPackagedAppVersion } = await import('./desktop-config.js')
+      expect(readPackagedAppVersion()).toBe(expected)
+    })
+  })
+
   it('returns "dev" in unpackaged mode', async () => {
     electronMocks.app.isPackaged = false
     const { readPackagedAppVersion } = await import('./main.js')

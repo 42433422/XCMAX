@@ -53,9 +53,9 @@ def _svc():
 
 
 def _resolve_shipment_output_path(file_arg: object) -> Path | None:
-    from app.utils.path_io.path_utils import get_app_data_dir
+    from app.utils.path_io.path_utils import get_shipment_output_dir
 
-    output_dir = Path(get_app_data_dir()).resolve() / "shipment_outputs"
+    output_dir = Path(get_shipment_output_dir()).resolve()
     try:
         candidate = resolve_under_allowed_dirs(str(file_arg or ""), [output_dir])
     except (OSError, UnsafeDownloadPathError):

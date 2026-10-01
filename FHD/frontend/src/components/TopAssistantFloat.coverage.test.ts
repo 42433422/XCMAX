@@ -111,6 +111,7 @@ vi.mock('@/utils/workflowNav', () => ({
 
 vi.mock('@/utils/erpDomainPaths', () => ({
   resolveErpApiPath: (p: string) => p,
+  resolveErpApiPathWhenReady: async (p: string) => p,
 }))
 
 vi.mock('@/composables/useEnterpriseScopedWorkflowRegistry', () => ({
@@ -214,7 +215,6 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
       'fetch',
       vi.fn(async () => makeFetchResponse()),
     )
-    // 重置 localStorage 状态
     localStorage.clear()
   })
 
@@ -272,7 +272,6 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
-    // 默认就是 push 标签
     expect(wrapper.find('.assistant-empty').exists()).toBe(true)
     expect(wrapper.text()).toContain('暂无推送')
   })

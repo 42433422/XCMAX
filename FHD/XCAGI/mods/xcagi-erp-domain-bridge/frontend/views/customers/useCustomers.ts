@@ -1,4 +1,4 @@
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onActivated, watch } from 'vue'
 import customersApi from '@/api/customers'
 import ordersApi from '@/api/orders'
 import templatePreviewApi from '@/api/templatePreview'
@@ -24,12 +24,8 @@ interface CustomerAddForm {
   address: string
 }
 
-interface CustomerEditForm {
+interface CustomerEditForm extends CustomerAddForm {
   id?: number | string | null
-  customer_name: string
-  contact_person: string
-  contact_phone: string
-  address: string
 }
 
 interface CustomersListResponse extends ApiResponse<CustomerRow[]> {
@@ -37,12 +33,8 @@ interface CustomersListResponse extends ApiResponse<CustomerRow[]> {
 }
 
 // 购买单位下拉项：接口可能返回字符串或对象（多字段名兼容）
-interface UnitOptionObject {
-  id?: number | string
-  name?: string
+interface UnitOptionObject extends CustomerRow {
   symbol?: string
-  unit_name?: string
-  customer_name?: string
   unitName?: string
 }
 
@@ -55,7 +47,6 @@ interface UnitsPayload {
   units?: unknown[]
 }
 
-// 客户导出模板（templatePreviewApi.listTemplates 响应）
 interface ExportTemplateItem {
   id: number | string
   name: string
@@ -70,8 +61,6 @@ interface ExportTemplatesResponse {
   templates?: ExportTemplateItem[]
 }
 
-// 拆分自 CustomersView.vue script（原第 200–508 行）；逻辑逐字迁移，行为不变。
-// DataTable / ConfirmDialog 组件仍在入口 SFC 中导入。
 export function useCustomers() {
   const pageNavTitle = useCoreNavLabel('customers');
   const productsNavLabel = useCoreNavLabel('products');
@@ -108,8 +97,6 @@ export function useCustomers() {
     { key: 'customer_name', label: '客户名称' },
     { key: 'contact_person', label: '联系人' },
     { key: 'contact_phone', label: '电话' },
-    // 列 key 必须与接口返回字段一致（customers/list 返回 contact_address），
-    // 否则 DataTable 取不到值、#cell-* 槽位也不命中，地址列恒显示 '-'。
     { key: 'contact_address', label: '地址' }
   ];
 
@@ -368,11 +355,13 @@ export function useCustomers() {
     loadCustomers({ reset: true });
   });
 
-  onMounted(() => {
+  const refreshCustomersView = () => {
     loadPurchaseUnitOptions();
     loadCustomers({ reset: true });
     loadTemplateOptions();
-  });
+  };
+  onMounted(refreshCustomersView);
+  onActivated(refreshCustomersView);
 
   return {
     pageNavTitle,

@@ -39,6 +39,7 @@ const modRoutes = [
 ]
 
 const modMenu = [
+  { id: 'mod-erp-purchase', label: '采购管理', icon: 'fa-shopping-cart', path: `${PREFIX}/purchase` },
   { id: 'mod-erp-products', label: '业务对象', icon: 'fa-cubes', path: `${PREFIX}/products` },
   { id: 'mod-erp-customers', label: '组织管理', icon: 'fa-users', path: `${PREFIX}/customers` },
   { id: 'mod-erp-orders', label: '业务单据', icon: 'fa-file-text-o', path: `${PREFIX}/orders` },

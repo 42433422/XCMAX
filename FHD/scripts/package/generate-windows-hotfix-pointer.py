@@ -31,9 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--artifact", required=True)
     parser.add_argument("--artifact-url", required=True)
     parser.add_argument("--release-metadata-source", required=True)
-    parser.add_argument(
-        "--signature-status", choices=("signed", "unsigned"), default="unsigned"
-    )
+    parser.add_argument("--signature-status", choices=("signed", "unsigned"), default="unsigned")
     parser.add_argument(
         "--risk-acceptance",
         default="",
@@ -126,31 +124,21 @@ def load_acceptance(path: Path, now: datetime.datetime) -> dict:
 
 def load_release(metadata_path: Path, version: str) -> dict:
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
-    if (
-        payload.get("version_lock") != version
-        or payload.get("download_version") != version
-    ):
-        raise ValueError(
-            "release metadata version does not match requested hotfix version"
-        )
-    history = payload.get("release_history")
-    if not isinstance(history, list) or not history:
-        raise ValueError("release metadata must contain release_history")
-    release = history[0]
+    if payload.get("version_lock") != version or payload.get("download_version") != version:
+        raise ValueError("release metadata version does not match requested hotfix version")
+    release = payload.get("windows_interim_release")
     if not isinstance(release, dict) or release.get("version") != version:
-        raise ValueError(
-            "release_history[0].version does not match requested hotfix version"
-        )
+        raise ValueError("windows_interim_release must match the requested version")
     for key in ("date", "title", "channel"):
         if not isinstance(release.get(key), str) or not release[key].strip():
-            raise ValueError(f"release_history[0].{key} must be a non-empty string")
+            raise ValueError(f"windows_interim_release.{key} must be a non-empty string")
     notes = release.get("notes")
     if (
         not isinstance(notes, list)
         or not notes
         or not all(isinstance(note, str) and note.strip() for note in notes)
     ):
-        raise ValueError("release_history[0].notes must contain non-empty strings")
+        raise ValueError("windows_interim_release.notes must contain non-empty strings")
     return release
 
 
@@ -172,9 +160,7 @@ def main() -> int:
         )
         return 1
     if not artifact.is_file():
-        print(
-            f"[error] Windows interim installer not found: {artifact}", file=sys.stderr
-        )
+        print(f"[error] Windows interim installer not found: {artifact}", file=sys.stderr)
         return 1
 
     try:
@@ -271,9 +257,7 @@ def main() -> int:
             "disclosed_risks": acceptance["disclosed_risks"],
         }
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"[ok] wrote {output} ({output.stat().st_size} bytes)")
     return 0
 

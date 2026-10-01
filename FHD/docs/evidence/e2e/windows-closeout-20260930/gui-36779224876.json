@@ -1,0 +1,428 @@
+{
+  "run": "36779224876-1",
+  "phase": "business",
+  "started_at": "2026-09-30T21:29:04.263Z",
+  "marker": "WIN-GUI-36779224876-1-business",
+  "names": {
+    "customer": "WIN-GUI-36779224876-1-business-客户",
+    "product": "WIN-GUI-36779224876-1-business-产品",
+    "supplier": "WIN-GUI-36779224876-1-business-供应商",
+    "ai": "WIN-GUI-36779224876-1-business-AI客户"
+  },
+  "cases": [
+    {
+      "id": "normal_login",
+      "started_at": "2026-09-30T21:29:04.340Z",
+      "input": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品",
+        "supplier": "WIN-GUI-36779224876-1-business-供应商",
+        "ai": "WIN-GUI-36779224876-1-business-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23"
+      },
+      "finished_at": "2026-09-30T21:29:14.745Z"
+    },
+    {
+      "id": "tenant_identity",
+      "started_at": "2026-09-30T21:29:14.745Z",
+      "input": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品",
+        "supplier": "WIN-GUI-36779224876-1-business-供应商",
+        "ai": "WIN-GUI-36779224876-1-business-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23"
+      },
+      "finished_at": "2026-09-30T21:29:14.966Z"
+    },
+    {
+      "id": "customer",
+      "started_at": "2026-09-30T21:29:14.966Z",
+      "input": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品",
+        "supplier": "WIN-GUI-36779224876-1-business-供应商",
+        "ai": "WIN-GUI-36779224876-1-business-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/mod/xcagi-erp-domain-bridge/customers",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1,
+          "customer_name": "WIN-GUI-36779224876-1-business-客户",
+          "contact_person": "验收员",
+          "contact_phone": "13800000001",
+          "contact_address": "WIN-GUI-36779224876-1-business隔离验收地址",
+          "created_at": "2026-09-30T21:29:18",
+          "updated_at": "2026-09-30T21:29:18"
+        }
+      },
+      "finished_at": "2026-09-30T21:29:19.738Z"
+    },
+    {
+      "id": "product",
+      "started_at": "2026-09-30T21:29:19.738Z",
+      "input": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品",
+        "supplier": "WIN-GUI-36779224876-1-business-供应商",
+        "ai": "WIN-GUI-36779224876-1-business-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/mod/xcagi-erp-domain-bridge/products/add",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1
+        }
+      },
+      "finished_at": "2026-09-30T21:29:26.420Z"
+    },
+    {
+      "id": "purchase",
+      "started_at": "2026-09-30T21:29:26.420Z",
+      "input": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品",
+        "supplier": "WIN-GUI-36779224876-1-business-供应商",
+        "ai": "WIN-GUI-36779224876-1-business-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/purchase/orders",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1,
+          "order_no": "PO20260930212928",
+          "supplier_id": 1,
+          "warehouse_id": null,
+          "order_date": "2026-09-30",
+          "delivery_date": null,
+          "total_amount": 125,
+          "paid_amount": 0,
+          "status": "draft",
+          "approver": null,
+          "approve_date": null,
+          "remark": "WIN-GUI-36779224876-1-business",
+          "created_at": "2026-09-30 21:29:28.570800",
+          "updated_at": "2026-09-30 21:29:28.570800",
+          "tenant_id": 1
+        }
+      },
+      "finished_at": "2026-09-30T21:29:30.076Z"
+    },
+    {
+      "id": "purchase_inbound",
+      "started_at": "2026-09-30T21:29:30.076Z",
+      "input": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品",
+        "supplier": "WIN-GUI-36779224876-1-business-供应商",
+        "ai": "WIN-GUI-36779224876-1-business-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/purchase/inbounds",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1,
+          "inbound_no": "PI20260930212931",
+          "order_id": 1,
+          "supplier_id": 1,
+          "warehouse_id": 1,
+          "inbound_date": "2026-09-30",
+          "total_amount": 125,
+          "status": "completed",
+          "handler": null,
+          "remark": "WIN-GUI-36779224876-1-business",
+          "created_at": "2026-09-30 21:29:31.583123",
+          "updated_at": "2026-09-30 21:29:31.583123",
+          "tenant_id": 1
+        }
+      },
+      "finished_at": "2026-09-30T21:29:33.758Z"
+    },
+    {
+      "id": "sales_order",
+      "started_at": "2026-09-30T21:29:33.758Z",
+      "input": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品",
+        "supplier": "WIN-GUI-36779224876-1-business-供应商",
+        "ai": "WIN-GUI-36779224876-1-business-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "order_id": 1,
+        "order_number": "26-09-00001A",
+        "output_file": "C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI\\tenants\\1\\shipment_outputs\\发货单_26-09-00001A_20260930_212936.xlsx"
+      },
+      "finished_at": "2026-09-30T21:29:38.042Z"
+    },
+    {
+      "id": "shipping_delivery_export",
+      "started_at": "2026-09-30T21:29:38.043Z",
+      "input": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品",
+        "supplier": "WIN-GUI-36779224876-1-business-供应商",
+        "ai": "WIN-GUI-36779224876-1-business-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "filename": "发货单_26-09-00001A_20260930_212936.xlsx",
+        "bytes": 4803,
+        "sha256": "31f4bc95b2a75994fa726089f69aec505604aba1e32a8924ba7b6cb9c1546ee1"
+      },
+      "finished_at": "2026-09-30T21:29:38.912Z"
+    },
+    {
+      "id": "stock_out",
+      "started_at": "2026-09-30T21:29:38.912Z",
+      "input": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品",
+        "supplier": "WIN-GUI-36779224876-1-business-供应商",
+        "ai": "WIN-GUI-36779224876-1-business-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/inventory/out",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "ledger_id": 1,
+          "quantity": 2,
+          "remaining_quantity": 8
+        },
+        "order_number": "26-09-00001A",
+        "expected_remaining_quantity": 8
+      },
+      "finished_at": "2026-09-30T21:29:40.908Z"
+    },
+    {
+      "id": "ui_readback",
+      "started_at": "2026-09-30T21:29:40.908Z",
+      "input": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品",
+        "supplier": "WIN-GUI-36779224876-1-business-供应商",
+        "ai": "WIN-GUI-36779224876-1-business-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品"
+      },
+      "finished_at": "2026-09-30T21:29:42.422Z"
+    },
+    {
+      "id": "ai_business",
+      "started_at": "2026-09-30T21:29:42.422Z",
+      "input": {
+        "customer": "WIN-GUI-36779224876-1-business-客户",
+        "product": "WIN-GUI-36779224876-1-business-产品",
+        "supplier": "WIN-GUI-36779224876-1-business-供应商",
+        "ai": "WIN-GUI-36779224876-1-business-AI客户"
+      },
+      "status": "failed",
+      "error": "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('[data-tutorial-id=\"approval-detail\"]')\nExpected substring: \"WIN-GUI-36779224876-1-business-AI客户\"\nReceived string:    \"基本信息申请编号：c124a2a9152948838917786de780bf46审批标题：智能对话写操作：business_db.write业务类型：workflow_tool当前状态：待审批申请描述：{\\\"entity\\\": \\\"customers\\\", \\\"operation\\\": \\\"upsert\\\", \\\"payload\\\": {\\\"unit_name\\\": \\\"WIN-GUI-36779224876-1-business-AI\\\", \\\"customer_name\\\": \\\"WIN-GUI-36779224876-1-business-AI\\\", \\\"contact_person\\\": \\\"AI验收员\\\", \\\"contact_phone\\\": \\\"13800000002\\\"}}审批记录\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"to.have.text\" with timeout 5000ms\n  - waiting for locator('[data-tutorial-id=\"approval-detail\"]')\n    9 × locator resolved to <div data-v-8b08ed31=\"\" class=\"request-detail\" data-tutorial-id=\"approval-detail\">…</div>\n      - unexpected value \"基本信息申请编号：c124a2a9152948838917786de780bf46审批标题：智能对话写操作：business_db.write业务类型：workflow_tool当前状态：待审批申请描述：{\"entity\": \"customers\", \"operation\": \"upsert\", \"payload\": {\"unit_name\": \"WIN-GUI-36779224876-1-business-AI\", \"customer_name\": \"WIN-GUI-36779224876-1-business-AI\", \"contact_person\": \"AI验收员\", \"contact_phone\": \"13800000002\"}}审批记录\"\n\n    at Proxy.<anonymous> (D:\\a\\XCMAX\\XCMAX\\FHD\\frontend\\node_modules\\playwright\\lib\\matchers\\expect.js:213:24)\n    at file:///D:/a/XCMAX/XCMAX/FHD/scripts/dev/record_enterprise_desktop_init.mjs:282:26\n    at async step (file:///D:/a/XCMAX/XCMAX/FHD/scripts/dev/record_enterprise_desktop_init.mjs:29:21)\n    at async main (file:///D:/a/XCMAX/XCMAX/FHD/scripts/dev/record_enterprise_desktop_init.mjs:266:3)\n    at async file:///D:/a/XCMAX/XCMAX/FHD/scripts/dev/record_enterprise_desktop_init.mjs:303:7",
+      "finished_at": "2026-09-30T21:30:13.932Z"
+    }
+  ],
+  "observations": [
+    {
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/customers",
+      "method": "POST",
+      "event": "request_started",
+      "observed_at": "2026-09-30T21:29:17.355Z"
+    },
+    {
+      "browser_console": "WIN_UI_CLICK:创建",
+      "observed_at": "2026-09-30T21:29:17.356Z"
+    },
+    {
+      "action": "save_button_clicked",
+      "name": "创建",
+      "actualText": "创建",
+      "observed_at": "2026-09-30T21:29:17.360Z"
+    },
+    {
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/customers",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T21:29:18.508Z"
+    },
+    {
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/products/add",
+      "method": "POST",
+      "event": "request_started",
+      "observed_at": "2026-09-30T21:29:23.889Z"
+    },
+    {
+      "browser_console": "WIN_UI_CLICK:保存",
+      "observed_at": "2026-09-30T21:29:23.898Z"
+    },
+    {
+      "action": "save_button_clicked",
+      "name": "保存",
+      "actualText": "保存",
+      "observed_at": "2026-09-30T21:29:23.904Z"
+    },
+    {
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/products/add",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T21:29:24.192Z"
+    },
+    {
+      "endpoint": "/api/purchase/suppliers",
+      "method": "POST",
+      "event": "request_started",
+      "observed_at": "2026-09-30T21:29:27.074Z"
+    },
+    {
+      "browser_console": "WIN_UI_CLICK:保存",
+      "observed_at": "2026-09-30T21:29:27.075Z"
+    },
+    {
+      "action": "save_button_clicked",
+      "name": "保存",
+      "actualText": "保存",
+      "observed_at": "2026-09-30T21:29:27.080Z"
+    },
+    {
+      "endpoint": "/api/purchase/suppliers",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T21:29:27.698Z"
+    },
+    {
+      "endpoint": "/api/purchase/orders",
+      "method": "POST",
+      "event": "request_started",
+      "observed_at": "2026-09-30T21:29:28.179Z"
+    },
+    {
+      "browser_console": "WIN_UI_CLICK:保存",
+      "observed_at": "2026-09-30T21:29:28.179Z"
+    },
+    {
+      "action": "save_button_clicked",
+      "name": "保存",
+      "actualText": "保存",
+      "observed_at": "2026-09-30T21:29:28.183Z"
+    },
+    {
+      "endpoint": "/api/purchase/orders",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T21:29:28.660Z"
+    },
+    {
+      "endpoint": "/api/purchase/orders/1/approve",
+      "method": "POST",
+      "event": "request_started",
+      "observed_at": "2026-09-30T21:29:28.993Z"
+    },
+    {
+      "endpoint": "/api/purchase/orders/1/approve",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T21:29:29.438Z"
+    },
+    {
+      "endpoint": "/api/inventory/warehouses",
+      "method": "POST",
+      "event": "request_started",
+      "observed_at": "2026-09-30T21:29:30.383Z"
+    },
+    {
+      "endpoint": "/api/inventory/warehouses",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T21:29:30.866Z"
+    },
+    {
+      "endpoint": "/api/purchase/inbounds",
+      "method": "POST",
+      "event": "request_started",
+      "observed_at": "2026-09-30T21:29:30.946Z"
+    },
+    {
+      "browser_console": "WIN_UI_CLICK:确认入库",
+      "observed_at": "2026-09-30T21:29:30.946Z"
+    },
+    {
+      "action": "save_button_clicked",
+      "name": "确认入库",
+      "actualText": "确认入库",
+      "observed_at": "2026-09-30T21:29:30.949Z"
+    },
+    {
+      "endpoint": "/api/purchase/inbounds",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T21:29:31.747Z"
+    },
+    {
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/shipment/generate",
+      "method": "POST",
+      "event": "request_started",
+      "observed_at": "2026-09-30T21:29:36.236Z"
+    },
+    {
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/shipment/generate",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T21:29:37.825Z"
+    },
+    {
+      "endpoint": "/api/inventory/out",
+      "method": "POST",
+      "event": "request_started",
+      "observed_at": "2026-09-30T21:29:39.354Z"
+    },
+    {
+      "browser_console": "WIN_UI_CLICK:确认出库",
+      "observed_at": "2026-09-30T21:29:39.355Z"
+    },
+    {
+      "action": "save_button_clicked",
+      "name": "确认出库",
+      "actualText": "确认出库",
+      "observed_at": "2026-09-30T21:29:39.360Z"
+    },
+    {
+      "endpoint": "/api/inventory/out",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T21:29:40.228Z"
+    }
+  ],
+  "result": "failed",
+  "failure": "expect(locator).toContainText(expected) failed\n\nLocator: locator('[data-tutorial-id=\"approval-detail\"]')\nExpected substring: \"WIN-GUI-36779224876-1-business-AI客户\"\nReceived string:    \"基本信息申请编号：c124a2a9152948838917786de780bf46审批标题：智能对话写操作：business_db.write业务类型：workflow_tool当前状态：待审批申请描述：{\\\"entity\\\": \\\"customers\\\", \\\"operation\\\": \\\"upsert\\\", \\\"payload\\\": {\\\"unit_name\\\": \\\"WIN-GUI-36779224876-1-business-AI\\\", \\\"customer_name\\\": \\\"WIN-GUI-36779224876-1-business-AI\\\", \\\"contact_person\\\": \\\"AI验收员\\\", \\\"contact_phone\\\": \\\"13800000002\\\"}}审批记录\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"to.have.text\" with timeout 5000ms\n  - waiting for locator('[data-tutorial-id=\"approval-detail\"]')\n    9 × locator resolved to <div data-v-8b08ed31=\"\" class=\"request-detail\" data-tutorial-id=\"approval-detail\">…</div>\n      - unexpected value \"基本信息申请编号：c124a2a9152948838917786de780bf46审批标题：智能对话写操作：business_db.write业务类型：workflow_tool当前状态：待审批申请描述：{\"entity\": \"customers\", \"operation\": \"upsert\", \"payload\": {\"unit_name\": \"WIN-GUI-36779224876-1-business-AI\", \"customer_name\": \"WIN-GUI-36779224876-1-business-AI\", \"contact_person\": \"AI验收员\", \"contact_phone\": \"13800000002\"}}审批记录\"\n",
+  "finished_at": "2026-09-30T21:30:13.932Z",
+  "unfinished": [
+    "ai_business"
+  ],
+  "full_customer_acceptance": "not_verified"
+}

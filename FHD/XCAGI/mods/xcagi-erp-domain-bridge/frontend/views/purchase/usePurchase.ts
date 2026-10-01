@@ -1,9 +1,12 @@
-import { ref, onMounted, onActivated } from 'vue'
+import { ref, onMounted, onActivated, type Ref } from 'vue'
 import { get, post, productsApi } from '@/api'
-import { appAlert, appConfirm } from '@/utils/appDialog'
+import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog'
 
-// 实体类型（字段以 PurchaseView 模板与表单赋值实际访问项为准）
 interface OrderItem {
+  id?: number
+  received_quantity?: number
+  order_item_id?: number
+  remaining_quantity?: number
   product_id: number | string
   quantity: number
   unit_price: number
@@ -51,27 +54,9 @@ interface Product {
   price: number
 }
 
-interface OrderForm {
-  id: number | null
-  supplier_id: number | string
-  order_date: string
-  delivery_date: string
-  remark: string
-  items: OrderItem[]
-  total_amount: number
-}
+type OrderForm = Omit<PurchaseOrder, 'id' | 'order_no' | 'supplier_name' | 'status'> & { id: number | null }
 
-interface SupplierForm {
-  id: number | null
-  code: string
-  name: string
-  contact_person: string
-  contact_phone: string
-  contact_email: string
-  address: string
-  rating: number
-  remark: string
-}
+type SupplierForm = Omit<Supplier, 'id' | 'status'> & { id: number | null }
 
 interface ApiListResponse<T> {
   success: boolean
@@ -82,9 +67,9 @@ interface ApiListResponse<T> {
 interface ApiWriteResponse {
   success: boolean
   message?: string
+  data?: { id?: number }
 }
 
-// 拆分自 PurchaseView.vue script（原第 262–540 行）；逻辑逐字迁移，行为不变。
 export function usePurchase() {
     const activeTab = ref('orders')
     const orders = ref<PurchaseOrder[]>([])
@@ -97,6 +82,9 @@ export function usePurchase() {
     const showSupplierModalFlag = ref(false)
     const isEditOrder = ref(false)
     const isEditSupplier = ref(false)
+    const receiving = ref(false)
+    const warehouses = ref<{ id: number; name: string }[]>([])
+    const receiveWarehouse = ref<number | ''>('')
 
     const orderForm = ref<OrderForm>({
       id: null,
@@ -120,52 +108,19 @@ export function usePurchase() {
       remark: ''
     })
 
-    const loadOrders = async () => {
+    const loadList = async <T,>(url: string, target: Ref<T[]>, params = {}, request?: () => Promise<ApiListResponse<T>>) => {
       try {
-        const params: Record<string, unknown> = {}
-        if (filterStatus.value) params.status = filterStatus.value
-        if (selectedSupplier.value) params.supplier_id = selectedSupplier.value
-        const res = await get<ApiListResponse<PurchaseOrder>>('/api/purchase/orders', params)
-        if (res.success) {
-          orders.value = res.data || []
-        }
+        const res = await (request ? request() : get<ApiListResponse<T>>(url, params))
+        if (res.success) target.value = res.data || []
       } catch (e) {
-        console.error('加载订单失败', e)
+        console.error(`加载 ${url} 失败`, e)
       }
     }
+    const loadOrders = () => loadList('/api/purchase/orders', orders, { ...(filterStatus.value ? { status: filterStatus.value } : {}), ...(selectedSupplier.value ? { supplier_id: selectedSupplier.value } : {}) })
+    const loadInbounds = () => loadList('/api/purchase/inbounds', inbounds)
+    const loadSuppliers = () => loadList('/api/purchase/suppliers', suppliers)
 
-    const loadInbounds = async () => {
-      try {
-        const res = await get<ApiListResponse<InboundRecord>>('/api/purchase/inbounds')
-        if (res.success) {
-          inbounds.value = res.data || []
-        }
-      } catch (e) {
-        console.error('加载入库记录失败', e)
-      }
-    }
-
-    const loadSuppliers = async () => {
-      try {
-        const res = await get<ApiListResponse<Supplier>>('/api/purchase/suppliers')
-        if (res.success) {
-          suppliers.value = res.data || []
-        }
-      } catch (e) {
-        console.error('加载供应商失败', e)
-      }
-    }
-
-    const loadProducts = async () => {
-      try {
-        const res = await productsApi.getProducts({ page: 1, per_page: 1000 })
-        if (res.success) {
-          products.value = res.data || []
-        }
-      } catch (e) {
-        console.error('加载产品失败', e)
-      }
-    }
+    const loadProducts = () => loadList('产品', products, {}, () => productsApi.getProducts({ page: 1, per_page: 1000 }))
 
     const getStatusText = (status: string) => {
       const map: Record<string, string> = {
@@ -179,6 +134,7 @@ export function usePurchase() {
     }
 
     const showOrderModal = () => {
+      receiving.value = false
       isEditOrder.value = false
       orderForm.value = {
         id: null,
@@ -193,6 +149,7 @@ export function usePurchase() {
     }
 
     const editOrder = (order: PurchaseOrder) => {
+      receiving.value = false
       isEditOrder.value = true
       orderForm.value = {
         id: order.id,
@@ -206,10 +163,23 @@ export function usePurchase() {
       showOrderModalFlag.value = true
     }
 
-    const viewOrder = (order: PurchaseOrder) => {
-      isEditOrder.value = true
-      orderForm.value = { ...order }
-      showOrderModalFlag.value = true
+    const receiveOrder = async (order: PurchaseOrder) => {
+      if (!['approved', 'partial'].includes(order.status)) return
+      const res = await get<ApiListResponse<{ id: number; name: string }>>('/api/inventory/warehouses')
+      if (!res.success) { await appAlert(res.message || '加载仓库失败'); return }
+      warehouses.value = res.data || []
+      receiveWarehouse.value = ''
+      editOrder(order)
+      receiving.value = true
+      orderForm.value.items = order.items.map(item => ({ ...item, order_item_id: item.id, remaining_quantity: item.quantity - (item.received_quantity || 0), quantity: item.quantity - (item.received_quantity || 0) })).filter(item => item.quantity > 0)
+      orderForm.value.items.forEach((_, idx) => calcItemAmount(idx))
+    }
+    const createWarehouse = async () => {
+      const name = (await appPrompt('收货仓库名称'))?.trim()
+      if (!name) return
+      const res = await post<ApiWriteResponse>('/api/inventory/warehouses', { name, code: `WH-${crypto.randomUUID()}` })
+      if (!res.success || !res.data?.id) { await appAlert(res.message || '创建仓库失败'); return }
+      warehouses.value.push({ id: res.data.id, name }); receiveWarehouse.value = res.data.id
     }
 
     const addOrderItem = () => {
@@ -247,6 +217,9 @@ export function usePurchase() {
     }
 
     const saveOrder = async () => {
+      if (receiving.value && (!receiveWarehouse.value || orderForm.value.items.some(item => !(item.quantity > 0) || item.quantity > (item.remaining_quantity || 0)))) {
+        await appAlert('请选择收货仓库，数量不得超过订单待收数量'); return
+      }
       if (!orderForm.value.supplier_id) {
         await appAlert('请选择供应商')
         return
@@ -261,13 +234,16 @@ export function usePurchase() {
         return
       }
       try {
-        const res = isEditOrder.value
+        const res = receiving.value
+          ? await post<ApiWriteResponse>('/api/purchase/inbounds', { order_id: orderForm.value.id, supplier_id: orderForm.value.supplier_id, warehouse_id: receiveWarehouse.value, items: orderForm.value.items, remark: orderForm.value.remark })
+          : isEditOrder.value
           ? await post<ApiWriteResponse>(`/api/purchase/orders/${orderForm.value.id}`, orderForm.value)
           : await post<ApiWriteResponse>('/api/purchase/orders', orderForm.value)
         if (res.success) {
           await appAlert('保存成功')
           showOrderModalFlag.value = false
           loadOrders()
+          if (receiving.value) { await loadInbounds(); activeTab.value = 'inbounds' }
         } else {
           await appAlert('保存失败: ' + res.message)
         }
@@ -366,13 +342,14 @@ export function usePurchase() {
       getStatusText,
       showOrderModal,
       editOrder,
-      viewOrder,
+      viewOrder: editOrder,
       addOrderItem,
       removeOrderItem,
       selectProduct,
       calcItemAmount,
       saveOrder,
       approveOrder,
+      receiving, warehouses, receiveWarehouse, receiveOrder, createWarehouse,
       showSupplierModal,
       editSupplier,
       saveSupplier

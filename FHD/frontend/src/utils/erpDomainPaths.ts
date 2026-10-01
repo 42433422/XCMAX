@@ -3,6 +3,7 @@ import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack'
 import { isProtectedClientModId } from '@/constants/protectedMods'
 import { clientModPolicies } from '@/stores/hostConfig'
 import { useModsStore } from '@/stores/mods'
+import { getActivePinia } from 'pinia'
 import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
 
 const MOD_FACADE_BASE = `/api/mod/${ERP_DOMAIN_BRIDGE_MOD_ID}`
@@ -23,19 +24,14 @@ const ERP_ON_BRIDGE_WHEN_CLIENT_ACTIVE: readonly string[] = ['/api/orders']
 
 /**
  * 与 app.mod_sdk.erp_domain_compat.DOMAIN_SPECS 及 Mod blueprints 实际挂载路径对齐。
- * 按 host 前缀长度降序匹配（最长前缀优先）。
  */
-const ERP_DOMAIN_PREFIX_SOURCE = [
-  ['/api/shipment', `${MOD_FACADE_BASE}/shipment`],
-  ['/api/products', `${MOD_FACADE_BASE}/products`],
-  ['/api/customers', `${MOD_FACADE_BASE}/customers`],
-  ['/api/purchase_units', `${MOD_FACADE_BASE}/purchase_units`],
-  ['/api/orders', `${MOD_FACADE_BASE}/orders`],
+const ERP_DOMAIN_PREFIXES = [
+  '/api/shipment',
+  '/api/products',
+  '/api/customers',
+  '/api/purchase_units',
+  '/api/orders',
 ] as const
-
-const ERP_DOMAIN_PREFIX_MAP: ReadonlyArray<readonly [hostPrefix: string, facadePrefix: string]> = [...ERP_DOMAIN_PREFIX_SOURCE].sort(
-  (a, b) => b[0].length - a[0].length,
-)
 
 /** 客户 Mod（太阳鸟等）未实现的 API，继续走宿主 /api */
 const HOST_ONLY_API_PREFIXES: readonly string[] = [
@@ -73,19 +69,8 @@ const HOST_ONLY_API_PREFIXES: readonly string[] = [
 
 function normalizeApiPath(path: string): string {
   const raw = path.startsWith('/') ? path : `/${path}`
-  const q = raw.indexOf('?')
-  const h = raw.indexOf('#')
-  let end = raw.length
-  if (q >= 0) end = Math.min(end, q)
-  if (h >= 0) end = Math.min(end, h)
+  const end = Math.min(raw.length, ...['?', '#'].map(separator => raw.indexOf(separator)).filter(index => index >= 0))
   return raw.slice(0, end) || raw
-}
-
-function pathSuffix(path: string): string {
-  const raw = path.startsWith('/') ? path : `/${path}`
-  const base = normalizeApiPath(raw)
-  if (raw.length <= base.length) return ''
-  return raw.slice(base.length)
 }
 
 export function readActiveExtensionModId(): string {
@@ -122,8 +107,7 @@ function isRoutableClientErpModId(modId: string): boolean {
   return isProtectedClientModId(id) && !isIndustryShellModId(id)
 }
 
-function resolveErpBaseForClientMod(activeClient: string, installedModIds: string[]): string {
-  const ids = installedModIds
+function resolveErpBaseForClientMod(activeClient: string, ids: string[]): string {
   if (isIndustryShellModId(activeClient)) {
     return ids.includes(ERP_DOMAIN_BRIDGE_MOD_ID) ? MOD_FACADE_BASE : '/api'
   }
@@ -145,18 +129,13 @@ function isHostOnlyApiPath(pathOnly: string): boolean {
  * ERP 领域 API 根路径（不含尾部路径段）。
  * 优先级：当前选中的客户 Mod > 通用领域门面 Mod > 宿主 /api
  */
-function readHostClientPrimaryErpModId(): string {
-  const pol = clientModPolicies.value
-  return String(pol?.client_primary_erp_mod_id || CLIENT_PRIMARY_ERP_MOD_ID).trim()
-}
-
 export function resolveErpApiBase(installedModIds?: string[]): string {
   const ids = readInstalledModIds(installedModIds)
   const activeClient = readActiveExtensionModId()
   if (activeClient && isRoutableClientErpModId(activeClient)) {
     return resolveErpBaseForClientMod(activeClient, ids)
   }
-  const primary = readHostClientPrimaryErpModId()
+  const primary = String(clientModPolicies.value?.client_primary_erp_mod_id || CLIENT_PRIMARY_ERP_MOD_ID).trim()
   if (!activeClient && primary && isRoutableClientErpModId(primary) && ids.includes(primary)) {
     return resolveErpBaseForClientMod(primary, ids)
   }
@@ -175,7 +154,7 @@ export function resolveErpApiBase(installedModIds?: string[]): string {
 export function resolveErpApiPath(hostPath: string, installedModIds?: string[]): string {
   const raw = hostPath.startsWith('/') ? hostPath : `/${hostPath}`
   const pathOnly = normalizeApiPath(raw)
-  const suffix = pathSuffix(raw)
+  const suffix = raw.slice(pathOnly.length)
   const ids = readInstalledModIds(installedModIds)
 
   if (isHostOnlyApiPath(pathOnly)) {
@@ -190,34 +169,23 @@ export function resolveErpApiPath(hostPath: string, installedModIds?: string[]):
     } else if (!pathMatchesPrefixes(pathOnly, ERP_ON_CLIENT_MOD_PREFIXES)) {
       erpBase = ids.includes(ERP_DOMAIN_BRIDGE_MOD_ID) ? MOD_FACADE_BASE : erpBase
     }
-    if (erpBase === '/api') {
-      return raw
-    }
-    if (pathOnly === '/api' || pathOnly.startsWith('/api/')) {
-      return `${erpBase}${pathOnly.slice(4)}${suffix}`
-    }
+    return erpBase === '/api' ? raw : `${erpBase}${pathOnly.slice(4)}${suffix}`
   }
 
   const erpBase = resolveErpApiBase(ids)
-  if (erpBase === '/api') {
-    return raw
-  }
-
-  if (pathOnly === '/api' || pathOnly.startsWith('/api/')) {
-    return `${erpBase}${pathOnly.slice(4)}${suffix}`
-  }
-
-  for (const [hostPrefix] of ERP_DOMAIN_PREFIX_MAP) {
-    if (pathOnly === hostPrefix || pathOnly.startsWith(`${hostPrefix}/`)) {
-      return `${erpBase}${pathOnly.slice(4)}${suffix}`
-    }
-  }
-
-  return raw
+  return erpBase === '/api' ? raw : `${erpBase}${pathOnly.slice(4)}${suffix}`
 }
 
 export function useErpDomainModFacade(): boolean {
   return readErpDomainModFacadeEnabled()
+}
+
+export async function resolveErpApiPathWhenReady(path: string): Promise<string> {
+  const only = normalizeApiPath(path)
+  if (!getActivePinia() || isHostOnlyApiPath(only) || !pathMatchesPrefixes(only, ERP_DOMAIN_PREFIXES)) return path
+  const store = useModsStore()
+  if (!store.clientModsUiOff && !store.isLoaded && !store.mods.length) await store.fetchMods()
+  return resolveErpApiPath(path)
 }
 
 export function erpDomainModStatusPath(): string {

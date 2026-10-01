@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -43,8 +44,10 @@ def test_shipment_order_routes_execute_through_agent_orchestrator(
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    shipment_outputs = tmp_path / "shipment_outputs"
-    shipment_outputs.mkdir()
+    from app.utils.path_io.path_utils import get_shipment_output_dir
+
+    shipment_outputs = Path(get_shipment_output_dir())
+    shipment_outputs.mkdir(parents=True)
     shipment_file = shipment_outputs / "shipment.xlsx"
     shipment_file.write_bytes(b"fake")
     svc = MagicMock()

@@ -160,3 +160,58 @@ def test_desktop_shipment_etl_requires_session_even_with_user_header(
         headers={"X-User-ID": "8"},
     )
     assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "tenant,allowed,status", [(None, True, 403), (23, False, 403), (23, True, 200)]
+)
+def test_mod_shipment_routes_keep_permission_and_file_tenant_scope(
+    tmp_path, monkeypatch, tenant, allowed, status
+):
+    from pathlib import Path
+
+    from app.fastapi_routes import shipment_orders
+    from app.infrastructure.mods.mod_manager import import_mod_backend_py
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    user = SimpleNamespace(id=8, tenant_id=tenant, role="user", is_active=True)
+    monkeypatch.setattr(dependencies, "resolve_session_user", lambda _request: user)
+    monkeypatch.setattr(
+        "app.application.facades.session_facade.get_auth_service",
+        lambda: SimpleNamespace(has_permission=lambda *_args: allowed),
+    )
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    for tid in (23, 24):
+        folder = tmp_path / "tenants" / str(tid) / "shipment_outputs"
+        folder.mkdir(parents=True)
+        (folder / "note.xlsx").write_bytes(str(tid).encode())
+    (tmp_path / "tenants" / "24" / "shipment_outputs" / "private.xlsx").write_bytes(b"other tenant")
+    calls = []
+    monkeypatch.setattr(
+        shipment_orders,
+        "shipment_generate",
+        lambda request, body: calls.append(current_tenant_id()) or {"success": True},
+    )
+    mod = import_mod_backend_py(
+        str(Path(__file__).resolve().parents[2] / "mods" / "xcagi-erp-domain-bridge"),
+        "xcagi-erp-domain-bridge",
+        "blueprints",
+    )
+    app = FastAPI()
+    mod.register_fastapi_routes(app, "xcagi-erp-domain-bridge")
+    client = TestClient(app)
+    base = "/api/mod/xcagi-erp-domain-bridge/shipment"
+    generated = client.post(
+        base + "/generate", json={"user_id": 999, "tenant_id": 24}, headers={"X-User-ID": "999"}
+    )
+    assert generated.status_code == status
+    download = client.get(base + "/download/note.xlsx", headers={"X-Tenant-ID": "24"})
+    assert download.status_code == status
+    if status == 200:
+        assert calls == [23] and download.content == b"23"
+        assert client.get(base + "/download/private.xlsx").status_code == 404
+        assert client.get(base + "/download/%2e%2e%5cprivate.xlsx").status_code == 400
+    else:
+        assert calls == []
+    monkeypatch.setattr(dependencies, "resolve_session_user", lambda _request: None)
+    assert client.get(base + "/download/note.xlsx").status_code == 401

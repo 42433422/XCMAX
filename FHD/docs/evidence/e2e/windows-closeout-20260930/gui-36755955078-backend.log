@@ -1,0 +1,367 @@
+
+[2026-09-30T18:08:45.812Z] XCAGI desktop backend bootstrap
+{
+  "platform": "win32",
+  "arch": "x64",
+  "packaged": true,
+  "resourcesPath": "D:\\a\\_temp\\xcagi-candidate-Gui\\resources",
+  "userData": "C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI",
+  "sku": "enterprise"
+}
+[crash] local crash capture enabled dir=C:\Users\runneradmin\AppData\Roaming\XCAGI\crash-dumps
+[spawn] D:\a\_temp\xcagi-candidate-Gui\resources\backend\xcagi-backend.exe --desktop --headless --host 0.0.0.0 --port 17500 --data-dir C:\Users\runneradmin\AppData\Roaming\XCAGI
+[cwd] D:\a\_temp\xcagi-candidate-Gui\resources\backend
+[updater] install receipt deferred: fetch failed
+[autonomy] controller started
+[stderr] INFO:alembic.runtime.plugins:setup plugin alembic.autogenerate.schemas
+INFO:alembic.runtime.plugins:setup plugin alembic.autogenerate.tables
+INFO:alembic.runtime.plugins:setup plugin alembic.autogenerate.types
+[stderr] INFO:alembic.runtime.plugins:setup plugin alembic.autogenerate.constraints
+INFO:alembic.runtime.plugins:setup plugin alembic.autogenerate.defaults
+INFO:alembic.runtime.plugins:setup plugin alembic.autogenerate.comments
+INFO:alembic.runtime.plugins:setup plugin alembic.ext.checkconstraint_byname
+[stderr] INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+[stderr] INFO  [alembic.runtime.migration] Running stamp_revision  -> 2026_09_27_tenant_rbac_owner
+[stderr] INFO:     Started server process [4480]
+INFO:     Waiting for application startup.
+[stderr] WARNI [app.db.init_db] 未找到种子数据库文件：products.db（将由 ORM/运行时创建）
+[stderr] WARNI [app.db.init_db] 未找到种子数据库文件：inventory.db（将由 ORM/运行时创建）
+WARNI [app.db.init_db] 未找到种子数据库文件：voice_learning.db（将由 ORM/运行时创建）
+[stderr] WARNI [app.db.init_db] 未找到种子数据库文件：error_collection.db（将由 ORM/运行时创建）
+[stderr] WARNI [app.db.init_db] 无法为 Mod attendance-industry 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\products.db（跳过 products__attendance_industry.db）
+[stderr] WARNI [app.db.init_db] 无法为 Mod attendance-industry 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\inventory.db（跳过 inventory__attendance_industry.db）
+WARNI [app.db.init_db] 无法为 Mod attendance-industry 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\voice_learning.db（跳过 voice_learning__attendance_industry.db）
+[stderr] WARNI [app.db.init_db] 无法为 Mod attendance-industry 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\error_collection.db（跳过 error_collection__attendance_industry.db）
+WARNI [app.db.init_db] 无法为 Mod lan-gate-ai-employee 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\products.db（跳过 products__lan_gate_ai_employee.db）
+[stderr] WARNI [app.db.init_db] 无法为 Mod lan-gate-ai-employee 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\inventory.db（跳过 inventory__lan_gate_ai_employee.db）
+WARNI [app.db.init_db] 无法为 Mod lan-gate-ai-employee 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\voice_learning.db（跳过 voice_learning__lan_gate_ai_employee.db）
+WARNI [app.db.init_db] 无法为 Mod lan-gate-ai-employee 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\error_collection.db（跳过 error_collection__lan_gate_ai_employee.db）
+[stderr] WARNI [app.db.init_db] 无法为 Mod xcagi-approval-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\products.db（跳过 products__xcagi_approval_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-approval-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\inventory.db（跳过 inventory__xcagi_approval_bridge.db）
+[stderr] WARNI [app.db.init_db] 无法为 Mod xcagi-approval-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\voice_learning.db（跳过 voice_learning__xcagi_approval_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-approval-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\error_collection.db（跳过 error_collection__xcagi_approval_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-core-workflow-employees 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\products.db（跳过 products__xcagi_core_workflow_employees.db）
+[stderr] WARNI [app.db.init_db] 无法为 Mod xcagi-customer-service-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\products.db（跳过 products__xcagi_customer_service_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-erp-domain-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\products.db（跳过 products__xcagi_erp_domain_bridge.db）
+[stderr] WARNI [app.db.init_db] 无法为 Mod xcagi-erp-domain-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\inventory.db（跳过 inventory__xcagi_erp_domain_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-erp-domain-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\voice_learning.db（跳过 voice_learning__xcagi_erp_domain_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-lan-license-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\products.db（跳过 products__xcagi_lan_license_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-lan-license-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\inventory.db（跳过 inventory__xcagi_lan_license_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-model-payment-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\products.db（跳过 products__xcagi_model_payment_bridge.db）
+[stderr] WARNI [app.db.init_db] 无法为 Mod xcagi-model-payment-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\inventory.db（跳过 inventory__xcagi_model_payment_bridge.db）
+[stderr] WARNI [app.db.init_db] 无法为 Mod xcagi-neuro-bus-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\products.db（跳过 products__xcagi_neuro_bus_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-neuro-bus-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\inventory.db（跳过 inventory__xcagi_neuro_bus_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-neuro-bus-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\voice_learning.db（跳过 voice_learning__xcagi_neuro_bus_bridge.db）
+[stderr] WARNI [app.db.init_db] 无法为 Mod xcagi-planner-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\products.db（跳过 products__xcagi_planner_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-planner-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\inventory.db（跳过 inventory__xcagi_planner_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-planner-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\voice_learning.db（跳过 voice_learning__xcagi_planner_bridge.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-planner-bridge 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\error_collection.db（跳过 error_collection__xcagi_planner_bridge.db）
+[stderr] WARNI [app.db.init_db] 无法为 Mod xcagi-planner-excel-tools 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\products.db（跳过 products__xcagi_planner_excel_tools.db）
+WARNI [app.db.init_db] 无法为 Mod xcagi-planner-excel-tools 准备专用库：母库不存在 C:\Users\runneradmin\AppData\Roaming\XCAGI\inventory.db（跳过 inventory__xcagi_planner_excel_tools.db）
+[stderr] INFO:     Application startup complete.
+[stderr] INFO:     Uvicorn running on http://0.0.0.0:17500 (Press CTRL+C to quit)
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/ping HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET / HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64107 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/index-DZH7lniT.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/css/index-B09vkK-r.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /api/system/industry-presets HTTP/1.1" 404 Not Found
+[stdout] INFO:     127.0.0.1:56737 - "GET /api/system/workflow-employee-catalog HTTP/1.1" 404 Not Found
+[stdout] INFO:     127.0.0.1:64222 - "GET /api/system/employee-registry-rules HTTP/1.1" 404 Not Found
+[stdout] INFO:     127.0.0.1:61300 - "GET /api/system/host-profile HTTP/1.1" 404 Not Found
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/index-ovX3apb4.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/vue-i18n.runtime-UG5nbo6b.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64107 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /api/runtime/product-sku HTTP/1.1" 404 Not Found
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /api/runtime/product-sku HTTP/1.1" 404 Not Found
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /api/runtime/product-sku HTTP/1.1" 404 Not Found
+[stdout] INFO:     127.0.0.1:56397 - "GET /api/runtime/product-sku HTTP/1.1" 404 Not Found
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /api/runtime/product-sku HTTP/1.1" 404 Not Found
+[stdout] INFO:     127.0.0.1:64903 - "GET /api/health?lite=true HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /api/runtime/product-sku HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /api/auth/session/validate HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /api/workspace/prefs HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64904 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/loginBranding-C9vojUOq.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/css/LoginView-Dne1-Yqu.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/LoginView-BFmM6iz7.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/browser-BeH1qxU8.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /api/mods/ HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /api/mods/loading-status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/css/PersyKnowledgeView-Dic2gKSU.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/PersyKnowledgeView-1sc5pnB2.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/installCanvasRenderer-Fu6PhGia.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/CreateOrderView-B_LVwoWI.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/css/HostModBridgeView-6B-o4pH-.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /api/mods/routes HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/modViews-69zXozvT.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/ApprovalWorkspaceView-DReOcWUa.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/ApprovalFlowManagementView-kQ5ebw4W.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/routes-BdXXi6Nm.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/css/useChatViewHost-CqlBMrU6.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/css/useChatOfficeDocking-Cafl_Yoc.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/css/YuangongStitchFullView-jqUmMb04.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/css/AdminEntitlementsView-nmRlfqAH.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/css/WorkflowEmployeeInspector-CVj7N5CD.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/css/PrivateModDeliveryPanel-BIPZwlYi.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/css/ChatView-DRik4egI.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/css/PrivateModDeliveryView-BloOFinD.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/css/AIEcosystemView-DBMUiZhY.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/css/ModStoreLauncherIcon-DEPg7yZr.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/css/ModLandingView-BEM7S7cc.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/css/ProjectFactoryView-NpUJGEy5.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/css/EtlCenterView-Cn30jmif.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/css/DiscoverView-VKTdrrV4.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/css/ProductsView-DxIeNajF.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/css/ConfirmDialog-yfZM0gCq.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/css/ModDetails-W63Mfu8i.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:49681 - "GET /api/health?lite=true HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/css/SettingsMemoryV2Card-DlcJo6Bm.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/css/SettingsBasicCard-CsV9JqOW.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/css/SettingsAuditLogsCard-BQzYqG7-.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/css/SettingsIntentCard-ChLPMCWd.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/css/ModStore-BDE6Qh2c.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/css/SettingsVersionsCard-DnBLvPQn.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64107 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:49683 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:49682 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/css/SettingsAboutCard-DtUEoYl_.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/css/TenantRolesView-Dymv03e2.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/css/SettingsView-CeYP-cZQ.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/css/MessengerContactPicker-DPuZPi9F.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/css/ConversationSidebar-DIVpUq0z.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/css/AiGroupChatView-D6a0VBel.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/css/SystemEmployeeChat-BrFaj7t9.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/css/ImMessengerView-BDRKNgnU.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56737 - "GET /assets/css/EmployeeWorkspaceView-DvHD3Yfz.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/css/ConversationChat-CsyC91kd.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/css/DutyRosterWorkflowLoopView-DWAmw9a0.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/css/DesktopRuntimeView-B31nLuER.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /api/platform-shell/capabilities HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /api/auth/oidc/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/AdminEntitlementsView-KRT3-GU9.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/ApprovalRulesView-Cj8atG4M.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/YuangongStitchFullView-BWvUeogY.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /startup/xc-logo-text.jpg HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/useChatViewHost-BDICpFOI.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64222 - "GET /assets/js/ChatView-IKjRdday.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56397 - "GET /assets/js/WorkflowEmployeeInspector-CQS8d7dH.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/index-CPcBvHan.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/pretext-DXwYCgNn.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/ModStoreLauncherIcon-Dt2OP7LK.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/useChatOfficeDocking-BylFqy-t.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/ModLandingView-B1t8tDQT.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/AIEcosystemView-BS_xheil.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/PrivateModDeliveryView-B1PEeayJ.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/PrivateModDeliveryPanel-CJnsz84f.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/ProjectFactoryView-CBuJJJya.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/codexSuperEmployee-pTJKlne5.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/KittenFinanceView-BqRHe0nP.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/ProductsView-BOuw3Iov.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/products-B5E4pj-3.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/useProductsReadLifecycle-Byh9U5tY.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/MaterialsView-D0Si6O2k.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/useCoreNavLabel-B6KlG_QM.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/templatePreview-ZTFknHcz.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/ConfirmDialog-DzVTDFW4.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/TraditionalModeView-CzuIi2l6.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/OrdersView-DeRAL3Hs.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/DataSourcesView-DSAz_E2p.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/CustomersView-CIAp59Ef.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/ShipmentRecordsView-xO0R4Msk.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/EtlCenterView-DHfW_SKl.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/PrinterListView-DDam_TXe.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/PrintView-CQtFsB8v.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/LabelEditorView-BkYqR1Nj.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/PurchaseView-Bwgcq4mw.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/TemplatePreviewView-Cb--M9Ra.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/BatchAnalyzeView-BeGert8E.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/ApprovalHubView-BmSX5U_T.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/InventoryView-DoRBxJ_w.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/ModDetails-D3QhZLrr.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/ModStore-Dv6bapZB.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/DiscoverView-C7LF2KyR.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/routes-BSHP1jpI.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/productErrorMessage-Vv4Uio5s.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/workflowEmployeeOnboard--9J8SL67.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/SettingsAuditLogsCard-BqTrp_8a.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/SettingsIntentCard-BF4cdtGb.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/SettingsView-CPJwwuK0.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/SettingsMemoryV2Card-DGitEXIH.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/SettingsVersionsCard-B-kr0wpd.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/SettingsBasicCard-1GPGX6zY.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/SettingsAboutCard-BW8RmmVV.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/useMessengerEntries-9kqk93ys.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/TenantRolesView-5DNcE9Ph.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/ImMessengerView-CIQWv02D.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/superEmployeeAvatars-B4-g8kcC.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/yuangonDutyRoster-BhEbsCV7.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/MessengerContactPicker-raXk3-w7.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/AiGroupChatView-OxFRGqsk.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64222 - "GET /assets/js/ConversationSidebar-Cyb9oq1I.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/routes-CHTNWCpd.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/ConversationChat-CnDj-fZC.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/DesktopRuntimeView-DseAkpDG.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/ChatDebugView-CYJmRPGE.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64222 - "GET /assets/js/ToolsView-BnnD4a2B.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/WorkflowVisualizationView-D7iyU5Na.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/EmployeeWorkspaceView-B15iATAJ.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61300 - "GET /assets/js/DutyRosterWorkflowLoopView-qEocxLbH.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56397 - "GET /assets/js/routes-BZ1jIWgf.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/routes-Daj4aLtC.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:49686 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/routes-1nPTn_Et.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/routes-BiWbZnvG.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/routes-j-6pQJXo.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/routes-DxzehchK.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/routes-pMtv1sZd.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60423 - "GET /assets/js/routes-Dfh4bN8B.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/routes-wr1SKoyZ.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/routes-DOnz6S3X.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64897 - "GET /assets/js/routes-CMDYYwJu.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stderr] {"audit_id": 1790791750565989800, "timestamp": "2026-09-30T18:09:10.565989+00:00", "event_type": "tenant_owner_claim", "user_id": 2, "ip_address": "", "details": {"tenant_id": 1, "reason": "verified_founding_user"}, "success": true, "severity": "info"}
+INFO  [audit] {"audit_id": 1790791750565989800, "timestamp": "2026-09-30T18:09:10.565989+00:00", "event_type": "tenant_owner_claim", "user_id": 2, "ip_address": "", "details": {"tenant_id": 1, "reason": "verified_founding_user"}, "success": true, "severity": "info"}
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:64106 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:49900 - "POST /api/desktop/crash-report HTTP/1.1" 200 OK
+[crash] uploaded settings.dat to backend
+[stdout] INFO:     127.0.0.1:49900 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "POST /api/auth/login HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /api/workspace/prefs HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /api/system/industry HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /api/system/industries HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /api/auth/session/validate HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /api/platform-shell/onboarding-industries HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /api/platform-shell/industry-baseline?industry_id=%E9%A5%B0%E5%93%81%E5%8C%85%E8%A3%85 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /assets/css/ChatView-084VF358.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /assets/js/ChatView-BjhO-47E.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56635 - "GET /api/xcmax/sync/entitlements/current HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:54194 - "GET /api/xcmax/sync/stream?since_cursor=0 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61806 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /api/im/unread-total HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61807 - "POST /api/desktop/crash-report HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /assets/fonts/fontawesome-webfont-B-jkhYfk.woff2?v=4.7.0 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:62918 - "GET /api/agent/task-runtime HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61805 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /api/workspace/prefs HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56635 - "GET /api/conversations/muof6eec9gqvyn17cot HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /api/tutorial/v2/courses HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /startup/xc-logo-text.png HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:62918 - "GET /api/tutorial/v2/runs/current HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56635 - "GET /api/agent/tasks/events/stream HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:62918 - "GET /api/platform-shell/capabilities HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56737 - "GET /assets/css/CustomersView-Bus56vIy.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /api/auth/me HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:62918 - "GET /api/mods/routes HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /api/workspace/prefs HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /api/agent/task-runtime HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:62918 - "GET /assets/js/CustomersView-D7ArqImY.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:49513 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /api/workspace/prefs HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:56737 - "GET /api/agent/tasks/events/stream HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:49513 - "GET /api/agent/task-runtime HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /ai-butler-female-avatar-v1.png HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61489 - "GET /api/workspace/prefs HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:62918 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:49513 - "GET /api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/units HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61489 - "GET /api/mod/xcagi-erp-domain-bridge/customers/list?page=1&per_page=20 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:62918 - "GET /api/templates HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:49513 - "GET /api/agent/tasks/events/stream HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61489 - "GET /api/agent/tasks/events/stream HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /api/agent/task-runtime HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /api/system/industries HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /api/system/industry HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:62918 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61988 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:62918 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "POST /api/mod/xcagi-erp-domain-bridge/customers HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61987 - "GET /api/agent/tasks/events/stream HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:62918 - "GET /api/agent/tasks/events/stream HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /api/mod/xcagi-erp-domain-bridge/customers/list?page=1&per_page=20 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:50366 - "GET /api/agent/tasks/events/stream HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60314 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60314 - "GET /api/agent/task-runtime HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60314 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60314 - "GET /assets/css/ProductsView-DY9LyPNt.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60314 - "GET /api/agent/tasks/events/stream HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60561 - "GET /assets/js/ProductsView-CRbXrwsM.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60561 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60561 - "GET /api/agent/tasks/events/stream HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:60562 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52536 - "GET /api/mod/xcagi-erp-domain-bridge/customers/list?page=1&per_page=1000 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52536 - "GET /api/mod/xcagi-erp-domain-bridge/products/list?per_page=1000&page=1 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52536 - "GET /api/templates HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52536 - "POST /api/mod/xcagi-erp-domain-bridge/products/add HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52536 - "GET /api/mod/xcagi-erp-domain-bridge/products/list?per_page=1000&page=1 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52536 - "GET /api/mod/xcagi-erp-domain-bridge/products/list?per_page=1000&page=1 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "POST /api/mod-store/private-delivery/sync HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /assets/js/PurchaseView-Bh3m1sip.js HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52536 - "GET /assets/css/PurchaseView-XZsU3wsZ.css HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52536 - "GET /api/purchase/orders HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /api/purchase/inbounds HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52536 - "GET /api/purchase/suppliers HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /api/mod/xcagi-erp-domain-bridge/products/list?page=1&per_page=1000 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52540 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "POST /api/purchase/suppliers HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /api/purchase/suppliers HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "POST /api/purchase/orders HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /api/purchase/orders HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52536 - "GET /api/agent/task-runtime HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52536 - "POST /api/purchase/orders/1/approve HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /api/purchase/orders HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "GET /api/inventory/warehouses HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:61805 - "POST /api/inventory/warehouses HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52541 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:52547 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:59056 - "GET /api/health HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:59056 - "GET /api/im/unread-total HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:59056 - "GET /api/xcmax/sync/entitlements/current HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:59057 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:59056 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:59056 - "GET /api/agent/task-runtime HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:59056 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:59056 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:59058 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:59064 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:59066 - "GET /api/desktop/status HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:63183 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:63183 - "GET /api/agent/task-runtime HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:63183 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK
+[stdout] INFO:     127.0.0.1:63183 - "GET /api/agent/tasks?limit=200 HTTP/1.1" 200 OK

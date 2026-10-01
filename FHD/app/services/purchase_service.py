@@ -349,12 +349,17 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                         reference_id=inbound.id,
                         operator=data.get("handler"),
                         remark=f"采购入库单: {inbound_no}",
+                        session=db,
                     )
                     if not result.get("success"):
-                        logger.warning("库存入库失败: %s", result.get("message"))
+                        raise ValueError(result.get("message") or "库存入库失败")
 
                 inbound.total_amount = Decimal(str(total_amount))
                 inbound.status = "completed"
+                order_id = data.get("order_id")
+                if order_id is not None:
+                    self._update_order_received_quantity(db, int(order_id))
+
                 db.commit()
                 db.refresh(inbound)
 
@@ -389,10 +394,6 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                             logger.warning("应付账款记账失败: %s", journal_result.get("message"))
                     except RECOVERABLE_ERRORS:  # noqa: BLE001 - 记账失败不阻断入库主流程
                         logger.warning("应付账款记账失败", exc_info=True)
-
-                order_id = data.get("order_id")
-                if order_id is not None:
-                    self._update_order_received_quantity(db, int(order_id))
 
                 self._publish_event(
                     "inventory.inbound_created",
