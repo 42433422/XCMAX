@@ -1,18 +1,13 @@
-"""
-发货单领域聚合测试
-"""
-
 from datetime import datetime
 
 import pytest
 
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
+from app.infrastructure.mappers.shipment_mapper import shipment_to_db
 from app.legacy.domain.legacy_vo import ContactInfo, Money, OrderNumber, Quantity
 
 
 class TestShipmentItem:
-    """ShipmentItem 实体测试"""
-
     def test_create_shipment_item_success(self):
         item = ShipmentItem(
             product_name="产品A",
@@ -74,8 +69,6 @@ class TestShipmentItem:
 
 
 class TestShipment:
-    """Shipment 聚合根测试"""
-
     def test_create_shipment(self):
         shipment = Shipment.create(unit_name="测试单位")
         assert shipment.purchase_unit_name == "测试单位"
@@ -102,6 +95,9 @@ class TestShipment:
         shipment.add_item(item)
         assert len(shipment.items) == 1
         assert shipment.total_quantity.tins == 3
+        record = shipment_to_db(shipment)
+        assert record["tin_spec"] == 20.0
+        assert record["quantity_kg"] == 60.0
 
     def test_add_multiple_items_recalculates_totals(self):
         shipment = Shipment.create(unit_name="测试单位")
@@ -122,6 +118,7 @@ class TestShipment:
         assert len(shipment.items) == 2
         assert shipment.total_quantity.tins == 5
         assert shipment.total_amount.amount == 1000.0
+        assert shipment_to_db(shipment)["tin_spec"] == 20.0
 
     def test_remove_item(self):
         shipment = Shipment.create(unit_name="测试单位")

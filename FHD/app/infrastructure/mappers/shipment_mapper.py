@@ -50,7 +50,7 @@ def shipment_to_db(shipment: Shipment) -> dict[str, Any]:
         "model_number": shipment.items[0].model_number if shipment.items else "",
         "quantity_kg": shipment.total_quantity.kg,
         "quantity_tins": shipment.total_quantity.tins,
-        "tin_spec": shipment.total_quantity.spec_per_tin,
+        "tin_spec": shipment.items[0].quantity.spec_per_tin if shipment.items else 0,
         "unit_price": shipment.items[0].unit_price.amount if shipment.items else 0,
         "amount": shipment.total_amount.amount,
         "status": shipment.status,
