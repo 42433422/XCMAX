@@ -356,7 +356,7 @@ _SHIPMENT_ALIAS["spec_per_tin"] = _SHIPMENT_ALIAS.pop("tin_spec")
 @pytest.mark.parametrize(
     "params,expected",
     [
-        ({"unit_name": "待用户提供"}, ["unit_name", "products"]),
+        ({"unit_name": "{{selected_unit_name}}"}, ["unit_name", "products"]),
         ({"unit_name": "Co", "products": "invalid"}, ["products"]),
         ({"unit_name": "Co", "products": ["invalid"]}, ["products.0"]),
         ({"unit_name": "Co", "products": [_SHIPMENT_ITEM]}, []),
@@ -379,6 +379,7 @@ _SHIPMENT_ALIAS["spec_per_tin"] = _SHIPMENT_ALIAS.pop("tin_spec")
                 ("unit_price", None),
                 ("amount", None),
                 ("product_name", "待用户提供"),
+                ("product_name", "{{selected_product_name}}"),
                 ("quantity_tins", 1.5),
                 ("amount", float("nan")),
                 ("quantity_tins", True),
