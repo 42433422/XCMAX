@@ -11,21 +11,18 @@ from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_data_dir
 
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 
 
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
 def order_store_path() -> Path:
     custom = (os.environ.get("MODEL_PAYMENT_ORDER_STORE_PATH") or "").strip()
     if custom:
         return Path(custom)
-    return _repo_root() / "data" / "model_payment_orders.json"
+    return Path(get_data_dir()) / "model_payment_orders.json"
 
 
 def _utc_iso() -> str:

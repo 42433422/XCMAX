@@ -23,10 +23,12 @@ def _order(no: str, status: str, created: datetime, **extra) -> dict:
     }
 
 
-@pytest.fixture
-def store(tmp_path, monkeypatch):
-    path = tmp_path / "model_payment_orders.json"
-    monkeypatch.setenv("MODEL_PAYMENT_ORDER_STORE_PATH", str(path))
+@pytest.fixture(params=["MODEL_PAYMENT_ORDER_STORE_PATH", "XCAGI_DATA_DIR"])
+def store(tmp_path, monkeypatch, request):
+    path = tmp_path / "data" / "model_payment_orders.json"
+    monkeypatch.delenv("MODEL_PAYMENT_ORDER_STORE_PATH", raising=False)
+    monkeypatch.setenv(request.param, str(path if request.param.startswith("MODEL") else tmp_path))
+    path.parent.mkdir()
     orders = [
         _order("ok", "paid", NOW - timedelta(hours=2), trade_no="T1", paid_at=NOW.isoformat()),
         _order("no-trade", "paid", NOW - timedelta(hours=3)),
