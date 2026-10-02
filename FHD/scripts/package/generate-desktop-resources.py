@@ -35,14 +35,12 @@ ACCENT = (0, 120, 215)
 
 
 def _product_version() -> str:
-    """安装包文案版本号：与 electron-builder ${version}（desktop/package.json）同源。"""
-    try:
-        import json
+    """安装包文案版本：取 installer.nsh 的 XCAGI_PRODUCT_DISPLAY_VERSION（与 DisplayVersion 同源）。"""
+    import re
 
-        pkg = json.loads((ROOT / "desktop" / "package.json").read_text(encoding="utf-8"))
-        return str(pkg.get("version") or "1.0")
-    except (OSError, ValueError):
-        return "1.0"
+    nsh = (ROOT / "desktop" / "build" / "installer.nsh").read_text(encoding="utf-8")
+    found = re.search(r'XCAGI_PRODUCT_DISPLAY_VERSION\s+"([^"]+)"', nsh)
+    return found.group(1) if found else "1.0.0"
 
 
 PRODUCT_VERSION = _product_version()
