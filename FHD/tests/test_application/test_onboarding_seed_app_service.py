@@ -147,6 +147,8 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         waiting = repository.get(waiting_payload["run_id"])
         assert waiting is not None
         assert waiting.status == "waiting_user"
+        assert waiting.steps[-1].params["payload"]["products"][0]["tin_spec"] == 1
+        assert waiting.steps[-1].params["payload"]["products"][0]["unit_price"] == 99
         assert [call.status for call in waiting.tool_calls] == ["completed", "completed"]
         with get_db() as db:
             assert db.query(ShipmentRecord).count() == 0
@@ -172,6 +174,9 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
             )
             assert shipment.product_name == product
             assert shipment.quantity_tins == 1
+            assert shipment.tin_spec == 1
+            assert shipment.unit_price == 99
+            assert shipment.amount == 99
             assert shipment.tenant_id == 1
     finally:
         Base.metadata.drop_all(db_mod.engine, tables=list(reversed(tables)))

@@ -9,7 +9,7 @@ _SHIPMENT_PRODUCTS_SCHEMA = {
     "minItems": 1,
     "items": {
         "type": "object",
-        "required": ["quantity_tins", "unit_price", "amount"],
+        "required": ["quantity_tins", "unit_price"],
         "allOf": [
             {"anyOf": [{"required": ["product_name"]}, {"required": ["name"]}]},
             {"anyOf": [{"required": ["tin_spec"]}, {"required": ["spec_per_tin"]}]},

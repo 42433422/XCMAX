@@ -360,6 +360,13 @@ _SHIPMENT_ALIAS["spec_per_tin"] = _SHIPMENT_ALIAS.pop("tin_spec")
         ({"unit_name": "Co", "products": "invalid"}, ["products"]),
         ({"unit_name": "Co", "products": ["invalid"]}, ["products.0"]),
         ({"unit_name": "Co", "products": [_SHIPMENT_ITEM]}, []),
+        (
+            {
+                "unit_name": "Co",
+                "products": [{k: v for k, v in _SHIPMENT_ITEM.items() if k != "amount"}],
+            },
+            [],
+        ),
         ({"purchase_unit": "Co", "items": [_SHIPMENT_ALIAS]}, []),
         *[
             (
