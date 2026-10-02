@@ -66,13 +66,19 @@ const isE2ERun = process.env.XCAGI_DESKTOP_E2E === '1'
 /**
  * 非阻塞启动失败提示（与 backend-process.ts 的 showBackendErrorBox 同一约定）。
  *
- * `dialog.showErrorBox` 是同步 API：无人点击「确定」时会永久阻塞主进程事件循环，
- * 使紧随其后的 `app.quit()` 永不执行。更新后启动失败路径下，回滚 helper 会一直
- * 等待进程退出，直到 120s 超时并放弃，自动回滚（恢复上一版本应用与数据库）因此
- * 失败——2026-10-03 实机复现。必须使用异步 `showMessageBox` 后再退出。
+ * `dialog.showErrorBox` 是同步 API；macOS 上不带 BrowserWindow 的 `showMessageBox`
+ * 也会走 `NSAlert.runModal` 同步阻塞主进程事件循环。两者都会让紧随其后的
+ * `app.quit()` 永不执行：回滚 helper 等待进程退出直到 120s 超时放弃，
+ * 更新失败后的自动回滚（恢复上一版应用与数据库）因此失败——2026-10-03 实机复现。
+ * 因此必须把提示挂到主窗口上（window-modal sheet）；没有窗口时只写日志。
  */
 export function showStartupFailureNotice(message: string): void {
-  void dialog.showMessageBox({ type: 'error', title: 'XCAGI', message })
+  const win = desktopRuntime.mainWindow
+  if (win && !win.isDestroyed()) {
+    void dialog.showMessageBox(win, { type: 'error', title: 'XCAGI', message })
+    return
+  }
+  writeBackendLog(`[startup] ${message}\n`)
 }
 
 function bootstrap(): void {
