@@ -413,8 +413,6 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
                 return
             if step.status == "completed":
                 continue
-            if pause_for_clarification(run, step):
-                return
             if any(dep not in completed_node_ids for dep in step.depends_on):
                 run.status = "blocked"
                 step.status = "skipped"
@@ -424,6 +422,8 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
                     f"步骤 {step.node_id} 依赖未满足",
                     {"step_id": step.step_id, "depends_on": step.depends_on},
                 )
+                return
+            if pause_for_clarification(run, step, node_outputs):
                 return
             step_is_approved = bool(approved and approved in {step.step_id, step.node_id})
             if not self._can_auto_execute(step) and (not step_is_approved):

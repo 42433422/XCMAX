@@ -317,6 +317,12 @@ def _validate_schema_payload(
 
 
 def _validate_input_schema(spec: ToolActionSpecV2, params: dict[str, Any]) -> tuple[bool, str]:
+    if (spec.tool_id, spec.action) == ("shipment_records", "create"):
+        from app.application.shipment_inputs import missing_shipment_fields
+
+        missing = missing_shipment_fields(params)
+        if missing:
+            return False, "缺少有效出货参数：" + "、".join(missing)
     if (spec.tool_id, spec.action) == ("inventory", "stock_in"):
         from app.application.inventory_inputs import validate_stock_in_request
 

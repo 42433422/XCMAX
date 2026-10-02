@@ -45,7 +45,7 @@ class ShipmentItem:
             spec_per_tin=data.get("tin_spec", data.get("spec_per_tin", 10.0)),
         )
         unit_price = Money(data.get("unit_price", 0))
-        amount = Money(data.get("amount", 0))
+        amount = Money(data["amount"]) if "amount" in data else unit_price * quantity.kg
 
         return cls(
             id=data.get("id"),

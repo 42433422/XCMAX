@@ -3803,17 +3803,14 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
 
     method = "POST"
     path = "/api/shipment/shipment-records/record"
-    if action == "create":
-        body.setdefault("unit_name", "星光贸易")
-        body.setdefault("products", [{"name": "5003", "qty": 2}])
-    elif action == "update":
+    if action == "update":
         method = "PATCH"
         body.setdefault("id", int(task.get("record_id") or 7))
         body.setdefault("status", "printed")
     elif action == "delete":
         method = "DELETE"
         body.setdefault("id", int(task.get("record_id") or 7))
-    else:
+    elif action != "create":
         return _failed(task, f"unsupported shipment records route action: {action}")
 
     app = FastAPI()

@@ -154,7 +154,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
     shipment_create_spec = specs[("shipment_records", "create")]
     assert shipment_create_spec.risk == "high"
     assert shipment_create_spec.required_params == ["unit_name"]
-    assert shipment_create_spec.input_schema["required"] == ["unit_name"]
+    assert len(shipment_create_spec.input_schema["allOf"]) == 2
     assert shipment_create_spec.test_fixtures[0]["output"]["data"]["id"] == 7
 
     shipment_update_spec = specs[("shipment_records", "update")]

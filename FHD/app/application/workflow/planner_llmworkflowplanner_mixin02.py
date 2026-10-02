@@ -140,6 +140,7 @@ class _LLMWorkflowPlannerPart02Mixin:
                             "entity": "shipment_records",
                             "operation": "create",
                             "payload": {
+                                "product_source_node": "find_onboarding_product",
                                 "unit_name": customer,
                                 "products": [
                                     {

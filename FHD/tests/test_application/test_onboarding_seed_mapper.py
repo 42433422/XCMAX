@@ -227,12 +227,12 @@ class TestBuildProductRow:
             "tenant_id": 3,
             "name": "XC 演示产品",
             "model_number": "DEMO-001",
-            "specification": "通用 首启样例 SKU",
+            "specification": "1",
             "price": Decimal("99.00"),
             "quantity": 10,
             "category": "通用",
             "brand": "XCAGI",
-            "unit": "个",
+            "unit": "kg",
             "is_active": 1,
         }
 

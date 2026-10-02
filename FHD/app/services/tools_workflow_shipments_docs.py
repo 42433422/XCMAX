@@ -113,12 +113,13 @@ def _registered_router_shipment_records(
         unit = str(params.get("unit") or params.get("unit_name") or "").strip() or None
         return {"success": True, "data": svc.get_shipment_records(unit)}
     if action == "create":
-        unit_name = str(params.get("unit_name") or params.get("purchase_unit") or "").strip()
-        if not unit_name:
-            return {"success": False, "message": "缺少 unit_name"}
-        products = params.get("products") or params.get("items") or []
-        if not isinstance(products, list):
-            products = []
+        from app.application.shipment_inputs import missing_shipment_fields
+
+        missing = missing_shipment_fields(params)
+        if missing:
+            return {"success": False, "message": "缺少有效出货参数：" + "、".join(missing)}
+        unit_name = str(params.get("unit_name") or params.get("purchase_unit")).strip()
+        products = params.get("products") or params.get("items")
         return cast(
             "dict[Any, Any]",
             svc.create_shipment(

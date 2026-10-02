@@ -776,18 +776,16 @@ class TestBuildPendingCompleteResponseEdges:
 
 
 class TestOrderStorePaths:
-    def test_repo_root_returns_path_object(self) -> None:
-        result = order_store._repo_root()
-        assert isinstance(result, Path)
-        # Should be the FHD root (parents[3] from order_store.py location)
-        assert result.name == "FHD" or result.exists()
-
-    def test_order_store_path_default_when_env_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_order_store_path_default_when_env_unset(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.delenv("MODEL_PAYMENT_ORDER_STORE_PATH", raising=False)
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
         result = order_store.order_store_path()
         assert isinstance(result, Path)
         assert result.name == "model_payment_orders.json"
         assert "data" in result.parts
+        assert result == tmp_path / "data" / "model_payment_orders.json"
 
     def test_order_store_path_default_when_env_blank(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

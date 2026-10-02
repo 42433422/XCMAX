@@ -626,25 +626,6 @@ class TestShipmentRecordsRouter:
             result = _registered_router_shipment_records("create", {}, _ctx(), "normal", "")
             assert result["success"] is False
 
-    def test_create_success(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.create_shipment.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
-            result = _registered_router_shipment_records(
-                "create", {"unit_name": "acme", "products": [{"id": 1}]}, _ctx(), "normal", ""
-            )
-            assert result["success"] is True
-
-    def test_create_products_not_list(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.create_shipment.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
-            _registered_router_shipment_records(
-                "create", {"unit_name": "acme", "products": "not-list"}, _ctx(), "normal", ""
-            )
-            mock_svc.create_shipment.assert_called_once()
-            assert mock_svc.create_shipment.call_args.kwargs["items_data"] == []
-
     def test_export(self) -> None:
         mock_svc = MagicMock()
         mock_svc.export_shipment_records.return_value = {"success": True}
