@@ -7,11 +7,9 @@ _PLACEHOLDERS = {"待用户提供", "待提供", "待填写", "tbd", "unknown"}
 
 
 def _provided_name(value: Any) -> bool:
-    return (
-        isinstance(value, str)
-        and bool(value.strip())
-        and value.strip().casefold() not in _PLACEHOLDERS
-    )
+    if not isinstance(value, str) or not value.strip():
+        return False
+    return value.strip().casefold() not in _PLACEHOLDERS and "{{" not in value
 
 
 def missing_shipment_fields(params: dict[str, Any]) -> list[str]:
