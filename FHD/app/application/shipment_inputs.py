@@ -1,9 +1,8 @@
-"""Shipment inputs shared by clarification and execution."""
-
 import math
 from typing import Any
 
 _PLACEHOLDERS = {"待用户提供", "待提供", "待填写", "tbd", "unknown"}
+_PLACEHOLDERS.update(("用户需提供", "需要用户提供", "请用户提供"))
 
 
 def _provided_name(value: Any) -> bool:
@@ -30,13 +29,13 @@ def missing_shipment_fields(params: dict[str, Any]) -> list[str]:
                 continue
             value = item.get(key, item.get("spec_per_tin") if key == "tin_spec" else None)
             try:
-                valid = not (
-                    not isinstance(value, (int, float))
-                    or isinstance(value, bool)
-                    or not math.isfinite(value)
-                    or value < 0
-                    or (key in {"quantity_tins", "tin_spec"} and value <= 0)
-                    or (key == "quantity_tins" and value != int(value))
+                valid = (
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and math.isfinite(value)
+                    and value >= 0
+                    and (key not in {"quantity_tins", "tin_spec"} or value > 0)
+                    and (key != "quantity_tins" or value == int(value))
                 )
             except OverflowError:
                 valid = False

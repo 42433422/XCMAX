@@ -348,15 +348,15 @@ _SHIPMENT_ITEM = {
     "unit_price": 1,
     "amount": 10,
 }
-_SHIPMENT_ALIAS = {**_SHIPMENT_ITEM}
-_SHIPMENT_ALIAS["name"] = _SHIPMENT_ALIAS.pop("product_name")
-_SHIPMENT_ALIAS["spec_per_tin"] = _SHIPMENT_ALIAS.pop("tin_spec")
+_SHIPMENT_ALIAS = {k: v for k, v in _SHIPMENT_ITEM.items() if k not in {"product_name", "tin_spec"}}
+_SHIPMENT_ALIAS.update(name="Paint", spec_per_tin=10)
 
 
 @pytest.mark.parametrize(
     "params,expected",
     [
         ({"unit_name": "{{selected_unit_name}}"}, ["unit_name", "products"]),
+        ({"unit_name": "用户需提供"}, ["unit_name", "products"]),
         ({"unit_name": "Co", "products": "invalid"}, ["products"]),
         ({"unit_name": "Co", "products": ["invalid"]}, ["products.0"]),
         ({"unit_name": "Co", "products": [_SHIPMENT_ITEM]}, []),
@@ -378,7 +378,7 @@ _SHIPMENT_ALIAS["spec_per_tin"] = _SHIPMENT_ALIAS.pop("tin_spec")
                 ("tin_spec", None),
                 ("unit_price", None),
                 ("amount", None),
-                ("product_name", "待用户提供"),
+                ("product_name", "用户需提供"),
                 ("product_name", "{{selected_product_name}}"),
                 ("quantity_tins", 1.5),
                 ("amount", float("nan")),
