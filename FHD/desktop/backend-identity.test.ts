@@ -17,7 +17,9 @@ vi.mock('electron', () => ({
     getVersion: () => '1.0.0',
     isQuitting: false,
   },
-  dialog: { showErrorBox: vi.fn() },
+  // 提示必须挂到窗口上：macOS 上无窗口的 showMessageBox 会以 NSAlert.runModal 阻塞主进程。
+  BrowserWindow: { getAllWindows: () => [{ isDestroyed: () => false }] },
+  dialog: { showErrorBox: vi.fn(), showMessageBox: vi.fn(() => Promise.resolve({ response: 0 })) },
 }))
 vi.mock('node:child_process', () => ({ spawn: state.spawn, execFile: vi.fn() }))
 vi.mock('./desktop-config', async importOriginal => ({

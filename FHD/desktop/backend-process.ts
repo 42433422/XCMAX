@@ -1,4 +1,4 @@
-import { app, dialog } from 'electron'
+import { BrowserWindow, app, dialog } from 'electron'
 import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -487,11 +487,22 @@ export async function stopBackend(): Promise<void> {
  * 非阻塞错误提示。
  *
  * `dialog.showErrorBox` 是**同步** API：无人点击「确定」时它会永久阻塞主进程事件循环
- * （表现为 9222 端口 TCP 可连但 HTTP 无响应、`app.quit()` 永不执行）。统一改用异步
- * `showMessageBox`，与本文件 `showDbRecoveryDialogIfNeeded()` 及 app-shell / main 的写法一致。
+ * （表现为 9222 端口 TCP 可连但 HTTP 无响应、`app.quit()` 永不执行）。
+ *
+ * 仅换成 `showMessageBox` 还不够：macOS 上不带 BrowserWindow 时它走
+ * `NSAlert.runModal` → `NSApplication runModalForWindow:`，同样同步阻塞主进程
+ * （2026-10-03 用 exact-main 候选包 sample 实测，调用栈停在 -[NSAlert runModal]）。
+ * 更新后启动失败时这会让 `app.quit()` 永不执行，回滚 helper 等到 120s 超时才放弃，
+ * 自动回滚因此失败。必须挂到窗口上成为 window-modal sheet；确实没有窗口时只写日志，
+ * 绝不以模态阻塞退出路径。
  */
 function showBackendErrorBox(message: string, detail: string): void {
-  void dialog.showMessageBox({ type: 'error', title: APP_NAME, message, detail })
+  const win = BrowserWindow.getAllWindows().find(candidate => !candidate.isDestroyed())
+  if (win) {
+    void dialog.showMessageBox(win, { type: 'error', title: APP_NAME, message, detail })
+    return
+  }
+  writeBackendLog(`[error] ${message} — ${detail}\n`)
 }
 
 /** 上一轮后端是否**确实健康过**且健康运行已超过稳定窗口。 */

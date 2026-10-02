@@ -42,13 +42,17 @@ const electronMocks = vi.hoisted(() => {
     focus: vi.fn(),
     restore: vi.fn(),
     isMinimized: vi.fn(() => false),
+    isDestroyed: vi.fn(() => false),
     getBounds: vi.fn(() => ({ x: 0, y: 0, width: 1280, height: 800 })),
     setBounds: vi.fn(),
     flashFrame: vi.fn(),
     close: vi.fn(),
     destroy: vi.fn()
   }))
-  ;(BrowserWindow as unknown as { getAllWindows: () => unknown[] }).getAllWindows = vi.fn(() => [])
+  // 模态提示必须挂到窗口上；macOS 上无窗口的 showMessageBox 会同步阻塞主进程事件循环。
+  const dialogParentWindow = { isDestroyed: vi.fn(() => false) }
+  ;(BrowserWindow as unknown as { getAllWindows: () => unknown[] }).getAllWindows =
+    vi.fn(() => [dialogParentWindow])
   const Menu = { buildFromTemplate: vi.fn(() => ({})), setApplicationMenu: vi.fn() }
   const Tray = vi.fn(() => ({ setToolTip: vi.fn(), setContextMenu: vi.fn() }))
   const Notification = vi.fn(() => ({ show: vi.fn() }))
@@ -732,16 +736,36 @@ describe('main — backend spawn failure', () => {
 })
 
 describe('main — startup failure notice stays non-blocking', () => {
-  it('uses async showMessageBox for the OTA rollback notice', async () => {
+  it('attaches the OTA rollback notice to a window instead of a modal alert', async () => {
     const { showStartupFailureNotice } = await import('./main.js')
+    const { desktopRuntime } = await import('./runtime-state.js')
     electronMocks.dialog.showErrorBox.mockClear()
     electronMocks.dialog.showMessageBox.mockClear()
+    const win = { isDestroyed: vi.fn(() => false) }
+    desktopRuntime.mainWindow = win as never
 
     showStartupFailureNotice('更新后启动失败，正在恢复上一版本；XCAGI 将自动重启。')
 
-    // 2026-10-03 实机回归：同步 showErrorBox 阻塞主进程事件循环，app.quit() 永不执行，
-    // 回滚 helper 等待进程退出直到 120s 超时放弃，更新失败后的自动回滚无法完成。
+    // 2026-10-03 实机回归：同步 showErrorBox 与「无窗口的 showMessageBox」在 macOS 上都走
+    // NSAlert.runModal 阻塞主进程，app.quit() 永不执行，回滚 helper 120s 超时放弃，
+    // 更新失败后的自动回滚无法完成。必须把提示挂到窗口上（window-modal sheet）。
     expect(electronMocks.dialog.showMessageBox).toHaveBeenCalledTimes(1)
+    const calls = electronMocks.dialog.showMessageBox.mock.calls as unknown as unknown[][]
+    expect(calls[0]?.[0]).toBe(win)
+    expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
+    desktopRuntime.mainWindow = null
+  })
+
+  it('falls back to a log line (never a modal) when no window exists', async () => {
+    const { showStartupFailureNotice } = await import('./main.js')
+    const { desktopRuntime } = await import('./runtime-state.js')
+    electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.dialog.showMessageBox.mockClear()
+    desktopRuntime.mainWindow = null
+
+    showStartupFailureNotice('更新后启动失败，正在恢复上一版本；XCAGI 将自动重启。')
+
+    expect(electronMocks.dialog.showMessageBox).not.toHaveBeenCalled()
     expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
   })
 })

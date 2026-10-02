@@ -1,5 +1,5 @@
 {
-  "lines": 2295313,
+  "lines": 2295356,
   "updated": "2026-10-03",
-  "note": "fix(macos): OTA 更新失败后自动回滚的非阻塞提示修复与回归测试（Mac 客户交付阻断缺陷，2026-10-03 实机复现）"
+  "note": "fix(macos): 回滚失败提示改为窗口模态并新增回归测试（第二层根因：macOS 无窗口 showMessageBox 走 NSAlert.runModal 阻塞主进程）"
 }
