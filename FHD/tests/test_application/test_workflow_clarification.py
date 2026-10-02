@@ -421,9 +421,9 @@ def test_shipment_inputs_shared_by_clarification_and_execution(params, expected,
     )
     step = AgentStep("write", node.tool_id, node.action, node.params)
     run = AgentRun("owner", "创建出货", steps=[step])
-    assert pause_for_clarification(run, step) is bool(expected)
+    assert pause_for_clarification(run, step) is bool(expected and generic)
     assert run.tool_calls == []
-    if expected:
+    if expected and generic:
         assert run.status == "blocked" and all(key in run.error for key in expected)
     svc = MagicMock()
     svc.create_shipment.return_value = {"success": True}

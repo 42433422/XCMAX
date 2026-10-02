@@ -88,7 +88,7 @@ def pause_for_clarification(run: AgentRun, step: AgentStep, outputs: dict | None
     )
 
     payload = shipment_call_payload(step.tool_id, step.action, step.params)
-    if payload is not None:
+    if payload is not None and step.tool_id == "business_db":
         if payload.get("product_source_node"):
             payload = step.params["payload"] = resolve_shipment_product_source(
                 payload, outputs or {}
