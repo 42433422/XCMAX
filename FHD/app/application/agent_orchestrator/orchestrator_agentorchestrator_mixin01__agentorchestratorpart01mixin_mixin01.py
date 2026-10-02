@@ -413,8 +413,6 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
                 return
             if step.status == "completed":
                 continue
-            if pause_for_clarification(run, step):
-                return
             if any(dep not in completed_node_ids for dep in step.depends_on):
                 run.status = "blocked"
                 step.status = "skipped"
@@ -425,23 +423,8 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
                     {"step_id": step.step_id, "depends_on": step.depends_on},
                 )
                 return
-            payload = step.params.get("payload") or {}
-            if (
-                step.tool_id == "business_db"
-                and step.params.get("entity") == "shipment_records"
-                and payload.get("product_source_node")
-            ):
-                from app.application.shipment_inputs import (
-                    missing_shipment_fields,
-                    resolve_shipment_product_source,
-                )
-
-                step.params["payload"] = resolve_shipment_product_source(payload, node_outputs)
-                missing = missing_shipment_fields(step.params["payload"])
-                if missing:
-                    run.status = "blocked"
-                    step.error = run.error = "请补充有效出货参数：" + "、".join(missing)
-                    return
+            if pause_for_clarification(run, step, node_outputs):
+                return
             step_is_approved = bool(approved and approved in {step.step_id, step.node_id})
             if not self._can_auto_execute(step) and (not step_is_approved):
                 step.status = "waiting_user"

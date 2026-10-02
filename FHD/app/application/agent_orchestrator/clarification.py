@@ -80,7 +80,24 @@ def apply_clarification_answer(run: AgentRun, *, step_id: str, parameters: dict[
     )
 
 
-def pause_for_clarification(run: AgentRun, step: AgentStep) -> bool:
+def pause_for_clarification(run: AgentRun, step: AgentStep, outputs: dict | None = None) -> bool:
+    payload = step.params.get("payload") or {}
+    if (
+        step.tool_id == "business_db"
+        and step.params.get("entity") == "shipment_records"
+        and payload.get("product_source_node")
+    ):
+        from app.application.shipment_inputs import (
+            missing_shipment_fields,
+            resolve_shipment_product_source,
+        )
+
+        step.params["payload"] = resolve_shipment_product_source(payload, outputs or {})
+        missing = missing_shipment_fields(step.params["payload"])
+        if missing:
+            run.status = "blocked"
+            step.error = run.error = "请补充有效出货参数：" + "、".join(missing)
+            return True
     if (step.tool_id, step.action) != ("clarify", "ask"):
         return False
     step.status = "waiting_user"
