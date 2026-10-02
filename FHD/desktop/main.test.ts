@@ -731,6 +731,21 @@ describe('main — backend spawn failure', () => {
   })
 })
 
+describe('main — startup failure notice stays non-blocking', () => {
+  it('uses async showMessageBox for the OTA rollback notice', async () => {
+    const { showStartupFailureNotice } = await import('./main.js')
+    electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.dialog.showMessageBox.mockClear()
+
+    showStartupFailureNotice('更新后启动失败，正在恢复上一版本；XCAGI 将自动重启。')
+
+    // 2026-10-03 实机回归：同步 showErrorBox 阻塞主进程事件循环，app.quit() 永不执行，
+    // 回滚 helper 等待进程退出直到 120s 超时放弃，更新失败后的自动回滚无法完成。
+    expect(electronMocks.dialog.showMessageBox).toHaveBeenCalledTimes(1)
+    expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
+  })
+})
+
 describe('main — desktop CSP defense-in-depth injection', () => {
   it('injects fallback CSP for a trusted local mainFrame without an existing CSP', async () => {
     const { resolveDesktopCspInjection } = await import('./main.js')
