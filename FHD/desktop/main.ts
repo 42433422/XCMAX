@@ -63,6 +63,18 @@ configureOtaProxyCommandLine()
 /** E2E（Playwright-Electron）模式：隔离真实系统副作用（登录项/协议注册/全局快捷键/OTA）。 */
 const isE2ERun = process.env.XCAGI_DESKTOP_E2E === '1'
 
+/**
+ * 非阻塞启动失败提示（与 backend-process.ts 的 showBackendErrorBox 同一约定）。
+ *
+ * `dialog.showErrorBox` 是同步 API：无人点击「确定」时会永久阻塞主进程事件循环，
+ * 使紧随其后的 `app.quit()` 永不执行。更新后启动失败路径下，回滚 helper 会一直
+ * 等待进程退出，直到 120s 超时并放弃，自动回滚（恢复上一版本应用与数据库）因此
+ * 失败——2026-10-03 实机复现。必须使用异步 `showMessageBox` 后再退出。
+ */
+export function showStartupFailureNotice(message: string): void {
+  void dialog.showMessageBox({ type: 'error', title: 'XCAGI', message })
+}
+
 function bootstrap(): void {
   const gotLock = app.requestSingleInstanceLock()
   if (!gotLock) {
@@ -207,8 +219,7 @@ function bootstrap(): void {
           // 如果是更新后首次启动，触发回滚
           if (pendingRollback) {
             const rollback = await triggerRollbackSafe('startBackend 失败：端口被占或 backend 可执行文件缺失')
-            void dialog.showErrorBox(
-              'XCAGI',
+            showStartupFailureNotice(
               !rollback
                 ? '更新后启动失败，自动回滚也未能启动。请从官网下载稳定版重新安装。'
                 : rollback.scheduled
@@ -316,8 +327,7 @@ function bootstrap(): void {
         writeBackendLog(`[rollback] 桌面启动失败: ${msg}\n`)
         if (pendingRollback) {
           const rollback = await triggerRollbackSafe(`桌面启动失败: ${msg}`)
-          void dialog.showErrorBox(
-            'XCAGI',
+          showStartupFailureNotice(
             !rollback
               ? '更新后启动失败，自动回滚也未能启动。请从官网下载稳定版重新安装。'
               : rollback.scheduled
@@ -327,7 +337,7 @@ function bootstrap(): void {
                   : '更新后后端启动失败，已恢复上一版本。请重启 XCAGI。',
           )
         } else {
-          void dialog.showErrorBox('XCAGI', msg)
+          showStartupFailureNotice(msg)
         }
         app.quit()
       }
