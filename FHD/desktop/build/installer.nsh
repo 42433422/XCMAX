@@ -1,9 +1,8 @@
 !define XCAGI_PRODUCT_DISPLAY_VERSION "1.0.0.5"
 
-; XCAGI NSIS include. build-installer.ps1 rewrites XCAGI_PRODUCT_DISPLAY_VERSION
-; from VERSION.md before electron-builder runs. npm/Electron stay on the
-; three-part toolchain version; the uninstall DisplayVersion is the four-part
-; product version.
+!macro customHeader
+  BrandingText "${PRODUCT_NAME} ${XCAGI_PRODUCT_DISPLAY_VERSION}"
+!macroend
 
 !macro customInstall
   WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" "DisplayVersion" "${XCAGI_PRODUCT_DISPLAY_VERSION}"
