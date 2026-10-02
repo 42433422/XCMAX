@@ -6,9 +6,7 @@ from typing import Any, Literal, cast
 
 from app.application.agent_orchestrator.tool_contract_fixtures import _default_fixture
 
-# Data tables are externalised into the ``tool_spec_data`` package. They are
-# re-exported here under their original names so downstream code (and tests)
-# can keep importing them from ``tool_spec`` unchanged.
+# Re-export tool data for existing callers.
 from app.application.agent_orchestrator.tool_spec_data import (  # noqa: F401
     _BUSINESS_ENTITIES,
     _DEFAULT_OUTPUT_SCHEMA,
@@ -317,12 +315,11 @@ def _validate_schema_payload(
 
 
 def _validate_input_schema(spec: ToolActionSpecV2, params: dict[str, Any]) -> tuple[bool, str]:
-    if (spec.tool_id, spec.action) == ("shipment_records", "create"):
-        from app.application.shipment_inputs import missing_shipment_fields
+    from app.application.shipment_inputs import missing_shipment_call_fields
 
-        missing = missing_shipment_fields(params)
-        if missing:
-            return False, "缺少有效出货参数：" + "、".join(missing)
+    missing = missing_shipment_call_fields(spec.tool_id, spec.action, params)
+    if missing:
+        return False, "缺少有效出货参数：" + "、".join(missing)
     if (spec.tool_id, spec.action) == ("inventory", "stock_in"):
         from app.application.inventory_inputs import validate_stock_in_request
 

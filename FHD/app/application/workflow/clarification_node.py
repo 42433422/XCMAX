@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.tools_execution.registry import (
+    REQUIRED_PARAMS_BY_TOOL_ACTION as _WRITE_REQUIRED_FALLBACK,
+)
+
 from . import clarification_lifecycle as _lifecycle
 from .types import PlanGraph, WorkflowNode
 
@@ -15,79 +19,26 @@ make_pending_entry = _lifecycle.make_pending_entry
 resolve_confirmed_target = _lifecycle.resolve_confirmed_target
 sweep_expired = _lifecycle.sweep_expired
 
-# 写/高风险节点必填参数回退表（与 services/tools_execution/registry REQUIRED_PARAMS 对齐，
-# 规避依赖完整 registry 的耦合；调用方可传 tool_registry 覆盖，见 needs_clarification）。
-_WRITE_REQUIRED_FALLBACK: dict[tuple[str, str], list[str]] = {
-    ("customers", "delete"): ["id"],
-    ("customers", "batch_delete"): ["ids"],
-    ("customers", "update"): ["id"],
-    ("products", "delete"): ["id"],
-    ("products", "update"): ["id"],
-    ("products", "batch_delete"): ["ids"],
-    ("materials", "delete"): ["id"],
-    ("materials", "update"): ["id"],
-    ("shipment_records", "delete"): ["id"],
-    ("shipment_records", "update"): ["id"],
-    ("shipment_orders", "delete"): ["id"],
-    ("finance", "delete_transaction"): ["transaction_id"],
-    ("finance", "update_transaction"): ["transaction_id"],
-    ("document_template", "delete"): ["id"],
-    ("document_template", "update"): ["id"],
-    ("inventory", "transfer"): [
-        "product_id",
-        "from_warehouse_id",
-        "to_warehouse_id",
-        "quantity",
-    ],
-    ("inventory", "stock_in"): ["quantity"],
-    ("inventory", "stock_out"): ["product_id", "warehouse_id", "quantity"],
-    ("business_db", "write"): ["entity", "operation", "payload"],
-    ("sales", "quote"): ["items"],
-    ("sales", "create_order"): ["items"],
-    ("sales", "confirm"): ["order_id"],
-    ("sales", "deliver"): ["order_id"],
-    ("sales", "invoice"): ["order_id"],
-    ("sales", "payment"): ["order_id", "amount"],
-    ("sales", "cancel"): ["order_id"],
-    ("finance", "journal_entry_create"): ["lines"],
-}
-
-
-def _is_write_or_high_risk(node: WorkflowNode) -> bool:
-    return node.risk == "high" or not node.idempotent
-
 
 def _action_required(node: WorkflowNode, tool_registry: dict[str, Any] | None) -> list[str]:
-    """从 tool_registry 的动作元信息取 required_params；缺失时回退到本地表。"""
-    if isinstance(tool_registry, dict):
-        spec = tool_registry.get(node.tool_id)
-        if isinstance(spec, dict):
-            actions = spec.get("actions")
-            if isinstance(actions, dict):
-                meta = actions.get(node.action)
-                if isinstance(meta, dict) and isinstance(meta.get("required_params"), list):
-                    return [str(x) for x in meta["required_params"]]
+    meta = tool_registry
+    for key in (node.tool_id, "actions", node.action):
+        meta = meta.get(key) if isinstance(meta, dict) else None
+    if isinstance(meta, dict) and isinstance(meta.get("required_params"), list):
+        return [str(x) for x in meta["required_params"]]
     return list(_WRITE_REQUIRED_FALLBACK.get((node.tool_id, node.action), []))
 
 
 def _missing_fields(params: dict[str, Any], required: list[str]) -> list[str]:
-    missing = []
-    for key in required:
-        value = params.get(key)
-        if value is None:
-            missing.append(key)
-            continue
-        if isinstance(value, str) and not value.strip():
-            missing.append(key)
-            continue
-        if isinstance(value, list) and len(value) == 0:
-            missing.append(key)
-            continue
-    return missing
-
-
-def _first_required(node: WorkflowNode, required: list[str]) -> str:
-    return required[0] if required else "target"
+    return [
+        key
+        for key in required
+        if params.get(key) is None
+        or isinstance(params.get(key), str)
+        and not params[key].strip()
+        or isinstance(params.get(key), list)
+        and not params[key]
+    ]
 
 
 def _build_missing_question(node: WorkflowNode, missing: list[str]) -> str:
@@ -119,7 +70,7 @@ def needs_clarification(
     for node in plan.nodes or []:
         if node.tool_id == "clarify":
             continue
-        if not _is_write_or_high_risk(node):
+        if node.risk != "high" and node.idempotent:
             continue
         params = node.params or {}
         required = _action_required(node, tool_registry)
@@ -168,7 +119,7 @@ def needs_clarification(
                     "tool_id": node.tool_id,
                     "action": node.action,
                     "reason": "ambiguous_target",
-                    "field": _first_required(node, required) or "id",
+                    "field": (required[0] if required else "target") or "id",
                     "candidates": general_candidates[:20],
                     "question": _build_ambiguous_question(node, general_candidates),
                 }
@@ -176,10 +127,10 @@ def needs_clarification(
             continue
 
         missing = _missing_fields(params, required)
-        if (node.tool_id, node.action) == ("shipment_records", "create"):
-            from app.application.shipment_inputs import missing_shipment_fields
+        from app.application.shipment_inputs import missing_shipment_call_fields
 
-            missing = missing_shipment_fields(params)
+        missing += missing_shipment_call_fields(node.tool_id, node.action, params)
+        missing = list(dict.fromkeys(missing))
         if (node.tool_id, node.action) == ("inventory", "stock_in"):
             from app.application.inventory_inputs import missing_stock_in_fields
 

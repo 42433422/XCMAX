@@ -66,3 +66,31 @@ def resolve_shipment_product_source(
             item.setdefault(key, _to_float_or_none(matches[0].get(source)))
         payload["products"] = [item]
     return payload
+
+
+def shipment_call_payload(tool_id: str, action: str, params: dict) -> dict | None:
+    if (tool_id, action) == ("shipment_records", "create"):
+        return params
+    if tool_id == "business_db" and action == "write":
+        from app.services.tools_workflow_common import _normalize_business_db_entity
+
+        if (
+            _normalize_business_db_entity(params.get("entity")) == "shipment_records"
+            and str(params.get("operation") or params.get("op") or "create").lower() == "create"
+        ):
+            return params.get("payload") if isinstance(params.get("payload"), dict) else {}
+    return None
+
+
+def missing_shipment_call_fields(tool_id: str, action: str, params: dict) -> list[str]:
+    payload = shipment_call_payload(tool_id, action, params)
+    missing = missing_shipment_fields(payload) if payload is not None else []
+    if (
+        payload
+        and isinstance(payload.get("product_source_node"), str)
+        and payload["product_source_node"].strip()
+    ):
+        missing = [
+            key for key in missing if key not in {"products.0.tin_spec", "products.0.unit_price"}
+        ]
+    return missing

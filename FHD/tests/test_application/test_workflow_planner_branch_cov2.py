@@ -513,10 +513,10 @@ class TestFallbackPlan:
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "新增产品", {"customers": {}, "products": {}})
         assert plan.intent == "add_product_to_unit"
-        assert len(plan.nodes) == 2
-        assert plan.nodes[0].tool_id == "customers"
-        assert plan.nodes[1].tool_id == "products"
-        assert plan.nodes[1].depends_on == ["check_or_create_unit"]
+        assert len(plan.nodes) == 3
+        assert plan.nodes[0].tool_id == "clarify"
+        assert [node.tool_id for node in plan.nodes[1:]] == ["customers", "products"]
+        assert plan.nodes[2].depends_on == ["check_or_create_unit"]
 
     def test_generic_fallback_products(self) -> None:
         # 2026-09 起未命中意图不再静默 products.query，而是 clarify.ask。
