@@ -390,9 +390,12 @@ _SHIPMENT_ALIAS["spec_per_tin"] = _SHIPMENT_ALIAS.pop("tin_spec")
         ],
     ],
 )
-def test_shipment_inputs_shared_by_clarification_and_execution(params, expected):
+@pytest.mark.parametrize("generic", [False, "shipment_records", "shipments", "发货单"])
+def test_shipment_inputs_shared_by_clarification_and_execution(params, expected, generic):
     from unittest.mock import MagicMock, patch
 
+    from app.application.agent_orchestrator.clarification import pause_for_clarification
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
     from app.application.agent_orchestrator.tool_spec import validate_tool_call
     from app.services.tools_execution.registry import _validate_required_params
     from app.services.tools_workflow_shipments_docs import _registered_router_shipment_records
@@ -406,11 +409,22 @@ def test_shipment_inputs_shared_by_clarification_and_execution(params, expected)
         risk="high",
         idempotent=False,
     )
+    if generic:
+        node.tool_id, node.action = "business_db", "write"
+        node.params = {"entity": generic, "operation": "create", "payload": params}
     plan = PlanGraph(plan_id="shipment", intent="create", nodes=[node])
     clarification = needs_clarification(plan, {})
     assert (clarification[0]["missing_fields"] if clarification else []) == expected
-    assert _validate_required_params("shipment_records", "create", params)[0] is (not expected)
-    assert validate_tool_call("shipment_records", "create", params).ok is (not expected)
+    assert _validate_required_params(node.tool_id, node.action, node.params)[0] is (not expected)
+    assert validate_tool_call(node.tool_id, node.action, node.params).ok is (
+        not expected and generic in (False, "shipment_records")
+    )
+    step = AgentStep("write", node.tool_id, node.action, node.params)
+    run = AgentRun("owner", "创建出货", steps=[step])
+    assert pause_for_clarification(run, step) is bool(expected and generic)
+    assert run.tool_calls == []
+    if expected and generic:
+        assert run.status == "blocked" and all(key in run.error for key in expected)
     svc = MagicMock()
     svc.create_shipment.return_value = {"success": True}
     with patch("app.bootstrap.get_shipment_app_service", return_value=svc):

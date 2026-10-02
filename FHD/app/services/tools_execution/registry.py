@@ -161,7 +161,6 @@ REQUIRED_PARAMS_BY_TOOL_ACTION = {
     ("excel_import", "import_records"): ["records"],
     ("unit_products_import", "execute_import"): ["saved_name", "unit_name"],
     ("generate_office_document", "execute"): [],
-    ("shipment_records", "create"): ["unit_name"],
 }
 
 
@@ -183,11 +182,11 @@ def _normalize_action(action: str, params: dict | None = None) -> str:
 
 
 def _validate_required_params(tool_id: str, action: str, params: dict | None) -> tuple[bool, str]:
-    if (tool_id, action) == ("shipment_records", "create"):
-        from app.application.shipment_inputs import missing_shipment_fields
+    from app.application.shipment_inputs import missing_shipment_call_fields
 
-        missing = missing_shipment_fields(dict(params or {}))
-        return (False, "缺少有效出货参数：" + "、".join(missing)) if missing else (True, "")
+    missing = missing_shipment_call_fields(tool_id, action, dict(params or {}))
+    if missing:
+        return False, "缺少有效出货参数：" + "、".join(missing)
     required = REQUIRED_PARAMS_BY_TOOL_ACTION.get(
         (str(tool_id or "").strip(), str(action or "").strip()), []
     )

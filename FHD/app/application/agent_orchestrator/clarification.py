@@ -81,19 +81,19 @@ def apply_clarification_answer(run: AgentRun, *, step_id: str, parameters: dict[
 
 
 def pause_for_clarification(run: AgentRun, step: AgentStep, outputs: dict | None = None) -> bool:
-    payload = step.params.get("payload") or {}
-    if (
-        step.tool_id == "business_db"
-        and step.params.get("entity") == "shipment_records"
-        and payload.get("product_source_node")
-    ):
-        from app.application.shipment_inputs import (
-            missing_shipment_fields,
-            resolve_shipment_product_source,
-        )
+    from app.application.shipment_inputs import (
+        missing_shipment_fields,
+        resolve_shipment_product_source,
+        shipment_call_payload,
+    )
 
-        step.params["payload"] = resolve_shipment_product_source(payload, outputs or {})
-        missing = missing_shipment_fields(step.params["payload"])
+    payload = shipment_call_payload(step.tool_id, step.action, step.params)
+    if payload is not None and step.tool_id == "business_db":
+        if payload.get("product_source_node"):
+            payload = step.params["payload"] = resolve_shipment_product_source(
+                payload, outputs or {}
+            )
+        missing = missing_shipment_fields(payload)
         if missing:
             run.status = "blocked"
             step.error = run.error = "请补充有效出货参数：" + "、".join(missing)
