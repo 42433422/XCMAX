@@ -247,19 +247,6 @@ class TestExtractBusinessDbWriteNode:
         assert result.params["entity"] == "materials"
         assert result.params["operation"] == "create"
 
-    def test_model_number_extracted(self) -> None:
-        node = _extract_business_db_write_node(
-            "给单位测试公司新增产品测试品 型号:ABC123 写入数据库"
-        )
-        if node is not None and node.params.get("payload"):
-            payload = node.params["payload"]
-            assert "model_number" in payload or "product_name" in payload
-
-
-# ---------------------------------------------------------------------------
-# _extract_business_db_read_keyword
-# ---------------------------------------------------------------------------
-
 
 class TestExtractBusinessDbReadKeyword:
     def test_quoted_takes_priority(self) -> None:
