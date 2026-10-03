@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-
 const electronMocks = vi.hoisted(() => {
   const nodeOs = require('node:os')
   const nodePath = require('node:path')
@@ -14,7 +13,6 @@ const electronMocks = vi.hoisted(() => {
   const state = {
     exePath: nodePath.join(tmpDir, `xcagi-rollback-app-${stamp}`, 'XCAGI.exe')
   }
-
   return {
     app: {
       isPackaged: false as boolean,
@@ -29,7 +27,6 @@ const electronMocks = vi.hoisted(() => {
     __state: state
   }
 })
-
 vi.mock('electron', () => electronMocks)
 const windowsRollbackMocks = vi.hoisted(() => ({
   launchWindowsFullRollback: vi.fn(async () => 12345)
@@ -48,7 +45,6 @@ vi.mock('./rollback-macos.js', async importOriginal => {
   const actual = await importOriginal<typeof import('./rollback-macos.js')>()
   return { ...actual, launchMacOSFullRollback: macosRollbackMocks.launchMacOSFullRollback }
 })
-
 function cleanRollbackState() {
   const userData = electronMocks.__userDataDir
   const rollbackDir = path.join(userData, 'rollback')
@@ -56,17 +52,14 @@ function cleanRollbackState() {
   try { fs.unlinkSync(path.join(userData, 'rollback-marker.json')) } catch {}
   try { fs.unlinkSync(path.join(userData, 'rollback-applied.json')) } catch {}
 }
-
 beforeEach(() => {
   cleanRollbackState()
   vi.resetModules()
 })
-
 describe('rollback — prepareRollback', () => {
   let tmpResources: string
   let tmpAppBundle: string
   let savedResourcesPath: string | undefined
-
   beforeEach(() => {
     electronMocks.app.isPackaged = true
     tmpAppBundle = path.join(os.tmpdir(), `xcagi-rollback-${Date.now()}-${Math.random().toString(36).slice(2)}.app`)
@@ -84,11 +77,9 @@ describe('rollback — prepareRollback', () => {
     fs.mkdirSync(path.dirname(appPath), { recursive: true })
     fs.writeFileSync(appPath, 'fake-app')
     electronMocks.__state.exePath = appPath
-
     savedResourcesPath = (process as { resourcesPath?: string }).resourcesPath
     ;(process as { resourcesPath?: string }).resourcesPath = tmpResources
   })
-
   afterEach(() => {
     electronMocks.app.isPackaged = false
     if (savedResourcesPath === undefined) {
@@ -97,14 +88,12 @@ describe('rollback — prepareRollback', () => {
       (process as { resourcesPath?: string }).resourcesPath = savedResourcesPath
     }
   })
-
   it('skips prepareRollback in dev mode (not packaged)', async () => {
     electronMocks.app.isPackaged = false
     const { prepareRollback } = await import('./rollback.js')
     await expect(prepareRollback('10.0.1')).resolves.toBeUndefined()
   })
-
-  it('backs up backend dir and writes marker when packaged', async () => {
+  it.each([false, true])('backs up the app when obsolete backup cleanup fails=%s', async cleanupFails => {
     const { prepareRollback, checkPendingRollback } = await import('./rollback.js')
     await prepareRollback('10.0.1')
     const marker = checkPendingRollback()
@@ -120,14 +109,8 @@ describe('rollback — prepareRollback', () => {
     } else {
       expect(marker!.backupRelPath).toMatch(/^backend-10\.0\.0$/)
     }
-
     const userData = electronMocks.__userDataDir
-    const backupRoot =
-      process.platform === 'win32'
-        ? path.join(userData, 'rollback', marker!.appBackupRelPath!)
-        : process.platform === 'darwin'
-          ? path.join(userData, 'rollback', marker!.appBackupRelPath!)
-        : path.join(userData, 'rollback', marker!.backupRelPath!)
+    const backupRoot = path.join(userData, 'rollback', marker!.appBackupRelPath || marker!.backupRelPath!)
     expect(fs.existsSync(backupRoot)).toBe(true)
     const exeName = process.platform === 'win32' ? 'xcagi-backend.exe' : 'xcagi-backend'
     const backendBackupRoot =
@@ -138,17 +121,24 @@ describe('rollback — prepareRollback', () => {
           : backupRoot
     expect(fs.existsSync(path.join(backendBackupRoot, exeName))).toBe(true)
     expect(fs.existsSync(path.join(backendBackupRoot, '_internal', 'config.json'))).toBe(true)
+    const remove = fs.rmSync.bind(fs)
+    vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+      if (cleanupFails && String(target).includes('.failed-') && fs.existsSync(target)) {
+        throw Object.assign(new Error('obsolete backup ENOTEMPTY'), { code: 'ENOTEMPTY' })
+      }
+      return remove(target, options)
+    })
+    await expect(prepareRollback('10.0.2')).resolves.toBeUndefined()
+    expect(checkPendingRollback()?.toVersion).toBe('10.0.2')
+    expect(fs.readFileSync(path.join(backendBackupRoot, exeName), 'utf8')).toBe('fake-binary-content')
   })
-
   it('throws when backend executable missing', async () => {
     const backendDir = path.join(tmpResources, 'backend')
     fs.rmSync(backendDir, { recursive: true, force: true })
-
     const { prepareRollback } = await import('./rollback.js')
     await expect(prepareRollback('10.0.1')).rejects.toThrow(/找不到当前 backend/)
   })
 })
-
 describe('rollback — commitRollback', () => {
   it('deletes marker file', async () => {
     const { prepareRollback, commitRollback, checkPendingRollback } = await import('./rollback.js')
@@ -163,7 +153,6 @@ describe('rollback — commitRollback', () => {
     }
   })
 })
-
 describe('rollback — triggerRollback', () => {
   it('returns silently when no marker (not update first-run)', async () => {
     const { triggerRollback } = await import('./rollback.js')
@@ -172,9 +161,7 @@ describe('rollback — triggerRollback', () => {
       scheduled: false
     })
   })
-
 })
-
 describe('rollback — consumeRollbackApplied', () => {
   it('returns the applied record only once', async () => {
     const appliedPath = path.join(electronMocks.__userDataDir, 'rollback-applied.json')
