@@ -400,7 +400,7 @@ describe('ProductsView.coverage', () => {
 
   // ===== saveProduct 保存产品 =====
   describe('saveProduct 保存产品', () => {
-    it('新建产品保留所选客户并刷新列表', async () => {
+    it.each([[10, 10], ['', 0], [0, 0]])('新建产品价格 %s 正常化为 %s 并保留客户', async (price, expectedPrice) => {
       mockCreateProduct.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
       await flushPromises()
@@ -411,13 +411,13 @@ describe('ProductsView.coverage', () => {
         model_number: 'A1',
         name: 'N1',
         specification: '',
-        price: 10,
+        price,
       })
       setSetupValue(wrapper, 'selectedUnit', '验收客户')
       setSetupValue(wrapper, 'showModal', true)
       await state.saveProduct()
       await flushPromises()
-      expect(mockCreateProduct).toHaveBeenCalledWith(expect.objectContaining({ unit: '验收客户', model_number: 'A1' }))
+      expect(mockCreateProduct).toHaveBeenCalledWith(expect.objectContaining({ unit: '验收客户', model_number: 'A1', price: expectedPrice }))
       expect(getSetupRefValue(wrapper, 'showModal')).toBe(false)
     })
 
@@ -441,7 +441,7 @@ describe('ProductsView.coverage', () => {
       expect(getSetupRefValue(wrapper, 'showModal')).toBe(true)
     })
 
-    it('编辑产品成功时关闭模态框', async () => {
+    it.each([[10, 10], ['', 0], [0, 0]])('编辑产品价格 %s 正常化为 %s', async (price, expectedPrice) => {
       mockUpdateProduct.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
       await flushPromises()
@@ -452,12 +452,12 @@ describe('ProductsView.coverage', () => {
         model_number: 'A7',
         name: 'N7',
         specification: '',
-        price: 10,
+        price,
       })
       setSetupValue(wrapper, 'showModal', true)
       await state.saveProduct()
       await flushPromises()
-      expect(mockUpdateProduct).toHaveBeenCalledWith(7, getSetupRefValue(wrapper, 'formData'))
+      expect(mockUpdateProduct).toHaveBeenCalledWith(7, { ...getSetupRefValue(wrapper, 'formData'), price: expectedPrice })
       expect(getSetupRefValue(wrapper, 'showModal')).toBe(false)
     })
 
