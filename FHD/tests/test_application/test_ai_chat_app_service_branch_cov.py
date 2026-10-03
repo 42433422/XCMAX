@@ -3098,6 +3098,13 @@ class TestTryHandleDynamicWorkflow:
             "u1", message, "pro", {}, message, True
         )
         assert result == {"missing": missing}
+        payload = next(
+            n.params["payload"]
+            for n in svc._open_clarification_gate.call_args.kwargs["plan"].nodes
+            if n.tool_id == "business_db"
+        )
+        assert payload["unit_name"] == customer
+        assert payload["products"][0]["product_name"] == "验收商品"
         assert original in svc.workflow_planner.plan.call_args.kwargs["message"]
         assert "u1" not in svc._pending_workflows
         svc.workflow_engine.run.assert_not_called()
