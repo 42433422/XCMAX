@@ -3053,8 +3053,9 @@ class TestTryHandleDynamicWorkflow:
         ],
     )
     @pytest.mark.parametrize("previous_customer", [None, "用户需提供"])
+    @pytest.mark.parametrize("profile", ["normal", "pro_default"])
     def test_shipment_missing_inputs_resume_through_validation(
-        self, customer, missing, previous_customer
+        self, customer, missing, previous_customer, profile
     ):
         from app.application.workflow.clarification_node import needs_clarification
         from app.application.workflow.planner import LLMWorkflowPlanner
@@ -3093,9 +3094,13 @@ class TestTryHandleDynamicWorkflow:
                 "missing": bool(needs_clarification(kw["plan"], kw["tool_registry"]))
             }
         )
-        message = f"客户名称是「{customer}」，产品验收商品，数量2箱，规格10kg，单价12.5元，请创建这条出货记录并交人工审批。"
+        message = f"客户名称是「{customer}」，" + (
+            "其他出货参数沿用刚才提供的内容，需要人工审批后执行。"
+            if previous_customer
+            else "产品验收商品，数量2箱，规格10kg，单价12.5元，请创建这条出货记录并交人工审批。"
+        )
         result = svc._try_handle_dynamic_workflow_after_excel(
-            "u1", message, "pro", {}, message, True
+            "u1", message, "normal", {"tool_execution_profile": profile}, message, False
         )
         assert result == {"missing": missing}
         payload = next(

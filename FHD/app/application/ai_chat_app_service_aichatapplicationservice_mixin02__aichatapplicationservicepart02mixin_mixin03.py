@@ -41,7 +41,12 @@ class __AIChatApplicationServicePart02MixinPart03Mixin(_DynamicWorkflowPendingRe
         # its whole instruction as a single shipment would discard the reads
         # and the user's explicit confirmation boundary before planning.
         has_onboarding_plan = _onboarding_first_order_slots(text) is not None
-        if profile == "normal" and not explicit_workflow_tool_intent and not has_onboarding_plan:
+        if (
+            profile == "normal"
+            and not explicit_workflow_tool_intent
+            and not has_onboarding_plan
+            and user_id not in self._pending_workflows
+        ):
             rr = route_normal_mode_message(text)
             if rr.get("intent") == "product_query":
                 pq = build_product_query_response_dict(rr)
