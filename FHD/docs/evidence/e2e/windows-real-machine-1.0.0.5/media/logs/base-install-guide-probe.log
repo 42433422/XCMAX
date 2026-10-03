@@ -1,0 +1,45 @@
+=== on-machine probe record ===
+item     : base-install-guide
+module   : base-edition
+probed_at: 2026-09-19 22:30:37
+product  : 1.0.0.5   release_sha: 54325894cc6e3fc2becfcbc98697a099310d9420
+
+> Get-ChildItem 'C:\XCAGI-evidence-1.0.0.5' -Force | Select-Object Mode,Length,Name | Format-Table -AutoSize | Out-String
+
+Mode  Length    Name
+----  ------    ----
+d----           locales
+d----           resources
+-a--- 116089    chrome_100_percent.pak
+-a--- 187558    chrome_200_percent.pak
+-a--- 4741480   d3dcompiler_47.dll
+-a--- 25666560  dxcompiler.dll
+-a--- 1503600   dxil.dll
+-a--- 3096576   ffmpeg.dll
+-a--- 10822192  icudtl.dat
+-a--- 522752    libEGL.dll
+-a--- 7965696   libGLESv2.dll
+-a--- 1096      LICENSE.electron.txt
+-a--- 19475437  LICENSES.chromium.html
+-a--- 6793929   resources.pak
+-a--- 341312    snapshot_blob.bin
+-a--- 192246    Uninstall XCAGI.exe
+-a--- 58399     uninstallerIcon.ico
+-a--- 715208    v8_context_snapshot.bin
+-a--- 106       vk_swiftshader_icd.json
+-a--- 5624320   vk_swiftshader.dll
+-a--- 954880    vulkan-1.dll
+-a--- 223774720 XCAGI.exe
+
+
+
+
+> Get-Item 'C:\XCAGI-evidence-1.0.0.5\XCAGI.exe' | Select-Object @{n='ProductVersion';e={$_.VersionInfo.ProductVersion}},Length,LastWriteTime | Format-List | Out-String
+
+ProductVersion : 1.0.0.0
+Length         : 223774720
+LastWriteTime  : 2026/9/18 14:46:28
+
+
+
+

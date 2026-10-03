@@ -1,0 +1,52 @@
+=== on-machine probe record ===
+item     : base-config
+module   : base-runtime
+probed_at: 2026-09-19 22:30:21
+product  : 1.0.0.5   release_sha: 54325894cc6e3fc2becfcbc98697a099310d9420
+
+> Get-ChildItem 'C:\XCAGI-evidence-data-1.0.0.5\userData' -Force | Select-Object Mode,Length,LastWriteTime,Name | Format-Table -AutoSize | Out-String -Width 200
+
+Mode  Length LastWriteTime      Name
+----  ------ -------------      ----
+d----        2026/9/19 20:34:33 .runtime
+d----        2026/9/19 20:34:40 autonomy
+d----        2026/9/19 20:34:59 backups
+d----        2026/9/19 20:36:23 blob_storage
+d----        2026/9/19 20:34:11 Cache
+d----        2026/9/19 20:34:11 Code Cache
+d----        2026/9/19 20:39:04 config
+d----        2026/9/19 20:46:23 crash-dumps
+d----        2026/9/19 20:36:30 data
+d----        2026/9/19 20:34:11 DawnGraphiteCache
+d----        2026/9/19 20:34:11 DawnWebGPUCache
+d----        2026/9/19 20:34:11 GPUCache
+d----        2026/9/19 20:34:11 Local Storage
+d----        2026/9/19 20:34:11 logs
+d----        2026/9/19 20:34:16 models
+d----        2026/9/19 20:34:37 mods
+d----        2026/9/19 20:35:53 Network
+d----        2026/9/19 20:34:23 saved_analyses
+d----        2026/9/19 20:36:33 Session Storage
+d----        2026/9/19 20:34:11 Shared Dictionary
+d----        2026/9/19 20:34:23 temp_excel
+d----        2026/9/19 20:34:16 uploads
+-a--- 35     2026/9/19 20:34:11 desktop-settings.json
+-a--- 4096   2026/9/19 20:34:11 DIPS
+-a--- 86552  2026/9/19 22:24:09 DIPS-wal
+-a--- 21     2026/9/19 20:34:12 frontend-cache-version.txt
+-a--- 37     2026/9/19 20:34:12 installation-id
+-a--- 490    2026/9/19 20:34:21 Local State
+-a--- 0      2026/9/19 20:36:23 lockfile
+-a--- 367    2026/9/19 20:34:12 pending-update-install-receipt.json
+-a--- 57     2026/9/19 20:36:34 Preferences
+-a--- 57     2026/9/19 20:34:12 release-note-state.json
+-a--- 4096   2026/9/19 20:36:11 SharedStorage
+-a--- 0      2026/9/19 20:36:11 SharedStorage-wal
+-a--- 42     2026/9/19 20:37:06 window-state.json
+
+
+
+
+> GET http://127.0.0.1:17500/api/desktop/status  -> HTTP 200
+{"desktopMode":true,"dataDir":"C:\\XCAGI-evidence-data-1.0.0.5\\userData","database":"C:\\XCAGI-evidence-data-1.0.0.5\\userData\\data\\xcagi.db","modsDir":"C:\\XCAGI-evidence-data-1.0.0.5\\userData\\mods","modelsDir":"C:\\XCAGI-evidence-data-1.0.0.5\\userData\\models","webModeCompatible":true,"storageMode":"local_sqlite","databaseUrlRedacted":"sqlite:///C:/XCAGI-evidence-data-1.0.0.5/userData/data/xcagi.db","profilePath":"C:\\XCAGI-evidence-data-1.0.0.5\\userData\\config\\database.json","modsRoutesLoaded":true,"modsFullLoadDone":true,"modsBackgroundLoadScheduled":false,"appRoutesReady":true,"readyForUi":true,"runtimeStatus":"degraded","degraded":true,"degradedReasons":["Industry MOD is entitled but not installed locally: list","Industry MOD is entitled but not installed locally: store"],"runtimeIntegrity":{"status":"degraded","components":{"desktop_runtime_routes":{"ok":true,"required":true,"detail":""},"desktop_automation_routes":{"ok":true,"required":false,"detail":""},"gdpr_routes":{"ok":true,"required":false,"detail":""},"platform_shell_routes":{"ok":true,"required":true,"detail":""},"business_route:xcmax_admin":{"ok":true,"required":false,"detail":""},"business_route:order_bridge_webhook":{"ok":true,"required":false,"detail":""},"business_route:xcmax_private_delivery_admin":{"ok":true,"required":false,"detail":""},"business_route:founder_autonomy":{"ok":true,"required":false,"detail":""},"business_route:ops_autonomy":{"ok":true,"required":false,"detail":""},"business_route:ops_wechat_ingest":{"ok":true,"required":false,"detail":""},"business_route:admin_audit":{"ok":true,"required":false,"detail":""},"business_route:genai_traces":{"ok":true,"required":false,"detail":""},"business_route:aibiz_terminal":{"ok":true,"required":false,"detail":""},"business_route:agent":{"ok":true,"required":false,"detail":""},"business_route:tutorial_v2":{"ok":true,"required":false,"detail":""},"business_route:knowledge_v1":{"ok":true,"required":false,"detail":""},"business_route:etl":{"ok":true,"required":true,"detail":""},"business_route:etl_targets":{"ok":true,"required":false,"detail":""},"business_route:taiyangniao_attendance_compat":{"ok":true,"required":false,"detail":""},"business_route:purchase":{"ok":true,"required":true,"detail":""},"business_route:inventory":{"ok":true,"required":true,"detail":""},"business_route:finance_unified_ledger":{"ok":true,"required":false,"detail":""},"business_route:finance_invoices":{"ok":true,"required":false,"detail":""},"business_route:finance":{"ok":true,"required":true,"detail":""},"business_route:reports":{"ok":true,"required":true,"detail":""},"business_route:rbac":{"ok":true,"required":false,"detail":""},"business_route:mods":{"ok":true,"required":true,"detail":""},"business_route:workspace_prefs":{"ok":true,"required":true,"detail":""},"business_route:business_bridge":{"ok":true,"required":true,"detail":""},"business_route:mod_store":{"ok":true,"required":true,"detail":""},"business_route:control":{"ok":true,"required":false,"detail":""},"business_route:voice":{"ok":true,"required":false,"detail":""},"business_route:mobile_api":{"ok":true,"required":false,"detail":""},"business_route:im_v0":{"ok":true,"required":false,"detail":""},"business_route:internal_im":{"ok":true,"required":false,"detail":""},"business_route:production_line_event":{"ok":true,"required":false,"detail":""},"business_route:production_line_event_xcmax":{"ok":true,"required":false,"detail":""},"industry_mod:list":{"ok":false,"required":false,"detail":"Industry MOD is entitled but not installed locally: list"},"industry_mod:store":{"ok":false,"required":false,"detail":"Industry MOD is entitled but not installed locally: store"}},"failures":[{"component":"industry_mod:list","ok":false,"required":false,"detail":"Industry MOD is entitled but not installed locally: list"},{"component":"industry_mod:store","ok":false,"required":false,"detail":"Industry MOD is entitled but not installed locally: store"}],"blockers":[],"degraded_reaso... [truncated]
+

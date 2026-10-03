@@ -1,0 +1,16 @@
+{
+  "_comment": "Auto-generated extraction of the Windows real-machine review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "platform": "windows",
+  "feature": "base-win-client",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "1976f0fe2bf31eec0e021641c127e5e0f8b11df074eb53b36dc7762655c7c275",
+  "visible_content": "Window \"XCAGI - V1\" maximized, DOM exposed via UI Automation, backend health reachable",
+  "full_feature_acceptance": true,
+  "visual_review_state": "accepted",
+  "frame_modality": "product_ui",
+  "video_modality": "product_ui",
+  "source": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/base-win-client.png"
+}

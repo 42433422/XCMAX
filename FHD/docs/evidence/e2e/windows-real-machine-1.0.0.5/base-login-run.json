@@ -1,0 +1,109 @@
+{
+  "_comment": "Auto-generated from the Windows real-machine evidence run; DO NOT EDIT historical outcomes.",
+  "kind": "feature-acceptance",
+  "platform": "windows",
+  "feature": "base-login",
+  "status": "blocked",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-20",
+  "reviewed_at": "2026-09-20",
+  "passed": 0,
+  "failed": 0,
+  "evidence_modality": "product_ui",
+  "visual_review_state": "accepted",
+  "full_feature_acceptance": false,
+  "visible_content": "Login page renders; POST /api/auth/login returns success=false MARKET_AUTH_FAILED for a probe account (remote validation against https://xiu-ci.com is live); the UI login button stayed disabled without a valid account",
+  "media": [
+    {
+      "feature": "base-login",
+      "kind": "screenshot",
+      "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/base-login.png",
+      "sha256": "e912bac20995f00fbf1062c87f09fa8b0e3262a9f51eb8c2bc95b0d3c33c8405",
+      "bytes": 492383,
+      "frame_modality": "product_ui",
+      "visual_review": "accepted",
+      "review_basis": "operator observation of the product UI at capture time",
+      "visible_result": "Login page renders; POST /api/auth/login returns success=false MARKET_AUTH_FAILED for a probe account (remote validation against https://xiu-ci.com is live); the UI login button stayed disabled without a valid account",
+      "reviewed_at": "2026-09-20"
+    },
+    {
+      "feature": "base-login",
+      "kind": "video",
+      "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/base-login.mp4",
+      "sha256": "cc563879ef614ad34f540c26fe71dd9941d1c29cc57f2b621f4c0db25ee517cb",
+      "bytes": 15657418,
+      "frame_modality": "product_ui",
+      "visual_review": "accepted",
+      "review_basis": "operator observation of the product UI at capture time",
+      "visible_result": "Login page renders; POST /api/auth/login returns success=false MARKET_AUTH_FAILED for a probe account (remote validation against https://xiu-ci.com is live); the UI login button stayed disabled without a valid account",
+      "reviewed_at": "2026-09-20"
+    }
+  ],
+  "cases": [
+    {
+      "input": "Windows real-machine verification of 登录与会话管理 (base-login)",
+      "actions": "no SUNBIRD enterprise credential available in this session, so a successful sign-in / session / logout could not be verified; the login page and the on-machine login endpoint were both exercised",
+      "expected": "Enterprise account signs in from the desktop client and the session persists",
+      "observed": "Login page renders; POST /api/auth/login returns success=false MARKET_AUTH_FAILED for a probe account (remote validation against https://xiu-ci.com is live); the UI login button stayed disabled without a valid account",
+      "result": "blocked"
+    }
+  ],
+  "six_elements": {
+    "screenshot": true,
+    "video": true,
+    "log": true,
+    "product_version": true,
+    "app_sha": true,
+    "verify_time": true
+  },
+  "evidence_kind": "local_api",
+  "machine": {
+    "hostname": "佳诺",
+    "os": "Microsoft Windows 11 家庭版 中文版",
+    "version": "10.0.26200",
+    "arch": "AMD64",
+    "ram_gb": 15.6
+  },
+  "baseline": {
+    "product_version": "1.0.0.5",
+    "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "installer": {
+      "name": "XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+      "bytes": 248514275,
+      "sha256_expected": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+      "sha256_measured": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+      "authenticode": "NotSigned"
+    },
+    "install_root": "C:\\XCAGI-evidence-1.0.0.5",
+    "user_data_dir": "C:\\XCAGI-evidence-data-1.0.0.5\\userData",
+    "clean_baseline": "全新独立安装目录 + 全新空 userData 目录（C:\\XCAGI-evidence-data-1.0.0.5\\userData，取证前为空），安装包从公网 https://xiu-ci.com 下载并校验 SHA256",
+    "installed_at": "2026-09-19 20:31:36",
+    "cold_start_seconds": 41.4,
+    "health": {
+      "status": "healthy",
+      "version": "1.0.0.5",
+      "git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "release_id": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420"
+    },
+    "build_info": {
+      "releaseId": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420",
+      "schema_version": 1,
+      "gitSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "version": "1.0.0.5"
+    },
+    "sku": {
+      "schema_version": 1,
+      "sku": "enterprise"
+    },
+    "app_exe_sha256": "41a272575d43faa7c71d079716078c7539c4078d5133abde9a0839e25217078c",
+    "machine": {
+      "hostname": "佳诺",
+      "os": "Microsoft Windows 11 家庭版 中文版",
+      "version": "10.0.26200",
+      "arch": "AMD64",
+      "ram_gb": 15.6
+    }
+  }
+}

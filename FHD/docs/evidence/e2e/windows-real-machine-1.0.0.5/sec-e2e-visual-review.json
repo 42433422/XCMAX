@@ -1,0 +1,16 @@
+{
+  "_comment": "Auto-generated extraction of the Windows real-machine review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "platform": "windows",
+  "feature": "sec-e2e",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "211aed5801a05f76ad3bcda832c424d838eeebeeafd59170375475723a2ef072",
+  "visible_content": null,
+  "full_feature_acceptance": false,
+  "visual_review_state": "not_a_ui_frame",
+  "frame_modality": "terminal_probe",
+  "video_modality": "terminal_probe",
+  "source": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/sec-e2e.png"
+}

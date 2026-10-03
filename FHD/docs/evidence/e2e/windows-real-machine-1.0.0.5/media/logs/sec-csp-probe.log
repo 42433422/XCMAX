@@ -1,0 +1,23 @@
+=== on-machine probe record ===
+item     : sec-csp
+module   : sec-security
+probed_at: 2026-09-19 22:33:11
+product  : 1.0.0.5   release_sha: 54325894cc6e3fc2becfcbc98697a099310d9420
+
+> $r = Invoke-WebRequest 'http://127.0.0.1:17500/login' -SkipHttpErrorCheck -TimeoutSec 20; 'STATUS: ' + [int]$r.StatusCode; $r.Headers.GetEnumerator() | Sort-Object Key | ForEach-Object { $_.Key + ': ' + ($_.Value -join '; ') } | Out-String
+STATUS: 200
+Accept-Ranges: bytes
+Content-Length: 2137
+Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; frame-src 'self' blob:; connect-src 'self' ws: wss:
+Content-Type: text/html; charset=utf-8
+Date: Sat, 19 Sep 2026 14:33:12 GMT
+ETag: "ac7e0a48a8a0a98a6a23a9da091fd68f"
+Last-Modified: Fri, 18 Sep 2026 06:46:28 GMT
+Referrer-Policy: strict-origin-when-cross-origin
+Server: uvicorn
+Set-Cookie: csrf_token=11d448034c8020cf26c7969dec150f9b04f80070b9d2dc5cb196f80ce46201f2; Path=/; SameSite=Lax
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+
+

@@ -1,0 +1,12 @@
+=== on-machine probe record ===
+item     : mods-open-api
+module   : mods-open
+probed_at: 2026-09-19 22:31:02
+product  : 1.0.0.5   release_sha: 54325894cc6e3fc2becfcbc98697a099310d9420
+
+> GET http://127.0.0.1:17500/api/mods/comms/endpoints  -> HTTP 200
+{"success":true,"data":[]}
+
+> GET http://127.0.0.1:17500/api/mods/routes  -> HTTP 200
+{"success":true,"data":[{"mod_id":"attendance-industry","routes_path":"frontend/routes"},{"mod_id":"lan-gate-ai-employee","routes_path":"frontend/routes"},{"mod_id":"xcagi-approval-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-core-workflow-employees","routes_path":"frontend/routes"},{"mod_id":"xcagi-customer-service-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-erp-domain-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-lan-license-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-model-payment-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-office-employee-pack-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-planner-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-workflow-visualization-bridge","routes_path":"frontend/routes"}]}
+
