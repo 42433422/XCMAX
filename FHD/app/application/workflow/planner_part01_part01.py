@@ -84,7 +84,7 @@ def _extract_business_db_id(message: str) -> int | None:
     return value if value > 0 else None
 
 
-def _extract_marked_value(message: str, labels: tuple[str, ...]) -> str:
+def _extract_marked_value(message: str, labels: tuple[str, ...], *, clean: bool = True) -> str:
     label_pattern = "|".join(_facade().re.escape(label) for label in labels)
     quoted = _facade().re.search(
         rf"""(?:{label_pattern})\s*[:：是为]?\s*(?:「([^」]*)」|“([^”]*)”|"([^"]*)"|'([^']*)')""",
@@ -98,7 +98,8 @@ def _extract_marked_value(message: str, labels: tuple[str, ...]) -> str:
         message,
         flags=_facade().re.I,
     )
-    return _facade()._clean_db_slot_value(match.group(1)) if match else ""
+    value = match.group(1) if match else ""
+    return _facade()._clean_db_slot_value(value) if clean else value.strip(" \t\r\n「」“”\"'")
 
 
 def _extract_number(message: str, labels: tuple[str, ...]) -> float | None:
@@ -322,8 +323,10 @@ def _extract_business_db_write_node(message: str) -> _facade().WorkflowNode | No
             idempotent=False,
         )
     if entity == "shipment_records":
-        unit_name = _facade()._extract_marked_value(message, ("客户", "购买单位"))
-        product_name = _facade()._extract_marked_value(message, ("产品", "商品"))
+        unit_name = _facade()._extract_marked_value(
+            message, ("客户名称", "单位名称", "购买单位", "客户", "单位"), clean=False
+        )
+        product_name = _facade()._extract_marked_value(message, ("产品", "商品"), clean=False)
         tins = _facade()._extract_number(message, ("桶数", "数量"))
         if not unit_name or not product_name or tins is None:
             return None
