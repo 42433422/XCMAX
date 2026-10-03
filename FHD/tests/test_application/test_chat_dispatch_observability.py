@@ -101,9 +101,9 @@ def test_compat_slot_logs_run_id_and_intent(caplog) -> None:
 
 def test_llm_planner_path_is_distinguishable(caplog) -> None:
     caplog.set_level(logging.INFO)
-    body = SimpleNamespace(message="帮我看看这个月的情况", context={}, system_prompt="keep")
-    # 受理分支现在先于 normal-slot 快路径解析会话上下文，因此 stub 需具备真实
-    # FastAPI Request 的基本属性（state/headers/cookies/url），否则会误报 AttributeError。
+    body = SimpleNamespace(
+        message="帮我看看这个月的情况", context={}, system_prompt="keep", user_id="u1"
+    )
     request = SimpleNamespace(
         state=SimpleNamespace(tutorial_active=False),
         headers={},
