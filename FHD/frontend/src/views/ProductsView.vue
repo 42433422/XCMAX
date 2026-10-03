@@ -268,8 +268,7 @@ const editProduct = (product) => {
 
 const saveProduct = async () => {
   if (isEdit.value && !canEditProducts.value) return;
-  // 行业感知校验：按当前行业 products 子系统的字段 validators 拦截（如考勤「班次」须为 早/中/晚）。
-  // 未声明 validators 的行业（如涂料）此处为空校验，不改变原有行为。
+  formData.value.price = formData.value.price || 0;
   const fieldErrors = productsSchema.validate(formData.value);
   if (fieldErrors.length > 0) {
     await appAlert(fieldErrors[0].message);

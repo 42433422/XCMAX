@@ -76,7 +76,8 @@ domains:
     owner: docs
     enabled: true
     ssot: FHD/docs/SSOT_INDEX.md
-    derived: []
+    derived:
+      - FHD/CHANGELOG.md
     mode: lint
     check: python scripts/dev/docs_ssot_lint.py
     sync: null
