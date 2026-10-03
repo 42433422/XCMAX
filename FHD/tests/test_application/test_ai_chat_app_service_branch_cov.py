@@ -1,39 +1,4 @@
-"""测试 ai_chat_app_service 的分支覆盖（聚焦未覆盖方法与边界分支）。
-
-覆盖目标：
-- _looks_like_explicit_workflow_tool_intent（静态方法，多分支）
-- _workflow_output_preview / _workflow_output_message（静态方法）
-- _iter_agentic_artifact_payloads（静态方法）
-- _agent_plan_can_auto_execute（静态方法）
-- _attach_deterministic_workflow_trace（静态方法）
-- _format_workflow_tool_success_line（实例方法）
-- _format_agent_run_response（实例方法）
-- _start_deterministic_import_agent_run（实例方法）
-- _start_agentic_workflow_agent_run（实例方法）
-- _bridge_agentic_workflow_result_to_agent_run（实例方法）
-- _workflow_products_float_query（实例方法，补充分支）
-- _build_workflow_thinking_steps（实例方法，补充分支）
-- _normal_slot_dispatch_chat_overlay（静态方法，补充分支）
-- _dispatch_workflow_tool（实例方法，补充分支）
-- _execute_pro_mode_tools（实例方法，补充分支）
-- _build_order_text_from_products（实例方法，补充分支）
-- _try_merge_split_model（实例方法，补充分支）
-- _execute_customers_intent（实例方法，补充分支）
-- _execute_shipment_generate（实例方法，补充分支）
-- _execute_shipments_query（实例方法，补充分支）
-- _handle_tool_call（实例方法，补充分支）
-- _build_response（实例方法，补充分支）
-- _persist_chat_turn（实例方法，补充分支）
-- _inject_excel_vector_context（实例方法，补充分支）
-- _resolve_unit_price_column（静态方法，补充分支）
-- _merge_user_intent_for_price_resolution（静态方法，补充分支）
-- _price_column_buckets（静态方法，补充分支）
-- _header_hint_column_roles（静态方法，补充分支）
-- _infer_excel_column_roles（实例方法，补充分支）
-- _fallback_excel_product_name_column / _fallback_excel_model_number_column（补充分支）
-- _extract_excel_import_records（实例方法，补充分支）
-- _try_handle_dynamic_workflow（实例方法，补充分支）
-"""
+"""AI chat service branch and confirmation-boundary regressions."""
 
 from __future__ import annotations
 
@@ -50,9 +15,7 @@ from app.application.ai_chat_app_service import (
     _skip_pro_excel_deterministic_import,
 )
 
-# ---------------------------------------------------------------------------
 # helpers
-# ---------------------------------------------------------------------------
 
 
 def _make_svc() -> AIChatApplicationService:
@@ -210,9 +173,7 @@ def _make_run_result(
     )
 
 
-# ---------------------------------------------------------------------------
 # _looks_like_explicit_workflow_tool_intent
-# ---------------------------------------------------------------------------
 
 
 class TestLooksLikeExplicitWorkflowToolIntent:
@@ -330,9 +291,7 @@ class TestLooksLikeExplicitWorkflowToolIntent:
         )
 
 
-# ---------------------------------------------------------------------------
 # _workflow_output_preview
-# ---------------------------------------------------------------------------
 
 
 class TestWorkflowOutputPreview:
@@ -407,9 +366,7 @@ class TestWorkflowOutputPreview:
         assert result == "{}"
 
 
-# ---------------------------------------------------------------------------
 # _workflow_output_message
-# ---------------------------------------------------------------------------
 
 
 class TestWorkflowOutputMessage:
@@ -442,9 +399,7 @@ class TestWorkflowOutputMessage:
         )
 
 
-# ---------------------------------------------------------------------------
 # _iter_agentic_artifact_payloads
-# ---------------------------------------------------------------------------
 
 
 class TestIterAgenticArtifactPayloads:
@@ -485,9 +440,7 @@ class TestIterAgenticArtifactPayloads:
         assert AIChatApplicationService._iter_agentic_artifact_payloads({"artifacts": []}) == []
 
 
-# ---------------------------------------------------------------------------
 # _agent_plan_can_auto_execute
-# ---------------------------------------------------------------------------
 
 
 class TestAgentPlanCanAutoExecute:
@@ -598,9 +551,7 @@ class TestAgentPlanCanAutoExecute:
         assert result is False
 
 
-# ---------------------------------------------------------------------------
 # _attach_deterministic_workflow_trace
-# ---------------------------------------------------------------------------
 
 
 class TestAttachDeterministicWorkflowTrace:
@@ -705,9 +656,7 @@ class TestAttachDeterministicWorkflowTrace:
         assert "file_context" not in runtime_ctx
 
 
-# ---------------------------------------------------------------------------
 # _format_workflow_tool_success_line
-# ---------------------------------------------------------------------------
 
 
 class TestFormatWorkflowToolSuccessLine:
@@ -853,9 +802,7 @@ class TestFormatWorkflowToolSuccessLine:
         assert len(result) >= 1
 
 
-# ---------------------------------------------------------------------------
 # _format_agent_run_response
-# ---------------------------------------------------------------------------
 
 
 class TestFormatAgentRunResponse:
@@ -1010,9 +957,7 @@ class TestFormatAgentRunResponse:
         assert len(result["data"]["data"]["node_results"]) == 1
 
 
-# ---------------------------------------------------------------------------
 # _start_deterministic_import_agent_run
-# ---------------------------------------------------------------------------
 
 
 class TestStartDeterministicImportAgentRun:
@@ -1109,9 +1054,7 @@ class TestStartDeterministicImportAgentRun:
         assert result["data"]["data"]["artifact_count"] == 1
 
 
-# ---------------------------------------------------------------------------
 # _start_agentic_workflow_agent_run
-# ---------------------------------------------------------------------------
 
 
 class TestStartAgenticWorkflowAgentRun:
@@ -1166,9 +1109,7 @@ class TestStartAgenticWorkflowAgentRun:
         assert result is saved_run
 
 
-# ---------------------------------------------------------------------------
 # _bridge_agentic_workflow_result_to_agent_run
-# ---------------------------------------------------------------------------
 
 
 class TestBridgeAgenticWorkflowResultToAgentRun:
@@ -1401,9 +1342,7 @@ class TestBridgeAgenticWorkflowResultToAgentRun:
         assert len(run.artifacts) == 0
 
 
-# ---------------------------------------------------------------------------
 # _workflow_products_float_query
-# ---------------------------------------------------------------------------
 
 
 class TestWorkflowProductsFloatQuery:
@@ -1511,9 +1450,7 @@ class TestWorkflowProductsFloatQuery:
         assert result == "msg"
 
 
-# ---------------------------------------------------------------------------
 # _build_workflow_thinking_steps
-# ---------------------------------------------------------------------------
 
 
 class TestBuildWorkflowThinkingSteps:
@@ -1603,9 +1540,7 @@ class TestBuildWorkflowThinkingSteps:
         assert long_preview not in result
 
 
-# ---------------------------------------------------------------------------
 # _normal_slot_dispatch_chat_overlay
-# ---------------------------------------------------------------------------
 
 
 class TestNormalSlotDispatchChatOverlay:
@@ -1686,9 +1621,7 @@ class TestNormalSlotDispatchChatOverlay:
         assert result == {}
 
 
-# ---------------------------------------------------------------------------
 # _dispatch_workflow_tool
-# ---------------------------------------------------------------------------
 
 
 class TestDispatchWorkflowTool:
@@ -1715,9 +1648,7 @@ class TestDispatchWorkflowTool:
         assert "tool crashed" not in result["message"]
 
 
-# ---------------------------------------------------------------------------
 # _execute_pro_mode_tools
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteProModeTools:
@@ -1838,9 +1769,7 @@ class TestExecuteProModeTools:
         assert "toolCall" in result
 
 
-# ---------------------------------------------------------------------------
 # _build_order_text_from_products
-# ---------------------------------------------------------------------------
 
 
 class TestBuildOrderTextFromProducts:
@@ -1912,9 +1841,7 @@ class TestBuildOrderTextFromProducts:
         assert "ACME" in result
 
 
-# ---------------------------------------------------------------------------
 # _try_merge_split_model
-# ---------------------------------------------------------------------------
 
 
 class TestTryMergeSplitModel:
@@ -1955,9 +1882,7 @@ class TestTryMergeSplitModel:
         assert result == ""
 
 
-# ---------------------------------------------------------------------------
 # _execute_customers_intent
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteCustomersIntent:
@@ -2047,9 +1972,7 @@ class TestExecuteCustomersIntent:
         assert "已创建" in result["response"]
 
 
-# ---------------------------------------------------------------------------
 # _execute_shipment_generate
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteShipmentGenerate:
@@ -2157,9 +2080,7 @@ class TestExecuteShipmentGenerate:
         assert mock_parse.call_args[0][0] == ""
 
 
-# ---------------------------------------------------------------------------
 # _execute_shipments_query
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteShipmentsQuery:
@@ -2229,9 +2150,7 @@ class TestExecuteShipmentsQuery:
         assert "暂无" in result["response"]
 
 
-# ---------------------------------------------------------------------------
 # _handle_tool_call
-# ---------------------------------------------------------------------------
 
 
 class TestHandleToolCall:
@@ -2273,9 +2192,7 @@ class TestHandleToolCall:
         assert result["normal"] is True
 
 
-# ---------------------------------------------------------------------------
 # _build_response
-# ---------------------------------------------------------------------------
 
 
 class TestBuildResponse:
@@ -2328,9 +2245,7 @@ class TestBuildResponse:
         assert "autoAction" not in result
 
 
-# ---------------------------------------------------------------------------
 # _persist_chat_turn
-# ---------------------------------------------------------------------------
 
 
 class TestPersistChatTurn:
@@ -2408,9 +2323,7 @@ class TestPersistChatTurn:
         assert "test.docx" in meta
 
 
-# ---------------------------------------------------------------------------
 # _inject_excel_vector_context
-# ---------------------------------------------------------------------------
 
 
 class TestInjectExcelVectorContext:
@@ -2485,9 +2398,7 @@ class TestInjectExcelVectorContext:
         assert result is ctx
 
 
-# ---------------------------------------------------------------------------
 # _resolve_unit_price_column
-# ---------------------------------------------------------------------------
 
 
 class TestResolveUnitPriceColumn:
@@ -2595,9 +2506,7 @@ class TestResolveUnitPriceColumn:
         assert result == ("", None)
 
 
-# ---------------------------------------------------------------------------
 # _merge_user_intent_for_price_resolution
-# ---------------------------------------------------------------------------
 
 
 class TestMergeUserIntentForPriceResolution:
@@ -2692,9 +2601,7 @@ class TestMergeUserIntentForPriceResolution:
         assert len(result) <= 8000
 
 
-# ---------------------------------------------------------------------------
 # _price_column_buckets
-# ---------------------------------------------------------------------------
 
 
 class TestPriceColumnBuckets:
@@ -2783,9 +2690,7 @@ class TestPriceColumnBuckets:
         assert len(generic) == 2
 
 
-# ---------------------------------------------------------------------------
 # _header_hint_column_roles
-# ---------------------------------------------------------------------------
 
 
 class TestHeaderHintColumnRoles:
@@ -2851,9 +2756,7 @@ class TestHeaderHintColumnRoles:
         assert roles["product_name"] == ""
 
 
-# ---------------------------------------------------------------------------
 # _infer_excel_column_roles
-# ---------------------------------------------------------------------------
 
 
 class TestInferExcelColumnRoles:
@@ -2909,9 +2812,7 @@ class TestInferExcelColumnRoles:
         assert len(assigned) >= 1
 
 
-# ---------------------------------------------------------------------------
 # _fallback_excel_product_name_column / _fallback_excel_model_number_column
-# ---------------------------------------------------------------------------
 
 
 class TestFallbackExcelColumns:
@@ -2977,9 +2878,7 @@ class TestFallbackExcelColumns:
         assert result == "model"
 
 
-# ---------------------------------------------------------------------------
 # _extract_excel_import_records
-# ---------------------------------------------------------------------------
 
 
 class TestExtractExcelImportRecords:
@@ -3137,9 +3036,7 @@ class TestExtractExcelImportRecords:
             assert records[0]["unit_name"] == "ACME"
 
 
-# ---------------------------------------------------------------------------
 # _try_handle_dynamic_workflow
-# ---------------------------------------------------------------------------
 
 
 class TestTryHandleDynamicWorkflow:
@@ -3246,6 +3143,57 @@ class TestTryHandleDynamicWorkflow:
                         )
         assert result is not None
         assert "调价" in result["response"] or "价格" in result["response"]
+
+    @pytest.mark.parametrize(
+        "customer,missing",
+        [
+            ("Mac验收客户-49B26CC9", False),
+            ("用户需提供", True),
+            ("需要用户提供", True),
+            ("请用户提供", True),
+        ],
+    )
+    def test_shipment_missing_inputs_resume_through_validation(self, customer, missing):
+        from app.application.workflow.clarification_node import needs_clarification
+        from app.application.workflow.planner import LLMWorkflowPlanner
+        from app.application.workflow.types import PlanGraph, WorkflowNode
+
+        svc = _make_svc()
+        svc.workflow_engine.run = Mock(side_effect=AssertionError("must await approval"))
+        original = "请创建一条出货记录。"
+        node = WorkflowNode(
+            node_id="ship",
+            tool_id="shipment_records",
+            action="create",
+            params={},
+            risk="high",
+            idempotent=False,
+        )
+        svc._pending_workflows["u1"] = {
+            "kind": "clarification",
+            "plan": PlanGraph(plan_id="missing", intent="shipment_create", nodes=[node]),
+            "target_node_id": "ship",
+            "clarification": {"reason": "missing_required"},
+            "runtime_context": {"message": original},
+        }
+        planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
+        svc.workflow_planner.plan.side_effect = lambda **kw: planner._fallback_plan(
+            "continued", kw["message"], kw["tool_registry"]
+        )
+        svc._open_clarification_gate = Mock(
+            side_effect=lambda **kw: {
+                "missing": bool(needs_clarification(kw["plan"], kw["tool_registry"]))
+            }
+        )
+        message = f"给客户「{customer}」创建出货记录：产品验收商品，数量2箱，规格10kg，单价12.5元。"
+        result = svc._try_handle_dynamic_workflow_after_excel(
+            "u1", message, "pro", {}, message, True
+        )
+        assert result == {"missing": missing}
+        assert original in svc.workflow_planner.plan.call_args.kwargs["message"]
+        assert "u1" not in svc._pending_workflows
+        svc.workflow_engine.run.assert_not_called()
+        svc.approval_service.create_approval_request.assert_not_called()
 
     def test_pending_workflow_confirm(self):
         svc = _make_svc()
@@ -3394,9 +3342,7 @@ class TestTryHandleDynamicWorkflow:
         assert result["imported"] is True
 
 
-# ---------------------------------------------------------------------------
 # _execute_products_query
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteProductsQuery:
@@ -3490,9 +3436,7 @@ class TestExecuteProductsQuery:
         assert "未找到" in result["response"]
 
 
-# ---------------------------------------------------------------------------
 # _execute_customers_query
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteCustomersQuery:
@@ -3529,9 +3473,7 @@ class TestExecuteCustomersQuery:
         assert "查询客户失败" in result["response"]
 
 
-# ---------------------------------------------------------------------------
 # _execute_normal_mode_tools
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteNormalModeTools:
@@ -3563,9 +3505,7 @@ class TestExecuteNormalModeTools:
         assert result["toolCall"]["params"]["extra"] == "val"
 
 
-# ---------------------------------------------------------------------------
 # _handle_confirmation_flow
-# ---------------------------------------------------------------------------
 
 
 class TestHandleConfirmationFlow:
@@ -3642,9 +3582,7 @@ class TestHandleConfirmationFlow:
         assert call_args["params"]["unit_name"] == "Beta"
 
 
-# ---------------------------------------------------------------------------
 # _skip_pro_excel_deterministic_import (补充边界)
-# ---------------------------------------------------------------------------
 
 
 class TestSkipProExcelDeterministicImportEdge:
