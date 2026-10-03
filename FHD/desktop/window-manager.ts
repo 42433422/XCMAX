@@ -147,6 +147,7 @@ function tagDesktopWebContents(win: BrowserWindow): void {
 }
 
 export async function createWindow(): Promise<void> {
+  if (desktopRuntime.mainWindow && !desktopRuntime.mainWindow.isDestroyed()) return
   const icon = shellIconPath()
   const statePath = path.join(app.getPath('userData'), 'window-state.json')
   const savedBounds = readWindowState(statePath)
