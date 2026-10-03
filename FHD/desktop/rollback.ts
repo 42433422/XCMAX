@@ -87,7 +87,11 @@ function replaceDirectoryFromStaging(source: string, destination: string, appBun
       }
       throw error
     }
-    fs.rmSync(failed, { recursive: true, force: true })
+    try {
+      fs.rmSync(failed, { recursive: true, force: true, maxRetries: 3 })
+    } catch (error) {
+      console.warn(`[rollback] Obsolete backup retained after replacement: ${failed}`, error)
+    }
   } catch (error) {
     fs.rmSync(staging, { recursive: true, force: true })
     if (!fs.existsSync(destination) && fs.existsSync(failed)) {
