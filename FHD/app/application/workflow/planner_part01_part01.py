@@ -322,7 +322,9 @@ def _extract_business_db_write_node(message: str) -> _facade().WorkflowNode | No
             idempotent=False,
         )
     if entity == "shipment_records":
-        unit_name = _facade()._extract_marked_value(message, ("客户", "购买单位"))
+        unit_name = _facade()._extract_marked_value(
+            message, ("客户名称", "单位名称", "购买单位", "客户", "单位")
+        )
         product_name = _facade()._extract_marked_value(message, ("产品", "商品"))
         tins = _facade()._extract_number(message, ("桶数", "数量"))
         if not unit_name or not product_name or tins is None:
