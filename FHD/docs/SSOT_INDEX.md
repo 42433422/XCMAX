@@ -1,7 +1,7 @@
 # SSOT 索引（唯一真相源登记表）
 
 > **本文件为 SSOT 索引的 SSOT**。任何文档声称 SSOT 必须在此登记。
-> 最后更新：2026-07-31
+> 最后更新：2026-10-03
 
 ## 登记规则
 
@@ -19,6 +19,7 @@
 | ci（CI/CD） | [../../docs/CI_SSOT.md](../../docs/CI_SSOT.md) | 根仓 .github/workflows/ 唯一调度入口 |
 | mod（Mod 开发） | [guides/MOD_AUTHORING_GUIDE.md](guides/MOD_AUTHORING_GUIDE.md) | Mod 开发规范、mods/ 为唯一编辑源 |
 | version（产品版本） | [VERSION.md](../VERSION.md) | 产品版本与工具链映射唯一数字来源（`verify_version_anchors.py` 校验） |
+| release-changelog（用户更新记录） | [../CHANGELOG.md](../CHANGELOG.md) | 产品 PR 强制更新的用户修复记录 |
 | route（路由） | [reports/WAVE2_ROUTE_SSOT.md](reports/WAVE2_ROUTE_SSOT.md) | RouteRegistry + mounts/* 路由 SSOT |
 | git（Git 仓库） | [reports/GIT_WORKTREE_RECOVERY.md](reports/GIT_WORKTREE_RECOVERY.md) | 根仓 XCMAX/ 为 Git SSOT |
 | mypy（类型检查） | [../pyproject.toml](../pyproject.toml) | [tool.mypy] 配置 |

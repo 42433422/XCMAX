@@ -5,7 +5,6 @@ import { createPinia, setActivePinia } from 'pinia'
 import { isRef, isReadonly } from 'vue'
 import ProductsView from './ProductsView.vue'
 
-// ===== Mock 数据准备（使用 vi.hoisted 确保 vi.mock 工厂可用） =====
 const {
   mockFetchProducts,
   mockCreateProduct,
@@ -32,7 +31,6 @@ const {
   mockAppAlert: vi.fn(),
 }))
 
-// ===== Mock 模块 =====
 vi.mock('@/stores/products', async () => {
   const { ref } = await import('vue')
   return {
@@ -365,7 +363,6 @@ describe('ProductsView.coverage', () => {
     })
   })
 
-  // ===== showAddModal / editProduct =====
   describe('showAddModal / editProduct 模态框', () => {
     it('showAddModal 打开添加模态框并重置表单', async () => {
       const wrapper = await mountProducts()
