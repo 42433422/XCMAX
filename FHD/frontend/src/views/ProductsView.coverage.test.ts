@@ -398,7 +398,6 @@ describe('ProductsView.coverage', () => {
     })
   })
 
-  // ===== saveProduct 保存产品 =====
   describe('saveProduct 保存产品', () => {
     it.each([[10, 10], ['', 0], [0, 0]])('新建产品价格 %s 正常化为 %s 并保留客户', async (price, expectedPrice) => {
       mockCreateProduct.mockResolvedValue({ success: true })
