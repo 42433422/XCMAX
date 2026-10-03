@@ -88,6 +88,30 @@ def path_exists(rel: str) -> bool:
     return e(rel).exists()
 
 
+def check_videos(catalog: dict, ffmpeg: str) -> list[dict]:
+    results = []
+    for domain in catalog["domains"]:
+        for module in domain["modules"]:
+            for feature in module["features"]:
+                for path in feature.get("evidence", {}).get("videos", []):
+                    row = {"feature": feature["id"], "path": path, "error": None}
+                    try:
+                        row["sha256"] = hashlib.sha256(e(path).read_bytes()).hexdigest()
+                        run = subprocess.run([ffmpeg, "-v", "error", "-xerror", "-threads", "1",
+                                              "-i", str(e(path)), "-map", "0:v:0", "-progress", "pipe:1",
+                                              "-f", "null", "-"], capture_output=True, text=True, timeout=180)
+                        frames = re.findall(r"^frame=(\d+)$", run.stdout, re.M)
+                        times = re.findall(r"^out_time_us=(\d+)$", run.stdout, re.M)
+                        row["frames"] = int(frames[-1]) if frames else 0
+                        row["duration_seconds"] = int(times[-1]) / 1000000 if times else 0
+                        if run.returncode or row["frames"] < 2 or row["duration_seconds"] <= 0:
+                            row["error"] = run.stderr.strip() or "录像没有可解码的视频时间轴"
+                    except (OSError, subprocess.SubprocessError) as exc:
+                        row["error"] = str(exc)
+                    results.append(row)
+    return results
+
+
 def evidence_asset_name(feature: str, rel: str, platform: str | None = None,
                         collisions: set[str] | None = None) -> str:
     qualified = platform and Path(rel).name in (collisions or set())
@@ -496,6 +520,13 @@ def completion(features: list[dict]) -> int:
     return (weighted * 20 + len(features)) // (2 * len(features))
 
 
+def public_feature(feature: dict) -> dict:
+    defaults = {"platforms": [], "summary": ""}
+    return {key: feature.get(key, defaults.get(key)) for key in (
+        "id", "name", "status", "platforms", "platform_status", "summary",
+        "featured", "evidence_ref", "evidence_ref_name")}
+
+
 def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     warnings: list[str] = []
@@ -532,19 +563,9 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                 feats_out.append(enriched)
                 feature_index.append(
                     {
-                        "id": enriched["id"],
-                        "name": enriched["name"],
-                        "status": enriched["status"],
-                        "domain_id": dom["id"],
-                        "domain_name": dom["name"],
-                        "module_id": mod["id"],
-                        "module_name": mod["name"],
-                        "platforms": enriched.get("platforms", []),
-                        "platform_status": enriched["platform_status"],
-                        "summary": enriched.get("summary", ""),
-                        "featured": featured,
-                        "evidence_ref": evidence_ref,
-                        "evidence_ref_name": enriched["evidence_ref_name"],
+                        **public_feature(enriched),
+                        "domain_id": dom["id"], "domain_name": dom["name"],
+                        "module_id": mod["id"], "module_name": mod["name"],
                         "excluded": enriched["excluded"],
                     }
                 )
@@ -572,17 +593,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                         "id": m["id"],
                         "name": m["name"],
                         "features": [
-                            {
-                                "id": f["id"],
-                                "name": f["name"],
-                                "status": f["status"],
-                                "platforms": f.get("platforms", []),
-                                "platform_status": f["platform_status"],
-                                "summary": f.get("summary", ""),
-                                "featured": f["featured"],
-                                "evidence_ref": f["evidence_ref"],
-                                "evidence_ref_name": f["evidence_ref_name"],
-                            }
+                            public_feature(f)
                             for f in m["features"]
                             if not f["excluded"]
                         ],
@@ -975,22 +986,15 @@ def render_catalog(data: dict) -> str:
 def evidence_list(items: list[str], cls: str = "") -> str:
     if not items:
         return '<p class="cap-evidence-empty">暂无</p>'
-    lis = "".join(
-        f'<li><code class="{cls}">{esc(i)}</code></li>' for i in items
-    )
-    return f'<ul class="cap-evidence-list">{lis}</ul>'
+    return '<ul class="cap-evidence-list">' + "".join(
+        f'<li><code class="{cls}">{esc(i)}</code></li>' for i in items) + '</ul>'
 
 
 def platform_chips(verdicts: list[dict]) -> str:
-    """适用平台固定全列，每个平台带自己的状态；缺证据的平台显示「待验证」，不隐藏。"""
-    out = []
-    for v in verdicts:
-        meta = PLATFORM_STATUS_META[v["status"]]
-        out.append(
-            f'<span class="cap-platform cap-platform--{esc(v["status"])}">'
-            f'{esc(v["name"])} · {meta["label"]}</span>'
-        )
-    return "".join(out)
+    return "".join(
+        f'<span class="cap-platform cap-platform--{esc(v["status"])}">'
+        f'{esc(v["name"])} · {PLATFORM_STATUS_META[v["status"]]["label"]}</span>'
+        for v in verdicts)
 
 
 def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
@@ -1028,19 +1032,16 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         )
 
     def media_figs(media: list[dict], platform: str | None = None) -> str:
-        """按运行记录绑定的媒体渲染；仅渲染已复核且哈希一致的条目。
-
-        `outcome` 由调用方给出：只有绑定到平台验收记录的媒体才允许写「通过/失败」；
-        未绑定平台的资料只写「资料收录」，不冒充验收结论。
-        """
+        """结论来自绑定的验收记录；未绑定的媒体只标资料收录。"""
         videos, shots = [], []
         for m in media:
             p = m["path"]
             src = asset(f["id"], p, platform)
             outcome = esc(m.get("outcome") or "资料收录")
             digest = f"；SHA-256：{esc(m['sha256'])}" if m.get("sha256") else ""
-            review = "原图内容已复核，" if m.get("visual_review") == "accepted" else ""
-            cap = (f"{review}{outcome}{digest}"
+            review = "媒体内容已复核，" if m.get("visual_review") == "accepted" else ""
+            visible = f"；画面内容：{esc(m['visible_result'])}" if m.get("visible_result") else ""
+            cap = (f"{review}记录结论：{outcome}{visible}{digest}"
                    f"（原始文件：{esc(p)}）")
             suffix = Path(p).suffix.lower()
             if suffix in (".mp4", ".webm", ".mov"):
@@ -1311,16 +1312,20 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
                         if p:
                             copy(f["id"], p)
                 for v in f.get("verdicts", []):
-                    paths = [r["_acceptance_path"] for r in v["runs"]]
-                    paths += [m["path"] for r in v["runs"] for m in r.get("media", [])]
-                    paths += v["logs"] + v["raw"]
-                    paths += [v.get("identity_path"), v.get("artifact_path")]
-                    for observation in v["observations"]:
-                        paths += [observation["record_path"], observation["identity_path"]]
-                        paths += [a["path"] for a in observation["assets"]]
-                    for p in dict.fromkeys(p for p in paths if p):
+                    for p in platform_evidence_paths(v):
                         copy(f["id"], p, v["id"], collisions)
     return copied
+
+
+def platform_evidence_paths(verdict: dict, checked: bool = False) -> list[str]:
+    runs = verdict["accepted"] if checked and verdict["status"] == "verified" else ([] if checked else verdict["runs"])
+    paths = [r["_acceptance_path"] for r in runs] + [m["path"] for r in runs for m in r.get("media", [])]
+    if runs or not checked:
+        paths += verdict["logs"] + verdict["raw"] + [verdict.get("identity_path"), verdict.get("artifact_path")]
+    for observation in verdict["observations"]:
+        paths += [observation["record_path"], observation["identity_path"]]
+        paths += [a["path"] for a in observation["assets"] if not checked or a["exists"]]
+    return list(dict.fromkeys(p for p in paths if p))
 
 
 def missing_public_evidence(domains: list[dict]) -> list[str]:
@@ -1330,14 +1335,7 @@ def missing_public_evidence(domains: list[dict]) -> list[str]:
             for f in m["features"]:
                 collisions = platform_asset_collisions(f)
                 for v in f["verdicts"]:
-                    paths = []
-                    if v["status"] == "verified":
-                        paths = [x["path"] for r in v["accepted"] for x in r["media"]]
-                        paths += v["logs"] + v["raw"] + [r["_acceptance_path"] for r in v["accepted"]]
-                        paths += [v["identity_path"], v["artifact_path"]]
-                    paths += [o["record_path"] for o in v["observations"]]
-                    paths += [o["identity_path"] for o in v["observations"]]
-                    paths += [a["path"] for o in v["observations"] for a in o["assets"] if a["exists"]]
+                    paths = platform_evidence_paths(v, checked=True)
                     missing.extend(f"{f['id']}/{v['id']}: {p}" for p in paths
                                    if p and e(p).is_file()
                                    and not public_asset_matches(f["id"], p, v["id"], collisions))
@@ -1345,22 +1343,32 @@ def missing_public_evidence(domains: list[dict]) -> list[str]:
 
 
 def prune_stale_generated(outputs: dict[str, str]) -> list[str]:
-    """删除目录里已不在目录数据中的旧生成页。"""
-    removed = []
-    feat_dir = OUT_DIR / "feature"
     valid = {Path(k).name for k in outputs if k.startswith("capabilities/feature/")}
-    if feat_dir.exists():
-        for p in feat_dir.glob("*.html"):
-            if p.name not in valid:
-                removed.append(str(p.relative_to(WEBSITE_DIR)))
-                p.unlink()
-    return removed
+    stale = [p for p in (OUT_DIR / "feature").glob("*.html") if p.name not in valid]
+    for path in stale:
+        path.unlink()
+    return [str(path.relative_to(WEBSITE_DIR)) for path in stale]
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="校验已提交文件与目录一致（CI 漂移门禁）")
+    ap.add_argument("--check-videos", action="store_true", help="完整解码全部目录录像；不改变业务验收状态")
+    ap.add_argument("--ffmpeg", default="ffmpeg")
+    ap.add_argument("--video-report", type=Path)
     args = ap.parse_args()
+    if args.check_videos:
+        videos = check_videos(json.loads(CATALOG_PATH.read_text(encoding="utf-8")), args.ffmpeg)
+        report = {"git_sha": git("rev-parse", "HEAD"), "scope": "video_decode_integrity", "videos": videos,
+                  "validator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                  "catalog_sha256": hashlib.sha256(CATALOG_PATH.read_bytes()).hexdigest()}
+        if args.video_report:
+            args.video_report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        failures = [v for v in videos if v["error"]]
+        for failure in failures:
+            print(f"ERROR {failure['feature']}: {failure['path']}: {failure['error']}")
+        print(f"录像完整解码：{len(videos) - len(failures)}/{len(videos)}；不代表业务验收通过。")
+        return int(bool(failures) or not videos)
 
     data, warnings, domains_full = build()
     evidence_errors = [w for w in warnings if w.startswith("ERROR ")]
@@ -1374,22 +1382,8 @@ def main() -> int:
         drift = []
         for rel, content in outputs.items():
             f = WEBSITE_DIR / rel
-            if not f.exists():
-                drift.append(f"缺失: {rel}")
-                continue
-            disk = f.read_text(encoding="utf-8")
-            mem = content
-            if disk == mem:
-                continue
-            drift.append(f"不一致: {rel}")
-            dl, ml = disk.splitlines(), mem.splitlines()
-            for i in range(max(len(dl), len(ml))):
-                a = dl[i] if i < len(dl) else "<文件结束>"
-                b = ml[i] if i < len(ml) else "<重生成结束>"
-                if a != b:
-                    drift.append(f"    已提交 L{i + 1}: {a.strip()[:160]}")
-                    drift.append(f"    重生成 L{i + 1}: {b.strip()[:160]}")
-                    break
+            if not f.exists() or f.read_text(encoding="utf-8") != content:
+                drift.append(f"{'缺失' if not f.exists() else '不一致'}: {rel}")
         drift.extend(f"已验证平台公开证据缺失或哈希不匹配: {p}" for p in missing_public_evidence(domains_full))
         for w in warnings:
             print(w if w.startswith("ERROR ") else f"WARN {w}")
