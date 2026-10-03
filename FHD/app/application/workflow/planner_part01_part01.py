@@ -326,7 +326,9 @@ def _extract_business_db_write_node(message: str) -> _facade().WorkflowNode | No
         unit_name = _facade()._extract_marked_value(
             message, ("客户名称", "单位名称", "购买单位", "客户", "单位"), clean=False
         )
-        product_name = _facade()._extract_marked_value(message, ("产品", "商品"), clean=False)
+        product_name = _facade()._extract_marked_value(
+            message, ("产品名称", "商品名称", "产品名", "商品名", "产品", "商品"), clean=False
+        )
         tins = _facade()._extract_number(message, ("桶数", "数量"))
         if not unit_name or not product_name or tins is None:
             return None

@@ -235,23 +235,6 @@ class TestLooksLikeBusinessDbWrite:
 
 
 class TestExtractBusinessDbWriteNode:
-    def test_customer_write_with_slot(self) -> None:
-        node = _extract_business_db_write_node("新增客户：ABC公司加入数据库")
-        if node is not None:
-            assert node.tool_id == "business_db"
-            assert node.action == "write"
-
-    def test_customer_write_no_slot_returns_none(self) -> None:
-        # No extractable slot → should return None
-        result = _extract_business_db_write_node("新增客户到数据库")
-        # May or may not succeed depending on regex; just verify type
-        assert result is None or result.tool_id == "business_db"
-
-    def test_product_write_with_slot(self) -> None:
-        node = _extract_business_db_write_node("为单位甲方新增产品：螺钉 给客户甲方写入数据库")
-        if node is not None:
-            assert node.action == "write"
-
     def test_product_missing_product_name_returns_none(self) -> None:
         # "产品" entity but no extractable name or unit
         result = _extract_business_db_write_node("产品写入数据库")

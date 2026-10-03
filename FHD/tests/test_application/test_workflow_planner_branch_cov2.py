@@ -196,6 +196,16 @@ class TestExtractBusinessDbWriteNode:
         assert node is not None
         assert node.params["payload"]["product_name"] == "安装验收产品-0112"
 
+    @pytest.mark.parametrize("label", ["产品名称", "商品名称", "产品名", "商品名", "产品", "商品"])
+    @pytest.mark.parametrize("separator", ["是", "："])
+    def test_shipment_product_label_is_not_saved_as_name(self, label, separator) -> None:
+        node = _extract_business_db_write_node(
+            f"请创建出货记录，客户名称是Mac验收客户-31611A88，{label}{separator}验收商品，"
+            "型号MAC-31611A88，数量2箱，规格10kg/箱，单价12.5元/千克。需要人工审批。"
+        )
+        assert node is not None
+        assert node.params["payload"]["products"][0]["product_name"] == "验收商品"
+
     def test_products_missing_product_name_returns_none(self) -> None:
         # "产品数据库" → product_name pattern captures "数据库" → cleaned to "" (数据库 token replaced)
         node = _extract_business_db_write_node("产品数据库")
