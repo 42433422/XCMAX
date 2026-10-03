@@ -87,7 +87,7 @@ def upload_file(
     file: UploadFile = File(...),
     batch_id: str | None = Form(default=None),
     relative_path: str | None = Form(default=None),
-    db: Session = Depends(get_db_dependency),
+    db: Session = Depends(get_db_dependency, scope="function"),
     user: Any = Depends(_execute),
 ):
     data = get_etl_service().save_upload(

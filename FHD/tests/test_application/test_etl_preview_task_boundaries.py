@@ -402,3 +402,36 @@ def test_process_control_exceptions_are_not_translated_to_application_failure(
     result = snapshot(preview_store, run_id)
     assert result["status"] == "previewing" and result["error_code"] is None
     assert run_id not in service_preview.SUBMITTED
+
+
+@pytest.mark.asyncio
+async def test_upload_committed_before_success_response(preview_store, monkeypatch):
+    from fastapi import FastAPI
+
+    from app.db.models.etl import EtlUpload
+    from app.fastapi_routes import etl
+
+    app = FastAPI()
+    app.include_router(etl.router)
+    app.dependency_overrides[etl._feature_gate] = lambda: None
+    app.dependency_overrides[etl._execute] = lambda: SimpleNamespace(id=7)
+    monkeypatch.setattr(etl, "get_etl_service", lambda: preview_store.service)
+
+    async def observed_app(scope, receive, send):
+        async def observe(message):
+            if message["type"] == "http.response.start" and message["status"] == 201:
+                with preview_store.factory() as db:
+                    upload = db.query(EtlUpload).filter_by(owner_user_id=7).one_or_none()
+                    assert upload is not None, "201 must not precede upload transaction commit"
+                    assert preview_store.service._owned_upload(db, upload.id, 7).sha256
+            await send(message)
+
+        await app(scope, receive, observe)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=observed_app), base_url="http://test"
+    ) as client:
+        result = await client.post(
+            "/api/etl/uploads", files={"file": ("products.csv", CSV, "text/csv")}
+        )
+        assert result.status_code == 201, result.text
