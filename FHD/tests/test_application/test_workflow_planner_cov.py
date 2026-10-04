@@ -8,9 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Pure-function imports (no app bootstrap needed)
-# ---------------------------------------------------------------------------
 from app.application.workflow.planner import (
     _clean_db_slot_value,
     _extract_business_db_read_keyword,
@@ -22,10 +19,6 @@ from app.application.workflow.planner import (
     _looks_like_business_db_write,
 )
 from app.application.workflow.types import PlanGraph, WorkflowNode, validate_plan_graph
-
-# ---------------------------------------------------------------------------
-# Minimal tool registry for LLMWorkflowPlanner tests
-# ---------------------------------------------------------------------------
 
 _SAMPLE_REGISTRY: dict[str, Any] = {
     "products": {
@@ -110,10 +103,6 @@ _SAMPLE_REGISTRY: dict[str, Any] = {
     },
 }
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 def _make_plan(nodes: list[WorkflowNode] | None = None) -> PlanGraph:
     return PlanGraph(
@@ -133,11 +122,6 @@ def _make_plan(nodes: list[WorkflowNode] | None = None) -> PlanGraph:
         ],
         risk_level="low",
     )
-
-
-# ---------------------------------------------------------------------------
-# _clean_db_slot_value
-# ---------------------------------------------------------------------------
 
 
 class TestCleanDbSlotValue:
@@ -161,11 +145,6 @@ class TestCleanDbSlotValue:
         assert _clean_db_slot_value(None) == ""  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
-# _extract_named_slot
-# ---------------------------------------------------------------------------
-
-
 class TestExtractNamedSlot:
     def test_pattern_match_returns_value(self) -> None:
         msg = "客户：ABC公司"
@@ -181,11 +160,6 @@ class TestExtractNamedSlot:
         msg = "没有任何匹配"
         result = _extract_named_slot(msg, (r"ZZZ(.+)",))
         assert result == ""
-
-
-# ---------------------------------------------------------------------------
-# _infer_business_db_entity
-# ---------------------------------------------------------------------------
 
 
 class TestInferBusinessDbEntity:
@@ -209,11 +183,6 @@ class TestInferBusinessDbEntity:
         assert _infer_business_db_entity("随机文字") == "products"
 
 
-# ---------------------------------------------------------------------------
-# _looks_like_business_db_write
-# ---------------------------------------------------------------------------
-
-
 class TestLooksLikeBusinessDbWrite:
     def test_chinese_write_keywords(self) -> None:
         assert _looks_like_business_db_write("新增产品到数据库", "新增产品到数据库") is True
@@ -227,11 +196,6 @@ class TestLooksLikeBusinessDbWrite:
     def test_write_keyword_without_db_reference(self) -> None:
         # Has write keyword but no db reference
         assert _looks_like_business_db_write("新增一条消息", "新增一条消息") is False
-
-
-# ---------------------------------------------------------------------------
-# _extract_business_db_write_node
-# ---------------------------------------------------------------------------
 
 
 class TestExtractBusinessDbWriteNode:
@@ -273,11 +237,6 @@ class TestExtractBusinessDbReadKeyword:
     def test_model_number_fallback(self) -> None:
         result = _extract_business_db_read_keyword("查ABC99X的价格", "products")
         assert result
-
-
-# ---------------------------------------------------------------------------
-# _filter_tool_registry_for_profile
-# ---------------------------------------------------------------------------
 
 
 class TestFilterToolRegistryForProfile:
@@ -360,11 +319,6 @@ class TestFilterToolRegistryForProfile:
         assert "pro_only_tool" not in filtered
 
 
-# ---------------------------------------------------------------------------
-# validate_plan_graph (from types.py — exercised via planner tests)
-# ---------------------------------------------------------------------------
-
-
 class TestValidatePlanGraph:
     def test_valid_plan_returns_none(self) -> None:
         plan = _make_plan()
@@ -404,11 +358,6 @@ class TestValidatePlanGraph:
         node = WorkflowNode("n", "t", "a", depends_on=["n"])
         plan = PlanGraph(plan_id="p", intent="i", nodes=[node])
         assert validate_plan_graph(plan) is not None
-
-
-# ---------------------------------------------------------------------------
-# LLMWorkflowPlanner — validate_required_params static method
-# ---------------------------------------------------------------------------
 
 
 class TestValidateRequiredParams:
@@ -481,11 +430,6 @@ class TestValidateRequiredParams:
         plan = _make_plan([node])
         result = LLMWorkflowPlanner._validate_required_params(plan, reg)
         assert result is not None
-
-
-# ---------------------------------------------------------------------------
-# LLMWorkflowPlanner._fallback_plan — rule-based paths
-# ---------------------------------------------------------------------------
 
 
 class TestFallbackPlan:
@@ -579,11 +523,6 @@ class TestFallbackPlan:
             ):
                 result = planner._fallback_plan("pid", "写入数据库", _SAMPLE_REGISTRY)
         assert result.risk_level == "medium"
-
-
-# ---------------------------------------------------------------------------
-# LLMWorkflowPlanner._plan_with_llm — mocked HTTP paths
-# ---------------------------------------------------------------------------
 
 
 class TestPlanWithLLM:
@@ -758,11 +697,6 @@ class TestPlanWithLLM:
         assert result.metadata.get("user_memory_rag_summary") == "用户偏好：ABC产品"
 
 
-# ---------------------------------------------------------------------------
-# LLMWorkflowPlanner.plan — integration with mocked LLM
-# ---------------------------------------------------------------------------
-
-
 class TestPlanMethod:
     def _make_planner(self) -> Any:
         from app.application.workflow.planner import LLMWorkflowPlanner
@@ -829,11 +763,6 @@ class TestPlanMethod:
                 context={},
             )
         assert result is not None
-
-
-# ---------------------------------------------------------------------------
-# _get_planner_http_client singleton
-# ---------------------------------------------------------------------------
 
 
 class TestGetPlannerHttpClient:

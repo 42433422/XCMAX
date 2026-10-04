@@ -115,6 +115,20 @@ def _extract_number(message: str, labels: tuple[str, ...]) -> float | None:
         return None
 
 
+def _extract_shipment_tins(message: str) -> float | None:
+    tins = _facade()._extract_number(message, ("桶数",))
+    if tins is not None:
+        return tins
+    match = _facade().re.search(
+        r"数量\s*[:：是为]?\s*(-?\d+(?:\.\d+)?)\s*(公斤|千克|kg|斤|吨|g)?",
+        message,
+        _facade().re.I,
+    )
+    if match and not match.group(2):
+        return float(match.group(1))
+    return None
+
+
 def _selector_for_business_db_message(entity: str, message: str) -> dict[str, _facade().Any]:
     numeric_id = _facade()._extract_business_db_id(message)
     if numeric_id:
@@ -173,7 +187,7 @@ def _changes_for_business_db_message(entity: str, message: str) -> dict[str, _fa
         if spec:
             changes["specification"] = spec
     elif entity == "shipment_records":
-        tins = _facade()._extract_number(message, ("桶数", "数量"))
+        tins = _extract_shipment_tins(message)
         status = _facade()._extract_marked_value(message, ("状态",))
         price = _facade()._extract_number(message, ("单价", "价格"))
         if tins is not None:
@@ -327,9 +341,9 @@ def _extract_business_db_write_node(message: str) -> _facade().WorkflowNode | No
             message, ("客户名称", "单位名称", "购买单位", "客户", "单位"), clean=False
         )
         product_name = _facade()._extract_marked_value(
-            message, ("产品名称", "商品名称", "产品名", "商品名", "产品", "商品"), clean=False
-        )
-        tins = _facade()._extract_number(message, ("桶数", "数量"))
+            message, ("产品名称", "商品名称", "产品名", "商品名"), clean=False
+        ) or _facade()._extract_marked_value(message, ("产品", "商品"), clean=False)
+        tins = _extract_shipment_tins(message)
         if not unit_name or not product_name or tins is None:
             return None
         item: dict[str, _facade().Any] = {
