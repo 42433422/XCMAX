@@ -235,13 +235,21 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     )
     # 拒绝类请求（审计 R02）：「不要打印/别删除」等否定动作不得路由到任何
     # 执行意图（开单/删除/打印标签/销售闭环写），交回普通对话处理。
-    if _facade()._is_negated_action_request(text):
+    if _facade()._is_negated_action_request(text) or _facade().re.search(
+        r"(?:不要|别|禁止|不准)[^，,。；;]{0,30}(?:出货|发货|送货)", text
+    ):
         return {"intent": "unknown", "slots": {}}
+    if _facade().re.search(r"(?:出货|发货)(?:记录|历史|列表|查询|明细)", text):
+        if any(k in text for k in ("创建", "新增", "添加", "写入", "保存", "修改", "更新", "删除")):
+            return {"intent": "unknown", "slots": {}}
+        return {"intent": "shipment_records_query", "slots": {"keyword": ""}}
     if (
         any(k in text for k in shipment_keywords) or number_style_order or print_spec_order
     ) and not template_preview:
         return {"intent": "shipment", "slots": {"number_style_order": number_style_order}}
     if template_preview:
+        return {"intent": "unknown", "slots": {}}
+    if any(k in text for k in ("出货", "发货", "送货")):
         return {"intent": "unknown", "slots": {}}
     sales_write_payload = _facade()._parse_sales_write_request(text)
     if sales_write_payload is not None:
@@ -307,19 +315,6 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     material_keywords = ("物料", "原材料", "材料")
     if any(k in text for k in material_keywords):
         return {"intent": "materials_query", "slots": {"keyword": ""}}
-    shipment_record_keywords = (
-        "出货记录",
-        "发货记录",
-        "出货历史",
-        "出货列表",
-        "发货列表",
-        "出货查询",
-        "发货查询",
-        "出货明细",
-        "发货明细",
-    )
-    if any(k in text for k in shipment_record_keywords):
-        return {"intent": "shipment_records_query", "slots": {"keyword": ""}}
     replenish_keywords = ("补货", "补货建议", "采购建议", "建议采购", "补多少")
     if any(k in text for k in replenish_keywords):
         return {"intent": "replenishment_suggest", "slots": {}}

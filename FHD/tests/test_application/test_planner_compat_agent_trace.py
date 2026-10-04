@@ -125,7 +125,7 @@ async def test_execute_compat_chat_attaches_agent_run_id() -> None:
 @pytest.mark.parametrize("pending_user", ["u42", "another-conversation"])
 async def test_execute_compat_chat_uses_ai_chat_mainline_when_enabled(pending_user: str) -> None:
     body = XcagiCompatChatBody(
-        message="客户名称是Mac补参验收客户，其他出货参数沿用刚才提供的内容，需要人工审批后执行。",
+        message="查询客户 Mac补参验收客户",
         user_id="u42",
         source="normal",
         context={"use_ai_chat_mainline": True},

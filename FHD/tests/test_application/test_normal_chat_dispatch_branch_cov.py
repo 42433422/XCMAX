@@ -1,17 +1,4 @@
-"""Tests for app.application.normal_chat_dispatch — branch coverage ramp.
-
-聚焦未覆盖分支：
-- route_normal_mode_message：number_style_order / customer_keyword / inventory / label_print /
-  product_query 各槽位分支（含 keyword 推导、unit/model 组合、tail model 排除 API/HTTP 等）
-- build_product_query_response_dict：非 product_query 早返回 / preview 失败 / query_desc 各分支
-- run_workflow_products_query_normal_profile：profile 命中 / kw_preview 回退各分支 / 异常路径
-- resolve_tool_execution_profile：explicit / ui_surface+intent_channel 组合
-- run_normal_slot_shipment_preview：空 text / parse 失败 / parse 成功
-- run_normal_slot_product_query_from_message：命中与未命中
-- build_customers_query_response_dict：非意图 / 空客户 / 有客户 / 异常
-- build_inventory_alert_response_dict：非意图 / 空低库存 / 有低库存 / 异常
-- build_label_print_response_dict：非意图 / 缺型号 / 成功 / 失败 / 异常
-"""
+"""Normal chat routing, preview, and query regressions."""
 
 from __future__ import annotations
 
@@ -50,26 +37,28 @@ from app.application.normal_chat_dispatch import (
 class TestRouteNormalModeMessageShipment:
     """route_normal_mode_message shipment 槽位分支。"""
 
-    def test_shipment_keyword_发货单(self):
-        result = route_normal_mode_message("帮我打开发货单")
-        assert result["intent"] == "shipment"
-        assert result["slots"]["number_style_order"] is False
-
-    def test_shipment_keyword_送货单(self):
-        result = route_normal_mode_message("送货单看一下")
-        assert result["intent"] == "shipment"
-
-    def test_shipment_keyword_出货单(self):
-        result = route_normal_mode_message("出货单打印")
-        assert result["intent"] == "shipment"
-
-    def test_shipment_keyword_开单(self):
-        result = route_normal_mode_message("开单")
-        assert result["intent"] == "shipment"
-
-    def test_shipment_keyword_打单(self):
-        result = route_normal_mode_message("打单")
-        assert result["intent"] == "shipment"
+    @pytest.mark.parametrize(
+        "text,expected",
+        [
+            ("帮我打开发货单", "shipment"),
+            ("送货单看一下", "shipment"),
+            ("出货单打印", "shipment"),
+            ("开单", "shipment"),
+            ("打单", "shipment"),
+            ("请给 Mac验收客户-70BC4E77 出货，必须人工审批后才能执行。", "unknown"),
+            ("给客户发货", "unknown"),
+            ("给客户送货", "unknown"),
+            ("不要给客户出货", "unknown"),
+            ("预览送货单模板", "unknown"),
+            ("查看客户出货记录", "shipment_records_query"),
+            ("请为客户创建出货记录", "unknown"),
+            ("新增发货记录并人工审批", "unknown"),
+            ("删除客户出货记录", "unknown"),
+            ("发货历史", "shipment_records_query"),
+        ],
+    )
+    def test_shipment_actions_keep_queries_and_negation_separate(self, text, expected):
+        assert route_normal_mode_message(text)["intent"] == expected
 
     def test_unspecified_print_is_not_assumed_to_be_a_shipment(self):
         result = route_normal_mode_message("打印一下")
