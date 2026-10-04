@@ -197,10 +197,9 @@ jobs:
 
       - name: Verify notarized DMG and packaged runtime
         run: |
-          v="${{ inputs.version }}"
-          arch="${{ inputs.architecture || 'arm64' }}"
-          dmg="$(find "release/xcagi-v${v}/enterprise" -name "XCAGI-Enterprise-${v}-mac-${arch}.dmg" -print -quit)"
+          read -r v arch <<<"${{ inputs.version }} ${{ inputs.architecture || 'arm64' }}"; dmg="$(find "release/xcagi-v${v}/enterprise" -name "XCAGI-Enterprise-${v}-mac-${arch}.dmg" -print -quit)"
           bash scripts/package/verify-macos-release-dmg.sh "${dmg}" "${v}" "${XCAGI_BUILD_SHA}"
+          if [ "${{ inputs.candidate_only }}" = true ] && [ "${arch}" = x64 ]; then evidence_dir="release/xcagi-v${v}/enterprise/acceptance-evidence"; mkdir -p "${evidence_dir}"; XCAGI_ACCEPTANCE_EVIDENCE_DIR="${evidence_dir}" bash scripts/package/acceptance-macos.sh --version "${v}" --dmg "${dmg}"; fi
 
       - name: Upload macOS OTA artifacts for recovery
         uses: actions/upload-artifact@v4
