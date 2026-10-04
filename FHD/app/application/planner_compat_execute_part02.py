@@ -46,7 +46,9 @@ async def execute_compat_chat(
         kitten_extra = {}
     from app.application.normal_chat_dispatch import try_normal_slot_read_payload
 
-    slot_payload = try_normal_slot_read_payload(body.message, request=request)
+    slot_payload = try_normal_slot_read_payload(
+        body.message, request=request, user_id=str(body.user_id or "default")
+    )
     if isinstance(slot_payload, dict) and slot_payload.get("response"):
         return _facade()._attach_compat_chat_trace(
             slot_payload,
