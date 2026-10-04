@@ -229,12 +229,9 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
             text,
         )
     )
-    # 「预览…模板」类话术是模板预览意图，不被「送货单/发货单」等单据词截胡成开单。
     template_preview = bool(
         _facade().re.search("(?:预览|看看|看下)[^，,。]{0,12}模板|模板[^，,。]{0,8}预览", text)
     )
-    # 拒绝类请求（审计 R02）：「不要打印/别删除」等否定动作不得路由到任何
-    # 执行意图（开单/删除/打印标签/销售闭环写），交回普通对话处理。
     if _facade()._is_negated_action_request(text) or _facade().re.search(
         r"(?:不要|别|禁止|不准)[^，,。；;]{0,30}(?:出货|发货|送货)", text
     ):
@@ -243,6 +240,8 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         if any(k in text for k in ("创建", "新增", "添加", "写入", "保存", "修改", "更新", "删除")):
             return {"intent": "unknown", "slots": {}}
         return {"intent": "shipment_records_query", "slots": {"keyword": ""}}
+    if _facade().re.search(r"人工审批|手动审批|(?:客户|单位)名称\s*(?:仍为|为|是|[:：])", text):
+        return {"intent": "workflow", "slots": {}}
     if (
         any(k in text for k in shipment_keywords) or number_style_order or print_spec_order
     ) and not template_preview:
@@ -250,7 +249,7 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     if template_preview:
         return {"intent": "unknown", "slots": {}}
     if any(k in text for k in ("出货", "发货", "送货")):
-        return {"intent": "unknown", "slots": {}}
+        return {"intent": "workflow", "slots": {}}
     sales_write_payload = _facade()._parse_sales_write_request(text)
     if sales_write_payload is not None:
         return {
@@ -264,9 +263,6 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         _facade().re.search("([^\\s，,。]{2,})\\s*的\\s*([0-9A-Za-z-]{2,})", text)
     )
     customer_entity_markers = ("客户", "购买单位", "买家")
-    # M11：单关键词槽位路由不得接管「要产物」或「多实体」的请求 —— 必须交回 LLM 规划，
-    # 否则第二个业务实体被静默丢弃，且 reports(action=export) 永远不会被调用
-    # （artifacts 恒为空）。此处的 unknown 与上方模板预览、否定动作共用同一逃生口。
     if _requires_llm_planning(text, customer_entity_markers):
         return {"intent": "unknown", "slots": {}}
     if any(k in text for k in customer_entity_markers):
