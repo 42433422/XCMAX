@@ -720,6 +720,8 @@
           base: '',
           winMb: '',
           releaseReady: false,
+          gitSha: '',
+          releaseId: '',
           manifest: null,
           windowsHotfix: null,
           tab: 'desktop',
@@ -760,17 +762,6 @@
           return 0
         }
 
-        function activeWindowsHotfix() {
-          var hotfix = state.windowsHotfix
-          if (!hotfix || hotfix.schema !== 'xcagi.windows_interim_release/v1') return null
-          var unsignedAccepted = hotfix.signature_status === 'unsigned' && hotfix.risk_acceptance &&
-            Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()
-          if (!hotfix.download_allowed || hotfix.stable_auto_update !== false ||
-            (hotfix.signature_status !== 'signed' && !unsignedAccepted) ||
-            !hotfix.artifact || !/^[a-f0-9]{64}$/i.test(hotfix.artifact.sha256 || '')) return null
-          return !hotfix.artifact || !hotfix.artifact.url || !hotfix.artifact.filename || compareVersions(hotfix.version, state.version) < 0 ? null : hotfix
-        }
-
         function fileName(platform) {
           if (platform === 'android') return 'XCAGI-Enterprise-Android-' + state.androidVersion + '.apk'
           if (platform === 'mac') return 'XCAGI-Enterprise-' + state.version + '-mac-' + state.macArch + '.dmg'
@@ -783,25 +774,63 @@
           return state.base + '/enterprise/' + fileName(platform)
         }
 
+        function officialArtifactUrl(url, filename) {
+          try {
+            var root = new URL(state.base)
+            var expected = new URL('enterprise/' + filename, root.href.replace(/\/?$/, '/'))
+            return root.protocol === 'https:' && root.origin === RELEASE_ROOT &&
+              root.pathname === '/xcagi-v' + state.version && url === expected.href
+          } catch (_) { return false }
+        }
+
+        function validInterimArtifact(hotfix) {
+          var artifact = hotfix && hotfix.artifact
+          var sha = String(artifact && artifact.sha256 || '').toLowerCase()
+          var commit = String(hotfix && hotfix.git_sha || '').toLowerCase()
+          var status = hotfix && hotfix.signature_status
+          var filename = 'XCAGI-Enterprise-Setup-' + (hotfix && hotfix.version) + '-x64-' + status + '.exe'
+          return hotfix && artifact && hotfix.version === state.version && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commit) &&
+            (status === 'signed' || status === 'unsigned') && artifact.platform === 'windows' && artifact.arch === 'x64' &&
+            artifact.filename === filename && /^[0-9a-f]{64}$/.test(sha) && Number.isSafeInteger(artifact.size) && artifact.size > 0 &&
+            artifact.url === RELEASE_ROOT + '/xcagi-v' + hotfix.version + '/enterprise/' + commit + '/' + sha + '/' + filename
+        }
+
+        function activeWindowsHotfix() {
+          var hotfix = state.windowsHotfix
+          if (!hotfix || hotfix.schema !== 'xcagi.windows_interim_release/v1' || !validInterimArtifact(hotfix)) return null
+          var unsignedAccepted = hotfix.signature_status === 'unsigned' && hotfix.risk_acceptance &&
+            Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()
+          return hotfix.download_allowed && hotfix.stable_auto_update === false &&
+            (hotfix.signature_status === 'signed' || unsignedAccepted) ? hotfix : null
+        }
+
         function manifestEntry(platform) {
           var manifest = state.manifest
           var sku = manifest && manifest.channels && manifest.channels.official_download && manifest.channels.official_download.enterprise
-          if (!state.releaseReady || !manifest || manifest.release_ready !== true || !sku) return null
+          if (!state.releaseReady || !manifest || manifest.release_ready !== true || manifest.version !== state.version ||
+            !state.gitSha || manifest.git_sha !== state.gitSha || !state.releaseId || manifest.release_id !== state.releaseId || !sku) return null
           var entry = null
           if (platform === 'win') entry = sku.win || null
           if (platform === 'android') entry = sku.android || null
           if (platform === 'mac') {
             var macs = sku.mac || []
-            for (var i = 0; i < macs.length; i += 1) if ((macs[i].arch || ((macs[i].filename || '').match(/-mac-(arm64|x64)\.dmg$/i) || [])[1]) === state.macArch) { entry = macs[i]; break }
+            for (var i = 0; i < macs.length; i += 1) {
+              var name = String(macs[i].filename || '')
+              var nameArch = (name.match(/-mac-(arm64|x64)\.dmg$/i) || [])[1]
+              if (nameArch === state.macArch && (!macs[i].arch || macs[i].arch === nameArch)) { entry = macs[i]; break }
+            }
           }
-          return entry && entry.url && /^[a-f0-9]{64}$/i.test(entry.sha256 || '') ? entry : null
+          var filename = entry && entry.filename
+          if (platform === 'win' && entry && entry.arch && entry.arch !== 'x64') return null
+          if ((platform === 'mac' || platform === 'win') && (!filename || filename !== fileName(platform) || !officialArtifactUrl(entry.url, filename))) return null
+          return entry && /^[a-f0-9]{64}$/i.test(entry.sha256 || '') ? entry : null
         }
 
         function downloadUrl(platform) {
           var hotfix = platform === 'win' ? activeWindowsHotfix() : null
           if (hotfix) return hotfix.artifact.url
           var entry = manifestEntry(platform)
-          return entry && entry.url ? entry.url : staticUrl(platform)
+          return entry ? entry.url : platform === 'android' && state.androidVersion ? staticUrl(platform) : ''
         }
 
         function metaText(platform) {
@@ -835,6 +864,8 @@
             if (!data) return
             if (typeof data.download_version === 'string') state.version = data.download_version
             if (typeof data.android_version === 'string') state.androidVersion = data.android_version
+            if (typeof data.git_sha === 'string') state.gitSha = data.git_sha.toLowerCase()
+            if (typeof data.release_id === 'string') state.releaseId = data.release_id
             if (data.win_installer_mb != null) state.winMb = String(data.win_installer_mb)
             if (typeof data.release_ready === 'boolean') state.releaseReady = data.release_ready
             if (typeof data.release_root === 'string') state.base = data.release_root.replace(/\/$/, '')
