@@ -1,0 +1,1 @@
+{"name":"@xcagi/async-resource-glob","version":"1.0.0","main":"index.cjs","dependencies":{"tinyglobby":"0.2.16"}}
