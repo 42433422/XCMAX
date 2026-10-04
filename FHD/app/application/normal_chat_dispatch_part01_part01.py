@@ -239,8 +239,7 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         r"(?:不要|别|禁止|不准)[^，,。；;]{0,30}(?:出货|发货|送货)", text
     ):
         return {"intent": "unknown", "slots": {}}
-    shipment_record_keywords = "出货记录 发货记录 出货历史 发货历史 出货列表 发货列表 出货查询 发货查询 出货明细 发货明细".split()
-    if any(k in text for k in shipment_record_keywords):
+    if _facade().re.search(r"(?:出货|发货)(?:记录|历史|列表|查询|明细)", text):
         if any(k in text for k in ("创建", "新增", "添加", "写入", "保存", "修改", "更新", "删除")):
             return {"intent": "unknown", "slots": {}}
         return {"intent": "shipment_records_query", "slots": {"keyword": ""}}
