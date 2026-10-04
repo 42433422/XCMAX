@@ -709,7 +709,6 @@ class TestXcagiPlannerStreamBytesAdditional:
         return ch.XcagiCompatChatBody(message=message, mode=mode, db_read_token=db_read_token)
 
     def test_mode_online_sets_llm_mode(self):
-        """Test that mode='online' calls set_llm_mode."""
         request = self._make_request()
         body = self._make_body(mode="online")
         with (
@@ -742,7 +741,6 @@ class TestXcagiPlannerStreamBytesAdditional:
         mock_set.assert_called_once_with("online")
 
     def test_mode_offline_sets_llm_mode(self):
-        """Test that mode='offline' calls set_llm_mode."""
         request = self._make_request()
         body = self._make_body(mode="OFFLINE")
         with (
@@ -775,7 +773,6 @@ class TestXcagiPlannerStreamBytesAdditional:
         mock_set.assert_called_once_with("offline")
 
     def test_mode_other_does_not_set_llm_mode(self):
-        """Test that other mode values don't call set_llm_mode."""
         request = self._make_request()
         body = self._make_body(mode="custom")
         with (
@@ -808,7 +805,6 @@ class TestXcagiPlannerStreamBytesAdditional:
         mock_set.assert_not_called()
 
     def test_db_read_not_authorized_yields_token_and_requires_token(self):
-        """Test that unauthorized db read yields token and requires_token events."""
         request = self._make_request()
         body = self._make_body(message="查询数据库", db_read_token="wrong")
         read_req = {
@@ -840,7 +836,6 @@ class TestXcagiPlannerStreamBytesAdditional:
         assert second_data["token_name"] == "DB_READ_TOKEN"
 
     def test_planner_workflow_interrupt_reply_returns_value(self):
-        """Test that planner_workflow_interrupt_reply returning a value yields done."""
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
@@ -872,7 +867,6 @@ class TestXcagiPlannerStreamBytesAdditional:
         assert second_data["result"]["success"] is True
 
     def test_vector_error_yields_error_event(self):
-        """Test that vector error yields error event."""
         request = self._make_request()
         body = self._make_body(message="建立向量索引")
         with (
@@ -900,7 +894,6 @@ class TestXcagiPlannerStreamBytesAdditional:
         assert data["message"] == "vector index error"
 
     def test_empty_merged_reply_yields_error(self):
-        """Test that empty merged reply yields error event."""
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
@@ -929,16 +922,13 @@ class TestXcagiPlannerStreamBytesAdditional:
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield token event + error event
-        assert len(results) == 2
-        # Last event should be error
+        assert len(results) == 3
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert last_data["type"] == "error"
         assert "没有返回可显示的正文" in last_data["message"]
         assert "已登录" not in last_data["message"]
 
     def test_merged_reply_with_thinking_steps(self):
-        """Test that merged reply with thinking steps yields done with dict reply."""
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
@@ -972,16 +962,13 @@ class TestXcagiPlannerStreamBytesAdditional:
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield 2 token events + 1 done event
-        assert len(results) == 3
+        assert len(results) == 4
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert last_data["type"] == "done"
         assert last_data["result"]["success"] is True
-        # thinking_steps should be present
         assert last_data["result"]["data"]["thinking_steps"] is not None
 
     def test_error_event_in_stream(self):
-        """Test that error event in stream is yielded and returns."""
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
@@ -1015,14 +1002,12 @@ class TestXcagiPlannerStreamBytesAdditional:
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield token + error, then return
-        assert len(results) == 2
+        assert len(results) == 3
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert last_data["type"] == "error"
         assert last_data["message"] == "stream error"
 
     def test_requires_token_event_halts_stream(self):
-        """Test that requires_token event halts the stream."""
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
@@ -1049,20 +1034,21 @@ class TestXcagiPlannerStreamBytesAdditional:
                         {"type": "requires_token", "token_name": "WRITE_TOKEN"},
                     ]
                 ),
-            ),
+            ) as planner,
             patch(
                 "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield token + requires_token, then return (no done event)
-        assert len(results) == 2
+        assert planner.call_args.kwargs["runtime_context"]["message"] == body.message
+        started = json.loads(results[0].replace(b"data: ", b"").strip())
+        assert started["type"] == "tool_progress" and started["run_id"].startswith("run_")
+        assert len(results) == 3
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert last_data["type"] == "requires_token"
 
     def test_done_event_in_stream_continues(self):
-        """Test that done event in stream continues (doesn't return)."""
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
@@ -1100,7 +1086,6 @@ class TestXcagiPlannerStreamBytesAdditional:
         assert len(results) >= 2
 
     def test_unknown_event_type_yielded(self):
-        """Test that unknown event types are yielded."""
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
@@ -1138,7 +1123,6 @@ class TestXcagiPlannerStreamBytesAdditional:
         assert len(results) >= 2
 
     def test_recoverable_error_exception(self):
-        """Test that RECOVERABLE_ERRORS exception yields error event."""
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
@@ -1167,13 +1151,11 @@ class TestXcagiPlannerStreamBytesAdditional:
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield error event
-        assert len(results) == 1
-        data = json.loads(results[0].replace(b"data: ", b"").strip())
+        assert len(results) == 2
+        data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert data["type"] == "error"
 
     def test_ephemeral_token_not_added_to_reply_parts(self):
-        """Test that ephemeral tokens are not added to reply_parts."""
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
@@ -1207,15 +1189,12 @@ class TestXcagiPlannerStreamBytesAdditional:
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield 2 tokens + done
-        assert len(results) == 3
+        assert len(results) == 4
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert last_data["type"] == "done"
-        # reply should only contain "real", not "ephemeral"
         assert last_data["result"]["response"] == "real"
 
     def test_db_read_authorized_with_db_read_message_sets_context(self):
-        """Test that db read authorized with db read message sets chat_db_read_authorized."""
         request = self._make_request()
         body = self._make_body(message="查询数据库", db_read_token="valid")
         with (
@@ -1258,7 +1237,6 @@ class TestXcagiPlannerStreamBytesAdditional:
 class TestXcagiPlannerStreamBytesAsyncAdditional:
     @pytest.mark.asyncio
     async def test_async_wrapper_yields_chunks(self):
-        """Test that async wrapper yields chunks from sync generator."""
         request = Mock()
         request.headers = {}
         request.client = None

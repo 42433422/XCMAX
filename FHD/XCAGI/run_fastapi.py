@@ -278,6 +278,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--host", default=None, help="监听地址")
     parser.add_argument("--port", type=int, default=None, help="监听端口")
     parser.add_argument("--data-dir", default=None, help="桌面数据目录")
+    parser.add_argument("--verify-backup", default="", help="只读校验 SQLite 备份后退出")
     parser.add_argument("--migrate-only", action="store_true", help="仅执行数据库迁移后退出")
     parser.add_argument(
         "--backup", action="store_true", help="迁移前备份（与 --migrate-only 合用）"
@@ -331,6 +332,15 @@ def main(argv: list[str] | None = None) -> None:
     _ensure_sys_path()
     _apply_no_console_child_defaults()
     args = _parse_args(argv)
+
+    if args.verify_backup:
+        from app.desktop_runtime.db import integrity_check_ok
+
+        backup = Path(args.verify_backup)
+        if not backup.is_file() or not backup.stat().st_size or not integrity_check_ok(backup):
+            raise SystemExit(1)
+        print(f"XCAGI_BACKUP_VALID={backup}")
+        return
 
     if args.verify_frozen_critical_runtime:
         _verify_frozen_critical_runtime()

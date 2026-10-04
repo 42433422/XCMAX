@@ -374,57 +374,58 @@ def _registered_router_reports(
     from app.services.report_service import ReportService
 
     svc = ReportService()
-    if action == "sales_summary":
-        return svc.get_sales_report(
-            start_date=params.get("start_date"),
-            end_date=params.get("end_date"),
-            group_by=str(params.get("group_by") or "product"),
-            customer_id=params.get("customer_id"),
+    filters = {
+        "sales": ("start_date", "end_date", "group_by", "customer_id"),
+        "inventory": ("warehouse_id", "category", "model_number"),
+        "purchase": ("start_date", "end_date", "group_by"),
+    }
+
+    def query(kind):
+        return getattr(svc, f"get_{kind}_report")(
+            **{key: params[key] for key in filters[kind] if params.get(key) is not None}
         )
-    if action == "inventory_summary":
-        return svc.get_inventory_report(
-            warehouse_id=params.get("warehouse_id"),
-            category=params.get("category"),
-            model_number=params.get("model_number"),
-        )
-    if action == "purchase_summary":
-        return svc.get_purchase_report(
-            start_date=params.get("start_date"),
-            end_date=params.get("end_date"),
-            group_by=str(params.get("group_by") or "supplier"),
-        )
+
+    if action.endswith("_summary") and action.removesuffix("_summary") in filters:
+        return query(action.removesuffix("_summary"))
     if action == "dashboard":
         return svc.get_dashboard_summary()
-    if action == "export":
-        report_type = str(params.get("report_type") or "report")
-        rows = params.get("data")
-        if rows is None and report_type == "sales":
-            report = svc.get_sales_report(
-                start_date=params.get("start_date"),
-                end_date=params.get("end_date"),
-                group_by=str(params.get("group_by") or "product"),
-            )
-            if not report.get("success"):
-                return report
-            rows = report.get("data") or []
-        exported = svc.export_to_excel(
-            report_type=report_type,
-            data=rows or [],
-            filename=str(params.get("filename") or "report"),
-        )
-        run_id = str(runtime_context.get("run_id") or "")
-        if run_id and exported.get("success"):
-            from app.application.agent_orchestrator.artifact_files import store_spreadsheet
-
-            artifact = store_spreadsheet(run_id, exported["data"], name=exported["filename"])
+    if action != "export":
+        return {"success": False, "message": f"未注册的 reports 动作: {action}"}
+    requested = [
+        kind
+        for kind, word in zip(filters, ("销售", "库存", "采购"))
+        if kind in user_message.casefold() or word in user_message
+    ]
+    report_type = str(params.get("report_type") or "").removesuffix("_summary")
+    if not report_type or report_type == "report":
+        report_type = requested[0] if len(requested) == 1 else "report"
+    rows = params.get("data")
+    if rows is None:
+        if report_type not in filters:
             return {
-                "success": True,
-                "message": "报表文件已生成",
-                "row_count": len(rows or []),
-                "artifacts": [artifact],
+                "success": False,
+                "message": "请指定销售、库存或采购报表类型",
+                "error_code": "missing_report_type",
             }
+        report = query(report_type)
+        if not report.get("success"):
+            return report
+        rows = report.get("data") or []
+    exported = svc.export_to_excel(
+        report_type=report_type, data=rows, filename=str(params.get("filename") or report_type)
+    )
+    run_id = str(runtime_context.get("run_id") or "")
+    if not run_id or not exported.get("success"):
         return exported
-    return {"success": False, "message": f"未注册的 reports 动作: {action}"}
+    from app.application.agent_orchestrator.artifact_files import store_spreadsheet
+
+    artifact = store_spreadsheet(run_id, exported["data"], name=exported["filename"])
+    return {
+        "success": True,
+        "message": "报表文件已生成",
+        "row_count": len(rows),
+        "artifacts": [artifact],
+    }
 
 
 def _registered_router_finance(

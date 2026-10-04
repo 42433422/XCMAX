@@ -30,7 +30,7 @@ def _pragma_ok(db_path: Path, pragma: str) -> bool:
     """跑指定 PRAGMA 校验，结果恰为 'ok' 时返回 True。"""
     conn = None
     try:
-        conn = sqlite3.connect(str(db_path))
+        conn = sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)
         result = conn.execute(pragma).fetchone()
         return bool(result) and result[0] == "ok"
     except sqlite3.Error:

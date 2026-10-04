@@ -1,6 +1,3 @@
-/**
- * useChatOrchestration 拆出的远程对话轮次（快路径 / SSE 流式 / JSON 与批量）（行为零变更）。
- */
 import type { Ref } from 'vue'
 import type { useAgentRunEventSync } from '../useAgentRunEvents'
 import type { useChatDbTokenGate } from '../useChatDbTokenGate'
@@ -276,7 +273,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       }
     }
 
-    /** ChatView 主路径：单条消息走 Planner SSE，token 逐字写入气泡；批量仍用 JSON。可用 ``VITE_CHAT_STREAM=0`` 关闭。 */
     if (remoteMessages.length === 1 && isChatStreamEnabled()) {
       const primaryForStream = remoteMessages[0] || ''
       round.setStreaming(true)
@@ -286,18 +282,17 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const baseS = resolveChatTimeoutMs(primaryForStream)
       const timeoutMsS = Math.min(120000, baseS)
       const controller = new AbortController()
-      const killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
+      let killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
       const msgIndex = pushStreamingAiShell()
       let streamPlain = ''
       let doneResult: unknown = null
       let sseError: string | null = null
-      // TTS 增量朗读：以句末标点为界把已稳定的前缀丢给语音队列，避免边生成边合成后半句卡顿或被重复打断
+      let streamRunId = ''
       let ttsSpokenOffset = 0
       const ttsShouldSpeakThisMessage = ttsEnabled.value
       const SPEAK_SENTENCE_BOUNDARY = /[。！？!?；;\n]/g
       const flushTtsFromStream = (text: string, force: boolean) => {
         if (!round.isActive()) return
-        // 开关状态可能在流式过程中被改掉；每次检查当前值，关闭后立即停止追加
         if (!ttsShouldSpeakThisMessage || !ttsEnabled.value) return
         const pending = text.slice(ttsSpokenOffset)
         if (!pending) return
@@ -306,7 +301,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           ttsSpokenOffset = text.length
           return
         }
-        // 找到最后一个句末标点的位置；若没有就暂不朗读，等后续 token 到达再重新判
         SPEAK_SENTENCE_BOUNDARY.lastIndex = 0
         let lastBoundary = -1
         let match: RegExpExecArray | null
@@ -334,7 +328,15 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           throw new Error(await parseChatStreamErrorResponse(res))
         }
         await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
-          if (ev.type === 'token') {
+          if (ev.type === 'token' || ev.type === 'tool_progress') {
+            window.clearTimeout(killTimer)
+            killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
+          }
+          if (ev.type === 'tool_progress') {
+            streamRunId = ev.run_id || streamRunId
+            setLoadingProgress(ev.label || '正在执行任务…', requestScope.sessionId)
+            if (streamRunId) void syncAgentRunFromPayload({ run_id: streamRunId }, primaryText)
+          } else if (ev.type === 'token') {
             streamPlain += ev.text || ''
             if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, streamPlain)
             flushTtsFromStream(streamPlain, false)
@@ -368,10 +370,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             applyPlainTextToMessageIndex(msgIndex, finalText)
           }
         }
-        // 后端 done 事件可能带一段非 token 的尾部文本（比如总结段），统一再做一次兜底朗读
         if (ttsShouldSpeakThisMessage && ttsEnabled.value) {
           if (finalText.length >= ttsSpokenOffset) {
-            // 用 finalText 做最终来源，确保 done 额外补的那段也能被念到
             const tail = finalText.slice(ttsSpokenOffset).trim()
             if (tail) queueVoice(tail)
             ttsSpokenOffset = finalText.length
@@ -407,11 +407,15 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
         }
       } catch (err: unknown) {
+        const timedOut = asRecord(err).name === 'AbortError'
         const errText =
-          err instanceof Error && err.name === 'AbortError'
-            ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
+          timedOut
+            ? streamRunId
+              ? '对话连接已超时，任务可能仍在执行。请到任务工作区核对结果，勿重复提交。'
+              : `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')
-        if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
+        if (streamRunId) await syncAgentRunFromPayload({ run_id: streamRunId }, primaryText)
+        if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, timedOut && streamRunId ? errText : `处理失败：${errText}`)
       } finally {
         round.setStreaming(false)
         window.clearTimeout(killTimer)
