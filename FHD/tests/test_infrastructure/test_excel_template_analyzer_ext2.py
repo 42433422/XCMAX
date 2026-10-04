@@ -595,7 +595,6 @@ class TestExcelAnalyzerSkill:
 
     def test_execute_with_output_json(self, tmp_path):
         excel_path = tmp_path / "test.xlsx"
-        excel_path.write_bytes(b"fake")
         output_path = tmp_path / "out.json"
 
         skill = ExcelAnalyzerSkill()

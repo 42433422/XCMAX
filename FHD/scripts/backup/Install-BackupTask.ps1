@@ -1,4 +1,4 @@
-# Registers daily and weekly backups at 12:30 for the interactive user.
+# Registers daily backups at 12:30 and weekly backups at 13:30 for the interactive user.
 [CmdletBinding()]
 param(
   [string]$ExternalDir = "",
@@ -63,13 +63,14 @@ function Register-BackupTask {
 }
 
 $at = Get-Date -Hour 12 -Minute 30 -Second 0 -Millisecond 0
+$weeklyAt = $at.AddHours(1)
 Register-BackupTask -TaskName $TaskNameDaily -Cadence Daily -At $at
-Register-BackupTask -TaskName $TaskNameWeekly -Cadence Weekly -At $at
+Register-BackupTask -TaskName $TaskNameWeekly -Cadence Weekly -At $weeklyAt
 
 Write-Host ""
 Write-Host "=== XCMAX backup tasks installed ==="
 Write-Host "  Daily  : $TaskNameDaily  @ 12:30 every day"
-Write-Host "  Weekly : $TaskNameWeekly @ 12:30 every Sunday"
+Write-Host "  Weekly : $TaskNameWeekly @ $($weeklyAt.ToString('HH:mm')) every Sunday"
 if ($ExternalDir) {
   Write-Host "  External backup dir: $ExternalDir"
 }
