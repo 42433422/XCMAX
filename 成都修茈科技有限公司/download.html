@@ -785,17 +785,16 @@
 
         function manifestEntry(platform) {
           var manifest = state.manifest
-          if (!manifest || !manifest.channels || !manifest.channels.official_download) return null
-          var sku = manifest.channels.official_download.enterprise
-          if (!sku) return null
-          if (platform === 'win') return sku.win || null
-          if (platform === 'android') return sku.android || null
+          var sku = manifest && manifest.channels && manifest.channels.official_download && manifest.channels.official_download.enterprise
+          if (!state.releaseReady || !manifest || manifest.release_ready !== true || !sku) return null
+          var entry = null
+          if (platform === 'win') entry = sku.win || null
+          if (platform === 'android') entry = sku.android || null
           if (platform === 'mac') {
             var macs = sku.mac || []
-            for (var i = 0; i < macs.length; i += 1) if (macs[i].arch === state.macArch) return macs[i]
-            return macs[0] || null
+            for (var i = 0; i < macs.length; i += 1) if ((macs[i].arch || ((macs[i].filename || '').match(/-mac-(arm64|x64)\.dmg$/i) || [])[1]) === state.macArch) { entry = macs[i]; break }
           }
-          return null
+          return entry && entry.url && /^[a-f0-9]{64}$/i.test(entry.sha256 || '') ? entry : null
         }
 
         function downloadUrl(platform) {
@@ -890,7 +889,8 @@
           // 版本号来自发布清单，一律以文本节点写入 DOM，不拼接 HTML 字符串（避免 DOM XSS）。
           if (!known) versionEl.replaceChildren('版本信息加载中…')
           else if (state.tab === 'android') versionEl.replaceChildren('当前版本 ', textElement('b', '', state.androidVersion))
-          else if (hotfix) versionEl.replaceChildren('macOS 稳定版 ', textElement('b', '', state.version), ' · Windows 临时交付 ', textElement('b', '', hotfix.version))
+          else if (hotfix && manifestEntry('mac')) versionEl.replaceChildren('macOS 稳定版 ', textElement('b', '', state.version), ' · Windows 临时交付 ', textElement('b', '', hotfix.version))
+          else if (hotfix) versionEl.replaceChildren('macOS 稳定包待开放 · Windows 临时交付 ', textElement('b', '', hotfix.version))
           else versionEl.replaceChildren('当前版本 ', textElement('b', '', state.version))
           pendingEl.hidden = rows().every(function (row) {
             if (row.platform === 'win' && activeWindowsHotfix()) return true
@@ -903,7 +903,7 @@
             state.tab === 'android'
               ? 'Android 为实验版（非签约级），安装后请在系统设置中允许“安装未知应用”。'
               : hotfix
-                ? 'Windows 临时交付包 Authenticode 状态：' + hotfix.signature_status + '。安装前请核对完整 SHA-256；不会进入稳定自动更新。macOS 仍使用稳定版。'
+                ? 'Windows 临时交付包 Authenticode 状态：' + hotfix.signature_status + '。安装前请核对完整 SHA-256；不会进入稳定自动更新。' + (manifestEntry('mac') ? 'macOS 仍使用稳定版。' : 'macOS 稳定包暂未开放。')
                 : '支持 Windows 10+、macOS 12+。安装后可按需安装行业 Mod。'
           listEl.replaceChildren()
           rows().forEach(function (row, index) {
@@ -911,8 +911,7 @@
             var available =
               Boolean(rowHotfix) ||
               Boolean(manifestEntry(row.platform)) ||
-              (row.platform === 'android' && Boolean(state.androidVersion)) ||
-              state.releaseReady
+              (row.platform === 'android' && Boolean(state.androidVersion))
             var link = document.createElement('a')
             link.className = 'download-item' + (index === 0 ? ' is-primary' : '')
             if (available) {
