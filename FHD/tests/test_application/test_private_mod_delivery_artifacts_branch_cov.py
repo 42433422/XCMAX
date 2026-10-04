@@ -104,17 +104,13 @@ class TestCustomDeliveryRemoteJson:
         with pytest.raises(PermissionError):
             await mod.custom_delivery_remote_json("", "/foo")
 
-    async def test_success_get_default(self):
+    async def test_success_get_default(self, monkeypatch):
         client = _async_client(request_resp=_resp(200, {"ok": True}))
-        with (
-            patch("httpx.AsyncClient", return_value=client),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://m.example.com",
-            ),
-        ):
+        monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com/market")
+        with patch("httpx.AsyncClient", return_value=client):
             result = await mod.custom_delivery_remote_json("tok", "/foo")
         assert result == {"ok": True}
+        assert client.request.call_args.args[1] == "https://xiu-ci.com/foo"
 
     async def test_path_without_leading_slash_and_payload(self):
         client = _async_client(request_resp=_resp(200, {"id": 1}))
@@ -306,10 +302,7 @@ def delivery(tmp_path, monkeypatch):
         lambda: employees,
     )
     monkeypatch.setattr("app.mod_sdk.employee_runtime.refresh_employee_pack_runtime", MagicMock())
-    monkeypatch.setattr(
-        "app.fastapi_routes.market_account._market_base_url",
-        lambda: "https://synthetic-market.invalid",
-    )
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic-market.invalid/market")
     client = _async_client()
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client)
     counter = 0
@@ -450,7 +443,9 @@ class TestInstallCustomDeliveryArtifact:
             await mod.install_custom_delivery_artifact(
                 "tok", 7, "module", owner_scope="tenant:1", artifact_id="another-module"
             )
-        assert "artifact_id=another-module" in delivery.client.get.await_args.args[0]
+        assert delivery.client.get.await_args.args[0].removeprefix(
+            "https://synthetic-market.invalid"
+        ) == "/api/customer-service/custom-deliveries/7/artifacts/module/download?artifact_id=another-module"
         delivery.install.assert_not_called()
         assert delivery.outbox_rows() == []
 
