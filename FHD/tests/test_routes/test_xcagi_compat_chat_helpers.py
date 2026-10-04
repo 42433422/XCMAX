@@ -17,7 +17,6 @@ from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.planner import LLMWorkflowPlanner
 from app.fastapi_routes import xcagi_compat_chat_helpers as ch
 
-# 精确验收句（与 W1-10 生产销售写路由一致）
 EXACT_SENTENCE = "把 A 产品卖给客户B，10 个，单价 100，开票收款"
 
 
@@ -32,16 +31,7 @@ class _LLMBomb:
 
 
 def _make_real_app_service():
-    """真实 AIChatApplicationService：真实 planner / risk gate / approval service /
-    AgentOrchestrator，真实 WorkflowEngine(分发器炸弹) + 真实 WorkflowCheckpointer。
-
-    仅隔离已确立的审计/运行/审批持久化边界，绝不替换 route、planner、risk gate、
-    approval-required-node 决策或应用服务逻辑：
-    - langgraph 运行时/检查点 → 真实 WorkflowEngine(dispatch bomb) / WorkflowCheckpointer；
-    - 遗留对话 LLM 服务 → 空壳；
-    - AgentRun 仓库 → 内存实现；
-    - 审批 DB 持久化（persist_request_to_db / persist_agent_run_link）→ no-op/in-memory。
-    """
+    """Real planning and approval with isolated persistence and forbidden dispatch/LLM."""
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.workflow.approval_service import ApprovalService
 
@@ -66,14 +56,11 @@ def _make_real_app_service():
             workflow_runtime=real_engine,
             workflow_checkpointer=real_checkpointer,
         )
-    # 使用独立的真实审批服务，避免其它测试对进程级单例安装的 mock 污染审批判定。
     svc.approval_service = ApprovalService()
     svc.approval_service._persist_request_to_db = lambda req, **k: {  # noqa: ARG005
         "request_no": req.request_id
     }
-    # 计划落库为尽力而为的持久化边界 → no-op，保持测试隔离。
     svc._persist_plan_state = lambda *a, **k: None
-    # planner 实例 model/completion 网关 → 炸弹（确定性 bypass 不触达）。
     svc.workflow_planner._ai_service = _LLMBomb()
     return svc
 
@@ -98,7 +85,6 @@ def test_runtime_context_uses_authenticated_session_actor():
     assert context["local_user_id"] == 17
     assert context["actor_id"] == 17
     assert context["user_id"] == "web_pro_session"
-    # 认证解析出的租户覆盖调用方上下文里的冲突租户（resolved tenant wins）。
     assert context["tenant_id"] == 7
 
 
@@ -182,11 +168,18 @@ def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts(
     events = _sse_payloads(chunks)
     errors = [e for e in events if e.get("type") == "error"]
     assert not errors, errors
-    # 真实 process_chat 已在认证租户作用域内执行（resolved tenant wins）。
     assert captured["tenant_id"] == 7
 
 
-def test_stream_business_db_write_uses_stateful_approval_mainline():
+@pytest.mark.parametrize(
+    "message",
+    [
+        "新增产品到数据库 产品:CHATCRUD-STREAM",
+        "请给 Mac验收客户-7F1B17CE 出货，必须人工审批后才能执行。",
+        "2桶，客户名称仍为用户需提供，必须人工审批后执行。",
+    ],
+)
+def test_stream_business_db_write_uses_stateful_approval_mainline(message):
     request = MagicMock()
     request.headers = {}
     request.cookies = {}
@@ -198,10 +191,12 @@ def test_stream_business_db_write_uses_stateful_approval_mainline():
         "data": {"action": "workflow_confirmation_required"},
     }
     body = ch.XcagiCompatChatBody(
-        message="新增产品到数据库 产品:CHATCRUD-STREAM",
+        message=message,
         user_id="web_pro_session",
-        source="pro",
+        source="normal",
     )
+    if "出货" in message or "人工审批" in message:
+        assert not AIChatApplicationService._is_pure_casual_chat(message)
     with (
         patch("app.application.get_ai_chat_app_service", return_value=service),
         patch.object(
@@ -221,6 +216,29 @@ def test_stream_business_db_write_uses_stateful_approval_mainline():
 @pytest.mark.parametrize(
     "message,source,node_id,tool_id,action,params",
     [
+        (
+            "创建出货单：客户名称为Mac验收客户-7F1B17CE，产品名称Mac验收涂料-7F1B17CE，数量2桶，规格10公斤/桶，单价12.5元/公斤。必须人工审批后执行。",
+            "normal",
+            "write_business_shipment_record",
+            "business_db",
+            "write",
+            {
+                "entity": "shipment_records",
+                "operation": "create",
+                "payload": {
+                    "unit_name": "Mac验收客户-7F1B17CE",
+                    "products": [
+                        {
+                            "product_name": "Mac验收涂料-7F1B17CE",
+                            "name": "Mac验收涂料-7F1B17CE",
+                            "quantity_tins": 2,
+                            "tin_spec": 10.0,
+                            "unit_price": 12.5,
+                        }
+                    ],
+                },
+            },
+        ),
         (
             EXACT_SENTENCE,
             "pro",
@@ -281,9 +299,7 @@ def test_executable_sse_request_uses_real_plan_and_waits_for_approval(
         ),
     ):
         chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # 首响应后审批已挂起（获批前不分发业务）。
         assert svc._pending_workflows["web_pro_session"]["approval_required"] is True
-        # 同一服务实例在全部炸弹仍生效时驱动确认 → approval_pending（确认期间也不得执行工具）。
         resp2 = svc.process_chat(
             user_id="web_pro_session", message="确认", context={}, source=source
         )
@@ -296,7 +312,6 @@ def test_executable_sse_request_uses_real_plan_and_waits_for_approval(
 
     done_payload = done[0]["result"]
     assert done_payload["data"]["action"] == "workflow_confirmation_required"
-    # Exactly one approval node; no dispatch before the normal approval flow.
     inner = done_payload["data"]["data"]
     assert inner["approval_required"] is True
     assert inner["approval_nodes"] == [
@@ -307,7 +322,6 @@ def test_executable_sse_request_uses_real_plan_and_waits_for_approval(
         }
     ]
 
-    # 同一服务实例驱动确认 → approval_pending
     assert resp2["data"]["action"] == "approval_pending"
     inner = resp2["data"]["data"]
     assert inner["approval_required"] is True
@@ -315,7 +329,6 @@ def test_executable_sse_request_uses_real_plan_and_waits_for_approval(
     request_ids = inner["approval_request_ids"]
     assert isinstance(request_ids, list) and len(request_ids) == 1
     assert str(request_ids[0]).strip()
-    # Pending approval retains the exact tool parameters.
     nodes = inner["approval_nodes"]
     assert len(nodes) == 1
     node = nodes[0]
@@ -359,9 +372,7 @@ def test_casual_chat_not_diverted_to_app_service():
     assert any(e.get("type") == "done" for e in events)
 
 
-# ---------------------------------------------------------------------------
 # XcagiCompatChatBody
-# ---------------------------------------------------------------------------
 
 
 class TestXcagiCompatChatBody:
@@ -415,9 +426,7 @@ class TestXcagiCompatChatBody:
             ch.XcagiCompatChatBody(message="")
 
 
-# ---------------------------------------------------------------------------
 # XcagiCompatChatBatchBody
-# ---------------------------------------------------------------------------
 
 
 class TestXcagiCompatChatBatchBody:
@@ -432,9 +441,7 @@ class TestXcagiCompatChatBatchBody:
         assert body.messages == []
 
 
-# ---------------------------------------------------------------------------
 # _chat_request_subject
-# ---------------------------------------------------------------------------
 
 
 class TestChatRequestSubject:
@@ -466,9 +473,7 @@ class TestChatRequestSubject:
         assert result.endswith("|na")
 
 
-# ---------------------------------------------------------------------------
 # _chat_db_read_grace_seconds_left / _touch_chat_db_read_grace
-# ---------------------------------------------------------------------------
 
 
 class TestChatDbReadGrace:
@@ -499,9 +504,7 @@ class TestChatDbReadGrace:
         assert ch._chat_db_read_grace_seconds_left(request) == 0
 
 
-# ---------------------------------------------------------------------------
 # _message_requires_db_read_token
-# ---------------------------------------------------------------------------
 
 
 class TestMessageRequiresDbReadToken:
@@ -524,9 +527,7 @@ class TestMessageRequiresDbReadToken:
         assert ch._message_requires_db_read_token("数据库查看") is True
 
 
-# ---------------------------------------------------------------------------
 # _chat_read_token_required_payload
-# ---------------------------------------------------------------------------
 
 
 class TestChatReadTokenRequiredPayload:
@@ -537,9 +538,7 @@ class TestChatReadTokenRequiredPayload:
         assert "token_description" in result
 
 
-# ---------------------------------------------------------------------------
 # _ensure_chat_db_read_authorized
-# ---------------------------------------------------------------------------
 
 
 class TestEnsureChatDbReadAuthorized:

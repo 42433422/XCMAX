@@ -241,7 +241,7 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
             return {"intent": "unknown", "slots": {}}
         return {"intent": "shipment_records_query", "slots": {"keyword": ""}}
     if _facade().re.search(r"人工审批|手动审批|(?:客户|单位)名称\s*(?:仍为|为|是|[:：])", text):
-        return {"intent": "unknown", "slots": {}}
+        return {"intent": "workflow", "slots": {}}
     if (
         any(k in text for k in shipment_keywords) or number_style_order or print_spec_order
     ) and not template_preview:
@@ -249,7 +249,7 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     if template_preview:
         return {"intent": "unknown", "slots": {}}
     if any(k in text for k in ("出货", "发货", "送货")):
-        return {"intent": "unknown", "slots": {}}
+        return {"intent": "workflow", "slots": {}}
     sales_write_payload = _facade()._parse_sales_write_request(text)
     if sales_write_payload is not None:
         return {
