@@ -244,12 +244,14 @@ def build_evidence(cases_cfg: dict) -> dict:
         die(f"证据目录无 run.json: {EVIDENCE_DIR}")
 
     # 追溯链：FHD 验收目录中的 videos-manifest.json（原始录像 → 原始 SHA256）
-    original_map: dict[str, dict] = {}
-    for mf in (FHD_ROOT / "docs" / "evidence" / "e2e").glob("*/base-login/*/videos-manifest.json"):
+    original_map: dict[tuple[str, str, str], dict] = {}
+    for mf in sorted((FHD_ROOT / "docs" / "evidence" / "e2e").glob("*/*/*/videos-manifest.json")):
         try:
             for item in json.loads(mf.read_text(encoding="utf-8")):
-                stem = Path(item["name"]).stem
-                original_map[stem] = item
+                key = (mf.parent.parent.name, mf.parent.name, Path(item["name"]).stem)
+                if key in original_map and original_map[key] != item:
+                    die(f"原始录像追溯歧义: {key} ({mf})")
+                original_map[key] = item
         except (json.JSONDecodeError, KeyError):
             continue
 
@@ -310,12 +312,9 @@ def build_evidence(cases_cfg: dict) -> dict:
                         blockers.append(f"非 H.264 编码({codec})")
                     if local.suffix == ".webm":
                         blockers.append("webm 不作官网展示")
-                    stem_no_platform = Path(local.name).stem.replace("-web", "").replace("-macos", "")
+                    stem_no_platform = Path(local.name).stem.replace("-web", "").replace("-macos", "").replace("-windows", "")
                     stem_candidates = [Path(local.name).stem, stem_no_platform, stem_no_platform.replace(f"{feat}-", "")]
-                    orig = next(
-                        (original_map[c] for c in stem_candidates if c in original_map),
-                        None,
-                    )
+                    orig = next((original_map[(feat, platform, c)] for c in stem_candidates if (feat, platform, c) in original_map), None)
                     if not orig:
                         blockers.append("原始录像不可追溯")
                     if blockers:
@@ -333,13 +332,12 @@ def build_evidence(cases_cfg: dict) -> dict:
                     entry["public_path"] = f"/capabilities/assets/evidence/{local.name}"
                     entry["duration_ok"] = True
                     entry["poster"] = f"/capabilities/assets/evidence/{poster.name}" if poster.exists() else None
-                    if orig:
-                        entry["original_recording"] = {
-                            "name": orig["name"],
-                            "sha256": orig["sha256"],
-                            "bytes": orig["bytes"],
-                            "archive_path": orig.get("archive_path"),
-                        }
+                    entry["original_recording"] = {
+                        "name": orig["name"],
+                        "sha256": orig["sha256"],
+                        "bytes": orig["bytes"],
+                        "archive_path": orig.get("archive_path"),
+                    }
                     videos.append({**entry, "feature": feat, "platform": platform})
                 else:
                     # 截图无转码差异：站点副本必须与 run.json 记录逐哈希一致，
