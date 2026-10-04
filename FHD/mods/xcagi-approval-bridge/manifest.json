@@ -1,7 +1,7 @@
 {
   "id": "xcagi-approval-bridge",
   "name": "审批中心门面 Mod",
-  "version": "1.0.0.0",
+  "version": "1.0.0.1",
   "author": "成都修茈科技有限公司",
   "description": "审批 API 门面 + 里程碑 K/O+ Mod 业务页（物理视图在 Mod 包；ORM/DB 仍在宿主）。",
   "dependencies": {
