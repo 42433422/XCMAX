@@ -443,9 +443,10 @@ class TestInstallCustomDeliveryArtifact:
             await mod.install_custom_delivery_artifact(
                 "tok", 7, "module", owner_scope="tenant:1", artifact_id="another-module"
             )
-        assert delivery.client.get.await_args.args[0].removeprefix(
-            "https://synthetic-market.invalid"
-        ) == "/api/customer-service/custom-deliveries/7/artifacts/module/download?artifact_id=another-module"
+        assert (
+            delivery.client.get.await_args.args[0].removeprefix("https://synthetic-market.invalid")
+            == "/api/customer-service/custom-deliveries/7/artifacts/module/download?artifact_id=another-module"
+        )
         delivery.install.assert_not_called()
         assert delivery.outbox_rows() == []
 
