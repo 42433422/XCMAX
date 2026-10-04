@@ -2,7 +2,6 @@
 import Modal from '@/components/Modal.vue'
 import type { ApprovalWorkspaceCtx } from './assemble'
 
-// 拆分自 ApprovalWorkspaceView.vue 模板（原第 158–281 行）；模板逐字迁移，行为不变。
 const props = defineProps<{ tm: ApprovalWorkspaceCtx }>()
 
 const {
@@ -65,7 +64,7 @@ const {
                   <span class="time">{{ formatTime(record.created_at) }}</span>
                 </div>
                 <div class="timeline-body">
-                  <div class="approver">审批人：{{ record.approver_name || '系统' }}</div>
+                  <div class="approver">审批人：{{ record.approver_name || record.approver_id || '系统' }}</div>
                   <div class="opinion">{{ record.opinion }}</div>
                 </div>
               </div>
