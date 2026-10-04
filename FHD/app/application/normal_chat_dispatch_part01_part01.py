@@ -217,7 +217,7 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         return {"intent": "desktop", "slots": desktop}
     if is_negation(text, action_keywords=["打印", "标签", "贴标", "商标"]):
         return {"intent": "unknown", "slots": {}}
-    shipment_keywords = ("发货", "送货", "出货", "开单", "打单")
+    shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单")
     print_spec_order = (
         "打印" in text
         and not any(word in text for word in ("标签", "商标", "贴标"))
@@ -240,8 +240,16 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     ):
         return {"intent": "unknown", "slots": {}}
     shipment_record_keywords = (
-        "出货记录", "发货记录", "出货历史", "发货历史", "出货列表", "发货列表",
-        "出货查询", "发货查询", "出货明细", "发货明细",
+        "出货记录",
+        "发货记录",
+        "出货历史",
+        "发货历史",
+        "出货列表",
+        "发货列表",
+        "出货查询",
+        "发货查询",
+        "出货明细",
+        "发货明细",
     )
     if any(k in text for k in shipment_record_keywords):
         return {"intent": "shipment_records_query", "slots": {"keyword": ""}}
@@ -250,6 +258,8 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     ) and not template_preview:
         return {"intent": "shipment", "slots": {"number_style_order": number_style_order}}
     if template_preview:
+        return {"intent": "unknown", "slots": {}}
+    if any(k in text for k in ("出货", "发货", "送货")):
         return {"intent": "unknown", "slots": {}}
     sales_write_payload = _facade()._parse_sales_write_request(text)
     if sales_write_payload is not None:
