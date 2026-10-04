@@ -263,19 +263,21 @@ describe('useChatOrchestration stream', () => {
     expect(applyPlainTextToMessageIndex).toHaveBeenCalled()
   })
 
-  it('sendMessage stream surfaces HTTP error', async () => {
-    sendChatStream.mockResolvedValue({ ok: false, status: 502 })
-    const api = useChatOrchestration({ sessionId: ref('s') })
-    await api.sendMessage('hello')
+  it('keeps an accepted task distinguishable from failure after a stream timeout', async () => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'tool_progress', run_id: 'run_export', label: '正在处理任务' })
+      throw new DOMException('timeout', 'AbortError')
+    })
+    await useChatOrchestration({ sessionId: ref('s') }).sendMessage('EXPORT INVENTORY')
+    expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('请到任务工作区核对结果'))
+    expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+  })
+
+  it.each(['http', 'sse'])('surfaces %s errors as failures', async (kind) => {
+    sendChatStream.mockResolvedValue({ ok: kind !== 'http', status: 502, body: {} })
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => onEvent({ type: 'error', message: '模型不可用' }))
+    await useChatOrchestration({ sessionId: ref('s') }).sendMessage('hello')
     expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('处理失败'))
   })
 
-  it('sendMessage stream surfaces SSE error event', async () => {
-    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
-      onEvent({ type: 'error', message: '模型不可用' })
-    })
-    const api = useChatOrchestration({ sessionId: ref('s') })
-    await api.sendMessage('hello')
-    expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('模型不可用'))
-  })
 })

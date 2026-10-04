@@ -929,9 +929,7 @@ class TestXcagiPlannerStreamBytesAdditional:
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield token event + error event
-        assert len(results) == 2
-        # Last event should be error
+        assert len(results) == 3
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert last_data["type"] == "error"
         assert "没有返回可显示的正文" in last_data["message"]
@@ -972,12 +970,10 @@ class TestXcagiPlannerStreamBytesAdditional:
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield 2 token events + 1 done event
-        assert len(results) == 3
+        assert len(results) == 4
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert last_data["type"] == "done"
         assert last_data["result"]["success"] is True
-        # thinking_steps should be present
         assert last_data["result"]["data"]["thinking_steps"] is not None
 
     def test_error_event_in_stream(self):
@@ -1015,8 +1011,7 @@ class TestXcagiPlannerStreamBytesAdditional:
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield token + error, then return
-        assert len(results) == 2
+        assert len(results) == 3
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert last_data["type"] == "error"
         assert last_data["message"] == "stream error"
@@ -1056,8 +1051,9 @@ class TestXcagiPlannerStreamBytesAdditional:
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield token + requires_token, then return (no done event)
-        assert len(results) == 2
+        started = json.loads(results[0].replace(b"data: ", b"").strip())
+        assert started["type"] == "tool_progress" and started["run_id"].startswith("run_")
+        assert len(results) == 3
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert last_data["type"] == "requires_token"
 
@@ -1167,9 +1163,8 @@ class TestXcagiPlannerStreamBytesAdditional:
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield error event
-        assert len(results) == 1
-        data = json.loads(results[0].replace(b"data: ", b"").strip())
+        assert len(results) == 2
+        data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert data["type"] == "error"
 
     def test_ephemeral_token_not_added_to_reply_parts(self):
@@ -1207,11 +1202,9 @@ class TestXcagiPlannerStreamBytesAdditional:
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # Should yield 2 tokens + done
-        assert len(results) == 3
+        assert len(results) == 4
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert last_data["type"] == "done"
-        # reply should only contain "real", not "ephemeral"
         assert last_data["result"]["response"] == "real"
 
     def test_db_read_authorized_with_db_read_message_sets_context(self):

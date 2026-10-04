@@ -304,7 +304,7 @@ function bootstrap(): void {
             },
             restartCountRef: () => desktopRuntime.restartCount,
             port: DEFAULT_PORT,
-            appVersion: app.getVersion(),
+            appVersion: readLocalProductVersion(),
             buildSha: readLocalBuildSha(),
             configPath: null,
             // Phase 1：注入 backend 重启 / 版本回滚闭包
