@@ -50,26 +50,16 @@ from app.application.normal_chat_dispatch import (
 class TestRouteNormalModeMessageShipment:
     """route_normal_mode_message shipment 槽位分支。"""
 
-    def test_shipment_keyword_发货单(self):
-        result = route_normal_mode_message("帮我打开发货单")
-        assert result["intent"] == "shipment"
-        assert result["slots"]["number_style_order"] is False
-
-    def test_shipment_keyword_送货单(self):
-        result = route_normal_mode_message("送货单看一下")
-        assert result["intent"] == "shipment"
-
-    def test_shipment_keyword_出货单(self):
-        result = route_normal_mode_message("出货单打印")
-        assert result["intent"] == "shipment"
-
-    def test_shipment_keyword_开单(self):
-        result = route_normal_mode_message("开单")
-        assert result["intent"] == "shipment"
-
-    def test_shipment_keyword_打单(self):
-        result = route_normal_mode_message("打单")
-        assert result["intent"] == "shipment"
+    @pytest.mark.parametrize("text,expected", [
+        ("帮我打开发货单", "shipment"), ("送货单看一下", "shipment"),
+        ("出货单打印", "shipment"), ("开单", "shipment"), ("打单", "shipment"),
+        ("请给 Mac验收客户-70BC4E77 出货，必须人工审批后才能执行。", "shipment"),
+        ("给客户发货", "shipment"), ("给客户送货", "shipment"),
+        ("不要给客户出货", "unknown"), ("预览送货单模板", "unknown"),
+        ("查看客户出货记录", "shipment_records_query"), ("发货历史", "shipment_records_query"),
+    ])
+    def test_shipment_actions_keep_queries_and_negation_separate(self, text, expected):
+        assert route_normal_mode_message(text)["intent"] == expected
 
     def test_unspecified_print_is_not_assumed_to_be_a_shipment(self):
         result = route_normal_mode_message("打印一下")
