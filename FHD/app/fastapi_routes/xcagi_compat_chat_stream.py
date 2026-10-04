@@ -217,7 +217,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     llm_client = _facade().create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []
     pre_run = None
-    planner_runtime_context = dict(runtime_context or {})
+    planner_runtime_context = {**(runtime_context or {}), "message": body.message}
     try:
         pre_run = _facade().start_legacy_chat_run(
             message=body.message,

@@ -263,6 +263,20 @@ describe('useChatOrchestration stream', () => {
     expect(applyPlainTextToMessageIndex).toHaveBeenCalled()
   })
 
+  it('keeps the stream open while execution progress continues', async () => {
+    vi.useFakeTimers()
+    try {
+      readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+        await vi.advanceTimersByTimeAsync(20_000)
+        onEvent({ type: 'tool_progress', label: '正在执行' })
+        await vi.advanceTimersByTimeAsync(20_000)
+        expect(sendChatStream.mock.calls[0][1].signal.aborted).toBe(false)
+        onEvent({ type: 'done', result: { success: true, response: '完成' } })
+      })
+      await useChatOrchestration({ sessionId: ref('s') }).sendMessage('EXPORT INVENTORY')
+    } finally { vi.useRealTimers() }
+  })
+
   it('keeps an accepted task distinguishable from failure after a stream timeout', async () => {
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
       onEvent({ type: 'tool_progress', run_id: 'run_export', label: '正在处理任务' })

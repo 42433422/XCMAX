@@ -282,7 +282,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const baseS = resolveChatTimeoutMs(primaryForStream)
       const timeoutMsS = Math.min(120000, baseS)
       const controller = new AbortController()
-      const killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
+      let killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
       const msgIndex = pushStreamingAiShell()
       let streamPlain = ''
       let doneResult: unknown = null
@@ -328,6 +328,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           throw new Error(await parseChatStreamErrorResponse(res))
         }
         await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
+          if (ev.type === 'token' || ev.type === 'tool_progress') {
+            window.clearTimeout(killTimer)
+            killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
+          }
           if (ev.type === 'tool_progress') {
             streamRunId = ev.run_id || streamRunId
             setLoadingProgress(ev.label || '正在执行任务…', requestScope.sessionId)

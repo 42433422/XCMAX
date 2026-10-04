@@ -291,8 +291,6 @@ function bootstrap(): void {
             }
           }
         }
-        // 启动自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归）
-        // 控制器提供新增能力：5min 内 backend 崩溃 ≥3 次自动回滚、磁盘满自动清日志、配置漂移自动纠正
         try {
           const adapter = new DesktopAutonomyAdapter({
             backendProcessRef: () => {
@@ -307,12 +305,8 @@ function bootstrap(): void {
             appVersion: readLocalProductVersion(),
             buildSha: readLocalBuildSha(),
             configPath: null,
-            // Phase 1：注入 backend 重启 / 版本回滚闭包
-            // restartBackend 调用 startBackend()；backend exit 时 backendProcess 已被清空，可直接 spawn
             restartBackend: async () => { await startBackend() },
-            // triggerRollback 复用现有 triggerRollbackSafe 吞错语义
             triggerRollback: async () => { await triggerRollbackSafe('autonomy_controller_triggered') },
-            // knownGoodConfigContent 当前为 null（桌面端暂无配置文件概念，repair_config 自动拒绝）
             knownGoodConfigContent: null,
           })
           desktopRuntime.autonomyController = new AutonomyController(
