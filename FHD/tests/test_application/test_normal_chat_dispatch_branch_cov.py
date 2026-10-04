@@ -51,6 +51,9 @@ class TestRouteNormalModeMessageShipment:
             ("不要给客户出货", "unknown"),
             ("预览送货单模板", "unknown"),
             ("查看客户出货记录", "shipment_records_query"),
+            ("请为客户创建出货记录", "unknown"),
+            ("新增发货记录并人工审批", "unknown"),
+            ("删除客户出货记录", "unknown"),
             ("发货历史", "shipment_records_query"),
         ],
     )
