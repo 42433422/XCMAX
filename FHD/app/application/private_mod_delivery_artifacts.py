@@ -51,17 +51,14 @@ async def custom_delivery_remote_json(
     token = str(market_token or "").strip()
     if not token:
         raise PermissionError("缺少市场登录凭证")
-    from app.fastapi_routes.market_account import _market_base_url
+    from app.fastapi_routes.market_account import _market_api_base_url
 
-    clean = path if str(path or "").startswith("/") else f"/{path}"
-    url = f"{_market_base_url()}{clean}"
+    clean = f"/{str(path or '').lstrip('/')}"
+    url = f"{_market_api_base_url()}{clean}"
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=8.0)) as client:
             response = await client.request(
-                method.upper(),
-                url,
-                headers={"Authorization": _auth_header(token)},
-                json=payload if payload is not None else None,
+                method.upper(), url, json=payload, headers={"Authorization": _auth_header(token)}
             )
     except httpx.RequestError as exc:
         raise ConnectionError(f"MODstore 定制交付服务不可达：{exc}") from exc
@@ -70,9 +67,11 @@ async def custom_delivery_remote_json(
     except ValueError:
         body = {}
     if response.status_code >= 400:
-        detail = ""
-        if isinstance(body, dict):
-            detail = str(body.get("detail") or body.get("message") or "").strip()
+        detail = (
+            str(body.get("detail") or body.get("message") or "").strip()
+            if isinstance(body, dict)
+            else ""
+        )
         raise RuntimeError(detail or f"MODstore 返回 HTTP {response.status_code}")
     if not isinstance(body, dict):
         raise RuntimeError("MODstore 定制交付返回格式无效")
@@ -97,17 +96,17 @@ async def install_custom_delivery_artifact(
         raise PermissionError("缺少市场登录凭证")
     if not owner_scope:
         raise ValueError("定制产物安装必须绑定当前工作空间")
-    from app.fastapi_routes.market_account import _market_base_url
+    from app.fastapi_routes.market_account import _market_api_base_url
 
     url = (
-        f"{_market_base_url()}/api/customer-service/custom-deliveries/"
+        f"{_market_api_base_url()}/api/customer-service/custom-deliveries/"
         f"{int(ticket_id)}/artifacts/{kind}/download"
     )
-    if requested_id:
-        url += "?" + urlencode({"artifact_id": requested_id})
-    tmp = tempfile.NamedTemporaryFile(prefix="xcagi-custom-delivery-", suffix=".zip", delete=False)
-    tmp_path = Path(tmp.name)
-    tmp.close()
+    url += "?" + urlencode({"artifact_id": requested_id}) if requested_id else ""
+    with tempfile.NamedTemporaryFile(
+        prefix="xcagi-custom-delivery-", suffix=".zip", delete=False
+    ) as tmp:
+        tmp_path = Path(tmp.name)
     try:
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=8.0)) as client:
@@ -136,8 +135,6 @@ async def install_custom_delivery_artifact(
         if not response.content:
             raise RuntimeError("定制产物包为空")
 
-        artifact_id = ""
-        installed_version = ""
         from app.infrastructure.mods.package_signing import verify_signed_package_bytes
 
         signed = verify_signed_package_bytes(response.content)

@@ -116,22 +116,17 @@ class TestCustomDeliveryRemoteJson:
             result = await mod.custom_delivery_remote_json("tok", "/foo")
         assert result == {"ok": True}
 
-    async def test_path_without_leading_slash_and_payload(self):
+    async def test_customer_intake_uses_api_origin(self, monkeypatch):
         client = _async_client(request_resp=_resp(200, {"id": 1}))
-        with (
-            patch("httpx.AsyncClient", return_value=client),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://m.example.com",
-            ),
-        ):
-            result = await mod.custom_delivery_remote_json(
-                "tok", "foo/bar", method="post", payload={"a": 1}
+        monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://m.example.com/market")
+        with patch("httpx.AsyncClient", return_value=client):
+            await mod.custom_delivery_remote_json(
+                "tok", "/api/customer-service/issues/intake", method="post", payload={"a": 1}
             )
-        assert result == {"id": 1}
         client.request.assert_awaited_once()
         args, kwargs = client.request.call_args
         assert args[0] == "POST"
+        assert args[1] == "https://m.example.com/api/customer-service/issues/intake"
         assert kwargs["json"] == {"a": 1}
 
     async def test_request_error_raises_connection_error(self):
@@ -442,15 +437,23 @@ class TestInstallCustomDeliveryArtifact:
         assert not (delivery.root / "mods" / "_employees" / "fixture-mod").exists()
 
     async def test_selected_artifact_is_in_download_url_and_must_match_signed_manifest(
-        self, delivery
+        self, delivery, monkeypatch
     ):
+        monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://market.example.test/market")
+        monkeypatch.setattr(
+            "app.fastapi_routes.market_account._market_base_url",
+            lambda: "https://market.example.test/market",
+        )
         raw = delivery.package()
         delivery.client.get.return_value = delivery.response(raw)
         with pytest.raises(RuntimeError, match="身份"):
             await mod.install_custom_delivery_artifact(
                 "tok", 7, "module", owner_scope="tenant:1", artifact_id="another-module"
             )
-        assert "artifact_id=another-module" in delivery.client.get.await_args.args[0]
+        assert delivery.client.get.await_args.args[0] == (
+            "https://market.example.test/api/customer-service/custom-deliveries/7/"
+            "artifacts/module/download?artifact_id=another-module"
+        )
         delivery.install.assert_not_called()
         assert delivery.outbox_rows() == []
 
