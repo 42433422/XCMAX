@@ -29,10 +29,6 @@ from app.application.normal_chat_dispatch import (
     run_workflow_products_query_normal_profile,
 )
 
-# ---------------------------------------------------------------------------
-# route_normal_mode_message — shipment 分支
-# ---------------------------------------------------------------------------
-
 
 class TestRouteNormalModeMessageShipment:
     """route_normal_mode_message shipment 槽位分支。"""
@@ -45,6 +41,13 @@ class TestRouteNormalModeMessageShipment:
             ("出货单打印", "shipment"),
             ("开单", "shipment"),
             ("打单", "shipment"),
+            (
+                "创建出货单：客户名称为用户需提供，产品型号 MAC-7F1B17CE，数量20公斤，规格10公斤/桶，单价12.5元/公斤。必须人工审批后执行。",
+                "unknown",
+            ),
+            ("2桶，客户名称仍为用户需提供，必须人工审批后执行。", "unknown"),
+            ("开出货单：客户名称为请用户提供，型号A001，2桶规格10", "unknown"),
+            ("开出货单：客户名称为需要用户提供，型号A001，2桶规格10", "unknown"),
             ("请给 Mac验收客户-70BC4E77 出货，必须人工审批后才能执行。", "unknown"),
             ("给客户发货", "unknown"),
             ("给客户送货", "unknown"),
