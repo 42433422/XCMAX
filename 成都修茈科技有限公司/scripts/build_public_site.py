@@ -312,7 +312,7 @@ def build_evidence(cases_cfg: dict) -> dict:
                         blockers.append(f"非 H.264 编码({codec})")
                     if local.suffix == ".webm":
                         blockers.append("webm 不作官网展示")
-                    stem_no_platform = Path(local.name).stem.replace("-web", "").replace("-macos", "")
+                    stem_no_platform = Path(local.name).stem.replace("-web", "").replace("-macos", "").replace("-windows", "")
                     stem_candidates = [Path(local.name).stem, stem_no_platform, stem_no_platform.replace(f"{feat}-", "")]
                     orig = next((original_map[(feat, platform, c)] for c in stem_candidates if (feat, platform, c) in original_map), None)
                     if not orig:
