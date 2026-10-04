@@ -1,6 +1,3 @@
-/**
- * useChatOrchestration 拆出的远程对话轮次（快路径 / SSE 流式 / JSON 与批量）（行为零变更）。
- */
 import type { Ref } from 'vue'
 import type { useAgentRunEventSync } from '../useAgentRunEvents'
 import type { useChatDbTokenGate } from '../useChatDbTokenGate'
