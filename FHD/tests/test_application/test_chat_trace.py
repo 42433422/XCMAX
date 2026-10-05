@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -598,7 +599,9 @@ def test_attach_chat_trace_run_records_generated_office_artifact() -> None:
 
 
 @pytest.mark.parametrize("approval_pending", [False, True])
-def test_attach_chat_trace_run_marks_token_waiting(approval_pending: bool) -> None:
+@pytest.mark.parametrize("outcome", [None, False, True])
+@pytest.mark.parametrize("mismatch", ["", "user", "tenant", "mod", "approval", "action"])
+def test_attach_chat_trace_run_marks_token_waiting(approval_pending, outcome, mismatch) -> None:
     repo = InMemoryAgentRunRepository()
     payload = {
         "success": True,
@@ -612,7 +615,14 @@ def test_attach_chat_trace_run_marks_token_waiting(approval_pending: bool) -> No
             "success": True,
             "legacy_tool_records": [
                 {"tool_id": "products", "output": {"success": False}},
-                {"tool_id": "sales", "output": {"pending_approval": True}},
+                {
+                    "tool_id": "sales",
+                    "action": "create_order",
+                    "output": {
+                        "pending_approval": True,
+                        "approval": {"approval_request_ids": ["approval-1"]},
+                    },
+                },
             ],
         }
 
@@ -620,12 +630,58 @@ def test_attach_chat_trace_run_marks_token_waiting(approval_pending: bool) -> No
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
         return_value=repo,
     ):
-        result = attach_chat_trace_run(payload, message="查看数据库", runtime_context={})
+        context = {"local_user_id": "u1", "tenant_id": "t1"}
+        result = attach_chat_trace_run(payload, message="查看数据库", runtime_context=context)
 
     run = repo.get(result["run_id"])
     assert run is not None
     assert run.status == "waiting_user"
     assert run.events[-1].event_type == "step.waiting_user"
+    if approval_pending:
+        from app.application.agent_orchestrator.chat_trace_part03 import resolve_legacy_approval
+
+        context["agent_run_id"] = run.run_id
+        if mismatch in {"user", "tenant"}:
+            context["local_user_id" if mismatch == "user" else "tenant_id"] = "foreign"
+        elif mismatch == "mod":
+            context["_mod_authorization"] = {"mod_id": "foreign"}
+        execution = (
+            None
+            if outcome is None
+            else SimpleNamespace(
+                success=outcome,
+                node_results=[
+                    SimpleNamespace(
+                        tool_id="sales",
+                        action="wrong" if mismatch == "action" else "create_order",
+                        success=outcome,
+                        output={"success": outcome, "data": {"order_id": 1}},
+                    )
+                ],
+            )
+        )
+        with patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ):
+            updated = resolve_legacy_approval(
+                "wrong" if mismatch == "approval" else "approval-1", context, execution
+            )
+            if mismatch == "action" and outcome is None:
+                mismatch = ""
+            assert bool(updated) is (not mismatch)
+            if not mismatch:
+                assert resolve_legacy_approval("approval-1", context, execution) == ""
+        current = repo.get(run.run_id)
+        assert current.status == (
+            "waiting_user"
+            if mismatch
+            else ("cancelled" if outcome is None else ("completed" if outcome else "failed"))
+        )
+        if not mismatch:
+            assert current.final_output["business_result"]["success"] is bool(outcome)
+            assert current.final_output["business_result"]["pending_approval"] is False
+            assert current.steps[0].status == "failed"
 
 
 def test_attach_chat_trace_run_skips_existing_run_id() -> None:

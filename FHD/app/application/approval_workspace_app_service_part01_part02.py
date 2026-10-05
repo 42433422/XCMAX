@@ -103,11 +103,7 @@ def _persist_ai_workflow_outcome(
     nodes_executed: int = 0,
     nodes_total: int = 0,
 ) -> None:
-    """在调用方事务内把 AI 工作流执行结果写入请求 ``business_data``（原子真值）。
-
-    只落白名单内的固定 ``code``/``message``；绝不落原始异常正文。由调用方随后统一
-    ``db.commit()``，从而与请求终态（approved/cancelled）构成单一、真实、可重放拒绝的状态。
-    """
+    """在调用方事务内保存白名单结果，与审批终态一起提交；不保存原始异常。"""
     business_data = _facade().json.loads(req.business_data) if req.business_data else {}
     if not isinstance(business_data, dict):
         business_data = {}
@@ -159,15 +155,9 @@ def _close_request_if_needed(
 def _resume_pending_ai_workflow_after_approval(
     *, request_no: str, opinion: str, approved_by: str = ""
 ) -> dict[str, _facade().Any] | None:
-    """工作台审批通过后，继续执行由 AI 工作流创建的 pending workflow。
+    """执行获批工作流并同步任务回执；审批请求终态和审计由调用方事务提交。
 
-    纯执行函数：只做内存态审批推进与实际工作流执行，**不做任何请求落库/状态持久化**。
-    请求的终态（approved/cancelled + ``workflow_execution`` outcome + 审计）统一由
-    调用方（``_approve_ai_workflow_request_without_node`` / ``approve_request``）在自身
-    事务中写入并提交，避免与恢复器嵌套会话冲突导致原子真值被覆盖。
-
-    优先内存快速路径；进程重启后内存缺失时，从 DB 严格加载持久化工作流快照并
-    重建可执行计划后继续执行（fail-closed：快照缺失/畸形/终态/不匹配/已执行 → 不执行）。
+    重启后仅恢复严格校验的持久化快照；缺失、畸形、终态、错配或已执行均不重放。
     """
     approval_request_id = str(request_no or "").strip()
     if not approval_request_id:
@@ -261,6 +251,9 @@ def _resume_pending_ai_workflow_after_approval(
             }
         engine = WorkflowEngine(tool_dispatcher=_dispatch_tool_for_approval)
         run_result = engine.run(plan=plan_obj, runtime_context=runtime_ctx, max_retries=1)
+        from app.application.agent_orchestrator.chat_trace_part03 import resolve_legacy_approval
+
+        legacy_run_id = resolve_legacy_approval(approval_request_id, runtime_ctx, run_result)
         approval_service.remove_pending_workflow(approval_request_id)
         _engine_success = bool(run_result.success)
         (_engine_code, _engine_message) = _facade().canonical_workflow_outcome(
@@ -272,6 +265,7 @@ def _resume_pending_ai_workflow_after_approval(
         return {
             "workflow_executed": True,
             "approval_request_id": approval_request_id,
+            "agent_run_id": legacy_run_id,
             "approved_in_memory": approved_in_memory,
             "success": _engine_success,
             "code": _engine_code,
@@ -340,6 +334,12 @@ def _drop_pending_ai_workflow_after_rejection(
                 requested_by="approval_rejected",
             )
             cancelled_run_id = str(getattr(cancelled, "run_id", "") or "")
+        else:
+            from app.application.agent_orchestrator.chat_trace_part03 import resolve_legacy_approval
+
+            cancelled_run_id = resolve_legacy_approval(
+                approval_request_id, workflow_data.get("runtime_context") or {}
+            )
         removed = approval_service.remove_pending_workflow(approval_request_id)
         return {
             "workflow_executed": False,

@@ -1,0 +1,31 @@
+{
+  "observed_at": "2026-10-06T01:43:39.650529+08:00",
+  "scope": "readonly fresh post-approval snapshot; no application business mutation",
+  "integrity": "ok",
+  "run": {
+    "run_id": "run_dba08dedab27478c93947d4f3a3e0872",
+    "status": "waiting_user",
+    "message": "SALES ORDER 2 P006 A006 10",
+    "created_at": "2026-10-05T16:41:43.818686+00:00",
+    "updated_at": "2026-10-05T16:43:49.120405+00:00"
+  },
+  "tasks": [
+    {
+      "task_id": "task_5f5b7c88724540cb840d48e499209cd7",
+      "status": "waiting_user",
+      "attention_state": "approval_required",
+      "active_run_id": "run_dba08dedab27478c93947d4f3a3e0872",
+      "updated_at": "2026-10-05T16:43:49.120405+00:00"
+    }
+  ],
+  "orders": [
+    {
+      "id": 1,
+      "tenant_id": 1,
+      "order_no": "SO20261006004727",
+      "customer_name": "A006",
+      "total_amount": 20
+    }
+  ],
+  "conclusion": "approval executed order while originating run and task remain waiting; not successful end-to-end AI receipt"
+}
