@@ -42,7 +42,7 @@ def die(msg: str) -> None:
     raise SystemExit(1)
 
 
-_PUBLIC_PRIVATE_MARKERS = ("sunbird", "太阳鸟", "余额", "真实订单")
+_PUBLIC_PRIVATE_MARKERS = ("sunbird", "太阳鸟", "奇士美", "余额", "真实订单")
 _PUBLIC_REDACTION = "客户账户及业务数据已脱敏，详细内容不公开。"
 
 
@@ -252,7 +252,7 @@ def build_evidence(cases_cfg: dict) -> dict:
     excluded = {p for d in catalog.get("domains", []) for m in d.get("modules", [])
                 for f in m.get("features", [])
                 for p in (f.get("evidence", {}) or {}).get("public_excluded_media", [])}
-    sensitive_features = {"base-login", "ind-attendance", "erp-sales-order"}
+    sensitive_features = {"base-login", "ind-attendance", "erp-sales-order", "ind-szqsm"}
 
     run_files = sorted(EVIDENCE_DIR.glob("*-run.json"))
     if not run_files:

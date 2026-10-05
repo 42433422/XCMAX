@@ -163,19 +163,19 @@
   "platforms": [
     {
       "key": "windows",
-      "applicable": 99,
-      "verified": 1,
+      "applicable": 95,
+      "verified": 0,
       "partial": 0,
-      "pending": 98,
-      "last_verified_at": "2026-09-24",
+      "pending": 95,
+      "last_verified_at": null,
       "label": "Windows 桌面",
       "level": "签约级"
     },
     {
       "key": "macos",
-      "applicable": 100,
-      "verified": 82,
-      "partial": 14,
+      "applicable": 96,
+      "verified": 79,
+      "partial": 13,
       "pending": 4,
       "last_verified_at": "2026-09-30",
       "label": "macOS 桌面",
@@ -183,10 +183,10 @@
     },
     {
       "key": "web",
-      "applicable": 128,
-      "verified": 124,
+      "applicable": 125,
+      "verified": 122,
       "partial": 0,
-      "pending": 4,
+      "pending": 3,
       "last_verified_at": "2026-09-29",
       "label": "Web / 后端",
       "level": "签约级"
@@ -213,10 +213,10 @@
     }
   ],
   "capabilities": {
-    "total": 158,
+    "total": 154,
     "by_status": {
-      "verified": 55,
-      "partial": 95,
+      "verified": 54,
+      "partial": 92,
       "implemented": 4,
       "planned": 4
     },
@@ -227,19 +227,19 @@
     "platforms": [
       {
         "key": "windows",
-        "applicable": 99,
-        "verified": 1,
+        "applicable": 95,
+        "verified": 0,
         "partial": 0,
-        "pending": 98,
-        "last_verified_at": "2026-09-24",
+        "pending": 95,
+        "last_verified_at": null,
         "label": "Windows 桌面",
         "level": "签约级"
       },
       {
         "key": "macos",
-        "applicable": 100,
-        "verified": 82,
-        "partial": 14,
+        "applicable": 96,
+        "verified": 79,
+        "partial": 13,
         "pending": 4,
         "last_verified_at": "2026-09-30",
         "label": "macOS 桌面",
@@ -247,10 +247,10 @@
       },
       {
         "key": "web",
-        "applicable": 128,
-        "verified": 124,
+        "applicable": 125,
+        "verified": 122,
         "partial": 0,
-        "pending": 4,
+        "pending": 3,
         "last_verified_at": "2026-09-29",
         "label": "Web / 后端",
         "level": "签约级"
@@ -4242,55 +4242,6 @@
         "source_run": "/capabilities/assets/evidence/mods-bridge-mods-bridge-web-run.json"
       },
       {
-        "feature": "mods-host-mount",
-        "platform": "web",
-        "status": "passed",
-        "passed": 4,
-        "failed": 0,
-        "verified_at": "2026-09-29",
-        "app_version": "1.0.0.5",
-        "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
-        "media": [
-          {
-            "file": "mods-host-mount-00-login-form.png",
-            "sha256": "76e88970b3fa7a20bd7307a5daea25459eaf360f1a262ff7ce848ce2fbcc3442",
-            "visual_review": "accepted",
-            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
-            "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/mods-host-mount-00-login-form.png"
-          },
-          {
-            "file": "mods-host-mount-H1-mods-registry.png",
-            "sha256": "11d672bf8f1f937d6daca959403fa6b3e9a1df508fd62a4b95cfc7dc80ff8999",
-            "visual_review": "accepted",
-            "visible_result": "卡片汇总三处真实响应：GET /api/mods 200 返回已装 Mod 注册表（含 coating-industry、attendance-industry 等）；GET /api/mods/routes 200 返回前端路由挂载清单；GET /api/mods/loading-status 200 返回 mods_root=/private/tmp/xcmax-verifycenter-main/FHD/mods 与搜索根列表。",
-            "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/mods-host-mount-H1-mods-registry.png"
-          },
-          {
-            "file": "mods-host-mount-H4-runtime-blocked.png",
-            "sha256": "d732d83a1972f0dfc0ec4589a0aacffc36f1b8ab5a9e143faf56ec132677f0cd",
-            "visual_review": "accepted",
-            "visible_result": "本轮响应：GET /api/mods/runtime/coating-industry 返回 409，success=false，message=扩展包尚未完成签名与安装验证 —— 未签名扩展不挂载运行时。",
-            "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/mods-host-mount-H4-runtime-blocked.png"
-          },
-          {
-            "file": "mods-host-mount-mods-host-mount-web-20260929-141355.webm",
-            "sha256": "a25c4593b20575b589dd82bb6785e5a8c2e619bf6161f38a5b622b35aa66d7b0",
-            "visual_review": "accepted",
-            "visible_result": "本轮真实浏览器会话录像（webm，20.16s，ffmpeg 实测）：管理员登录 → Mod 注册表 → 路由挂载 → 加载状态 → 未签名运行时 409。",
-            "kind": "video",
-            "size_bytes": 1895131,
-            "duration_seconds": null,
-            "codec": "webm",
-            "public_path": null
-          }
-        ],
-        "run_log": null,
-        "source_run": "/capabilities/assets/evidence/mods-host-mount-mods-host-mount-web-run.json"
-      },
-      {
         "feature": "mods-loader",
         "platform": "web",
         "status": "passed",
@@ -7755,16 +7706,6 @@
         "action": "not-published"
       },
       {
-        "feature": "mods-host-mount",
-        "file": "mods-host-mount-mods-host-mount-web-20260929-141355.webm",
-        "issues": [
-          "时长超 60s 或不可解析(None)",
-          "webm 不作官网展示",
-          "原始录像不可追溯"
-        ],
-        "action": "not-published"
-      },
-      {
         "feature": "mods-loader",
         "file": "mods-loader-mods-loader-web-20260929-135842.webm",
         "issues": [
@@ -8216,8 +8157,8 @@
       }
     ],
     "summary": {
-      "total": 122,
-      "passed": 119,
+      "total": 121,
+      "passed": 118,
       "failed": 0,
       "last_verified_at": "2026-09-29"
     }

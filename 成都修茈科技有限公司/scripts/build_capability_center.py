@@ -80,8 +80,9 @@ def catalog_payload(data: dict) -> str:
     return json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
 
 
-_PUBLIC_PRIVATE_MARKERS = ("sunbird", "太阳鸟", "余额", "真实订单")
+_PUBLIC_PRIVATE_MARKERS = ("sunbird", "太阳鸟", "奇士美", "余额", "真实订单")
 _PUBLIC_REDACTION = "客户账户及业务数据已脱敏，详细内容不公开。"
+_PUBLIC_PRIVATE_FEATURES = {"base-login", "ind-attendance", "erp-sales-order", "ind-szqsm"}
 
 
 def public_projection(value: object, excluded: set[str]) -> object:
@@ -90,8 +91,11 @@ def public_projection(value: object, excluded: set[str]) -> object:
     def hidden(item: object) -> bool:
         if isinstance(item, str):
             return item in excluded
-        return isinstance(item, dict) and any(isinstance(item.get(k), str) and item[k] in excluded
-                                              for k in ("path", "_acceptance_path", "acceptance_path", "record_path", "identity_path"))
+        return isinstance(item, dict) and (
+            item.get("id") in _PUBLIC_PRIVATE_FEATURES
+            or any(isinstance(item.get(k), str) and item[k] in excluded
+                   for k in ("path", "_acceptance_path", "acceptance_path", "record_path", "identity_path"))
+        )
 
     def project(item: object) -> object:
         if isinstance(item, dict):
@@ -107,7 +111,7 @@ def public_projection(value: object, excluded: set[str]) -> object:
 
 def privacy_exclusions(evidence: dict, feature_id: str = "") -> set[str]:
     excluded = set(evidence.get("public_excluded_media") or [])
-    sensitive = feature_id in {"base-login", "ind-attendance", "erp-sales-order"}
+    sensitive = feature_id in _PUBLIC_PRIVATE_FEATURES
 
     stack = [v for k, v in evidence.items() if k not in {"impl", "api", "tests", "ci", "docs"}]
     while stack:
@@ -611,6 +615,8 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
         for mod in dom["modules"]:
             feats_out = []
             for feat in mod["features"]:
+                if feat["id"] in _PUBLIC_PRIVATE_FEATURES:
+                    continue
                 if "status" in feat:
                     # 硬守卫：总体状态只能由平台状态自动汇总，不接受目录里手写。
                     raise SystemExit(
@@ -1391,7 +1397,7 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
 
 
 def private_generated_assets() -> list[Path]:
-    sensitive_prefixes = ("base-login-", "ind-attendance-", "erp-sales-order-")
+    sensitive_prefixes = ("base-login-", "ind-attendance-", "erp-sales-order-", "ind-szqsm-")
     private = []
     for path in EVIDENCE_ASSET_DIR.iterdir():
         if not path.is_file():
