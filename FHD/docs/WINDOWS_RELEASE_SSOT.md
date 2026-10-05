@@ -2,6 +2,7 @@
 > 登记于 [SSOT_INDEX.md](SSOT_INDEX.md)「windows-release」域；Gate 仅用 GREEN/YELLOW/RED/UNKNOWN。判据：[真实机协议](e2e/desktop-real-machine-acceptance-protocol.md)；[未签名风险决策](../config/windows_signing_acceptance.json)。历史证据保持原样，失败须修复后实装重测。
 **未闭环。** 当前实装候选为主线 #2163 `be136e33638a062f1b791eda85ee9249914d362c`、1.0.0.5，私有构建37310481292；安装器250233948字节、SHA-256 `c48b410035c95793eb5ca6e85b8cae0268f9f4d90374ac59a25f754bf288eb48`、未签名。运行后端与包内身份一致；这是冻结前定向回归，未完成最终冻结、A/B/C及发布，stable OTA关闭。
 原始运行 `WIN-VM-REGRESSION-BE136E3-20261005-001`：[运行索引](evidence/e2e/windows-closeout-20261005/run.json)、[运行身份](evidence/e2e/windows-closeout-20261005/installed-healthy-runtime-identity.json)、[AI实际Excel字段](evidence/e2e/windows-closeout-20261005/ai-inventory-downloaded.content.json)、[销售失败及待审批](evidence/e2e/windows-closeout-20261005/ai-sales-confirmation-diagnostic.json)。#2096由#2107替代，#2103/#2104已入主线；[5197历史](evidence/e2e/windows-closeout-20260930/gui-36841870956.json)不能替代同一最终包复验。
+## Release Gate 状态
 | Gate | 项目 | 状态 | 当前证据 / 缺口 |
 |---|---|---|---|
 | G1 | 构建与身份 | YELLOW | be136e3安装与运行身份、17500所属后端已核对；最终冻结和客户入口重下未完成 |

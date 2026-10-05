@@ -608,7 +608,13 @@ def test_attach_chat_trace_run_marks_token_waiting(approval_pending: bool) -> No
         "data": {"requires_token": True},
     }
     if approval_pending:
-        payload = {"success": True, "legacy_tool_records": [{"tool_id": "products", "output": {"success": False}}, {"tool_id": "sales", "output": {"pending_approval": True}}]}
+        payload = {
+            "success": True,
+            "legacy_tool_records": [
+                {"tool_id": "products", "output": {"success": False}},
+                {"tool_id": "sales", "output": {"pending_approval": True}},
+            ],
+        }
 
     with patch(
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
