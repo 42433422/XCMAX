@@ -51,10 +51,9 @@ async def custom_delivery_remote_json(
     token = str(market_token or "").strip()
     if not token:
         raise PermissionError("缺少市场登录凭证")
-    from app.fastapi_routes.market_account import _market_base_url
+    from app.fastapi_routes.market_account import _market_api_base_url
 
-    clean = path if str(path or "").startswith("/") else f"/{path}"
-    url = f"{_market_base_url()}{clean}"
+    url = f"{_market_api_base_url()}/{str(path or '').lstrip('/')}"
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=8.0)) as client:
             response = await client.request(
@@ -97,10 +96,10 @@ async def install_custom_delivery_artifact(
         raise PermissionError("缺少市场登录凭证")
     if not owner_scope:
         raise ValueError("定制产物安装必须绑定当前工作空间")
-    from app.fastapi_routes.market_account import _market_base_url
+    from app.fastapi_routes.market_account import _market_api_base_url
 
     url = (
-        f"{_market_base_url()}/api/customer-service/custom-deliveries/"
+        f"{_market_api_base_url()}/api/customer-service/custom-deliveries/"
         f"{int(ticket_id)}/artifacts/{kind}/download"
     )
     if requested_id:
