@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 官网运行时验收（真人视角 + 移动端 390px + 视频播放 + 1 次点击路径）。
+ * 官网运行时验收（桌面 + 移动端 390px + 授权媒体状态 + 1 次点击路径）。
  * 产出 site/data/runtime-results.json（供 site_acceptance.py --runtime 合并判定 PASS）。
  * 截图证据写入 site/data/runtime-evidence/。
  *
@@ -40,9 +40,11 @@ try {
   record('desktop: hero H1 存在', /把重复业务交给/.test(h1 || ''), `load=${loadMs}ms h1=${(h1 || '').trim().slice(0, 24)}`)
   record('desktop: 首屏加载 ≤5s', loadMs < 5000, `${loadMs}ms`)
 
+  const ssot = await desktop.evaluate(() => fetch('/site/data/public-site.json').then((r) => r.json()))
   const heroImg = desktop.locator('.home-hero-figure img')
   const heroLoaded = (await heroImg.count()) > 0 ? await heroImg.first().evaluate((img) => img.complete && img.naturalWidth > 100).catch(() => false) : false
-  record('desktop: hero 实机截图渲染', !!heroLoaded, '真实产品界面截图')
+  const heroOk = ssot.hero_media ? heroLoaded : (await heroImg.count()) === 0
+  record('desktop: hero 媒体与公开 SSOT 一致', heroOk, ssot.hero_media ? '公开 hero 图已渲染' : '无获准公开 hero 媒体；客户图未展示')
 
   // SSOT 注入：hero CTA 价格 + 平台状态 + 数据戳
   await desktop.waitForTimeout(800)
@@ -51,7 +53,6 @@ try {
   const platText = await desktop.locator('[data-platform-status]').first().textContent()
   record('desktop: 平台状态槽位被 SSOT 校验', /签约级|实验|待验证/.test(platText || ''), (platText || '').trim())
 
-  const ssot = await desktop.evaluate(() => fetch('/site/data/public-site.json').then((r) => r.json()))
   const trialDisplay = ssot.pricing.trial.amount_display
   const planText = await desktop.locator('#pricing').textContent()
   record('desktop: 定价含 SSOT 试用价', planText.includes(trialDisplay), `expect ${trialDisplay}`)
@@ -63,7 +64,8 @@ try {
   // 视频块（SSOT 驱动）
   const videoVisible = await desktop.locator('#demo-video').isVisible().catch(() => false)
   const video = desktop.locator('#home-demo-video')
-  record('desktop: 合规录像块已展示', videoVisible, '≤60s 连续无剪辑录屏')
+  const hasPublicVideo = (ssot.evidence?.videos || []).length > 0
+  record('desktop: 视频展示状态与公开 SSOT 一致', hasPublicVideo ? videoVisible : !videoVisible, hasPublicVideo ? '公开视频必须可见' : '公开视频为空，视频块保持隐藏')
 
   // 1 次点击路径
   for (const [label, expect] of [['客户案例', '/cases.html'], ['下载', '/download'], ['价格', '/pricing.html'], ['验证中心', '/verify.html']]) {
@@ -85,8 +87,10 @@ try {
   /* ---------- 桌面端：案例/验证中心/价格页 ---------- */
   await desktop.goto(BASE + '/cases.html', { waitUntil: 'domcontentloaded' })
   await desktop.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
-  const evHref = await desktop.locator('a[href^="/verify.html"]').first().getAttribute('href').catch(() => null)
-  record('desktop: 案例页有完整证据入口', !!evHref, evHref)
+  const caseText = await desktop.locator('body').textContent()
+  const evHref = await desktop.locator('a[href="/capabilities/index.html"]').first().getAttribute('href').catch(() => null)
+  const casePageOk = ssot.cases.length ? !!(await desktop.locator('a[href^="/verify.html"]').first().getAttribute('href').catch(() => null)) : /没有通过公开授权和证据核验/.test(caseText || '') && !!evHref
+  record('desktop: 案例页与授权案例 SSOT 一致', casePageOk, ssot.cases.length ? '公开案例有验证中心入口' : '无获准公开案例，说明与能力入口可见')
   await desktop.screenshot({ path: join(EVID, 'desktop-cases.png') })
 
   await desktop.goto(BASE + '/verify.html', { waitUntil: 'domcontentloaded' })
@@ -137,7 +141,12 @@ try {
     videoDetail = `played=${played} in ${Date.now() - tPlay}ms preload=${preload} poster=${poster ? 'yes' : 'no'}`
     await video.evaluate((v) => v.pause())
   }
-  record('desktop: 证据视频可播 + preload=metadata + poster', videoOk, videoDetail)
+  if (!hasPublicVideo) {
+    const source = await video.getAttribute('src').catch(() => null)
+    videoOk = !videoVisible && (await video.count()) === 0 && !source
+    videoDetail = '公开视频清单为空；视频控件/来源均未展示'
+  }
+  record('desktop: 视频播放或无公开媒体状态校验', videoOk, videoDetail)
 
   const desktopAll = results.checks.filter((c) => c.name.startsWith('desktop:')).every((c) => c.pass)
   results.desktop_test = desktopAll ? 'pass' : 'fail'
@@ -157,7 +166,8 @@ try {
     if (!v) return null
     return { w: v.getBoundingClientRect().width, cw: v.closest('.home-wrap').getBoundingClientRect().width }
   })
-  record('mobile: 视频宽度 100%', !!vidW && Math.abs(vidW.w - vidW.cw) <= 2.5, JSON.stringify(vidW))
+  const mobileVideoOk = hasPublicVideo ? !!vidW && Math.abs(vidW.w - vidW.cw) <= 2.5 : vidW === null
+  record('mobile: 视频布局或无公开媒体状态校验', mobileVideoOk, JSON.stringify(vidW))
 
   await mobile.click('#mobile-menu-toggle')
   const drawerOpen = await mobile.locator('#mobile-menu').evaluate((d) => d.classList.contains('active'))
@@ -200,20 +210,20 @@ try {
   /* ---------- HTTP Range ---------- */
   const rangePage = await browser.newPage()
   await rangePage.goto(BASE + '/', { waitUntil: 'domcontentloaded' })
-  const rangeUrl = BASE + '/capabilities/assets/evidence/base-login-03-login-operation-web.mp4'
+  const publishedVideo = (ssot.evidence?.videos || [])[0]
+  const rangeUrl = publishedVideo ? BASE + publishedVideo.public_path : BASE + '/capabilities/assets/evidence/base-login-03-login-operation-web.mp4'
   const rangeResult = await rangePage.evaluate(async (url) => {
     const r = await fetch(url, { headers: { Range: 'bytes=0-1023' } })
     return { status: r.status, accept: r.headers.get('accept-ranges'), length: (await r.arrayBuffer()).byteLength }
   }, rangeUrl)
-  record(
-    'range: 206 Partial Content + Accept-Ranges',
-    rangeResult.status === 206 && rangeResult.accept === 'bytes' && rangeResult.length === 1024,
-    JSON.stringify(rangeResult),
-  )
-  results.range_test = rangeResult.status === 206 ? 'pass' : 'fail'
+  const rangeOk = publishedVideo
+    ? rangeResult.status === 206 && rangeResult.accept === 'bytes' && rangeResult.length === 1024
+    : rangeResult.status === 404
+  record(publishedVideo ? 'range: 206 Partial Content + Accept-Ranges' : 'range: 未授权媒体未发布', rangeOk, JSON.stringify(rangeResult))
+  results.range_test = publishedVideo ? (rangeOk ? 'pass' : 'fail') : (rangeOk ? 'not_applicable' : 'fail')
   await rangePage.close()
 
-  results.video_runtime_test = videoOk ? 'pass' : 'fail'
+  results.video_runtime_test = hasPublicVideo ? (videoOk ? 'pass' : 'fail') : (videoOk ? 'not_applicable' : 'fail')
   results.finished_at = new Date().toISOString()
   const failed = results.checks.filter((c) => !c.pass)
   results.summary = { total: results.checks.length, failed: failed.length }
