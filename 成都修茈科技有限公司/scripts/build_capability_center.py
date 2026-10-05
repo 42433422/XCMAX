@@ -1233,7 +1233,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
       <div>
         <span class="eyebrow">{esc(dom['name'])} / {esc(mod['name'])}</span>
         <h1>{esc(f['name'])}</h1>
-        <div class="cap-feature-meta">{status_badge(f['status'])}{platform_chips(verdicts)}</div>
+        <div class="cap-feature-meta">{status_badge(f['status'])}{platform_chips(verdicts)}<span>代码更新于 {esc(verified_time)}</span></div>
         <p>{esc(f.get('summary', ''))}</p>
       </div>
       <div class="page-hero-side"><p><a class="btn btn-secondary btn-sm" href="/capabilities/catalog.html?domain={esc(dom['id'])}">返回 {esc(dom['name'])}</a></p></div>
@@ -1247,7 +1247,6 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         <div class="cap-info-block"><h3>使用方式</h3><p>{esc(usage)}</p></div>
         <div class="cap-info-block"><h3>所属模块</h3><p>{esc(dom['name'])} / {esc(mod['name'])}</p></div>
         <div class="cap-info-block"><h3>适用平台</h3><p>{platform_chips(verdicts) or '—'}</p></div>
-        <div class="cap-info-block"><h3>当前状态</h3><p>{status_badge(f['status'])}（相关代码更新时间：{esc(verified_time)}）</p></div>
         <div class="cap-info-block"><h3>已知限制</h3><ul class="cap-limitations">{limitations}</ul></div>
       </div>
       {panel}
