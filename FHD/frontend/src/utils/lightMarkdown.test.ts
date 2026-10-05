@@ -12,6 +12,9 @@ describe('lightMarkdown', () => {
     const html = renderMarkdown('see [`code`](https://example.com) and `x`')
     expect(html).toContain('href="https://example.com"')
     expect(html).toContain('<code')
+    expect(html).toContain('target="_blank"')
+    expect(renderMarkdown('[inventory.xlsx](/api/agent/runs/run_test/artifacts/xlsx_test)')).toContain('target="_self"')
+    expect(renderMarkdown('[file](//evil.example/api/agent/runs/run_test/artifacts/xlsx_test)')).not.toContain('target="_self"')
   })
 
   it('stripInternalMarkers removes plan blocks', () => {

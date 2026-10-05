@@ -1,0 +1,108 @@
+{
+  "run_id": "WIN-VM-REGRESSION-BE136E3-20261005-001",
+  "started_at_utc": "2026-10-05T12:53:26.6675558Z",
+  "scope": "targeted installed regression before final freeze; does not count as final A/B/C",
+  "candidate_build_run": 37310481292,
+  "expected_release_sha": "be136e33638a062f1b791eda85ee9249914d362c",
+  "candidate_installer_sha256": "c48b410035c95793eb5ca6e85b8cae0268f9f4d90374ac59a25f754bf288eb48",
+  "source_before_install": "cfa230d112b4636d44fd16b6daf9ee3b8dc654c9",
+  "inputs": {
+    "unit_price": 10,
+    "existing_product": "P006",
+    "account": "SUNBIRD",
+    "quantity": 20,
+    "sales_request_quantity": 2,
+    "existing_warehouse": "W006",
+    "existing_customer": "A006",
+    "ai_inventory_request": "EXPORT INVENTORY"
+  },
+  "required_actual_results": [
+    "correct nonempty inventory workbook",
+    "traceable normal AI execution to a real sales order after approval",
+    "visible normal Mod details dialog"
+  ],
+  "results": [],
+  "final_freeze": false,
+  "published": false,
+  "stable_ota": false,
+  "guest_transport_verified": true,
+  "installed": true,
+  "installed_runtime_regression": {
+    "observed_at": "2026-10-05T21:11:42.5590174+08:00",
+    "health_git_sha": "be136e33638a062f1b791eda85ee9249914d362c",
+    "version": "1.0.0.5",
+    "port": 17500,
+    "owning_process": 9588,
+    "identity_evidence": "installed-healthy-runtime-identity.json",
+    "normal_home_account": "SUNBIRD",
+    "inventory_ui": {
+      "product": "BOX",
+      "model": "P006",
+      "warehouse": "W006",
+      "quantity": 20,
+      "available": 20,
+      "evidence": "installed-inventory-readback-20.png"
+    },
+    "mod_details": {
+      "name": "出货管理 AI 员工",
+      "version": "1.0.0",
+      "visible": true,
+      "backdrop_close": true,
+      "evidence": "mod-shipment-details-visible.png"
+    },
+    "ai_inventory_export": {
+      "status": "passed_targeted_installed_regression",
+      "input": "EXPORT INVENTORY",
+      "normal_confirmation": "YES",
+      "downloaded_at": "2026-10-05T21:22:23.2307966+08:00",
+      "file": "ai-inventory-downloaded.xlsx",
+      "length": 4981,
+      "sha256": "f88c38184cf2ed425a17b9657f32a3f6e06484d1ca43f2257a6af5c38933fa13",
+      "actual_rows": [
+        {
+          "product_id": 1,
+          "product_name": "BOX",
+          "reserved_quantity": 0,
+          "warehouse_name": "W006",
+          "total_quantity": 20,
+          "available_quantity": 20,
+          "model_number": "P006"
+        }
+      ],
+      "receipt": "ai-inventory-generated-one-record-receipt.png",
+      "content_evidence": "ai-inventory-downloaded.content.json"
+    },
+    "ai_sales_order": {
+      "status": "failed_not_closed",
+      "input": "SELL 2 P006 TO A006",
+      "normal_confirmation": "YES",
+      "first_run": "run_dac5963911c041cca46e880ac0efc477",
+      "confirmation_run": "run_44456633f9a44b16a24d7fdd9829d3f2",
+      "actual_sales_order_count": 0,
+      "actual_shipment_record_count": 0,
+      "approval_request_id": "4f7f3259635145f194b67c801619c09b",
+      "approval_status": "pending_not_approved",
+      "requested_entity": "shipment_records",
+      "incorrect_product_id": 4,
+      "actual_product_id": 1,
+      "cancel_status": "not_completed_normal_approval_entry_not_visible",
+      "task_status": "failed",
+      "business_result_status": "pending_approval",
+      "normal_orders_route": "shipment_records",
+      "normal_new_order_form": "shipment_document",
+      "trace_evidence": "ai-sales-confirmation-diagnostic.json",
+      "normal_navigation_evidence": "normal-navigation-no-approval-entry.png",
+      "new_order_evidence": "normal-new-order-is-shipment-form.png",
+      "next_required": "Repair actual sales order and approval navigation in shared host with tenant permissions preserved; cancel incorrect pending request through normal UI; rebuild exact main and repeat installed regression"
+    },
+    "final_acceptance": false,
+    "download_secondary_window": {
+      "status": "observed_pending_triage",
+      "actual": "AI report downloaded correctly but an empty xcagi-desktop child window remained",
+      "evidence": "ai-file-download-secondary-blank-window.png",
+      "normal_close": true,
+      "source_observation": "trusted loopback target=_blank is allowed by desktop navigation handler",
+      "no_fix_claim": true
+    }
+  }
+}

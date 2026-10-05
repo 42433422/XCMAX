@@ -1,0 +1,192 @@
+{
+  "run_id": "run_44456633f9a44b16a24d7fdd9829d3f2",
+  "status": "failed",
+  "message": "YES",
+  "calls": [
+    {
+      "tool_id": "business_db_write",
+      "action": "execute",
+      "params": {
+        "entity": "shipment_records",
+        "operation": "create",
+        "payload": {
+          "product_id": 4,
+          "unit_name": "A006",
+          "product_name": "BOX",
+          "model_number": "P006",
+          "quantity_kg": 2,
+          "unit_price": 10,
+          "amount": 20
+        }
+      },
+      "status": "failed",
+      "output": {
+        "success": false,
+        "message": "缺少有效出货参数：products"
+      },
+      "error": "缺少有效出货参数：products"
+    },
+    {
+      "tool_id": "business_db_write",
+      "action": "execute",
+      "params": {
+        "entity": "shipment_records",
+        "operation": "create",
+        "payload": {
+          "products": [
+            {
+              "product_id": 4,
+              "product_name": "BOX",
+              "model_number": "P006",
+              "quantity_kg": 2,
+              "unit_price": 10,
+              "amount": 20
+            }
+          ],
+          "unit_name": "A006"
+        }
+      },
+      "status": "failed",
+      "output": {
+        "success": false,
+        "message": "缺少有效出货参数：products.0.quantity_tins、products.0.tin_spec"
+      },
+      "error": "缺少有效出货参数：products.0.quantity_tins、products.0.tin_spec"
+    },
+    {
+      "tool_id": "business_db_write",
+      "action": "execute",
+      "params": {
+        "entity": "shipment_records",
+        "operation": "create",
+        "payload": {
+          "products": [
+            {
+              "product_id": 4,
+              "product_name": "BOX",
+              "model_number": "P006",
+              "quantity_kg": 2,
+              "quantity_tins": 2,
+              "tin_spec": "1KG",
+              "unit_price": 10,
+              "amount": 20
+            }
+          ],
+          "unit_name": "A006"
+        }
+      },
+      "status": "failed",
+      "output": {
+        "success": false,
+        "message": "缺少有效出货参数：products.0.tin_spec"
+      },
+      "error": "缺少有效出货参数：products.0.tin_spec"
+    },
+    {
+      "tool_id": "execute_erp_capability",
+      "action": "create",
+      "params": {
+        "tool_id": "shipment_records",
+        "action": "create",
+        "params": {
+          "products": [
+            {
+              "product_id": 4,
+              "product_name": "BOX",
+              "model_number": "P006",
+              "quantity_kg": 2,
+              "quantity_tins": 2,
+              "tin_spec": "1KG/桶",
+              "unit_price": 10,
+              "amount": 20
+            }
+          ],
+          "unit_name": "A006"
+        }
+      },
+      "status": "failed",
+      "output": {
+        "success": false,
+        "capability": {
+          "tool_id": "shipment_records",
+          "action": "create",
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "unit_name"
+          ]
+        },
+        "approval": {
+          "plan_id": "erp-capability-shipment_records-create-ebce07197b95",
+          "risk_decision": {
+            "requires_confirmation": true,
+            "reason": "plan requires human risk approval",
+            "blocking_nodes": [
+              "registered_capability"
+            ],
+            "denied_nodes": []
+          },
+          "node_decisions": [
+            {
+              "node_id": "registered_capability",
+              "tool_id": "shipment_records",
+              "action": "create",
+              "risk": "high",
+              "requires_approval": true,
+              "approval_request_id": "4f7f3259635145f194b67c801619c09b",
+              "approved": null,
+              "rejected": null,
+              "reason": "pending human approval"
+            }
+          ],
+          "approval_request_ids": [
+            "4f7f3259635145f194b67c801619c09b"
+          ],
+          "all_approved": false,
+          "any_rejected": false,
+          "pending_approval": true
+        },
+        "pending_approval": true,
+        "message": "该 ERP 操作已创建审批请求，审批前不会执行。"
+      },
+      "error": "该 ERP 操作已创建审批请求，审批前不会执行。"
+    }
+  ],
+  "business_result": {
+    "protocol": "xcagi.business-harness.v1",
+    "status": "pending_approval",
+    "success": false,
+    "pending_approval": true,
+    "summary": "该 ERP 操作已创建审批请求，审批前不会执行。",
+    "facts": {},
+    "task_id": "task_328177d8f7aa481dad7af4f2bf40279d",
+    "turn_id": "turn_d07d75afe71045f290eb1151bc0cad3f",
+    "conversation_id": "muvaa37hyug7pqkqngc",
+    "run_id": "run_44456633f9a44b16a24d7fdd9829d3f2",
+    "attempt": 1,
+    "evidence": {
+      "event_count": 12,
+      "completed_tool_count": 0,
+      "pending_approval": true,
+      "approval_request_ids": [
+        "4f7f3259635145f194b67c801619c09b"
+      ],
+      "artifact_ids": []
+    },
+    "projection_key": "xcagi.business-harness.v1:run_44456633f9a44b16a24d7fdd9829d3f2:pending_approval"
+  },
+  "counts": {
+    "sales_orders": 0,
+    "sales_order_items": 0,
+    "shipment_records": 0,
+    "customers": 0
+  },
+  "approval_tables": [
+    "agent_approval_consumptions",
+    "approval_flows",
+    "approval_delegations",
+    "approval_flow_nodes",
+    "approval_requests",
+    "approval_records"
+  ]
+}
