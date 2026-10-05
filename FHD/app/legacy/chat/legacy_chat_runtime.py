@@ -16,6 +16,14 @@ def _facade() -> Any:
     return legacy_chat_adapter
 
 
+def _approval_wait_text() -> str:
+    for record in _facade().get_last_tool_records():
+        output = record.get("output") or {}
+        if isinstance(output, dict) and output.get("pending_approval") is True:
+            return str(output.get("message") or "审批请求已创建，请在业务审批中处理；尚未执行。")
+    return ""
+
+
 def chat(
     user_message: str,
     *,
@@ -105,6 +113,10 @@ def chat(
                         }
                     ),
                     ensure_ascii=False,
+                )
+            if waiting := _approval_wait_text():
+                return _facade()._attach_last_tool_records(
+                    {"response": waiting, "text": waiting, "pending_approval": True}
                 )
             tool_choice = "auto"
             continue
@@ -254,6 +266,9 @@ def chat_stream_text(
                     or "数据库写入授权令牌",
                     "message": token_request.get("message"),
                 }
+                return
+            if waiting := _approval_wait_text():
+                yield waiting
                 return
             n_tail = len(tcs)
             tool_payloads: list[dict[str, Any]] = []

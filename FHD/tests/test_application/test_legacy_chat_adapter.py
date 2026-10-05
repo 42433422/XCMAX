@@ -454,7 +454,9 @@ class TestChat:
         assert result["legacy_tool_records"][0]["tool_call_id"] == "tc1"
         assert result["legacy_tool_records"][0]["output"]["success"] is True
 
-    def test_chat_max_iterations_reached(self):
+    @pytest.mark.parametrize("pending", [False, True])
+    @pytest.mark.parametrize("iterations", [1, 2])
+    def test_chat_max_iterations_reached(self, pending, iterations):
         mock_client = MagicMock()
         mock_msg = MagicMock()
         mock_msg.content = ""
@@ -467,7 +469,9 @@ class TestChat:
         mock_client.chat.completions.create.return_value = mock_resp
         mock_client.is_modstore_openai_compatible = False
 
-        execute_tool = MagicMock(return_value='{"success": true}')
+        execute_tool = MagicMock(
+            return_value=json.dumps({"success": not pending, "pending_approval": pending})
+        )
 
         with (
             patch(
@@ -479,9 +483,13 @@ class TestChat:
                 return_value=execute_tool,
             ),
         ):
-            result = chat("analyze", client=mock_client, model="test-model", max_iterations=1)
+            result = chat(
+                "analyze", client=mock_client, model="test-model", max_iterations=iterations
+            )
         assert isinstance(result, dict)
-        assert "最大迭代" in result["text"]
+        assert ("最大迭代" in result["text"]) is not pending
+        assert bool(result.get("pending_approval")) is pending
+        assert mock_client.chat.completions.create.call_count == (1 if pending else iterations)
 
     def test_chat_requires_token_returns_json_string(self):
         mock_client = MagicMock()

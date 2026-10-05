@@ -1,0 +1,65 @@
+{
+  "scope": "readonly pre-approval trace snapshot and normal UI maximum-iteration failure; not current post-approval state",
+  "run_id": "run_dba08dedab27478c93947d4f3a3e0872",
+  "status": "waiting_user",
+  "input": "SALES ORDER 2 P006 A006 10",
+  "updated_at": "2026-10-05T16:43:49.120405+00:00",
+  "calls": [
+    {
+      "tool_id": "business_db_read",
+      "action": "execute",
+      "status": "failed",
+      "pending_approval": false,
+      "error": "缺少或不支持的 entity；允许 customers/products/materials/shipment_records。"
+    },
+    {
+      "tool_id": "business_db_read",
+      "action": "execute",
+      "status": "completed",
+      "pending_approval": false,
+      "error": ""
+    },
+    {
+      "tool_id": "execute_erp_capability",
+      "action": "execute",
+      "status": "failed",
+      "pending_approval": false,
+      "error": "params 必须是 JSON 对象"
+    },
+    {
+      "tool_id": "list_orders",
+      "action": "execute",
+      "status": "completed",
+      "pending_approval": false,
+      "error": ""
+    },
+    {
+      "tool_id": "business_db_read",
+      "action": "execute",
+      "status": "completed",
+      "pending_approval": false,
+      "error": ""
+    },
+    {
+      "tool_id": "execute_erp_capability",
+      "action": "read",
+      "status": "completed",
+      "pending_approval": false,
+      "error": ""
+    },
+    {
+      "tool_id": "execute_erp_capability",
+      "action": "query",
+      "status": "completed",
+      "pending_approval": false,
+      "error": ""
+    },
+    {
+      "tool_id": "execute_erp_capability",
+      "action": "create_order",
+      "status": "failed",
+      "pending_approval": true,
+      "error": "该 ERP 操作已创建审批请求，审批前不会执行。"
+    }
+  ]
+}
