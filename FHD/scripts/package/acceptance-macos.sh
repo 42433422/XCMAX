@@ -16,8 +16,7 @@
 #           → 卸载 dmg；客户业务、OTA 与回滚须另行实测
 #
 # --overwrite-upgrade：在既有安装（${ACCEPT_DIR}/XCAGI.app，须先退出应用）上覆盖升级。
-#   安装前采集 userData 业务数据基线 + 写入数据保留标记，安装后重采集并比对，
-#   证明覆盖升级后库/上传/Mod 数据零丢失。基线与比对结果落 WORK_DIR JSON。
+#   安装前采集 userData 基线并写标记，安装后校验库、上传与 Mod 数据无减少，结果写入 WORK_DIR JSON。
 #
 # 幂等：重复运行会重建 ~/Applications/acceptance/XCAGI.app，重用/覆盖下载缓存。
 # 安全边界：绝不修改 /Applications 下的任何内容；OTA 与回滚只打印指引，不自动执行。
@@ -346,6 +345,8 @@ ditto "${SRC_APP}" "${ACCEPT_DIR}/XCAGI.app"
 ok "已安装：${ACCEPT_DIR}/XCAGI.app"
 
 INSTALLED_APP="${ACCEPT_DIR}/XCAGI.app"
+lipo "${INSTALLED_APP}/Contents/MacOS/XCAGI" -verify_arch "${ARCH}" || die "客户端架构与本机 ${ARCH} 不匹配"
+lipo "${INSTALLED_APP}/Contents/Resources/backend/xcagi-backend" -verify_arch "${ARCH}" || die "后端架构与本机 ${ARCH} 不匹配"
 
 # -------------------------------------------------------------- [7/9] 版本身份
 STEP_NAME="读取并核对应用版本身份"
@@ -437,7 +438,7 @@ else
     die "检测到正在运行的 XCAGI 实例（单实例锁 + 17500 端口会冲突，并干扰计时）。请先完全退出它，或改用 --skip-launch。"
   fi
 
-  SCREENSHOT="${WORK_DIR}/xcagi-acceptance-${STAMP}.png"
+  SCREENSHOT="${XCAGI_ACCEPTANCE_EVIDENCE_DIR:-${WORK_DIR}}/xcagi-acceptance-${STAMP}.png"
   START_TS="$(python3 -c 'import time; print(time.time())')"
   open -n "${INSTALLED_APP}"
 
@@ -467,14 +468,14 @@ else
     HEALTH_OK=0
     for _ in $(seq 1 60); do
       # --noproxy：本机代理会拦截 127.0.0.1 并回 502，健康检查必须直连。
-      if HEALTH_JSON="$(curl -fsS --noproxy '*' --max-time 3 "${HEALTH_URL}" 2>/dev/null)"; then
+      if HEALTH_JSON="$(curl -fsS --noproxy '*' --max-time 3 "${HEALTH_URL}" 2>/dev/null)" && python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("version")==sys.argv[1] and d.get("git_sha")==sys.argv[2]' "${BI_VERSION}" "${BI_GITSHA}" <<<"${HEALTH_JSON}"; then
         HEALTH_OK=1
         break
       fi
       sleep 1
     done
     if [[ "${HEALTH_OK}" -eq 1 ]]; then
-      ok "健康检查通过：${HEALTH_JSON}"
+      ok "候选身份健康检查通过：$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({k:d.get(k) for k in ("status","version","git_sha","release_id","degradedReasons") if k in d},ensure_ascii=False))' <<<"${HEALTH_JSON}")"
       HEALTH_RESULT=PASS
     else
       fail "健康检查 60 秒内未通过（curl ${HEALTH_URL}）"
