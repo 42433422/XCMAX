@@ -80,6 +80,57 @@ def catalog_payload(data: dict) -> str:
     return json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
 
 
+_PUBLIC_PRIVATE_MARKERS = ("sunbird", "太阳鸟", "余额", "真实订单")
+_PUBLIC_REDACTION = "客户账户及业务数据已脱敏，详细内容不公开。"
+
+
+def public_projection(value: object, excluded: set[str]) -> object:
+    names = {Path(path).name.casefold() for path in excluded}
+
+    def hidden(item: object) -> bool:
+        if isinstance(item, str):
+            return item in excluded
+        return isinstance(item, dict) and any(isinstance(item.get(k), str) and item[k] in excluded
+                                              for k in ("path", "_acceptance_path", "acceptance_path", "record_path", "identity_path"))
+
+    def project(item: object) -> object:
+        if isinstance(item, dict):
+            return {k: project(v) for k, v in item.items() if k != "public_excluded_media" and not hidden(v)}
+        if isinstance(item, list):
+            return [project(child) for child in item if not hidden(child)]
+        if isinstance(item, str) and any(x in item.casefold() for x in (*_PUBLIC_PRIVATE_MARKERS, *names)):
+            return _PUBLIC_REDACTION
+        return item
+
+    return project(value)
+
+
+def privacy_exclusions(evidence: dict, feature_id: str = "") -> set[str]:
+    excluded = set(evidence.get("public_excluded_media") or [])
+    sensitive = feature_id in {"base-login", "ind-attendance", "erp-sales-order"}
+
+    stack = [v for k, v in evidence.items() if k not in {"impl", "api", "tests", "ci", "docs"}]
+    while stack:
+        value = stack.pop()
+        if isinstance(value, dict):
+            stack.extend(value.values())
+        elif isinstance(value, list):
+            stack.extend(value)
+        elif isinstance(value, str):
+            path = value
+            ext = Path(path).suffix.lower()
+            if sensitive and ext in {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".mov"}:
+                excluded.add(path)
+            elif ext in {".json", ".log", ".txt"}:
+                try:
+                    body = e(path).read_text(encoding="utf-8").casefold()
+                except (OSError, UnicodeError):
+                    continue
+                if sensitive or any(marker in body for marker in _PUBLIC_PRIVATE_MARKERS):
+                    excluded.add(path)
+    return excluded
+
+
 def e(path: str) -> Path:
     return REPO_ROOT / path
 
@@ -403,6 +454,7 @@ def contains_key(value, key: str) -> bool:
 def validate_feature(feat: dict, warnings: list[str]) -> dict:
     """校验单个功能的证据，返回最终状态与证据明细。No Evidence, No Claim。"""
     ev = feat.get("evidence", {}) or {}
+    ev["public_excluded_media"] = sorted(privacy_exclusions(ev, feat["id"]))
     if ("status" in feat or "platform_status" in feat
             or contains_key(ev.get("platform_assets") or {}, "status")):
         raise ValueError(f"[{feat['id']}] capability and platform status must be evidence-derived")
@@ -451,10 +503,23 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     commit_time = git("log", "-1", "--format=%cI", *ref, "--", *paths) if paths else None
     verified_at = project_code_date(commit_time)
     accepted_at = max((v["verified_at"] for v in verdicts if v["verified_at"]), default=None)
+    public_review_note = None
+    if ev.get("review"):
+        review_record = json.loads(e(ev["review"]).read_text(encoding="utf-8"))
+        public_review_note = review_record.get("visible_content")
+        excluded_names = {
+            path.rsplit("/", 1)[-1].casefold()
+            for path in (ev.get("public_excluded_media") or [])
+        }
+        if isinstance(public_review_note, str) and any(
+            name in public_review_note.casefold() for name in excluded_names
+        ):
+            public_review_note = "复核说明引用了暂不公开的媒体，详细内容因隐私审查暂不展示。"
 
-    return {
+    result = {
         **feat,
         "status": final,
+        "public_review_note": public_review_note,
         "platform_status": [{"id": v["id"], "name": v["name"], "status": v["status"],
                              "verified_at": v["verified_at"], "run_count": len(v["runs"]),
                              "accepted_count": len(v["accepted"])} for v in verdicts],
@@ -477,6 +542,7 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
         },
         "verified_at": verified_at,
     }
+    return public_projection(result, set(ev.get("public_excluded_media") or []))
 
 
 def load_platform_levels() -> dict[str, str]:
@@ -555,6 +621,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                 evidence_ref = feat.get("evidence_ref") or None
                 enriched = {
                     **enriched,
+                    "_public_excluded_media": sorted(privacy_exclusions(feat.get("evidence", {}) or {}, feat["id"])),
                     "featured": featured,
                     "evidence_ref": evidence_ref,
                     "evidence_ref_name": id_to_name.get(evidence_ref) if evidence_ref else None,
@@ -1109,12 +1176,15 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         run_paths = {path for path, _ in pairs}
         return (run_lines(pairs, v["id"]) + media_figs(media, v["id"])
                 + (log_blocks(v.get("logs", []), v["id"]) if pairs else "")
-                + raw_block([p for p in v.get("raw", []) if pairs and p not in run_paths and p != v["identity_path"]], v["id"]))
+                + raw_block([p for p in v.get("raw", []) if pairs and p not in run_paths and p != v.get("identity_path")], v["id"]))
 
     def artifact_block(v: dict) -> str:
-        return (f'<p class="cap-plat-run">安装包 / 部署产物 SHA-256：<code>{esc(v["artifact_sha256"])}</code> · '
-                f'<a href="{asset(f["id"], v["artifact_path"], v["id"])}">交付身份 JSON</a></p>'
-                if v.get("artifact_sha256") else "")
+        if not v.get("artifact_sha256"):
+            return ""
+        link = (f' · <a href="{asset(f["id"], v["artifact_path"], v["id"])}">交付身份 JSON</a>'
+                if v.get("artifact_path") else " · 交付身份文件因隐私审查暂不公开")
+        return (f'<p class="cap-plat-run">安装包 / 部署产物 SHA-256：'
+                f'<code>{esc(v["artifact_sha256"])}</code>{link}</p>')
 
     def observation_blocks(v: dict) -> str:
         blocks = []
@@ -1220,7 +1290,8 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
     usage = f.get("usage", "") or "请联系我们获取演示或参阅关联文档。"
     review_note = (
         f'<p class="cap-section-note">图片内容复核（{esc(review.get("reviewed_at", "待补"))}，'
-        f'Mac {esc(review.get("app_version", "待补"))}）：{esc(review.get("visible_content", "尚无本项图片内容复核记录"))}</p>'
+        f'Mac {esc(review.get("app_version", "待补"))}）：'
+        f'{esc(f.get("public_review_note") or "尚无本项图片内容复核记录")}</p>'
         if review else ""
     )
     docs_html = f'<div class="cap-evidence-block"><h3>关联文档</h3>{evidence_list(ev["docs"])}</div>' if ev["docs"] else ""
@@ -1288,12 +1359,14 @@ def write_outputs(data: dict, domains_full: list[dict]) -> dict[str, str]:
 
 
 def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
-    """Copy evidence assets; add platform suffixes only when basename collisions exist."""
+    """Copy only public evidence; never copy assets excluded by privacy review."""
     copied = []
     EVIDENCE_ASSET_DIR.mkdir(parents=True, exist_ok=True)
 
     def copy(feature: str, path: str, platform: str | None = None,
-             collisions: set[str] | None = None) -> None:
+             collisions: set[str] | None = None, excluded: set[str] | None = None) -> None:
+        if path in (excluded or set()):
+            return
         src = e(path)
         if src.is_file():
             dst = EVIDENCE_ASSET_DIR / evidence_asset_name(feature, path, platform, collisions)
@@ -1304,16 +1377,39 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
         for m in d["modules"]:
             for f in m["features"]:
                 collisions = platform_asset_collisions(f)
+                excluded = set(f.get("_public_excluded_media") or [])
                 # Unattributed catalog material keeps the legacy public name.
                 for kind in ("screenshots", "videos", "runs", "review", "logs", "raw"):
                     paths = [f["evidence"][kind]] if kind == "review" and f["evidence"].get(kind) else f["evidence"].get(kind, []) or []
                     for p in paths:
                         if p:
-                            copy(f["id"], p)
+                            copy(f["id"], p, excluded=excluded)
                 for v in f.get("verdicts", []):
                     for p in platform_evidence_paths(v):
-                        copy(f["id"], p, v["id"], collisions)
+                        copy(f["id"], p, v["id"], collisions, excluded)
     return copied
+
+
+def private_generated_assets() -> list[Path]:
+    sensitive_prefixes = ("base-login-", "ind-attendance-", "erp-sales-order-")
+    private = []
+    for path in EVIDENCE_ASSET_DIR.iterdir():
+        if not path.is_file():
+            continue
+        try:
+            body = path.read_text(encoding="utf-8").casefold() if path.suffix.lower() in {".json", ".log", ".txt"} else ""
+        except (OSError, UnicodeError):
+            continue
+        if path.name.startswith(sensitive_prefixes) or any(marker in body for marker in _PUBLIC_PRIVATE_MARKERS):
+            private.append(path)
+    return private
+
+
+def prune_private_generated_assets() -> list[str]:
+    removed = private_generated_assets()
+    for path in removed:
+        path.unlink()
+    return [str(path.relative_to(WEBSITE_DIR)) for path in removed]
 
 
 def platform_evidence_paths(verdict: dict, checked: bool = False) -> list[str]:
@@ -1336,7 +1432,8 @@ def missing_public_evidence(domains: list[dict]) -> list[str]:
                 for v in f["verdicts"]:
                     paths = platform_evidence_paths(v, checked=True)
                     missing.extend(f"{f['id']}/{v['id']}: {p}" for p in paths
-                                   if p and e(p).is_file()
+                                   if p and p not in set(f.get("_public_excluded_media") or [])
+                                   and e(p).is_file()
                                    and not public_asset_matches(f["id"], p, v["id"], collisions))
     return missing
 
@@ -1384,6 +1481,8 @@ def main() -> int:
             if not f.exists() or f.read_text(encoding="utf-8") != content:
                 drift.append(f"{'缺失' if not f.exists() else '不一致'}: {rel}")
         drift.extend(f"已验证平台公开证据缺失或哈希不匹配: {p}" for p in missing_public_evidence(domains_full))
+        drift.extend(f"隐私审查未通过的证据副本仍公开: {p.relative_to(WEBSITE_DIR)}"
+                     for p in private_generated_assets())
         for w in warnings:
             print(w if w.startswith("ERROR ") else f"WARN {w}")
         drift.extend(f"证据来源或 SHA-256 校验失败: {w[6:]}" for w in evidence_errors)
@@ -1401,13 +1500,14 @@ def main() -> int:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
     copied = copy_evidence_assets(domains_full)
+    removed_assets = prune_private_generated_assets()
     removed = prune_stale_generated(outputs)
 
     s = data["stats"]
     print(f"已生成能力中心：{s['total']} 项能力 / {s['modules']} 模块 / {s['domains']} 域")
     print(f"状态分布：{s['by_status']}")
     print(f"最近验证时间：{s['last_verified_at']}")
-    print(f"证据资产复制（截图/录像）：{len(copied)} 个；清理过期页：{len(removed)} 个")
+    print(f"证据资产复制（截图/录像）：{len(copied)} 个；隐私排除副本删除：{len(removed_assets)} 个；清理过期页：{len(removed)} 个")
     if warnings:
         print(f"\n构建警告 {len(warnings)} 条：")
         for w in warnings:

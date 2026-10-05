@@ -42,6 +42,16 @@ def die(msg: str) -> None:
     raise SystemExit(1)
 
 
+_PUBLIC_PRIVATE_MARKERS = ("sunbird", "太阳鸟", "余额", "真实订单")
+_PUBLIC_REDACTION = "客户账户及业务数据已脱敏，详细内容不公开。"
+
+
+def redact_public_values(value):
+    if isinstance(value, dict): return {key: redact_public_values(item) for key, item in value.items()}
+    if isinstance(value, list): return [redact_public_values(item) for item in value]
+    return _PUBLIC_REDACTION if isinstance(value, str) and any(m in value.casefold() for m in _PUBLIC_PRIVATE_MARKERS) else value
+
+
 def read_json(path: Path) -> dict:
     if not path.exists():
         die(f"SSOT 缺失: {path}")
@@ -238,6 +248,11 @@ def build_evidence(cases_cfg: dict) -> dict:
     features: dict[str, dict] = {}
     videos: list[dict] = []
     integrity_problems: list[dict] = []
+    catalog = read_json(SITE_ROOT / "data" / "capabilities" / "catalog.json")
+    excluded = {p for d in catalog.get("domains", []) for m in d.get("modules", [])
+                for f in m.get("features", [])
+                for p in (f.get("evidence", {}) or {}).get("public_excluded_media", [])}
+    sensitive_features = {"base-login", "ind-attendance", "erp-sales-order"}
 
     run_files = sorted(EVIDENCE_DIR.glob("*-run.json"))
     if not run_files:
@@ -266,6 +281,8 @@ def build_evidence(cases_cfg: dict) -> dict:
         platform = detect_platform(rf.stem)
         media_out = []
         for m in d.get("media", []):
+            if feat in sensitive_features or m.get("path") in excluded:
+                continue
             name = Path(m.get("path", "")).name
             entry = {
                 "file": name,
@@ -461,9 +478,10 @@ def build() -> dict:
     caps = read_json(SITE_ROOT / "data" / "capabilities.json")
     release = read_json(SITE_ROOT / "download-release.json")
 
-    cases = cases_cfg.get("cases")
-    if not cases:
-        die("public_cases.json 缺少 cases")
+    configured_cases = cases_cfg.get("cases")
+    if not isinstance(configured_cases, list):
+        die("public_cases.json 缺少 cases 数组")
+    cases = configured_cases
 
     evidence = build_evidence(cases_cfg)
     attach_case_media(cases, evidence)
@@ -475,13 +493,13 @@ def build() -> dict:
         hero = {
             "file": h["public_path"],
             "sha256": h["sha256"],
-            "caption": "XCAGI 实机工作台：太阳鸟企业账号（SUNBIRD·饰品包装助手）登录后的智能对话界面",
+            "caption": "XCAGI 实机工作台：登录后的智能对话界面",
             "acceptance_status": "passed",
             "verified_at": next(f["verified_at"] for f in evidence["features"] if f["feature"] == "base-login"),
         }
 
     last_verified = evidence["summary"]["last_verified_at"]
-    return {
+    result = {
         "schema": SCHEMA,
         "_comment": "由 scripts/build_public_site.py 自动生成，请勿手改（DO NOT EDIT）。事实来源见 sources。",
         "sources": {
@@ -507,6 +525,7 @@ def build() -> dict:
         "evidence": evidence,
         "hero_media": hero,
     }
+    return redact_public_values(result)
 
 
 def main() -> None:

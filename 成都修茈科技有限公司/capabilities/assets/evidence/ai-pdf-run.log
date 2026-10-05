@@ -1,8 +1,0 @@
-2026-09-30T04:18:00+0800 [ai-pdf] 开始验收 ai-pdf PDF 生成与解析；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:18:00+0800 [ai-pdf] M1 passed :: HTTP 200 14ms；{"employee_id": "pdf-generate-employee", "status": "ready"}
-2026-09-30T04:18:00+0800 [ai-pdf] M2 passed :: HTTP 200 24ms；ok=True；pdf=/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790713080/outputs/generated_document.pdf
-2026-09-30T04:18:00+0800 [ai-pdf] M3 passed :: 解析 document_full.txt 文本：'MAC验收0929 汇报\n客户：太阳鸟\n产品：包装盒 数量：24'
-2026-09-30T04:18:00+0800 [ai-pdf] M4 passed :: HTTP 200 11ms；"缺少 file_path：请上传或指定要处理的文件。"
-2026-09-30T04:18:04+0800 [ai-pdf] M5 passed :: 导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 ['工具表']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管理 | 系统设
-2026-09-30T04:18:05+0800 [ai-pdf] screenshot result.png
-2026-09-30T04:18:11+0800 [ai-pdf] video operation.webm bytes=324423

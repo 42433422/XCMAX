@@ -1,6 +1,0 @@
-2026-09-29T20:19:36+0800 [erp-print-agent] 开始验收 erp-print-agent 打印代理与套打通道；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
-2026-09-29T20:19:36+0800 [erp-print-agent] M1 passed :: HTTP 200 140ms；{"success": true, "printers": [{"name": "Canon_TS3700_series", "status": "就绪", "is_default": true}], "count": 1, "classified": {"document_printer": {"name": "Canon_TS3700_series", "status": "就绪", "is_connected": true}, "label_printer": {"na
-2026-09-29T20:19:40+0800 [erp-print-agent] M2 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/printer-list；命中文本 ['打印机']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 打印机列表 | SUNBIRD | 副窗 | ◈ | 工作区 | 3 | 打印机列表 | 刷新 | 打印机分类 | 发货单打印机 | 未设置（自动识别） | Canon_TS3700_series | 状态：就绪 | 标签打印机 | 未
-2026-09-29T20:19:40+0800 [erp-print-agent] M3 failed :: 受阻：需要本机安装实体打印机
-2026-09-29T20:19:41+0800 [erp-print-agent] screenshot result.png
-2026-09-29T20:19:45+0800 [erp-print-agent] video operation.webm bytes=319028

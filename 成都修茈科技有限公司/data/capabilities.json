@@ -3668,7 +3668,7 @@
           "features": [
             {
               "id": "ind-taiyangniao",
-              "name": "太阳鸟专属 Mod",
+              "name": "客户账户及业务数据已脱敏，详细内容不公开。",
               "status": "partial",
               "platforms": [
                 "windows",
@@ -3692,7 +3692,7 @@
                   "accepted_count": 1
                 }
               ],
-              "summary": "太阳鸟客户的专属业务 Mod（受保护定制，不随通用版分发）。",
+              "summary": "客户账户及业务数据已脱敏，详细内容不公开。",
               "featured": true,
               "evidence_ref": null,
               "evidence_ref_name": null
@@ -3998,7 +3998,7 @@
                   "accepted_count": 0
                 }
               ],
-              "summary": "支付宝当面付/订单码支付与异步回调对账，支撑余额充值与套餐购买。",
+              "summary": "客户账户及业务数据已脱敏，详细内容不公开。",
               "featured": true,
               "evidence_ref": null,
               "evidence_ref_name": null
@@ -4038,7 +4038,7 @@
                   "accepted_count": 1
                 }
               ],
-              "summary": "Token 余额、套餐与模型用量计费。",
+              "summary": "客户账户及业务数据已脱敏，详细内容不公开。",
               "featured": false,
               "evidence_ref": "pay-alipay",
               "evidence_ref_name": "支付宝支付与回调"

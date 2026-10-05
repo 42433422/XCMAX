@@ -1,6 +1,0 @@
-2026-09-29T20:22:54+0800 [ch-wechat-contacts] 开始验收 ch-wechat-contacts 微信联系人同步与情报；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
-2026-09-29T20:23:00+0800 [ch-wechat-contacts] M1 passed :: HTTP 401 6489ms；{"success": false, "error_code": "http_401", "message": "invalid wechat sync token", "path": "/api/ops/wechat/contacts"}
-2026-09-29T20:23:00+0800 [ch-wechat-contacts] M2 failed :: 受阻：需要微信采集端与 sync token
-2026-09-29T20:23:04+0800 [ch-wechat-contacts] M3 passed :: 导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | 
-2026-09-29T20:23:05+0800 [ch-wechat-contacts] screenshot result.png
-2026-09-29T20:23:13+0800 [ch-wechat-contacts] video operation.webm bytes=487479

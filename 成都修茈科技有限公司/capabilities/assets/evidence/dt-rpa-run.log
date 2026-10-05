@@ -1,7 +1,0 @@
-2026-09-30T04:26:42+0800 [dt-rpa] 开始验收 dt-rpa 桌面自动化与运行时状态；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:26:42+0800 [dt-rpa] M1 passed :: HTTP 200 43ms；{"profiles": 1, "drivers": {"windows": false, "mac": true, "mcp_wechat": false}}
-2026-09-30T04:26:42+0800 [dt-rpa] M2 passed :: HTTP 200 17ms；{"success": true, "data": {"success": true, "profile": {"app_id": "mac-acc-0929", "name": "mac-acc-0929", "mac_bundle_id": "com.apple.TextEdit"}}}
-2026-09-30T04:26:42+0800 [dt-rpa] M3 passed :: HTTP 200 16ms；{"profiles": [{"app_id": "mac-acc-0929", "name": "mac-acc-0929", "mac_bundle_id": "com.apple.TextEdit"}]}
-2026-09-30T04:26:46+0800 [dt-rpa] M4 passed :: 导航后路径 /desktop-runtime；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 桌面运行时 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 桌面运行时 |  | 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 |  | 刷新状态检查桌面更新 | 运行状态 | 桌面
-2026-09-30T04:26:47+0800 [dt-rpa] screenshot result.png
-2026-09-30T04:26:49+0800 [dt-rpa] video operation.webm bytes=351552

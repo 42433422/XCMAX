@@ -1,6 +1,0 @@
-2026-09-30T04:31:18+0800 [ind-fields] 开始验收 ind-fields 行业字段与规则配置；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:31:22+0800 [ind-fields] M1 passed :: HTTP 200 4098ms；{"schema_version": 1, "industry_id": "general", "summary": "保持干净页面：对话与智能生态即可起步，其它能力按需再补。", "industry_package": null, "groups": [{"id": "core", "title": "侧栏对话底座", "hint": "干净起步：侧栏挂上智能对话与智能生态入口（宿主桥接，非员工
-2026-09-30T04:31:22+0800 [ind-fields] M2 passed :: HTTP 200 209ms；config keys ['units', 'quantity_fields', 'product_fields', 'order_types', 'print_config', 'subsystems']
-2026-09-30T04:31:26+0800 [ind-fields] M3 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/products；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 业务对象 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 饰品包装品管理 | 导入Excel | 导出价格表 | 导出Excel | + 添加产品 | 产品单位： | 请选择产品单位 | MAC验收0929出货客户13
-2026-09-30T04:31:27+0800 [ind-fields] screenshot result.png
-2026-09-30T04:31:30+0800 [ind-fields] video operation.webm bytes=458317

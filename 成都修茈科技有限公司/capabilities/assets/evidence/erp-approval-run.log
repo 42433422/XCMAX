@@ -1,7 +1,0 @@
-2026-09-30T04:27:00+0800 [erp-approval] 开始验收 erp-approval 业务审批与流程；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:27:01+0800 [erp-approval] M1 passed :: HTTP 200 25ms；{"id": 5, "flow_key": "mac0929_1790713621", "flow_name": "MAC验收0929流程", "description": null, "industry": "通用", "business_type": "general", "node_type": "serial"
-2026-09-30T04:27:01+0800 [erp-approval] M2 passed :: HTTP 200 89ms；{"id": 5, "tenant_id": 1, "request_no": "APR20260930-839EAA", "flow_id": 5, "flow_name": "MAC验收0929流程", "business_type": "general", "business_id": null, "busine
-2026-09-30T04:27:01+0800 [erp-approval] M3 passed :: HTTP 200 42ms；{"id": 5, "tenant_id": 1, "request_no": "APR20260930-839EAA", "flow_id": 5, "flow_name": "MAC验收0929流程", "business_type": "general", "business_id": null, "busine
-2026-09-30T04:27:04+0800 [erp-approval] M4 passed :: 已在 /approval-hub/workspace 页面看到「MAC验收0929审批」；上下文：0 | 待审批 | 5 | 我发起的 | 5 | 已通过 | 0 | 已拒绝 | 待我审批 | 查看全部 |  | 暂无待审批事项 |  | 我发起的 | 清理 | 5 | 查看全部 | MAC验收0929审批 | 已通过 | 2026/9/29 20:27:01 | MAC验收0929审批 | 已通过 | 2026/9/29 12:36:38 | MAC验收0929通知 | 已通过 | 2026/9/29 05:05:05 | MAC验收0929审批 | 已通过
-2026-09-30T04:27:05+0800 [erp-approval] screenshot result.png
-2026-09-30T04:27:07+0800 [erp-approval] video operation.webm bytes=287111
