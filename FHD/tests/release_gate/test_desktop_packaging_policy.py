@@ -16,6 +16,17 @@ def _desktop_runtime_source(*names: str) -> str:
     return "\n".join((REPO_ROOT / "desktop" / name).read_text(encoding="utf-8") for name in names)
 
 
+def test_weekly_backup_keeps_cadence_after_missed_sunday() -> None:
+    scripts = REPO_ROOT / "scripts" / "backup"
+    install = (scripts / "Install-BackupTask.ps1").read_text(encoding="utf-8")
+    backup = (scripts / "XcagiBackup.ps1").read_text(encoding="utf-8")
+    assert "-StartWhenAvailable" in install
+    assert 'if ($Cadence -eq "Weekly") { "$ArgumentLine -Weekly" }' in install
+    assert "-Argument $taskArguments" in install
+    assert "[switch]$Weekly" in backup and "($Weekly -or (Get-Date).DayOfWeek" in backup
+    assert 'Write-Log "ERROR: failed to create weekly copy: $_"\n      throw' in backup
+
+
 def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     scripts = REPO_ROOT / "scripts" / "package"
     ps_backend = (scripts / "build-backend.ps1").read_text(encoding="utf-8")
@@ -35,12 +46,9 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
             "VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full"
         ) in script
         assert "VITE_XCAGI_PRODUCT_SKU=enterprise npm run build" not in script
-        # 桌面包不得构建 admin-console
         assert "admin-console && npm run build" not in script
         assert "(cd admin-console && npm run build)" not in script
 
-    # build-backend.sh 自 4c724dae8 起把前端构建委托给 build-frontend.sh（SSOT 单点构建），
-    # enterprise=full 的构建由 build-frontend.sh 保证，这里校验委托关系与 admin-console 禁令。
     sh_frontend = (scripts / "build-frontend.sh").read_text(encoding="utf-8")
     assert "build-frontend.sh" in sh_backend
     assert (
@@ -95,7 +103,6 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in smoke
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in acceptance
     assert "isDesktopShell" in router
-    # 网页 admin → /admin；桌面壳 admin → 拒入（管理端仅网页 SSOT）
     assert "resolveAdminConsoleHomeUrl()" in router
     assert "profile.isAdminAccount" in router
     assert "DESKTOP_ADMIN_FORBIDDEN_MESSAGE" in router

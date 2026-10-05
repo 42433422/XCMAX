@@ -25,7 +25,6 @@ if (-not (Get-Module -ListAvailable -Name ScheduledTasks)) {
 $pwshArgs = @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "`"$BackupScript`"")
 if ($DataDir) { $pwshArgs += @("-DataDir", "`"$DataDir`"") }
 if ($ExternalDir) { $pwshArgs += @("-ExternalDir", "`"$ExternalDir`"") }
-# Execute is already powershell.exe. Argument must not start with another powershell.exe.
 $ArgumentLine = $pwshArgs -join " "
 
 function Register-BackupTask {
@@ -41,7 +40,8 @@ function Register-BackupTask {
     Write-Host "removed existing task: $TaskName"
   }
 
-  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $ArgumentLine
+  $taskArguments = if ($Cadence -eq "Weekly") { "$ArgumentLine -Weekly" } else { $ArgumentLine }
+  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $taskArguments
   if ($Cadence -eq "Daily") {
     $taskTrigger = New-ScheduledTaskTrigger -Daily -At $At
   } else {
@@ -67,7 +67,6 @@ $weeklyAt = $at.AddHours(1)
 Register-BackupTask -TaskName $TaskNameDaily -Cadence Daily -At $at
 Register-BackupTask -TaskName $TaskNameWeekly -Cadence Weekly -At $weeklyAt
 
-Write-Host ""
 Write-Host "=== XCMAX backup tasks installed ==="
 Write-Host "  Daily  : $TaskNameDaily  @ 12:30 every day"
 Write-Host "  Weekly : $TaskNameWeekly @ $($weeklyAt.ToString('HH:mm')) every Sunday"
@@ -75,6 +74,5 @@ if ($ExternalDir) {
   Write-Host "  External backup dir: $ExternalDir"
 }
 Write-Host "  Log: %APPDATA%\XCAGI\logs\backup.log"
-Write-Host ""
 Write-Host "Manual trigger test:"
 Write-Host "  Start-ScheduledTask -TaskName $TaskNameDaily"

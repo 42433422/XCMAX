@@ -217,7 +217,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     llm_client = _facade().create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []
     pre_run = None
-    planner_runtime_context = dict(runtime_context or {})
+    planner_runtime_context = {**(runtime_context or {}), "message": body.message}
     try:
         pre_run = _facade().start_legacy_chat_run(
             message=body.message,
@@ -228,8 +228,28 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         )
         planner_runtime_context["run_id"] = pre_run.run_id
         planner_runtime_context["agent_run_id"] = pre_run.run_id
+        yield _facade()._sse_event_line(
+            {
+                "type": "tool_progress",
+                "phase": "started",
+                "label": "正在处理任务",
+                "run_id": pre_run.run_id,
+            }
+        )
     except _facade().RECOVERABLE_ERRORS:
         _facade().logger.debug("legacy stream planner AgentRun pre-create skipped", exc_info=True)
+
+    def finalize(payload):
+        return _facade().finalize_legacy_chat_run(
+            pre_run.run_id,
+            payload,
+            message=body.message,
+            runtime_context=planner_runtime_context,
+            user_id=body.user_id,
+            source=body.source,
+            channel="compat_chat_stream",
+        )
+
     try:
         halted_for_write_token = False
         for ev in _facade()._xcagi_guarded_planner_stream_events(
@@ -250,15 +270,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                             "status_code": ev.get("status_code"),
                         },
                     }
-                    _facade().finalize_legacy_chat_run(
-                        pre_run.run_id,
-                        payload,
-                        message=body.message,
-                        runtime_context=planner_runtime_context,
-                        user_id=body.user_id,
-                        source=body.source,
-                        channel="compat_chat_stream",
-                    )
+                    finalize(payload)
                 yield _facade()._sse_event_line(
                     _facade()._sse_payload_with_run_id(ev, getattr(pre_run, "run_id", None))
                 )
@@ -283,15 +295,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                             "token_description": ev.get("token_description"),
                         },
                     }
-                    _facade().finalize_legacy_chat_run(
-                        pre_run.run_id,
-                        payload,
-                        message=body.message,
-                        runtime_context=planner_runtime_context,
-                        user_id=body.user_id,
-                        source=body.source,
-                        channel="compat_chat_stream",
-                    )
+                    finalize(payload)
                 yield _facade()._sse_event_line(
                     _facade()._sse_payload_with_run_id(ev, getattr(pre_run, "run_id", None))
                 )
@@ -313,15 +317,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                     "response": msg,
                     "data": {"error": msg},
                 }
-                _facade().finalize_legacy_chat_run(
-                    pre_run.run_id,
-                    payload,
-                    message=body.message,
-                    runtime_context=planner_runtime_context,
-                    user_id=body.user_id,
-                    source=body.source,
-                    channel="compat_chat_stream",
-                )
+                finalize(payload)
             yield _facade()._sse_event_line(
                 _facade()._sse_payload_with_run_id(
                     {"type": "error", "message": msg}, getattr(pre_run, "run_id", None)
@@ -354,15 +350,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             done_reply = visible_text
         payload = _facade()._xcagi_compat_reply_payload(done_reply)
         if pre_run is not None:
-            payload = _facade().finalize_legacy_chat_run(
-                pre_run.run_id,
-                payload,
-                message=body.message,
-                runtime_context=planner_runtime_context,
-                user_id=body.user_id,
-                source=body.source,
-                channel="compat_chat_stream",
-            )
+            payload = finalize(payload)
         else:
             payload = _facade().attach_chat_trace_run(
                 payload,
@@ -383,15 +371,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 "response": message,
                 "data": {"error": message, "status_code": exc.status_code},
             }
-            _facade().finalize_legacy_chat_run(
-                pre_run.run_id,
-                payload,
-                message=body.message,
-                runtime_context=planner_runtime_context,
-                user_id=body.user_id,
-                source=body.source,
-                channel="compat_chat_stream",
-            )
+            finalize(payload)
         yield _facade()._sse_event_line(
             _facade()._sse_payload_with_run_id(
                 {"type": "error", "message": message, "status_code": exc.status_code},

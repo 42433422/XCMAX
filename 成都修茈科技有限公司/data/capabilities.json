@@ -6,15 +6,15 @@
   "stats": {
     "total": 158,
     "by_status": {
-      "verified": 54,
-      "partial": 96,
+      "verified": 55,
+      "partial": 95,
       "implemented": 4,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 54,
+    "verified_total": 55,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
       "windows": 99,
@@ -40,9 +40,9 @@
       },
       "web": {
         "applicable": 128,
-        "verified": 123,
+        "verified": 124,
         "partial": 0,
-        "pending": 5,
+        "pending": 4,
         "last_verified_at": "2026-09-29"
       },
       "android": {
@@ -124,7 +124,7 @@
             {
               "id": "base-login",
               "name": "登录与会话管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -150,10 +150,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-24",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "企业统一的账号登录、会话保持与安全退出，桌面端与 Web 端共用同一套账户体系。",

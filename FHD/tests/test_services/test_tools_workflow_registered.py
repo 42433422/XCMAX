@@ -624,19 +624,12 @@ class TestErpToolRegistry:
         assert sales["confirm"]["required_params"] == ["order_id"]
 
     def test_reports_tool_registered(self):
-        reg = _workflow_registry()
-        assert "reports" in reg
-        actions = set(reg["reports"]["actions"])
-        assert {
-            "sales_summary",
-            "inventory_summary",
-            "purchase_summary",
+        actions = _workflow_registry()["reports"]["actions"]
+        assert {f"{kind}_summary" for kind in ("sales", "inventory", "purchase")} | {
             "dashboard",
             "export",
-        } <= actions
-        # 报表动作均为只读低风险幂等
-        for action in reg["reports"]["actions"].values():
-            assert action["risk"] == "low" and action["idempotent"] is True
+        } <= set(actions)
+        assert all(a["risk"] == "low" and a["idempotent"] for a in actions.values())
 
     def test_inventory_extended_with_alerts(self):
         reg = _workflow_registry()
@@ -722,13 +715,33 @@ class TestErpRouterDispatch:
         r = _registered_router_sales("hack", {}, {}, "shared", "")
         assert r["success"] is False
 
-    def test_reports_router_sales_summary(self):
-        from app.services.report_service import ReportService
+    @pytest.mark.parametrize("kind", ["sales", "inventory", "purchase"])
+    def test_reports_summary_and_export_use_same_rows(self, kind):
+        rows = [{"model_number": "P002", "total_quantity": 18}]
+        with patch("app.services.report_service.ReportService") as factory:
+            svc = factory.return_value
+            query = getattr(svc, f"get_{kind}_report")
+            query.return_value = {"success": True, "data": rows}
+            svc.export_to_excel.return_value = {"success": True}
+            assert (
+                _registered_router_reports(f"{kind}_summary", {}, {}, "shared", "")["data"] == rows
+            )
+            result = _registered_router_reports(
+                "export", {}, {}, "shared", f"EXPORT {kind.upper()}"
+            )
+            assert result["success"]
+            svc.export_to_excel.assert_called_once_with(report_type=kind, data=rows, filename=kind)
+            assert query.call_count == 2
 
-        with patch.object(ReportService, "get_sales_report", return_value={"success": True}) as m:
-            r = _registered_router_reports("sales_summary", {}, {}, "shared", "")
-            assert r["success"] is True
-            m.assert_called_once()
+    @pytest.mark.parametrize("report", [{"success": False, "message": "query failed"}, None])
+    def test_reports_export_does_not_fabricate_empty_success(self, report):
+        with patch("app.services.report_service.ReportService") as factory:
+            svc = factory.return_value
+            svc.get_inventory_report.return_value = report
+            params = {"report_type": "inventory"} if report else {}
+            result = _registered_router_reports("export", params, {}, "shared", "")
+            assert not result["success"]
+            svc.export_to_excel.assert_not_called()
 
     def test_finance_router_ledger_query(self):
         from app.services import accounting_services

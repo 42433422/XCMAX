@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from unittest.mock import Mock
 
 import pytest
@@ -116,3 +117,19 @@ def test_workflow_registry_and_dispatch_include_capability_tool(monkeypatch) -> 
         workspace_root="/tmp/workspace",
     )
     assert json.loads(raw)["success"] is True
+
+
+def test_business_read_keeps_decimal_price_serializable(monkeypatch):
+    from app.application.tools import workflow
+
+    monkeypatch.setattr(
+        workflow,
+        "try_execute_business_db_tool",
+        lambda *args: {
+            "success": True,
+            "data": [{"model_number": "P002", "price": Decimal("10.25")}],
+        },
+    )
+    result = json.loads(workflow.execute_workflow_tool("business_db_read", {"entity": "products"}))
+    assert result["success"] is True
+    assert result["data"] == [{"model_number": "P002", "price": 10.25}]
