@@ -1,0 +1,61 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "base-settings",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "3ab4874b17974fae2b52dcabc033f07092206771",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-10-06",
+  "passed": 2,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "S1",
+      "input": "未登录打开系统设置",
+      "actions": "浏览器访问 http://127.0.0.1:17510/settings，不带会话",
+      "expected": "只出现企业账号登录，不能修改设置",
+      "observed": "页面停在企业账号登录，有账号密码、手机验证码、扫码登录，没有系统设置表单",
+      "result": "passed"
+    },
+    {
+      "id": "S2",
+      "input": "已登录会话打开系统设置",
+      "actions": "同一地址带当前企业会话打开",
+      "expected": "看到系统设置，并显示当前登录用户",
+      "observed": "标题为系统设置；个人主页显示登录名 wuxinghua1，并有展示名称和退出登录",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "base-settings",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20261006/base-settings/web/01-login-wall.png",
+      "sha256": "5dfd2c685a2dcebea2f397529ecb4504d3aa4e2894d5069d47c980bd46f71da3",
+      "visual_review": "accepted",
+      "visible_result": "未登录时页面是企业账号登录，没有系统设置",
+      "reviewed_at": "2026-10-06"
+    },
+    {
+      "feature": "base-settings",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20261006/base-settings/web/02-settings.png",
+      "sha256": "39cec1ded52521fa4b3a90aaff3650f1b1f851d2a4394432fe7d48c635b99cd6",
+      "visual_review": "accepted",
+      "visible_result": "已登录后是系统设置，个人主页显示当前登录名",
+      "reviewed_at": "2026-10-06"
+    },
+    {
+      "feature": "base-settings",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20261006/base-settings/web/operation.mov",
+      "sha256": "7fa4bca734fc6e0a958a41fe0c4c31ce28e9c648857db10b1dbbc195406646eb",
+      "visual_review": "accepted",
+      "visible_result": "先是登录墙，接着是已登录的系统设置",
+      "reviewed_at": "2026-10-06"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20261006/base-settings/web/run.log",
+    "sha256": "e919236e52e5e8ff830394fb82de402521d6ee677aab489f0f13fff671cd8337",
+    "bytes": 225
+  }
+}

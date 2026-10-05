@@ -15,7 +15,7 @@
     "domains": 10,
     "modules": 28,
     "verified_total": 54,
-    "last_verified_at": "2026-10-05",
+    "last_verified_at": "2026-10-06",
     "platform_counts": {
       "windows": 99,
       "macos": 100,
@@ -40,10 +40,10 @@
       },
       "web": {
         "applicable": 128,
-        "verified": 54,
+        "verified": 55,
         "partial": 0,
-        "pending": 74,
-        "last_verified_at": "2026-10-05"
+        "pending": 73,
+        "last_verified_at": "2026-10-06"
       },
       "android": {
         "applicable": 8,
@@ -596,10 +596,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-10-06",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "工作区级设置与用户偏好项。",
