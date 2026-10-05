@@ -2,9 +2,9 @@
   "golden_set": "task_golden_set.json",
   "total_tasks": 22,
   "trials": 1,
-  "pass_1": 0.9091,
-  "pass_k": 0.9091,
-  "pass_at_k": 0.9091,
+  "pass_1": 0.8636,
+  "pass_k": 0.8636,
+  "pass_at_k": 0.8636,
   "by_domain": {
     "customers": {
       "pass_k": 4,
@@ -35,7 +35,7 @@
       "total": 3
     },
     "shipment": {
-      "pass_k": 2,
+      "pass_k": 1,
       "total": 2
     }
   },
@@ -49,6 +49,19 @@
         {
           "tool_id": "clarify",
           "action": "ask"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "shipment.generate.full_slots_017",
+      "instruction": "打印 七彩乐园 的发货单，编号9803，规格12，一共3桶",
+      "difficulty": "medium",
+      "failure": "spreadsheet content differs: 发货单",
+      "plan": [
+        {
+          "tool_id": "shipment_orders",
+          "action": "generate"
         }
       ],
       "trials_failed": 1
