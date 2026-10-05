@@ -1,0 +1,10 @@
+{
+  "captures": {
+    "01-identity.json": {
+      "app_build_info": {
+        "gitSha": "3ab4874b17974fae2b52dcabc033f07092206771",
+        "version": "1.0.0.5"
+      }
+    }
+  }
+}

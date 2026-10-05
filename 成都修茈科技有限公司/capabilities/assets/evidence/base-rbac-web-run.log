@@ -1,0 +1,7 @@
+feature=base-rbac
+platform=web
+app_version=1.0.0.5
+app_git_sha=3ab4874b17974fae2b52dcabc033f07092206771
+backend=http://127.0.0.1:17500/api/health status=healthy
+R1 passed 标题为角色与权限；左下角系统正常，版本 v1.0.0.5
+R2 passed 编辑区标题是选择角色，用户和角色下拉都停在未选择，没有分配结果

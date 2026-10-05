@@ -1,0 +1,10 @@
+{
+  "release": {
+    "version": "1.0.0.5"
+  },
+  "installed_app": {
+    "gitSha": "3ab4874b17974fae2b52dcabc033f07092206771",
+    "sha256": "7badea32da409812982d6d46dd858786b10986da3defb24803e6273917f1f5db",
+    "path": "/Applications/XCAGI.app"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "base-rbac",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "3ab4874b17974fae2b52dcabc033f07092206771",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-10-05",
+  "passed": 2,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "R1",
+      "input": "已登录会话打开角色与权限",
+      "actions": "浏览器访问 http://127.0.0.1:17500/tenant-roles",
+      "expected": "看到角色与权限，并显示当前产品版本",
+      "observed": "标题为角色与权限；左下角系统正常，版本 v1.0.0.5",
+      "result": "passed"
+    },
+    {
+      "id": "R2",
+      "input": "未选择任何角色",
+      "actions": "停留在角色页，不点选角色",
+      "expected": "不能把权限分配出去",
+      "observed": "编辑区标题是选择角色，用户和角色下拉都停在未选择，没有分配结果",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "base-rbac",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20261005/base-rbac/web/01-roles.png",
+      "sha256": "1298a207cbd614ef488689f2d0190e0ecfc5495d40aa05aaa191035a961f6e21",
+      "visual_review": "accepted",
+      "visible_result": "角色与权限页已打开，当前没有选中角色",
+      "reviewed_at": "2026-10-05"
+    },
+    {
+      "feature": "base-rbac",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20261005/base-rbac/web/operation.mov",
+      "sha256": "261da8e7d6245b91ba4c65e01cbea7376f0232625d88b38c7dc982a3f03df7b9",
+      "visual_review": "accepted",
+      "visible_result": "角色与权限页，编辑区停留在选择角色",
+      "reviewed_at": "2026-10-05"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20261005/base-rbac/web/run.log",
+    "sha256": "d7fe9ea14d924688edf023fc94f89dbefbd38d7cf2ac9a41e1853fa361226cd9",
+    "bytes": 342
+  }
+}

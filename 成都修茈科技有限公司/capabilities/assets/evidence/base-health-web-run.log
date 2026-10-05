@@ -1,0 +1,7 @@
+feature=base-health
+platform=web
+app_version=1.0.0.5
+app_git_sha=3ab4874b17974fae2b52dcabc033f07092206771
+backend=http://127.0.0.1:17500/api/health status=healthy
+H1 passed 页面是企业账号登录，有账号密码、手机验证码、扫码登录，没有运行状态
+H2 passed 桌面模式为是；数据目录和数据库都指向本机验收配置；存储模式为本地 SQLite

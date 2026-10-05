@@ -1,0 +1,61 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "base-health",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "3ab4874b17974fae2b52dcabc033f07092206771",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-10-05",
+  "passed": 2,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "H1",
+      "input": "未登录打开桌面运行时页面",
+      "actions": "浏览器访问 http://127.0.0.1:17500/desktop-runtime，不带会话",
+      "expected": "只出现企业账号登录，不出现运行状态",
+      "observed": "页面是企业账号登录，有账号密码、手机验证码、扫码登录，没有运行状态",
+      "result": "passed"
+    },
+    {
+      "id": "H2",
+      "input": "已登录会话打开桌面运行时页面",
+      "actions": "同一地址带当前企业会话打开",
+      "expected": "桌面模式为是，并显示本机数据目录和 SQLite",
+      "observed": "桌面模式为是；数据目录和数据库都指向本机验收配置；存储模式为本地 SQLite",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "base-health",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20261005/base-health/web/01-login-wall.png",
+      "sha256": "faa33929d28464ede300be4fe0ace08bb18afccc278d1988a56e0094aad1ddf2",
+      "visual_review": "accepted",
+      "visible_result": "未登录时页面是企业账号登录，没有运行状态",
+      "reviewed_at": "2026-10-05"
+    },
+    {
+      "feature": "base-health",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20261005/base-health/web/02-runtime-status.png",
+      "sha256": "75a233ce64fc1c970092f6f8ed0758ce111958eb80da7830e2b3ae7144cf79d0",
+      "visual_review": "accepted",
+      "visible_result": "已登录后桌面模式为是，并显示本机数据目录",
+      "reviewed_at": "2026-10-05"
+    },
+    {
+      "feature": "base-health",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20261005/base-health/web/operation.mov",
+      "sha256": "35ba6f84ff462e21f47ed1e9df2698be05a3007b5b8253cef5986ad12018e109",
+      "visual_review": "accepted",
+      "visible_result": "先是登录墙，接着是桌面运行时状态",
+      "reviewed_at": "2026-10-05"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20261005/base-health/web/run.log",
+    "sha256": "79d46c9930157be2fb4c4b5bff3f088b427d3ddae5438d98c35aea63171c5bd4",
+    "bytes": 387
+  }
+}

@@ -1,0 +1,7 @@
+2026-09-29T06:38:45+0800 [base-rbac] 开始验收 base-rbac 权限与角色控制（RBAC）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:38:45+0800 [base-rbac] M1 passed :: HTTP 200 40ms；权限点 6 个，示例 ['etl.execute', 'etl.read', 'etl.rollback', 'etl.target.manage']
+2026-09-29T06:38:46+0800 [base-rbac] M2 passed :: HTTP 201 27ms；角色 id=7 key=tenant:1:MAC验收0929角色35125
+2026-09-29T06:38:46+0800 [base-rbac] M3 passed :: HTTP 200 25ms；角色数 3，含 MAC验收0929角色35125
+2026-09-29T06:38:49+0800 [base-rbac] M4 passed :: 导航后路径 /tenant-roles；命中文本 ['角色']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 角色与权限 | SUNBIRD | 副窗 | ◈ | 工作区 | 角色与权限 |  | 管理当前企业的业务角色，并将角色分配给本企业用户。 |  | 刷新 | 角色 | 新建角色 | MAC验收0929角色 | 0 项权限 | MAC验
+2026-09-29T06:38:50+0800 [base-rbac] screenshot result.png
+2026-09-29T06:38:52+0800 [base-rbac] video operation.webm bytes=300521
