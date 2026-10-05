@@ -48,6 +48,10 @@ def resolve_quote_references(
     for item in items:
         product_id = item.get("product_id")
         model = str(item.get("model_number") or "").strip()
+        alias = str(item.get("product_model") or "").strip()
+        if model and alias and model != alias:
+            raise ValueError("产品型号参数不一致")
+        model = model or alias
         product = None
         if product_id:
             product = db.query(Product).filter(Product.id == int(product_id)).first()
