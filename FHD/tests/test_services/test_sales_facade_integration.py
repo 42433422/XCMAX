@@ -1,16 +1,4 @@
-"""销售门面组合（W1-09）集成测试。
-
-验证 ``SalesAppService`` 是纯组合门面（composition only）：
-
-1. 每个门面方法恰好一次委托到所属专属模块；
-2. 路由 ``_registered_router_sales`` 的必填参数与门面/服务签名一致；
-3. 风险注册表元数据（risk / idempotent / required_params）反映真实委托行为；
-4. 显式销售短语（销售订单 / 销售明细）路由经执行产出结构化结果，而含裸词
-   「销售」的无关句子不再误命中 sales_query。
-
-本文件只测试门面组合与路由，不复制任何状态迁移 / 履行 / 库存 / 分配 / 退款 /
-贷项通知单领域逻辑。
-"""
+"""销售门面委托、路由、引用解析与调用方事务的集成回归。"""
 
 from __future__ import annotations
 
@@ -566,8 +554,9 @@ class TestQuoteCallerOwnedSession:
     """quote 在调用方会话内执行：不 commit/rollback/close，跨会话可见性受调用方事务控制。"""
 
     @pytest.mark.parametrize("confirmation_fails", [False, True])
+    @pytest.mark.parametrize("model_field", ["model_number", "product_model"])
     def test_create_confirmed_order_commits_all_or_rolls_back(
-        self, _facade_file_db, monkeypatch, confirmation_fails
+        self, _facade_file_db, monkeypatch, confirmation_fails, model_field
     ):
         from app.application.sales_order_creation import create_confirmed_order
         from app.db.models import PurchaseUnit, SalesOrderItem
@@ -588,7 +577,7 @@ class TestQuoteCallerOwnedSession:
                 {
                     "customer_name": "下单客户",
                     "items": [
-                        {"model_number": "ORDER", "quantity": 10, "unit_price": 50},
+                        {model_field: "ORDER", "quantity": 10, "unit_price": 50},
                     ],
                 }
             )
@@ -602,6 +591,9 @@ class TestQuoteCallerOwnedSession:
                 if expected:
                     assert fresh.query(SalesOrder).one().state == "confirmed"
                     assert float(fresh.query(SalesOrder).one().total_amount) == 500
+                    item = fresh.query(SalesOrderItem).one()
+                    assert item.product_id == fresh.query(Product).one().id
+                    assert item.product_name == "订单产品"
             finally:
                 fresh.close()
 
@@ -660,7 +652,15 @@ class TestQuoteCallerOwnedSession:
         assert float(order.total_amount) == 100
 
     @pytest.mark.parametrize(
-        "problem", ["missing_customer", "duplicate_customer", "missing_product", "mismatch_product"]
+        "problem",
+        [
+            "missing_customer",
+            "duplicate_customer",
+            "missing_product",
+            "mismatch_product",
+            "missing_alias",
+            "conflicting_alias",
+        ],
     )
     def test_unresolved_reference_leaves_no_order(self, _facade_file_db, problem):
         db = _facade_file_db
@@ -675,6 +675,11 @@ class TestQuoteCallerOwnedSession:
                 db.commit()
         elif problem == "missing_product":
             item["model_number"] = "missing"
+        elif problem == "missing_alias":
+            item.pop("model_number")
+            item["product_model"] = "missing"
+        elif problem == "conflicting_alias":
+            item["product_model"] = "wrong"
         else:
             item.update(product_id=product.id, model_number="wrong")
         result = SalesAppService().quote({"customer_name": name, "items": [item]}, db=db)

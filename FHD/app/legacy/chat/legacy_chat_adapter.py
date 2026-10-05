@@ -331,12 +331,7 @@ def append_tool_messages(
     execute_tool=None,
     db_write_token: str | None = None,
 ) -> dict[str, Any] | None:
-    """执行工具调用并添加消息;如果需要令牌则返回令牌请求信息。
-
-    同一轮次多个独立工具默认线程并行执行以缩短总耗时;含可能首轮即
-    requires_token 的写入类工具时保持串行,避免破坏「未到令牌则不应执行
-    后续工具」的语义。
-    """
+    """执行工具并记录消息；独立调用并行，令牌敏感调用串行且遇授权请求立即返回。"""
     if not tool_calls:
         return None
 

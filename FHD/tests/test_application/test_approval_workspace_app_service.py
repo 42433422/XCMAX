@@ -62,45 +62,26 @@ def _make_db_ctx(mock_db):
     return ctx
 
 
-# ========================= _allow_x_user_id_header =======================
-
-
 class TestAllowXUserIdHeader:
     def test_default_false(self, monkeypatch):
         monkeypatch.delenv("FHD_ALLOW_X_USER_ID_HEADER", raising=False)
         assert _allow_x_user_id_header() is False
 
-    def test_1(self, monkeypatch):
-        monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "1")
-        assert _allow_x_user_id_header() is True
-
-    def test_true(self, monkeypatch):
-        monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "true")
-        assert _allow_x_user_id_header() is True
-
-    def test_yes(self, monkeypatch):
-        monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "yes")
-        assert _allow_x_user_id_header() is True
-
-    def test_false(self, monkeypatch):
-        monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "false")
-        assert _allow_x_user_id_header() is False
-
-    def test_empty(self, monkeypatch):
-        monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "")
-        assert _allow_x_user_id_header() is False
-
-    def test_whitespace_true(self, monkeypatch):
-        monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "  true  ")
-        assert _allow_x_user_id_header() is True
-
-    def test_uppercase_TRUE(self, monkeypatch):
-        monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "TRUE")
-        # .lower() makes "TRUE" → "true" which IS in the set
-        assert _allow_x_user_id_header() is True
-
-
-# ========================= _generate_request_no ==========================
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("1", True),
+            ("true", True),
+            ("yes", True),
+            ("false", False),
+            ("", False),
+            ("  true  ", True),
+            ("TRUE", True),
+        ],
+    )
+    def test_explicit_header_policy(self, monkeypatch, value, expected):
+        monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", value)
+        assert _allow_x_user_id_header() is expected
 
 
 class TestGenerateRequestNo:
@@ -140,9 +121,6 @@ class TestAiWorkflowAuthorization:
         query.filter.return_value.first.return_value = SimpleNamespace(role="admin")
         req = SimpleNamespace(applicant_id=7)
         assert _can_review_ai_workflow_request(db, req, 8) is True
-
-
-# ========================= _node_query_for_user ==========================
 
 
 class TestNodeQueryForUser:
@@ -200,9 +178,6 @@ class TestNodeQueryForUser:
         node = Mock()
         node.approver_ids = ""
         assert _node_query_for_user(node, 1) is False
-
-
-# ========================= _resolve_actor ================================
 
 
 class TestResolveActor:
@@ -279,9 +254,6 @@ class TestResolveActor:
             assert result is None
 
 
-# ========================= _audit ========================================
-
-
 class TestAudit:
     def test_audit_writes_to_db(self):
         db = MagicMock()
@@ -308,9 +280,6 @@ class TestAudit:
         _audit(db, actor=1, action="test.action", payload={"k": "v"})
 
 
-# ========================= _next_node ====================================
-
-
 class TestNextNode:
     def test_finds_next(self):
         n1 = Mock(node_order=1)
@@ -331,9 +300,6 @@ class TestNextNode:
         assert _next_node([n1, n2], 0) is n1
 
 
-# ========================= _ordered_nodes ================================
-
-
 class TestOrderedNodes:
     def test_ordered_nodes_query(self):
         db = MagicMock()
@@ -345,9 +311,6 @@ class TestOrderedNodes:
         result = _ordered_nodes(db, flow_id=1)
         assert result == []
         db.query.assert_called_once_with(ApprovalFlowNode)
-
-
-# ========================= _request_to_dict ==============================
 
 
 class TestRequestToDict:
@@ -414,9 +377,6 @@ class TestRequestToDict:
         assert result["records"] == []
 
 
-# ========================= _normalize_statuses ===========================
-
-
 class TestNormalizeStatuses:
     def test_none_returns_final(self):
         result = _normalize_statuses(None)
@@ -427,21 +387,9 @@ class TestNormalizeStatuses:
             ApprovalStatus.CANCELLED.value,
         }
 
-    def test_string_all(self):
-        result = _normalize_statuses("all")
-        assert len(result) == 4
-
-    def test_string_completed(self):
-        result = _normalize_statuses("completed")
-        assert len(result) == 4
-
-    def test_string_final(self):
-        result = _normalize_statuses("final")
-        assert len(result) == 4
-
-    def test_string_empty(self):
-        result = _normalize_statuses("")
-        assert len(result) == 4
+    @pytest.mark.parametrize("value", ["all", "completed", "final", ""])
+    def test_terminal_aliases(self, value):
+        assert len(_normalize_statuses(value)) == 4
 
     def test_string_comma_separated(self):
         result = _normalize_statuses("approved,rejected")
@@ -470,9 +418,6 @@ class TestNormalizeStatuses:
     def test_empty_list(self):
         result = _normalize_statuses([])
         assert len(result) == 4
-
-
-# ========================= _close_request_if_needed ======================
 
 
 class TestCloseRequestIfNeeded:
@@ -510,9 +455,6 @@ class TestCloseRequestIfNeeded:
         )
         # None treated as 0, so n1 (order=1) is next
         assert status == ApprovalStatus.IN_PROGRESS.value
-
-
-# ========================= list_requests =================================
 
 
 class TestListRequests:
@@ -656,9 +598,6 @@ class TestListRequests:
             assert result["success"] is True
 
 
-# ========================= cleanup_requests ==============================
-
-
 class TestCleanupRequests:
     def test_cleanup_no_actor_raises_401(self):
         request = Mock()
@@ -791,9 +730,6 @@ class TestCleanupRequests:
             assert result["data"]["deleted"] == 0
 
 
-# ========================= get_request_detail ============================
-
-
 class TestGetRequestDetail:
     def test_found(self):
         mock_db = MagicMock()
@@ -821,9 +757,6 @@ class TestGetRequestDetail:
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = get_request_detail(999)
             assert result.status_code == 404
-
-
-# ========================= submit_request ================================
 
 
 class TestSubmitRequest:
@@ -935,17 +868,44 @@ class TestSubmitRequest:
         assert exc_info.value.status_code == 400
 
 
-# ========================= approve_request ===============================
-
-
 class TestApproveRequest:
-    def test_resume_pending_ai_workflow_after_approval_executes_engine(self):
+    @pytest.mark.parametrize("legacy", [False, True])
+    def test_resume_pending_ai_workflow_after_approval_executes_engine(self, legacy):
+        from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
+        from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+
+        repo = InMemoryAgentRunRepository()
+        context = {"local_user_id": "u1", "tenant_id": "t1", "message": "写入客户"}
+        if legacy:
+            with patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ):
+                traced = attach_chat_trace_run(
+                    {
+                        "legacy_tool_records": [
+                            {
+                                "tool_id": "execute_erp_capability",
+                                "action": "write",
+                                "params": {"tool_id": "business_db", "action": "write"},
+                                "output": {
+                                    "success": False,
+                                    "pending_approval": True,
+                                    "approval": {"approval_request_ids": ["req-ai-1"]},
+                                },
+                            }
+                        ]
+                    },
+                    message="写入客户",
+                    runtime_context=context,
+                )
+                context["agent_run_id"] = traced["run_id"]
         plan = SimpleNamespace(plan_id="plan-ai", intent="business_db_write", nodes=[object()])
         svc = MagicMock()
         svc.approve.return_value = True
         svc.get_pending_workflow.return_value = {
             "plan": plan,
-            "runtime_context": {"message": "写入客户"},
+            "runtime_context": context,
         }
         node_result = SimpleNamespace(
             node_id="write_customer",
@@ -956,6 +916,7 @@ class TestApproveRequest:
             retries=0,
             retryable=True,
             recovery_hint="",
+            output={"success": True, "data": {"id": 42}},
         )
         run_result = SimpleNamespace(
             success=True,
@@ -966,6 +927,10 @@ class TestApproveRequest:
         engine.run.return_value = run_result
 
         with (
+            patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ),
             patch("app.application.workflow.get_approval_service", return_value=svc),
             patch("app.application.workflow.WorkflowEngine", return_value=engine),
             patch("app.fastapi_routes.domains.misc.helpers._dispatch_tool_for_approval"),
@@ -983,6 +948,13 @@ class TestApproveRequest:
         svc.approve.assert_called_once_with("req-ai-1", "同意")
         svc.remove_pending_workflow.assert_called_once_with("req-ai-1")
         engine.run.assert_called_once()
+        if legacy:
+            assert out["agent_run_id"] == context["agent_run_id"]
+            run = repo.get(out["agent_run_id"])
+            task = repo.get_task(user_id="u1", tenant_id="t1", task_id=run.run_id)
+            assert run.status == task.status == "completed"
+            assert task.attention_state != "approval_required"
+            assert run.final_output["business_result"]["facts"]["id"] == 42
 
     def test_resume_pending_ai_workflow_continues_exact_agent_run_step(self):
         svc = MagicMock()
@@ -1530,9 +1502,6 @@ class TestApproveRequest:
         mock_db.commit.assert_not_called()
 
 
-# ========================= reject_request ================================
-
-
 class TestRejectRequest:
     def test_no_actor_raises_401(self):
         request = Mock()
@@ -1841,9 +1810,6 @@ class TestRejectRequest:
         svc.remove_pending_workflow.assert_called_once_with("req-ai-1")
 
 
-# ========================= withdraw_request ==============================
-
-
 class TestWithdrawRequest:
     def test_no_actor_raises_401(self):
         request = Mock()
@@ -2003,9 +1969,6 @@ class TestWithdrawRequest:
             assert result["success"] is True
 
 
-# ========================= delete_request ================================
-
-
 class TestDeleteRequest:
     def test_no_actor_raises_401(self):
         request = Mock()
@@ -2102,9 +2065,6 @@ class TestDeleteRequest:
             mock_db.delete.assert_called_once_with(req)
 
 
-# ========================= get_approval_users ============================
-
-
 class TestGetApprovalUsers:
     def test_with_user_model(self):
         mock_db = MagicMock()
@@ -2157,9 +2117,6 @@ class TestGetApprovalUsers:
             assert "data" in result
 
 
-# ========================= check_approver_orphan =========================
-
-
 class TestCheckApproverOrphan:
     def test_no_orphan(self):
         mock_db = MagicMock()
@@ -2200,9 +2157,6 @@ class TestCheckApproverOrphan:
             assert len(result["orphan_flows"]) == 1
 
 
-# ========================= process_approval_timeouts_endpoint ============
-
-
 class TestProcessApprovalTimeoutsEndpoint:
     def test_success(self):
         with patch(
@@ -2219,9 +2173,6 @@ class TestProcessApprovalTimeoutsEndpoint:
             mock_pt.return_value = {"success": False, "message": "error"}
             result = process_approval_timeouts_endpoint()
             assert result.status_code == 500
-
-
-# ========================= list_flows ====================================
 
 
 class TestListFlows:
@@ -2255,9 +2206,6 @@ class TestListFlows:
             assert result["success"] is True
 
 
-# ========================= get_flow_detail ===============================
-
-
 class TestGetFlowDetail:
     def test_found(self):
         mock_db = MagicMock()
@@ -2284,9 +2232,6 @@ class TestGetFlowDetail:
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = get_flow_detail(999)
             assert result.status_code == 404
-
-
-# ========================= create_flow ===================================
 
 
 class TestCreateFlow:
@@ -2432,9 +2377,6 @@ class TestCreateFlow:
             assert result["success"] is True
 
 
-# ========================= update_flow ===================================
-
-
 class TestUpdateFlow:
     def test_not_found(self):
         request = Mock()
@@ -2473,9 +2415,6 @@ class TestUpdateFlow:
             result = update_flow(1, request, body={"flow_name": "Updated"})
             assert result["success"] is True
             mock_db.commit.assert_called()
-
-
-# ========================= toggle_flow_active ============================
 
 
 class TestToggleFlowActive:
@@ -2537,9 +2476,6 @@ class TestToggleFlowActive:
             result = toggle_flow_active(1, request, body={"is_active": False})
             assert result["success"] is True
             assert result["is_active"] is False
-
-
-# ========================= delete_flow ===================================
 
 
 class TestDeleteFlow:
@@ -2621,7 +2557,6 @@ class TestDeleteFlow:
             assert flow.is_active is False
 
 
-# ========================= 可靠快照恢复（进程重启） =========================
 class TestHasPendingAiWorkflow:
     """工作台判定"存在待审批 AI 工作流"：内存快速路径 + 持久化快照兜底。"""
 

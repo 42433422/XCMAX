@@ -1,21 +1,4 @@
-"""测试 legacy_chat_adapter 的补充分支覆盖。
-
-覆盖目标（test_legacy_chat_adapter.py 未覆盖的方法与分支）：
-- _should_replace_tool_result: 各分支（previous None / new None / success 组合 / download_url）
-- _record_tool_result: 各分支（payload None / requires_token / download_url / replace）
-- _tool_action_from_payload: 各分支（action 存在 / excel 工具 / 默认）
-- _append_last_tool_record: 各分支（JSON 解析失败 / 非 dict / 正常）
-- _attach_last_tool_records: 各分支（有记录 / 无记录）
-- clear_last_tool_result: 清空记录
-- get_last_tool_records: 各分支（无记录 / 有记录 / 非列表）
-- get_last_tool_result: 各分支（无记录 / 有记录 / output 非 dict）
-- reset_last_tool_result: 重置 ContextVar
-- _call_model_completion: 各分支（client None / client 提供）
-- append_tool_messages: 补充分支（并行重复 / 并行 requires_token / 无 execute_tool）
-- chat: 补充分支（system_prompt / runtime_context / 无 tool_calls / tool_outputs 累积）
-- chat_stream_text: 补充分支（delta None / tool_calls 跨 chunk 累积 / finish_reason / post_tool_round_hint）
-- chat_stream_sse_events: 补充分支（token_description / message fallback）
-"""
+"""legacy_chat_adapter 工具轨迹、并行去重、聊天和流式审批等待的分支回归。"""
 
 from __future__ import annotations
 
@@ -45,9 +28,7 @@ from app.legacy.chat.legacy_chat_adapter import (
     reset_planner_tool_dedup_state,
 )
 
-# ---------------------------------------------------------------------------
 # helpers
-# ---------------------------------------------------------------------------
 
 
 class _Fn:
@@ -72,9 +53,7 @@ def _reset_state():
     reset_last_tool_result()
 
 
-# ---------------------------------------------------------------------------
 # _should_replace_tool_result
-# ---------------------------------------------------------------------------
 
 
 class TestShouldReplaceToolResultEdge:
@@ -136,9 +115,7 @@ class TestShouldReplaceToolResultEdge:
         assert _should_replace_tool_result(previous, new) is False
 
 
-# ---------------------------------------------------------------------------
 # _record_tool_result
-# ---------------------------------------------------------------------------
 
 
 class TestRecordToolResultEdge:
@@ -190,9 +167,7 @@ class TestRecordToolResultEdge:
         assert result["success"] is None
 
 
-# ---------------------------------------------------------------------------
 # _tool_action_from_payload
-# ---------------------------------------------------------------------------
 
 
 class TestToolActionFromPayloadEdge:
@@ -226,9 +201,7 @@ class TestToolActionFromPayloadEdge:
         assert _tool_action_from_payload("any_tool", {}) == "execute"
 
 
-# ---------------------------------------------------------------------------
 # _append_last_tool_record
-# ---------------------------------------------------------------------------
 
 
 class TestAppendLastToolRecordEdge:
@@ -316,9 +289,7 @@ class TestAppendLastToolRecordEdge:
         assert len(records) == 1
 
 
-# ---------------------------------------------------------------------------
 # _attach_last_tool_records
-# ---------------------------------------------------------------------------
 
 
 class TestAttachLastToolRecordsEdge:
@@ -344,9 +315,7 @@ class TestAttachLastToolRecordsEdge:
         assert result is payload
 
 
-# ---------------------------------------------------------------------------
 # clear_last_tool_result / get_last_tool_records / get_last_tool_result
-# ---------------------------------------------------------------------------
 
 
 class TestClearAndGetLastToolEdge:
@@ -417,9 +386,7 @@ class TestClearAndGetLastToolEdge:
         assert records == []
 
 
-# ---------------------------------------------------------------------------
 # _call_model_completion
-# ---------------------------------------------------------------------------
 
 
 class TestCallModelCompletionEdge:
@@ -497,9 +464,7 @@ class TestCallModelCompletionEdge:
         assert result == ""
 
 
-# ---------------------------------------------------------------------------
 # append_tool_messages 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestAppendToolMessagesExtraEdge:
@@ -601,9 +566,7 @@ class TestAppendToolMessagesExtraEdge:
         assert messages[0]["role"] == "tool"
 
 
-# ---------------------------------------------------------------------------
 # chat 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestChatExtraEdge:
@@ -803,9 +766,7 @@ class TestChatExtraEdge:
         assert result["text"] == "Default client response"
 
 
-# ---------------------------------------------------------------------------
 # chat_stream_text 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestChatStreamTextExtraEdge:
@@ -1061,7 +1022,10 @@ class TestChatStreamTextExtraEdge:
             parts = list(chat_stream_text("hi"))
         assert "Hello" in parts
 
-    def test_max_iterations_reached(self):
+    @pytest.mark.parametrize("pending", [False, True])
+    @pytest.mark.parametrize("entry", [chat_stream_text, chat_stream_sse_events])
+    @pytest.mark.parametrize("iterations", [1, 2])
+    def test_max_iterations_reached(self, pending, entry, iterations):
         mock_client = MagicMock()
         chunk = MagicMock()
         chunk.choices = [MagicMock()]
@@ -1080,7 +1044,9 @@ class TestChatStreamTextExtraEdge:
         mock_client.chat.completions.create.return_value = iter([chunk])
         mock_client.is_modstore_openai_compatible = False
 
-        execute_tool = MagicMock(return_value='{"success": true}')
+        execute_tool = MagicMock(
+            return_value=json.dumps({"success": not pending, "pending_approval": pending})
+        )
 
         with (
             patch(
@@ -1093,17 +1059,16 @@ class TestChatStreamTextExtraEdge:
             ),
         ):
             parts = list(
-                chat_stream_text(
-                    "analyze", client=mock_client, model="test-model", max_iterations=1
-                )
+                entry("analyze", client=mock_client, model="test-model", max_iterations=iterations)
             )
-        # 应该有内容产出
         assert len(parts) > 0
+        assert ("最大迭代" in json.dumps(parts, ensure_ascii=False)) is not pending
+        assert mock_client.chat.completions.create.call_count == (1 if pending else iterations)
+        if pending:
+            assert "审批请求已创建" in json.dumps(parts, ensure_ascii=False)
 
 
-# ---------------------------------------------------------------------------
 # chat_stream_sse_events 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestChatStreamSseEventsExtraEdge:
