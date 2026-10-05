@@ -77,6 +77,7 @@ SKIP_PATH_PREFIXES = (
     "FHD/contracts/",                            # 由 schema 生成的契约快照
     "FHD/dataset_rag/",                          # 数据集文件
     "成都修茈科技有限公司/corp-butler/assets/",    # 前端打包产物
+    "成都修茈科技有限公司/site/data/site-release-acceptance.json",  # 生成的验收回执
 )
 
 # 生成物横幅：文件头部声明自动生成即不计入。

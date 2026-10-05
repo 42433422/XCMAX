@@ -4,10 +4,10 @@
   "catalog_version": "2026-09-16",
   "principle": "No Evidence, No Claim：总体状态由各平台实机验收记录自动汇总，目录不存放可手写的状态；缺证据的平台固定显示「待验证」。",
   "stats": {
-    "total": 158,
+    "total": 157,
     "by_status": {
       "verified": 55,
-      "partial": 95,
+      "partial": 94,
       "implemented": 4,
       "planned": 4
     },
@@ -17,24 +17,24 @@
     "verified_total": 55,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
-      "windows": 99,
-      "macos": 100,
+      "windows": 98,
+      "macos": 99,
       "web": 128,
       "android": 8,
       "ios": 1
     },
     "platform_coverage": {
       "windows": {
-        "applicable": 99,
+        "applicable": 98,
         "verified": 1,
         "partial": 0,
-        "pending": 98,
+        "pending": 97,
         "last_verified_at": "2026-09-24"
       },
       "macos": {
-        "applicable": 100,
+        "applicable": 99,
         "verified": 82,
-        "partial": 14,
+        "partial": 13,
         "pending": 4,
         "last_verified_at": "2026-09-30"
       },
@@ -3668,7 +3668,7 @@
           "features": [
             {
               "id": "ind-taiyangniao",
-              "name": "太阳鸟专属 Mod",
+              "name": "客户账户及业务数据已脱敏，详细内容不公开。",
               "status": "partial",
               "platforms": [
                 "windows",
@@ -3692,38 +3692,7 @@
                   "accepted_count": 1
                 }
               ],
-              "summary": "太阳鸟客户的专属业务 Mod（受保护定制，不随通用版分发）。",
-              "featured": true,
-              "evidence_ref": null,
-              "evidence_ref_name": null
-            },
-            {
-              "id": "ind-szqsm",
-              "name": "奇士美专属 Mod",
-              "status": "partial",
-              "platforms": [
-                "windows",
-                "macos"
-              ],
-              "platform_status": [
-                {
-                  "id": "windows",
-                  "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
-                },
-                {
-                  "id": "macos",
-                  "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
-                  "run_count": 1,
-                  "accepted_count": 0
-                }
-              ],
-              "summary": "奇士美客户的专属业务 Mod（受保护定制，不随通用版分发）。",
+              "summary": "客户账户及业务数据已脱敏，详细内容不公开。",
               "featured": true,
               "evidence_ref": null,
               "evidence_ref_name": null
@@ -3998,7 +3967,7 @@
                   "accepted_count": 0
                 }
               ],
-              "summary": "支付宝当面付/订单码支付与异步回调对账，支撑余额充值与套餐购买。",
+              "summary": "客户账户及业务数据已脱敏，详细内容不公开。",
               "featured": true,
               "evidence_ref": null,
               "evidence_ref_name": null
@@ -4038,7 +4007,7 @@
                   "accepted_count": 1
                 }
               ],
-              "summary": "Token 余额、套餐与模型用量计费。",
+              "summary": "客户账户及业务数据已脱敏，详细内容不公开。",
               "featured": false,
               "evidence_ref": "pay-alipay",
               "evidence_ref_name": "支付宝支付与回调"

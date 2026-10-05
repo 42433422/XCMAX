@@ -1,19 +1,503 @@
 {
   "schema": "xcagi.site_release_acceptance/v1",
-  "release_time": "2026-09-26T11:09:01Z",
-  "git_sha": "5d32f458ecfcb737e15ce69af4209ce782eec701",
-  "site_build_sha": "6c88d30c5fada80c1be3bf46c304019e651392692e70dd34e1e3d4d390f52d5b",
+  "release_time": "2026-10-05T03:13:12Z",
+  "git_sha": "6a22a0fad9ee8922a4abfddd6894f900398f650d",
+  "site_build_sha": "ab407abd49f641d1ceafe21381cd94bdc8864ca8dc0c48a8dc217e4e2ce03ecc",
   "version": "1.0.0.5",
   "pricing_ssot_sha": "90f9bf6e9283121999805adbba4f23f6e307367c3cabfde15ea5447b06c86225",
-  "capability_ssot_sha": "3c9e28c8bcda2326ac80a82ba193d74bd7b1f27475527609ddfcfc0925a5c015",
+  "capability_ssot_sha": "dab4de135e62270cc8be2b34993b591d11cd0af96a0d98d7fbde2e9fba9dd5f3",
   "release_manifest_sha": "f6dc9598296582d160b6d4e9669c0572157d4d6d240e7cf3e0318a4c82b07fa7",
   "cases_ssot_sha": "9afe21525fbc4fd79df757a369b08ecacbfcf8e87479d95e8b2af829ae2a3397",
-  "page_count": 27,
-  "broken_links": [],
+  "page_count": 2,
+  "broken_links": [
+    "index.html → ./main.js?v=20260925a",
+    "index.html → ./styles.css?v=20260925a",
+    "index.html → /assets/xiu-ci-logo.png",
+    "index.html → /case-coating.html",
+    "index.html → /case-manufacture.html",
+    "index.html → /cases.html",
+    "index.html → /cases.html#flow",
+    "index.html → /contact.html",
+    "index.html → /contact.html#quick-inquiry",
+    "index.html → /corp-butler/corp-butler.css?v=20260925a",
+    "index.html → /corp-butler/corp-butler.js?v=20260925a",
+    "index.html → /developer.html",
+    "index.html → /download",
+    "index.html → /download/breakpoints",
+    "index.html → /download/goals",
+    "index.html → /solutions.html",
+    "index.html → /verify.html",
+    "index.html → /world-will",
+    "index.html → /world-will-ticker.css?v=20260729a",
+    "index.html → /world-will-ticker.js?v=20260729a",
+    "pricing.html → ./main.js?v=20260925a",
+    "pricing.html → ./styles.css?v=20260925a",
+    "pricing.html → /assets/site-v2.css?v=20260926a",
+    "pricing.html → /assets/xiu-ci-logo.png",
+    "pricing.html → /cases.html",
+    "pricing.html → /contact.html",
+    "pricing.html → /developer.html",
+    "pricing.html → /download",
+    "pricing.html → /download/breakpoints",
+    "pricing.html → /download/goals",
+    "pricing.html → /solutions.html",
+    "pricing.html → /verify.html",
+    "pricing.html → /world-will"
+  ],
   "hardcoded_fact_violations": [],
   "video_test": "pass",
   "video_problems": [],
   "upstream_evidence_drift": [
+    {
+      "feature": "ai-chat-core",
+      "file": "ai-chat-core-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-chat-core",
+      "file": "ai-chat-core-ai-chat-core-web-20260929-135243.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-chat-debug",
+      "file": "ai-chat-debug-ai-chat-debug-web-20260929-062651.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-csv",
+      "file": "ai-csv-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-csv",
+      "file": "ai-csv-ai-csv-web-20260929-135544.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-employee-pack",
+      "file": "ai-employee-pack-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-employee-pack",
+      "file": "ai-employee-pack-ai-employee-pack-web-20260929-135446.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-employee-publish",
+      "file": "ai-employee-publish-ai-employee-publish-web-20260929-062919.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-employee-runtime",
+      "file": "ai-employee-runtime-ai-employee-runtime-web-20260929-062731.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-employees-workflow",
+      "file": "ai-employees-workflow-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-employees-workflow",
+      "file": "ai-employees-workflow-ai-employees-workflow-web-20260929-135432.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-eskill",
+      "file": "ai-eskill-ai-eskill-web-20260929-062747.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-excel",
+      "file": "ai-excel-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-excel",
+      "file": "ai-excel-ai-excel-web-20260929-135501.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-intent",
+      "file": "ai-intent-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-intent",
+      "file": "ai-intent-ai-intent-web-20260929-135257.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-knowledge",
+      "file": "ai-knowledge-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-knowledge",
+      "file": "ai-knowledge-ai-knowledge-web-20260929-135529.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-model-access",
+      "file": "ai-model-access-ai-model-access-web-20260929-062451.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-multimodal",
+      "file": "ai-multimodal-ai-multimodal-web-20260929-063048.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-ocr-doc",
+      "file": "ai-ocr-doc-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-ocr-doc",
+      "file": "ai-ocr-doc-ai-ocr-doc-web-20260929-135641.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-pdf",
+      "file": "ai-pdf-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-pdf",
+      "file": "ai-pdf-ai-pdf-web-20260929-135558.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-ppt",
+      "file": "ai-ppt-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-ppt",
+      "file": "ai-ppt-ai-ppt-web-20260929-135612.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-run-monitor",
+      "file": "ai-run-monitor-ai-run-monitor-web-20260929-062820.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-task-workspace",
+      "file": "ai-task-workspace-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-task-workspace",
+      "file": "ai-task-workspace-ai-task-workspace-web-20260929-135311.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-tts",
+      "file": "ai-tts-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-tts",
+      "file": "ai-tts-ai-tts-web-20260929-135515.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-vector-rag",
+      "file": "ai-vector-rag-ai-vector-rag-web-20260929-062839.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-word",
+      "file": "ai-word-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ai-word",
+      "file": "ai-word-ai-word-web-20260929-135626.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-account-security",
+      "file": "base-account-security-base-account-security-web-20260929-082903.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-config",
+      "file": "base-config-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-db",
+      "file": "base-db-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-device-bind",
+      "file": "base-device-bind-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-diagnostics",
+      "file": "base-diagnostics-base-diagnostics-web-20260929-082917.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-edition-pack",
+      "file": "base-edition-pack-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-edition-pack",
+      "file": "base-edition-pack-base-edition-pack-web-20260929-135157.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-health",
+      "file": "base-health-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-health",
+      "file": "base-health-base-health-web-20260929-135211.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-help",
+      "file": "base-help-base-help-web-20260929-082538.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-install-guide",
+      "file": "base-install-guide-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
     {
       "feature": "base-login",
       "file": "base-login-base-login-web-20260924-015410.mp4",
@@ -41,11 +525,23 @@
       "action": "not-published"
     },
     {
+      "feature": "base-mac-client",
+      "file": "base-mac-client-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
       "feature": "base-rbac",
-      "file": "base-rbac-base-rbac.png",
-      "kind": "sha-mismatch-not-published",
-      "recorded_sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
-      "actual_sha256": "9c62e8a431250b1720eeab6c03dd6a72fecab906b6d087cd510acc9dd645ec17",
+      "file": "base-rbac-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
       "action": "not-published"
     },
     {
@@ -58,10 +554,12 @@
     },
     {
       "feature": "base-rbac",
-      "file": "base-rbac-base-rbac.png",
-      "kind": "sha-mismatch-not-published",
-      "recorded_sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
-      "actual_sha256": "9c62e8a431250b1720eeab6c03dd6a72fecab906b6d087cd510acc9dd645ec17",
+      "file": "base-rbac-base-rbac-web-20260929-135143.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
       "action": "not-published"
     },
     {
@@ -71,30 +569,1755 @@
         "原始录像不可追溯"
       ],
       "action": "not-published"
-    }
-  ],
-  "video_inventory": [
-    {
-      "file": "base-login-03-login-operation-web.mp4",
-      "duration_seconds": 47.0,
-      "codec": "avc1",
-      "sha256": "27210eeb7c3fdc2a",
-      "poster": "/capabilities/assets/evidence/base-login-03-postlogin-screen.png"
     },
     {
-      "file": "base-login-05c-gui-logout-operation-web.mp4",
-      "duration_seconds": 21.1,
-      "codec": "avc1",
-      "sha256": "fcd8ede9041e3be4",
-      "poster": "/capabilities/assets/evidence/base-login-03-postlogin-screen.png"
+      "feature": "base-register",
+      "file": "base-register-base-register-web-20260929-082459.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-settings",
+      "file": "base-settings-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-settings",
+      "file": "base-settings-base-settings-web-20260929-135229.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-update-mgmt",
+      "file": "base-update-mgmt-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-web-admin",
+      "file": "base-web-admin-base-web-admin-web-20260929-082432.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-asr",
+      "file": "ch-asr-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-asr",
+      "file": "ch-asr-ch-asr-web-20260929-155952.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-im-core",
+      "file": "ch-im-core-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-im-core",
+      "file": "ch-im-core-ch-im-core-web-20260929-160430.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-im-cs",
+      "file": "ch-im-cs-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-im-cs",
+      "file": "ch-im-cs-ch-im-cs-web-20260929-160147.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-im-super",
+      "file": "ch-im-super-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-im-super",
+      "file": "ch-im-super-ch-im-super-web-20260929-142652.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-im-ws",
+      "file": "ch-im-ws-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-im-ws",
+      "file": "ch-im-ws-ch-im-ws-web-20260929-142709.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-mobile-qr",
+      "file": "ch-mobile-qr-ch-mobile-qr-web-20260929-160202.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-notify",
+      "file": "ch-notify-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-notify",
+      "file": "ch-notify-ch-notify-web-20260929-160450.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-realtime-voice",
+      "file": "ch-realtime-voice-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-task-center",
+      "file": "ch-task-center-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-task-center",
+      "file": "ch-task-center-ch-task-center-web-20260929-142636.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-wechat-contacts",
+      "file": "ch-wechat-contacts-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-wechat-contacts",
+      "file": "ch-wechat-contacts-ch-wechat-contacts-web-20260929-191024.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-wechat-context",
+      "file": "ch-wechat-context-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-wechat-context",
+      "file": "ch-wechat-context-ch-wechat-context-web-20260929-191040.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-wechat-ingest",
+      "file": "ch-wechat-ingest-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-wechat-ingest",
+      "file": "ch-wechat-ingest-ch-wechat-ingest-web-20260929-191000.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ch-wechat-phone",
+      "file": "ch-wechat-phone-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-cold-start-rollback",
+      "file": "dt-cold-start-rollback-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-desktop-workflow",
+      "file": "dt-desktop-workflow-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-element-find",
+      "file": "dt-element-find-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-evidence-store",
+      "file": "dt-evidence-store-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-evidence-store",
+      "file": "dt-evidence-store-dt-evidence-store-web-20260929-135718.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-install-sign",
+      "file": "dt-install-sign-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-integrity",
+      "file": "dt-integrity-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-mac-control",
+      "file": "dt-mac-control-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-neurobus",
+      "file": "dt-neurobus-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-neurobus",
+      "file": "dt-neurobus-dt-neurobus-web-20260929-135704.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-ota",
+      "file": "dt-ota-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-process-mgmt",
+      "file": "dt-process-mgmt-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-rpa",
+      "file": "dt-rpa-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "dt-shell",
+      "file": "dt-shell-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-approval",
+      "file": "erp-approval-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-approval",
+      "file": "erp-approval-erp-approval-web-20260929-152329.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-ar-ap",
+      "file": "erp-ar-ap-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-ar-ap",
+      "file": "erp-ar-ap-erp-ar-ap-web-20260929-151945.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-business-api",
+      "file": "erp-business-api-erp-business-api-web-20260929-111950.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-contract",
+      "file": "erp-contract-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-contract",
+      "file": "erp-contract-erp-contract-web-20260929-152214.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-etl",
+      "file": "erp-etl-erp-etl-web-20260929-091735.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-excel-io",
+      "file": "erp-excel-io-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-excel-io",
+      "file": "erp-excel-io-erp-excel-io-web-20260929-152158.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-finance-ledger",
+      "file": "erp-finance-ledger-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-finance-ledger",
+      "file": "erp-finance-ledger-erp-finance-ledger-web-20260929-151845.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-inventory",
+      "file": "erp-inventory-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-inventory",
+      "file": "erp-inventory-erp-inventory-web-20260929-152454.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-inventory-warehouse",
+      "file": "erp-inventory-warehouse-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-inventory-warehouse",
+      "file": "erp-inventory-warehouse-erp-inventory-warehouse-web-20260929-151813.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-invoice",
+      "file": "erp-invoice-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-invoice",
+      "file": "erp-invoice-erp-invoice-web-20260929-152017.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-label",
+      "file": "erp-label-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-label",
+      "file": "erp-label-erp-label-web-20260929-152143.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-master-data",
+      "file": "erp-master-data-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-master-data",
+      "file": "erp-master-data-erp-master-data-web-20260929-151624.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-ocr-clean",
+      "file": "erp-ocr-clean-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-ocr-clean",
+      "file": "erp-ocr-clean-erp-ocr-clean-web-20260929-152313.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-ocr",
+      "file": "erp-ocr-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-ocr",
+      "file": "erp-ocr-erp-ocr-web-20260929-152250.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-print-agent",
+      "file": "erp-print-agent-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-purchase",
+      "file": "erp-purchase-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-purchase",
+      "file": "erp-purchase-erp-purchase-web-20260929-151551.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-purchase-inbound",
+      "file": "erp-purchase-inbound-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-purchase-inbound",
+      "file": "erp-purchase-inbound-erp-purchase-inbound-web-20260929-152717.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-reconcile",
+      "file": "erp-reconcile-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-reconcile",
+      "file": "erp-reconcile-erp-reconcile-web-20260929-152032.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-replenishment",
+      "file": "erp-replenishment-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-replenishment",
+      "file": "erp-replenishment-erp-replenishment-web-20260929-151829.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-report",
+      "file": "erp-report-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-report",
+      "file": "erp-report-erp-report-web-20260929-152001.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-sales-order",
+      "file": "erp-sales-order-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-shipment",
+      "file": "erp-shipment-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-shipment",
+      "file": "erp-shipment-erp-shipment-web-20260929-151648.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-templates",
+      "file": "erp-templates-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-templates",
+      "file": "erp-templates-erp-templates-web-20260929-152047.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "erp-uom",
+      "file": "erp-uom-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-ai-assistant",
+      "file": "ind-ai-assistant-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-attendance",
+      "file": "ind-attendance-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-attendance",
+      "file": "ind-attendance-ind-attendance-web-20260929-160114.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-coating",
+      "file": "ind-coating-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-coating",
+      "file": "ind-coating-ind-coating-web-20260929-143319.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-custom-delivery",
+      "file": "ind-custom-delivery-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-custom-delivery",
+      "file": "ind-custom-delivery-ind-custom-delivery-web-20260929-164059.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-fields",
+      "file": "ind-fields-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-fields",
+      "file": "ind-fields-ind-fields-web-20260929-143011.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-lan-license",
+      "file": "ind-lan-license-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-modstore-gateway",
+      "file": "ind-modstore-gateway-ind-modstore-gateway-web-20260929-064709.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-modstore-pay",
+      "file": "ind-modstore-pay-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-modstore-pay",
+      "file": "ind-modstore-pay-ind-modstore-pay-web-20260929-150657.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-packaging",
+      "file": "ind-packaging-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-planner",
+      "file": "ind-planner-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-planner",
+      "file": "ind-planner-ind-planner-web-20260929-151518.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-szqsm",
+      "file": "ind-szqsm-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-taiyangniao",
+      "file": "ind-taiyangniao-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-workflow-viz",
+      "file": "ind-workflow-viz-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-workflow-viz",
+      "file": "ind-workflow-viz-ind-workflow-viz-web-20260929-151534.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-workspace",
+      "file": "ind-workspace-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ind-workspace",
+      "file": "ind-workspace-ind-workspace-web-20260929-160130.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-aiopen-support",
+      "file": "mods-aiopen-support-mods-aiopen-support-web-20260929-064631.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-bridge",
+      "file": "mods-bridge-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-bridge",
+      "file": "mods-bridge-mods-bridge-web-20260929-142532.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-host-mount",
+      "file": "mods-host-mount-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-host-mount",
+      "file": "mods-host-mount-mods-host-mount-web-20260929-141355.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-loader",
+      "file": "mods-loader-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-loader",
+      "file": "mods-loader-mods-loader-web-20260929-135842.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-open-api",
+      "file": "mods-open-api-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-open-api",
+      "file": "mods-open-api-mods-open-api-web-20260929-142459.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-pack-io",
+      "file": "mods-pack-io-mods-pack-io-web-20260929-064246.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-pat",
+      "file": "mods-pat-mods-pat-web-20260929-064549.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-shell",
+      "file": "mods-shell-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-shell",
+      "file": "mods-shell-mods-shell-web-20260929-142438.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-store",
+      "file": "mods-store-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-store",
+      "file": "mods-store-mods-store-web-20260929-135903.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-store-sync",
+      "file": "mods-store-sync-mods-store-sync-web-20260929-064508.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-template",
+      "file": "mods-template-mods-template-web-20260929-064418.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-toolchain",
+      "file": "mods-toolchain-mods-toolchain-web-20260929-064201.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-version",
+      "file": "mods-version-mods-version-web-20260929-064332.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-webhook",
+      "file": "mods-webhook-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "mods-webhook",
+      "file": "mods-webhook-mods-webhook-web-20260929-160413.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-admin-console",
+      "file": "ops-admin-console-ops-admin-console-web-20260929-061306.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-customer-value",
+      "file": "ops-customer-value-ops-customer-value-web-20260929-080227.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-delivery-center",
+      "file": "ops-delivery-center-ops-delivery-center-web-20260929-075932.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-delivery",
+      "file": "ops-delivery-ops-delivery-web-20260929-075821.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-delivery-sync",
+      "file": "ops-delivery-sync-ops-delivery-sync-web-20260929-080543.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-employee-gov",
+      "file": "ops-employee-gov-ops-employee-gov-web-20260929-074113.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-issue-runtime",
+      "file": "ops-issue-runtime-ops-issue-runtime-web-20260929-080007.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-monitor",
+      "file": "ops-monitor-ops-monitor-web-20260929-074256.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-pipeline",
+      "file": "ops-pipeline-ops-pipeline-web-20260929-074146.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-project-factory",
+      "file": "ops-project-factory-ops-project-factory-web-20260929-074415.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-self-heal",
+      "file": "ops-self-heal-ops-self-heal-web-20260929-074334.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-version-evolution",
+      "file": "ops-version-evolution-ops-version-evolution-web-20260929-075726.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "ops-work-order",
+      "file": "ops-work-order-ops-work-order-web-20260929-074224.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-alipay",
+      "file": "pay-alipay-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-alipay",
+      "file": "pay-alipay-pay-alipay-web-20260929-160218.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-author-revenue",
+      "file": "pay-author-revenue-pay-author-revenue-web-20260929-070223.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-backend-bridge",
+      "file": "pay-backend-bridge-pay-backend-bridge-web-20260929-070001.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-entitlement-delivery",
+      "file": "pay-entitlement-delivery-pay-entitlement-delivery-web-20260929-070204.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-entitlement",
+      "file": "pay-entitlement-pay-entitlement-web-20260929-070139.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-lan",
+      "file": "pay-lan-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-lan-settings",
+      "file": "pay-lan-settings-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-member-plan",
+      "file": "pay-member-plan-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-member-plan",
+      "file": "pay-member-plan-pay-member-plan-web-20260929-142922.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-reconcile",
+      "file": "pay-reconcile-pay-reconcile-web-20260929-065856.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-refund",
+      "file": "pay-refund-pay-refund-web-20260929-070024.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-wallet",
+      "file": "pay-wallet-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "pay-wallet",
+      "file": "pay-wallet-pay-wallet-web-20260929-142903.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-ai-trace",
+      "file": "sec-ai-trace-sec-ai-trace-web-20260929-082644.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-audit",
+      "file": "sec-audit-sec-audit-web-20260929-082604.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-audit-standard",
+      "file": "sec-audit-standard-sec-audit-standard-web-20260929-084414.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-continuous-observe",
+      "file": "sec-continuous-observe-sec-continuous-observe-web-20260929-082656.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-coverage",
+      "file": "sec-coverage-sec-coverage-web-20260929-084234.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-csp",
+      "file": "sec-csp-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-csp",
+      "file": "sec-csp-sec-csp-web-20260929-135810.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-e2e",
+      "file": "sec-e2e-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-e2e",
+      "file": "sec-e2e-sec-e2e-web-20260929-135825.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-gdpr",
+      "file": "sec-gdpr-sec-gdpr-web-20260929-082551.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-identity",
+      "file": "sec-identity-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-identity",
+      "file": "sec-identity-sec-identity-web-20260929-135734.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-model-gate",
+      "file": "sec-model-gate-sec-model-gate-web-20260929-082930.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-release-gate",
+      "file": "sec-release-gate-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-runtime-gate",
+      "file": "sec-runtime-gate-operation.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-runtime-gate",
+      "file": "sec-runtime-gate-sec-runtime-gate-web-20260929-135752.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-scan",
+      "file": "sec-scan-sec-scan-web-20260929-082617.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-slo",
+      "file": "sec-slo-sec-slo-web-20260929-082709.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "sec-tenant-isolation",
+      "file": "sec-tenant-isolation-sec-tenant-isolation-web-20260929-082630.webm",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "webm 不作官网展示",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
     }
   ],
+  "video_inventory": [],
   "ssot_drift_test": "pass",
   "ssot_drift_detail": "",
-  "mobile_test": "pass",
-  "desktop_test": "pass",
-  "video_runtime_test": "pass",
-  "range_test": "pass",
-  "result": "PASS",
+  "mobile_test": "pending",
+  "desktop_test": "pending",
+  "video_runtime_test": "pending",
+  "range_test": "pending",
+  "result": "BLOCKED",
   "_gate": "result=PASS 才允许发布；BLOCKED 必须修复；PENDING 需回填运行时结果。禁止改断言、改结果字段或删测试来过门禁。"
 }

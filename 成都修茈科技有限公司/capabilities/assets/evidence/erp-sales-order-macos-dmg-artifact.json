@@ -1,9 +1,0 @@
-{
-  "schema": "xcagi.gate.evidence.v1",
-  "gate": "macos-dmg",
-  "dmg_sha256": "08edc608565b266dd44994057e733036d907c15124f8c1dfc7b9db41a89205d0",
-  "expected_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
-  "expected_version": "1.0.0.5",
-  "codesign_ok": true,
-  "gatekeeper_ok": true
-}

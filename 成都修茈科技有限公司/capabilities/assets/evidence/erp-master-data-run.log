@@ -1,8 +1,0 @@
-2026-09-30T04:28:07+0800 [erp-master-data] 开始验收 erp-master-data 产品 / 客户 / 供应商主数据；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:28:07+0800 [erp-master-data] M1 passed :: HTTP 200 277ms；客户 id=8
-2026-09-30T04:28:07+0800 [erp-master-data] M2 passed :: HTTP 200 20ms；{"id": 5}
-2026-09-30T04:28:07+0800 [erp-master-data] M3 passed :: HTTP 400 47ms；{"success": false, "error_code": "http_400", "message": "产品名称不能为空", "path": "/api/mod/xcagi-erp-domain-bridge/products/add"}
-2026-09-30T04:28:07+0800 [erp-master-data] M4 passed :: HTTP 200 37ms；产品 5 条，含 MAC验收0929产品13687
-2026-09-30T04:28:11+0800 [erp-master-data] M5 passed :: 已在 /mod/xcagi-erp-domain-bridge/products 页面看到「MAC验收0929产品13687」；上下文：ult） | 产品价格表（Word 价目，默认） | 考勤统计表·明细导入人员 | 	型号	名称	规格	价格	操作 | 	M13687	MAC验收0929产品13687	-	¥3.50	 | 编辑 | 删除 |  | 	M84657	MAC验收0929产品84656	-	¥3.50	 | 编辑 | 删除 |  | 	M58099	MAC验收0929产品58099	-	¥3.50	 | 编辑 | 删除 |  | 	M355
-2026-09-30T04:28:12+0800 [erp-master-data] screenshot result.png
-2026-09-30T04:28:15+0800 [erp-master-data] video operation.webm bytes=360276

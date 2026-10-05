@@ -1,7 +1,0 @@
-2026-09-30T04:23:11+0800 [base-health] 开始验收 base-health 服务健康探针；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:23:16+0800 [base-health] M1 passed :: HTTP 200 4963ms；status=healthy version=1.0.0.5 neuro.running=True
-2026-09-30T04:23:16+0800 [base-health] M2 passed :: HTTP 200 254ms；alive
-2026-09-30T04:23:17+0800 [base-health] M3 passed :: HTTP 200 138ms；整体 degraded；database=healthy；redis=disabled
-2026-09-30T04:23:20+0800 [base-health] M4 passed :: 导航后路径 /settings；命中文本 ['系统正常']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮
-2026-09-30T04:23:21+0800 [base-health] screenshot result.png
-2026-09-30T04:23:25+0800 [base-health] video operation.webm bytes=397502

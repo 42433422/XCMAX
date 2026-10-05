@@ -1,8 +1,0 @@
-2026-09-30T04:36:27+0800 [ch-im-cs] 开始验收 ch-im-cs AI 客服与话术协同；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:36:31+0800 [ch-im-cs] M1 passed :: HTTP 200 3886ms；{"ok": true, "mod_id": "xcagi-customer-service-bridge", "registry": {"success": true, "mod_id": "xcagi-customer-service-bridge", "mod_page_prefix": "/mod/xcagi-
-2026-09-30T04:36:31+0800 [ch-im-cs] M2 passed :: HTTP 200 47ms；阶段 11，活跃阶段 [('未接触', 1)]
-2026-09-30T04:36:34+0800 [ch-im-cs] M3 passed :: HTTP 200 2581ms；conversation=58 cs_mode=human status=human_pending
-2026-09-30T04:36:34+0800 [ch-im-cs] M4 passed :: HTTP 200 25ms；{"success": true, "data": {"ok": true, "status": "ready", "summary": "用户客服员工已就绪：可生成需求采集话术、表单链接草稿，并保留只读资料核对能力。", "issues": [], "ready_for_response_draft": true, 
-2026-09-30T04:36:37+0800 [ch-im-cs] M5 passed :: 导航后路径 /im；命中文本 ['信息']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 信息 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 信息 | 实时已连接 | 客 | 客户消息 · 客来来在 XCMAX 内只读查看客户会话 | 💬 | 用户客服员工 | O-A 获客部 · 未安装 | 🧭 | 需求接入
-2026-09-30T04:36:38+0800 [ch-im-cs] screenshot result.png
-2026-09-30T04:36:41+0800 [ch-im-cs] video operation.webm bytes=376610
