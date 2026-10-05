@@ -82,7 +82,8 @@ def catalog_payload(data: dict) -> str:
 
 _PUBLIC_PRIVATE_MARKERS = ("sunbird", "太阳鸟", "奇士美", "余额", "真实订单")
 _PUBLIC_REDACTION = "客户账户及业务数据已脱敏，详细内容不公开。"
-_PUBLIC_PRIVATE_FEATURES = {"base-login", "ind-attendance", "erp-sales-order", "ind-szqsm"}
+_PRIVATE_EVIDENCE_FEATURES = {"base-login", "ind-attendance", "erp-sales-order", "ind-szqsm"}
+_PUBLIC_EXCLUDED_FEATURES = {"ind-szqsm"}
 
 
 def public_projection(value: object, excluded: set[str]) -> object:
@@ -92,7 +93,7 @@ def public_projection(value: object, excluded: set[str]) -> object:
         if isinstance(item, str):
             return item in excluded
         return isinstance(item, dict) and (
-            item.get("id") in _PUBLIC_PRIVATE_FEATURES
+            item.get("id") in _PUBLIC_EXCLUDED_FEATURES
             or any(isinstance(item.get(k), str) and item[k] in excluded
                    for k in ("path", "_acceptance_path", "acceptance_path", "record_path", "identity_path"))
         )
@@ -111,7 +112,7 @@ def public_projection(value: object, excluded: set[str]) -> object:
 
 def privacy_exclusions(evidence: dict, feature_id: str = "") -> set[str]:
     excluded = set(evidence.get("public_excluded_media") or [])
-    sensitive = feature_id in _PUBLIC_PRIVATE_FEATURES
+    sensitive = feature_id in _PRIVATE_EVIDENCE_FEATURES
 
     stack = [v for k, v in evidence.items() if k not in {"impl", "api", "tests", "ci", "docs"}]
     while stack:
@@ -615,7 +616,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
         for mod in dom["modules"]:
             feats_out = []
             for feat in mod["features"]:
-                if feat["id"] in _PUBLIC_PRIVATE_FEATURES:
+                if feat["id"] in _PUBLIC_EXCLUDED_FEATURES:
                     continue
                 if "status" in feat:
                     # 硬守卫：总体状态只能由平台状态自动汇总，不接受目录里手写。

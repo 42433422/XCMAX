@@ -163,18 +163,18 @@
   "platforms": [
     {
       "key": "windows",
-      "applicable": 95,
-      "verified": 0,
+      "applicable": 98,
+      "verified": 1,
       "partial": 0,
-      "pending": 95,
-      "last_verified_at": null,
+      "pending": 97,
+      "last_verified_at": "2026-09-24",
       "label": "Windows 桌面",
       "level": "签约级"
     },
     {
       "key": "macos",
-      "applicable": 96,
-      "verified": 79,
+      "applicable": 99,
+      "verified": 82,
       "partial": 13,
       "pending": 4,
       "last_verified_at": "2026-09-30",
@@ -183,10 +183,10 @@
     },
     {
       "key": "web",
-      "applicable": 125,
-      "verified": 122,
+      "applicable": 128,
+      "verified": 124,
       "partial": 0,
-      "pending": 3,
+      "pending": 4,
       "last_verified_at": "2026-09-29",
       "label": "Web / 后端",
       "level": "签约级"
@@ -213,10 +213,10 @@
     }
   ],
   "capabilities": {
-    "total": 154,
+    "total": 157,
     "by_status": {
-      "verified": 54,
-      "partial": 92,
+      "verified": 55,
+      "partial": 94,
       "implemented": 4,
       "planned": 4
     },
@@ -227,18 +227,18 @@
     "platforms": [
       {
         "key": "windows",
-        "applicable": 95,
-        "verified": 0,
+        "applicable": 98,
+        "verified": 1,
         "partial": 0,
-        "pending": 95,
-        "last_verified_at": null,
+        "pending": 97,
+        "last_verified_at": "2026-09-24",
         "label": "Windows 桌面",
         "level": "签约级"
       },
       {
         "key": "macos",
-        "applicable": 96,
-        "verified": 79,
+        "applicable": 99,
+        "verified": 82,
         "partial": 13,
         "pending": 4,
         "last_verified_at": "2026-09-30",
@@ -247,10 +247,10 @@
       },
       {
         "key": "web",
-        "applicable": 125,
-        "verified": 122,
+        "applicable": 128,
+        "verified": 124,
         "partial": 0,
-        "pending": 3,
+        "pending": 4,
         "last_verified_at": "2026-09-29",
         "label": "Web / 后端",
         "level": "签约级"

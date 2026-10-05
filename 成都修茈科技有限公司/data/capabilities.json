@@ -4,45 +4,45 @@
   "catalog_version": "2026-09-16",
   "principle": "No Evidence, No Claim：总体状态由各平台实机验收记录自动汇总，目录不存放可手写的状态；缺证据的平台固定显示「待验证」。",
   "stats": {
-    "total": 154,
+    "total": 157,
     "by_status": {
-      "verified": 54,
-      "partial": 92,
+      "verified": 55,
+      "partial": 94,
       "implemented": 4,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 54,
+    "verified_total": 55,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
-      "windows": 95,
-      "macos": 96,
-      "web": 125,
+      "windows": 98,
+      "macos": 99,
+      "web": 128,
       "android": 8,
       "ios": 1
     },
     "platform_coverage": {
       "windows": {
-        "applicable": 95,
-        "verified": 0,
+        "applicable": 98,
+        "verified": 1,
         "partial": 0,
-        "pending": 95,
-        "last_verified_at": null
+        "pending": 97,
+        "last_verified_at": "2026-09-24"
       },
       "macos": {
-        "applicable": 96,
-        "verified": 79,
+        "applicable": 99,
+        "verified": 82,
         "partial": 13,
         "pending": 4,
         "last_verified_at": "2026-09-30"
       },
       "web": {
-        "applicable": 125,
-        "verified": 122,
+        "applicable": 128,
+        "verified": 124,
         "partial": 0,
-        "pending": 3,
+        "pending": 4,
         "last_verified_at": "2026-09-29"
       },
       "android": {
@@ -121,6 +121,46 @@
           "id": "base-auth",
           "name": "账户与认证",
           "features": [
+            {
+              "id": "base-login",
+              "name": "登录与会话管理",
+              "status": "verified",
+              "platforms": [
+                "windows",
+                "macos",
+                "web"
+              ],
+              "platform_status": [
+                {
+                  "id": "windows",
+                  "name": "Windows 桌面",
+                  "status": "verified",
+                  "verified_at": "2026-09-24",
+                  "run_count": 1,
+                  "accepted_count": 1
+                },
+                {
+                  "id": "macos",
+                  "name": "macOS 桌面",
+                  "status": "verified",
+                  "verified_at": "2026-09-22",
+                  "run_count": 1,
+                  "accepted_count": 1
+                },
+                {
+                  "id": "web",
+                  "name": "Web",
+                  "status": "verified",
+                  "verified_at": "2026-09-24",
+                  "run_count": 1,
+                  "accepted_count": 1
+                }
+              ],
+              "summary": "企业统一的账号登录、会话保持与安全退出，桌面端与 Web 端共用同一套账户体系。",
+              "featured": true,
+              "evidence_ref": null,
+              "evidence_ref_name": null
+            },
             {
               "id": "base-rbac",
               "name": "权限与角色控制（RBAC）",
@@ -1510,6 +1550,46 @@
                 }
               ],
               "summary": "主数据的维护与变更。",
+              "featured": false,
+              "evidence_ref": "erp-shipment",
+              "evidence_ref_name": "发货单与出货管理"
+            },
+            {
+              "id": "erp-sales-order",
+              "name": "销售订单管理",
+              "status": "partial",
+              "platforms": [
+                "windows",
+                "macos",
+                "web"
+              ],
+              "platform_status": [
+                {
+                  "id": "windows",
+                  "name": "Windows 桌面",
+                  "status": "pending",
+                  "verified_at": null,
+                  "run_count": 0,
+                  "accepted_count": 0
+                },
+                {
+                  "id": "macos",
+                  "name": "macOS 桌面",
+                  "status": "verified",
+                  "verified_at": "2026-09-30",
+                  "run_count": 1,
+                  "accepted_count": 1
+                },
+                {
+                  "id": "web",
+                  "name": "Web",
+                  "status": "pending",
+                  "verified_at": null,
+                  "run_count": 0,
+                  "accepted_count": 0
+                }
+              ],
+              "summary": "销售订单创建与流转。",
               "featured": false,
               "evidence_ref": "erp-shipment",
               "evidence_ref_name": "发货单与出货管理"
@@ -3416,6 +3496,46 @@
                 }
               ],
               "summary": "面向饰品包装行业的成品、原材料仓库与库存管理 Mod（实机截图见桌面壳与 OTA 证据页）。",
+              "featured": true,
+              "evidence_ref": null,
+              "evidence_ref_name": null
+            },
+            {
+              "id": "ind-attendance",
+              "name": "考勤行业包",
+              "status": "partial",
+              "platforms": [
+                "windows",
+                "macos",
+                "web"
+              ],
+              "platform_status": [
+                {
+                  "id": "windows",
+                  "name": "Windows 桌面",
+                  "status": "pending",
+                  "verified_at": null,
+                  "run_count": 0,
+                  "accepted_count": 0
+                },
+                {
+                  "id": "macos",
+                  "name": "macOS 桌面",
+                  "status": "verified",
+                  "verified_at": "2026-09-30",
+                  "run_count": 1,
+                  "accepted_count": 1
+                },
+                {
+                  "id": "web",
+                  "name": "Web",
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
+                }
+              ],
+              "summary": "考勤转换、排班、考勤机打印与人事管理的行业工作区，已在实机验收中运行。",
               "featured": true,
               "evidence_ref": null,
               "evidence_ref_name": null
