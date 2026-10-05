@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from types import SimpleNamespace
 from typing import Any
 
 from app.infrastructure.llm.client import llm_client_scope
@@ -177,7 +178,6 @@ def chat_stream_text(
         text_parts: list[str] = []
         tool_calls_by_idx: dict[int, Any] = {}
         finish_reason = None
-        has_tool_call = False
         for chunk in stream:
             choice = chunk.choices[0]
             finish_reason = getattr(choice, "finish_reason", None)
@@ -208,8 +208,7 @@ def chat_stream_text(
                     if fn_name:
                         cur["function"]["name"] = fn_name
                     cur["function"]["arguments"] += str(getattr(fn, "arguments", "") or "")
-                has_tool_call = True
-        if has_tool_call and tool_calls_by_idx:
+        if tool_calls_by_idx:
             for v in tool_calls_by_idx.values():
                 tool_name = str(v.get("function", {}).get("name", "") or "")
                 raw_args = str(v.get("function", {}).get("arguments") or "")
@@ -220,26 +219,13 @@ def chat_stream_text(
                     if slow:
                         yield slow
         if finish_reason == "tool_calls" or tool_calls_by_idx:
-
-            class _Fn:
-                def __init__(self, name: str, arguments: str) -> None:
-                    self.name = name
-                    self.arguments = arguments
-
-            class _Tc:
-                def __init__(self, tc_id: str, name: str, arguments: str) -> None:
-                    self.id = tc_id
-                    self.function = _Fn(name, arguments)
-
-            tcs = []
-            for v in tool_calls_by_idx.values():
-                tcs.append(
-                    _Tc(
-                        v.get("id") or "",
-                        v.get("function", {}).get("name") or "",
-                        v.get("function", {}).get("arguments") or "",
-                    )
+            tcs = [
+                SimpleNamespace(
+                    id=v.get("id") or "",
+                    function=SimpleNamespace(**v["function"]),
                 )
+                for v in tool_calls_by_idx.values()
+            ]
             formatted_tool_calls = [
                 {
                     "id": t.id,
@@ -272,19 +258,13 @@ def chat_stream_text(
             n_tail = len(tcs)
             tool_payloads: list[dict[str, Any]] = []
             if n_tail:
-                collected: list[dict[str, Any]] = []
-                for j in range(len(messages) - 1, -1, -1):
-                    m = messages[j]
+                for m in messages[-n_tail:]:
                     if m.get("role") != "tool":
-                        break
+                        continue
                     try:
-                        collected.append(json.loads(str(m.get("content") or "{}")))
+                        tool_payloads.append(json.loads(str(m.get("content") or "{}")))
                     except json.JSONDecodeError:
-                        collected.append({})
-                    if len(collected) >= n_tail:
-                        break
-                collected.reverse()
-                tool_payloads = collected
+                        tool_payloads.append({})
                 while len(tool_payloads) < n_tail:
                     tool_payloads.append({})
             yield _facade()._post_tool_round_hint(tcs, tool_payloads)
@@ -296,7 +276,7 @@ def chat_stream_text(
             raise _facade().EmptyMultimodalResponseError(
                 f"模型 {mdl} 完成了图片处理请求，但没有返回可显示的正文。系统已停止重复空请求，请重试或切换视觉模型。"
             )
-    return
+    yield {"_planner_sse": "error", "message": "对话达到最大迭代次数，未完成。"}
 
 
 def chat_stream_sse_events(
@@ -320,13 +300,25 @@ def chat_stream_sse_events(
         model=model,
         client=client,
     ):
+        if isinstance(item, dict) and item.get("_planner_sse") == "error":
+            yield {
+                "type": "error",
+                "message": item["message"],
+                "result": _facade()._attach_last_tool_records({}),
+            }
+            return
         if isinstance(item, dict) and item.get("_planner_sse") == "requires_token":
             td = str(
                 item.get("token_description") or item.get("message") or "数据库写入授权令牌"
             ).strip()
             tn = str(item.get("token_name") or "DB_WRITE_TOKEN").strip()
             yield {"type": "token", "text": f"\n[需要授权: {td}]\n"}
-            yield {"type": "requires_token", "token_name": tn, "token_description": td}
+            yield {
+                "type": "requires_token",
+                "token_name": tn,
+                "token_description": td,
+                "result": _facade()._attach_last_tool_records({}),
+            }
             return
         yield {"type": "token", "text": str(item)}
-    yield {"type": "done"}
+    yield {"type": "done", "result": _facade()._attach_last_tool_records({})}
