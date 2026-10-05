@@ -99,7 +99,7 @@ function inlineFormat(raw: string, ph: PlaceholderTable): string {
     const u = safeUrl(url)
     if (!u) return label
     const t = title ? ` title="${title}"` : ''
-    return `<a href="${u}"${t} target="_blank" rel="noopener noreferrer" class="md-link">${label}</a>`
+    return `<a href="${u}"${t} target="${/^\/api\/agent\/runs\/[^/]+\/artifacts\//.test(u) ? '_self' : '_blank'}" rel="noopener noreferrer" class="md-link">${label}</a>`
   })
 
   s = s.replace(/(^|[\s(])(https?:\/\/[^\s<>()]+)(?=[)\s]|$)/g, (_m, lead, url) => {
