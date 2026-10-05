@@ -1,10 +1,4 @@
-/** 轻量 Markdown -> HTML 渲染器（自包含、零依赖）。
- * - 覆盖 chat 场景：标题、列表、引用、行内/块代码、表格、加粗/斜体/删除线、链接、图片、行内公式 \(...\)、块级公式 \[...\]、Mermaid 占位
- * - 纯文本走 escapeHtml，不解析 raw HTML；safeUrl 拒绝脚本协议和非图片 data URL。
- * - mermaid 代码块输出 <div class="md-mermaid" data-source="...">，调用方负责异步替换为渲染后的 SVG
- * - 块级公式输出 <div class="md-math md-math-block" data-tex="...">；行内公式输出 <span class="md-math md-math-inline" data-tex="...">
- * - 普通代码块输出 <pre class="md-code"><code class="md-code__body" data-lang="...">...</code></pre>，配合 <button class="md-code__copy"> 由调用方注入
- */
+/** 零依赖 Markdown 渲染；纯文本转义、不解析 raw HTML，拒绝脚本协议及非图片 data URL；调用方渲染数学、Mermaid 与复制按钮。 */
 const VOID_PLACEHOLDER_PREFIX = '\u0000MD_PLACEHOLDER_'
 const VOID_PLACEHOLDER_SUFFIX = '\u0001'
 function escapeHtml(s: string): string {
