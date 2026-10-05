@@ -360,7 +360,22 @@ async def test_execute_compat_chat_batch_precreates_agent_run_per_message() -> N
         assert runtime_context["agent_run_id"] == run_id
 
 
-def test_stream_done_result_attaches_agent_run_id() -> None:
+@pytest.mark.parametrize("failed_tool", [False, True])
+def test_stream_done_result_attaches_agent_run_id(failed_tool: bool) -> None:
+    records = (
+        [
+            {
+                "tool_name": "execute_erp_capability",
+                "tool_id": "sales",
+                "action": "create_order",
+                "params": {},
+                "success": False,
+                "output": {"success": False, "error": "customer not found"},
+            }
+        ]
+        if failed_tool
+        else []
+    )
     repo = InMemoryAgentRunRepository()
     body = XcagiCompatChatBody(message="hello", user_id="stream-user", source="desktop")
 
@@ -402,7 +417,12 @@ def test_stream_done_result_attaches_agent_run_id() -> None:
         patch.object(
             stream_helpers,
             "_xcagi_guarded_planner_stream_events",
-            return_value=iter([{"type": "token", "text": "hello"}, {"type": "done"}]),
+            return_value=iter(
+                [
+                    {"type": "token", "text": "hello"},
+                    {"type": "done", "result": {"legacy_tool_records": records}},
+                ]
+            ),
         ) as mock_stream,
     ):
         chunks = list(
@@ -422,7 +442,11 @@ def test_stream_done_result_attaches_agent_run_id() -> None:
     assert run is not None
     assert run.user_id == "stream-user"
     assert run.metadata["channel"] == "compat_chat_stream"
-    assert run.metadata["trace_mode"] == "legacy_planner_run"
+    assert run.metadata["trace_mode"] == (
+        "legacy_planner_run_with_tools" if failed_tool else "legacy_planner_run"
+    )
+    assert run.status == ("failed" if failed_tool else "completed")
+    assert len(run.tool_calls) == int(failed_tool)
     assert "planner.started" in [event.event_type for event in run.events]
     assert "planner.completed" in [event.event_type for event in run.events]
     runtime_context = mock_stream.call_args.kwargs["runtime_context"]

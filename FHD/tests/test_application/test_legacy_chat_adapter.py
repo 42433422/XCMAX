@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,24 +27,12 @@ from app.legacy.chat.legacy_chat_adapter import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Helper: lightweight tool-call stub
-# ---------------------------------------------------------------------------
-class _Fn:
-    def __init__(self, name: str, arguments: str) -> None:
-        self.name = name
-        self.arguments = arguments
-
-
 class _Tc:
     def __init__(self, tc_id: str, name: str, arguments: str) -> None:
         self.id = tc_id
-        self.function = _Fn(name, arguments)
+        self.function = SimpleNamespace(name=name, arguments=arguments)
 
 
-# ---------------------------------------------------------------------------
-# _parse_generate_office_format
-# ---------------------------------------------------------------------------
 class TestParseGenerateOfficeFormat:
     def test_docx(self):
         assert _parse_generate_office_format('{"output_format":"docx"}') == "docx"
@@ -76,9 +65,6 @@ class TestParseGenerateOfficeFormat:
         assert _parse_generate_office_format('{"output_format":"  "}') == ""
 
 
-# ---------------------------------------------------------------------------
-# _tool_key
-# ---------------------------------------------------------------------------
 class TestToolKey:
     def test_combines_name_and_args(self):
         result = _tool_key("mytool", '{"a":1}')
@@ -86,9 +72,6 @@ class TestToolKey:
         assert "a" in result
 
 
-# ---------------------------------------------------------------------------
-# _resolve_chat_model_for_client
-# ---------------------------------------------------------------------------
 class TestResolveChatModelForClient:
     def test_explicit_model_takes_precedence(self):
         assert _resolve_chat_model_for_client(None, "gpt-4") == "gpt-4"
@@ -135,9 +118,6 @@ class TestResolveChatModelForClient:
             assert _resolve_chat_model_for_client(None, None) == "fallback-model"
 
 
-# ---------------------------------------------------------------------------
-# _tool_stream_call_label
-# ---------------------------------------------------------------------------
 class TestToolStreamCallLabel:
     def test_generate_office_docx(self):
         assert (
@@ -162,9 +142,6 @@ class TestToolStreamCallLabel:
         assert _tool_stream_call_label("custom_tool", "{}") == "custom_tool"
 
 
-# ---------------------------------------------------------------------------
-# _slow_tool_wait_message
-# ---------------------------------------------------------------------------
 class TestSlowToolWaitMessage:
     def test_import_excel(self):
         msg = _slow_tool_wait_message("import_excel_to_database", "{}")
@@ -190,9 +167,6 @@ class TestSlowToolWaitMessage:
         assert _slow_tool_wait_message("excel_analysis", "{}") is None
 
 
-# ---------------------------------------------------------------------------
-# _post_tool_round_hint
-# ---------------------------------------------------------------------------
 class TestPostToolRoundHint:
     def test_docx_ok(self):
         tcs = [_Tc("1", "generate_office_document", '{"output_format":"docx"}')]
@@ -259,9 +233,6 @@ class TestPostToolRoundHint:
         assert "工具已返回结果" in hint
 
 
-# ---------------------------------------------------------------------------
-# _planner_tools_max_workers
-# ---------------------------------------------------------------------------
 class TestPlannerToolsMaxWorkers:
     def test_default_is_8(self, monkeypatch):
         monkeypatch.delenv("FHD_PLANNER_TOOLS_MAX_PARALLEL", raising=False)
@@ -284,9 +255,6 @@ class TestPlannerToolsMaxWorkers:
         assert _planner_tools_max_workers() == 32
 
 
-# ---------------------------------------------------------------------------
-# reset_planner_tool_dedup_state
-# ---------------------------------------------------------------------------
 class TestResetPlannerToolDedupState:
     def test_clears_dedup_set(self):
         from app.legacy.chat.legacy_chat_adapter import _tool_dedup_state
@@ -296,9 +264,6 @@ class TestResetPlannerToolDedupState:
         assert len(_tool_dedup_state()) == 0
 
 
-# ---------------------------------------------------------------------------
-# append_tool_messages
-# ---------------------------------------------------------------------------
 class TestAppendToolMessages:
     def setup_method(self):
         reset_planner_tool_dedup_state()
@@ -422,9 +387,6 @@ class TestAppendToolMessages:
         assert get_last_tool_result() == {}
 
 
-# ---------------------------------------------------------------------------
-# chat (non-streaming)
-# ---------------------------------------------------------------------------
 class TestChat:
     def setup_method(self):
         reset_planner_tool_dedup_state()
@@ -554,9 +516,6 @@ class TestChat:
         assert data["requires_token"] is True
 
 
-# ---------------------------------------------------------------------------
-# chat_stream_text
-# ---------------------------------------------------------------------------
 class TestChatStreamText:
     def setup_method(self):
         reset_planner_tool_dedup_state()
@@ -661,12 +620,34 @@ class TestChatStreamText:
         assert any(p.get("_planner_sse") == "requires_token" for p in dict_parts)
 
 
-# ---------------------------------------------------------------------------
-# chat_stream_sse_events
-# ---------------------------------------------------------------------------
 class TestChatStreamSseEvents:
     def setup_method(self):
         reset_planner_tool_dedup_state()
+
+    def test_terminal_events_carry_worker_tool_records(self, monkeypatch):
+        from app.legacy.chat import legacy_chat_adapter as adapter
+
+        record = {
+            "tool_name": "execute_erp_capability",
+            "success": False,
+            "output": {"success": False, "error": "customer not found"},
+        }
+
+        def stream(*args, **kwargs):
+            adapter._LAST_TOOL_TRACE.records = [record]
+            yield "needs customer"
+
+        monkeypatch.setattr(adapter, "chat_stream_text", stream)
+        events = list(chat_stream_sse_events("sell"))
+        assert events[-1] == {"type": "done", "result": {"legacy_tool_records": [record]}}
+
+    def test_iteration_limit_is_error_instead_of_completed(self):
+        events = list(
+            chat_stream_sse_events("sell", max_iterations=0, client=MagicMock(), model="test-model")
+        )
+        assert events[-1]["type"] == "error"
+        assert "未完成" in events[-1]["message"]
+        assert not any(event["type"] == "done" for event in events)
 
     def test_yields_token_and_done_events(self):
         mock_client = MagicMock()

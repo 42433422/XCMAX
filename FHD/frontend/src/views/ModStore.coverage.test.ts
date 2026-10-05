@@ -18,8 +18,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
+import Modal from '@/components/Modal.vue'
 
-/* ── mock functions ── */
 const mockApiFetch = vi.fn().mockResolvedValue({
   ok: true,
   json: async () => ({ success: true, data: { available: [] } }),
@@ -42,7 +42,6 @@ const mockPromptAdvancedTutorialAfterInstall = vi.fn().mockResolvedValue('alread
 const mockMarkProductFlowCompleted = vi.fn()
 const mockMarkHostPackAcknowledged = vi.fn()
 
-/* ── 模块级 mock 引用（便于在测试中动态控制返回值） ── */
 const mockCatalogStoreCollection = vi.fn((row: any) => row?.store_collection || '')
 const mockIsHostFoundationEmployeePackId = vi.fn((id: string) => id === 'xcagi-host-foundation-employee')
 const mockReadBuildEdition = vi.fn(() => 'generic')
@@ -50,7 +49,6 @@ const mockIsOfficeEmployeePkg = vi.fn((id: string) => String(id || '').startsWit
 const mockIsOfficeAuxPack1Pkg = vi.fn((id: string) => String(id || '').startsWith('office-aux-'))
 const mockResolveEnterpriseOrgLayerForCatalogItem = vi.fn(() => null)
 
-/* ── module mocks ── */
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
   getApiBase: () => '',
@@ -145,14 +143,13 @@ vi.mock('@/stores/mods', () => ({
   CLIENT_MODS_UI_OFF_KEY: 'xcagi_client_mods_ui_off',
 }))
 
-/* ── stubs ── */
 const globalStubs = {
-  Modal: { template: '<div class="modal-stub"><slot /></div>' },
+  Modal,
+  teleport: true,
   ModDetails: { template: '<div class="mod-details-stub" />' },
   RouterLink: { template: '<a><slot /></a>' },
 }
 
-/* ── 工具：构造 router + 挂载组件 ── */
 async function mountModStore(query: Record<string, string> = {}) {
   const ModStore = (await import('./ModStore.vue')).default
   const router = createRouter({
@@ -605,13 +602,15 @@ describe('ModStore.coverage – viewDetails / onMobileUse', () => {
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
-    expect(wrapper.find('.modal-stub').exists()).toBe(false)
+    expect(wrapper.find('.modal.visible').exists()).toBe(false)
     const mod = makeMod({ name: 'DetailMod' })
     vm.viewDetails(mod)
     await flushPromises()
     expect(vm.selectedMod).toBeTruthy()
     expect(vm.selectedMod.name).toBe('DetailMod')
-    expect(wrapper.find('.modal-stub').exists()).toBe(true)
+    expect(wrapper.find('.modal.visible').exists()).toBe(true)
+    await wrapper.find('.modal.visible').trigger('click')
+    expect(wrapper.find('.modal').exists()).toBe(false)
     wrapper.unmount()
   })
 

@@ -252,16 +252,20 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
 
     try:
         halted_for_write_token = False
+        planner_result = {}
         for ev in _facade()._xcagi_guarded_planner_stream_events(
             body,
             runtime_context=planner_runtime_context,
             workspace_root=workspace_root,
             client=llm_client,
         ):
+            if isinstance(ev.get("result"), dict):
+                planner_result.update(ev["result"])
             et = ev.get("type")
             if et == "error":
                 if pre_run is not None:
                     payload = {
+                        **planner_result,
                         "success": False,
                         "message": str(ev.get("message") or "流式 planner 执行失败"),
                         "response": str(ev.get("message") or "流式 planner 执行失败"),
@@ -283,6 +287,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             elif et == "requires_token":
                 if pre_run is not None:
                     payload = {
+                        **planner_result,
                         "success": True,
                         "requires_token": True,
                         "token_name": ev.get("token_name"),
@@ -312,6 +317,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             msg = "模型服务已完成请求，但没有返回可显示的正文。若附带图片，请确认当前账号已启用视觉模型，或上传文字更清晰的截图。"
             if pre_run is not None:
                 payload = {
+                    **planner_result,
                     "success": False,
                     "message": msg,
                     "response": msg,
@@ -324,9 +330,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 )
             )
             return
-        # 终态回复必须使用**清洗后**的正文：merged 仍含 planner 内部标记
-        # （如 `[正在调用工具: execute_erp_capability]`），直接作为 response 会让
-        # 内部标记进入用户可见正文，并被 business_result.summary 原样带出。
+        # Normalize the worker's tool results together with the visible reply.
         from app.application.planner_display_markers import strip_planner_stream_markers
 
         visible_text, marker_lines = strip_planner_stream_markers(merged)
@@ -344,11 +348,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
         if not thinking:
             thinking = marker_lines
-        if thinking:
-            done_reply: str | dict = {"response": visible_text, "thinking_steps": thinking}
-        else:
-            done_reply = visible_text
+        done_reply = {"response": visible_text, "thinking_steps": thinking, **planner_result}
         payload = _facade()._xcagi_compat_reply_payload(done_reply)
+        payload.update(planner_result)
         if pre_run is not None:
             payload = finalize(payload)
         else:
