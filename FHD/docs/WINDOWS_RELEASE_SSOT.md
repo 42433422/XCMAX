@@ -11,16 +11,16 @@ GREEN须本最终包实测通过；YELLOW为有限证据或过渡方案，RED为
 | G1 | 构建与身份 | YELLOW | f16373d安装与运行身份、17500所属后端已核对；最终冻结和客户入口重下未完成 |
 | G2 | 首装 | YELLOW | 本轮f16373d为既有A测试机正常覆盖安装；干净首装完整A轮未完成 |
 | G3 | 签名 | YELLOW | 当前包NotSigned；仅允许未签名过渡交付，不得称正式签名发布 |
-| G4 | 首次启动 | YELLOW | 新后端PID9588从安装目录启动并进入SUNBIRD首页；完整干净A/C未完成 |
+| G4 | 首次启动 | YELLOW | f16373d后端PID4068从安装目录启动并进入SUNBIRD首页；完整干净A/C未完成 |
 | G5 | 登录、企业与设备绑定 | YELLOW | 同账号界面读回P006/W006库存20；设备绑定、工作区归属完整验收未完成 |
 | G6 | 权益、Mod、AI员工 | RED | 复现：SUNBIRD正常登录→员工平台→员工空间，考勤AI助手未启用、已托管0；[实机证据](evidence/e2e/windows-closeout-20261005/normal-employee-space-not-ready.png)。#2163 SDK源修复仍待正式部署，生产内核TSSA-2026:1026门禁阻塞 |
-| G7 | 真实业务与AI任务 | RED | 复现：f16373d正常审批入口和拒绝已实测；SALES ORDER 2 P006 A006 10→正常审批→SO20261006004727金额20，但product_model被忽略，订单行产品ID/名称为空；[字段](evidence/e2e/windows-closeout-20261006/sales-order-persistence-diagnostic.json)、[审批输入](evidence/e2e/windows-closeout-20261006/normal-sales-create-order-correct-approval.png)；修复6375eea15690cd1c40b89b6c04ea1b11e4edc46f后须换包复验及完成出库、单据、导出、UI查询 |
+| G7 | 真实业务与AI任务 | RED | 复现：f16373d正常审批入口和拒绝已实测；SALES ORDER 2 P006 A006 10→正常审批→SO20261006004727金额20，但product_model被忽略，订单行产品ID/名称为空；[字段](evidence/e2e/windows-closeout-20261006/sales-order-persistence-diagnostic.json)、[审批输入](evidence/e2e/windows-closeout-20261006/normal-sales-create-order-correct-approval.png)；修复#2168后须换包复验及完成出库、单据、导出、UI查询 |
 | G8 | stable通道 | YELLOW | stable OTA保持关闭；本轮尚未发布客户下载指针 |
 | G9 | OTA升级 | YELLOW | 本轮OTA关闭，覆盖安装与升级证据不得记为OTA通过 |
 | G10 | 覆盖升级读回 | UNKNOWN | 支持旧版B002/PB02原ID证据已保留；最终同包升级及同账号界面读回未完成 |
 | G11 | 升级后业务 | UNKNOWN | 最终候选B轮新增业务未完成 |
 | G12 | 退出重开 | UNKNOWN | 旧cfa230d正常退出零进程再开读回20已实测；不能替代最终候选复验 |
-| G13 | 备份恢复与故障取消 | UNKNOWN | cfa230d正式Daily产物已核对，Weekly自然触发及最终同包隔离恢复应用读回未完成；f16373d[正常拒绝错误请求](evidence/e2e/windows-closeout-20261006/normal-approval-rejected-pending-zero.png)后库存仍20；不能替代最终C轮 |
+| G13 | 备份恢复与故障取消 | UNKNOWN | cfa230d正式Daily产物已核对，Weekly自然触发及最终同包隔离恢复应用读回未完成；f16373d[任务与进程](evidence/e2e/windows-closeout-20261006/backup-registration-and-runtime-20261006.json)仅证明注册、未触发；f16373d[正常拒绝错误请求](evidence/e2e/windows-closeout-20261006/normal-approval-rejected-pending-zero.png)后库存仍20；不能替代最终C轮 |
 ## 6. 实机验收任务
 最终同包独立A首装完整业务、B受支持旧版原ID同账号读回并新增、C故障取消与正式调度备份隔离恢复；每轮独立时间、输入、结果及原始证据，未完成项保持未闭环。
 ## 8. 发版复用 Runbook

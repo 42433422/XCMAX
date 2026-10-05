@@ -1,0 +1,71 @@
+{
+    "observed_at":  "2026-10-06T01:16:42.5427898+08:00",
+    "scope":  "registration only; formal execution not verified",
+    "tasks":  [
+                  {
+                      "name":  "XcagiDailyBackup",
+                      "state":  "Ready",
+                      "user":  "xcagi-test",
+                      "logon_type":  3,
+                      "run_level":  0,
+                      "actions":  [
+                                      {
+                                          "Execute":  "powershell.exe",
+                                          "Arguments":  "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"C:\\Users\\xcagi-test\\AppData\\Local\\Programs\\XCAGI\\resources\\backend\\_internal\\scripts\\backup\\XcagiBackup.ps1\"",
+                                          "WorkingDirectory":  null
+                                      }
+                                  ],
+                      "triggers":  [
+                                       {
+                                           "StartBoundary":  "2026-10-06T12:30:00+08:00",
+                                           "DaysOfWeek":  null,
+                                           "WeeksInterval":  null,
+                                           "DaysInterval":  1,
+                                           "Enabled":  true
+                                       }
+                                   ],
+                      "last_run":  "1999-11-30T00:00:00.0000000+08:00",
+                      "next_run":  "2026-10-06T12:30:00.0000000+08:00",
+                      "last_result":  267011
+                  },
+                  {
+                      "name":  "XcagiWeeklyBackup",
+                      "state":  "Ready",
+                      "user":  "xcagi-test",
+                      "logon_type":  3,
+                      "run_level":  0,
+                      "actions":  [
+                                      {
+                                          "Execute":  "powershell.exe",
+                                          "Arguments":  "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"C:\\Users\\xcagi-test\\AppData\\Local\\Programs\\XCAGI\\resources\\backend\\_internal\\scripts\\backup\\XcagiBackup.ps1\" -Weekly",
+                                          "WorkingDirectory":  null
+                                      }
+                                  ],
+                      "triggers":  [
+                                       {
+                                           "StartBoundary":  "2026-10-06T13:30:00+08:00",
+                                           "DaysOfWeek":  1,
+                                           "WeeksInterval":  1,
+                                           "DaysInterval":  null,
+                                           "Enabled":  true
+                                       }
+                                   ],
+                      "last_run":  "1999-11-30T00:00:00.0000000+08:00",
+                      "next_run":  "2026-10-11T13:30:00.0000000+08:00",
+                      "last_result":  267011
+                  }
+              ],
+    "backend":  [
+                    {
+                        "ProcessId":  4068,
+                        "ExecutablePath":  "C:\\Users\\xcagi-test\\AppData\\Local\\Programs\\XCAGI\\resources\\backend\\xcagi-backend.exe"
+                    }
+                ],
+    "listeners":  [
+                      {
+                          "LocalAddress":  "0.0.0.0",
+                          "LocalPort":  17500,
+                          "OwningProcess":  4068
+                      }
+                  ]
+}
