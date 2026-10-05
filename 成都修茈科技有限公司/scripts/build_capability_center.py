@@ -122,17 +122,16 @@ def privacy_exclusions(evidence: dict, feature_id: str = "") -> set[str]:
         elif isinstance(value, list):
             stack.extend(value)
         elif isinstance(value, str):
-            path = value
-            ext = Path(path).suffix.lower()
+            ext = Path(value).suffix.lower()
             if sensitive and ext in {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".mov"}:
-                excluded.add(path)
+                excluded.add(value)
             elif ext in {".json", ".log", ".txt"}:
                 try:
-                    body = e(path).read_text(encoding="utf-8").casefold()
+                    body = e(value).read_text(encoding="utf-8").casefold()
                 except (OSError, UnicodeError):
                     continue
                 if sensitive or any(marker in body for marker in _PUBLIC_PRIVATE_MARKERS):
-                    excluded.add(path)
+                    excluded.add(value)
     return excluded
 
 
@@ -510,16 +509,7 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     accepted_at = max((v["verified_at"] for v in verdicts if v["verified_at"]), default=None)
     public_review_note = None
     if ev.get("review"):
-        review_record = json.loads(e(ev["review"]).read_text(encoding="utf-8"))
-        public_review_note = review_record.get("visible_content")
-        excluded_names = {
-            path.rsplit("/", 1)[-1].casefold()
-            for path in (ev.get("public_excluded_media") or [])
-        }
-        if isinstance(public_review_note, str) and any(
-            name in public_review_note.casefold() for name in excluded_names
-        ):
-            public_review_note = "复核说明引用了暂不公开的媒体，详细内容因隐私审查暂不展示。"
+        public_review_note = json.loads(e(ev["review"]).read_text(encoding="utf-8")).get("visible_content")
 
     result = {
         **feat,
@@ -1397,7 +1387,7 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
     return copied
 
 
-def private_generated_assets() -> list[Path]:
+def private_generated_assets(remove: bool = False) -> list[Path]:
     sensitive_prefixes = ("base-login-", "ind-attendance-", "erp-sales-order-", "ind-szqsm-")
     private = []
     for path in EVIDENCE_ASSET_DIR.iterdir():
@@ -1409,14 +1399,9 @@ def private_generated_assets() -> list[Path]:
             continue
         if path.name.startswith(sensitive_prefixes) or any(marker in body for marker in _PUBLIC_PRIVATE_MARKERS):
             private.append(path)
+            if remove:
+                path.unlink()
     return private
-
-
-def prune_private_generated_assets() -> list[str]:
-    removed = private_generated_assets()
-    for path in removed:
-        path.unlink()
-    return [str(path.relative_to(WEBSITE_DIR)) for path in removed]
 
 
 def platform_evidence_paths(verdict: dict, checked: bool = False) -> list[str]:
@@ -1507,7 +1492,7 @@ def main() -> int:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
     copied = copy_evidence_assets(domains_full)
-    removed_assets = prune_private_generated_assets()
+    removed_assets = private_generated_assets(remove=True)
     removed = prune_stale_generated(outputs)
 
     s = data["stats"]

@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-10-05 01:29 UTC",
+  "generated_at": "2026-10-05 04:36 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -91,10 +91,10 @@
     }
   },
   "capability_totals": {
-    "total": 158,
+    "total": 157,
     "by_status": {
       "verified": 55,
-      "partial": 95,
+      "partial": 94,
       "implemented": 4,
       "planned": 4
     },
@@ -104,24 +104,24 @@
     "verified_total": 55,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
-      "windows": 99,
-      "macos": 100,
+      "windows": 98,
+      "macos": 99,
       "web": 128,
       "android": 8,
       "ios": 1
     },
     "platform_coverage": {
       "windows": {
-        "applicable": 99,
+        "applicable": 98,
         "verified": 1,
         "partial": 0,
-        "pending": 98,
+        "pending": 97,
         "last_verified_at": "2026-09-24"
       },
       "macos": {
-        "applicable": 100,
+        "applicable": 99,
         "verified": 82,
-        "partial": 14,
+        "partial": 13,
         "pending": 4,
         "last_verified_at": "2026-09-30"
       },
@@ -263,9 +263,9 @@
           "pay",
           "industry"
         ],
-        "total": 39,
+        "total": 38,
         "by_status": {
-          "partial": 24,
+          "partial": 23,
           "verified": 14,
           "planned": 1
         },

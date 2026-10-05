@@ -28,6 +28,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from build_capability_center import _PRIVATE_EVIDENCE_FEATURES, public_projection
+
 SITE_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = SITE_ROOT.parent
 FHD_ROOT = REPO_ROOT / "FHD"
@@ -40,16 +42,6 @@ SCHEMA = "xcagi.public_site/v1"
 def die(msg: str) -> None:
     print(f"[public-site] FAIL: {msg}", file=sys.stderr)
     raise SystemExit(1)
-
-
-_PUBLIC_PRIVATE_MARKERS = ("sunbird", "太阳鸟", "奇士美", "余额", "真实订单")
-_PUBLIC_REDACTION = "客户账户及业务数据已脱敏，详细内容不公开。"
-
-
-def redact_public_values(value):
-    if isinstance(value, dict): return {key: redact_public_values(item) for key, item in value.items()}
-    if isinstance(value, list): return [redact_public_values(item) for item in value]
-    return _PUBLIC_REDACTION if isinstance(value, str) and any(m in value.casefold() for m in _PUBLIC_PRIVATE_MARKERS) else value
 
 
 def read_json(path: Path) -> dict:
@@ -252,7 +244,7 @@ def build_evidence(cases_cfg: dict) -> dict:
     excluded = {p for d in catalog.get("domains", []) for m in d.get("modules", [])
                 for f in m.get("features", [])
                 for p in (f.get("evidence", {}) or {}).get("public_excluded_media", [])}
-    sensitive_features = {"base-login", "ind-attendance", "erp-sales-order", "ind-szqsm"}
+    sensitive_features = _PRIVATE_EVIDENCE_FEATURES
 
     run_files = sorted(EVIDENCE_DIR.glob("*-run.json"))
     if not run_files:
@@ -525,7 +517,7 @@ def build() -> dict:
         "evidence": evidence,
         "hero_media": hero,
     }
-    return redact_public_values(result)
+    return public_projection(result, set())
 
 
 def main() -> None:
