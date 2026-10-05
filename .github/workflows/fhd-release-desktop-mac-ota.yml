@@ -1,7 +1,6 @@
 # CI SSOT: generated from FHD/.github/workflows/release-desktop-mac-ota.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
-# macOS OTA release; candidate_only uploads an artifact without publishing.
-# Release mode retains exact-SHA security clearance and public readback.
+# macOS OTA: candidates do not publish; releases keep exact-SHA security clearance and public readback.
 name: Release Desktop macOS OTA
 
 on:

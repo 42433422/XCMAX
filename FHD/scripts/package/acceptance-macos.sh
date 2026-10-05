@@ -16,8 +16,7 @@
 #           → 卸载 dmg；客户业务、OTA 与回滚须另行实测
 #
 # --overwrite-upgrade：在既有安装（${ACCEPT_DIR}/XCAGI.app，须先退出应用）上覆盖升级。
-#   安装前采集 userData 业务数据基线 + 写入数据保留标记，安装后重采集并比对，
-#   证明覆盖升级后库/上传/Mod 数据零丢失。基线与比对结果落 WORK_DIR JSON。
+#   安装前采集 userData 基线并写标记，安装后校验库、上传与 Mod 数据无减少，结果写入 WORK_DIR JSON。
 #
 # 幂等：重复运行会重建 ~/Applications/acceptance/XCAGI.app，重用/覆盖下载缓存。
 # 安全边界：绝不修改 /Applications 下的任何内容；OTA 与回滚只打印指引，不自动执行。
