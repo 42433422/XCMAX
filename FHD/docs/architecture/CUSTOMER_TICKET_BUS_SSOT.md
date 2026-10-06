@@ -1,6 +1,6 @@
 # 客服工单总线 SSOT
 
-> 更新日期：2026-07-24
+> 更新日期：2026-10-06
 
 ## 定轨
 
@@ -12,6 +12,7 @@
 | 编排 | `incident_team_orchestrator`（scout/fix/verify）+ binding 派发 |
 | 入口员工 | `intake-dispatcher` 产出 `routing_plan`；`incident_bus` 消费并派发 `proposed_owner` |
 | 回写 | `apply_customer_ticket_incident_progress` → 用户可见 lifecycle |
+| 客户决定 | 桌面 `POST /api/mod-store/issue-runtime/{id}/decision` → `POST /api/customer-service/issues/{id}/decision`：「已解决」才关单，「重新打开」回到处理中并重新投递 |
 
 ## 非 SSOT
 
@@ -20,4 +21,4 @@
 
 ## 验收
 
-一张 `CS*` 工单：`dispatched_count > 0`，`_cs_progress.lifecycle_*` 非空，且非全员 `handler_failed`。
+一张 `CS*` 工单：`dispatched_count > 0`，`_cs_progress.lifecycle_*` 非空，且非全员 `handler_failed`。真实闭环按 [ticket-loop.run.json](../evidence/e2e/final-acceptance-1.0.0.5/ticket-loop.run.json) 53 项与 [gates.json](../evidence/e2e/final-acceptance-1.0.0.5/gates.json) 闸门 17–23 判定；目前只有本机集成证据 [ticket-loop-local-20261006](../evidence/e2e/ticket-loop-local-20261006/run.jsonl)，未闭环。
