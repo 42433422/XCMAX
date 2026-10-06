@@ -2,6 +2,7 @@
   "run_id": "PROD-AVAIL-20261006-001",
   "scope": "最终闸门 1（官网正常）与 2（生产 API 正常），对应工单清单第 1 项：生产恢复后的外部连续拨测",
   "created_at": "2026-10-06T16:12:00Z",
+  "updated_at": "2026-10-06T16:48:40Z",
   "final_gates": [1, 2],
   "incident": {
     "issue": "https://github.com/42433422/XCMAX/issues/2169",
@@ -16,7 +17,7 @@
     "dns": {"name": "xiu-ci.com", "a": "43.138.211.142", "ttl": 600, "soa_serial": 1791301134, "soa_serial_utc": "2026-10-06T15:38:54Z", "previous_a": "119.27.178.147", "staging_xiu_ci_com": "NXDOMAIN"},
     "edge_headers": {"x-xcmax-dr": "43.138.211.142", "x-xcmax-dr-mode": "promoted", "x-xcmax-node": "dr-promoted"},
     "dr_health": {"url": "https://xiu-ci.com/__dr/health", "body": {"status": "ok", "node": "43.138.211.142", "mode": "promoted"}},
-    "primary": {"ip": "119.27.178.147", "https_fhd_health": "000（8 秒超时，15:52Z 与 16:05Z 两次）", "deploy_ssh": "corp-site-deploy run 37486504881 于 15:20:00Z dial tcp :22 i/o timeout"}
+    "primary": {"ip": "119.27.178.147", "https_fhd_health": "15:52Z 与 16:05Z 两次 000（8 秒超时）；16:28:54Z 起 200", "deploy_ssh": "corp-site-deploy run 37486504881 于 15:20:00Z dial tcp :22 i/o timeout"}
   },
   "serving_identity": {
     "fhd": {"version": "1.0.0.1", "git_sha": "73861ed71e41ce34b8a5cf06f9e17a1cfa93d44d", "built_at": "2026-09-08T16:54:22Z", "release_id": "xcagi-1.0.0.1-73861ed71e41ce34b8a5cf06f9e17a1cfa93d44d", "same_as_last_prod_deploy": 34262784106, "commits_behind_main_604ab1531": 493},
@@ -30,17 +31,20 @@
     "outage_samples": 392,
     "outage_http_codes": {"000": 392},
     "outage_observed": ["2026-10-06T13:30:32Z", "2026-10-06T15:37:57Z"],
-    "continuous_ok": ["2026-10-06T15:39:03Z", "2026-10-06T16:11:18Z"],
-    "minutes": 32.2,
-    "distinct_minutes": 32,
-    "max_homepage_gap_seconds": 78,
+    "recovered_window": ["2026-10-06T15:39:03Z", "2026-10-06T16:48:20Z"],
+    "minutes": 69.3,
+    "distinct_minutes": 69,
+    "max_homepage_gap_seconds": 78.0,
     "core_expect": {"/": "200 text/html", "/api/health": "200 application/json", "/fhd-api/api/health": "200 application/json", "/api/work-orders/customer-candidate": "401 application/json"},
-    "core_samples": 128,
-    "core_failures": 0,
-    "core_latency_seconds": {"p50": 1.136, "max": 5.439},
+    "core_samples": 276,
+    "core_failures": 1,
+    "core_failure_rows": [
+      {"at": "2026-10-06T16:29:15Z", "url": "/api/work-orders/customer-candidate", "http": "000", "seconds": 7.001, "ip": "43.138.211.142"}
+    ],
+    "core_latency_seconds": {"p50": 1.098, "max": 7.001},
     "not_served": {
       "urls": ["/fhd-staging-api/health", "/xcagi-v1.0.0.5/manifest.json", "/releases/stable/enterprise/latest.yml", "/releases/stable/enterprise/latest-mac.yml"],
-      "observed": "52 次带类型采样全部为 200 text/html 67176 字节（官网首页兜底），不是健康检查或发布指针"
+      "observed": "200 次带类型采样全部为 200 text/html 67176 字节（官网首页兜底），不是健康检查或发布指针"
     }
   },
   "multi_region": {
@@ -48,7 +52,8 @@
     "nodes": ["hk1", "jp1", "sg1", "de4", "fr2"],
     "rounds": [
       {"at": "2026-10-06T15:55:02Z", "ok": 14, "total": 15, "failed": "sg1 → /api/health Connection timed out（3.0 秒）"},
-      {"at": "2026-10-06T16:10:37Z", "ok": 15, "total": 15}
+      {"at": "2026-10-06T16:10:37Z", "ok": 15, "total": 15},
+      {"at": "2026-10-06T16:40:13Z", "ok": 15, "total": 15, "ip": ["43.138.211.142"]}
     ],
     "mainland_china": "check-host 无中国大陆节点，需用 domestic_retest 命令补测"
   },
@@ -72,7 +77,7 @@
   "ops_uptime_probe": {
     "workflow": ".github/workflows/ops-uptime.yml",
     "cron": "*/10 * * * *",
-    "observed_interval": "近 7 天实际 3–7 小时运行一次，不能作为分钟级告警",
+    "observed_interval": "近 7 天实际 3–7 小时运行一次（10-06 为 02:08Z、08:54Z、15:37Z），不能作为分钟级告警",
     "last_run": {"run": 37489058745, "probe": ["2026-10-06T15:37:53Z", "2026-10-06T15:41:24Z"], "result": "fhd-api 与 corp-site 均 000", "note": "开始于 DNS 切换（15:38:54Z，TTL 600 秒）之前，托管机仍连接旧主机"},
     "recovery_record": "待下一次定时运行；通过后工作流会在 #2169 评论并自动关单",
     "status_code_only": "只判状态码，staging 与发布指针的 HTML 兜底会被误判为正常"
@@ -85,14 +90,39 @@
     "self_test": "2026-10-06T16:05:08Z 在本 VM 跑 1 轮，输出与上述判定一致"
   },
   "verdict": {
-    "gate_1": {"status": "YELLOW", "reason": "首页恢复后连续 32 分钟逐分钟可达且内容正确，5 个境外地区两轮抽测 29/30 成功；但当前由灾备接管节点提供，发布产物未同步，下载页为 1.0.0.1 且两个平台均「待开放」，国内复测与 Ops Uptime 恢复记录尚缺"},
-    "gate_2": {"status": "YELLOW", "reason": "FHD 与 MODstore 健康检查连续 32 分钟 200 JSON、工单接口 401 JSON，无 000/5xx；但服务来自灾备节点上 9 月版本（FHD 73861ed7、MODstore 201d1f69），MODstore 调度进程未运行，staging API 未提供，国内复测与 Ops Uptime 恢复记录尚缺"}
+    "gate_1": {"status": "YELLOW", "reason": "首页恢复后 69 分钟内逐分钟可达且内容正确（首页失败 0 次），5 个境外地区三轮抽测 44/45 成功；但由灾备接管节点以过渡方式提供 9 月版本，发布产物未同步，下载页为 1.0.0.1 且两个平台均「待开放」；旧主机已恢复但未隔离；国内复测与 Ops Uptime 恢复记录尚缺"},
+    "gate_2": {"status": "YELLOW", "reason": "FHD 与 MODstore 健康检查 69 分钟内 200 JSON、工单接口 401 JSON，276 个核心样本失败 1 次（16:29:15Z /api/work-orders/customer-candidate 7 秒超时返回 000，前后各轮正常）；但服务来自灾备节点上 9 月版本（FHD 73861ed7、MODstore 201d1f69），灾备 MODstore 调度进程未运行，staging 只在旧主机提供；旧主机 scheduler_running=true 未隔离，存在两边同时写入的风险；国内复测与 Ops Uptime 恢复记录尚缺"}
   },
   "ops_actions": [
-    "按 ops/dr/README.md 在灾备启用 xcmax-dr-scheduler，确认 /api/health 的 scheduler_running=true",
-    "把 /var/www/xcagi-v*/ 与 /var/www/update/releases/ 的发布产物恢复到当前服务节点，并让这些路径缺文件时返回 404 而不是首页",
-    "原主机恢复后先隔离再重建为 standby；或把 corp-site-deploy、fhd-deploy、modstore-prod-deploy 的 SSH 目标切到 43.138.211.142。冻结 SHA 部署前必须完成其一",
+    "先按 ops/dr/README.md 第 103–104 行隔离旧主机 119.27.178.147 的应用、scheduler 与数据库写入，并确定以哪一侧数据为准；以灾备为准时把旧主重建为 standby，回切旧主时先并回灾备 15:38:54Z 之后的写入再改 DNS",
+    "按 ops/dr/README.md 在当前主节点启用 scheduler，确认 /api/health 的 scheduler_running=true",
+    "把 /var/www/xcagi-v*/ 与 /var/www/update/releases/ 的发布产物放到当前主节点，并让这些路径缺文件时返回 404 而不是首页",
+    "冻结 SHA 部署前让 corp-site-deploy、fhd-deploy、modstore-prod-deploy 的 SSH 目标与 DNS 指向的主节点一致",
     "从国内网络运行 domestic_retest 命令 30 分钟，把日志放入本目录",
     "等待 Ops Uptime 下一次定时运行通过并自动关闭 #2169"
-  ]
+  ],
+  "primary_after_recovery": {
+    "ip": "119.27.178.147",
+    "last_000_observed_at": "2026-10-06T16:05Z",
+    "first_200_observed_at": "2026-10-06T16:28:54Z",
+    "trigger": "15:00Z 之后没有任何部署或运维工作流触达该主机，恢复来源不在仓库内（控制台或网络侧）",
+    "probe_file": "probe-primary.jsonl",
+    "probe_window": ["2026-10-06T16:30:51Z", "2026-10-06T16:48:07Z"],
+    "probe_minutes": 19,
+    "probe_http": {"/ 200": 19, "/api/health 200": 19, "/fhd-api/api/health 200": 19},
+    "probe_scheduler_running": {"true": 19},
+    "dns_still_points_to": "43.138.211.142",
+    "serving": {
+      "homepage": "200 text/html 18197 字节，与灾备节点首页不同",
+      "modstore": {"git_sha": "201d1f691855465f76dd53adc74c1d53ff4d9af4", "scheduler_running": true, "hostname": "VM-0-7-tencentos"},
+      "fhd": "/fhd-api/api/health 只返回 {\"status\":\"ok\"}，其余路径 403 lan_blocked，外部读不到构建身份",
+      "staging": {"url": "/fhd-staging-api/health", "product_version": "1.0.0.5", "git_sha": "e5b2412ace0c7b202a6f60c41472b1deef83d8d8", "built_at": "2026-09-30T13:37:27Z"},
+      "download_release_json": {"version_lock": "1.0.0.5", "release_ready": false, "git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f", "generated_at": "2026-09-21T10:06:32Z"},
+      "manifest_1_0_0_5": {"git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f", "release_ready": false},
+      "latest_mac_yml": {"productVersion": "1.0.0.5", "buildSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f", "releaseDate": "2026-09-21T08:55:08.454Z", "ed25519_signature_valid": true},
+      "latest_yml": "404",
+      "ssh_22": "open"
+    },
+    "risk": "ops/dr/README.md 规定自动回切默认禁止，旧主恢复后必须先确认其应用、scheduler 和数据库写入均被隔离，再重建为 standby。现在旧主 scheduler_running=true 且对外提供服务，灾备节点自 15:38:54Z 起也在接收写入，两边数据可能分叉；三个部署工作流的 SSH 目标仍是旧主，部署结果不会出现在公网入口"
+  }
 }

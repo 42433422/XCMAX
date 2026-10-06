@@ -66,7 +66,7 @@
       "result": "UNKNOWN",
       "observed_at": null,
       "evidence": ["../production-availability-20261006/run.json"],
-      "note": "2026-10-06 灾备接管后首页与 API 连续 32 分钟可达（闸门 1/2 YELLOW）；国内复测、发布产物和 MODstore 调度进程待补，正式闭环时须在冻结 SHA 部署后重测。"
+      "note": "2026-10-06 灾备接管后 69 分钟内首页逐分钟可达，核心接口 276 次采样 1 次超时（闸门 1/2 YELLOW）；旧主机已恢复未隔离，国内复测、发布产物和 MODstore 调度进程待补，正式闭环时须在冻结 SHA 部署后重测。"
     },
     {
       "no": 2,

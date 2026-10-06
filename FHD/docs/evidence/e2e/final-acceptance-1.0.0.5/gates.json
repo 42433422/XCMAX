@@ -1,7 +1,7 @@
 {
   "scope": "两个闭环 25 道最终发布硬闸门；任何一道不是 GREEN 都不能宣布闭环",
   "gate_values": ["GREEN", "YELLOW", "RED", "UNKNOWN"],
-  "updated_at": "2026-10-06T16:34:59Z",
+  "updated_at": "2026-10-06T16:49:27Z",
   "source_sha": null,
   "verdict": "未闭环",
   "counts": {
@@ -26,7 +26,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../production-availability-20261006/run.json"],
-      "blocker": "灾备节点以过渡方式提供 9 月版本：下载页 1.0.0.1、两个平台「待开放」，/xcagi-v*/ 与 /releases/ 产物缺失；旧主机已恢复但未隔离；国内复测与 Ops Uptime 恢复记录未完成；冻结 SHA 部署后须重测"
+      "blocker": "灾备节点以过渡方式提供 9 月版本：下载页 1.0.0.1、两个平台「待开放」，/xcagi-v*/ 与 /releases/ 产物缺失；旧主机 16:28Z 已恢复但未隔离；国内复测与 Ops Uptime 恢复记录未完成；冻结 SHA 部署后须重测"
     },
     {
       "no": 2,
@@ -39,7 +39,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../production-availability-20261006/run.json"],
-      "blocker": "灾备节点 FHD 73861ed7、MODstore 201d1f69 为 9 月版本且 scheduler_running=false；staging 只在旧主机提供；旧主机 scheduler_running=true 未隔离，存在两边同时写入的风险；冻结 SHA 未部署"
+      "blocker": "灾备节点 FHD 73861ed7、MODstore 201d1f69 为 9 月版本且 scheduler_running=false；恢复后 69 分钟内工单接口 1 次 7 秒超时；staging 只在旧主机提供；旧主机 scheduler_running=true 未隔离，存在两边同时写入的风险；冻结 SHA 未部署"
     },
     {
       "no": 3,
