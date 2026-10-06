@@ -1,7 +1,7 @@
 {
   "scope": "两个闭环 25 道最终发布硬闸门；任何一道不是 GREEN 都不能宣布闭环",
   "gate_values": ["GREEN", "YELLOW", "RED", "UNKNOWN"],
-  "updated_at": "2026-10-06T17:09:54Z",
+  "updated_at": "2026-10-06T21:42:27Z",
   "source_sha": null,
   "verdict": "未闭环",
   "counts": {
@@ -26,7 +26,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../production-availability-20261006/run.json"],
-      "blocker": "灾备时段发布产物回落首页；16:50:16Z DNS 回切未隔离的旧主后，下载页（主线 249dd003f 版本）在 release_ready=false 时仍提供 macOS DMG 与 Windows 临时包，Windows 更新源 latest.yml 为 404；国内复测与 Ops Uptime 恢复记录未完成；冻结 SHA 部署后须重测"
+      "blocker": "恢复后 362 分钟外部拨测首页每轮 200，Ops Uptime 20:31:46Z 两个端点 200，下载页已部署 15b7180b3 的发布身份门控；国内复测未完成，线上 manifest 与 latest-mac.yml 仍为 8d50fe9d，灾备边缘的发布路径仍回落首页；冻结 SHA 部署后须重测"
     },
     {
       "no": 2,
@@ -39,7 +39,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../production-availability-20261006/run.json"],
-      "blocker": "16:50:16Z DNS 回切旧主（MODstore 201d1f69、scheduler_running=true），灾备仍为 promoted 可写主库，接管期间写入未并回，两边数据可能分叉；恢复后 89 分钟内工单接口 1 次 7 秒超时；冻结 SHA 未部署"
+      "blocker": "恢复后 362 分钟 1443 个核心样本失败 1 次；灾备到 21:32Z 仍为 promoted 可写主库，接管期间写入未并回，两边数据可能分叉；15b7180b3 未部署到 FHD 与 MODstore；国内复测未完成"
     },
     {
       "no": 3,
@@ -64,7 +64,7 @@
       ],
       "status": "RED",
       "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../windows-closeout-20261006/run.json", "prefreeze-artifacts-604ab1531.json"],
-      "blocker": "最近一次实机 f16373d 的 G6/G7 为 RED，修复 #2168 与 G6 定位已入主线 604ab1531 但未在冻结候选上复验；冻结候选未构建（#2170 未合入），windows-a/b/c 三轮未执行"
+      "blocker": "最近一次实机 f16373d 的 G6/G7 为 RED，修复 #2168 与 G6 定位已入主线 604ab1531 但未在冻结候选上复验；冻结候选未构建（15b7180b3 的发布安全扫描未通过，不能冻结），windows-a/b/c 三轮未执行"
     },
     {
       "no": 4,
@@ -89,7 +89,7 @@
       ],
       "status": "UNKNOWN",
       "evidence": ["../../../MACOS_RELEASE_SSOT.md", "prefreeze-artifacts-604ab1531.json"],
-      "blocker": "现有 GREEN 证据属于 54325894c 旧包；冻结候选未构建（#2170 未合入），无 x64 构建；codesign、spctl、stapler 须在真实 Mac 上采集；macos-a/b/c 三轮未执行"
+      "blocker": "现有 GREEN 证据属于 54325894c 旧包；冻结候选未构建（15b7180b3 的发布安全扫描未通过，不能冻结），无 x64 构建；codesign、spctl、stapler 须在真实 Mac 上采集；macos-a/b/c 三轮未执行"
     },
     {
       "no": 5,
@@ -306,7 +306,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
-      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产 MODstore 仍是 9 月版本 201d1f69"
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；工单闭环已随 #2170 合入 main 15b7180b3，但 FHD 与 MODstore 均未部署，生产 MODstore 仍是 9 月版本 201d1f69"
     },
     {
       "no": 18,
@@ -319,7 +319,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
-      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产 MODstore 仍是 9 月版本 201d1f69"
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；工单闭环已随 #2170 合入 main 15b7180b3，但 FHD 与 MODstore 均未部署，生产 MODstore 仍是 9 月版本 201d1f69"
     },
     {
       "no": 19,
@@ -345,7 +345,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
-      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产 MODstore 仍是 9 月版本 201d1f69；桌面结果视图在 #2170 中，安装版未验证"
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；工单闭环已随 #2170 合入 main 15b7180b3，但 FHD 与 MODstore 均未部署，生产 MODstore 仍是 9 月版本 201d1f69；桌面结果视图已在 15b7180b3，安装版未验证"
     },
     {
       "no": 21,
@@ -358,7 +358,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
-      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产 MODstore 仍是 9 月版本 201d1f69；客户确认接口在 #2170 中，生产不存在"
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；工单闭环已随 #2170 合入 main 15b7180b3，但 FHD 与 MODstore 均未部署，生产 MODstore 仍是 9 月版本 201d1f69；客户确认接口已在 15b7180b3，生产未部署"
     },
     {
       "no": 22,
@@ -371,7 +371,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
-      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产 MODstore 仍是 9 月版本 201d1f69；重新打开接口在 #2170 中，生产不存在"
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；工单闭环已随 #2170 合入 main 15b7180b3，但 FHD 与 MODstore 均未部署，生产 MODstore 仍是 9 月版本 201d1f69；重新打开接口已在 15b7180b3，生产未部署"
     },
     {
       "no": 23,
@@ -388,7 +388,7 @@
       ],
       "status": "RED",
       "evidence": ["candidate.run.json", "ticket-loop.run.json"],
-      "blocker": "8 份 run.json 共 342 项结果全部为 UNKNOWN；冻结候选未构建（#2170 未合入）"
+      "blocker": "8 份 run.json 共 342 项结果全部为 UNKNOWN；冻结候选未构建（15b7180b3 的发布安全扫描未通过，不能冻结）"
     },
     {
       "no": 24,
@@ -400,8 +400,8 @@
         }
       ],
       "status": "RED",
-      "evidence": ["candidate.run.json"],
-      "blocker": "集成 PR #2170 仍为草稿，合入需要明确授权；冻结 SHA、安全扫描对与构建均未产生"
+      "evidence": ["candidate.run.json", "prefreeze-security-scan-15b7180b3.json"],
+      "blocker": "#2170 已合入 main 15b7180b3，但发布安全扫描 run 37526133865 未通过：依赖漏洞已在 #2178 修复待合入，CodeQL 须在冻结 SHA 上等分析完成后再扫，生产内核 TSSA-2026:1026 须运维更新；合入后 main 的能力中心日期漂移由 #2177 修复待合入；冻结 SHA、间隔 ≥30 分钟的扫描对与 Windows/macOS 构建均未产生"
     },
     {
       "no": 25,
@@ -414,7 +414,7 @@
       ],
       "status": "RED",
       "evidence": ["../../../../config/download_release.json", "../production-availability-20261006/run.json"],
-      "blocker": "主线 download_release.json release_ready=false；16:50Z 回切后的线上下载页仍按 8d50fe9d manifest 提供 macOS DMG 并列出 Windows 临时包，#2170 的发布身份门控未部署；须 1–24 全部 GREEN 后才能解除"
+      "blocker": "主线 download_release.json release_ready=false；官网已部署 15b7180b3 的下载页门控（macOS 两个架构待开放，Windows 只列出 604ab1531 未签名临时包），但线上 manifest 与 stable 的 latest-mac.yml 仍为 8d50fe9d；须 1–24 全部 GREEN 后才能解除"
     }
   ]
 }

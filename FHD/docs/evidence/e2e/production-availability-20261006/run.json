@@ -2,7 +2,7 @@
   "run_id": "PROD-AVAIL-20261006-001",
   "scope": "最终闸门 1（官网正常）与 2（生产 API 正常），对应工单清单第 1 项：生产恢复后的外部连续拨测",
   "created_at": "2026-10-06T16:12:00Z",
-  "updated_at": "2026-10-06T17:09:07Z",
+  "updated_at": "2026-10-06T21:41:50Z",
   "final_gates": [1, 2],
   "incident": {
     "issue": "https://github.com/42433422/XCMAX/issues/2169",
@@ -32,25 +32,26 @@
     "outage_samples": 392,
     "outage_http_codes": {"000": 392},
     "outage_observed": ["2026-10-06T13:30:32Z", "2026-10-06T15:37:57Z"],
-    "recovered_window": ["2026-10-06T15:39:03Z", "2026-10-06T17:08:16Z"],
-    "minutes": 89.2,
-    "distinct_minutes": 89,
-    "max_homepage_gap_seconds": 78.0,
+    "recovered_window": ["2026-10-06T15:39:03Z", "2026-10-06T21:41:35Z"],
+    "minutes": 362.5,
+    "distinct_minutes": 361,
+    "max_homepage_gap_seconds": 121.0,
     "core_expect": {"/": "200 text/html", "/api/health": "200 application/json", "/fhd-api/api/health": "200 application/json", "/api/work-orders/customer-candidate": "401 application/json"},
-    "core_samples": 356,
+    "core_samples": 1443,
     "core_failures": 1,
     "core_failure_rows": [
       {"at": "2026-10-06T16:29:15Z", "url": "/api/work-orders/customer-candidate", "http": "000", "seconds": 7.001, "ip": "43.138.211.142"}
     ],
-    "core_latency_seconds": {"p50": 1.093, "max": 7.001},
+    "core_latency_seconds": {"p50": 1.002, "max": 7.001},
     "not_served": {
       "urls": ["/fhd-staging-api/health", "/xcagi-v1.0.0.5/manifest.json", "/releases/stable/enterprise/latest.yml", "/releases/stable/enterprise/latest-mac.yml"],
-      "observed": "灾备时段 225 次带类型采样全部为 200 text/html 67176 字节（官网首页兜底），不是健康检查或发布指针；回切旧主后 55 次采样为 /fhd-staging-api/health 200 application/json、/releases/stable/enterprise/latest-mac.yml 200 application/octet-stream、/releases/stable/enterprise/latest.yml 404 text/html、/xcagi-v1.0.0.5/manifest.json 200 application/json"
+      "observed": "灾备时段 225 次带类型采样全部为 200 text/html 67176 字节（官网首页兜底），不是健康检查或发布指针；回切旧主后 1142 次采样为 /fhd-staging-api/health 200 application/json、/releases/stable/enterprise/latest-mac.yml 200 application/octet-stream、/releases/stable/enterprise/latest.yml 404 text/html、/xcagi-v1.0.0.5/manifest.json 200 application/json"
     },
     "serving_segments": [
       {"ip": "43.138.211.142", "node": "灾备 promoted", "from": "2026-10-06T15:39:03Z", "to": "2026-10-06T16:55:05Z"},
-      {"ip": "119.27.178.147", "node": "旧主机", "from": "2026-10-06T16:55:07Z", "to": "2026-10-06T17:08:16Z", "rounds": 14}
-    ]
+      {"ip": "119.27.178.147", "node": "旧主机", "from": "2026-10-06T16:55:07Z", "to": "2026-10-06T21:41:35Z", "rounds": 286}
+    ],
+    "probe_gaps": "19:42Z 一轮拨测 VM 自身卡顿，请求之间间隔被拉长（各请求本身约 1 秒），19:43Z 未采样；旧主探针 19:32Z 一轮缺少 / 的记录。两处都是采样缺口，不是失败"
   },
   "multi_region": {
     "file": "checkhost.json",
@@ -59,7 +60,8 @@
       {"at": "2026-10-06T15:55:02Z", "ok": 14, "total": 15, "failed": "sg1 → /api/health Connection timed out（3.0 秒）"},
       {"at": "2026-10-06T16:10:37Z", "ok": 15, "total": 15},
       {"at": "2026-10-06T16:40:13Z", "ok": 15, "total": 15, "ip": ["43.138.211.142"]},
-      {"at": "2026-10-06T17:00:56Z", "ok": 14, "total": 15, "failed": "sg1 → / Connection timed out（4.7 秒）", "ip": ["119.27.178.147"]}
+      {"at": "2026-10-06T17:00:56Z", "ok": 14, "total": 15, "failed": "sg1 → / Connection timed out（4.7 秒）", "ip": ["119.27.178.147"]},
+      {"at": "2026-10-06T21:37:19Z", "ok": 15, "total": 15, "ip": ["119.27.178.147"]}
     ],
     "mainland_china": "check-host 无中国大陆节点，需用 domestic_retest 命令补测"
   },
@@ -67,7 +69,8 @@
     "dr-home.png": "2026-10-06T16:07Z 官网首页正常渲染",
     "dr-download.png": "2026-10-06T16:08Z 下载页显示当前版本 1.0.0.1，「稳定版正在签名与验收，完成后开放下载」，Windows 与 macOS 均为「待开放」",
     "primary-home.png": "2026-10-06T17:04Z 回切旧主后官网首页正常渲染",
-    "primary-download.png": "2026-10-06T17:05Z 回切旧主后下载页为「macOS 稳定版 1.0.0.5 · Windows 临时交付 1.0.0.5」，提供 Windows 临时包（unsigned，SHA256 92810ed6…）与 macOS Apple Silicon DMG（SHA256 55a87377…）下载"
+    "primary-download.png": "2026-10-06T17:05Z 回切旧主后下载页为「macOS 稳定版 1.0.0.5 · Windows 临时交付 1.0.0.5」，提供 Windows 临时包（unsigned，SHA256 92810ed6…）与 macOS Apple Silicon DMG（SHA256 55a87377…）下载",
+    "download-after-merge.png": "2026-10-06T21:12Z #2170 合入并部署后的下载页：顶部为「macOS 稳定包待开放 · Windows 临时交付 1.0.0.5」，Windows 64 位只列出 v1.0.0.5 临时包（Authenticode unsigned，约 239 MB，SHA256 bfc4dde1…），macOS Apple Silicon 与 Intel 均为「待开放」，并注明不会进入稳定自动更新"
   },
   "download_surface": {
     "checked_at": "2026-10-06T15:57Z",
@@ -89,14 +92,27 @@
       "windows_hotfix": {"git_sha": "83939363ca2ccf7776c97f5c7895e29c1e5bc453", "download_allowed": true, "signature_status": "unsigned", "sha256": "92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf", "risk_acceptance": "WSA-2026-09-17-01，至 2029-09-17"},
       "latest_yml": "404",
       "finding": "release_ready=false 时下载页仍提供 macOS DMG 与 Windows 临时包，发布闸门未在官网生效"
+    },
+    "after_main_merge": {
+      "checked_at": "2026-10-06T21:32:18Z",
+      "main": "15b7180b333acac54e7cf86c68fe9ecb14ee37a6（#2170，2026-10-06T20:23:23Z squash 合入）",
+      "corp_site_deploy": {"runs": [37526072364, 37526426463], "download_last_modified": "2026-10-06T20:28:07Z"},
+      "download_page": {"equals_main_download_html": true, "bytes": 34318, "sha256": "14bafb8c413645b6722164f5b7150a70e785c9a84f9f46813237860073a16986"},
+      "rendered": "macOS Apple Silicon 与 Intel 为「待开放」（aria-disabled=true）；Windows 64 位为「临时交付 v1.0.0.5」，说明为「Windows 临时交付包 Authenticode 状态：unsigned。安装前请核对完整 SHA-256；不会进入稳定自动更新。macOS 稳定包暂未开放。」",
+      "windows_interim": {"url": "/xcagi-v1.0.0.5/enterprise/604ab1531407cd9849c01631fb8c3f38b6e5d7d0/bfc4dde1b41759f849c2372c45ad87f70a34726d41f58d363231f9cf6cb47623/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe", "http": "200", "bytes": 250278156, "last_modified": "2026-10-06T17:59:24Z", "matches": "../final-acceptance-1.0.0.5/prefreeze-artifacts-604ab1531.json 的 installer_sha256 与 installer_size"},
+      "manifest_1_0_0_5": {"git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f", "release_ready": false},
+      "latest_mac_yml": {"http": "200", "version": "1.0.0", "productVersion": "1.0.0.5", "buildSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f"},
+      "latest_yml": "404",
+      "finding": "官网下载页已按 15b7180b3 门控：release_ready=false 时不再提供 macOS DMG，Windows 只列出已接受风险的临时包；manifest 与 stable 的 latest-mac.yml 仍为 8d50fe9d（09-21 构建），FHD 与 MODstore 也未随 15b7180b3 部署"
     }
   },
   "ops_uptime_probe": {
     "workflow": ".github/workflows/ops-uptime.yml",
     "cron": "*/10 * * * *",
-    "observed_interval": "近 7 天实际 3–7 小时运行一次（10-06 为 02:08Z、08:54Z、15:37Z），不能作为分钟级告警",
-    "last_run": {"run": 37489058745, "probe": ["2026-10-06T15:37:53Z", "2026-10-06T15:41:24Z"], "result": "fhd-api 与 corp-site 均 000", "note": "开始于 DNS 切换（15:38:54Z，TTL 600 秒）之前，托管机仍连接旧主机"},
-    "recovery_record": "待下一次定时运行；通过后工作流会在 #2169 评论并自动关单",
+    "observed_interval": "近 7 天实际 3–7 小时运行一次（10-06 为 02:08Z、08:54Z、15:37Z、20:31Z），不能作为分钟级告警",
+    "previous_run": {"run": 37489058745, "probe": ["2026-10-06T15:37:53Z", "2026-10-06T15:41:24Z"], "result": "fhd-api 与 corp-site 均 000", "note": "开始于 DNS 切换（15:38:54Z，TTL 600 秒）之前，托管机仍连接旧主机"},
+    "last_run": {"run": 37527132805, "probe": ["2026-10-06T20:31:50Z", "2026-10-06T20:31:56Z"], "result": "fhd-api 与 corp-site 均 200"},
+    "recovery_record": "20:31:46Z 定时运行 37527132805 两个端点均 200；#2169 已于 20:23:26Z 因 #2170 合入被关闭（关闭者为 PR #2170），所以这次运行没有可评论或关闭的事件单",
     "status_code_only": "只判状态码，staging 与发布指针的 HTML 兜底会被误判为正常"
   },
   "domestic_retest": {
@@ -107,16 +123,15 @@
     "self_test": "2026-10-06T16:05:08Z 在本 VM 跑 1 轮，输出与上述判定一致"
   },
   "verdict": {
-    "gate_1": {"status": "YELLOW", "reason": "首页自 15:39:03Z 恢复后 89 分钟内逐分钟可达（首页失败 0 次），5 个境外地区四轮抽测 58/60 成功；灾备时段以过渡方式提供 9 月版本、发布产物回落首页，16:50:16Z DNS 回切未隔离的旧主后，下载页在 release_ready=false 时仍提供 macOS DMG 与 Windows 临时包，Windows 更新源 latest.yml 为 404；国内复测与 Ops Uptime 恢复记录尚缺"},
-    "gate_2": {"status": "YELLOW", "reason": "FHD 与 MODstore 健康检查 89 分钟内 200 JSON、工单接口 401 JSON，356 个核心样本失败 1 次（16:29:15Z /api/work-orders/customer-candidate 7 秒超时返回 000，前后各轮正常）；16:50:16Z DNS 回切旧主（MODstore 201d1f69，scheduler_running=true），但灾备仍为 promoted 可写主库，接管期间写入未并回，两边数据可能分叉；服务仍是 9 月版本，国内复测与 Ops Uptime 恢复记录尚缺"}
+    "gate_1": {"status": "YELLOW", "reason": "首页自 15:39:03Z 恢复后 362 分钟内 361 轮采样全部 200（首页失败 0 次，19:43Z 因拨测 VM 卡顿漏采一轮），5 个境外地区 5 轮抽测 73/75 成功；Ops Uptime 20:31:46Z 定时运行两个端点均 200；20:28Z 起下载页为 15b7180b3 版本，release_ready=false 时 macOS 显示待开放，Windows 只列出已接受风险的临时包；国内复测仍缺，线上 manifest 与 latest-mac.yml 仍为 8d50fe9d，灾备边缘的发布路径仍回落首页；冻结 SHA 部署后须重测"},
+    "gate_2": {"status": "YELLOW", "reason": "FHD 与 MODstore 健康检查 362 分钟内 200 JSON、工单接口 401 JSON，1443 个核心样本失败 1 次（16:29:15Z /api/work-orders/customer-candidate 7 秒超时返回 000，前后各轮正常）；旧主自 16:55:07Z 起持续服务（MODstore 201d1f69，scheduler_running=true），但灾备到 21:32:18Z 仍为 promoted 可写主库，接管期间写入未并回，两边数据可能分叉；15b7180b3 未部署到 FHD 与 MODstore；国内复测仍缺"}
   },
   "ops_actions": [
     "灾备 43.138.211.142 仍为 promoted 可写主库：先让它停止接收写入，核对 15:38:54Z 至约 17:00Z 灾备库的新增写入并并回旧主，再按 ops/dr/README.md 把灾备重建为 standby",
     "查明 16:50:16Z 的 DNS 回切来源；若为 DNSPod 健康检查自动回切，按 ops/dr/README.md「自动回切默认禁止」关闭",
-    "合入 #2170 并部署官网，让下载页按发布身份门控；冻结 SHA 发布后重新生成 download-release.json、manifest、latest.yml 与 latest-mac.yml",
-    "灾备边缘配置补 /xcagi-v*/ 与 /releases/ 路由，或缺文件时返回 404，避免再次接管时回落首页",
-    "从国内网络运行 domestic_retest 命令 30 分钟，把日志放入本目录",
-    "等待 Ops Uptime 下一次定时运行通过并自动关闭 #2169"
+    "在灾备节点重新运行 main 上的 ops/dr/xcmax_dr_prepare_edge.sh，让发布路径缺文件时返回 404，避免再次接管时回落首页",
+    "合入 #2177、#2178 并修复生产内核 TSSA-2026:1026 后冻结 SHA，部署 FHD 与 MODstore；发布后重新生成 download-release.json、manifest、latest.yml 与 latest-mac.yml",
+    "从国内网络运行 domestic_retest 命令 30 分钟，把日志放入本目录"
   ],
   "primary_after_recovery": {
     "ip": "119.27.178.147",
@@ -124,10 +139,10 @@
     "first_200_observed_at": "2026-10-06T16:28:54Z",
     "trigger": "15:00Z 之后没有任何部署或运维工作流触达该主机，恢复来源不在仓库内（控制台或网络侧）",
     "probe_file": "probe-primary.jsonl",
-    "probe_window": ["2026-10-06T16:30:51Z", "2026-10-06T17:08:09Z"],
-    "probe_minutes": 39,
-    "probe_http": {"/ 200": 39, "/api/health 200": 39, "/fhd-api/api/health 200": 39},
-    "probe_scheduler_running": {"true": 39},
+    "probe_window": ["2026-10-06T16:30:51Z", "2026-10-06T21:41:21Z"],
+    "probe_minutes": 312,
+    "probe_http": {"/ 200": 311, "/api/health 200": 312, "/fhd-api/api/health 200": 312},
+    "probe_scheduler_running": {"true": 312},
     "dns_points_to": "16:50:16Z 起为本机，见 dns_failback",
     "serving": {
       "homepage": "200 text/html 18197 字节，与灾备节点首页不同",
@@ -155,6 +170,13 @@
     "dr_after_failback": {"checked_at": "2026-10-06T16:58:08Z", "x-xcmax-dr-mode": "promoted", "api_health": {"deploy_tier": "local", "scheduler_running": false, "git_sha": "201d1f691855465f76dd53adc74c1d53ff4d9af4"}, "write_path": "promoted 模式下 ops/dr/xcmax_dr_prepare_edge.sh 把写请求留在本机，xcmax_dr_promote.sh 已提升本机 PostgreSQL 并停用到生产的隧道；POST /api/auth/login 由灾备本机返回 422"},
     "primary_after_failback": {"deploy_tier": "production", "scheduler_running": true, "hostname": "VM-0-7-tencentos", "git_sha": "201d1f691855465f76dd53adc74c1d53ff4d9af4"},
     "resolved": ["服务节点 scheduler_running=true", "corp-site-deploy、fhd-deploy、modstore-prod-deploy 的 SSH 目标与 DNS 重新一致"],
-    "risk": "ops/dr/README.md 规定自动回切默认禁止，旧主恢复后须先隔离再重建为 standby；这次回切时灾备仍是可写主库。15:38:54Z 至 DNS 缓存过期（约 17:00Z）写入灾备的数据不在旧主，旧主 16:28Z 恢复后的 scheduler 写入与回切后的客户写入也不在灾备，两边数据可能已分叉，是否有实际写入须核对两库"
+    "risk": "ops/dr/README.md 规定自动回切默认禁止，旧主恢复后须先隔离再重建为 standby；这次回切时灾备仍是可写主库。15:38:54Z 至 DNS 缓存过期（约 17:00Z）写入灾备的数据不在旧主，旧主 16:28Z 恢复后的 scheduler 写入与回切后的客户写入也不在灾备，两边数据可能已分叉，是否有实际写入须核对两库",
+    "dr_latest": {
+      "checked_at": "2026-10-06T21:32:18Z",
+      "x-xcmax-dr-mode": "promoted",
+      "api_health": {"deploy_tier": "local", "scheduler_running": false, "git_sha": "201d1f691855465f76dd53adc74c1d53ff4d9af4"},
+      "release_paths": "manifest 与 latest-mac.yml 仍返回 200 text/html 67176 字节首页；main 上 ops/dr/xcmax_dr_prepare_edge.sh 已改为 try_files $uri =404，灾备节点尚未重新应用",
+      "dns_a": {"dns.google": "119.27.178.147", "cloudflare-dns.com": "119.27.178.147", "dns.alidns.com": "119.27.178.147", "doh.pub": "119.27.178.147"}
+    }
   }
 }
