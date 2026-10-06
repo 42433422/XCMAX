@@ -151,9 +151,9 @@ def build_support_bundle_zip(
     readme = "清单不含密钥，日志已脱敏；数据库和崩溃转储不随包提供。\n"
     if shots:
         readme += "screenshots/ 是客户报障时所选的截图，已压缩。\n"
-    keep = 250_000
-    while True:
-        blob = _zip_entries(
+
+    def pack(keep: int) -> bytes:
+        return _zip_entries(
             [
                 ("README.txt", readme.encode()),
                 ("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2).encode()),
@@ -161,10 +161,14 @@ def build_support_bundle_zip(
                 *((f"screenshots/{index}.jpg", shot) for index, shot in enumerate(shots, 1)),
             ]
         )
-        if len(blob) <= SUPPORT_BUNDLE_MAX_BYTES or keep < 4_000:
-            return blob
+
+    keep = 250_000
+    blob = pack(keep)
+    while len(blob) > SUPPORT_BUNDLE_MAX_BYTES and keep >= 4_000:
         keep //= 2
         manifest["logTailBytes"] = keep
+        blob = pack(keep)
+    return blob
 
 
 def build_evidence_ref(
