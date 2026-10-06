@@ -1,8 +1,17 @@
 {
   "run_id": "CANDIDATE-<SHA8>-<YYYYMMDD>",
   "scope": "唯一冻结候选：版本与构建身份、官网下载入口（清单 A–B 段）；A 段第 3–9 项和 B 段第 17–19 项由云端只读下载 CI 产物核对",
-  "result_values": ["PASS", "FAIL", "UNKNOWN"],
-  "gate_values": ["GREEN", "YELLOW", "RED", "UNKNOWN"],
+  "result_values": [
+    "PASS",
+    "FAIL",
+    "UNKNOWN"
+  ],
+  "gate_values": [
+    "GREEN",
+    "YELLOW",
+    "RED",
+    "UNKNOWN"
+  ],
   "created_at": null,
   "final_acceptance": true,
   "release_frozen": false,
@@ -76,7 +85,9 @@
       "gitSha": null,
       "releaseId": null
     },
-    "platform": "macos-x64"
+    "platform": "macos-x64",
+    "scope_decision": "excluded_from_this_customer_candidate",
+    "written_scope": "本次客户候选只交付 Apple Silicon（arm64）。Intel Mac（x64）不进入本次客户下载渠道，也不作为本次实机闭环的通过条件。官网同时列出 Apple Silicon 与 Intel：没有 x64 安装包时 Intel 行不可下载，且不得指向 arm64 包。VERSION.md 仍写 macOS arm64 + x64，该口径不因本次排除而改写；x64 须另有候选包和 Intel 实机后才能纳入。"
   },
   "manifest": {
     "url": null,
@@ -90,8 +101,14 @@
       "no": 1,
       "section": "A",
       "item": "确定唯一候选版本",
-      "criteria": ["禁止测试过程中不断换 commit。", "明确版本号。", "明确 git SHA。"],
-      "final_gates": [24],
+      "criteria": [
+        "禁止测试过程中不断换 commit。",
+        "明确版本号。",
+        "明确 git SHA。"
+      ],
+      "final_gates": [
+        24
+      ],
       "owner": "field",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -104,8 +121,12 @@
       "no": 2,
       "section": "A",
       "item": "冻结候选版本",
-      "criteria": ["除阻断级 Bug 外不再加功能。"],
-      "final_gates": [24],
+      "criteria": [
+        "除阻断级 Bug 外不再加功能。"
+      ],
+      "final_gates": [
+        24
+      ],
       "owner": "field",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -118,7 +139,9 @@
       "no": 3,
       "section": "A",
       "item": "Windows 构建通过",
-      "final_gates": [3],
+      "final_gates": [
+        3
+      ],
       "owner": "cloud-agent",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -131,7 +154,9 @@
       "no": 4,
       "section": "A",
       "item": "macOS 构建通过",
-      "final_gates": [4],
+      "final_gates": [
+        4
+      ],
       "owner": "cloud-agent",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -144,7 +169,10 @@
       "no": 5,
       "section": "A",
       "item": "安装包版本号一致",
-      "final_gates": [3, 4],
+      "final_gates": [
+        3,
+        4
+      ],
       "owner": "cloud-agent",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -157,7 +185,10 @@
       "no": 6,
       "section": "A",
       "item": "应用内部版本号一致",
-      "final_gates": [3, 4],
+      "final_gates": [
+        3,
+        4
+      ],
       "owner": "cloud-agent",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -170,7 +201,10 @@
       "no": 7,
       "section": "A",
       "item": "manifest 版本一致",
-      "final_gates": [3, 4],
+      "final_gates": [
+        3,
+        4
+      ],
       "owner": "cloud-agent",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -183,7 +217,10 @@
       "no": 8,
       "section": "A",
       "item": "下载页面版本一致",
-      "final_gates": [3, 4],
+      "final_gates": [
+        3,
+        4
+      ],
       "owner": "cloud-agent",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -196,7 +233,10 @@
       "no": 9,
       "section": "A",
       "item": "哈希正确",
-      "final_gates": [3, 4],
+      "final_gates": [
+        3,
+        4
+      ],
       "owner": "cloud-agent",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -209,7 +249,9 @@
       "no": 10,
       "section": "A",
       "item": "发布清单 release_ready 满足正式要求",
-      "final_gates": [25],
+      "final_gates": [
+        25
+      ],
       "owner": "field",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -222,7 +264,11 @@
       "no": 11,
       "section": "B",
       "item": "普通客户打开官网",
-      "final_gates": [1, 3, 4],
+      "final_gates": [
+        1,
+        3,
+        4
+      ],
       "owner": "field",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -235,7 +281,11 @@
       "no": 12,
       "section": "B",
       "item": "找到下载入口",
-      "final_gates": [1, 3, 4],
+      "final_gates": [
+        1,
+        3,
+        4
+      ],
       "owner": "field",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -248,7 +298,11 @@
       "no": 13,
       "section": "B",
       "item": "Windows 下载按钮正确",
-      "final_gates": [1, 3, 4],
+      "final_gates": [
+        1,
+        3,
+        4
+      ],
       "owner": "field",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -261,7 +315,11 @@
       "no": 14,
       "section": "B",
       "item": "Mac 下载按钮正确",
-      "final_gates": [1, 3, 4],
+      "final_gates": [
+        1,
+        3,
+        4
+      ],
       "owner": "field",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -274,7 +332,11 @@
       "no": 15,
       "section": "B",
       "item": "下载不会跳 404",
-      "final_gates": [1, 3, 4],
+      "final_gates": [
+        1,
+        3,
+        4
+      ],
       "owner": "field",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -287,7 +349,11 @@
       "no": 16,
       "section": "B",
       "item": "下载不会跳旧版本",
-      "final_gates": [1, 3, 4],
+      "final_gates": [
+        1,
+        3,
+        4
+      ],
       "owner": "field",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -300,7 +366,10 @@
       "no": 17,
       "section": "B",
       "item": "安装包完整下载",
-      "final_gates": [3, 4],
+      "final_gates": [
+        3,
+        4
+      ],
       "owner": "cloud-agent",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -313,7 +382,10 @@
       "no": 18,
       "section": "B",
       "item": "核对文件大小",
-      "final_gates": [3, 4],
+      "final_gates": [
+        3,
+        4
+      ],
       "owner": "cloud-agent",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -326,7 +398,10 @@
       "no": 19,
       "section": "B",
       "item": "核对 SHA256",
-      "final_gates": [3, 4],
+      "final_gates": [
+        3,
+        4
+      ],
       "owner": "cloud-agent",
       "result": "UNKNOWN",
       "observed_at": null,
@@ -339,7 +414,10 @@
       "no": 20,
       "section": "B",
       "item": "浏览器下载提示合理",
-      "final_gates": [3, 4],
+      "final_gates": [
+        3,
+        4
+      ],
       "owner": "field",
       "result": "UNKNOWN",
       "observed_at": null,

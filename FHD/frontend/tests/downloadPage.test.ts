@@ -39,23 +39,23 @@ async function open(files: Record<string, unknown>, search = '') {
 }
 
 afterEach(() => vi.unstubAllGlobals())
-
 it('offers stable installers only when the pointer and manifest agree on a ready release', async () => {
   const stable = { [`${root}/manifest.json`]: manifest(['arm64']) }
   expect(await open({ ...stable, '/download-release.json': pointer(true) })).toEqual({
     'Windows 64 位': `${root}/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64.exe`,
-    'macOS · Apple Silicon': `${root}/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg`,
+    'macOS · Apple Silicon': `${root}/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg`, 'macOS · Intel': null,
   })
-  expect(document.getElementById('pending')?.hidden).toBe(true)
+  expect(document.getElementById('pending')?.hidden).toBe(false)
   for (const release of [pointer(false), pointer(true, { git_sha: 'c'.repeat(40) })]) {
-    expect(Object.values(await open({ ...stable, '/download-release.json': release }))).toEqual([null, null])
+    expect(Object.values(await open({ ...stable, '/download-release.json': release }))).toEqual([null, null, null])
     expect(document.getElementById('pending')?.hidden).toBe(false)
   }
 })
 
 it('never hands an Intel Mac the Apple Silicon image', async () => {
   const files = (macs: string[]) => ({ '/download-release.json': pointer(true), [`${root}/manifest.json`]: manifest(macs) })
-  expect((await open(files(['arm64']), '?macArch=x64'))['macOS · Intel']).toBeNull()
+  const armOnly = await open(files(['arm64']))
+  expect([armOnly['macOS · Apple Silicon'], armOnly['macOS · Intel']]).toEqual([`${root}/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg`, null])
   expect((await open(files(['arm64', 'x64']), '?macArch=x64'))['macOS · Intel']).toBe(`${root}/enterprise/XCAGI-Enterprise-1.0.0.5-mac-x64.dmg`)
 })
 

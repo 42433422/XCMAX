@@ -744,7 +744,11 @@
             if (query === 'arm64' || query === 'aarch64') return 'arm64'
             if (query === 'x64' || query === 'x86_64' || query === 'intel') return 'x64'
           }
-          if (/\b(aarch64|arm64)\b/i.test(navigator.userAgent || '')) return 'arm64'
+          var ua = navigator.userAgent || ''
+          if (/\b(aarch64|arm64)\b/i.test(ua)) return 'arm64'
+          // Safari on Apple Silicon still says "Intel Mac OS X", so UA alone cannot
+          // choose the package. Row order may prefer arm64; the Intel row never
+          // receives the arm64 file.
           return 'arm64'
         }
 
@@ -771,9 +775,9 @@
           return hotfix
         }
 
-        function fileName(platform) {
+        function fileName(platform, arch) {
           if (platform === 'android') return 'XCAGI-Enterprise-Android-' + state.androidVersion + '.apk'
-          if (platform === 'mac') return 'XCAGI-Enterprise-' + state.version + '-mac-' + state.macArch + '.dmg'
+          if (platform === 'mac') return 'XCAGI-Enterprise-' + state.version + '-mac-' + (arch || state.macArch) + '.dmg'
           var hotfix = activeWindowsHotfix()
           if (hotfix) return hotfix.artifact.filename
           return 'XCAGI-Enterprise-Setup-' + state.version + '-x64.exe'
@@ -783,32 +787,33 @@
           return state.base + '/enterprise/' + fileName(platform)
         }
 
-        function manifestEntry(platform) {
+        function manifestEntry(platform, arch) {
           var manifest = state.manifest
           var sku = manifest && manifest.channels && manifest.channels.official_download && manifest.channels.official_download.enterprise
           if (!sku || !state.releaseReady || manifest.release_ready !== true || manifest.version !== state.version ||
             !state.gitSha || manifest.git_sha !== state.gitSha || !state.releaseId || manifest.release_id !== state.releaseId) return null
+          var macArch = arch || state.macArch
           var entry = platform === 'mac'
-            ? (sku.mac || []).filter(function (row) { return row && row.filename === fileName('mac') })[0]
+            ? (sku.mac || []).filter(function (row) { return row && row.filename === fileName('mac', macArch) })[0]
             : sku[platform]
           if (!entry || !/^[a-f0-9]{64}$/i.test(entry.sha256 || '')) return null
-          var arch = platform === 'mac' ? state.macArch : 'x64'
-          return platform === 'android' || (entry.filename === fileName(platform) && entry.url === officialUrl(entry.filename) &&
-            (!entry.arch || entry.arch === arch)) ? entry : null
+          var expectArch = platform === 'mac' ? macArch : 'x64'
+          return platform === 'android' || (entry.filename === fileName(platform, macArch) && entry.url === officialUrl(entry.filename) &&
+            (!entry.arch || entry.arch === expectArch)) ? entry : null
         }
 
-        function downloadUrl(platform) {
+        function downloadUrl(platform, arch) {
           var hotfix = platform === 'win' ? activeWindowsHotfix() : null
-          var entry = hotfix ? hotfix.artifact : manifestEntry(platform)
+          var entry = hotfix ? hotfix.artifact : manifestEntry(platform, arch)
           return entry ? entry.url : platform === 'android' && state.androidVersion ? staticUrl(platform) : ''
         }
 
-        function metaText(platform) {
+        function metaText(platform, arch) {
           var hotfix = platform === 'win' ? activeWindowsHotfix() : null
           if (hotfix) {
             return 'v' + hotfix.version + ' · Authenticode ' + hotfix.signature_status + ' · 约 ' + Math.round(hotfix.artifact.size / 1048576) + ' MB · SHA256 ' + String(hotfix.artifact.sha256)
           }
-          var entry = manifestEntry(platform)
+          var entry = manifestEntry(platform, arch)
           var bits = []
           if (entry && entry.size) bits.push('约 ' + Math.round(entry.size / 1048576) + ' MB')
           else if (platform === 'win' && state.winMb) bits.push('约 ' + state.winMb + ' MB')
@@ -871,12 +876,14 @@
               platform: 'win',
               name: hotfix ? 'Windows 64 位 · 临时交付 v' + hotfix.version : 'Windows 64 位',
             },
-            {
-              platform: 'mac',
-              name: 'macOS · ' + (state.macArch === 'arm64' ? 'Apple Silicon' : 'Intel'),
-            },
+            { platform: 'mac', arch: 'arm64', name: 'macOS · Apple Silicon' },
+            { platform: 'mac', arch: 'x64', name: 'macOS · Intel' },
           ]
-          if (state.preferredPlatform === 'mac') desktopRows.reverse()
+          if (state.preferredPlatform === 'mac') {
+            var macRows = desktopRows.filter(function (row) { return row.platform === 'mac' })
+            if (state.macArch === 'x64') macRows.reverse()
+            desktopRows = macRows.concat(desktopRows.filter(function (row) { return row.platform !== 'mac' }))
+          }
           return desktopRows
         }
 
@@ -894,7 +901,7 @@
           else if (hotfix) versionEl.replaceChildren('macOS 稳定包待开放 · Windows 临时交付 ', textElement('b', '', hotfix.version))
           else versionEl.replaceChildren('当前版本 ', textElement('b', '', state.version))
           pendingEl.hidden = rows().every(function (row) {
-            return Boolean(downloadUrl(row.platform))
+            return Boolean(downloadUrl(row.platform, row.arch))
           })
           noteEl.classList.toggle('is-warning', Boolean(hotfix) && hotfix.signature_status === 'unsigned' && state.tab === 'desktop')
           noteEl.textContent =
@@ -902,21 +909,23 @@
               ? 'Android 为实验版（非签约级），安装后请在系统设置中允许“安装未知应用”。'
               : hotfix
                 ? 'Windows 临时交付包 Authenticode 状态：' + hotfix.signature_status + '。安装前请核对完整 SHA-256；不会进入稳定自动更新。' + (manifestEntry('mac') ? 'macOS 仍使用稳定版。' : 'macOS 稳定包暂未开放。')
-                : '支持 Windows 10+、macOS 12+。安装后可按需安装行业 Mod。'
+                : (downloadUrl('mac', 'x64')
+                  ? '支持 Windows 10+、macOS 12+。安装后可按需安装行业 Mod。'
+                  : '支持 Windows 10+ 与 Apple Silicon。本次不提供 Intel Mac 安装包，Intel 入口不会下载 Apple Silicon 包。')
           listEl.replaceChildren()
           rows().forEach(function (row, index) {
             var rowHotfix = row.platform === 'win' ? activeWindowsHotfix() : null
-            var href = downloadUrl(row.platform)
+            var href = downloadUrl(row.platform, row.arch)
             var available = Boolean(href)
             var link = document.createElement('a')
             link.className = 'download-item' + (index === 0 ? ' is-primary' : '')
             if (available) {
               link.href = href
-              link.setAttribute('download', fileName(row.platform))
+              link.setAttribute('download', fileName(row.platform, row.arch))
             }
             link.setAttribute('rel', 'noopener')
             if (!available) link.setAttribute('aria-disabled', 'true')
-            var meta = metaText(row.platform)
+            var meta = metaText(row.platform, row.arch)
             var copy = textElement('span', 'download-item__copy', '')
             copy.append(textElement('strong', '', row.name))
             if (meta) copy.append(textElement('span', '', meta))
