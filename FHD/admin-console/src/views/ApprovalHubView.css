@@ -23,6 +23,10 @@
 .payload { max-height: 420px; overflow: auto; margin: 0 16px 16px; padding: 12px; border-radius: 10px; background: #0f172a; color: #e2e8f0; font-size: 11px; }
 .drawer-actions { justify-content: flex-start; padding: 0 16px 16px; }
 .work-order > .muted { margin: 0 16px 16px; }
+.ticket-trail { padding: 0 16px 16px; }
+.ticket-trail .drawer-actions { padding: 0 0 8px; }
+.timeline { margin: 0; padding-left: 18px; color: #172033; font-size: 12px; }
+.timeline time { margin-right: 8px; color: #64748b; }
 .empty { padding: 28px; color: #64748b; text-align: center; }
 @media (max-width: 640px) {
   .approval-hub-view { padding: 18px 14px 28px; }
