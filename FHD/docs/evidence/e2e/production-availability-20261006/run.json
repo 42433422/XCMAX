@@ -1,0 +1,98 @@
+{
+  "run_id": "PROD-AVAIL-20261006-001",
+  "scope": "最终闸门 1（官网正常）与 2（生产 API 正常），对应工单清单第 1 项：生产恢复后的外部连续拨测",
+  "created_at": "2026-10-06T16:12:00Z",
+  "final_gates": [1, 2],
+  "incident": {
+    "issue": "https://github.com/42433422/XCMAX/issues/2169",
+    "issue_opened_at": "2026-10-05T22:02:57Z",
+    "last_ssh_deploy_ok": {"run": 37361849119, "at": "2026-10-05T19:13:28Z"},
+    "first_ssh_failure": {"run": 37365500345, "started_at": "2026-10-05T19:45:54Z"},
+    "first_ops_uptime_failure": {"run": 37379502663, "at": "2026-10-05T21:59:15Z"}
+  },
+  "recovery": {
+    "mode": "dr-promoted",
+    "first_ok_at": "2026-10-06T15:39:03Z",
+    "dns": {"name": "xiu-ci.com", "a": "43.138.211.142", "ttl": 600, "soa_serial": 1791301134, "soa_serial_utc": "2026-10-06T15:38:54Z", "previous_a": "119.27.178.147", "staging_xiu_ci_com": "NXDOMAIN"},
+    "edge_headers": {"x-xcmax-dr": "43.138.211.142", "x-xcmax-dr-mode": "promoted", "x-xcmax-node": "dr-promoted"},
+    "dr_health": {"url": "https://xiu-ci.com/__dr/health", "body": {"status": "ok", "node": "43.138.211.142", "mode": "promoted"}},
+    "primary": {"ip": "119.27.178.147", "https_fhd_health": "000（8 秒超时，15:52Z 与 16:05Z 两次）", "deploy_ssh": "corp-site-deploy run 37486504881 于 15:20:00Z dial tcp :22 i/o timeout"}
+  },
+  "serving_identity": {
+    "fhd": {"version": "1.0.0.1", "git_sha": "73861ed71e41ce34b8a5cf06f9e17a1cfa93d44d", "built_at": "2026-09-08T16:54:22Z", "release_id": "xcagi-1.0.0.1-73861ed71e41ce34b8a5cf06f9e17a1cfa93d44d", "same_as_last_prod_deploy": 34262784106, "commits_behind_main_604ab1531": 493},
+    "modstore": {"git_sha": "201d1f691855465f76dd53adc74c1d53ff4d9af4", "release_id": "xcagi-1.0.0.1-201d1f691855465f76dd53adc74c1d53ff4d9af4", "artifact_sha256": "6c11d71cb153adc10444fec73668b0eb52d08f15f0465e0c691ab22b05de3591", "scheduler_running": false, "same_as_last_prod_deploy": 34677587105, "commits_behind_main_604ab1531": 374},
+    "corp_site": {"download_html": "与 73861ed71 版本逐字节相同，不含主线 #2038/#2043/#2106", "download_release_json": {"version_lock": "1.0.0.1", "release_ready": false, "same_as_main": true}}
+  },
+  "window": {
+    "probe_file": "probe.jsonl",
+    "probe_source": "cursor-cloud-vm（AWS us-east-1 Ashburn，AS14618）",
+    "cadence": "15:47Z 前约 75 秒一轮，之后按整分钟对齐；15:58:49Z 起逐条记录 content-type、字节数和 IP",
+    "outage_samples": 392,
+    "outage_http_codes": {"000": 392},
+    "outage_observed": ["2026-10-06T13:30:32Z", "2026-10-06T15:37:57Z"],
+    "continuous_ok": ["2026-10-06T15:39:03Z", "2026-10-06T16:11:18Z"],
+    "minutes": 32.2,
+    "distinct_minutes": 32,
+    "max_homepage_gap_seconds": 78,
+    "core_expect": {"/": "200 text/html", "/api/health": "200 application/json", "/fhd-api/api/health": "200 application/json", "/api/work-orders/customer-candidate": "401 application/json"},
+    "core_samples": 128,
+    "core_failures": 0,
+    "core_latency_seconds": {"p50": 1.136, "max": 5.439},
+    "not_served": {
+      "urls": ["/fhd-staging-api/health", "/xcagi-v1.0.0.5/manifest.json", "/releases/stable/enterprise/latest.yml", "/releases/stable/enterprise/latest-mac.yml"],
+      "observed": "52 次带类型采样全部为 200 text/html 67176 字节（官网首页兜底），不是健康检查或发布指针"
+    }
+  },
+  "multi_region": {
+    "file": "checkhost.json",
+    "nodes": ["hk1", "jp1", "sg1", "de4", "fr2"],
+    "rounds": [
+      {"at": "2026-10-06T15:55:02Z", "ok": 14, "total": 15, "failed": "sg1 → /api/health Connection timed out（3.0 秒）"},
+      {"at": "2026-10-06T16:10:37Z", "ok": 15, "total": 15}
+    ],
+    "mainland_china": "check-host 无中国大陆节点，需用 domestic_retest 命令补测"
+  },
+  "screenshots": {
+    "dr-home.png": "2026-10-06T16:07Z 官网首页正常渲染",
+    "dr-download.png": "2026-10-06T16:08Z 下载页显示当前版本 1.0.0.1，「稳定版正在签名与验收，完成后开放下载」，Windows 与 macOS 均为「待开放」"
+  },
+  "download_surface": {
+    "checked_at": "2026-10-06T15:57Z",
+    "missing_on_dr": [
+      "/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+      "/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.zip",
+      "/releases/stable/enterprise/latest.yml",
+      "/releases/stable/enterprise/latest-mac.yml",
+      "/xcagi-v1.0.0.5/manifest.json",
+      "/download-windows-hotfix.json"
+    ],
+    "observed": "全部返回 200 text/html 67176 字节；灾备边缘配置 ops/dr/xcmax_dr_prepare_edge.sh 没有 /xcagi-v*/ 与 /releases/ 路由，location / 的 try_files 回落到 /index.html",
+    "primary_contract": "原主机 deploy/nginx/snippets/xcagi-cos-alias.inc.conf 从 /var/www 提供这些文件并 try_files $uri =404"
+  },
+  "ops_uptime_probe": {
+    "workflow": ".github/workflows/ops-uptime.yml",
+    "cron": "*/10 * * * *",
+    "observed_interval": "近 7 天实际 3–7 小时运行一次，不能作为分钟级告警",
+    "last_run": {"run": 37489058745, "probe": ["2026-10-06T15:37:53Z", "2026-10-06T15:41:24Z"], "result": "fhd-api 与 corp-site 均 000", "note": "开始于 DNS 切换（15:38:54Z，TTL 600 秒）之前，托管机仍连接旧主机"},
+    "recovery_record": "待下一次定时运行；通过后工作流会在 #2169 评论并自动关单",
+    "status_code_only": "只判状态码，staging 与发布指针的 HTML 兜底会被误判为正常"
+  },
+  "domestic_retest": {
+    "run_from": "中国大陆网络（macOS / Linux / Git Bash / WSL），连续 30 分钟",
+    "command": "for i in $(seq 1 30); do for u in https://xiu-ci.com/ https://xiu-ci.com/api/health https://xiu-ci.com/fhd-api/api/health https://xiu-ci.com/api/work-orders/customer-candidate https://xiu-ci.com/fhd-staging-api/health https://xiu-ci.com/download-release.json https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml; do curl -s -o /dev/null -m 10 -w \"$(date -u +%FT%TZ) %{http_code} %{remote_ip} %{content_type} %{time_total}s $u\\n\" \"$u\"; done; sleep 60; done | tee xiu-ci-domestic-probe.log",
+    "primary_check": "curl -s -o /dev/null -m 10 -w '%{http_code} %{remote_ip}\\n' --resolve xiu-ci.com:443:119.27.178.147 https://xiu-ci.com/fhd-api/api/health",
+    "pass": "前四个地址依次为 200 text/html、200 application/json、200 application/json、401 application/json，30 轮无 000/502/504；staging 与发布指针应为 JSON/YAML，若为 text/html 记为未提供",
+    "self_test": "2026-10-06T16:05:08Z 在本 VM 跑 1 轮，输出与上述判定一致"
+  },
+  "verdict": {
+    "gate_1": {"status": "YELLOW", "reason": "首页恢复后连续 32 分钟逐分钟可达且内容正确，5 个境外地区两轮抽测 29/30 成功；但当前由灾备接管节点提供，发布产物未同步，下载页为 1.0.0.1 且两个平台均「待开放」，国内复测与 Ops Uptime 恢复记录尚缺"},
+    "gate_2": {"status": "YELLOW", "reason": "FHD 与 MODstore 健康检查连续 32 分钟 200 JSON、工单接口 401 JSON，无 000/5xx；但服务来自灾备节点上 9 月版本（FHD 73861ed7、MODstore 201d1f69），MODstore 调度进程未运行，staging API 未提供，国内复测与 Ops Uptime 恢复记录尚缺"}
+  },
+  "ops_actions": [
+    "按 ops/dr/README.md 在灾备启用 xcmax-dr-scheduler，确认 /api/health 的 scheduler_running=true",
+    "把 /var/www/xcagi-v*/ 与 /var/www/update/releases/ 的发布产物恢复到当前服务节点，并让这些路径缺文件时返回 404 而不是首页",
+    "原主机恢复后先隔离再重建为 standby；或把 corp-site-deploy、fhd-deploy、modstore-prod-deploy 的 SSH 目标切到 43.138.211.142。冻结 SHA 部署前必须完成其一",
+    "从国内网络运行 domestic_retest 命令 30 分钟，把日志放入本目录",
+    "等待 Ops Uptime 下一次定时运行通过并自动关闭 #2169"
+  ]
+}
