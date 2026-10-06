@@ -1,8 +1,15 @@
 {
   "scope": "两个闭环 25 道最终发布硬闸门；任何一道不是 GREEN 都不能宣布闭环",
   "gate_values": ["GREEN", "YELLOW", "RED", "UNKNOWN"],
-  "updated_at": null,
+  "updated_at": "2026-10-06T16:34:59Z",
   "source_sha": null,
+  "verdict": "未闭环",
+  "counts": {
+    "GREEN": 0,
+    "YELLOW": 7,
+    "RED": 9,
+    "UNKNOWN": 9
+  },
   "gates": [
     {
       "no": 1,
@@ -17,9 +24,9 @@
           "items": [1]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "YELLOW",
+      "evidence": ["../production-availability-20261006/run.json"],
+      "blocker": "灾备节点以过渡方式提供 9 月版本：下载页 1.0.0.1、两个平台「待开放」，/xcagi-v*/ 与 /releases/ 产物缺失；旧主机已恢复但未隔离；国内复测与 Ops Uptime 恢复记录未完成；冻结 SHA 部署后须重测"
     },
     {
       "no": 2,
@@ -30,9 +37,9 @@
           "items": [1, 2]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "YELLOW",
+      "evidence": ["../production-availability-20261006/run.json"],
+      "blocker": "灾备节点 FHD 73861ed7、MODstore 201d1f69 为 9 月版本且 scheduler_running=false；staging 只在旧主机提供；旧主机 scheduler_running=true 未隔离，存在两边同时写入的风险；冻结 SHA 未部署"
     },
     {
       "no": 3,
@@ -55,9 +62,9 @@
           "items": [141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "RED",
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../windows-closeout-20261006/run.json", "prefreeze-artifacts-604ab1531.json"],
+      "blocker": "最近一次实机 f16373d 的 G6/G7 为 RED，修复 #2168 与 G6 定位已入主线 604ab1531 但未在冻结候选上复验；冻结候选未构建（#2170 未合入），windows-a/b/c 三轮未执行"
     },
     {
       "no": 4,
@@ -81,8 +88,8 @@
         }
       ],
       "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "evidence": ["../../../MACOS_RELEASE_SSOT.md", "prefreeze-artifacts-604ab1531.json"],
+      "blocker": "现有 GREEN 证据属于 54325894c 旧包；冻结候选未构建（#2170 未合入），无 x64 构建；codesign、spctl、stapler 须在真实 Mac 上采集；macos-a/b/c 三轮未执行"
     },
     {
       "no": 5,
@@ -98,8 +105,8 @@
         }
       ],
       "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../../../MACOS_RELEASE_SSOT.md"],
+      "blocker": "Windows G5 仅 f16373d 同账号读回（YELLOW），macOS G5 为旧包结论；冻结候选两个平台 A 轮第 47–53 项未执行"
     },
     {
       "no": 6,
@@ -115,8 +122,8 @@
         }
       ],
       "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md"],
+      "blocker": "Windows G5 的设备绑定与工作区归属验收未完成；冻结候选两个平台 A 轮第 54–59 项未执行"
     },
     {
       "no": 7,
@@ -131,9 +138,9 @@
           "items": [60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "RED",
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../windows-closeout-20261006/g6-panorama-triage.json"],
+      "blocker": "Windows G6 仍为 RED：L1/L2/L4 暂无员工 Mod 已定位为预期渲染，但最终包尚未由 L3「考勤ai助手」完成一次考勤表转化；#2163 待正式部署，生产内核 TSSA-2026:1026 门禁阻塞"
     },
     {
       "no": 8,
@@ -148,9 +155,9 @@
           "items": [74, 75, 76, 77, 78, 79]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "RED",
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../windows-closeout-20261006/g6-panorama-triage.json"],
+      "blocker": "随 Windows G6 RED：AI 员工在最终包上的考勤表转化未完成；两个平台 A 轮第 74–79 项未执行"
     },
     {
       "no": 9,
@@ -165,9 +172,9 @@
           "items": [80, 81, 82, 83, 84, 85, 86]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "RED",
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../windows-closeout-20261006/sales-order-persistence-diagnostic.json"],
+      "blocker": "f16373d 销售订单行产品 ID/名称为空；#2168 已入主线未换包复验；出库、单据、导出、UI 查询未完成"
     },
     {
       "no": 10,
@@ -182,9 +189,9 @@
           "items": [87, 88, 89, 90, 91, 92, 93, 94]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "RED",
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../windows-closeout-20261006/post-approval-run-task-diagnostic.json"],
+      "blocker": "f16373d 审批通过后原运行与任务仍显示待审批，对话另报最大迭代失败；须在冻结包上复验第 87–94 项"
     },
     {
       "no": 11,
@@ -199,9 +206,9 @@
           "items": [95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "RED",
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../windows-closeout-20261006/sales-order-persistence-diagnostic.json"],
+      "blocker": "f16373d 订单行 product_id/product_name 落库为空；须在冻结包上复验第 95–107 项"
     },
     {
       "no": 12,
@@ -217,8 +224,8 @@
         }
       ],
       "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../windows-closeout-20261006/redownloaded-inventory.content.json"],
+      "blocker": "f16373d 正常重下文件只核销空白子窗口；冻结候选第 108–113 项未执行"
     },
     {
       "no": 13,
@@ -234,8 +241,8 @@
         }
       ],
       "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../../../MACOS_RELEASE_SSOT.md"],
+      "blocker": "Windows G12 未测，macOS G12 为旧包结论；冻结候选第 114–123 项未执行"
     },
     {
       "no": 14,
@@ -251,8 +258,8 @@
         }
       ],
       "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../../../MACOS_RELEASE_SSOT.md"],
+      "blocker": "Windows G10 最终同包升级读回未完成，macOS G10 为旧包结论；B 轮第 124–140 项未执行"
     },
     {
       "no": 15,
@@ -268,8 +275,8 @@
         }
       ],
       "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md", "../windows-closeout-20261006/backup-registration-and-runtime-20261006.json"],
+      "blocker": "f16373d 仅证明备份任务已注册、未触发；C 轮第 141–147 项未执行"
     },
     {
       "no": 16,
@@ -285,8 +292,8 @@
         }
       ],
       "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "evidence": ["../../../WINDOWS_RELEASE_SSOT.md"],
+      "blocker": "最终同包隔离恢复与应用读回未完成；C 轮第 148–156 项未执行"
     },
     {
       "no": 17,
@@ -297,9 +304,9 @@
           "items": [2, 3, 4, 5, 6, 7, 8, 9, 40]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "YELLOW",
+      "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产服务节点仍是灾备上的 MODstore 201d1f69"
     },
     {
       "no": 18,
@@ -310,9 +317,9 @@
           "items": [10, 11, 12, 13, 14, 15, 16, 39, 42]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "YELLOW",
+      "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产服务节点仍是灾备上的 MODstore 201d1f69"
     },
     {
       "no": 19,
@@ -324,8 +331,8 @@
         }
       ],
       "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
+      "blocker": "本机未开后台任务，工单停在 repair_failed，流水线状态由测试脚本推进，不算 AI 处理证据；生产灾备节点 scheduler_running=false，派发与 AI 处理会停滞"
     },
     {
       "no": 20,
@@ -336,9 +343,9 @@
           "items": [28, 29, 30, 31, 32, 38]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "YELLOW",
+      "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产服务节点仍是灾备上的 MODstore 201d1f69；桌面结果视图在 #2170 中，安装版未验证"
     },
     {
       "no": 21,
@@ -349,9 +356,9 @@
           "items": [33, 34, 35]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "YELLOW",
+      "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产服务节点仍是灾备上的 MODstore 201d1f69；客户确认接口在 #2170 中，生产不存在"
     },
     {
       "no": 22,
@@ -362,9 +369,9 @@
           "items": [36, 37]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "YELLOW",
+      "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产服务节点仍是灾备上的 MODstore 201d1f69；重新打开接口在 #2170 中，生产不存在"
     },
     {
       "no": 23,
@@ -379,9 +386,9 @@
           "items": "全部 run.json 的 evidence 均非空且可复核"
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "RED",
+      "evidence": ["candidate.run.json", "ticket-loop.run.json"],
+      "blocker": "8 份 run.json 共 342 项结果全部为 UNKNOWN；冻结候选未构建（#2170 未合入）"
     },
     {
       "no": 24,
@@ -392,9 +399,9 @@
           "items": [1, 2]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "RED",
+      "evidence": ["candidate.run.json"],
+      "blocker": "集成 PR #2170 仍为草稿，合入需要明确授权；冻结 SHA、安全扫描对与构建均未产生"
     },
     {
       "no": 25,
@@ -405,9 +412,9 @@
           "items": [10]
         }
       ],
-      "status": "UNKNOWN",
-      "evidence": [],
-      "blocker": ""
+      "status": "RED",
+      "evidence": ["../../../../config/download_release.json", "../production-availability-20261006/run.json"],
+      "blocker": "主线 download_release.json release_ready=false，官网下载页「待开放」；须 1–24 全部 GREEN 后才能解除"
     }
   ]
 }
