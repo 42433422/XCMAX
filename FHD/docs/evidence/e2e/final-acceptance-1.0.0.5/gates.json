@@ -1,0 +1,413 @@
+{
+  "scope": "两个闭环 25 道最终发布硬闸门；任何一道不是 GREEN 都不能宣布闭环",
+  "gate_values": ["GREEN", "YELLOW", "RED", "UNKNOWN"],
+  "updated_at": null,
+  "source_sha": null,
+  "gates": [
+    {
+      "no": 1,
+      "gate": "官网正常",
+      "sources": [
+        {
+          "run": "candidate.run.json",
+          "items": [11, 12, 13, 14, 15, 16]
+        },
+        {
+          "run": "ticket-loop.run.json",
+          "items": [1]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 2,
+      "gate": "生产 API 正常",
+      "sources": [
+        {
+          "run": "ticket-loop.run.json",
+          "items": [1, 2]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 3,
+      "gate": "Windows 新候选安装包通过完整实机验证",
+      "sources": [
+        {
+          "run": "candidate.run.json",
+          "items": [3, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        },
+        {
+          "run": "windows-a.run.json",
+          "items": [21, 22, 23, 24, 25, 26, 27, 28, 29, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123]
+        },
+        {
+          "run": "windows-b.run.json",
+          "items": [124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+        },
+        {
+          "run": "windows-c.run.json",
+          "items": [141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 4,
+      "gate": "Mac 新候选安装包通过完整实机验证",
+      "sources": [
+        {
+          "run": "candidate.run.json",
+          "items": [4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        },
+        {
+          "run": "macos-a.run.json",
+          "items": [30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123]
+        },
+        {
+          "run": "macos-b.run.json",
+          "items": [124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+        },
+        {
+          "run": "macos-c.run.json",
+          "items": [141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 5,
+      "gate": "登录通过",
+      "sources": [
+        {
+          "run": "macos-a.run.json",
+          "items": [47, 48, 49, 50, 51, 52, 53]
+        },
+        {
+          "run": "windows-a.run.json",
+          "items": [47, 48, 49, 50, 51, 52, 53]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 6,
+      "gate": "企业绑定通过",
+      "sources": [
+        {
+          "run": "macos-a.run.json",
+          "items": [54, 55, 56, 57, 58, 59]
+        },
+        {
+          "run": "windows-a.run.json",
+          "items": [54, 55, 56, 57, 58, 59]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 7,
+      "gate": "Mod 通过",
+      "sources": [
+        {
+          "run": "macos-a.run.json",
+          "items": [60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73]
+        },
+        {
+          "run": "windows-a.run.json",
+          "items": [60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 8,
+      "gate": "AI员工通过",
+      "sources": [
+        {
+          "run": "macos-a.run.json",
+          "items": [74, 75, 76, 77, 78, 79]
+        },
+        {
+          "run": "windows-a.run.json",
+          "items": [74, 75, 76, 77, 78, 79]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 9,
+      "gate": "一次真实业务通过",
+      "sources": [
+        {
+          "run": "macos-a.run.json",
+          "items": [80, 81, 82, 83, 84, 85, 86]
+        },
+        {
+          "run": "windows-a.run.json",
+          "items": [80, 81, 82, 83, 84, 85, 86]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 10,
+      "gate": "审批通过",
+      "sources": [
+        {
+          "run": "macos-a.run.json",
+          "items": [87, 88, 89, 90, 91, 92, 93, 94]
+        },
+        {
+          "run": "windows-a.run.json",
+          "items": [87, 88, 89, 90, 91, 92, 93, 94]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 11,
+      "gate": "真实业务数据库结果正确",
+      "sources": [
+        {
+          "run": "macos-a.run.json",
+          "items": [95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107]
+        },
+        {
+          "run": "windows-a.run.json",
+          "items": [95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 12,
+      "gate": "文件下载通过",
+      "sources": [
+        {
+          "run": "macos-a.run.json",
+          "items": [108, 109, 110, 111, 112, 113]
+        },
+        {
+          "run": "windows-a.run.json",
+          "items": [108, 109, 110, 111, 112, 113]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 13,
+      "gate": "退出重开通过",
+      "sources": [
+        {
+          "run": "macos-a.run.json",
+          "items": [114, 115, 116, 117, 118, 119, 120, 121, 122, 123]
+        },
+        {
+          "run": "windows-a.run.json",
+          "items": [114, 115, 116, 117, 118, 119, 120, 121, 122, 123]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 14,
+      "gate": "旧版升级不丢数据",
+      "sources": [
+        {
+          "run": "macos-b.run.json",
+          "items": [124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+        },
+        {
+          "run": "windows-b.run.json",
+          "items": [124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 15,
+      "gate": "自动备份通过",
+      "sources": [
+        {
+          "run": "macos-c.run.json",
+          "items": [141, 142, 143, 144, 145, 146, 147]
+        },
+        {
+          "run": "windows-c.run.json",
+          "items": [141, 142, 143, 144, 145, 146, 147]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 16,
+      "gate": "备份恢复通过",
+      "sources": [
+        {
+          "run": "macos-c.run.json",
+          "items": [148, 149, 150, 151, 152, 153, 154, 155, 156]
+        },
+        {
+          "run": "windows-c.run.json",
+          "items": [148, 149, 150, 151, 152, 153, 154, 155, 156]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 17,
+      "gate": "真实客户提交工单成功",
+      "sources": [
+        {
+          "run": "ticket-loop.run.json",
+          "items": [2, 3, 4, 5, 6, 7, 8, 9, 40]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 18,
+      "gate": "管理端收到工单",
+      "sources": [
+        {
+          "run": "ticket-loop.run.json",
+          "items": [10, 11, 12, 13, 14, 15, 16, 39, 42]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 19,
+      "gate": "AI处理工单",
+      "sources": [
+        {
+          "run": "ticket-loop.run.json",
+          "items": [17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 41]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 20,
+      "gate": "客户收到解决结果",
+      "sources": [
+        {
+          "run": "ticket-loop.run.json",
+          "items": [28, 29, 30, 31, 32, 38]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 21,
+      "gate": "客户确认关闭",
+      "sources": [
+        {
+          "run": "ticket-loop.run.json",
+          "items": [33, 34, 35]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 22,
+      "gate": "工单重新打开功能通过",
+      "sources": [
+        {
+          "run": "ticket-loop.run.json",
+          "items": [36, 37]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 23,
+      "gate": "两条链路全过程证据齐全",
+      "sources": [
+        {
+          "run": "ticket-loop.run.json",
+          "items": [43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]
+        },
+        {
+          "run": "*",
+          "items": "全部 run.json 的 evidence 均非空且可复核"
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 24,
+      "gate": "正式版本冻结",
+      "sources": [
+        {
+          "run": "candidate.run.json",
+          "items": [1, 2]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    },
+    {
+      "no": 25,
+      "gate": "正式发布闸门解除",
+      "sources": [
+        {
+          "run": "candidate.run.json",
+          "items": [10]
+        }
+      ],
+      "status": "UNKNOWN",
+      "evidence": [],
+      "blocker": ""
+    }
+  ]
+}

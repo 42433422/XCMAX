@@ -1,0 +1,268 @@
+{
+  "run_id": "WIN-B-<SHA8>-<YYYYMMDD>-001",
+  "scope": "Windows B 轮：从真实旧版覆盖升级，读回旧数据后新增业务（清单 O 段）",
+  "result_values": ["PASS", "FAIL", "UNKNOWN"],
+  "gate_values": ["GREEN", "YELLOW", "RED", "UNKNOWN"],
+  "created_at": null,
+  "final_acceptance": true,
+  "release_frozen": false,
+  "published": false,
+  "stable_ota": false,
+  "candidate": {
+    "source_sha": null,
+    "version": "1.0.0.5",
+    "build_run_id": null,
+    "installer_name": null,
+    "installer_sha256": null,
+    "installer_size": null,
+    "signature": null,
+    "build_info": {
+      "version": null,
+      "gitSha": null,
+      "releaseId": null
+    },
+    "running_backend": {
+      "version": null,
+      "gitSha": null,
+      "releaseId": null
+    },
+    "platform": "windows"
+  },
+  "machine": {
+    "os": null,
+    "arch": null,
+    "clean": null,
+    "previous_version": null
+  },
+  "account": {
+    "alias": null,
+    "tenant": null,
+    "enterprise": null
+  },
+  "gates": {
+    "G10": {
+      "status": "UNKNOWN",
+      "items": [124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+    },
+    "G11": {
+      "status": "UNKNOWN",
+      "items": "post_upgrade_business"
+    }
+  },
+  "gate_notes": {
+    "G9": "Windows stable OTA 关闭；B 轮覆盖安装只能记 G10/G11，不能记 OTA 通过。"
+  },
+  "items": [
+    {
+      "no": 124,
+      "section": "O",
+      "item": "安装一个真实旧版本。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 125,
+      "section": "O",
+      "item": "在旧版本写入真实数据。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 126,
+      "section": "O",
+      "item": "创建客户。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 127,
+      "section": "O",
+      "item": "创建商品。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 128,
+      "section": "O",
+      "item": "创建业务单据。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 129,
+      "section": "O",
+      "item": "保存配置。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 130,
+      "section": "O",
+      "item": "安装/启用 Mod。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 131,
+      "section": "O",
+      "item": "触发正常升级。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 132,
+      "section": "O",
+      "item": "升级到候选正式版。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 133,
+      "section": "O",
+      "item": "应用能正常启动。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 134,
+      "section": "O",
+      "item": "数据库迁移成功。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 135,
+      "section": "O",
+      "item": "原客户仍存在。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 136,
+      "section": "O",
+      "item": "原商品仍存在。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 137,
+      "section": "O",
+      "item": "原订单仍存在。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 138,
+      "section": "O",
+      "item": "配置仍存在。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 139,
+      "section": "O",
+      "item": "Mod 仍存在。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 140,
+      "section": "O",
+      "item": "登录绑定仍正常。",
+      "gate": "G10",
+      "final_gates": [3, 14],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    }
+  ],
+  "post_upgrade_business": {
+    "gate": "G11",
+    "rerun_items": [80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107],
+    "result": "UNKNOWN",
+    "evidence": [],
+    "note": "升级后用同一账号新增一张真实业务单据并读回，按 80–107 项口径记录。"
+  }
+}
