@@ -62,7 +62,7 @@
 
 ## 6. Release Gate 状态（2026-09-18 实跑 1.0.0.5 @ `54325894c`；证据目录 [evidence/e2e/macos-release-1.0.0.5/](evidence/e2e/macos-release-1.0.0.5/)）
 
-> **当前结论（2026-10-06）：下表是 54325894c 旧包结论，不是最终候选，未闭环。** #2170 合入后的冻结候选尚未构建；最终 A/B/C 逐项记入 [final-acceptance-1.0.0.5](evidence/e2e/final-acceptance-1.0.0.5/)，25 道闸门见其中 gates.json。主线 604ab1531 arm64 产物只读[预演](evidence/e2e/final-acceptance-1.0.0.5/prefreeze-artifacts-604ab1531.json)：DMG/ZIP 与 build-info 一致、内嵌 Developer ID 链与 staple 票据、latest-mac.yml 验签通过；codesign/spctl/stapler 仍须真机。10-06 公网由灾备节点接管，§2 的 DMG/ZIP/feed 地址回落为首页 HTML；已恢复的旧主机提供的 manifest 与 feed 为 8d50fe9d（09-21，`release_ready=false`），与 §1/§2 的 54325894c 不同（[可用性](evidence/e2e/production-availability-20261006/run.json)），恢复并复核前 §2 不能当作线上实测。
+> **当前结论（2026-10-06）：下表是 54325894c 旧包结论，不是最终候选，未闭环。** #2170 合入后的冻结候选尚未构建；最终 A/B/C 逐项记入 [final-acceptance-1.0.0.5](evidence/e2e/final-acceptance-1.0.0.5/)，25 道闸门见其中 gates.json。主线 604ab1531 arm64 产物只读[预演](evidence/e2e/final-acceptance-1.0.0.5/prefreeze-artifacts-604ab1531.json)：DMG/ZIP 与 build-info 一致、内嵌 Developer ID 链与 staple 票据、latest-mac.yml 验签通过；codesign/spctl/stapler 仍须真机。10-06 公网曾由灾备节点接管（§2 的 DMG/ZIP/feed 地址回落为首页 HTML），16:50Z DNS 回切旧主后线上 manifest 与 feed 为 8d50fe9d（09-21，`release_ready=false`），与 §1/§2 的 54325894c 不同，下载页仍据此提供 DMG（SHA256 55a87377…，[可用性](evidence/e2e/production-availability-20261006/run.json)），复核前 §2 不能当作线上实测。
 
 | # | Gate | 状态 | 现有证据 | 缺失证据 | 阻断 | 对应 PR | 下一步 |
 |---|------|------|---------|---------|------|---------|--------|

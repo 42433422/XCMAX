@@ -1,7 +1,7 @@
 {
   "scope": "两个闭环 25 道最终发布硬闸门；任何一道不是 GREEN 都不能宣布闭环",
   "gate_values": ["GREEN", "YELLOW", "RED", "UNKNOWN"],
-  "updated_at": "2026-10-06T16:49:27Z",
+  "updated_at": "2026-10-06T17:09:54Z",
   "source_sha": null,
   "verdict": "未闭环",
   "counts": {
@@ -26,7 +26,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../production-availability-20261006/run.json"],
-      "blocker": "灾备节点以过渡方式提供 9 月版本：下载页 1.0.0.1、两个平台「待开放」，/xcagi-v*/ 与 /releases/ 产物缺失；旧主机 16:28Z 已恢复但未隔离；国内复测与 Ops Uptime 恢复记录未完成；冻结 SHA 部署后须重测"
+      "blocker": "灾备时段发布产物回落首页；16:50:16Z DNS 回切未隔离的旧主后，下载页（主线 249dd003f 版本）在 release_ready=false 时仍提供 macOS DMG 与 Windows 临时包，Windows 更新源 latest.yml 为 404；国内复测与 Ops Uptime 恢复记录未完成；冻结 SHA 部署后须重测"
     },
     {
       "no": 2,
@@ -39,7 +39,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../production-availability-20261006/run.json"],
-      "blocker": "灾备节点 FHD 73861ed7、MODstore 201d1f69 为 9 月版本且 scheduler_running=false；恢复后 69 分钟内工单接口 1 次 7 秒超时；staging 只在旧主机提供；旧主机 scheduler_running=true 未隔离，存在两边同时写入的风险；冻结 SHA 未部署"
+      "blocker": "16:50:16Z DNS 回切旧主（MODstore 201d1f69、scheduler_running=true），灾备仍为 promoted 可写主库，接管期间写入未并回，两边数据可能分叉；恢复后 89 分钟内工单接口 1 次 7 秒超时；冻结 SHA 未部署"
     },
     {
       "no": 3,
@@ -306,7 +306,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
-      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产服务节点仍是灾备上的 MODstore 201d1f69"
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产 MODstore 仍是 9 月版本 201d1f69"
     },
     {
       "no": 18,
@@ -319,7 +319,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
-      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产服务节点仍是灾备上的 MODstore 201d1f69"
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产 MODstore 仍是 9 月版本 201d1f69"
     },
     {
       "no": 19,
@@ -332,7 +332,7 @@
       ],
       "status": "UNKNOWN",
       "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
-      "blocker": "本机未开后台任务，工单停在 repair_failed，流水线状态由测试脚本推进，不算 AI 处理证据；生产灾备节点 scheduler_running=false，派发与 AI 处理会停滞"
+      "blocker": "本机未开后台任务，工单停在 repair_failed，流水线状态由测试脚本推进，不算 AI 处理证据；生产 MODstore 为 9 月版本 201d1f69，AI 处理未在生产验证"
     },
     {
       "no": 20,
@@ -345,7 +345,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
-      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产服务节点仍是灾备上的 MODstore 201d1f69；桌面结果视图在 #2170 中，安装版未验证"
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产 MODstore 仍是 9 月版本 201d1f69；桌面结果视图在 #2170 中，安装版未验证"
     },
     {
       "no": 21,
@@ -358,7 +358,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
-      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产服务节点仍是灾备上的 MODstore 201d1f69；客户确认接口在 #2170 中，生产不存在"
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产 MODstore 仍是 9 月版本 201d1f69；客户确认接口在 #2170 中，生产不存在"
     },
     {
       "no": 22,
@@ -371,7 +371,7 @@
       ],
       "status": "YELLOW",
       "evidence": ["../ticket-loop-local-20261006/run.jsonl"],
-      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产服务节点仍是灾备上的 MODstore 201d1f69；重新打开接口在 #2170 中，生产不存在"
+      "blocker": "仅集成分支 064717dc3 本机测试账号证据，不能替代真实客户；#2170 未合入、未部署，生产 MODstore 仍是 9 月版本 201d1f69；重新打开接口在 #2170 中，生产不存在"
     },
     {
       "no": 23,
@@ -414,7 +414,7 @@
       ],
       "status": "RED",
       "evidence": ["../../../../config/download_release.json", "../production-availability-20261006/run.json"],
-      "blocker": "主线 download_release.json release_ready=false，官网下载页「待开放」；须 1–24 全部 GREEN 后才能解除"
+      "blocker": "主线 download_release.json release_ready=false；16:50Z 回切后的线上下载页仍按 8d50fe9d manifest 提供 macOS DMG 并列出 Windows 临时包，#2170 的发布身份门控未部署；须 1–24 全部 GREEN 后才能解除"
     }
   ]
 }
