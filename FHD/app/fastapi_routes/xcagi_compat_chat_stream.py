@@ -19,8 +19,10 @@ def _facade():
 def _client_issue_reply(receipt: dict | None) -> str:
     if not receipt:
         return ""
+    shots = receipt.get("screenshots") or {}
     replies: dict[str, str] = {
-        "ROUTED": f"已向 Owner 提交产品问题，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。支持包 SHA256：{receipt.get('support_bundle_sha256')}。",
+        "ROUTED": f"已向 Owner 提交产品问题，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。支持包 SHA256：{receipt.get('support_bundle_sha256')}。"
+        + (f"支持包已附截图 {shots.get('included')}/{shots.get('selected')} 张。" if shots else ""),
         "NEEDS_MORE_EVIDENCE": (
             "这看起来是产品缺陷上报，但还缺少必要信息，暂未自动建单。"
             "请按「期望：… 实际：…」补充后重发，我会立即建单并把工单号回给你。"
@@ -73,6 +75,7 @@ async def _classify_and_submit_client_issue_async(
             tenant_id=runtime_context.get("tenant_id"),
             customer_message=message,
             triage=triage,
+            attachments=runtime_context.get("multimodal_attachments"),
         )
     except _facade().RECOVERABLE_ERRORS:
         _facade().logger.warning("client product issue intake failed", exc_info=True)

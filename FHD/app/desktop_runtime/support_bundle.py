@@ -11,6 +11,7 @@ import platform
 import sys
 import time
 import zipfile
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,10 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from .paths import ensure_desktop_dirs, is_desktop_mode
 
 logger = logging.getLogger(__name__)
+# MODstore customer issue intake rejects larger bundles.
+SUPPORT_BUNDLE_MAX_BYTES = 256_000
+_SCREENSHOT_BUDGET = 128_000
+_SCREENSHOT_MAX_PIXELS = 40_000_000
 
 
 def _redact_log_bytes(chunk: bytes) -> bytes:
@@ -39,12 +44,53 @@ def _tail_bytes(path: Path, max_bytes: int = 250_000) -> bytes | None:
         return None
 
 
+def _fit_screenshots(images: Sequence[bytes]) -> list[bytes]:
+    """Re-encode customer-selected screenshots as JPEG, shrinking them until they fit."""
+    from PIL import Image
+
+    frames = []
+    for raw in images:
+        try:
+            with Image.open(io.BytesIO(raw)) as image:
+                if image.width * image.height <= _SCREENSHOT_MAX_PIXELS:
+                    image.thumbnail((1600, 1600))
+                    frames.append(image.convert("RGB"))
+        except RECOVERABLE_ERRORS + (Image.DecompressionBombError,):
+            logger.info("customer screenshot skipped", exc_info=True)
+    shots: list[bytes] = []
+    for side, quality in ((1600, 70), (1280, 60), (1024, 50), (800, 40)):
+        shots = []
+        for frame in frames:
+            frame.thumbnail((side, side))
+            out = io.BytesIO()
+            frame.save(out, format="JPEG", quality=quality, optimize=True)
+            shots.append(out.getvalue())
+        if sum(map(len, shots)) <= _SCREENSHOT_BUDGET:
+            return shots
+    while sum(map(len, shots)) > _SCREENSHOT_BUDGET:
+        shots.pop()
+    return shots
+
+
+def _zip_entries(entries: list[tuple[str, bytes]]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for name, data in entries:
+            zf.writestr(name, data)
+    return buf.getvalue()
+
+
 def build_support_bundle_zip(
     *,
     data_dir: str | os.PathLike[str] | None = None,
     fastapi_version: str = "unknown",
+    screenshots: Sequence[bytes] = (),
 ) -> bytes:
-    """Return ZIP bytes with non-secret diagnostics (no live DB copy)."""
+    """Return ZIP bytes with non-secret diagnostics (no live DB copy).
+
+    ``screenshots`` are the images the customer attached to the report. The bundle stays
+    within ``SUPPORT_BUNDLE_MAX_BYTES`` by dropping the oldest log lines first.
+    """
 
     if not is_desktop_mode():
         raise RuntimeError("support bundle is only available in desktop mode")
@@ -82,37 +128,50 @@ def build_support_bundle_zip(
         logger.warning("mod list for support bundle unavailable: %s", exc)
         manifest["modsLoaded"] = []
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(
-            "README.txt", "清单不含密钥，日志已脱敏；数据库和崩溃转储不随包提供。\n".encode()
-        )
-        zf.writestr(
-            "manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
-        )
-
+    shots: list[bytes] = []
+    if screenshots:
+        try:
+            shots = _fit_screenshots(screenshots)
+        except RECOVERABLE_ERRORS:
+            logger.warning("customer screenshots unavailable for support bundle", exc_info=True)
+        manifest["screenshots"] = {"selected": len(screenshots), "included": len(shots)}
+    logs = [
+        (f"logs/{name}", _redact_log_bytes(chunk))
         for name in (
             "xcagi.log",
             "xcagi.log.1",
             "xcagi.log.2",
             "electron-backend.log",
             "electron-backend.log.1",
-        ):
-            chunk = _tail_bytes(logs_dir / name)
-            if chunk:
-                zf.writestr(f"logs/{name}", _redact_log_bytes(chunk))
-
-        if updater_chunk:
-            zf.writestr("logs/updater-events.jsonl", _redact_log_bytes(updater_chunk))
-
-    buf.seek(0)
-    return buf.getvalue()
+        )
+        if (chunk := _tail_bytes(logs_dir / name))
+    ]
+    if updater_chunk:
+        logs.append(("logs/updater-events.jsonl", _redact_log_bytes(updater_chunk)))
+    readme = "清单不含密钥，日志已脱敏；数据库和崩溃转储不随包提供。\n"
+    if shots:
+        readme += "screenshots/ 是客户报障时所选的截图，已压缩。\n"
+    keep = 250_000
+    while True:
+        blob = _zip_entries(
+            [
+                ("README.txt", readme.encode()),
+                ("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2).encode()),
+                *((name, data[-keep:]) for name, data in logs),
+                *((f"screenshots/{index}.jpg", shot) for index, shot in enumerate(shots, 1)),
+            ]
+        )
+        if len(blob) <= SUPPORT_BUNDLE_MAX_BYTES or keep < 4_000:
+            return blob
+        keep //= 2
+        manifest["logTailBytes"] = keep
 
 
 def build_evidence_ref(
     *,
     data_dir: str | os.PathLike[str] | None = None,
     keep_last: int = 10,
+    screenshots: Sequence[bytes] = (),
 ) -> dict[str, Any] | None:
     """落盘一份支持诊断包并返回工单 context 用的证据引用（best-effort）。
 
@@ -126,7 +185,7 @@ def build_evidence_ref(
         dirs = ensure_desktop_dirs(data_dir or os.environ.get("XCAGI_DATA_DIR"))
         bundle_dir = dirs["root"] / "support-bundles"
         bundle_dir.mkdir(parents=True, exist_ok=True)
-        blob = build_support_bundle_zip(data_dir=data_dir)
+        blob = build_support_bundle_zip(data_dir=data_dir, screenshots=screenshots)
         stamp = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}-{time.time_ns() % 100000:05d}"
         path = bundle_dir / f"support-bundle-{stamp}.zip"
         path.write_bytes(blob)
@@ -137,13 +196,18 @@ def build_evidence_ref(
                 old.unlink()
             except OSError:
                 logger.debug("prune old support bundle failed: %s", old)
-        return {
+        ref: dict[str, Any] = {
             "kind": "support_bundle",
             "path": str(path),
             "sha256": hashlib.sha256(blob).hexdigest(),
             "bytes": len(blob),
             "generated_at": stamp,
         }
+        if screenshots:
+            with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+                included = sum(name.startswith("screenshots/") for name in archive.namelist())
+            ref["screenshots"] = {"selected": len(screenshots), "included": included}
+        return ref
     except RECOVERABLE_ERRORS:  # noqa: BLE001
         logger.debug("support bundle evidence build failed", exc_info=True)
         return None

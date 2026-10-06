@@ -18,10 +18,24 @@ logger = logging.getLogger(__name__)
 _REPORT_RE = re.compile(
     r"(?i)(问题|故障|缺陷|报错|失败|不能用(?![^。！？\n]{0,40}(?:代替|替代))|没反应|异常|crash|bug)"
 )
+_IMAGE_DATA_URL = re.compile(r"(?i)^data:image/[\w.+-]+;base64,")
 
 
 def looks_like_issue_report(message: str) -> bool:
     return bool(_REPORT_RE.search(str(message or "")))
+
+
+def _attached_screenshots(attachments: Any) -> list[bytes]:
+    """Decode the images the customer attached to the report message."""
+    images: list[bytes] = []
+    for item in attachments if isinstance(attachments, list) else []:
+        url = str(item.get("data_url") or "") if isinstance(item, dict) else ""
+        if match := _IMAGE_DATA_URL.match(url):
+            try:
+                images.append(base64.b64decode(url[match.end() :], validate=True))
+            except ValueError:
+                logger.info("customer screenshot is not valid base64")
+    return images[:6]
 
 
 def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str, Any] | None:
@@ -83,6 +97,7 @@ async def submit_product_issue(
     tenant_id: int | None,
     customer_message: str,
     triage: dict[str, Any],
+    attachments: Any = None,
 ) -> dict[str, Any]:
     """Create one tenant-scoped Work Order and route its redacted bundle to Owner intake."""
     if triage.get("type") != "product_defect" or triage.get("confidence", 0) < 0.8:
@@ -99,7 +114,7 @@ async def submit_product_issue(
     from app.desktop_runtime.support_bundle import build_evidence_ref
     from app.fastapi_routes.private_mod_delivery_context import _private_delivery_market_token
 
-    evidence = build_evidence_ref()
+    evidence = build_evidence_ref(screenshots=_attached_screenshots(attachments))
     if not evidence:
         return {"state": "NEEDS_MORE_EVIDENCE", "missing_evidence": ["support_bundle"]}
     bundle_path = Path(str(evidence.get("path") or ""))
@@ -197,6 +212,7 @@ async def submit_product_issue(
         "owner_ticket_id": result["ticket_id"],
         "owner_ticket_no": result["ticket_no"],
         "support_bundle_sha256": evidence["sha256"],
+        **({"screenshots": evidence["screenshots"]} if evidence.get("screenshots") else {}),
     }
 
 
