@@ -8,31 +8,39 @@ import hashlib
 import io
 import json
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
+from modstore_server.customer_issue_delivery_contract import issue_resolution
 from modstore_server.customer_issue_intake import enqueue_issue, request_identity
-from modstore_server.customer_service_orchestrator import ticket_payload
+from modstore_server.customer_service_orchestrator import (
+    ticket_lifecycle_payload,
+    ticket_payload,
+)
 from modstore_server.customer_service_tools import audit, json_dumps, json_loads
 from modstore_server.models import User, UserMod
 from modstore_server.models_cs import (
+    CustomerServiceAction,
     CustomerServiceMessage,
     CustomerServiceSession,
     CustomerServiceTicket,
 )
-from modstore_server.work_order_api import route_customer_issue
+from modstore_server.work_order_api import record_customer_decision, route_customer_issue
 
 router = APIRouter()
+_CLOSED = frozenset({"resolved", "closed", "done", "rejected"})
 
 
 def _wake_owner_intake(ticket_id: int, source: str) -> None:
-    if source == "customer_feedback":
+    if source in {"customer_feedback", "customer_reopen"}:
         from modstore_server.customer_service_api import _schedule_customer_ticket_incident
 
         _schedule_customer_ticket_incident({"ticket_id": int(ticket_id)})
@@ -301,3 +309,176 @@ def shared_issue_runtime_receipt(
     outcome = record_shared_runtime(db, ticket, body.model_dump(), int(user.id))
     db.commit()
     return {"success": True, "ticket": ticket_payload(ticket), "receipt": outcome}
+
+
+class CustomerIssueDecisionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["resolved", "reopen"]
+    note: str = Field(min_length=4, max_length=2000)
+    idempotency_key: str = Field(min_length=8, max_length=128)
+
+
+def _issue_row(row: CustomerServiceTicket) -> dict[str, Any]:
+    evidence = json_loads(row.evidence_json, {})
+    resolution = evidence.get("resolution") or {}
+    state = str(resolution.get("state") or "received")
+    reports = [r for r in evidence.get("employee_reports") or [] if isinstance(r, dict)]
+    closed = row.status in _CLOSED
+    return {
+        "id": row.id,
+        "ticket_no": row.ticket_no,
+        "title": row.title,
+        "summary": row.summary,
+        "status": row.status,
+        "state": state,
+        "lifecycle_label": ticket_lifecycle_payload(row.status, row.decision_status)[
+            "lifecycle_label"
+        ],
+        "latest_result": (
+            {k: reports[-1].get(k) for k in ("team_ok", "progress", "at")} if reports else None
+        ),
+        "last_error": str(resolution.get("last_error") or ""),
+        "closed_at": row.closed_at.isoformat() if row.closed_at else "",
+        "reopen_count": len(evidence.get("reopen_history") or []),
+        "can_resolve": not closed,
+        "can_reopen": closed or state not in {"received", "reopened"},
+    }
+
+
+@router.get("/issues/mine")
+def my_product_issues(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> dict[str, Any]:
+    rows = (
+        db.query(CustomerServiceTicket)
+        .filter_by(user_id=int(user.id), intent="product_issue")
+        .order_by(CustomerServiceTicket.id.desc())
+        .limit(30)
+        .all()
+    )
+    return {"items": [_issue_row(row) for row in rows]}
+
+
+@router.post("/issues/{ticket_id}/decision")
+def decide_product_issue(
+    ticket_id: int,
+    body: CustomerIssueDecisionBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Only the ticket owner closes or reopens; AI results never close a product issue."""
+    ticket = (
+        db.query(CustomerServiceTicket)
+        .filter_by(id=ticket_id, user_id=int(user.id), intent="product_issue")
+        .first()
+    )
+    if ticket is None:
+        raise HTTPException(404, "原工单不存在")
+    note = body.note.strip()
+    if len(note) < 4:
+        raise HTTPException(400, "请说明原问题现在的使用结果（至少4个字）")
+    evidence = json_loads(ticket.evidence_json, {})
+    digest = hashlib.sha256(json.dumps([body.decision, note]).encode()).hexdigest()
+    decisions = [r for r in evidence.get("customer_decisions") or [] if isinstance(r, dict)]
+    prior = next((r for r in decisions if r.get("idempotency_key") == body.idempotency_key), None)
+    if prior:
+        if prior.get("request_sha256") != digest:
+            raise HTTPException(409, "同一操作标识不可绑定不同内容")
+        return {"success": True, "replayed": True, "issue": _issue_row(ticket)}
+    resolution = issue_resolution(ticket, evidence)
+    closed = ticket.status in _CLOSED
+    now = datetime.now(UTC)
+    event_id = ""
+    if body.decision == "resolved":
+        if closed:
+            raise HTTPException(409, "工单已关闭；如问题仍存在，请重新打开")
+        ticket.status, ticket.decision_status, ticket.closed_at = "resolved", "approved", now
+        resolution.update(
+            state="resolved",
+            resolved_at=now.isoformat(),
+            verification_mode="customer_decision",
+            closed_by_user_id=int(user.id),
+            handled_by=sorted(
+                {
+                    str(r["employee_id"])
+                    for r in resolution.get("team") or []
+                    if isinstance(r, dict) and r.get("employee_id")
+                }
+            ),
+        )
+    else:
+        if not closed and resolution.get("state") in {"received", "reopened"}:
+            raise HTTPException(409, "工单仍在处理中，请等处理结果出来后再决定")
+        history = [r for r in evidence.get("reopen_history") or [] if isinstance(r, dict)]
+        evidence["reopen_history"] = [
+            *history,
+            {
+                "at": now.isoformat(),
+                "note": note,
+                "previous_status": ticket.status,
+                "previous_state": resolution.get("state"),
+                "release_target": resolution.pop("release_target", None),
+            },
+        ]
+        for key in ("resolved_at", "verification_mode", "closed_by_user_id", "handled_by"):
+            resolution.pop(key, None)
+        resolution.update(
+            state="reopened",
+            repair_verified=False,
+            reopen_note=note,
+            reopened_at=now.isoformat(),
+            reopen_after_action_id=int(
+                db.query(func.max(CustomerServiceAction.id))
+                .filter(CustomerServiceAction.ticket_id == ticket.id)
+                .scalar()
+                or 0
+            ),
+        )
+        ticket.status, ticket.decision_status, ticket.closed_at = "processing", "accepted", None
+    evidence["resolution"] = resolution
+    evidence["customer_decisions"] = [
+        *decisions,
+        {
+            "idempotency_key": body.idempotency_key,
+            "decision": body.decision,
+            "request_sha256": digest,
+            "user_id": int(user.id),
+            "at": now.isoformat(),
+        },
+    ][-50:]
+    ticket.evidence_json = json_dumps(evidence)
+    ticket.updated_at = now
+    db.add(
+        CustomerServiceMessage(
+            session_id=ticket.session_id,
+            ticket_id=ticket.id,
+            user_id=int(user.id),
+            role="user",
+            content=note,
+            payload_json=json_dumps({"customer_decision": body.decision}),
+        )
+    )
+    if body.decision == "reopen":
+        reopen = len(evidence["reopen_history"])
+        event_id = enqueue_issue(db, ticket, revision=f"reopen:{reopen}")
+    audit(
+        db,
+        event_type=f"customer_issue_{body.decision}",
+        ticket_id=ticket.id,
+        session_id=ticket.session_id,
+        actor=user,
+        detail={"note": note, "idempotency_key": body.idempotency_key, "event_id": event_id},
+    )
+    db.commit()
+    if evidence.get("work_order_id"):
+        record_customer_decision(
+            db,
+            wo_id=str(evidence["work_order_id"]),
+            user=user,
+            decision=body.decision,
+            ticket_id=int(ticket.id),
+        )
+    if event_id:
+        _wake_owner_intake(ticket.id, "customer_reopen")
+    db.refresh(ticket)
+    return {"success": True, "replayed": False, "issue": _issue_row(ticket)}

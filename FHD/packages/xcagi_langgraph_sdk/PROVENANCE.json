@@ -4,16 +4,16 @@
   "upstream_pkg": "langgraph-sdk",
   "license": "MIT",
   "license_file": "LICENSE",
-  "version": "0.4.2",
-  "upstream_tag": "1.2.10",
-  "upstream_commit_sha": "41341457342327166d72fc11952ab28fb61ec0bf",
+  "version": "0.4.4",
+  "upstream_tag": "sdk==0.4.4",
+  "upstream_commit_sha": "d5f4b2aa960940effc8430165ab3604038e817af",
   "source_path": "libs/sdk-py",
   "vendored_path": "langgraph_sdk/",
   "sha256_manifest": "MANIFEST.sha256",
   "verify_script": "verify_vendor.py",
-  "fetch_time_utc": "2026-08-10T00:00:00Z",
+  "fetch_time_utc": "2026-10-06T15:40:00Z",
   "verification": {
-    "method": "在线取回远端 tag 1.2.10 并 rev-parse，其解析 commit 须等于锁定 SHA 41341457342327166d72fc11952ab28fb61ec0bf，再对该 commit 的 libs/sdk-py/langgraph_sdk + LICENSE 做字节级比对 + MANIFEST.sha256 完整性 + LICENSE 校验",
-    "note": "吸收源取自 langgraph 仓库 tag 1.2.10 @ commit 41341457342327166d72fc11952ab28fb61ec0bf 的 libs/sdk-py/langgraph_sdk + LICENSE，字节级一致。langgraph-sdk 0.4.2 完整运行时源码（含 _async/_sync/_shared/auth/encryption/stream 等子包）。"
+    "method": "在线取回远端 tag sdk==0.4.4 并 rev-parse，其解析 commit 须等于锁定 SHA d5f4b2aa960940effc8430165ab3604038e817af，再对该 commit 的 libs/sdk-py/langgraph_sdk + LICENSE 做字节级比对 + MANIFEST.sha256 完整性 + LICENSE 校验",
+    "note": "吸收源取自 langgraph 仓库 tag sdk==0.4.4 @ commit d5f4b2aa960940effc8430165ab3604038e817af 的 libs/sdk-py/langgraph_sdk + LICENSE（修复 GHSA-fvww-7h3r-vfhp / CVE-2026-104873）。XCAGI 本地修改 16 个文件：except Exception/BaseException 改为 _exception_policy.py 的同义异常族，并删去 ty: ignore 注释；这些文件的上游比对会报不一致，其余文件与上游字节级一致。"
   }
 }

@@ -720,6 +720,8 @@
           base: '',
           winMb: '',
           releaseReady: false,
+          gitSha: '',
+          releaseId: '',
           manifest: null,
           windowsHotfix: null,
           tab: 'desktop',
@@ -742,38 +744,40 @@
             if (query === 'arm64' || query === 'aarch64') return 'arm64'
             if (query === 'x64' || query === 'x86_64' || query === 'intel') return 'x64'
           }
-          if (/\b(aarch64|arm64)\b/i.test(navigator.userAgent || '')) return 'arm64'
+          var ua = navigator.userAgent || ''
+          if (/\b(aarch64|arm64)\b/i.test(ua)) return 'arm64'
+          // Safari on Apple Silicon still says "Intel Mac OS X", so UA alone cannot
+          // choose the package. Row order may prefer arm64; the Intel row never
+          // receives the arm64 file.
           return 'arm64'
         }
 
-        function compareVersions(left, right) {
-          var a = String(left || '')
-            .split('.')
-            .map(Number)
-          var b = String(right || '')
-            .split('.')
-            .map(Number)
-          for (var i = 0; i < Math.max(a.length, b.length); i += 1) {
-            var difference = (a[i] || 0) - (b[i] || 0)
-            if (difference !== 0) return difference
-          }
-          return 0
+        function officialUrl(path) {
+          return RELEASE_ROOT + '/xcagi-v' + state.version + '/enterprise/' + path
         }
 
+        // 字段与路径须和 release-desktop.yml 写出的临时指针逐项一致。
         function activeWindowsHotfix() {
           var hotfix = state.windowsHotfix
-          if (!hotfix || hotfix.schema !== 'xcagi.windows_interim_release/v1') return null
-          var unsignedAccepted = hotfix.signature_status === 'unsigned' && hotfix.risk_acceptance &&
+          var artifact = hotfix && hotfix.artifact
+          if (!artifact || hotfix.schema !== 'xcagi.windows_interim_release/v1' || hotfix.version !== state.version) return null
+          var commit = String(hotfix.git_sha || '').toLowerCase()
+          var sha = String(artifact.sha256 || '').toLowerCase()
+          var status = hotfix.signature_status
+          var filename = 'XCAGI-Enterprise-Setup-' + hotfix.version + '-x64-' + status + '.exe'
+          var unsignedAccepted = status === 'unsigned' && hotfix.risk_acceptance &&
             Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()
-          if (!hotfix.download_allowed || hotfix.stable_auto_update !== false ||
-            (hotfix.signature_status !== 'signed' && !unsignedAccepted) ||
-            !hotfix.artifact || !/^[a-f0-9]{64}$/i.test(hotfix.artifact.sha256 || '')) return null
-          return !hotfix.artifact || !hotfix.artifact.url || !hotfix.artifact.filename || compareVersions(hotfix.version, state.version) < 0 ? null : hotfix
+          if (!hotfix.download_allowed || hotfix.stable_auto_update !== false || (status !== 'signed' && !unsignedAccepted) ||
+            !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commit) || !/^[0-9a-f]{64}$/.test(sha) ||
+            artifact.platform !== 'windows' || artifact.arch !== 'x64' || artifact.filename !== filename ||
+            !Number.isSafeInteger(artifact.size) || artifact.size <= 0 ||
+            artifact.url !== officialUrl(commit + '/' + sha + '/' + filename)) return null
+          return hotfix
         }
 
-        function fileName(platform) {
+        function fileName(platform, arch) {
           if (platform === 'android') return 'XCAGI-Enterprise-Android-' + state.androidVersion + '.apk'
-          if (platform === 'mac') return 'XCAGI-Enterprise-' + state.version + '-mac-' + state.macArch + '.dmg'
+          if (platform === 'mac') return 'XCAGI-Enterprise-' + state.version + '-mac-' + (arch || state.macArch) + '.dmg'
           var hotfix = activeWindowsHotfix()
           if (hotfix) return hotfix.artifact.filename
           return 'XCAGI-Enterprise-Setup-' + state.version + '-x64.exe'
@@ -783,34 +787,33 @@
           return state.base + '/enterprise/' + fileName(platform)
         }
 
-        function manifestEntry(platform) {
+        function manifestEntry(platform, arch) {
           var manifest = state.manifest
-          if (!manifest || !manifest.channels || !manifest.channels.official_download) return null
-          var sku = manifest.channels.official_download.enterprise
-          if (!sku) return null
-          if (platform === 'win') return sku.win || null
-          if (platform === 'android') return sku.android || null
-          if (platform === 'mac') {
-            var macs = sku.mac || []
-            for (var i = 0; i < macs.length; i += 1) if (macs[i].arch === state.macArch) return macs[i]
-            return macs[0] || null
-          }
-          return null
+          var sku = manifest && manifest.channels && manifest.channels.official_download && manifest.channels.official_download.enterprise
+          if (!sku || !state.releaseReady || manifest.release_ready !== true || manifest.version !== state.version ||
+            !state.gitSha || manifest.git_sha !== state.gitSha || !state.releaseId || manifest.release_id !== state.releaseId) return null
+          var macArch = arch || state.macArch
+          var entry = platform === 'mac'
+            ? (sku.mac || []).filter(function (row) { return row && row.filename === fileName('mac', macArch) })[0]
+            : sku[platform]
+          if (!entry || !/^[a-f0-9]{64}$/i.test(entry.sha256 || '')) return null
+          var expectArch = platform === 'mac' ? macArch : 'x64'
+          return platform === 'android' || (entry.filename === fileName(platform, macArch) && entry.url === officialUrl(entry.filename) &&
+            (!entry.arch || entry.arch === expectArch)) ? entry : null
         }
 
-        function downloadUrl(platform) {
+        function downloadUrl(platform, arch) {
           var hotfix = platform === 'win' ? activeWindowsHotfix() : null
-          if (hotfix) return hotfix.artifact.url
-          var entry = manifestEntry(platform)
-          return entry && entry.url ? entry.url : staticUrl(platform)
+          var entry = hotfix ? hotfix.artifact : manifestEntry(platform, arch)
+          return entry ? entry.url : platform === 'android' && state.androidVersion ? staticUrl(platform) : ''
         }
 
-        function metaText(platform) {
+        function metaText(platform, arch) {
           var hotfix = platform === 'win' ? activeWindowsHotfix() : null
           if (hotfix) {
             return 'v' + hotfix.version + ' · Authenticode ' + hotfix.signature_status + ' · 约 ' + Math.round(hotfix.artifact.size / 1048576) + ' MB · SHA256 ' + String(hotfix.artifact.sha256)
           }
-          var entry = manifestEntry(platform)
+          var entry = manifestEntry(platform, arch)
           var bits = []
           if (entry && entry.size) bits.push('约 ' + Math.round(entry.size / 1048576) + ' MB')
           else if (platform === 'win' && state.winMb) bits.push('约 ' + state.winMb + ' MB')
@@ -836,6 +839,8 @@
             if (!data) return
             if (typeof data.download_version === 'string') state.version = data.download_version
             if (typeof data.android_version === 'string') state.androidVersion = data.android_version
+            if (typeof data.git_sha === 'string') state.gitSha = data.git_sha.toLowerCase()
+            if (typeof data.release_id === 'string') state.releaseId = data.release_id
             if (data.win_installer_mb != null) state.winMb = String(data.win_installer_mb)
             if (typeof data.release_ready === 'boolean') state.releaseReady = data.release_ready
             if (typeof data.release_root === 'string') state.base = data.release_root.replace(/\/$/, '')
@@ -871,12 +876,14 @@
               platform: 'win',
               name: hotfix ? 'Windows 64 位 · 临时交付 v' + hotfix.version : 'Windows 64 位',
             },
-            {
-              platform: 'mac',
-              name: 'macOS · ' + (state.macArch === 'arm64' ? 'Apple Silicon' : 'Intel'),
-            },
+            { platform: 'mac', arch: 'arm64', name: 'macOS · Apple Silicon' },
+            { platform: 'mac', arch: 'x64', name: 'macOS · Intel' },
           ]
-          if (state.preferredPlatform === 'mac') desktopRows.reverse()
+          if (state.preferredPlatform === 'mac') {
+            var macRows = desktopRows.filter(function (row) { return row.platform === 'mac' })
+            if (state.macArch === 'x64') macRows.reverse()
+            desktopRows = macRows.concat(desktopRows.filter(function (row) { return row.platform !== 'mac' }))
+          }
           return desktopRows
         }
 
@@ -890,38 +897,35 @@
           // 版本号来自发布清单，一律以文本节点写入 DOM，不拼接 HTML 字符串（避免 DOM XSS）。
           if (!known) versionEl.replaceChildren('版本信息加载中…')
           else if (state.tab === 'android') versionEl.replaceChildren('当前版本 ', textElement('b', '', state.androidVersion))
-          else if (hotfix) versionEl.replaceChildren('macOS 稳定版 ', textElement('b', '', state.version), ' · Windows 临时交付 ', textElement('b', '', hotfix.version))
+          else if (hotfix && manifestEntry('mac')) versionEl.replaceChildren('macOS 稳定版 ', textElement('b', '', state.version), ' · Windows 临时交付 ', textElement('b', '', hotfix.version))
+          else if (hotfix) versionEl.replaceChildren('macOS 稳定包待开放 · Windows 临时交付 ', textElement('b', '', hotfix.version))
           else versionEl.replaceChildren('当前版本 ', textElement('b', '', state.version))
           pendingEl.hidden = rows().every(function (row) {
-            if (row.platform === 'win' && activeWindowsHotfix()) return true
-            if (manifestEntry(row.platform)) return true
-            if (row.platform === 'android' && state.androidVersion) return true
-            return state.releaseReady
+            return Boolean(downloadUrl(row.platform, row.arch))
           })
           noteEl.classList.toggle('is-warning', Boolean(hotfix) && hotfix.signature_status === 'unsigned' && state.tab === 'desktop')
           noteEl.textContent =
             state.tab === 'android'
               ? 'Android 为实验版（非签约级），安装后请在系统设置中允许“安装未知应用”。'
               : hotfix
-                ? 'Windows 临时交付包 Authenticode 状态：' + hotfix.signature_status + '。安装前请核对完整 SHA-256；不会进入稳定自动更新。macOS 仍使用稳定版。'
-                : '支持 Windows 10+、macOS 12+。安装后可按需安装行业 Mod。'
+                ? 'Windows 临时交付包 Authenticode 状态：' + hotfix.signature_status + '。安装前请核对完整 SHA-256；不会进入稳定自动更新。' + (manifestEntry('mac') ? 'macOS 仍使用稳定版。' : 'macOS 稳定包暂未开放。')
+                : (downloadUrl('mac', 'x64')
+                  ? '支持 Windows 10+、macOS 12+。安装后可按需安装行业 Mod。'
+                  : '支持 Windows 10+ 与 Apple Silicon。本次不提供 Intel Mac 安装包，Intel 入口不会下载 Apple Silicon 包。')
           listEl.replaceChildren()
           rows().forEach(function (row, index) {
             var rowHotfix = row.platform === 'win' ? activeWindowsHotfix() : null
-            var available =
-              Boolean(rowHotfix) ||
-              Boolean(manifestEntry(row.platform)) ||
-              (row.platform === 'android' && Boolean(state.androidVersion)) ||
-              state.releaseReady
+            var href = downloadUrl(row.platform, row.arch)
+            var available = Boolean(href)
             var link = document.createElement('a')
             link.className = 'download-item' + (index === 0 ? ' is-primary' : '')
             if (available) {
-              link.href = downloadUrl(row.platform)
-              link.setAttribute('download', fileName(row.platform))
+              link.href = href
+              link.setAttribute('download', fileName(row.platform, row.arch))
             }
             link.setAttribute('rel', 'noopener')
             if (!available) link.setAttribute('aria-disabled', 'true')
-            var meta = metaText(row.platform)
+            var meta = metaText(row.platform, row.arch)
             var copy = textElement('span', 'download-item__copy', '')
             copy.append(textElement('strong', '', row.name))
             if (meta) copy.append(textElement('span', '', meta))

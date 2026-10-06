@@ -68,6 +68,9 @@ def enqueue_issue(
         scope = "website"
     elif domain in {"desktop", "android", "fhd", "modstore"}:
         scope = domain
+    summary = str(ticket.summary or "")
+    if resolution.get("state") == "reopened" and resolution.get("reopen_note"):
+        summary = f"客户重开说明：{resolution['reopen_note']}\n原问题：{summary}"
     payload = {
         "ticket_id": int(ticket.id),
         "ticket_no": ticket.ticket_no,
@@ -75,7 +78,7 @@ def enqueue_issue(
         "tenant_id": int(ticket.user_id),
         "session_id": int(ticket.session_id),
         "title": ticket.title,
-        "summary": str(ticket.summary or "")[:1500],
+        "summary": summary[:1500],
         "intent": ticket.intent,
         "issue_domain": evidence.get("issue_domain", "platform"),
         "source": "customer_ticket",

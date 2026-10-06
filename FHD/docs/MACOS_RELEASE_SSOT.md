@@ -62,7 +62,7 @@
 
 ## 6. Release Gate 状态（2026-09-18 实跑 1.0.0.5 @ `54325894c`；证据目录 [evidence/e2e/macos-release-1.0.0.5/](evidence/e2e/macos-release-1.0.0.5/)）
 
-> **当前结论（2026-09-17 1.0.0.4 真机全链复跑后）：G9 RED 阻断「零干预 OTA」，其余 Gate 全链真机证据齐备。** ① **发布面未闭环**：构建 run [34856380264](https://github.com/42433422/XCMAX/actions/runs/34856380264) **cancelled**、manifest/`download_release.json` 均 `release_ready=false` 且下载中心未切 1.0.0.4（§1、§7-13）。② **OTA 链**：真机 1.0.0.3 应用内发现 1.0.0.4（G8 GREEN）→ 点击「下载更新 → 更新并重新加载」→ ShipIt「Detected this as an install request」→ **181s 无进展（等应用退出）** → 外部干预后 `Installation completed successfully`（G9 子项：入口 PASS / **自动退出 FAIL** / 替换 PASS / **自动重启 FAIL**）→ 数据保留 16 项 15 SAME（G10 PASS）→ 登录/上传/出单 200（G11 PASS）→ **真实整机重启（`kern.boottime` 1789579911→1789626349）后冷启动** health 1.0.0.4/healthy + `PRAGMA quick_check=ok` + mods 62 + 业务出单（G12 PASS）。历史 RED（G7 bundle 写回归）已在 1.0.0.3 修复并重测转 GREEN（§7-11）。
+> **当前结论（2026-10-06）：下表是 54325894c 旧包结论，不是最终候选，未闭环。** #2170 合入后的冻结候选尚未构建；最终 A/B/C 逐项记入 [final-acceptance-1.0.0.5](evidence/e2e/final-acceptance-1.0.0.5/)，25 道闸门见其中 gates.json。主线 604ab1531 arm64 产物只读[预演](evidence/e2e/final-acceptance-1.0.0.5/prefreeze-artifacts-604ab1531.json)：DMG/ZIP 与 build-info 一致、内嵌 Developer ID 链与 staple 票据、latest-mac.yml 验签通过；codesign/spctl/stapler 仍须真机。10-06 公网曾由灾备节点接管（§2 的 DMG/ZIP/feed 地址回落为首页 HTML），16:50Z DNS 回切旧主后线上 manifest 与 feed 为 8d50fe9d（09-21，`release_ready=false`），与 §1/§2 的 54325894c 不同，下载页仍据此提供 DMG（SHA256 55a87377…，[可用性](evidence/e2e/production-availability-20261006/run.json)），复核前 §2 不能当作线上实测。
 
 | # | Gate | 状态 | 现有证据 | 缺失证据 | 阻断 | 对应 PR | 下一步 |
 |---|------|------|---------|---------|------|---------|--------|

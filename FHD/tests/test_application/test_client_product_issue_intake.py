@@ -32,7 +32,7 @@ def intake_env(tmp_path, monkeypatch):
     path.write_bytes(raw)
     sha = hashlib.sha256(raw).hexdigest()
     evidence = {"kind": "support_bundle", "path": str(path), "sha256": sha, "bytes": len(raw)}
-    monkeypatch.setattr(support_bundle, "build_evidence_ref", lambda: evidence)
+    monkeypatch.setattr(support_bundle, "build_evidence_ref", lambda **_: evidence)
 
     async def _token(_request):
         return "test-account-token"
@@ -47,7 +47,7 @@ def intake_env(tmp_path, monkeypatch):
             lambda: {"product_version": version, "git_sha": git_sha},
         )
 
-    return NS(raw=raw, sha=sha, identity=identity)
+    return NS(raw=raw, sha=sha, identity=identity, evidence=evidence)
 
 
 def _client(content: str):
@@ -133,6 +133,45 @@ def test_product_issue_routes_one_work_order_and_support_bundle(intake_env, monk
     # 「同一需求标识是否绑定同一内容」，混入每次都变的支持包摘要会被判 409。
     assert intake_env.sha not in calls[1][3]["description"]
     assert calls[1][3]["support_bundle_sha256"] == intake_env.sha
+
+
+def test_screenshots_attached_to_the_report_reach_the_support_bundle(intake_env, monkeypatch):
+    import importlib
+
+    from app.application import client_product_issue_intake as intake
+    from app.desktop_runtime import support_bundle
+
+    stream = importlib.import_module("app.fastapi_routes.xcagi_compat_chat_stream")
+    intake_env.identity(instance="client-instance-6", version="1.0.0.5", git_sha="f" * 40)
+    bundled = []
+
+    def evidence(*, screenshots):
+        bundled.append(screenshots)
+        return {**intake_env.evidence, "screenshots": {"selected": 1, "included": 1}}
+
+    async def remote(token, route, *, method="GET", payload=None):
+        if route.endswith("customer-candidate"):
+            return {"wo_id": "WO-0123456789ab", "status": "candidate", "created": True}
+        return {"success": True, "ticket_id": 6, "ticket_no": "CI6"}
+
+    monkeypatch.setattr(support_bundle, "build_evidence_ref", evidence)
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    attachments = [
+        {"kind": "image", "data_url": "data:image/png;base64," + base64.b64encode(b"png").decode()},
+        {"kind": "pdf", "data_url": "data:application/pdf;base64,JVBERi0="},
+        {"kind": "image", "data_url": "data:image/png;base64,@@@"},
+        "not-a-row",
+    ]
+    receipt = stream._classify_and_submit_client_issue(
+        object(),
+        {"tenant_id": 6, "multimodal_attachments": attachments},
+        "导出报表报错。期望：导出成功。实际：提示服务器内部错误。",
+        "",
+        client=object(),
+    )
+    assert bundled == [[b"png"]]
+    assert receipt["state"] == "ROUTED" and receipt["screenshots"]["included"] == 1
+    assert "支持包已附截图 1/1 张" in stream._client_issue_reply(receipt)
 
 
 def test_intake_still_creates_work_order_when_client_version_is_unresolvable(

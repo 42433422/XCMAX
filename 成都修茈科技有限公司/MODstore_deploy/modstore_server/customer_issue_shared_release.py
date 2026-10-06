@@ -167,6 +167,7 @@ def bind_shared_release(db: Any, ticket: Any, host_sha: str) -> dict[str, Any] |
             action_type="issue.repair.result",
             status="completed",
         )
+        .filter(CustomerServiceAction.id > int(resolution.get("reopen_after_action_id") or 0))
         .order_by(CustomerServiceAction.id.desc())
         .all()
     )
