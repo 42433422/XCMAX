@@ -383,3 +383,46 @@ class TestWorkOrderApi:
         )
         assert r.json()["ok"] is False
         assert r.json()["reason"] == "invalid_transition"
+
+
+def test_customer_decision_is_owner_bound_and_moves_only_inside_window() -> None:
+    from modstore_server import work_order_api as api
+
+    with get_session_factory()() as db:
+        owner, other = _user(db, tag="wo_owner"), _user(db, tag="wo_other")
+        wo_id = api.create_customer_candidate(
+            api.CustomerCandidateBody(
+                dedup_key=uuid.uuid4().hex,
+                expected="保存成功",
+                actual="保存报错",
+                confidence=0.9,
+                support_bundle_sha256="e" * 64,
+                client_instance_id="client-1",
+                product_version="1.0.0.5",
+                git_sha=_RELEASE_SHA,
+                platform="windows",
+            ),
+            db=db,
+            user=owner,
+        )["wo_id"]
+        assert api.route_customer_issue(
+            db, wo_id=wo_id, user=owner, support_bundle_sha256="e" * 64, ticket_id=7
+        )["ok"]
+
+        def decide(user, decision):
+            return api.record_customer_decision(
+                db, wo_id=wo_id, user=user, decision=decision, ticket_id=7
+            )
+
+        assert decide(other, "reopen")["reason"] == "client_work_order_mismatch"
+        assert decide(owner, "reopen")["status"] == "routed"
+        for state in ("in_dev", "merged", "released", "verifying"):
+            api.transition(api.TransitionBody(wo_id=wo_id, to_state=state), db=db, _user=owner)
+        assert decide(owner, "resolved")["to"] == "closed"
+        assert decide(owner, "reopen")["to"] == "reopened"
+        gates = [
+            row["ref"]["gate_status"]
+            for row in api._view(db, wo_id)["history"]
+            if row["event"] == "gate" and row["ref"]["gate"] == "customer_decision"
+        ]
+        assert gates == ["REOPENED", "RESOLVED", "REOPENED"]

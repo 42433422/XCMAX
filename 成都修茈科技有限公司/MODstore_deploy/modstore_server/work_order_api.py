@@ -242,6 +242,57 @@ def transition(
     return {"ok": True, "wo_id": wo_id, "from": current, "to": target}
 
 
+def _customer_view(db: Session, wo_id: str, user: User) -> dict[str, Any] | None:
+    view = _view(db, wo_id)
+    context = (view or {}).get("context") or {}
+    if (
+        not view
+        or view.get("source") != "client_ai_product_issue"
+        or not context.get("customer_reported")
+        or int(context.get("customer_user_id") or 0) != int(user.id)
+    ):
+        return None
+    return view
+
+
+def record_customer_decision(
+    db: Session, *, wo_id: str, user: User, decision: str, ticket_id: int
+) -> dict[str, Any]:
+    """The ticket owner's verdict is a gate receipt; it moves the WO only inside its window."""
+    view = _customer_view(db, wo_id, user)
+    if view is None:
+        return {"ok": False, "reason": "client_work_order_mismatch", "wo_id": wo_id}
+    target, window = (
+        ("closed", {"released", "verifying"})
+        if decision == "resolved"
+        else ("reopened", {"verifying", "closed"})
+    )
+    record_gate_receipt(
+        GateReceiptBody(
+            wo_id=wo_id,
+            gate="customer_decision",
+            gate_status="RESOLVED" if decision == "resolved" else "REOPENED",
+            evidence={"customer_ticket_id": ticket_id},
+            source="customer_issue_decision",
+        ),
+        db=db,
+        _user=user,
+    )
+    if view.get("status") not in window:
+        return {"ok": True, "wo_id": wo_id, "status": view.get("status")}
+    return transition(
+        TransitionBody(
+            wo_id=wo_id,
+            to_state=target,
+            ref={"customer_ticket_id": ticket_id},
+            note="客户本人决定",
+            source="customer_issue_decision",
+        ),
+        db=db,
+        _user=user,
+    )
+
+
 def route_customer_issue(
     db: Session,
     *,
@@ -251,15 +302,8 @@ def route_customer_issue(
     ticket_id: int | None,
     ticket_no: str = "",
 ) -> dict[str, Any]:
-    view = _view(db, wo_id)
-    context = (view or {}).get("context") or {}
-    if (
-        not view
-        or view.get("source") != "client_ai_product_issue"
-        or not context.get("customer_reported")
-        or int(context.get("customer_user_id") or 0) != int(user.id)
-        or not support_bundle_sha256
-    ):
+    view = _customer_view(db, wo_id, user)
+    if view is None or not support_bundle_sha256:
         return {"ok": False, "reason": "client_work_order_mismatch", "wo_id": wo_id}
     status = view.get("status")
     if status != "candidate" and status not in _CUSTOMER_ROUTABLE_STATES:

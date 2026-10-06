@@ -801,3 +801,87 @@ def test_invalid_archive_is_explicit_delivery_rejection():
 
     with pytest.raises(ValueError):
         verify_delivery_package(b"not an archive")
+
+
+def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client, monkeypatch):
+    from modstore_server import customer_service_api
+    from modstore_server.api.deps import get_current_user
+    from modstore_server.app import app
+    from modstore_server.customer_service_orchestrator import (
+        apply_customer_ticket_incident_progress,
+    )
+    from modstore_server.models import OutboxEvent, get_session_factory
+    from modstore_server.models_cs import CustomerServiceAuditLog, CustomerServiceTicket
+    from tests.test_customer_service_api import _make_user
+
+    woken = []
+    monkeypatch.setattr(customer_service_api, "_schedule_customer_ticket_incident", woken.append)
+    user, tid = make_ticket(client, monkeypatch)
+    endpoint = f"/api/customer-service/issues/{tid}/decision"
+
+    def decide(decision, note, key):
+        return client.post(
+            endpoint, json={"decision": decision, "note": note, "idempotency_key": key}
+        )
+
+    def pending_ready():
+        rows = client.get(
+            "/api/customer-service/issues/pending-runtime", params={"host_sha": "c" * 40}
+        ).json()["items"]
+        return next(row for row in rows if row["id"] == tid)["ready"]
+
+    assert decide("reopen", "还没有处理结果", "reopen-early").status_code == 409
+    github_fixture(monkeypatch)
+    with get_session_factory()() as db:
+        seed_repair(db, db.get(CustomerServiceTicket, tid))
+    mine = next(row for row in client.get("/api/customer-service/issues/mine").json()["items"])
+    assert mine["id"] == tid and mine["status"] == "processing" and mine["can_reopen"]
+    assert mine["latest_result"]["team_ok"] is True and pending_ready()
+
+    wakes = len(woken)
+    reopened = decide("reopen", "装了新版还是算错", "reopen-1")
+    assert reopened.status_code == 200, reopened.text
+    issue = reopened.json()["issue"]
+    assert [issue["status"], issue["state"], issue["reopen_count"]] == ["processing", "reopened", 1]
+    assert woken[wakes:] == [{"ticket_id": tid}] and not pending_ready()
+    assert decide("reopen", "装了新版还是算错", "reopen-2").status_code == 409
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, tid)
+        event = db.query(OutboxEvent).filter_by(aggregate_id=f"{ticket.ticket_no}:reopen:1").one()
+        assert json.loads(event.payload_json)["summary"].startswith(
+            "客户重开说明：装了新版还是算错"
+        )
+        evidence = json_loads(ticket.evidence_json, {})
+        assert evidence["reopen_history"][0]["release_target"]["fix_sha"] == "b" * 40
+        rows = [
+            {"role": role, "employee_id": role, "ok": True, "status": "success"}
+            for role in ("scout", "fix", "verify")
+        ]
+        apply_customer_ticket_incident_progress(
+            db, ticket_id=tid, event_id=992, team_ok=True, team_rows=rows
+        )
+        db.commit()
+        assert db.get(CustomerServiceTicket, tid).status == "processing"
+    assert not pending_ready()
+
+    resolved = decide("resolved", "现在可以正常计算了", "resolve-1")
+    assert resolved.status_code == 200, resolved.text
+    assert resolved.json()["issue"]["status"] == "resolved"
+    assert decide("resolved", "现在可以正常计算了", "resolve-1").json()["replayed"] is True
+    assert decide("resolved", "换了一个说法", "resolve-1").status_code == 409
+    assert decide("resolved", "再次确认已解决", "resolve-2").status_code == 409
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, tid)
+        resolution = json_loads(ticket.evidence_json, {})["resolution"]
+        assert ticket.closed_at is not None and resolution["closed_by_user_id"] == user.id
+        assert resolution["verification_mode"] == "customer_decision"
+        assert resolution["handled_by"] == ["fix", "scout", "verify"]
+        audits = {
+            row.event_type
+            for row in db.query(CustomerServiceAuditLog).filter_by(ticket_id=tid).all()
+        }
+        assert {"customer_issue_reopen", "customer_issue_resolved"} <= audits
+    stranger = _make_user("decision_stranger")
+    monkeypatch.setitem(app.dependency_overrides, get_current_user, lambda: stranger)
+    assert decide("reopen", "冒充客户重开工单", "stranger-1").status_code == 404
+    assert client.get("/api/customer-service/issues/mine").json()["items"] == []
