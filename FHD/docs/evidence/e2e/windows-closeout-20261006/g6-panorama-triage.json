@@ -1,0 +1,37 @@
+{
+  "gate": "G6 (final release gate 7)",
+  "observed_candidate": "f16373d1eb7f59a5e27b289e72c8df9329cacb02",
+  "triaged_at": "2026-10-06T14:40:00Z",
+  "triaged_on": "3526af86effbcd9bbdee0745edb3397265ba8f1f",
+  "question": "企业全景 L1/L2 显示「暂无员工 Mod」是账号授权问题还是代码缺陷",
+  "conclusion": "expected_rendering_not_a_defect",
+  "reason": [
+    "config/customer_delivery.json customer-taiyangniao 的承诺员工只有 attendance_ai",
+    "mods/taiyangniao-pro/manifest.json 只声明 workflow_employees=[attendance_ai]",
+    "xcagi-core-workflow-employees、xcagi-office-employee-pack-bridge 是定制阶段桥接 Mod（CUSTOM_PHASE_EMPLOYEE_CARRIER_MOD_IDS），按设计只补侧栏、不注入工位",
+    "attendance_ai 归属 L3 服务层（EMP_ID_LAYER），四部门图其余三层无工位时显示占位"
+  ],
+  "render_probe": {
+    "method": "vitest 挂载 EnterpriseEstablishmentGraph，使用真实 taiyangniao-pro manifest、真实注册表合并与分层函数",
+    "registry_source_mods": ["taiyangniao-pro"],
+    "registry_employee_ids": ["attendance_ai"],
+    "rendered_by_zone": {
+      "L1 工具层": ["暂无员工 Mod"],
+      "L2 执行层": ["暂无员工 Mod"],
+      "L3 服务层": ["考勤ai助手"],
+      "L4 管理层": ["暂无员工 Mod"]
+    }
+  },
+  "guarded_by_tests": [
+    "frontend/src/utils/workflowEmployeeScope.test.ts（考勤栈只合并出 attendance_ai）",
+    "frontend/src/utils/modWorkflowEmployees.registry.test.ts（桥接 Mod 不进入工位注册表）"
+  ],
+  "related": {
+    "pr_2163": "merged be136e33638a062f1b791eda85ee9249914d362c, ancestor of main 604ab1531"
+  },
+  "remaining_g6_evidence": [
+    "实机企业全景 L3 服务层显示考勤ai助手且开关为已开（截图需包含 L3）",
+    "用该员工完成一次 attendance-convert（考勤表转化），取得结果文件与执行回执",
+    "同一账号的 Mod 权益、已安装版本与冻结 SHA 的 build-info 一致"
+  ]
+}
