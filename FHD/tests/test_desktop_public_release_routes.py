@@ -105,7 +105,7 @@ def test_download_page_accepts_bounded_unsigned_interim_without_enabling_ota() -
 
     assert "Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()" in download_page
     assert "hotfix.stable_auto_update !== false" in download_page
-    assert "compareVersions(hotfix.version, state.version) < 0" in download_page
+    assert "hotfix.version !== state.version" in download_page
     assert "String(hotfix.artifact.sha256)" in download_page
     assert "innerHTML" not in download_page
 
