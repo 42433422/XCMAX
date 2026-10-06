@@ -1,0 +1,55 @@
+{
+  "run_id": "PREFREEZE-SECSCAN-15b7180b3",
+  "scope": "最终闸门 24（正式版本冻结）：#2170 合入后 main 15b7180b3 的发布安全扫描及处置；这不是冻结候选的扫描对",
+  "source_sha": "15b7180b333acac54e7cf86c68fe9ecb14ee37a6",
+  "workflow": ".github/workflows/fhd-security-full-scan.yml",
+  "run": 37526133865,
+  "gate_generated_at": "2026-10-06T20:33:52Z",
+  "passed": false,
+  "blockers": [
+    {
+      "id": "python-dependencies",
+      "finding": "multidict 6.7.1：CVE-2026-104874（GHSA-54p9-h82j-f925），修复版本 6.9.1",
+      "owner": "repo",
+      "disposition": "#2178 82e5c613a：FHD/uv.lock 与 FHD/XCAGI/requirements.lock.txt 升到 6.9.1"
+    },
+    {
+      "id": "trivy-filesystem",
+      "finding": "@vue/server-renderer GHSA-g2v6-rqmx-r4w6（FHD/frontend 3.5.41、market 3.5.33、官网根目录 3.5.32）；sharp GHSA-wq5f-xc86-pv6w（FHD/frontend、market 0.35.4）；source-map-js CVE-2026-93749（上述三处 1.2.1）",
+      "owner": "repo",
+      "disposition": "#2178 82e5c613a：Vue 系列 3.5.43、sharp 0.35.5、source-map-js 1.2.2"
+    },
+    {
+      "id": "node-dependencies",
+      "finding": "FHD/frontend high 5 / critical 2、FHD/desktop high 1 / critical 2、market high 5：除上述三项外，还有 tinypool GHSA-5gmw-xhrv-c9v3、GHSA-85c8-ppgw-ccpr（critical）；vitest、vue、@huggingface/transformers 因依赖被连带标记；FHD/XCAGI 与 desktop-shell 为 0",
+      "owner": "repo",
+      "disposition": "#2178 82e5c613a：FHD/frontend 与 FHD/desktop 用 override 把 tinypool 锁到 2.1.2，vitest 3.x 没有依赖已修复 tinypool 的版本"
+    },
+    {
+      "id": "codeql:scanner_unavailable、codeql:source_sha_mismatch",
+      "finding": "扫描开始时 15b7180b3 的 CodeQL push 分析仍在运行，之后该分析成功完成",
+      "owner": "timing",
+      "disposition": "在冻结 SHA 上等 CodeQL 完成后再扫描"
+    },
+    {
+      "id": "production-host",
+      "finding": "TSSA-2026:1026（important）：生产 CVM TencentOS 3.3 运行内核 5.4.241-24.0017.41.5，修复包为 kernel-5.4.241-24.0017.44.tl3",
+      "owner": "ops",
+      "disposition": "需运维在生产 CVM 安装内核更新并重启，仓库内无法修复"
+    }
+  ],
+  "local_verification_of_2178": {
+    "node": "22",
+    "FHD/frontend": "lint、test（627 个文件，9882 个用例）、test:coverage、覆盖率与 ts-any 棘轮通过；npm audit high=0、critical=0",
+    "FHD/desktop": "test（28 个文件，363 个用例，vitest 3.2.6 + tinypool 2.1.2）通过；npm audit high=0、critical=0",
+    "MODstore market": "lint、typecheck:ci、test:coverage（181 个文件，1777 个用例）、build 通过；npm audit high=0、critical=0",
+    "官网根目录": "lint、typecheck、test:coverage（83 个用例）、build:no-typecheck 通过",
+    "python": "uv lock --check 通过；uv export --frozen --all-extras --no-dev 后 pip-audit 无已知漏洞",
+    "ssot_gate": "cd FHD && python scripts/dev/ssot_cli.py gate 退出码 0，net-deletion 差 +0"
+  },
+  "out_of_scope": "官网根目录不在本扫描的 npm audit 目录内；2026-10-06T21:35Z 本地 npm audit 为 high 5、critical 2，全部是 vitest、tinypool、braces、micromatch 等测试与构建工具的开发依赖，运行时依赖由 trivy-filesystem 覆盖且已修复",
+  "related": {
+    "#2177": "修复合入后 main 上 SSOT Drift Gate 与 CI - Marketing Site 的能力中心日期漂移，并把官网检查的作业超时从 10 分钟改为 30 分钟"
+  },
+  "conclusion": "15b7180b3 不能作为冻结 SHA。#2177、#2178 合入且生产内核修复后，选定同一 SHA，等 CodeQL 完成，再间隔至少 30 分钟跑两次本扫描，两次都通过才能冻结"
+}
