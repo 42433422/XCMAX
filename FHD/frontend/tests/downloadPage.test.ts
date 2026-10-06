@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { runInThisContext } from 'node:vm'
 import { afterEach, expect, it, vi } from 'vitest'
 
 const html = readFileSync(join(process.cwd(), '../../成都修茈科技有限公司/download.html'), 'utf8')
@@ -26,11 +27,12 @@ const interim = (url = `${root}/enterprise/${sha}/${digest}/${interimName}`) => 
 
 async function open(files: Record<string, unknown>, search = '') {
   window.history.replaceState(null, '', `/download${search}`)
-  document.body.innerHTML = new DOMParser().parseFromString(html, 'text/html').body.innerHTML
+  const page = new DOMParser().parseFromString(html, 'text/html').body
+  document.body.replaceChildren(...Array.from(page.childNodes, (node) => document.importNode(node, true)))
   vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
     ok: url in files, headers: { get: () => 'application/json' }, json: async () => files[url],
   })))
-  new Function(script)()
+  runInThisContext(script)
   await new Promise((resolve) => setTimeout(resolve))
   const links = Array.from(document.querySelectorAll('.download-item'))
   return Object.fromEntries(links.map((link) => [link.querySelector('strong')?.textContent, link.getAttribute('href')]))
