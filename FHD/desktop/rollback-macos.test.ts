@@ -52,9 +52,9 @@ describe('macOS full rollback helper', () => {
     } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
   })
 
-  it.each(['receipt', 'snapshot'])('preserves the new app and committed WAL when %s recovery fails', (failure) => {
+  it.each(['receipt', 'snapshot', 'empty snapshot'])('preserves the new app and committed WAL when %s recovery fails', (failure) => {
     const f = setup(failure === 'receipt')
-    if (failure === 'snapshot') fs.writeFileSync(f.options.databaseBackupPath, 'corrupt SQLite snapshot')
+    if (failure !== 'receipt') fs.writeFileSync(f.options.databaseBackupPath, failure === 'empty snapshot' ? '' : 'corrupt SQLite snapshot')
     try {
       execFileSync('python3', ['-c', `import sqlite3,os,sys
 p=sys.argv[1]; os.unlink(p); c=sqlite3.connect(p)

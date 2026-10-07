@@ -118,8 +118,7 @@ export function resolvePackagedBackendPath(): string {
 }
 
 export function resolvePackagedAppPath(): string {
-  if (!app.isPackaged) return ''
-  return app.getPath('exe')
+  return app.isPackaged ? app.getPath('exe') : ''
 }
 
 function resolveMacOSAppBundlePath(appPath: string): string {
@@ -134,16 +133,9 @@ function resolveMacOSAppBundlePath(appPath: string): string {
 function currentVersionIdentity(): string {
   const version = app.getVersion() || 'unknown'
   if (!app.isPackaged) return version
-  for (const candidate of [
-    path.join(process.resourcesPath, 'build-info.json'),
-    path.join(process.resourcesPath, 'backend', 'build-info.json'),
-  ]) {
+  for (const candidate of ['build-info.json', 'backend/build-info.json']) {
     try {
-      if (!fs.existsSync(candidate)) continue
-      const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8')) as {
-        gitSha?: string
-        buildSha?: string
-      }
+      const parsed = JSON.parse(fs.readFileSync(path.join(process.resourcesPath, candidate), 'utf8')) as { gitSha?: string; buildSha?: string }
       const sha = String(parsed.gitSha || parsed.buildSha || '').trim()
       if (sha) return `${version}+${sha.slice(0, 12)}`
     } catch {
@@ -302,8 +294,10 @@ export async function triggerRollback(reason: string): Promise<RollbackTriggerRe
     const backendBackup = resolveInside(dir, marker.backupRelPath)
     if (!fs.existsSync(backendBackup)) throw new Error(`回滚失败：备份目录不存在 ${backendBackup}`)
     const bundle = resolveMacOSAppBundlePath(resolvePackagedAppPath() || '')
-    if (!bundle) throw new Error('完整旧版应用备份不足：当前 Mac 应用路径无效')
     marker = promoteLegacyMacRollback(marker, dir, bundle, backendBackup)
+  }
+  if (process.platform === 'darwin' && (marker.mode !== 'macos-full' || !marker.appBundlePath || !marker.appBackupRelPath)) {
+    throw new Error('完整旧版应用备份不足：Mac 回滚标记不完整或来自其他平台；保留当前应用、数据库和标记')
   }
   const applied: RollbackApplied & WindowsRollbackAppliedRecord = {
     appliedAt: new Date().toISOString(),

@@ -43,7 +43,7 @@ export function buildMacOSRollbackScript(options: MacOSRollbackLaunchOptions): s
     'trap rollback_pair EXIT',
     'ditto "$backup" "$staging"',
     '[ -d "$staging/Contents" ] || { logline "staged app invalid"; exit 1; }',
-    'if [ -n "$db" ] && [ -n "$db_backup" ]; then rm -f "$db_staging" "$db_failed"; cp -p "$db_backup" "$db_staging"; [ "$(/usr/bin/sqlite3 -readonly "$db_staging" "PRAGMA integrity_check;" 2>> "$log")" = ok ] || { logline "database backup integrity check failed"; exit 1; }; fi',
+    'if [ -n "$db" ] && [ -n "$db_backup" ]; then rm -f "$db_staging" "$db_failed"; cp -p "$db_backup" "$db_staging"; [ -s "$db_staging" ] && [ "$(/usr/bin/sqlite3 -readonly "$db_staging" "PRAGMA integrity_check;" 2>> "$log")" = ok ] || { logline "database backup integrity check failed"; exit 1; }; fi',
     '[ ! -e "$app" ] || mv "$app" "$failed"',
     'mv "$staging" "$app"',
     'if [ -n "$db" ] && [ -n "$db_backup" ]; then',
