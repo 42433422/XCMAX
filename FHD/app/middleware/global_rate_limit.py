@@ -51,6 +51,8 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path or ""
         if not path.startswith("/api/"):
             return await call_next(request)
+        if path in ("/api/ping", "/api/desktop/status"):
+            return await call_next(request)
         if path.startswith(("/api/health", "/api/system/health", "/metrics")):
             return await call_next(request)
         if path.startswith("/api/platform-shell/"):

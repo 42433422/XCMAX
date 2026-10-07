@@ -33,7 +33,7 @@ const electronMocks = vi.hoisted(() => {
     setBadgeCount: vi.fn(),
     isQuitting: false as boolean
   }
-  const BrowserWindow = vi.fn(() => ({
+  const BrowserWindow = vi.fn(function () { return ({
     loadURL: vi.fn(),
     on: vi.fn(),
     once: vi.fn(),
@@ -48,13 +48,13 @@ const electronMocks = vi.hoisted(() => {
     flashFrame: vi.fn(),
     close: vi.fn(),
     destroy: vi.fn()
-  }))
+  }) })
   // 模态提示必须挂到窗口上；macOS 上无窗口的 showMessageBox 会同步阻塞主进程事件循环。
   const dialogParentWindow = { isDestroyed: vi.fn(() => false) }
   ;(BrowserWindow as unknown as { getAllWindows: () => unknown[] }).getAllWindows =
     vi.fn(() => [dialogParentWindow])
   const Menu = { buildFromTemplate: vi.fn(() => ({})), setApplicationMenu: vi.fn() }
-  const Tray = vi.fn(() => ({ setToolTip: vi.fn(), setContextMenu: vi.fn() }))
+  const Tray = vi.fn(function () { return ({ setToolTip: vi.fn(), setContextMenu: vi.fn() }) })
   const Notification = vi.fn(() => ({ show: vi.fn() }))
   ;(Notification as unknown as { isSupported: () => boolean }).isSupported = vi.fn(() => true)
   const dialog = {

@@ -34,7 +34,6 @@ describe('offlineTts', () => {
     })
 
     it('getOfflineError returns null or unknown', () => {
-      // 初始状态应为 null
       expect(getOfflineError()).toBeNull()
     })
   })
@@ -54,13 +53,7 @@ describe('offlineTts', () => {
       await expect(playOfflinePcm(new Float32Array(0), 16000)).resolves.toBeUndefined()
     })
 
-    it('resolves immediately for null-like input', async () => {
-      // null is passed as Float32Array with length 0
-      await expect(playOfflinePcm(new Float32Array(0), 16000)).resolves.toBeUndefined()
-    })
-
     it('does not throw with valid PCM data', async () => {
-      // Mock AudioContext to avoid real audio
       const mockCtx = {
         createBuffer: vi.fn(() => ({
           copyToChannel: vi.fn(),
@@ -77,14 +70,12 @@ describe('offlineTts', () => {
       }
       const original = window.AudioContext
       // @ts-expect-error mock
-      window.AudioContext = vi.fn(() => mockCtx)
+      window.AudioContext = vi.fn(function () { return mockCtx })
       // @ts-expect-error mock
       window.webkitAudioContext = undefined
 
       const pcm = new Float32Array([0.1, 0.2, 0.3])
-      // Will resolve via onended or catch
       const promise = playOfflinePcm(pcm, 16000)
-      // Manually trigger onended to resolve
       const source = mockCtx.createBufferSource.mock.results[0].value
       if (source.onended) source.onended(new Event('ended'))
       await expect(promise).resolves.toBeUndefined()

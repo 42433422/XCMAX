@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from app.desktop_runtime.backup_retention import cleanup_local_backups
 from app.desktop_runtime.migrate import backup_database
 from app.desktop_runtime.paths import ensure_desktop_dirs
@@ -25,6 +27,33 @@ def _database(path: Path) -> None:
     with sqlite3.connect(path) as connection:
         connection.execute("CREATE TABLE proof (id INTEGER PRIMARY KEY)")
         connection.execute("INSERT INTO proof DEFAULT VALUES")
+
+
+@pytest.mark.parametrize("version", ["unknown", "startup", "1.0.0.4"])
+def test_backup_records_packaged_version_and_preserves_explicit_old_version(
+    tmp_path, monkeypatch, version
+):
+    dirs = ensure_desktop_dirs(tmp_path)
+    _database(dirs["data"] / "xcagi.db")
+    resources = tmp_path / "resources"
+    resources.mkdir()
+    (resources / "build-info.json").write_text(
+        json.dumps(
+            {
+                "version": "1.0.0.5",
+                "gitSha": "a" * 40,
+                "builtAt": "2026-10-07T12:00:00Z",
+            }
+        )
+    )
+    monkeypatch.setenv("XCAGI_DESKTOP_RESOURCES", str(resources))
+    monkeypatch.setenv("FHD_DEPLOY_ROOT", str(tmp_path))
+    monkeypatch.delenv("XCMAX_PRODUCT_VERSION", raising=False)
+    result = backup_database(tmp_path, version)
+    expected = "1.0.0.4" if version == "1.0.0.4" else "1.0.0.5"
+    assert result is not None and result.name.startswith(f"xcagi-{expected}-")
+    with sqlite3.connect(result) as connection:
+        assert connection.execute("SELECT count(*) FROM proof").fetchone()[0] == 1
 
 
 def test_cleanup_caps_automatic_backups_and_preserves_manual_files(tmp_path: Path) -> None:

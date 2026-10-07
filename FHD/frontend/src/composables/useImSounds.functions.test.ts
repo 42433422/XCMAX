@@ -60,7 +60,7 @@ describe('useImSounds', () => {
         preload: '',
       }
       const origAudio = global.Audio
-      global.Audio = vi.fn(() => fakeAudio as unknown as HTMLAudioElement) as unknown as typeof Audio
+      global.Audio = vi.fn(function () { return fakeAudio as unknown as HTMLAudioElement }) as unknown as typeof Audio
       try {
         const { setMode, playIncoming } = useImSounds()
         setMode('all')
@@ -83,7 +83,7 @@ describe('useImSounds', () => {
         preload: '',
       }
       const origAudio = global.Audio
-      global.Audio = vi.fn(() => fakeAudio as unknown as HTMLAudioElement) as unknown as typeof Audio
+      global.Audio = vi.fn(function () { return fakeAudio as unknown as HTMLAudioElement }) as unknown as typeof Audio
       const origAudioContext = global.AudioContext
       const closeSpy = vi.fn()
       const startSpy = vi.fn()
@@ -125,7 +125,7 @@ describe('useImSounds', () => {
         requestPermission: vi.fn().mockResolvedValue('granted'),
       } as unknown as typeof Notification
       const notifInstance = { onclick: null, close: vi.fn() }
-      global.Notification = vi.fn(() => notifInstance as unknown as Notification) as unknown as typeof Notification
+      global.Notification = vi.fn(function () { return notifInstance as unknown as Notification }) as unknown as typeof Notification
       ;(global.Notification as unknown as { permission: string }).permission = 'granted'
       try {
         const { setMode, playIncoming } = useImSounds()
@@ -193,7 +193,7 @@ describe('useImSounds', () => {
         preload: '',
       }
       const origAudio = global.Audio
-      global.Audio = vi.fn(() => fakeAudio as unknown as HTMLAudioElement) as unknown as typeof Audio
+      global.Audio = vi.fn(function () { return fakeAudio as unknown as HTMLAudioElement }) as unknown as typeof Audio
       try {
         const { setMode, playOutgoing } = useImSounds()
         setMode('all')

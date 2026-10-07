@@ -93,7 +93,7 @@
 
 **专项（子项目迁入 XCAGI）**
 
-- `docs/migration_report.md`（例：原「AI 助手」Excel 等能力并入 XCAGI 的记录）
+- 原「AI 助手」Excel 迁移快照已外置，恢复路径见仓根 `ARCHIVE_POINTER.md`。
 
 ---
 
