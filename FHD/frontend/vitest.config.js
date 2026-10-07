@@ -73,16 +73,8 @@ export default defineConfig({
         'src/**/*.worker.ts',
         'src/i18n/locales/**',
       ],
-      // 阈值 = 全量诚实基线。floor 只升不降，由
-      // scripts/dev/coverage_ratchet.py 维护。历史 50/30/35/50 来自窄 include，不可比，已退役。
-      // 2026-06-19：statements 达到 90% 目标，棘轮提升至 90/80/77/90。
-      // 2026-06-20：6 个组件 236 测试补齐，functions 78.5% > 76%，棘轮提升 functions 至 78。
-      // 2026-06-21：删除 coverage.ramp.test.ts（2496 行盲调凑数）+ zeroCoverage.mount.test.ts（仅
-      //   断言 exists），挤水分后真实基线为 79.67/78.89/76/79.67，棘轮重置至诚实值。
-      // 2026-06-24：全量补测（~1100+ 测试，60+ 文件）恢复真实覆盖至 89.64/79.75/77.9/89.64，
-      //   阈值恢复至 ratchet baseline floor（89/79/77/89），棘轮门禁通过。
-      // 2026-07-21：PR241 合入前实测 functions 89.85%，短暂回落棘轮至 89.8，避免门禁误杀。
-      // 2026-08-05：实测 functions 91.39%，对齐 SSOT baseline floor 回提升至 90（只升不降）。
+      // floor 与 metrics/coverage_ratchet_baseline.json 同步，由
+      // scripts/dev/coverage_ratchet.py 维护，只升不降。
       thresholds: {
         lines: 92,
         branches: 81,
