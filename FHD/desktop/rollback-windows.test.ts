@@ -43,7 +43,8 @@ describe('Windows full application rollback helper', () => {
     expect(script).toContain('Move-Item -LiteralPath $stagingDir -Destination $installDir')
   })
 
-  windowsIt('restores the complete app directory and pre-migration database', async () => {
+  windowsIt.each(['success', 'receipt-failure', 'marker-failure', 'retained-failure', 'retained-wal'])('keeps app and database consistent after %s', async (scenario) => {
+    const failed = scenario !== 'success'
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-windows-rollback-'))
     cleanupRoots.push(root)
     const installDir = path.join(root, 'XCAGI')
@@ -64,10 +65,16 @@ describe('Windows full application rollback helper', () => {
     fs.writeFileSync(path.join(installDir, 'build.txt'), 'new-build')
     fs.writeFileSync(path.join(backupRoot, 'XCAGI.exe'), 'old-app')
     fs.writeFileSync(path.join(backupRoot, 'build.txt'), 'old-build')
-    fs.writeFileSync(markerPath, '{}')
+    if (scenario === 'marker-failure') fs.mkdirSync(markerPath)
+    fs.writeFileSync(scenario === 'marker-failure' ? path.join(markerPath, 'retained') : markerPath, '{}')
     fs.writeFileSync(databasePath, 'new-database')
     fs.writeFileSync(`${databasePath}-wal`, 'new-wal')
+    fs.writeFileSync(`${databasePath}-shm`, 'new-shm')
     fs.writeFileSync(databaseBackupPath, 'old-database')
+    if (scenario === 'receipt-failure') fs.mkdirSync(appliedPath)
+    const retained = path.join(`${installDir}.xcagi-failed`, 'XCAGI.exe')
+    if (scenario === 'retained-failure') { fs.mkdirSync(path.dirname(retained)); fs.writeFileSync(retained, 'prior-failure') }
+    if (scenario === 'retained-wal') fs.writeFileSync(`${databasePath}.xcagi-failed-wal`, 'prior-wal')
 
     const options: WindowsRollbackLaunchOptions = {
       currentPid: 2_000_000_000,
@@ -103,10 +110,7 @@ describe('Windows full application rollback helper', () => {
           '-EncodedCommand',
           encoded,
         ],
-        // Hosted Windows runners occasionally spend more than 20 seconds in
-        // Defender while moving the executable-shaped fixture. The helper's
-        // own process wait remains capped at five seconds; leave enough room
-        // for filesystem scanning without turning a genuine hang into a pass.
+        // Allow executable fixture scanning; the helper process wait stays capped at five seconds.
         { cwd: dataDir, timeout: 45_000 },
       )
     } catch (error) {
@@ -114,11 +118,18 @@ describe('Windows full application rollback helper', () => {
     }
     const helperLog = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : ''
 
-    expect(fs.readFileSync(appPath, 'utf8'), `${executionError}\n${helperLog}`).toBe('old-app')
-    expect(fs.readFileSync(path.join(installDir, 'build.txt'), 'utf8')).toBe('old-build')
-    expect(fs.readFileSync(databasePath, 'utf8')).toBe('old-database')
-    expect(fs.existsSync(`${databasePath}-wal`)).toBe(false)
-    expect(fs.existsSync(markerPath)).toBe(false)
-    expect(JSON.parse(fs.readFileSync(appliedPath, 'utf8')).reason).toBe('integration test')
+    expect(fs.readFileSync(appPath, 'utf8'), `${executionError}\n${helperLog}`).toBe(failed ? 'new-app' : 'old-app')
+    expect(fs.readFileSync(path.join(installDir, 'build.txt'), 'utf8')).toBe(failed ? 'new-build' : 'old-build')
+    expect(fs.readFileSync(databasePath, 'utf8')).toBe(failed ? 'new-database' : 'old-database')
+    expect(fs.existsSync(markerPath)).toBe(failed)
+    for (const [suffix, value] of [['wal', 'new-wal'], ['shm', 'new-shm']]) {
+      expect(fs.existsSync(`${databasePath}-${suffix}`)).toBe(failed)
+      if (failed) expect(fs.readFileSync(`${databasePath}-${suffix}`, 'utf8')).toBe(value)
+    }
+    if (failed) expect(executionError).not.toBe('')
+    else expect(JSON.parse(fs.readFileSync(appliedPath, 'utf8')).reason).toBe('integration test')
+    if (scenario === 'marker-failure') expect(fs.existsSync(appliedPath)).toBe(false)
+    if (scenario === 'retained-failure') expect(fs.readFileSync(retained, 'utf8')).toBe('prior-failure')
+    if (scenario === 'retained-wal') expect(fs.readFileSync(`${databasePath}.xcagi-failed-wal`, 'utf8')).toBe('prior-wal')
   }, 60_000)
 })
