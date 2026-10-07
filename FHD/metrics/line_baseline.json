@@ -1,5 +1,5 @@
 {
-  "lines": 2296756,
+  "lines": 2296786,
   "updated": "2026-10-08",
-  "note": "Installed EDF Mac regression requires online planner precedence and grounded repeat-request, compound-request safety tests; scoped +106 lines, no unrelated deletions."
+  "note": "Installed EDF Mac blockers: online sales planner repeat/compound safety regressions (+106); report download intercept and trusted-origin regressions (+30). New exact-main installer revalidation remains required."
 }

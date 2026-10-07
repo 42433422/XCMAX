@@ -7,7 +7,7 @@
 ## Unreleased（1.0.0.5 之后的累积变更）
 - 修复 SUNBIRD 生成私包失败后的原单返工死路：可选择已有主线考勤 Mod，保留原工单与生产历史；账号权益和发行源码身份校验通过才启动，仍需签包、客户验收、安装与业务验证。
 - 修复 Mac 实机销售订单请求误入产品写入及联网规划丢参：明确的单笔销售请求在模型规划前保留客户、型号、数量、单价与人工审批，不再额外生成销售确认；复合请求仍走完整规划，缺参仍澄清。修正类型重复声明，并在员工安装失败时显示实际原因；新安装包仍须实机复验。
-- Mac OTA rollback preserves committed SQLite WAL records if recovery recording fails and restarts in the original data directory and port; installer checks isolate the app, wait for login UI, and retain startup video and failure evidence.
+- Mac OTA rollback preserves committed SQLite WAL records if recovery recording fails and restarts in the original data directory and port; installer checks isolate the app, wait for login UI, and retain startup video and failure evidence. Generated AI reports download through the existing window instead of leaving an empty child; trusted local origin and port checks remain enforced, with final installer revalidation required.
 
 - Windows 更新回滚失败会恢复当前应用及 SQLite 主库、WAL、SHM，失败回执不再提前中断补偿或误留成功记录；既有失败副本保留，最终安装包仍须隔离客户 VM 复验。
 - 桌面启动探测直连本地后端，避免系统代理干扰；为完整响应设置超时，并将 ping、桌面状态探测从全局业务限流中豁免；最终安装包仍须实机复验。
