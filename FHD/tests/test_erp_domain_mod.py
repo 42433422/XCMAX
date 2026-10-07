@@ -10,6 +10,96 @@ REPO = Path(__file__).resolve().parents[1]
 MOD_DIR = REPO / "mods" / "xcagi-erp-domain-bridge"
 
 
+def test_customer_export_download_is_tenant_scoped(tmp_path, monkeypatch):
+    import importlib.util
+    from io import BytesIO
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from openpyxl import load_workbook
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.customer_app_service import CustomerApplicationService
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.mod_sdk import erp_customers_facade
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'export.db'}")
+    PurchaseUnit.__table__.create(engine)
+    factory = sessionmaker(bind=engine)
+    with factory() as session:
+        session.add_all(
+            [
+                PurchaseUnit(unit_name="SUNBIRD验收客户", contact_person="验收联系人", tenant_id=1),
+                PurchaseUnit(unit_name="其他租户客户", tenant_id=2),
+            ]
+        )
+        session.commit()
+    service = CustomerApplicationService()
+    monkeypatch.setattr(service, "_get_session", factory)
+    monkeypatch.setattr(erp_customers_facade, "_service", lambda: service)
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        "app.infrastructure.auth.db_token.verify_db_read_token_header", lambda request: None
+    )
+    spec = importlib.util.spec_from_file_location(
+        "customer_export_bridge", MOD_DIR / "backend/blueprints.py"
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bridge)
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def customer_scope(request, call_next):
+        with tenant_scope(1):
+            return await call_next(request)
+
+    bridge.register_fastapi_routes(app, "xcagi-erp-domain-bridge")
+    response = TestClient(app).get("/api/mod/xcagi-erp-domain-bridge/customers/export")
+    assert response.status_code == 200
+    assert "spreadsheetml.sheet" in response.headers["content-type"]
+    assert ".xlsx" in response.headers["content-disposition"]
+    rows = list(load_workbook(BytesIO(response.content)).active.values)
+    assert len(rows) == 2 and rows[1][1:3] == ("SUNBIRD验收客户", "验收联系人")
+    assert "其他租户客户" not in str(rows)
+    engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "failure,status", [("outside", 500), ("missing", 500), ("service", 400), ("auth", 401)]
+)
+def test_customer_export_rejects_unsafe_or_failed_download(tmp_path, monkeypatch, failure, status):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
+    from app.mod_sdk import erp_customers_facade
+
+    service = Mock()
+    service.export_to_excel.return_value = {
+        "success": failure != "service",
+        "file_path": str(
+            tmp_path.parent / "outside.xlsx" if failure == "outside" else tmp_path / "missing.xlsx"
+        ),
+        "message": "导出失败",
+    }
+    monkeypatch.setattr(erp_customers_facade, "_service", lambda: service)
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: str(tmp_path))
+
+    def authorize(request):
+        if failure == "auth":
+            raise HTTPException(status_code=401, detail="需要登录")
+
+    monkeypatch.setattr("app.infrastructure.auth.db_token.verify_db_read_token_header", authorize)
+    with pytest.raises(HTTPException) as exc:
+        erp_customers_facade.customers_export(
+            Request({"type": "http", "method": "GET", "path": "/"})
+        )
+    assert exc.value.status_code == status
+    if failure == "auth":
+        service.export_to_excel.assert_not_called()
+
+
 def test_erp_domain_mod_manifest():
     data = json.loads((MOD_DIR / "manifest.json").read_text(encoding="utf-8"))
     assert data["id"] == "xcagi-erp-domain-bridge"

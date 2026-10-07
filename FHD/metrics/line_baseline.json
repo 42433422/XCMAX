@@ -1,5 +1,5 @@
 {
-  "lines": 2294961,
+  "lines": 2295136,
   "updated": "2026-10-07",
-  "note": "PR 2179 Mac acceptance security and real sales missing-input fix: preserve 80% coverage with behavior regressions, deduplicate 108 test lines, and add two fail-closed sales continuation cases; Ruff formatting included. Explicit maintained-line exception for review."
+  "note": "PR 2179 Mac acceptance blockers: required dependency security migration, preserved 80% coverage gates, sales input continuation, tenant-scoped customer Excel download and approval conversation retention. Regressions prove actual HTTP XLSX contents, tenant isolation, authorization and unsafe-path rejection, and original conversation preservation. 108 duplicate test lines removed earlier; explicit maintained-line exception for review."
 }

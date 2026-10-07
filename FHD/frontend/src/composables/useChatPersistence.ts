@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import type { ChatMessage } from './useChatMessages'
+import { chatMessageExtrasFromServerRow, type ChatMessage } from './useChatMessages'
 import type { ShipmentTask } from './useShipmentTask'
 import {
   CHAT_MESSAGES_STORAGE_PREFIX,
@@ -272,7 +272,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
         const s = session as Record<string, unknown>
         const sid = String(s?.session_id || s?.id || '').trim()
         if (!sid) return null
-        const title = String(s?.title || s?.summary || '').trim() || `会话 ${idx + 1}`
+        const title = String(s?.title || s?.summary || readLocalSessionMeta(sid)?.title || '').trim() || `会话 ${idx + 1}`
         const count = Number(s?.message_count ?? (Array.isArray(s?.messages) ? s.messages.length : 0))
         return {
           ...s,
@@ -301,6 +301,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
             role: m?.role === 'user' || m?.role === 'task' ? m.role : 'ai',
             content: String(m?.content || ''),
             time: String(m?.time || '').trim() || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+            ...chatMessageExtrasFromServerRow({ ui_payload: m }),
           } as ChatMessage
         })
         .filter((msg: ChatMessage) => !!toPlainText(msg.content))
@@ -399,6 +400,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
       byId.set(sid, {
         ...(prev || {}),
         ...session,
+        message_count: Math.max(Number(prev?.message_count || 0), Number(session.message_count || 0)),
         is_local_only: false,
       })
     })
