@@ -57,7 +57,7 @@ export function buildMacOSRollbackScript(options: MacOSRollbackLaunchOptions): s
     'rm -rf "$failed" 2>/dev/null || true; [ -z "$db_failed" ] || rm -f "$db_failed" 2>/dev/null || true',
     'if [ -n "$db" ]; then rm -f "$db-wal.xcagi-failed" "$db-shm.xcagi-failed"; fi',
     'logline "full application and database rollback completed"',
-    'open "$app" || logline "rollback succeeded but app launch failed"',
+    'open -n --env "XCAGI_DESKTOP_USER_DATA_DIR=$(dirname "$marker")" --env "XCAGI_DESKTOP_PORT=${XCAGI_DESKTOP_PORT:-17500}" "$app" || logline "rollback succeeded but app launch failed"',
   ].join('\n') + '\n'
 }
 

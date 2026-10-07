@@ -41,14 +41,14 @@ describe('macOS full rollback helper', () => {
     const bin = path.join(f.root, 'bin')
     const opened = path.join(f.root, 'opened')
     fs.mkdirSync(bin)
-    fs.writeFileSync(path.join(bin, 'open'), `#!/bin/sh\nprintf '%s' "$1" > '${opened}'\n`, { mode: 0o700 })
+    fs.writeFileSync(path.join(bin, 'open'), `#!/bin/sh\nprintf '%s\\n' "$@" > '${opened}'\n`, { mode: 0o700 })
     try {
-      execFileSync('/bin/sh', ['-c', scriptForTestHost(buildMacOSRollbackScript(f.options))], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } })
+      execFileSync('/bin/sh', ['-c', scriptForTestHost(buildMacOSRollbackScript(f.options))], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, XCAGI_DESKTOP_PORT: '18781' } })
       expect(fs.readFileSync(path.join(f.app, 'Contents', 'version'), 'utf8')).toBe('old')
       expect(fs.readFileSync(f.db, 'utf8')).toBe('pre-migration')
       expect(fs.existsSync(f.marker)).toBe(false)
       expect(JSON.parse(fs.readFileSync(f.applied, 'utf8')).toVersion).toBe('1')
-      expect(fs.readFileSync(opened, 'utf8')).toBe(f.app)
+      expect(fs.readFileSync(opened, 'utf8').trim().split('\n')).toEqual(['-n', '--env', `XCAGI_DESKTOP_USER_DATA_DIR=${f.root}`, '--env', 'XCAGI_DESKTOP_PORT=18781', f.app])
     } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
   })
 
