@@ -244,26 +244,14 @@ async def decide_custom_delivery(
         raise HTTPException(404, "定制交付工单不存在")
     evidence = _custom_delivery_evidence(ticket)
     if body.source_mode:
-        from modstore_server.customer_delivery_versioned import (
-            MOD_ID,
-            assert_owner_source,
-            release_source,
-        )
+        from modstore_server.customer_delivery_versioned import select_main_rework_source
 
-        if (
-            body.action != "rework"
-            or evidence.get("kind") != "module"
-            or evidence.get("suggested_id") != MOD_ID
-        ):
-            raise HTTPException(409, "只有太阳鸟模块原单返工可选择主线源码")
         try:
-            assert_owner_source(int(user.id), MOD_ID)
-            release_source()
+            select_main_rework_source(evidence, int(user.id), body.action)
         except PermissionError as exc:
             raise HTTPException(403, str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
-        evidence["source_mode"] = body.source_mode
     payload = await _custom_delivery_payload(ticket)
     custom = payload.get("custom_delivery") or {}
     if body.action == "accept":
