@@ -2,7 +2,7 @@ import { flushPromises, shallowMount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { nextTick, type Component } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from '../App.vue'
 import AdminDatabaseView from './AdminDatabaseView.vue'
@@ -41,6 +41,7 @@ const apiResult = {
 
 const apiMockState = vi.hoisted(() => ({
   reject: false,
+  calls: [] as unknown[][],
   responses: {} as Record<string, unknown>,
 }))
 
@@ -49,7 +50,8 @@ vi.mock('../api', () => ({
     {},
     {
       get: (_target, property) =>
-        vi.fn(async () => {
+        vi.fn(async (...args: unknown[]) => {
+          apiMockState.calls.push([String(property), ...args])
           if (apiMockState.reject) throw new Error(`mock ${String(property)} failure`)
           if (Object.prototype.hasOwnProperty.call(apiMockState.responses, String(property))) {
             const configured = apiMockState.responses[String(property)]
@@ -110,6 +112,12 @@ vi.mock('../api', () => ({
   setTokens: vi.fn(),
 }))
 
+beforeEach(() => {
+  apiMockState.reject = false
+  apiMockState.responses = {}
+  apiMockState.calls = []
+})
+
 const cases = [
   ['app', App, '/'],
   ['home', HomeView, '/'],
@@ -131,17 +139,17 @@ const cases = [
   ['order detail', OrderDetailView, '/order/order-1'],
 ] as const
 
-async function mountView(component: Component, path: string) {
+async function mountView(component: Component, path: string, namedRoutes = true) {
   const empty = { template: '<div />' }
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [
+    routes: namedRoutes ? [
       { path: '/login', name: 'login', component: empty },
       { path: '/checkout/:orderId', name: 'checkout', component: empty },
       { path: '/workbench/repository', name: 'workbench-repository', component: empty },
       { path: '/repository/mod/:modId', name: 'mod-authoring', component: empty },
       { path: '/:pathMatch(.*)*', component: empty },
-    ],
+    ] : [{ path: '/:pathMatch(.*)*', component: empty }],
   })
   await router.push(path)
   await router.isReady()
@@ -160,30 +168,13 @@ async function mountView(component: Component, path: string) {
 
 describe('application views', () => {
   it.each(cases)('mounts %s without a render failure', async (_name, component, path) => {
-    apiMockState.reject = false
-    apiMockState.responses = {}
     localStorage.clear()
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
-    })
-    await router.push(path)
-    await router.isReady()
-
-    const wrapper = shallowMount(component, {
-      global: {
-        plugins: [createPinia(), router],
-        stubs: {
-          RouterLink: { template: '<a><slot /></a>' },
-          RouterView: { template: '<div><slot /></div>' },
-        },
-      },
-    })
+    const { wrapper } = await mountView(component, path, false)
 
     await flushPromises()
     expect(wrapper.exists()).toBe(true)
 
-    const argumentsByAction: Record<string, unknown[]> = {
+    const actions: Record<string, unknown[]> = {
       flash: ['done', true],
       formatTime: ['2026-08-17T00:00:00Z'],
       formatDate: ['2026-08-17T00:00:00Z'],
@@ -191,18 +182,41 @@ describe('application views', () => {
       securityLabel: ['verified'],
       securityLevelClass: ['verified'],
       truncate: ['a long value', 4],
+      loadFacets: [],
+      loadItems: [],
       setIndustry: ['manufacturing'],
       setArtifact: ['workflow'],
       setSecurityLevel: ['verified'],
-      statusText: ['paid'],
-      normPath: ['/folder//file.txt'],
-      getBlurb: [{ description: 'description' }],
-      viewMod: ['demo'],
+      applyFilters: [],
+      resetFilters: [],
+      routeId: [],
+      doBuy: [],
       doDownload: [1],
+      refreshLandingAuth: [],
+      startCountdown: [],
+      sendCode: [],
+      resendCode: [],
+      doLogin: [],
+      normPath: ['/folder//file.txt'],
+      goRepo: [],
+      refreshSummary: [],
+      reload: [],
+      saveManifest: [],
+      loadSelectedFile: [],
+      onPathSelect: [],
+      saveFile: [],
+      loadStore: [],
+      orderId: [],
+      fetchOrder: [],
+      pollOrder: [],
+      statusText: ['paid'],
       handleBuy: [{ id: 'starter', price: 9.9 }],
       startCooldown: [1],
-      txnTypeLabel: ['recharge'],
-      switchMode: ['client'],
+      doRegister: [],
+      getBlurb: [{ description: 'description' }],
+      viewMod: ['demo'],
+      load: [],
+      submitCreate: [],
       onImport: [
         {
           target: {
@@ -211,66 +225,21 @@ describe('application views', () => {
           },
         },
       ],
+      doPull: [],
+      doPush: [],
+      txnTypeLabel: ['recharge'],
+      loadTransactions: [],
+      startAlipayRecharge: [],
+      checkHome: [],
+      switchMode: ['client'],
+      doLogout: [],
     }
-    const actions = [
-      'flash',
-      'formatTime',
-      'formatDate',
-      'artifactLabel',
-      'securityLabel',
-      'securityLevelClass',
-      'truncate',
-      'loadFacets',
-      'loadItems',
-      'setIndustry',
-      'setArtifact',
-      'setSecurityLevel',
-      'applyFilters',
-      'resetFilters',
-      'routeId',
-      'doBuy',
-      'doDownload',
-      'refreshLandingAuth',
-      'startCountdown',
-      'sendCode',
-      'resendCode',
-      'doLogin',
-      'normPath',
-      'goRepo',
-      'refreshSummary',
-      'reload',
-      'saveManifest',
-      'loadSelectedFile',
-      'onPathSelect',
-      'saveFile',
-      'loadStore',
-      'orderId',
-      'fetchOrder',
-      'pollOrder',
-      'statusText',
-      'handleBuy',
-      'startCooldown',
-      'doRegister',
-      'getBlurb',
-      'viewMod',
-      'load',
-      'submitCreate',
-      'onImport',
-      'doPull',
-      'doPush',
-      'txnTypeLabel',
-      'loadTransactions',
-      'startAlipayRecharge',
-      'checkHome',
-      'switchMode',
-      'doLogout',
-    ]
     const vm = wrapper.vm as unknown as Record<string, (...args: unknown[]) => unknown>
-    for (const action of actions) {
+    for (const [action, args] of Object.entries(actions)) {
       const callable = vm[action]
       if (typeof callable !== 'function') continue
       try {
-        await callable(...(argumentsByAction[action] ?? []))
+        await callable(...args)
       } catch {
         // Invalid/empty form state intentionally exercises each component's
         // validation or error branch; the mounted view must remain usable.
@@ -284,35 +253,17 @@ describe('application views', () => {
 
   it.each(cases)('keeps %s renderable when its API is unavailable', async (_name, component, path) => {
     apiMockState.reject = true
-    apiMockState.responses = {}
     localStorage.setItem('modstore_token', 'test-token')
     const consoleError = _name === 'database viewer' ? vi.spyOn(console, 'error').mockImplementation(() => undefined) : null
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
-    })
-    await router.push(path)
-    await router.isReady()
-
-    const wrapper = shallowMount(component, {
-      global: {
-        plugins: [createPinia(), router],
-        stubs: {
-          RouterLink: { template: '<a><slot /></a>' },
-          RouterView: { template: '<div><slot /></div>' },
-        },
-      },
-    })
+    const { wrapper } = await mountView(component, path, false)
     await flushPromises()
 
     expect(wrapper.exists()).toBe(true)
     wrapper.unmount()
     consoleError?.mockRestore()
-    apiMockState.reject = false
   })
 
   it('covers payment plan checkout decisions', async () => {
-    apiMockState.reject = false
     apiMockState.responses = {
       paymentPlans: {
         plans: [{ id: 9, name: 'Pro', price: 99, description: 'Pro plan', features: ['AI'] }],
@@ -348,7 +299,6 @@ describe('application views', () => {
   })
 
   it('covers wallet validation and checkout decisions', async () => {
-    apiMockState.reject = false
     apiMockState.responses = { balance: { balance: 10 }, transactions: { transactions: [] } }
     localStorage.clear()
     const { wrapper, router } = await mountView(WalletView, '/wallet')
@@ -391,7 +341,6 @@ describe('application views', () => {
   })
 
   it('covers catalog purchase and download outcomes', async () => {
-    apiMockState.reject = false
     apiMockState.responses = {
       catalogDetail: {
         id: 1,
@@ -424,7 +373,6 @@ describe('application views', () => {
   })
 
   it('covers repository formatting and synchronization alternatives', async () => {
-    apiMockState.reject = false
     apiMockState.responses = {
       listMods: { data: [{ id: 'demo' }] },
       createMod: { id: 'created' },
@@ -455,7 +403,6 @@ describe('application views', () => {
   })
 
   it('covers MOD authoring validation, save, and file branches', async () => {
-    apiMockState.reject = false
     apiMockState.responses = {
       getMod: {
         manifest: { artifact: 'employee_pack', backend: { entry: 'main.py' } },
@@ -493,6 +440,96 @@ describe('application views', () => {
     await vm.loadSelectedFile()
     await vm.saveFile()
     await nextTick()
+    wrapper.unmount()
+  })
+})
+
+
+describe('customer and administrator UI boundaries', () => {
+  it.each([[false, false], [true, false], [true, true]])('navigation follows authenticated=%s/admin=%s and logout clears identity', async (loggedIn, admin) => {
+    apiMockState.responses = { me: { id: 1, username: 'alice', is_admin: admin }, balance: { balance: 12.5 } }
+    localStorage.clear()
+    if (loggedIn) localStorage.setItem('modstore_token', 'token')
+    const { wrapper, router } = await mountView(App, '/wallet')
+    expect(wrapper.find('.btn-logout').exists()).toBe(loggedIn)
+    expect(wrapper.findAll('.mode-tab')).toHaveLength(admin ? 2 : 0)
+    if (loggedIn) {
+      expect(wrapper.text()).toContain('¥12.50')
+      if (admin) {
+        await wrapper.findAll('.mode-tab')[1]!.trigger('click')
+        await flushPromises()
+        expect(router.currentRoute.value.path).toBe('/admin/database')
+        expect(wrapper.text()).toContain('管理员模式')
+        await wrapper.findAll('.mode-tab')[0]!.trigger('click')
+        await flushPromises()
+        expect(router.currentRoute.value.path).toBe('/')
+        await router.push('/wallet')
+        await flushPromises()
+      }
+      await wrapper.find('.btn-logout').trigger('click')
+      await flushPromises()
+      expect(localStorage.getItem('modstore_token')).toBeNull()
+      expect(router.currentRoute.value.path).toBe('/')
+      expect(wrapper.find('.navbar').exists()).toBe(false)
+    } else {
+      expect(wrapper.text()).toContain('登录')
+      expect(wrapper.text()).not.toContain('¥12.50')
+    }
+    wrapper.unmount()
+  })
+
+  it('does not request administrative data for a customer account', async () => {
+    apiMockState.responses = { me: { id: 29, is_admin: false } }
+    const { wrapper } = await mountView(AdminDatabaseView, '/admin/database')
+    expect(wrapper.text()).toContain('需要管理员权限')
+    expect(apiMockState.calls.some(([name]) => String(name).startsWith('adminList'))).toBe(false)
+    wrapper.unmount()
+  })
+
+  it.each([AdminDatabaseView, DbViewerView])('renders populated ledgers without dropping negative balances or escaping status', async (component) => {
+    const users = [{ id: 1, username: '<script>admin</script>', email: '', is_admin: true }, { id: 2, username: 'customer', email: 'a@example.com', is_admin: false, created_at: '2026-10-07T00:00:00Z' }]
+    const wallets = [{ id: 1, user_id: 1, balance: 12.5 }, { id: 2, user_id: 2, balance: -5, updated_at: '2026-10-07T00:00:00Z' }]
+    const catalog = [{ id: 1, name: 'Free MOD', pkg_id: 'free', price: 0 }, { id: 2, name: 'Paid MOD', pkg_id: 'paid', price: 12.5, downloads: 3, created_at: '2026-10-07T00:00:00Z' }]
+    const transactions = [{ id: 1, user_id: 1, amount: 12.5, status: 'completed', description: '' }, { id: 2, user_id: 2, amount: -5, status: 'pending', description: 'refund', created_at: '2026-10-07T00:00:00Z' }]
+    apiMockState.responses = { me: { is_admin: true }, adminListUsers: { users, items: users }, adminListWallets: { items: wallets }, adminListCatalog: { items: catalog }, adminListTransactions: { items: transactions } }
+    const { wrapper } = await mountView(component, '/admin/database')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(8)
+    expect(wrapper.text()).toContain('¥-5.00')
+    expect(wrapper.text()).toContain('¥12.50')
+    expect(wrapper.text()).toContain('免费')
+    expect(wrapper.text()).toContain('pending')
+    expect(wrapper.find('script').exists()).toBe(false)
+    expect(wrapper.text()).toContain('<script>admin</script>')
+    expect(wrapper.findAll('.db-empty')).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('keeps catalog filters, ownership and errors consistent with visible results', async () => {
+    apiMockState.responses = {
+      catalogFacets: { industries: ['manufacturing'], artifacts: ['mod', 'employee_pack', 'bundle', 'surface', 'unknown'] },
+      catalog: { items: ['personal', 'enterprise', 'confidential', 'unknown'].map((security_level, index) => ({ id: index + 1, name: `Item ${index}`, pkg_id: `pkg.${index}`, version: '1', artifact: ['mod', 'employee_pack', 'bundle', 'unknown'][index], industry: index ? 'manufacturing' : '', description: index ? 'x'.repeat(130) : '', security_level, purchased: index === 1, price: index ? 12.5 : 0 })), total: 9 },
+    }
+    const { wrapper } = await mountView(AiStoreView, '/ai-store')
+    expect(wrapper.findAll('.store-card')).toHaveLength(4)
+    expect(wrapper.text()).toContain('已购')
+    expect(wrapper.text()).toContain('免费')
+    expect(wrapper.text()).toContain('共 9 条')
+    const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
+    await button('manufacturing').trigger('click')
+    await button('AI 员工包').trigger('click')
+    await button('保密级').trigger('click')
+    await wrapper.find('#store-search').setValue('  inventory  ')
+    await wrapper.find('#store-search').trigger('keydown.enter')
+    await flushPromises()
+    expect(apiMockState.calls.filter(([name]) => name === 'catalog').at(-1)).toEqual(['catalog', 'inventory', 'employee_pack', 80, 0, 'manufacturing', 'confidential'])
+    await button('重置').trigger('click')
+    await flushPromises()
+    expect(apiMockState.calls.filter(([name]) => name === 'catalog').at(-1)).toEqual(['catalog', '', '', 80, 0, '', ''])
+    apiMockState.responses.catalog = new Error('catalog unavailable')
+    await button('搜索').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('catalog unavailable')
+    expect(wrapper.findAll('.store-card')).toHaveLength(0)
     wrapper.unmount()
   })
 })
