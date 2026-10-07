@@ -1,5 +1,5 @@
 {
-  "lines": 2295186,
+  "lines": 2295017,
   "updated": "2026-10-07",
-  "note": "PR 2179 fixes observed Mac acceptance blockers: dependency security, sales continuation, customer XLSX download, approval conversation retention, failed issue-intake task state and packaged backup version identity. Behavior, actual HTTP/SQLite, isolation, authorization, path, persisted failed-run and backup identity regressions preserve coverage thresholds. 108 duplicate test lines removed earlier; explicit maintained-line exception for review. Frontend CI reconciliation retains the existing coverage scope/floors and removes 7 maintained lines while using patched tinypool 2.1.2."
+  "note": "PR 2179 fixes observed Mac acceptance blockers: dependency security, sales continuation, customer XLSX download, approval conversation retention, failed issue-intake task state and packaged backup version identity. Behavior, actual HTTP/SQLite, isolation, authorization, path, persisted failed-run and backup identity regressions preserve coverage thresholds. 108 duplicate test lines removed earlier; explicit maintained-line exception for review. Frontend CI reconciliation retains the existing coverage scope/floors and removes 7 maintained lines while using patched tinypool 2.1.2. Windows startup adapts decc9e352 with real HTTP and exhausted-bucket regression tests; obsolete unregistered Excel migration snapshot archived with verified checksum."
 }
