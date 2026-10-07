@@ -148,11 +148,14 @@ class __AIChatApplicationServicePart02MixinPart03Mixin(_DynamicWorkflowPendingRe
             )
             if (
                 target
-                and shipment_call_payload(target.tool_id, target.action, target.params) is not None
+                and (
+                    shipment_call_payload(target.tool_id, target.action, target.params) is not None
+                    or (target.tool_id == "sales" and target.action == "create_order")
+                )
                 and text.lower() not in {"取消", "否", "不要", "停止", "no"}
             ):
                 message = text = (
-                    f"{message}\n原始出货请求：{pending.get('runtime_context', {}).get('message', '')}"
+                    f"{message}\n原始业务请求：{pending.get('runtime_context', {}).get('message', '')}"
                 )
                 self._pending_workflows.pop(user_id, None)
         pending_handled, pending_result = self._resume_pending_dynamic_workflow(

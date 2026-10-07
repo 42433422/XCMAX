@@ -1,5 +1,5 @@
 {
-  "lines": 2294900,
+  "lines": 2294941,
   "updated": "2026-10-07",
-  "note": "Security-required Vitest 4 migration: preserve 80% coverage gates with customer navigation, administrator isolation, ledger and catalog behavior tests; deduplicate 108 existing test lines, resulting in 36 additional maintained lines. Explicit exception recorded for PR 2179 review."
+  "note": "PR 2179 Mac acceptance: security-required Vitest 4 preserves existing 80% coverage gates with seven behavior cases after deduplicating 108 lines; real Mac sales missing-input deadlock adds two fail-closed replanning regressions. Maintained-line increase is explicit for review."
 }
