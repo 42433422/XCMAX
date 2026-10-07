@@ -397,3 +397,29 @@ describe('rollback — triggerRollback defensive paths', () => {
     }
   })
 })
+
+const macIt = process.platform === 'darwin' ? it : it.skip
+macIt('never mixes a legacy Mac backend with the new signed application or migrated database', async () => {
+  const cleanup = setupPackagedBackend()
+  const data = electronMocks.__userDataDir
+  const resources = (process as { resourcesPath?: string }).resourcesPath as string
+  const backup = path.join(data, 'rollback', 'legacy-backend')
+  const database = path.join(data, 'data', 'xcagi.db')
+  fs.mkdirSync(backup, { recursive: true })
+  fs.mkdirSync(path.dirname(database), { recursive: true })
+  fs.writeFileSync(path.join(backup, 'xcagi-backend'), 'old-backend')
+  fs.writeFileSync(database, 'new-database')
+  fs.writeFileSync(database + '.before', 'old-database')
+  fs.writeFileSync(path.join(data, 'rollback-marker.json'), JSON.stringify({
+    mode: 'backend', fromVersion: '1.0.0+280225ac77ce', toVersion: '1.0.0.5',
+    preparedAt: new Date().toISOString(), backendPath: path.join(resources, 'backend', 'xcagi-backend'),
+    backupRelPath: 'legacy-backend', databasePath: database, databaseBackupPath: database + '.before',
+  }))
+  try {
+    const { triggerRollback } = await import('./rollback.js')
+    await expect(triggerRollback('legacy startup failed')).rejects.toThrow(/完整旧版应用/)
+    expect(fs.readFileSync(path.join(resources, 'backend', 'xcagi-backend'), 'utf8')).toBe('fake-backend')
+    expect(fs.readFileSync(database, 'utf8')).toBe('new-database')
+    expect(fs.existsSync(path.join(data, 'rollback-marker.json'))).toBe(true)
+  } finally { cleanup() }
+})

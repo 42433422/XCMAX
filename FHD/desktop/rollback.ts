@@ -7,6 +7,7 @@ import {
   type WindowsRollbackAppliedRecord,
 } from './rollback-windows.js'
 import { launchMacOSFullRollback } from './rollback-macos.js'
+import { promoteLegacyMacRollback } from './legacy-macos-recovery.js'
 
 const ROLLBACK_DIR = 'rollback'
 const ROLLBACK_MARKER = 'rollback-marker.json'
@@ -290,12 +291,20 @@ export interface RollbackTriggerResult {
 }
 
 export async function triggerRollback(reason: string): Promise<RollbackTriggerResult> {
-  const marker = checkPendingRollback()
+  let marker = checkPendingRollback()
   if (!marker) {
     return { mode: 'none', scheduled: false }
   }
 
   const dir = rollbackDir()
+  if (process.platform === 'darwin' && (!marker.mode || marker.mode === 'backend')) {
+    if (!marker.backupRelPath) throw new Error('回滚失败：marker 缺少 backend 备份路径')
+    const backendBackup = resolveInside(dir, marker.backupRelPath)
+    if (!fs.existsSync(backendBackup)) throw new Error(`回滚失败：备份目录不存在 ${backendBackup}`)
+    const bundle = resolveMacOSAppBundlePath(resolvePackagedAppPath() || '')
+    if (!bundle) throw new Error('完整旧版应用备份不足：当前 Mac 应用路径无效')
+    marker = promoteLegacyMacRollback(marker, dir, bundle, backendBackup)
+  }
   const applied: RollbackApplied & WindowsRollbackAppliedRecord = {
     appliedAt: new Date().toISOString(),
     reason,
@@ -303,52 +312,21 @@ export async function triggerRollback(reason: string): Promise<RollbackTriggerRe
     toVersion: marker.fromVersion
   }
 
-  if (
-    process.platform === 'win32' &&
-    marker.mode === 'windows-full' &&
-    marker.appPath &&
-    marker.appBackupRelPath
-  ) {
-    const backupRoot = resolveInside(dir, marker.appBackupRelPath)
-    if (!fs.existsSync(backupRoot)) {
-      throw new Error(`回滚失败：完整应用备份目录不存在 ${backupRoot}`)
-    }
-    const options = {
-      currentPid: process.pid,
-      installDir: path.dirname(marker.appPath),
-      backupRoot,
-      appPath: marker.appPath,
-      markerPath: markerPath(),
-      appliedPath: appliedPath(),
-      logPath: helperLogPath(),
-      applied,
-      ...(marker.databasePath && marker.databaseBackupPath
-        ? {
-            databasePath: marker.databasePath,
-            databaseBackupPath: marker.databaseBackupPath,
-          }
-        : {}),
-    }
-    await launchWindowsFullRollback(options)
-    return { mode: 'windows-full', scheduled: true }
-  }
-
-  if (process.platform === 'darwin' && marker.mode === 'macos-full' && marker.appBundlePath && marker.appBackupRelPath) {
+  const windows = process.platform === 'win32' && marker.mode === 'windows-full' && marker.appPath
+  const macos = process.platform === 'darwin' && marker.mode === 'macos-full' && marker.appBundlePath
+  if ((windows || macos) && marker.appBackupRelPath) {
     const backupRoot = resolveInside(dir, marker.appBackupRelPath)
     if (!fs.existsSync(backupRoot)) throw new Error(`回滚失败：完整应用备份目录不存在 ${backupRoot}`)
-    await launchMacOSFullRollback({
-      currentPid: process.pid,
-      appPath: marker.appBundlePath,
-      backupRoot,
-      markerPath: markerPath(),
-      appliedPath: appliedPath(),
-      logPath: helperLogPath(),
-      applied,
+    const options = {
+      currentPid: process.pid, backupRoot, appPath: (windows || macos) as string,
+      markerPath: markerPath(), appliedPath: appliedPath(), logPath: helperLogPath(), applied,
       ...(marker.databasePath && marker.databaseBackupPath
         ? { databasePath: marker.databasePath, databaseBackupPath: marker.databaseBackupPath }
         : {}),
-    })
-    return { mode: 'macos-full', scheduled: true }
+    }
+    if (windows) await launchWindowsFullRollback({ ...options, installDir: path.dirname(windows) })
+    else await launchMacOSFullRollback(options)
+    return { mode: windows ? 'windows-full' : 'macos-full', scheduled: true }
   }
 
   if (!marker.backupRelPath) {
