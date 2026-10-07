@@ -3122,8 +3122,14 @@ class TestTryHandleDynamicWorkflow:
 
         svc = _make_svc()
         original = "请创建销售订单，必须先人工审批。"
-        node = WorkflowNode(node_id="sale", tool_id="sales", action="create_order",
-                            params={}, risk="high", idempotent=False)
+        node = WorkflowNode(
+            node_id="sale",
+            tool_id="sales",
+            action="create_order",
+            params={},
+            risk="high",
+            idempotent=False,
+        )
         svc._pending_workflows["u1"] = {
             "kind": "clarification",
             "plan": PlanGraph(plan_id="missing-sale", intent="sales_create_order", nodes=[node]),
@@ -3131,17 +3137,31 @@ class TestTryHandleDynamicWorkflow:
             "clarification": {"reason": "missing_required"},
             "runtime_context": {"message": original},
         }
-        params = {"customer_name": "Mac验收客户", "items": [{"product_id": 1, "quantity": 2, "unit_price": 9.9}]}
+        params = {
+            "customer_name": "Mac验收客户",
+            "items": [{"product_id": 1, "quantity": 2, "unit_price": 9.9}],
+        }
         if not complete:
             params.pop("items")
         svc.workflow_planner.plan.return_value = PlanGraph(
-            plan_id="continued-sale", intent="sales_create_order",
-            nodes=[WorkflowNode(node_id="sale", tool_id="sales", action="create_order",
-                                params=params, risk="high", idempotent=False)],
+            plan_id="continued-sale",
+            intent="sales_create_order",
+            nodes=[
+                WorkflowNode(
+                    node_id="sale",
+                    tool_id="sales",
+                    action="create_order",
+                    params=params,
+                    risk="high",
+                    idempotent=False,
+                )
+            ],
         )
-        svc._open_clarification_gate = Mock(side_effect=lambda **kw: {
-            "missing": bool(needs_clarification(kw["plan"], kw["tool_registry"]))
-        })
+        svc._open_clarification_gate = Mock(
+            side_effect=lambda **kw: {
+                "missing": bool(needs_clarification(kw["plan"], kw["tool_registry"]))
+            }
+        )
         message = "客户名称 Mac验收客户，产品ID 1，数量2，单价9.90元，先人工审批。"
         result = svc._try_handle_dynamic_workflow_after_excel(
             "u1", message, "normal", {"tool_execution_profile": "normal"}, message, False

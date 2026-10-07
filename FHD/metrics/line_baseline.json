@@ -1,5 +1,5 @@
 {
-  "lines": 2294941,
+  "lines": 2294961,
   "updated": "2026-10-07",
-  "note": "PR 2179 Mac acceptance: security-required Vitest 4 preserves existing 80% coverage gates with seven behavior cases after deduplicating 108 lines; real Mac sales missing-input deadlock adds two fail-closed replanning regressions. Maintained-line increase is explicit for review."
+  "note": "PR 2179 Mac acceptance security and real sales missing-input fix: preserve 80% coverage with behavior regressions, deduplicate 108 test lines, and add two fail-closed sales continuation cases; Ruff formatting included. Explicit maintained-line exception for review."
 }
