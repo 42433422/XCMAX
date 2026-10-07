@@ -236,7 +236,11 @@ async def mod_store_decide_private_delivery_request(
             token,
             f"/api/customer-service/custom-deliveries/{int(ticket_id)}/decision",
             method="POST",
-            payload={"action": action, "note": note},
+            payload={
+                "action": action,
+                "note": note,
+                **({"source_mode": payload["source_mode"]} if payload.get("source_mode") else {}),
+            },
         )
     except (ConnectionError, RuntimeError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

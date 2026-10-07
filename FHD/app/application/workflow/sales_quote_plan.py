@@ -47,7 +47,7 @@ def sales_quote_node(message: str, registry: dict[str, Any]) -> WorkflowNode | N
         r"(?:[，,]\s*单价\s*(\d+(?:\.\d+)?)(?:元)?)?[。！!]?",
         message.strip(),
     )
-    action = "quote"
+    action = "quote" if match else "create_order"
     if not match:
         match = re.fullmatch(
             r"(?:请|帮我)?给客户\s*(.+?)\s*下订单[，,]\s*产品\s*([A-Za-z0-9][A-Za-z0-9._-]*)"
@@ -55,11 +55,10 @@ def sales_quote_node(message: str, registry: dict[str, Any]) -> WorkflowNode | N
             r"(?:[，,]\s*单价\s*(\d+(?:\.\d+)?)(?:元)?)?[。！!]?",
             message.strip(),
         )
-        action = "create_order"
     if not match:
         return None
     customer, model, quantity, price = match.groups()
-    item: dict[str, Any] = {"model_number": model}
+    item = {"model_number": model}
     if quantity is not None:
         item["quantity"] = float(quantity)
     if price is not None:

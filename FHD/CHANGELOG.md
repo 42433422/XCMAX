@@ -5,7 +5,8 @@
 ---
 
 ## Unreleased（1.0.0.5 之后的累积变更）
-- 修复 Mac 实机销售订单请求误入产品写入：销售意图优先，保留客户、型号、数量、单价及缺参澄清/人工审批。
+- 修复 SUNBIRD 生成私包失败后的原单返工死路：可选择已有主线考勤 Mod，保留原工单与生产历史；账号权益和发行源码身份校验通过才启动，仍需签包、客户验收、安装与业务验证。
+- 修复 Mac 实机销售订单请求误入产品写入：销售意图优先，保留客户、型号、数量、单价及缺参澄清/人工审批；修正类型重复声明，并在员工安装失败时显示实际原因。
 - Mac OTA rollback preserves committed SQLite WAL records if recovery recording fails and restarts in the original data directory and port; installer checks isolate the app, wait for login UI, and retain startup video and failure evidence.
 
 - 桌面启动探测直连本地后端，避免系统代理干扰；为完整响应设置超时，并将 ping、桌面状态探测从全局业务限流中豁免；最终安装包仍须实机复验。
