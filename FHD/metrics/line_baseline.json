@@ -1,5 +1,5 @@
 {
-  "lines": 2296373,
+  "lines": 2296472,
   "updated": "2026-10-08",
-  "note": "PR2179 adds 134 meaningful Mac frontend behavior cases for customer navigation, entitlements, tenant roles, business charts and tables, task approval/workspace presentation, installed identity, update and login-item failures. Full suite 10016 passed with unchanged coverage scope and floors; explicit reviewed line-budget exception, preserving existing runtime fixes and archived-document reduction. Changelog checkout fetches only compared commits after two all-history fetch timeouts; gate behavior retained, net deletes 2 lines."
+  "note": "Installed Mac d8f13a1c acceptance reproduces sales orders incorrectly routed to product creation; minimal sales routing repair plus seven behavioral regression cases preserve commercial terms, clarification, negation and product CRUD. Explicit review-visible exception for this release-blocking repair."
 }

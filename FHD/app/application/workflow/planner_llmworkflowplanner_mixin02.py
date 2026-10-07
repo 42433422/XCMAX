@@ -217,6 +217,13 @@ class _LLMWorkflowPlannerPart02Mixin:
             if inventory_node is not None:
                 nodes.append(inventory_node)
                 intent = "inventory_stock_in"
+        if not nodes:
+            from app.application.workflow.sales_quote_plan import sales_quote_node
+
+            quote_node = sales_quote_node(message, tool_registry)
+            if quote_node is not None:
+                nodes.append(quote_node)
+                intent = f"sales_{quote_node.action}"
         if (
             not nodes
             and _facade()._looks_like_business_db_write(message, lower)
@@ -234,13 +241,6 @@ class _LLMWorkflowPlannerPart02Mixin:
             if finance_node is not None:
                 nodes.append(finance_node)
                 intent = "finance_write"
-        if not nodes:
-            from app.application.workflow.sales_quote_plan import sales_quote_node
-
-            quote_node = sales_quote_node(message, tool_registry)
-            if quote_node is not None:
-                nodes.append(quote_node)
-                intent = f"sales_{quote_node.action}"
         route = route_normal_mode_message(message)
         if (
             not nodes

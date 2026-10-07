@@ -399,3 +399,70 @@ class TestPlanWithLLM:
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
 
         assert result is None
+
+
+@pytest.mark.parametrize("prefix", ["请创建销售订单", "帮我新建一张销售订单"])
+def test_labeled_sales_order_never_creates_product(prefix):
+    planner = LLMWorkflowPlanner()
+    plan = planner._fallback_plan(
+        "sales-regression",
+        prefix + "：客户Mac新main验收客户-20261008，产品Mac新main验收包装盒，"
+        "型号MAC-MAIN-20261008，数量2件，单价12.50元，总金额25元。"
+        "请先展示销售订单执行计划，提交人工审批后再执行。",
+        get_tool_registry(),
+    )
+    assert len(plan.nodes) == 1
+    node = plan.nodes[0]
+    assert (node.tool_id, node.action) == ("sales", "create_order")
+    assert node.risk == "medium" and not node.idempotent
+    assert node.params == {
+        "customer_name": "Mac新main验收客户-20261008",
+        "items": [
+            {
+                "model_number": "MAC-MAIN-20261008",
+                "product_name": "Mac新main验收包装盒",
+                "quantity": 2.0,
+                "unit_price": 12.5,
+            }
+        ],
+    }
+
+
+def test_labeled_sales_order_does_not_invent_commercial_terms():
+    from app.application.workflow.sales_quote_plan import sales_quote_node
+
+    node = sales_quote_node("创建销售订单：客户测试企业，产品测试商品，型号ABC-1", {"sales": {}})
+    assert node is not None
+    assert node.params == {
+        "customer_name": "测试企业",
+        "items": [{"model_number": "ABC-1", "product_name": "测试商品"}],
+    }
+
+
+@pytest.mark.parametrize(
+    "message", ["不要创建销售订单：客户A，产品B，数量2，单价3", "别新建一张销售订单：客户A，型号B"]
+)
+def test_negated_labeled_sales_order_has_no_sales_write(message):
+    from app.application.workflow.sales_quote_plan import sales_quote_node
+
+    assert sales_quote_node(message, {"sales": {}}) is None
+
+
+def test_labeled_sales_missing_terms_still_require_clarification():
+    from app.application.workflow.clarification_node import needs_clarification
+
+    plan = LLMWorkflowPlanner()._fallback_plan(
+        "missing-sales", "创建销售订单：客户测试企业，产品测试商品，型号ABC-1", get_tool_registry()
+    )
+    assert (plan.nodes[0].tool_id, plan.nodes[0].action) == ("clarify", "ask")
+    assert any((node.tool_id, node.action) == ("sales", "create_order") for node in plan.nodes)
+    missing = needs_clarification(plan, get_tool_registry())
+    assert missing[0]["missing_fields"] == ["items.0.quantity", "items.0.unit_price"]
+
+
+def test_sales_named_product_master_create_remains_product_crud():
+    plan = LLMWorkflowPlanner()._fallback_plan(
+        "product-master", "创建产品：产品名称销售订单收纳盒，型号BOX-1，单价5", get_tool_registry()
+    )
+    assert (plan.nodes[0].tool_id, plan.nodes[0].action) == ("business_db", "write")
+    assert plan.nodes[0].params["entity"] == "products"
