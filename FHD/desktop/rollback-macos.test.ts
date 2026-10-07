@@ -23,18 +23,14 @@ function setup(recoveryRecordIsDirectory = false) {
   fs.writeFileSync(dbBackup, 'pre-migration')
   fs.writeFileSync(marker, '{}')
   if (recoveryRecordIsDirectory) fs.mkdirSync(applied)
-  const options = {
+  return { root, app, marker, applied, db, options: {
     currentPid: 99999999,
-    appPath: app,
-    backupRoot: backup,
-    markerPath: marker,
-    appliedPath: applied,
+    appPath: app, backupRoot: backup,
+    markerPath: marker, appliedPath: applied,
     logPath: path.join(root, 'helper.log'),
     applied: { appliedAt: 'now', reason: 'startup failed', fromVersion: '2', toVersion: '1' },
-    databasePath: db,
-    databaseBackupPath: dbBackup,
-  }
-  return { root, app, marker, applied, db, options }
+    databasePath: db, databaseBackupPath: dbBackup,
+  } }
 }
 
 const scriptForTestHost = (script: string) => process.platform === 'darwin' ? script : script.replace('ditto "$backup" "$staging"', 'cp -a "$backup" "$staging"').replace('/usr/bin/base64 -D', 'base64 -d')
@@ -47,8 +43,7 @@ describe('macOS full rollback helper', () => {
     fs.mkdirSync(bin)
     fs.writeFileSync(path.join(bin, 'open'), `#!/bin/sh\nprintf '%s' "$1" > '${opened}'\n`, { mode: 0o700 })
     try {
-      const script = buildMacOSRollbackScript(f.options)
-      execFileSync('/bin/sh', ['-c', scriptForTestHost(script)], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } })
+      execFileSync('/bin/sh', ['-c', scriptForTestHost(buildMacOSRollbackScript(f.options))], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } })
       expect(fs.readFileSync(path.join(f.app, 'Contents', 'version'), 'utf8')).toBe('old')
       expect(fs.readFileSync(f.db, 'utf8')).toBe('pre-migration')
       expect(fs.existsSync(f.marker)).toBe(false)
@@ -60,9 +55,17 @@ describe('macOS full rollback helper', () => {
   it('restores the new app and database when recording recovery fails', () => {
     const f = setup(true)
     try {
+      execFileSync('python3', ['-c', `import sqlite3,os,sys
+p=sys.argv[1]; os.unlink(p); c=sqlite3.connect(p)
+c.execute('PRAGMA journal_mode=WAL'); c.execute('PRAGMA wal_autocheckpoint=0')
+c.execute('CREATE TABLE records(value TEXT)'); c.commit()
+c.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+c.execute("INSERT INTO records VALUES ('committed customer record')"); c.commit()
+os._exit(0)`, f.db])
+      expect(fs.existsSync(`${f.db}-wal`)).toBe(true)
       expect(() => execFileSync('/bin/sh', ['-c', scriptForTestHost(buildMacOSRollbackScript(f.options))], { stdio: 'ignore' })).toThrow()
       expect(fs.readFileSync(path.join(f.app, 'Contents', 'version'), 'utf8')).toBe('new')
-      expect(fs.readFileSync(f.db, 'utf8')).toBe('migrated')
+      expect(execFileSync('python3', ['-c', "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('SELECT value FROM records').fetchone()[0])", f.db], { encoding: 'utf8' }).trim()).toBe('committed customer record')
       expect(fs.existsSync(f.marker)).toBe(true)
     } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
   })

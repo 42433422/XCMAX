@@ -5,6 +5,7 @@
 ---
 
 ## Unreleased（1.0.0.5 之后的累积变更）
+- Mac OTA rollback preserves committed SQLite WAL records if recovery recording fails.
 
 - 桌面启动探测直连本地后端，避免系统代理干扰；为完整响应设置超时，并将 ping、桌面状态探测从全局业务限流中豁免；最终安装包仍须实机复验。
 
