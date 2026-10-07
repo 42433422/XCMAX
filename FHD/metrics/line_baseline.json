@@ -1,5 +1,5 @@
 {
-  "lines": 2295017,
+  "lines": 2296374,
   "updated": "2026-10-07",
-  "note": "PR 2179 fixes observed Mac acceptance blockers: dependency security, sales continuation, customer XLSX download, approval conversation retention, failed issue-intake task state and packaged backup version identity. Behavior, actual HTTP/SQLite, isolation, authorization, path, persisted failed-run and backup identity regressions preserve coverage thresholds. 108 duplicate test lines removed earlier; explicit maintained-line exception for review. Frontend CI reconciliation retains the existing coverage scope/floors and removes 7 maintained lines while using patched tinypool 2.1.2. Windows startup adapts decc9e352 with real HTTP and exhausted-bucket regression tests; obsolete unregistered Excel migration snapshot archived with verified checksum."
+  "note": "PR2179 adds 134 meaningful Mac frontend behavior cases for customer navigation, entitlements, tenant roles, business charts and tables, task approval/workspace presentation, installed identity, update and login-item failures. Full suite 10016 passed with unchanged coverage scope and floors; explicit reviewed line-budget exception, preserving existing runtime fixes and archived-document reduction."
 }
