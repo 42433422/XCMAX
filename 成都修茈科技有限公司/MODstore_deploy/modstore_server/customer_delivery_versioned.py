@@ -20,6 +20,18 @@ MOD_ID = "sunbird-attendance-custom"
 LEGACY_ID = "taiyangniao-pro"
 
 
+def select_main_rework_source(evidence: dict[str, Any], user_id: int, action: str) -> None:
+    if (
+        action != "rework"
+        or evidence.get("kind") != "module"
+        or evidence.get("suggested_id") != MOD_ID
+    ):
+        raise ValueError("只有太阳鸟模块原单返工可选择主线源码")
+    assert_owner_source(user_id, MOD_ID)
+    release_source()
+    evidence["source_mode"] = "versioned_main"
+
+
 def source_fingerprints(root: Path) -> tuple[dict[str, str], str]:
     """Hash every file and the ordered tree; reject links and special members."""
     if not root.is_dir() or root.is_symlink():
