@@ -1,5 +1,5 @@
 {
-  "lines": 2296650,
+  "lines": 2296756,
   "updated": "2026-10-08",
-  "note": "棘轮下调"
+  "note": "Installed EDF Mac regression requires online planner precedence and grounded repeat-request, compound-request safety tests; scoped +106 lines, no unrelated deletions."
 }

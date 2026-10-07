@@ -7,10 +7,20 @@ from app.application.workflow.types import WorkflowNode
 from app.domain.services.conversation.chat_tool_intent import is_negated_action_request
 
 
-def sales_quote_node(message: str, registry: dict[str, Any]) -> WorkflowNode | None:
+def sales_quote_node(
+    message: str, registry: dict[str, Any], *, single_request: bool = False
+) -> WorkflowNode | None:
     if "sales" not in registry or is_negated_action_request(message):
         return None
     if re.search(r"(?:创建|新建|新增)\s*(?:一[张个]\s*)?销售订单(?=[:：，,\s]|$)", message):
+        if single_request and not re.fullmatch(
+            r"\s*(?:请|帮我)?(?:创建|新建|新增)\s*(?:一[张个]\s*)?销售订单"
+            r"(?:[:：，,；;\n]\s*(?:客户名称|客户|购买单位|产品名称|产品|商品名称|商品|型号|数量|单价|总金额)"
+            r"\s*[:：]?\s*[^，,；;。\n]+)+"
+            r"(?:[。；;，,]\s*(?:请)?(?:先)?(?:展示销售订单执行计划|提交人工审批后再执行))*[。！!]?\s*",
+            message,
+        ):
+            return None
 
         def slot(label: str) -> str | None:
             found = re.search(
