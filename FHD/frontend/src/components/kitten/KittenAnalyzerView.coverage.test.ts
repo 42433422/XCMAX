@@ -1,6 +1,5 @@
 /**
  * KittenAnalyzerView.vue 覆盖率补齐测试
- * 目标：覆盖脚本内所有函数的 happy path、空值、边界、异常路径
  * 重点：onVizEmployeeSelect、applyVizEmployeeChartType、runDocGen、onQuickPick、
  *       runFinancialBriefAndClose、startVoiceInput、stopVoiceInput、openDownloadLink
  */
