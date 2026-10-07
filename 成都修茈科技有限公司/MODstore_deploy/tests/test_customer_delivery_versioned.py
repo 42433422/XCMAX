@@ -370,11 +370,10 @@ def test_signing_failure_rolls_done_session_back_to_error(pinned_source, tmp_pat
 @pytest.mark.parametrize("failure", ["owner", "release", "wrong_mod", "accept"])
 def test_original_ticket_main_rework_rejects_before_start_or_commit(monkeypatch, failure):
     from fastapi import HTTPException
+
     import modstore_server.customer_service_api  # noqa: F401
-    from modstore_server import (
-        customer_service_delivery_api as api,
-        customer_delivery_versioned as versioned,
-    )
+    from modstore_server import customer_delivery_versioned as versioned
+    from modstore_server import customer_service_delivery_api as api
     from modstore_server.customer_service_delivery_models import (
         CustomDeliveryDecisionBody,
     )
@@ -420,10 +419,8 @@ def test_original_ticket_rework_preserves_identity_and_source_choice(
     monkeypatch, selected, previous
 ):
     import modstore_server.customer_service_api  # noqa: F401
-    from modstore_server import (
-        customer_service_delivery_api as api,
-        customer_delivery_versioned as versioned,
-    )
+    from modstore_server import customer_delivery_versioned as versioned
+    from modstore_server import customer_service_delivery_api as api
     from modstore_server.customer_service_delivery_models import (
         CustomDeliveryDecisionBody,
     )
