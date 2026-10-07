@@ -34,6 +34,12 @@ def _client_issue_reply(receipt: dict | None) -> str:
     return replies.get(str(receipt.get("state") or ""), "")
 
 
+def _apply_client_issue_outcome(payload: dict, receipt: dict | None) -> dict:
+    if receipt and receipt.get("state") == "OWNER_ROUTE_UNAVAILABLE":
+        payload.update(success=False, message=_client_issue_reply(receipt))
+    return payload
+
+
 async def _classify_and_submit_client_issue_async(
     request, runtime_context, message, reply, client=None, *, guide_unavailable: bool = True
 ):
@@ -131,11 +137,12 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     authenticated_tenant_id = (
         int(authenticated_tenant_id) if authenticated_tenant_id is not None else None
     )
-    if issue_reply := _client_issue_reply(
-        _classify_and_submit_client_issue(request, runtime_context, body.message, "")
-    ):
+    issue_receipt = _classify_and_submit_client_issue(request, runtime_context, body.message, "")
+    if issue_reply := _client_issue_reply(issue_receipt):
         payload = _facade().attach_chat_trace_run(
-            _facade()._xcagi_compat_reply_payload(issue_reply),
+            _apply_client_issue_outcome(
+                _facade()._xcagi_compat_reply_payload(issue_reply), issue_receipt
+            ),
             message=body.message,
             runtime_context=runtime_context,
             user_id=body.user_id,
@@ -354,6 +361,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         done_reply = {"response": visible_text, "thinking_steps": thinking, **planner_result}
         payload = _facade()._xcagi_compat_reply_payload(done_reply)
         payload.update(planner_result)
+        _apply_client_issue_outcome(payload, issue_receipt)
         if pre_run is not None:
             payload = finalize(payload)
         else:

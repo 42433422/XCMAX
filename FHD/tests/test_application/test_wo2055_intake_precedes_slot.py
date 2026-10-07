@@ -15,6 +15,7 @@ part03 里的 try_normal_slot_read_payload 会在任何受理之前直接返回�
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace as NS
 
 import pytest
@@ -35,7 +36,10 @@ def _collect(agen) -> list[dict]:
 
 @pytest.mark.parametrize(
     "guide",
-    [{"state": "ROUTED", "work_order_id": "WO-fixed-path", "owner_ticket_no": "CI-fixed-path"}],
+    [
+        {"state": "ROUTED", "work_order_id": "WO-fixed-path", "owner_ticket_no": "CI-fixed-path"},
+        {"state": "OWNER_ROUTE_UNAVAILABLE", "work_order_id": "WO-fixed-path"},
+    ],
 )
 def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide):
     import importlib
@@ -76,3 +80,12 @@ def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide):
 
     assert "当前没有采购订单。" not in text, "缺陷上报被 normal-slot 快路径吃掉"
     assert "WO-fixed-path" in text, "必须回执 Work Order 编号"
+    events = [json.loads(line[6:]) for line in text.splitlines() if line.startswith("data: ")]
+    result = next(event["result"] for event in events if event["type"] == "done")
+    assert result["success"] is (guide["state"] == "ROUTED")
+    if guide["state"] == "OWNER_ROUTE_UNAVAILABLE":
+        assert "尚未送达" in result["message"]
+        from app.application.agent_orchestrator import AgentOrchestrator
+
+        run = AgentOrchestrator().get_run(result["run_id"])
+        assert run is not None and run.status == "failed"
