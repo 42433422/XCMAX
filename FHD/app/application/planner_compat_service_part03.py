@@ -18,6 +18,7 @@ async def compat_chat_stream_async(
 
     # 客户缺陷上报先受理；查询快路径保留待澄清工作流的续接。
     from app.fastapi_routes.xcagi_compat_chat_stream import (
+        _apply_client_issue_outcome,
         _classify_and_submit_client_issue_async,
         _client_issue_reply,
     )
@@ -35,7 +36,9 @@ async def compat_chat_stream_async(
             {
                 "type": "done",
                 "result": _facade().attach_chat_trace_run(
-                    _facade()._xcagi_compat_reply_payload(issue_reply),
+                    _apply_client_issue_outcome(
+                        _facade()._xcagi_compat_reply_payload(issue_reply), issue_receipt
+                    ),
                     message=body.message,
                     runtime_context=issue_context,
                     user_id=getattr(body, "user_id", None),
