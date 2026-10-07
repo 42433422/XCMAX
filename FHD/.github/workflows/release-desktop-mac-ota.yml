@@ -187,18 +187,23 @@ jobs:
           grep -Eq "^releaseDate: ['\"]?[0-9]{4}-[0-9]{2}-[0-9]{2}T" "${src}/latest-mac.yml"
           grep -Eq '^signature: ed25519:[A-Za-z0-9+/=]+$' "${src}/latest-mac.yml"
 
+      - name: Install startup video recorder
+        working-directory: FHD/desktop
+        run: npx playwright install ffmpeg
+
       - name: Verify notarized DMG and packaged runtime
         run: |
           read -r v arch <<<"${{ inputs.version }} ${{ inputs.architecture || 'arm64' }}"; dmg="$(find "release/xcagi-v${v}/enterprise" -name "XCAGI-Enterprise-${v}-mac-${arch}.dmg" -print -quit)"
           bash scripts/package/verify-macos-release-dmg.sh "${dmg}" "${v}" "${XCAGI_BUILD_SHA}"
-          if [ "${{ inputs.candidate_only }}" = true ] && [ "${arch}" = x64 ]; then evidence_dir="release/xcagi-v${v}/enterprise/acceptance-evidence"; mkdir -p "${evidence_dir}"; XCAGI_ACCEPTANCE_EVIDENCE_DIR="${evidence_dir}" bash scripts/package/acceptance-macos.sh --version "${v}" --dmg "${dmg}"; fi
+          if [ "${{ inputs.candidate_only }}" = true ]; then evidence_dir="release/xcagi-v${v}/enterprise/acceptance-evidence"; mkdir -p "${evidence_dir}"; XCAGI_ACCEPTANCE_SYSTEM_INTEGRATION=1 XCAGI_ACCEPTANCE_EVIDENCE_DIR="${evidence_dir}" bash scripts/package/acceptance-macos.sh --version "${v}" --dmg "${dmg}"; fi
 
       - name: Upload macOS OTA artifacts for recovery
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.candidate_only && format('mac-acceptance-{0}-{1}', inputs.release_sha, inputs.architecture || 'arm64') || format('mac-ota-enterprise-{0}', inputs.version) }}
           path: FHD/release/xcagi-v${{ github.event.inputs.version }}/enterprise
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Publish macOS OTA artifacts to CVM (official + stable)
