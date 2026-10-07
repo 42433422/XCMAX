@@ -1,5 +1,5 @@
 {
-  "lines": 2296650,
+  "lines": 2296786,
   "updated": "2026-10-08",
-  "note": "棘轮下调"
+  "note": "Installed EDF Mac blockers: online sales planner repeat/compound safety regressions (+106); report download intercept and trusted-origin regressions (+30). New exact-main installer revalidation remains required."
 }

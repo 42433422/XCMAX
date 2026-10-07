@@ -460,9 +460,99 @@ def test_labeled_sales_missing_terms_still_require_clarification():
     assert missing[0]["missing_fields"] == ["items.0.quantity", "items.0.unit_price"]
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "创建销售订单：客户A，型号B，数量2，单价3。然后导出客户列表",
+        "先导出客户列表，再创建销售订单：客户A，型号B，数量2，单价3",
+        "创建销售订单：客户A，型号B，数量2，单价3，同时删除产品B",
+    ],
+)
+def test_sales_precedence_does_not_discard_additional_operations(message):
+    from app.application.workflow.sales_quote_plan import sales_quote_node
+
+    assert sales_quote_node(message, {"sales": {}}, single_request=True) is None
+    assert sales_quote_node(message, {"sales": {}}) is not None
+
+
 def test_sales_named_product_master_create_remains_product_crud():
     plan = LLMWorkflowPlanner()._fallback_plan(
         "product-master", "创建产品：产品名称销售订单收纳盒，型号BOX-1，单价5", get_tool_registry()
     )
     assert (plan.nodes[0].tool_id, plan.nodes[0].action) == ("business_db", "write")
     assert plan.nodes[0].params["entity"] == "products"
+
+
+@pytest.mark.parametrize("llm_variant", ["drops_customer", "adds_confirmation"])
+def test_online_sales_planner_preserves_explicit_fields_before_model(llm_variant):
+    with patch("app.application.workflow.planner.get_ai_conversation_service"):
+        planner = LLMWorkflowPlanner()
+    item = {
+        "model_number": "WRONG-MODEL",
+        "product_name": "模型猜测产品",
+        "quantity": 99,
+        "unit_price": 100,
+    }
+    nodes = [
+        WorkflowNode(
+            node_id="llm_create",
+            tool_id="sales",
+            action="create_order",
+            params={
+                "customer_name": "" if llm_variant == "drops_customer" else "模型猜测客户",
+                "items": [item],
+            },
+            risk="medium",
+            idempotent=False,
+        )
+    ]
+    if llm_variant == "adds_confirmation":
+        nodes.append(
+            WorkflowNode(
+                node_id="llm_confirm",
+                tool_id="sales",
+                action="confirm",
+                params={"order_id": "模型猜测订单"},
+                depends_on=["llm_create"],
+                risk="medium",
+                idempotent=False,
+            )
+        )
+    memory = Mock()
+    memory.format_memory_v2_for_prompt.return_value = "无已确认记忆"
+    with (
+        patch.object(
+            planner,
+            "_plan_with_react_multiagent",
+            return_value=PlanGraph(plan_id="model-plan", intent="sales_create_order", nodes=nodes),
+        ) as online,
+        patch(
+            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            return_value="full",
+        ),
+        patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
+        patch("app.services.user_memory_service.get_user_memory_service", return_value=memory),
+        patch("app.application.workflow.planner.execute_tool") as execute,
+    ):
+        for attempt in range(2):
+            plan = planner.plan(
+                "u1",
+                "请创建销售订单：客户Mac新main验收客户-20261008，产品Mac新main验收包装盒，型号MAC-MAIN-20261008，数量2件，单价12.50元，总金额25元。请先展示销售订单执行计划，提交人工审批后再执行。",
+                get_tool_registry(),
+                {"conversation_id": f"retry-{attempt}"},
+            )
+            assert [(n.tool_id, n.action) for n in plan.nodes] == [("sales", "create_order")]
+            assert plan.nodes[0].params == {
+                "customer_name": "Mac新main验收客户-20261008",
+                "items": [
+                    {
+                        "model_number": "MAC-MAIN-20261008",
+                        "product_name": "Mac新main验收包装盒",
+                        "quantity": 2.0,
+                        "unit_price": 12.5,
+                    }
+                ],
+            }
+            assert plan.nodes[0].risk == "medium" and not plan.nodes[0].idempotent
+        online.assert_not_called()
+        execute.assert_not_called()
