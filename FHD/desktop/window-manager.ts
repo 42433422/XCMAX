@@ -244,7 +244,7 @@ export async function createWindow(): Promise<void> {
     })
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    return { action: handleDesktopWindowOpen(url, DEFAULT_PORT, target => shell.openExternal(target), message => console.warn(message)) }
+    return { action: handleDesktopWindowOpen(url, DEFAULT_PORT, target => shell.openExternal(target), message => console.warn(message), target => mainWindow.webContents.downloadURL(target)) }
   })
   mainWindow.webContents.on('unresponsive', () => {
     writeBackendLog('[crash] renderer unresponsive\n')
