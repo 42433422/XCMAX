@@ -54,7 +54,6 @@ describe('offlineTts', () => {
     })
 
     it('does not throw with valid PCM data', async () => {
-      // Mock AudioContext to avoid real audio
       const mockCtx = {
         createBuffer: vi.fn(() => ({
           copyToChannel: vi.fn(),
