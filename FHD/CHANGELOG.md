@@ -6,7 +6,7 @@
 
 ## Unreleased（1.0.0.5 之后的累积变更）
 - 修复 Mac 实机销售订单请求误入产品写入：销售意图优先，保留客户、型号、数量、单价及缺参澄清/人工审批。
-- Mac OTA rollback preserves committed SQLite WAL records if recovery recording fails and restarts in the original data directory and port.
+- Mac OTA rollback preserves committed SQLite WAL records if recovery recording fails and restarts in the original data directory and port; installer checks isolate the app, wait for login UI, and retain startup video and failure evidence.
 
 - 桌面启动探测直连本地后端，避免系统代理干扰；为完整响应设置超时，并将 ping、桌面状态探测从全局业务限流中豁免；最终安装包仍须实机复验。
 
