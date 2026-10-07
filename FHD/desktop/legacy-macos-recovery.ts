@@ -8,7 +8,7 @@ type RecoveryPackage = { filename: string; sha256: string; gitSha: string; versi
 
 export function promoteLegacyMacRollback(marker: RollbackMarker, dir: string, appBundlePath: string, backendBackup: string): RollbackMarker {
   const missing = () => new Error(`完整旧版应用备份不足：${marker.fromVersion} (${process.arch})；保留当前应用、数据库和旧备份，请提供对应的已签名完整安装包及数据库快照`)
-  if (!marker.databasePath || !marker.databaseBackupPath || !fs.existsSync(marker.databaseBackupPath)) throw missing()
+  if (!appBundlePath || !marker.databasePath || !marker.databaseBackupPath || !fs.existsSync(marker.databaseBackupPath)) throw missing()
   const root = path.join(process.resourcesPath, 'legacy-macos-recovery')
   let selected: RecoveryPackage | undefined
   try {
@@ -29,9 +29,8 @@ export function promoteLegacyMacRollback(marker: RollbackMarker, dir: string, ap
   if (identity.gitSha !== selected.gitSha || identity.version !== selected.version) throw missing()
   execFileSync('codesign', ['--verify', '--deep', '--strict', restored])
   // Retain the actual old backend's opaque runtime files, not merely a clean vendor copy.
-  const backend = path.join(resources, 'backend')
-  fs.rmSync(backend, { recursive: true })
-  execFileSync('ditto', [backendBackup, backend])
+  fs.rmSync(path.join(resources, 'backend'), { recursive: true })
+  execFileSync('ditto', [backendBackup, path.join(resources, 'backend')])
   execFileSync('codesign', ['--verify', '--deep', '--strict', restored])
   const promoted: RollbackMarker = { ...marker, mode: 'macos-full', fromVersion: `${selected.version}+${selected.gitSha.slice(0, 12)}`, appBundlePath, appBackupRelPath: path.relative(dir, restored) }
   const temporary = path.join(path.dirname(dir), `rollback-marker.${process.pid}.tmp`)
