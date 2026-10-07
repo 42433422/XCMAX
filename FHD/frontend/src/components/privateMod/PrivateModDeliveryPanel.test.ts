@@ -251,3 +251,20 @@ it.each(['version', 'stage'])('keeps the previous %s when the server rejects the
   expect(action.attributes('disabled')).toBeUndefined()
   wrapper.unmount()
 })
+
+
+it('selects the existing main Sunbird Mod for rework on the original ticket', async () => {
+  const original = { ...ticket, custom_delivery: { kind: 'module', suggested_id: 'sunbird-attendance-custom', stage: 'rework' } }
+  vi.mocked(apiFetch).mockResolvedValueOnce(centerResponse({ requests: [original], projects: [{ mod_id: 'taiyangniao-pro', runtime_mod_id: 'sunbird-attendance-custom' }] }))
+  const { wrapper } = await setup()
+  await wrapper.get('.private-mod-request__rework input[type="checkbox"]').setValue(true)
+  await wrapper.get('.private-mod-request__rework textarea').setValue('原单使用主线已具备前端的考勤转换模块返工')
+  vi.mocked(apiFetch).mockResolvedValueOnce(centerResponse({})).mockResolvedValueOnce(centerResponse({ requests: [original] }))
+  await wrapper.get('.private-mod-request__rework button').trigger('click')
+  await flushPromises()
+  expect(apiFetch).toHaveBeenNthCalledWith(2, '/api/mod-store/private-delivery/requests/7/decision', expect.objectContaining({
+    body: JSON.stringify({ action: 'rework', note: '原单使用主线已具备前端的考勤转换模块返工', source_mode: 'versioned_main' }),
+  }))
+  expect(wrapper.find('.private-mod-request__delivered').exists()).toBe(false)
+  wrapper.unmount()
+})

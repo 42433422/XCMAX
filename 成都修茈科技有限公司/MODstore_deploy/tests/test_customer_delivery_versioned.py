@@ -365,3 +365,126 @@ def test_signing_failure_rolls_done_session_back_to_error(pinned_source, tmp_pat
     assert snapshot["steps"][1]["status"] == "error"
     assert snapshot["error"] == "signing failed"
     assert custom_delivery_gate(snapshot)[0] is False
+
+
+@pytest.mark.parametrize("failure", ["owner", "release", "wrong_mod", "accept"])
+def test_original_ticket_main_rework_rejects_before_start_or_commit(monkeypatch, failure):
+    from fastapi import HTTPException
+    import modstore_server.customer_service_api  # noqa: F401
+    from modstore_server import (
+        customer_service_delivery_api as api,
+        customer_delivery_versioned as versioned,
+    )
+    from modstore_server.customer_service_delivery_models import (
+        CustomDeliveryDecisionBody,
+    )
+
+    evidence = {"kind": "module", "suggested_id": versioned.MOD_ID}
+    ticket = types.SimpleNamespace(id=34, user_id=29, intent="custom_delivery")
+    monkeypatch.setattr(api, "_visible_ticket_or_404", lambda *_: ticket)
+    monkeypatch.setattr(api, "_custom_delivery_evidence", lambda *_: dict(evidence))
+    monkeypatch.setattr(versioned, "assert_owner_source", lambda *_: None)
+    monkeypatch.setattr(versioned, "release_source", lambda: (None, {}))
+    if failure == "owner":
+        monkeypatch.setattr(
+            versioned,
+            "assert_owner_source",
+            lambda *_: (_ for _ in ()).throw(PermissionError("unentitled")),
+        )
+    elif failure == "release":
+        monkeypatch.setattr(
+            versioned,
+            "release_source",
+            lambda: (_ for _ in ()).throw(ValueError("release mismatch")),
+        )
+    elif failure == "wrong_mod":
+        evidence["suggested_id"] = "another-private-mod"
+    body = CustomDeliveryDecisionBody(
+        action="accept" if failure == "accept" else "rework",
+        note="补齐正式运行产物",
+        source_mode="versioned_main",
+    )
+    with pytest.raises(HTTPException) as rejected:
+        asyncio.run(
+            api.decide_custom_delivery(34, body, db=object(), user=types.SimpleNamespace(id=29))
+        )
+    assert rejected.value.status_code == (403 if failure == "owner" else 409)
+    assert "source_mode" not in evidence
+
+
+@pytest.mark.parametrize(
+    "selected,previous",
+    [(None, "generated"), (None, "versioned_main"), ("versioned_main", "generated")],
+)
+def test_original_ticket_rework_preserves_identity_and_source_choice(
+    monkeypatch, selected, previous
+):
+    import modstore_server.customer_service_api  # noqa: F401
+    from modstore_server import (
+        customer_service_delivery_api as api,
+        customer_delivery_versioned as versioned,
+    )
+    from modstore_server.customer_service_delivery_models import (
+        CustomDeliveryDecisionBody,
+    )
+
+    evidence = {
+        "kind": "module",
+        "suggested_id": versioned.MOD_ID,
+        "source_mode": previous,
+        "runs": [{"session_id": "old-generation"}],
+        "delivery_artifacts": [{"id": "old"}],
+        "acceptance_status": "accepted",
+    }
+    ticket = types.SimpleNamespace(
+        id=34,
+        user_id=29,
+        session_id=12,
+        intent="custom_delivery",
+        ticket_no="CD-original",
+    )
+    monkeypatch.setattr(api, "_visible_ticket_or_404", lambda *_: ticket)
+    monkeypatch.setattr(api, "_custom_delivery_evidence", lambda *_: dict(evidence))
+    monkeypatch.setattr(
+        versioned,
+        "assert_owner_source",
+        lambda owner, mod: owner == 29 and mod == versioned.MOD_ID,
+    )
+    monkeypatch.setattr(versioned, "release_source", lambda: (None, {"git_sha": "a" * 40}))
+    calls = []
+
+    async def payload(row):
+        return {"id": row.id, "ticket_no": row.ticket_no}
+
+    async def start(**kwargs):
+        calls.append(kwargs)
+        return {"session_id": "new-generation"}
+
+    monkeypatch.setattr(api, "_custom_delivery_payload", payload)
+    monkeypatch.setattr(api, "_start_custom_delivery_run", start)
+    events = []
+    monkeypatch.setattr(api, "audit", lambda *args, **kwargs: events.append(kwargs))
+    commits = []
+    db = types.SimpleNamespace(commit=lambda: commits.append(True), refresh=lambda *_: None)
+    result = asyncio.run(
+        api.decide_custom_delivery(
+            34,
+            CustomDeliveryDecisionBody(
+                action="rework", note="补齐正式运行产物", source_mode=selected
+            ),
+            db=db,
+            user=types.SimpleNamespace(id=29),
+        )
+    )
+    saved = json.loads(ticket.evidence_json)
+    assert result == {"id": 34, "ticket_no": "CD-original"}
+    assert len(calls) == len(commits) == 1
+    assert calls[0]["ticket_id"] == 34 and calls[0]["user_id"] == 29 and calls[0]["attempt"] == 2
+    assert saved["source_mode"] == (selected or previous)
+    assert [row["session_id"] for row in saved["runs"]] == [
+        "old-generation",
+        "new-generation",
+    ]
+    assert saved["delivery_artifacts"] == [] and saved["acceptance_status"] == "pending"
+    assert ticket.status == "processing" and ticket.closed_at is None
+    assert events[0]["event_type"] == "custom_delivery_rework_requested"

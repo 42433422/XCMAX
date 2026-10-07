@@ -1,5 +1,5 @@
 {
-  "lines": 2296472,
+  "lines": 2296669,
   "updated": "2026-10-08",
-  "note": "Installed Mac d8f13a1c acceptance reproduces sales orders incorrectly routed to product creation; minimal sales routing repair plus seven behavioral regression cases preserve commercial terms, clarification, negation and product CRUD. Explicit review-visible exception for this release-blocking repair."
+  "note": "Mac installed SUNBIRD original delivery ticket repeatedly fails SDK frontend and existing main private-Mod create is blocked by the open ticket; scoped original-ticket source selection preserves owner/release/signature gates and audit history; focused security and identity regressions require additional lines."
 }

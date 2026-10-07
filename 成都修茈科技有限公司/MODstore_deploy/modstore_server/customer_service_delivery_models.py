@@ -21,6 +21,7 @@ class CustomDeliveryCreateBody(BaseModel):
 
 
 class CustomDeliveryDecisionBody(BaseModel):
+    source_mode: Literal["versioned_main"] | None = None
     action: str = Field(..., pattern="^(accept|rework)$")
     note: str = Field(default="", max_length=4000)
 
