@@ -26,6 +26,7 @@ import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { desktopBackendEnv } from './backend-env'
 import { sanitizeBackendProxyEnv } from './backend-env-utils'
 import { createForceUpgradeHandler } from './desktop-resilience'
+import { loopbackHttpGet } from './backend-loopback-http'
 
 export const POST_UPDATE_STABILITY_MS = 5_000
 
@@ -113,10 +114,8 @@ export async function waitForBackendPing(
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/ping`, {
-        signal: AbortSignal.timeout(2_000)
-      })
-      const server = (response.headers.get('server') || '').toLowerCase()
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/ping`, 2_000)
+      const server = (response.getHeader('server') || '').toLowerCase()
       if (response.ok && server.includes('uvicorn')) {
         desktopRuntime.startupMarks.backendHealthMs = Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? started)
         return
@@ -153,9 +152,7 @@ async function waitForStartupHealth(port: number, timeoutMs: number): Promise<bo
   let last = ''
   while (Date.now() - started <= budget) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
-        signal: AbortSignal.timeout(2_000)
-      })
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/health`, 2_000)
       if (response.ok) {
         const body = (await response.json()) as {
           status?: string
@@ -196,9 +193,7 @@ export async function waitForBackendApplicationReady(
   const remaining = () => Math.max(0, timeoutMs - (Date.now() - started))
   while (remaining() > 0) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/desktop/status`, {
-        signal: AbortSignal.timeout(2_000)
-      })
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/desktop/status`, 2_000)
       if (response.ok) {
         const body = (await response.json()) as {
           appRoutesReady?: boolean
@@ -223,7 +218,7 @@ export async function waitForBackendStatus(port: number, timeoutMs = 60_000): Pr
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/desktop/status`)
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/desktop/status`, 2_000)
       if (response.ok) {
         desktopRuntime.startupMarks.desktopStatusMs = Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? started)
         return (await response.json()) as Record<string, unknown>
