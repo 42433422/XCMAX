@@ -1473,6 +1473,6 @@ function createMockSpeechRecognition() {
     abort: vi.fn(),
   }
   // 返回构造器函数本身，instance 作为属性挂载，便于测试中直接赋值给 window.SpeechRecognition
-  const Ctor = vi.fn(() => instance)
+  const Ctor = vi.fn(function () { return instance })
   return Object.assign(Ctor, { instance }) as typeof Ctor & { instance: typeof instance }
 }
