@@ -9,6 +9,7 @@
 - 修复 Mac 实机销售订单请求误入产品写入：销售意图优先，保留客户、型号、数量、单价及缺参澄清/人工审批；修正类型重复声明，并在员工安装失败时显示实际原因。
 - Mac OTA rollback preserves committed SQLite WAL records if recovery recording fails and restarts in the original data directory and port; installer checks isolate the app, wait for login UI, and retain startup video and failure evidence.
 
+- Windows 更新回滚失败会恢复当前应用及 SQLite 主库、WAL、SHM，失败回执不再提前中断补偿或误留成功记录；既有失败副本保留，最终安装包仍须隔离客户 VM 复验。
 - 桌面启动探测直连本地后端，避免系统代理干扰；为完整响应设置超时，并将 ping、桌面状态探测从全局业务限流中豁免；最终安装包仍须实机复验。
 
 - 共享桌面候选更新构建与运行依赖，修复危险模板输入、模型权重路径穿越和资源耗尽等已确认的依赖安全问题；销售订单补参后重新校验并进入审批流程，避免反复要求选择目标；客户 Excel 导出接回既有业务服务；审批回执刷新时保留原会话内容、标题和审批信息；问题工单受理失败会正确记为失败，不再记成已完成任务；自动备份按安装包身份记录版本，避免记成 unknown；新安装包仍须实机验收，正式发布继续执行完整安全闸门。
