@@ -199,10 +199,16 @@ def project_terminal_run_to_conversation(
 
             store = WorkflowPlanStore()
             original = _original_plan_terminal(store, orchestrator, run, session_id, result)
-            if original and store.load(original[0]).get("status") in {
-                "running",
-                "pending_awaiting",
-            }:
+            saved = store.load(original[0]) if original else None
+            if (
+                original
+                and saved
+                and str(saved.get("status") or "")
+                in {
+                    "running",
+                    "pending_awaiting",
+                }
+            ):
                 # Approval handlers call this after commit; never execute a tool here.
                 store.update_status(original[0], original[1], str(result.get("summary") or ""))
         projection_key = str(result.get("projection_key") or "").strip()
