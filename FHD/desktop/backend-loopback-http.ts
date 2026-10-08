@@ -1,6 +1,5 @@
 import http from 'node:http'
 
-/** Startup probes connect directly, independently of the desktop/system proxy. */
 export function loopbackHttpGet(url: string, timeoutMs: number): Promise<{
   ok: boolean
   getHeader(name: string): string
@@ -11,7 +10,7 @@ export function loopbackHttpGet(url: string, timeoutMs: number): Promise<{
     if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1') {
       throw new Error('backend probe requires an HTTP IPv4 loopback URL')
     }
-    const req = http.get(parsed, res => {
+    const req = http.get(parsed, { agent: false }, res => { // Bypass globalAgent proxyEnv.
       const chunks: Buffer[] = []
       res.on('data', chunk => chunks.push(Buffer.from(chunk)))
       res.on('error', reject)

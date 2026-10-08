@@ -1,0 +1,132 @@
+{
+  "observed_at": "2026-10-08T01:12:38.687241+00:00",
+  "vm_role": "Independent clean task A; original A and B data preserved",
+  "product_version": "1.0.0.5",
+  "git_sha": "edf274051b0e6cb5e5d25d99c2bbeb3cb0cf857b",
+  "installer_sha256": "8b54e1773c25240314e5900bb785c2cb2f934bdbb321b33aeb50605415d36060",
+  "candidate_scope": "outdated exact-main diagnostic candidate, not final frozen delivery",
+  "normal_installation": "COMPLETED, original wizard screen retained; continuous video pending",
+  "first_start": "FAIL: /api/ping exceeded 180000ms and direct loopback refused",
+  "late_backend": "Actual EDF runtime later became healthy; does not erase first-start failure",
+  "relaunch": "Normal tray Exit then shortcut Open reached login; no forced kill or backend manual launch",
+  "authentication": "Normal Windows UI enterprise login and company/industry onboarding succeeded for same synthetic TEST customer; clipboard restored disabled; no token injection. Does not erase first-start failure.",
+  "original_ticket_number": null,
+  "latest_main_verified": "189ab2ab0d0992de6ccdb8840e33923571e28eeb",
+  "previous_integration_pr": "Merged without Windows review patches",
+  "issues": [
+    {
+      "id": "WIN-20261008-LICENSE",
+      "problem": "NSIS Chinese company name garbled",
+      "repair": "UTF8 signature source patch, rebuilt VM pending"
+    },
+    {
+      "id": "WIN-20261008-INSTALLER-STYLE",
+      "problem": "Release CI explicitly skips existing modern WPF wrapper",
+      "repair": "Existing WPF path restored in review source; real child exit required, crash retry no longer deletes installation directory, /S compatibility and final-wrapper signing enforced; original negative control fails 5/7 and repaired 7/7 pass. Exact-main rebuilt installer and customer VM revalidation pending."
+    },
+    {
+      "id": "WIN-20261008-COLD-START",
+      "problem": "Initialization continues beyond timeout but shell remains permanently failed",
+      "repair": "Cold-start phase reproduction and recovery fix pending; proxy patch alone insufficient"
+    },
+    {
+      "id": "WIN-20261008-ACCOUNT-ACTIONS",
+      "problem": "Native 50px titlebar covers top24px login registration and purchase controls",
+      "repair": "Windows-only placement below overlay; production CSS geometry regression, rebuilt VM pending"
+    },
+    {
+      "id": "WIN-20261008-AUTH-STARTUP",
+      "problem": "Unauthenticated generic home and conversations404 before enterprise login",
+      "repair": "Early shell load and temporary SKU generic fallback identified as possible path; actual request correlation and fix pending"
+    },
+    {
+      "id": "WIN-20261008-NETWORK-PROMPTS",
+      "problem": "First start requested Windows network access separately for the main program and backend",
+      "repair": "Windows shell probe now uses loopback and checks occupied listeners by outbound connection; backend LAN pairing retained. 91 related tests and TypeScript pass; rebuilt exact-main VM prompt-count revalidation pending."
+    }
+  ],
+  "integration_pr": "https://github.com/42433422/XCMAX/pull/2187",
+  "common_backend_owner": "Mac primary; actual role acknowledgment still required",
+  "final_16_nodes_passed": 0,
+  "network_source_tests": {
+    "passed": 91,
+    "failed": 0,
+    "typescript": "PASS",
+    "customer_vm": "PENDING"
+  },
+  "original_raw_records_preserved": true,
+  "files": [
+    {
+      "path": "nsis-01-license.png",
+      "sha256": "38cc8d6001c11c789546e6fa69999f0fd2137c1d589b46019beef08fc64f9d55",
+      "bytes": 137346
+    },
+    {
+      "path": "nsis-03-completed.png",
+      "sha256": "6928050d660389e6dff5ff487946a24662b4fef6c2a1ed94c22265f7d773de5b",
+      "bytes": 127485
+    },
+    {
+      "path": "first-start-ping-timeout.png",
+      "sha256": "f0f467b2cc80edaa5ce74f39332dfcf7dbb76e011493fc5a424f2c17b3ec1471",
+      "bytes": 46149
+    },
+    {
+      "path": "first-start-failed-splash.png",
+      "sha256": "a09180080113d7e42933c6c973a76721ca35c5706172aa9ecd33e45d49a39d53",
+      "bytes": 39007
+    },
+    {
+      "path": "normal-relaunch-home-original-size.png",
+      "sha256": "ed9c5d8d6ddfdb3496c544104ac66c5d7fbddd5e9976a03ecaf2657009e7512c",
+      "bytes": 62198
+    },
+    {
+      "path": "login-original-800x600.png",
+      "sha256": "1d80cf6164d45792f1f98bd95af8c05912586af55036f37b1a6a89e0756ea09a",
+      "bytes": 81806
+    },
+    {
+      "path": "login-maximized-original.png",
+      "sha256": "e39fc08914545dd87c2ee18afe7e720429aa8ea7dbef2fab65c9de8f320919b1",
+      "bytes": 89028
+    },
+    {
+      "path": "first-start-direct-ping.json",
+      "sha256": "f4d7dd5c84bce1078abb819d8043a0b38f205439cc647d01e77b2ff5f0779f98",
+      "bytes": 318
+    },
+    {
+      "path": "first-start-late-health-summary.json",
+      "sha256": "bd707cf4ed73476dd4939b87516d4a3f723ba0f8329ecb887a652a28977b533d",
+      "bytes": 311
+    },
+    {
+      "path": "electron-backend-first-start.redacted.log",
+      "sha256": "84dbcbbf593b977a9a7df35707a4059259d468d50896d46d1a97e012c5d5531f",
+      "bytes": 819
+    },
+    {
+      "path": "test-normal-login-receipt.json",
+      "sha256": "2eb9d36b49532ecba48467d5e29e351bba6c7d9688543846c408b872051c99a1",
+      "bytes": 694
+    },
+    {
+      "path": "test-coating-workspace-opened.png",
+      "sha256": "68a9480ad2506631351be19e66abae70f8c47b48d5f80cbdb2da16530d21186c",
+      "bytes": 61830
+    }
+  ],
+  "ticket_path": "Information: dedicated customer support and same ticket history; intelligent chat assists submission via customer-candidate then issues/intake. No original ticket number yet; private customization is separate.",
+  "source_regressions": {
+    "scope": "Host build/process regression only, not customer VM acceptance",
+    "wrapper_process_original_failed_cases": 5,
+    "wrapper_process_fixed_passed_cases": 7,
+    "actual_wpf_build": "PASS 0 warnings 0 errors",
+    "actual_wpf_argument_parser_passed_cases": 4,
+    "signing_policy_fixture_passed_cases": 10,
+    "rebuilt_exact_main_installer": "PENDING",
+    "actual_final_signature": "NOT_TESTED",
+    "full_16_vm_revalidation": "PENDING"
+  }
+}

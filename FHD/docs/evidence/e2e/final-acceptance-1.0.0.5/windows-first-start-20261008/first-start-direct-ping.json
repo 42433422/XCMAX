@@ -1,0 +1,11 @@
+{
+  "observed_at": "2026-10-08T08:52:31.1964909+08:00",
+  "url": "http://127.0.0.1:17500/api/ping",
+  "noproxy": "*",
+  "exit": 1,
+  "result": "curl(7) Failed to connect after2037ms",
+  "api_health": "pending separate read",
+  "ui_timeout_ms": 180000,
+  "ui_port": 17500,
+  "manual_backend_launch": false
+}

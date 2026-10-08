@@ -103,7 +103,8 @@ public partial class App : System.Windows.Application
             {
                 var arg = args[i];
                 if (arg.Equals("--silent", StringComparison.OrdinalIgnoreCase) ||
-                    arg.Equals("/silent", StringComparison.OrdinalIgnoreCase))
+                    arg.Equals("/silent", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("/S", StringComparison.OrdinalIgnoreCase))
                 {
                     enabled = true;
                     continue;

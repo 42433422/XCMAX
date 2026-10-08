@@ -47,6 +47,8 @@ public partial class MainWindow : Window
     private void MainWindow_OnLoaded(object sender, RoutedEventArgs e)
     {
         LoadLogo();
+        var version = typeof(MainWindow).Assembly.GetName().Version?.ToString() ?? "unknown";
+        WelcomeSubtitleText.Text = $"{version} · 企业 AI 员工宿主";
         InstallDirBox.Text = _installDir;
         WelcomePathPreview.Text = _installDir;
 
@@ -60,13 +62,13 @@ public partial class MainWindow : Window
         _hasEmbeddedPayload = EmbeddedPayloadExtractor.HasEmbeddedPayload();
         if (!_hasEmbeddedPayload)
         {
-            _setupExePath = PayloadLocator.FindSetupExeOnDisk("8.0.0");
+            _setupExePath = PayloadLocator.FindSetupExeOnDisk(version);
             if (_setupExePath == null)
             {
                 ShowError(
                     "未找到安装包。\n\n" +
                     "请使用完整发行包（build-installer.ps1 生成），\n" +
-                    "或将 XCAGI-Setup-8.0.0-x64.exe 置于本程序同目录。");
+                    $"或将 XCAGI-Setup-{version}-x64.exe 置于本程序同目录。");
                 return;
             }
         }

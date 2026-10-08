@@ -230,6 +230,13 @@ describe('main — resolveDesktopBackendBindHost', () => {
 })
 
 describe('main — isPortAvailable', () => {
+  it('keeps the Windows shell probe on loopback without changing backend LAN binding', async () => {
+    const { isPortAvailable, DESKTOP_BACKEND_BIND_HOST } = await import('./main.js')
+    const net = await import('node:net')
+    const listen = vi.spyOn(net.Server.prototype, 'listen')
+    expect(await isPortAvailable(0)).toBe(true)
+    expect(listen.mock.calls[0][1]).toBe(process.platform === 'win32' ? '127.0.0.1' : DESKTOP_BACKEND_BIND_HOST)
+  })
   it('returns true for a free port', async () => {
     const { isPortAvailable } = await import('./main.js')
     // 用一个几乎不可能被占用的端口

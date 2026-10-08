@@ -17,8 +17,7 @@ public sealed class NsisSilentInstaller
         string setupExePath,
         string installDirectory,
         IProgress<InstallProgressUpdate>? progress = null,
-        CancellationToken cancellationToken = default,
-        int attempt = 1)
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(setupExePath))
             return InstallResult.Fail($"未找到安装包：{setupExePath}");
@@ -59,103 +58,36 @@ public sealed class NsisSilentInstaller
 
         var estimated = InstallProgressTracker.EstimateInstalledBytes(setupExePath, dir);
 
-        bool hungAfterComplete;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(30));
         try
         {
-            hungAfterComplete = await InstallProgressTracker.MonitorInstallAsync(
-                process,
-                dir,
-                estimated,
-                progress,
-                cancellationToken).ConfigureAwait(false);
+            await InstallProgressTracker.MonitorInstallAsync(
+                process, dir, estimated, progress, timeout.Token).ConfigureAwait(false);
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             try
             {
                 if (!process.HasExited)
-                    process.Kill(entireProcessTree: true);
-            }
-            catch
-            {
-                // ignore
-            }
-
-            return InstallResult.Fail("安装已取消。");
-        }
-
-        if (!process.HasExited)
-        {
-            if (hungAfterComplete || InstallProgressTracker.IsInstallComplete(dir))
-            {
-                try
                 {
                     process.Kill(entireProcessTree: true);
                     await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
                 }
-                catch
-                {
-                    // 文件已齐全时仍视为成功
-                }
             }
-            else
-            {
-                try
-                {
-                    await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    return InstallResult.Fail("安装已取消。");
-                }
-            }
+            catch { /* Cancellation remains a failure even if stopping the installer fails. */ }
+            return InstallResult.Fail(cancellationToken.IsCancellationRequested ? "安装已取消。" : "安装超时，未确认完成。");
         }
-
-        if (!InstallProgressTracker.IsInstallComplete(dir))
-        {
-            if (process.ExitCode != 0)
-            {
-                if (attempt == 1 && process.ExitCode == unchecked((int)0xC0000005))
-                {
-                    progress?.Report(new InstallProgressUpdate(0, "安装程序异常退出，正在重试…"));
-                    TryCleanInstallDirectory(dir);
-                    return await RunAsync(
-                        setupExePath,
-                        installDirectory,
-                        progress,
-                        cancellationToken,
-                        attempt + 1).ConfigureAwait(false);
-                }
-
-                return InstallResult.Fail($"安装程序退出码 {process.ExitCode}。");
-            }
+        // Existing files cannot prove this installation succeeded or justify deleting user data.
+        if (process.ExitCode != 0)
+            return InstallResult.Fail($"安装程序退出码 {process.ExitCode}。");
+        if (!InstallCompletionDetector.IsComplete(dir))
             return InstallResult.Fail("安装未完成：缺少 XCAGI 主程序或后端文件。");
-        }
-
-        var appExe = Path.Combine(dir, "XCAGI.exe");
-        if (!File.Exists(appExe))
-        {
-            var found = Directory.EnumerateFiles(dir, "XCAGI.exe", SearchOption.AllDirectories).FirstOrDefault();
-            if (found != null)
-                appExe = found;
-        }
-
-        return InstallResult.Ok(dir, File.Exists(appExe) ? appExe : null);
+        progress?.Report(new InstallProgressUpdate(100, "安装完成"));
+        return InstallResult.Ok(dir, Path.Combine(dir, "XCAGI.exe"));
     }
 
-    private static void TryCleanInstallDirectory(string dir)
-    {
-        try
-        {
-            if (Directory.Exists(dir))
-                Directory.Delete(dir, recursive: true);
-            Directory.CreateDirectory(dir);
-        }
-        catch
-        {
-            // The retry will report the actual installer result.
-        }
-    }
 }
 
 public readonly record struct InstallResult(bool Success, string? InstallDir, string? AppExePath, string? Error)
