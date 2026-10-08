@@ -210,7 +210,11 @@ async def submit_product_issue(
         "owner_ticket_no": result["ticket_no"],
         "support_bundle_saved": saved,
         "support_bundle_sha256": evidence["sha256"] if saved else "",
-        **({"screenshots": evidence["screenshots"]} if saved and evidence.get("screenshots") else {}),
+        **(
+            {"screenshots": evidence["screenshots"]}
+            if saved and evidence.get("screenshots")
+            else {}
+        ),
     }
 
 

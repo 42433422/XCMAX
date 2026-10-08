@@ -145,8 +145,11 @@ async def intake_customer_issue(
         from modstore_server.customer_issue_support_reports import record_support_report
 
         saved = record_support_report(
-            db, ticket, owner=user, values=values,
-            request_digest=request_digest, replayed=replayed,
+            db,
+            ticket,
+            owner=user,
+            values=values,
+            request_digest=request_digest,
         )
         _route_work_order(db, body, user, ticket)
         _wake_owner_intake(ticket.id, body.source)

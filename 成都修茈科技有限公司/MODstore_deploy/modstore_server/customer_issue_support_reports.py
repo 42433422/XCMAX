@@ -18,11 +18,13 @@ from modstore_server.models_cs import CustomerServiceTicket
 
 
 def record_support_report(
-    db: Session, ticket: CustomerServiceTicket, *, owner: User,
-    values: dict[str, Any], request_digest: str, replayed: bool,
+    db: Session,
+    ticket: CustomerServiceTicket,
+    *,
+    owner: User,
+    values: dict[str, Any],
+    request_digest: str,
 ) -> bool:
-    bundle_b64 = str(values.get("support_bundle_base64") or "")
-    bundle_sha = str(values.get("support_bundle_sha256") or "")
     previous = str(ticket.evidence_json)
     evidence = json_loads(previous, {})
     context_keys = {
@@ -49,7 +51,7 @@ def record_support_report(
     saved = report == {key: evidence.get(key, "") for key in context_keys} or any(
         all(item.get(key, "") == value for key, value in report.items()) for item in reports
     )
-    if replayed and bundle_b64 and same_issue and not saved:
+    if values.get("support_bundle_base64") and same_issue and not saved:
         if ticket.status in {"resolved", "closed", "done", "rejected"}:
             raise HTTPException(409, "原工单已关闭，请先通过客户复验入口重开")
         revision = hashlib.sha256(json.dumps(report, sort_keys=True).encode()).hexdigest()
@@ -73,7 +75,7 @@ def record_support_report(
             ticket_id=ticket.id,
             session_id=ticket.session_id,
             actor=owner,
-            detail={"support_bundle_sha256": bundle_sha, "event_id": event_id},
+            detail={"support_bundle_sha256": report["support_bundle_sha256"], "event_id": event_id},
         )
         db.commit()
         db.refresh(ticket)

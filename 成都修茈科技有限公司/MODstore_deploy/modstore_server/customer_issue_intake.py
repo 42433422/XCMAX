@@ -46,8 +46,12 @@ def record_dispatch_failure(payload: dict[str, Any], error: str) -> None:
 
 
 def enqueue_issue(
-    db: Session, ticket: CustomerServiceTicket, *, revision: str = "", private_factory: bool = False,
-    support_report: dict[str, Any] | None = None
+    db: Session,
+    ticket: CustomerServiceTicket,
+    *,
+    revision: str = "",
+    private_factory: bool = False,
+    support_report: dict[str, Any] | None = None,
 ) -> str:
     evidence = json_loads(ticket.evidence_json, {})
     if not isinstance(evidence, dict):
