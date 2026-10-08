@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sqlite3
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -139,34 +140,74 @@ class TestRestoreDatabase:
                 assert result["success"] is False
                 assert "不存在" in result["message"]
 
-    def test_restore_success(self, tmp_path):
+    @pytest.mark.parametrize("absolute", [False, True])
+    def test_restore_success_with_live_wal_connection(self, tmp_path, absolute):
         svc = DatabaseService()
         db_file = tmp_path / "test.db"
-        db_file.write_text("old content")
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir()
         backup_file = backup_dir / "test.db.20240101_000000.bak"
-        backup_file.write_text("restored content")
+        with sqlite3.connect(backup_file) as snapshot:
+            snapshot.execute("create table products(price real)")
+            snapshot.execute("insert into products values (12.50)")
+        live = sqlite3.connect(db_file)
+        try:
+            live.execute("pragma journal_mode=wal")
+            live.execute("create table products(price real)")
+            live.execute("insert into products values (13.50)")
+            live.commit()
+            with (
+                patch.object(svc, "_get_db_path", return_value=str(db_file)),
+                patch.object(svc, "_get_backup_dir", return_value=str(backup_dir)),
+            ):
+                result = svc.restore_database(str(backup_file) if absolute else backup_file.name)
+            assert result["success"] is True
+            assert live.execute("select price from products").fetchone()[0] == 12.50
+            assert live.execute("pragma integrity_check").fetchone()[0] == "ok"
+        finally:
+            live.close()
+        with sqlite3.connect(db_file) as reopened:
+            assert reopened.execute("select price from products").fetchone()[0] == 12.50
+            assert reopened.execute("pragma integrity_check").fetchone()[0] == "ok"
 
-        with patch.object(svc, "_get_db_path", return_value=str(db_file)):
-            with patch.object(svc, "_get_backup_dir", return_value=str(backup_dir)):
-                result = svc.restore_database(backup_file.name)
-
-        assert result["success"] is True
-        assert db_file.read_text() == "restored content"
-
-    def test_restore_absolute_path(self, tmp_path):
+    def test_restore_invalid_backup_preserves_database(self, tmp_path):
         svc = DatabaseService()
         db_file = tmp_path / "test.db"
-        db_file.write_text("old")
+        with sqlite3.connect(db_file) as db:
+            db.execute("create table products(price real)")
+            db.execute("insert into products values (13.50)")
+        original = db_file.read_bytes()
         backup_file = tmp_path / "custom_backup.bak"
         backup_file.write_text("new")
 
         with patch.object(svc, "_get_db_path", return_value=str(db_file)):
             result = svc.restore_database(str(backup_file))
 
-        assert result["success"] is True
-        assert db_file.read_text() == "new"
+        assert result["success"] is False
+        assert db_file.read_bytes() == original
+
+    def test_restore_locked_database_fails_without_overwriting_or_hanging(self, tmp_path):
+        svc = DatabaseService()
+        live_path, backup = tmp_path / "live.db", tmp_path / "snapshot.bak"
+        with sqlite3.connect(backup) as snapshot:
+            snapshot.execute("create table products(price real)")
+            snapshot.execute("insert into products values (12.50)")
+        writer = sqlite3.connect(live_path)
+        try:
+            writer.execute("pragma journal_mode=wal")
+            writer.execute("create table products(price real)")
+            writer.execute("insert into products values (13.50)")
+            writer.commit()
+            writer.execute("update products set price=14.50")
+            with patch.object(svc, "_get_db_path", return_value=str(live_path)):
+                result = svc.restore_database(str(backup))
+            assert result["success"] is False
+            assert writer.execute("select price from products").fetchone()[0] == 14.50
+            writer.rollback()
+            assert writer.execute("select price from products").fetchone()[0] == 13.50
+            assert writer.execute("pragma integrity_check").fetchone()[0] == "ok"
+        finally:
+            writer.close()
 
 
 class TestListBackups:

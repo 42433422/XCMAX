@@ -53,6 +53,29 @@ def approve_request(
             )
         status_before = req.status
         node_id_before = current_node.id
+        nodes = _facade()._ordered_nodes(db, req.flow_id)
+        try:
+            business = _facade().json.loads(req.business_data or "{}")
+        except (ValueError, TypeError):
+            business = {}
+        restore_execution = None
+        final_restore = (
+            _facade()._is_ai_workflow_request(req)
+            and isinstance(business, dict)
+            and (business.get("tool_id"), business.get("action"))
+            == ("system_maintenance", "restore_database")
+            and _facade()._next_node(nodes, req.current_node_order or 0) is None
+        )
+        if final_restore:
+            # Authorization above is complete. Do not take the destination write
+            # lock before SQLite restores it, and retain this request's history.
+            list(req.records)
+            restore_execution = _facade()._resume_pending_ai_workflow_after_approval(
+                request_no=str(req.request_no or ""), opinion=opinion, approved_by=str(actor)
+            )
+            if restore_execution and restore_execution.get("success"):
+                db.expunge_all()
+                req = db.merge(req)
         record = _facade().ApprovalRecord(
             request_id=req.id,
             node_id=current_node.id,
@@ -65,7 +88,6 @@ def approve_request(
             is_passed=True,
         )
         db.add(record)
-        nodes = _facade()._ordered_nodes(db, req.flow_id)
         new_status, next_node_id = _facade()._close_request_if_needed(
             db, req=req, nodes=nodes, approver_id=actor, approver_name=approver_name
         )
@@ -89,9 +111,11 @@ def approve_request(
             new_status == _facade().ApprovalStatus.APPROVED.value
             and _facade()._is_ai_workflow_request(req)
         ):
-            workflow_execution = _facade()._resume_pending_ai_workflow_after_approval(
-                request_no=str(req.request_no or ""), opinion=opinion, approved_by=str(actor)
-            )
+            workflow_execution = restore_execution
+            if not final_restore:
+                workflow_execution = _facade()._resume_pending_ai_workflow_after_approval(
+                    request_no=str(req.request_no or ""), opinion=opinion, approved_by=str(actor)
+                )
             _execution_success = bool(
                 workflow_execution
                 and workflow_execution.get("workflow_executed")

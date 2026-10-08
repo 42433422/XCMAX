@@ -16,6 +16,191 @@ from app.application.approval_workspace_app_service import (
     _resolve_actor,
 )
 
+
+@pytest.mark.parametrize(
+    "snapshot_has_request,case",
+    [
+        (False, "success"),
+        (True, "success"),
+        (False, "denied"),
+        (False, "intermediate"),
+        (False, "invalid-backup"),
+        (False, "multi"),
+    ],
+)
+def test_configured_restore_approval_restores_wal_and_retains_audit(
+    tmp_path, snapshot_has_request, case
+):
+    import sqlite3
+    from contextlib import contextmanager
+
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application import approval_workspace_app_service as service
+    from app.db.base import Base
+    from app.db.models import User
+    from app.db.models.approval import (
+        ApprovalFlow,
+        ApprovalFlowNode,
+        ApprovalRecord,
+        ApprovalRequest,
+    )
+    from app.services.database_service import DatabaseService
+
+    live, backup = tmp_path / "live.db", tmp_path / "snapshot.bak"
+    engine = create_engine(f"sqlite:///{live}")
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine)
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("pragma journal_mode=wal")
+            connection.exec_driver_sql("create table restore_probe(price real)")
+            connection.exec_driver_sql("insert into restore_probe values(12.50)")
+            connection.exec_driver_sql(
+                "create table ai_action_audit(actor text, action text, payload text)"
+            )
+        with sessions() as db:
+            db.add(User(id=41, username="configured-restore", password="test"))
+            db.add(
+                ApprovalFlow(id=1, flow_key="configured-restore", flow_name="Configured restore")
+            )
+            db.commit()
+            db.add(
+                ApprovalFlowNode(
+                    id=1,
+                    flow_id=1,
+                    node_name="Manager approval",
+                    node_order=1,
+                    approver_type="user",
+                    approver_ids="[77]" if case == "denied" else "[41]",
+                )
+            )
+            if case in {"intermediate", "multi"}:
+                db.add(
+                    ApprovalFlowNode(
+                        id=2,
+                        flow_id=1,
+                        node_name="Final approval",
+                        node_order=2,
+                        approver_type="user",
+                        approver_ids="[41]",
+                    )
+                )
+            db.commit()
+        with sqlite3.connect(live) as source, sqlite3.connect(backup) as target:
+            source.backup(target)
+        with sessions() as db:
+            db.add(
+                ApprovalRequest(
+                    id=4,
+                    tenant_id=1,
+                    request_no="APR-configured-restore",
+                    flow_id=1,
+                    business_type="workflow_tool",
+                    business_data=json.dumps(
+                        {"tool_id": "system_maintenance", "action": "restore_database"}
+                    ),
+                    applicant_id=41,
+                    title="Configured restore",
+                    status="pending",
+                    current_node_id=1,
+                    current_node_order=1,
+                )
+            )
+            db.commit()
+            if snapshot_has_request:
+                with sqlite3.connect(live) as source, sqlite3.connect(backup) as target:
+                    source.backup(target)
+            db.execute(text("update restore_probe set price=13.50"))
+            db.commit()
+        if case == "invalid-backup":
+            backup.write_bytes(b"INVALID SYNTHETIC BACKUP")
+
+        @contextmanager
+        def database_context():
+            with sessions() as db:
+                yield db
+
+        def resume(**kwargs):
+            database = DatabaseService()
+            with patch.object(database, "_get_db_path", return_value=str(live)):
+                outcome = database.restore_database(str(backup))
+            return {
+                "success": outcome["success"],
+                "workflow_executed": outcome["success"],
+                "nodes_executed": 1,
+                "nodes_total": 1,
+            }
+
+        with (
+            patch.object(service, "get_db", side_effect=database_context),
+            patch.object(service, "_resolve_actor", return_value=41),
+            patch.object(
+                service, "_resume_pending_ai_workflow_after_approval", side_effect=resume
+            ) as execution,
+            patch.object(service, "notify_mobile_user"),
+        ):
+            response = service.approve_request(4, Mock(), body={"opinion": "restore authorized"})
+            if case == "denied":
+                assert response.status_code == 403
+                execution.assert_not_called()
+                with sessions() as db:
+                    assert db.get(ApprovalRequest, 4).status == "pending"
+                    assert db.query(ApprovalRecord).count() == 0
+                    assert db.execute(text("select price from restore_probe")).scalar() == 13.50
+                return
+            if case == "intermediate":
+                assert response["success"] is True
+                execution.assert_not_called()
+                with sessions() as db:
+                    assert db.get(ApprovalRequest, 4).status == "in_progress"
+                    assert db.execute(text("select price from restore_probe")).scalar() == 13.50
+                return
+            if case == "multi":
+                execution.assert_not_called()
+                response = service.approve_request(
+                    4, Mock(), body={"opinion": "final restore authorized"}
+                )
+            assert execution.call_count == 1
+        if case == "invalid-backup":
+            assert response["success"] is False
+            with sessions() as db:
+                assert db.get(ApprovalRequest, 4).status == "cancelled"
+                assert db.execute(text("select price from restore_probe")).scalar() == 13.50
+                assert (
+                    db.query(ApprovalRecord).filter_by(request_id=4, action="approve").count() == 1
+                )
+                assert db.execute(text("select count(*) from ai_action_audit")).scalar() == 2
+            with sqlite3.connect(live) as reopened:
+                assert reopened.execute("pragma integrity_check").fetchall() == [("ok",)]
+            return
+        assert response["success"] is True
+        with sessions() as db:
+            assert db.execute(text("select price from restore_probe")).scalar() == 12.50
+            assert db.get(ApprovalRequest, 4).status == "approved"
+            assert db.query(ApprovalRecord).filter_by(request_id=4, action="approve").count() == (
+                2 if case == "multi" else 1
+            )
+            records = (
+                db.query(ApprovalRecord)
+                .filter_by(request_id=4)
+                .order_by(ApprovalRecord.node_order)
+                .all()
+            )
+            assert [record.opinion for record in records] == (
+                ["restore authorized", "final restore authorized"]
+                if case == "multi"
+                else ["restore authorized"]
+            )
+            assert all(record.approver_id == 41 for record in records)
+            assert db.execute(text("select count(*) from ai_action_audit")).scalar() == 1
+        with sqlite3.connect(live) as reopened:
+            assert reopened.execute("pragma integrity_check").fetchall() == [("ok",)]
+    finally:
+        engine.dispose()
+
+
 # ========================= _allow_x_user_id_header ======================
 
 

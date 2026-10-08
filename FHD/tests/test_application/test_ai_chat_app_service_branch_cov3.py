@@ -38,6 +38,52 @@ from app.application.ai_chat_app_service import (
     _skip_pro_excel_deterministic_import,
 )
 
+
+def test_approval_child_preserves_exact_parent_link_without_mutating_parent():
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+
+    node = WorkflowNode(
+        node_id="sales_create_order",
+        tool_id="sales",
+        action="create_order",
+        params={"quantity": 2},
+        risk="high",
+    )
+    parent = PlanGraph(
+        plan_id="wp-session:original", intent="sales", nodes=[node], metadata={"keep": "original"}
+    )
+    svc = object.__new__(AIChatApplicationService)
+    svc._pending_workflows = {
+        "web_normal_session": {
+            "plan": parent,
+            "runtime_context": {"local_user_id": 41},
+            "approval_required": True,
+            "approval_nodes": [{"node_id": node.node_id}],
+        }
+    }
+    svc.approval_service = Mock()
+    svc.approval_service.create_approval_request.return_value = SimpleNamespace(
+        request_id="APR-parent"
+    )
+    svc.approval_service.get_request_metadata.return_value = {"request_no": "APR-parent"}
+    orchestrator = Mock()
+    orchestrator.start_run_from_plan.return_value = SimpleNamespace(
+        status="waiting_user", run_id="run-child"
+    )
+    with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
+        handled, response = svc._resume_pending_dynamic_workflow(
+            "web_normal_session", "确认", "确认"
+        )
+    assert handled and response["success"]
+    child = orchestrator.start_run_from_plan.call_args.kwargs["plan"]
+    assert child.metadata["approval_parent_plan_id"] == parent.plan_id
+    assert child.metadata["approval_parent_node_id"] == node.node_id
+    assert child.plan_id == f"{parent.plan_id}:{node.node_id}"
+    assert svc.approval_service.create_approval_request.call_args.kwargs["plan"] is child
+    assert parent.metadata == {"keep": "original"}
+    assert "web_normal_session" not in svc._pending_workflows
+
+
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------

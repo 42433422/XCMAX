@@ -1155,6 +1155,7 @@
         },
         "restore_database": {
           "risk": "high",
+          "approval": "always",
           "idempotent": false,
           "required_params": [
             "backup_file"

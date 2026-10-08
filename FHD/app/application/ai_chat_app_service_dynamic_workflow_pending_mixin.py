@@ -73,7 +73,11 @@ class _DynamicWorkflowPendingResumeMixin:
                                     ],
                                     nodes=[approved_node],
                                     risk_level=node.risk,
-                                    metadata=dict(pending_plan.metadata or {}),
+                                    metadata={
+                                        **dict(pending_plan.metadata or {}),
+                                        "approval_parent_plan_id": pending_plan.plan_id,
+                                        "approval_parent_node_id": node.node_id,
+                                    },
                                 )
                                 agent_run = AgentOrchestrator().start_run_from_plan(
                                     user_id=self._task_owner_id(user_id, runtime_ctx),

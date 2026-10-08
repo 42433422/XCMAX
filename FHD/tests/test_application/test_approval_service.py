@@ -69,6 +69,21 @@ class TestCheckNodeRequiresApproval:
         node = _make_node(tool_id="business_db", action="write")
         assert svc.check_node_requires_approval(node) is True
 
+    @pytest.mark.parametrize("declared_risk", ["low", "high"])
+    def test_database_restore_requires_durable_approval_even_if_planner_downgrades(
+        self, declared_risk
+    ):
+        svc = ApprovalService()
+        svc._config = MagicMock(enabled=True, rules=[])
+        node = _make_node(
+            tool_id="system_maintenance",
+            action="restore_database",
+            params={"backup_file": "snapshot.bak"},
+        )
+        node.risk = declared_risk
+        assert svc.check_node_requires_approval(node) is True
+        assert svc.get_approval_required_nodes(_make_plan([node])) == [node]
+
     def test_never_trigger(self):
         svc = ApprovalService()
         svc._config = MagicMock(enabled=True)

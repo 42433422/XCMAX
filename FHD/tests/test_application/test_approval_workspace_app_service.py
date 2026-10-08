@@ -62,6 +62,113 @@ def _make_db_ctx(mock_db):
     return ctx
 
 
+@pytest.mark.parametrize("snapshot_has_request", [False, True])
+def test_restore_approval_survives_restoring_snapshot_before_request(
+    tmp_path, snapshot_has_request
+):
+    import sqlite3
+
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.base import Base
+    from app.db.models import User
+    from app.services.database_service import DatabaseService
+
+    live, backup = tmp_path / "live.db", tmp_path / "snapshot.bak"
+    engine = create_engine(f"sqlite:///{live}")
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine)
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("pragma journal_mode=wal")
+            connection.exec_driver_sql("create table restore_probe(price real)")
+            connection.exec_driver_sql("insert into restore_probe values(12.50)")
+            connection.exec_driver_sql(
+                "create table ai_action_audit(actor text, action text, payload text)"
+            )
+        with sessions() as db:
+            db.add(User(id=41, username="restore-probe", password="test"))
+            db.add(ApprovalFlow(id=1, flow_key="restore-probe", flow_name="Restore probe"))
+            db.commit()
+            db.add(
+                ApprovalFlowNode(
+                    id=1, flow_id=1, node_name="Approval", node_order=1, approver_type="user"
+                )
+            )
+            db.commit()
+        with sqlite3.connect(live) as source, sqlite3.connect(backup) as target:
+            source.backup(target)
+        with sessions() as db:
+            req = ApprovalRequest(
+                id=4,
+                tenant_id=1,
+                request_no="APR-restore-probe",
+                flow_id=1,
+                business_type="workflow_tool",
+                business_data=json.dumps(
+                    {"tool_id": "system_maintenance", "action": "restore_database"}
+                ),
+                applicant_id=41,
+                title="Restore probe",
+                status="pending",
+            )
+            db.add(req)
+            db.commit()
+            if snapshot_has_request:
+                with sqlite3.connect(live) as source, sqlite3.connect(backup) as target:
+                    source.backup(target)
+            db.execute(text("update restore_probe set price=13.50"))
+            db.commit()
+            svc = DatabaseService()
+
+            def resume(**kwargs):
+                with patch.object(svc, "_get_db_path", return_value=str(live)):
+                    restored = svc.restore_database(str(backup))
+                return {
+                    "success": restored["success"],
+                    "workflow_executed": restored["success"],
+                    "nodes_executed": 1,
+                    "nodes_total": 1,
+                }
+
+            with (
+                patch(
+                    "app.application.approval_workspace_app_service._has_pending_ai_workflow",
+                    return_value=True,
+                ),
+                patch(
+                    "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
+                    side_effect=resume,
+                ),
+                patch("app.application.approval_workspace_app_service.notify_mobile_user"),
+            ):
+                response = _approve_ai_workflow_request_without_node(
+                    db, req=req, actor=41, approver_name="probe", opinion="approve restore"
+                )
+            assert response["success"] is True
+        with sessions() as reopened:
+            restored_req = reopened.get(ApprovalRequest, 4)
+            assert restored_req.request_no == "APR-restore-probe"
+            assert restored_req.status == "approved"
+            assert (
+                reopened.query(ApprovalRecord).filter_by(request_id=4, action="approve").count()
+                == 1
+            )
+            assert reopened.execute(text("select price from restore_probe")).scalar_one() == 12.50
+            assert reopened.execute(text("pragma integrity_check")).scalar_one() == "ok"
+            assert (
+                reopened.execute(
+                    text(
+                        "select count(*) from ai_action_audit where action in ('approval.approve_ai_workflow', 'approval.execute_ai_workflow')"
+                    )
+                ).scalar_one()
+                == 2
+            )
+    finally:
+        engine.dispose()
+
+
 class TestAllowXUserIdHeader:
     def test_default_false(self, monkeypatch):
         monkeypatch.delenv("FHD_ALLOW_X_USER_ID_HEADER", raising=False)
