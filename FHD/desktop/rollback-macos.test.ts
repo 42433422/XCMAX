@@ -20,7 +20,7 @@ function setup(recoveryRecordIsDirectory = false) {
   fs.writeFileSync(path.join(app, 'Contents', 'version'), 'new')
   fs.writeFileSync(path.join(backup, 'Contents', 'version'), 'old')
   fs.writeFileSync(db, 'migrated')
-  fs.writeFileSync(dbBackup, 'pre-migration')
+  execFileSync('python3', ['-c', "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('CREATE TABLE records(value TEXT)'); c.execute(\"INSERT INTO records VALUES ('pre-migration')\"); c.commit(); c.close()", dbBackup])
   fs.writeFileSync(marker, '{}')
   if (recoveryRecordIsDirectory) fs.mkdirSync(applied)
   return { root, app, marker, applied, db, options: {
@@ -45,15 +45,16 @@ describe('macOS full rollback helper', () => {
     try {
       execFileSync('/bin/sh', ['-c', scriptForTestHost(buildMacOSRollbackScript(f.options))], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, XCAGI_DESKTOP_PORT: '18781' } })
       expect(fs.readFileSync(path.join(f.app, 'Contents', 'version'), 'utf8')).toBe('old')
-      expect(fs.readFileSync(f.db, 'utf8')).toBe('pre-migration')
+      expect(execFileSync('python3', ['-c', "import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute('SELECT value FROM records').fetchone()[0])", f.db], { encoding: 'utf8' }).trim()).toBe('pre-migration')
       expect(fs.existsSync(f.marker)).toBe(false)
       expect(JSON.parse(fs.readFileSync(f.applied, 'utf8')).toVersion).toBe('1')
       expect(fs.readFileSync(opened, 'utf8').trim().split('\n')).toEqual(['-n', '--env', `XCAGI_DESKTOP_USER_DATA_DIR=${f.root}`, '--env', 'XCAGI_DESKTOP_PORT=18781', f.app])
     } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
   })
 
-  it('restores the new app and database when recording recovery fails', () => {
-    const f = setup(true)
+  it.each(['receipt', 'snapshot', 'empty snapshot'])('preserves the new app and committed WAL when %s recovery fails', (failure) => {
+    const f = setup(failure === 'receipt')
+    if (failure !== 'receipt') fs.writeFileSync(f.options.databaseBackupPath, failure === 'empty snapshot' ? '' : 'corrupt SQLite snapshot')
     try {
       execFileSync('python3', ['-c', `import sqlite3,os,sys
 p=sys.argv[1]; os.unlink(p); c=sqlite3.connect(p)

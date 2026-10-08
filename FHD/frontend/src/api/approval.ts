@@ -56,6 +56,7 @@ export interface ApprovalRequest {
   business_id?: number
   title: string
   description?: string
+  business_data?: { tool_id?: string; action?: string; params?: Record<string, unknown> }
   applicant_id: number | null
   status: string
   current_node_id?: number

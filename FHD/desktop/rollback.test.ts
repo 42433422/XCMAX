@@ -356,7 +356,7 @@ describe('rollback — triggerRollback defensive paths', () => {
       [{ mode: 'backend', backendPath: '/tmp/xcagi-escape/backend/app', backupRelPath: '../../escape' }, 'escape', /路径越界/],
       [{ mode: 'backend', backendPath: '/tmp/xcagi-missing/backend/app' }, 'missing path', /缺少 backend 备份路径/],
       [{ mode: 'backend', backendPath: '/tmp/xcagi-gone/backend/app', backupRelPath: 'backend-gone' }, 'missing backup', /备份目录不存在/],
-      [{ mode: 'windows-full', backendPath: '/tmp/xcagi-win/backend/app.exe', appPath: '/tmp/xcagi-win/app.exe', appBackupRelPath: 'windows-app-current' }, 'windows backup', process.platform === 'win32' ? /完整应用备份目录不存在/ : /缺少 backend 备份路径/],
+      [{ mode: 'windows-full', backendPath: '/tmp/xcagi-win/backend/app.exe', appPath: '/tmp/xcagi-win/app.exe', appBackupRelPath: 'windows-app-current' }, 'windows backup', process.platform === 'win32' ? /完整应用备份目录不存在/ : process.platform === 'darwin' ? /完整旧版应用/ : /缺少 backend 备份路径/],
     ]
     for (const [fields, reason, expected] of cases) {
       writeMarker({ fromVersion: '1.0.0', toVersion: '2.0.0', preparedAt: new Date().toISOString(), ...fields })
@@ -396,4 +396,33 @@ describe('rollback — triggerRollback defensive paths', () => {
       cleanup()
     }
   })
+})
+
+const macIt = process.platform === 'darwin' ? it : it.skip
+macIt.each([{ mode: 'backend' }, { mode: 'windows-full' }, { mode: 'macos-full' }, { mode: 'macos-full', appBundlePath: '/Applications/XCAGI.app' }, { mode: 'macos-full', appBackupRelPath: 'legacy-backend' }])('never mixes a legacy or invalid Mac marker %j with the new app or database', async (fields) => {
+  const cleanup = setupPackagedBackend()
+  const data = electronMocks.__userDataDir
+  const resources = (process as { resourcesPath?: string }).resourcesPath as string
+  const backup = path.join(data, 'rollback', 'legacy-backend')
+  const database = path.join(data, 'data', 'xcagi.db')
+  fs.mkdirSync(backup, { recursive: true })
+  fs.mkdirSync(path.dirname(database), { recursive: true })
+  fs.writeFileSync(path.join(backup, 'xcagi-backend'), 'old-backend')
+  fs.writeFileSync(database, 'new-database')
+  fs.writeFileSync(database + '.before', 'old-database')
+  fs.writeFileSync(path.join(data, 'rollback-marker.json'), JSON.stringify({
+    ...fields, fromVersion: '1.0.0+280225ac77ce', toVersion: '1.0.0.5',
+    preparedAt: new Date().toISOString(), backendPath: path.join(resources, 'backend', 'xcagi-backend'),
+    backupRelPath: 'legacy-backend', databasePath: database, databaseBackupPath: database + '.before',
+  }))
+  try {
+    const { triggerRollback } = await import('./rollback.js')
+    const originalApp = fs.readFileSync(electronMocks.__state.exePath)
+    const originalMarker = fs.readFileSync(path.join(data, 'rollback-marker.json'), 'utf8')
+    await expect(triggerRollback('legacy startup failed')).rejects.toThrow(/完整旧版应用/)
+    expect(fs.readFileSync(path.join(resources, 'backend', 'xcagi-backend'), 'utf8')).toBe('fake-backend')
+    expect(fs.readFileSync(database, 'utf8')).toBe('new-database')
+    expect(fs.readFileSync(electronMocks.__state.exePath)).toEqual(originalApp)
+    expect(fs.readFileSync(path.join(data, 'rollback-marker.json'), 'utf8')).toBe(originalMarker)
+  } finally { cleanup() }
 })
