@@ -45,10 +45,15 @@
       "repair": "Windows shell probe now uses loopback and checks occupied listeners by outbound connection; backend LAN pairing retained. 91 related tests and TypeScript pass; rebuilt exact-main VM prompt-count revalidation pending."
     }
   ],
-  "integration_pr": "https://github.com/42433422/XCMAX/pull/2186",
+  "integration_pr": "https://github.com/42433422/XCMAX/pull/2187",
   "common_backend_owner": "Mac primary; actual role acknowledgment still required",
   "final_16_nodes_passed": 0,
-  "network_source_tests": { "passed": 91, "failed": 0, "typescript": "PASS", "customer_vm": "PENDING" },
+  "network_source_tests": {
+    "passed": 91,
+    "failed": 0,
+    "typescript": "PASS",
+    "customer_vm": "PENDING"
+  },
   "original_raw_records_preserved": true,
   "files": [
     {
