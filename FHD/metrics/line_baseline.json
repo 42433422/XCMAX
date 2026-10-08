@@ -1,5 +1,5 @@
 {
-  "lines": 2296933,
+  "lines": 2296963,
   "updated": "2026-10-08",
-  "note": "Installed Mac item 90 approval preview, missing commercial term and immutable-payload regression coverage, required Mod mirror/version update, with restored mandatory Mac release SSOT contract; no source or execution permission relaxation."
+  "note": "Mac189 installed approval throws BigInt TypeError after ES2015 lowering; add 28-line production-target executable regression and 2 mirrored explanatory lines, preserve exact amounts and approval gates; source fix otherwise line-neutral."
 }
