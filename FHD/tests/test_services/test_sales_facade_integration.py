@@ -554,7 +554,7 @@ class TestQuoteCallerOwnedSession:
     """quote 在调用方会话内执行：不 commit/rollback/close，跨会话可见性受调用方事务控制。"""
 
     @pytest.mark.parametrize("confirmation_fails", [False, True])
-    @pytest.mark.parametrize("model_field", ["model_number", "product_model"])
+    @pytest.mark.parametrize("model_field", ["model_number", "product_model", "product_name"])
     def test_create_confirmed_order_commits_all_or_rolls_back(
         self, _facade_file_db, monkeypatch, confirmation_fails, model_field
     ):
@@ -650,6 +650,35 @@ class TestQuoteCallerOwnedSession:
         assert item.product_id == product.id
         assert item.product_name == "报价品"
         assert float(order.total_amount) == 100
+
+    @pytest.mark.parametrize("collision", [False, True])
+    def test_product_label_resolves_unique_tenant_reference(self, _facade_file_db, collision):
+        from app.db.models import SalesOrderItem
+
+        db = _facade_file_db
+        customer, product = _seed_quote_owner_db(db)
+        with tenant_scope(2):
+            db.add(Product(model_number="P-Q", name="其他租户产品"))
+            db.commit()
+        with tenant_scope(1):
+            if collision:
+                db.add(Product(model_number="OTHER", name="P-Q"))
+                db.commit()
+            result = SalesAppService().quote(
+                {
+                    "customer_id": customer.id,
+                    "items": [
+                        {"product_name": "P-Q", "quantity": 2, "unit_price": 50},
+                    ],
+                },
+                db=db,
+            )
+            db.commit()
+            assert result["success"] is not collision
+            assert db.query(SalesOrder).count() == int(not collision)
+            if not collision:
+                assert db.query(SalesOrderItem).one().product_id == product.id
+                assert db.query(SalesOrderItem).one().product_name == "报价品"
 
     @pytest.mark.parametrize(
         "problem",
