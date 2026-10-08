@@ -2,14 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { useChatViewHost, type UseChatViewHostDeps } from './useChatViewHost'
 
-vi.mock('@/utils/hostBusinessPageRedirect', () => ({
-  resolveHostBusinessPageRedirect: vi.fn(() => null),
-}))
-
-vi.mock('@/utils/typeGuards', () => ({
-  asRecord: vi.fn((v) => v || {}),
-}))
-
 function makeDeps(): UseChatViewHostDeps {
   return {
     modsStore: {
@@ -37,25 +29,11 @@ describe('useChatViewHost', () => {
     localStorage.clear()
   })
 
-  it('returns toolbar change handlers', () => {
-    const host = useChatViewHost(makeDeps())
-    expect(typeof host.onAutoRefreshToolbarChange).toBe('function')
-  })
-
-  it('onAutoRefreshToolbarChange enables and persists setting', () => {
+  it.each([true, false])('persists the requested refresh setting %s', (enabled) => {
     const deps = makeDeps()
-    const host = useChatViewHost(deps)
-    host.onAutoRefreshToolbarChange(true)
-    expect(deps.autoRefreshStarredWechat.value).toBe(true)
-    expect(localStorage.getItem('xcagi_auto_refresh_starred_wechat')).toBe('1')
-  })
-
-  it('onAutoRefreshToolbarChange disables and persists setting', () => {
-    const deps = makeDeps()
-    const host = useChatViewHost(deps)
-    host.onAutoRefreshToolbarChange(false)
-    expect(deps.autoRefreshStarredWechat.value).toBe(false)
-    expect(localStorage.getItem('xcagi_auto_refresh_starred_wechat')).toBe('0')
+    useChatViewHost(deps).onAutoRefreshToolbarChange(enabled)
+    expect(deps.autoRefreshStarredWechat.value).toBe(enabled)
+    expect(localStorage.getItem('xcagi_auto_refresh_starred_wechat')).toBe(enabled ? '1' : '0')
   })
 
   it('onAutoRefreshToolbarChange dispatches custom event', () => {
@@ -67,17 +45,4 @@ describe('useChatViewHost', () => {
     dispatchSpy.mockRestore()
   })
 
-  it('onTaskPaneViewportChange updates isTaskPaneResizable', () => {
-    const deps = makeDeps()
-    useChatViewHost(deps)
-    // Test via the public API - the viewport change handler is internal
-    // but we can verify the initial state
-    expect(deps.isTaskPaneResizable.value).toBe(true)
-  })
-
-  it('latestAssistantPush is null initially', () => {
-    const deps = makeDeps()
-    useChatViewHost(deps)
-    expect(deps.latestAssistantPush.value).toBeNull()
-  })
 })

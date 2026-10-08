@@ -1,4 +1,4 @@
-import { onMounted, onBeforeUnmount, type Ref } from 'vue'
+import { onMounted, onBeforeUnmount, onActivated, onDeactivated, type Ref } from 'vue'
 import type { useModsStore } from '@/stores/mods'
 import { asRecord } from '@/utils/typeGuards'
 import { consumeFirstAiTaskPrompt } from '@/constants/productFlow'
@@ -42,6 +42,12 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
   let legacyAutoActionHandler: ((action: unknown, userMessage?: string) => void) | null = null
   let onAssistantPush: ((evt: Event) => void) | null = null
   let taskPaneViewportMedia: MediaQueryList | null = null
+  let returningToChat = false
+  onDeactivated(() => { returningToChat = true })
+  onActivated(() => {
+    if (returningToChat) void syncSessionMessages().catch(() => {})
+    returningToChat = false
+  })
 
   const persistAutoRefreshWechatSetting = () => {
     const enabled = !!autoRefreshStarredWechat.value

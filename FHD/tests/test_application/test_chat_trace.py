@@ -599,9 +599,27 @@ def test_attach_chat_trace_run_records_generated_office_artifact() -> None:
 
 
 @pytest.mark.parametrize("approval_pending", [False, True])
+@pytest.mark.parametrize("restored", [False, True])
 @pytest.mark.parametrize("outcome", [None, False, True])
-@pytest.mark.parametrize("mismatch", ["", "user", "tenant", "mod", "approval", "action"])
-def test_attach_chat_trace_run_marks_token_waiting(approval_pending, outcome, mismatch) -> None:
+@pytest.mark.parametrize(
+    "mismatch",
+    [
+        "",
+        "user",
+        "tenant",
+        "mod",
+        "approval",
+        "action",
+        "task_id",
+        "session_id",
+        "conversation_id",
+        "turn_id",
+        "run",
+    ],
+)
+def test_attach_chat_trace_run_marks_token_waiting(
+    approval_pending, outcome, mismatch, restored
+) -> None:
     repo = InMemoryAgentRunRepository()
     payload = {
         "success": True,
@@ -630,7 +648,14 @@ def test_attach_chat_trace_run_marks_token_waiting(approval_pending, outcome, mi
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
         return_value=repo,
     ):
-        context = {"local_user_id": "u1", "tenant_id": "t1"}
+        context = {
+            "local_user_id": "u1",
+            "tenant_id": "t1",
+            "task_id": "task-1",
+            "session_id": "session-1",
+            "conversation_id": "session-1",
+            "turn_id": "turn-1",
+        }
         result = attach_chat_trace_run(payload, message="查看数据库", runtime_context=context)
 
     run = repo.get(result["run_id"])
@@ -641,10 +666,14 @@ def test_attach_chat_trace_run_marks_token_waiting(approval_pending, outcome, mi
         from app.application.agent_orchestrator.chat_trace_part03 import resolve_legacy_approval
 
         context["agent_run_id"] = run.run_id
+        if restored:
+            repo = InMemoryAgentRunRepository()
         if mismatch in {"user", "tenant"}:
             context["local_user_id" if mismatch == "user" else "tenant_id"] = "foreign"
         elif mismatch == "mod":
             context["_mod_authorization"] = {"mod_id": "foreign"}
+        elif mismatch in {"task_id", "session_id", "conversation_id", "turn_id", "run"}:
+            context["agent_run_id" if mismatch == "run" else mismatch] = "foreign"
         execution = (
             None
             if outcome is None
@@ -665,7 +694,10 @@ def test_attach_chat_trace_run_marks_token_waiting(approval_pending, outcome, mi
             return_value=repo,
         ):
             updated = resolve_legacy_approval(
-                "wrong" if mismatch == "approval" else "approval-1", context, execution
+                "wrong" if mismatch == "approval" else "approval-1",
+                context,
+                execution,
+                run_before_restore=run if restored else None,
             )
             if mismatch == "action" and outcome is None:
                 mismatch = ""
@@ -673,6 +705,9 @@ def test_attach_chat_trace_run_marks_token_waiting(approval_pending, outcome, mi
             if not mismatch:
                 assert resolve_legacy_approval("approval-1", context, execution) == ""
         current = repo.get(run.run_id)
+        if restored and mismatch:
+            assert current is None
+            return
         assert current.status == (
             "waiting_user"
             if mismatch

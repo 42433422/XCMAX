@@ -71,8 +71,11 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import sessionmaker
 
+    from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
     from app.db.base import Base
-    from app.db.models import User
+    from app.db.models import AIConversation, User
+    from app.infrastructure.tenant_scope import tenant_scope
     from app.services.database_service import DatabaseService
 
     live, backup = tmp_path / "live.db", tmp_path / "snapshot.bak"
@@ -121,16 +124,62 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
             db.execute(text("update restore_probe set price=13.50"))
             db.commit()
             svc = DatabaseService()
+            repo = SQLAlchemyAgentRunRepository(session_factory=sessions)
+            context = {
+                "local_user_id": 41,
+                "actor_id": 41,
+                "tenant_id": 1,
+                "task_id": "restore-task",
+                "session_id": "restore-chat",
+                "conversation_id": "restore-chat",
+            }
+            with patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ):
+                trace = attach_chat_trace_run(
+                    {
+                        "success": True,
+                        "legacy_tool_records": [
+                            {
+                                "tool_id": "system_maintenance",
+                                "action": "restore_database",
+                                "output": {
+                                    "pending_approval": True,
+                                    "approval": {"approval_request_ids": [req.request_no]},
+                                },
+                            }
+                        ],
+                    },
+                    message="restore database",
+                    runtime_context=context,
+                )
+            context["agent_run_id"] = trace["run_id"]
+            plan = SimpleNamespace(
+                plan_id="restore-plan",
+                intent="restore",
+                nodes=[SimpleNamespace(tool_id="system_maintenance", action="restore_database")],
+            )
+            approval = Mock()
+            approval.get_pending_workflow.return_value = {"plan": plan, "runtime_context": context}
 
             def resume(**kwargs):
                 with patch.object(svc, "_get_db_path", return_value=str(live)):
                     restored = svc.restore_database(str(backup))
-                return {
-                    "success": restored["success"],
-                    "workflow_executed": restored["success"],
-                    "nodes_executed": 1,
-                    "nodes_total": 1,
-                }
+                assert repo.get(trace["run_id"]) is None
+                return SimpleNamespace(
+                    success=restored["success"],
+                    node_results=[
+                        SimpleNamespace(
+                            node_id="restore-node",
+                            tool_id="system_maintenance",
+                            action="restore_database",
+                            success=restored["success"],
+                            output=restored,
+                            error=None,
+                        )
+                    ],
+                )
 
             with (
                 patch(
@@ -138,10 +187,24 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
                     return_value=True,
                 ),
                 patch(
-                    "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
+                    "app.application.workflow.WorkflowEngine.run",
                     side_effect=resume,
                 ),
+                patch("app.application.workflow.get_approval_service", return_value=approval),
+                patch(
+                    "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                    return_value=repo,
+                ),
+                patch(
+                    "app.application.agent_orchestrator.get_agent_run_repository", return_value=repo
+                ),
+                patch(
+                    "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                    return_value=repo,
+                ),
+                patch("app.services.conversation_service.get_db", side_effect=lambda: sessions()),
                 patch("app.application.approval_workspace_app_service.notify_mobile_user"),
+                tenant_scope(1),
             ):
                 response = _approve_ai_workflow_request_without_node(
                     db, req=req, actor=41, approver_name="probe", opinion="approve restore"
@@ -165,6 +228,15 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
                 ).scalar_one()
                 == 2
             )
+            run = repo.get(trace["run_id"])
+            assert run is not None and run.status == "completed"
+            assert (
+                repo.get_task(user_id="41", task_id="restore-task", tenant_id="1").status
+                == "completed"
+            )
+            messages = reopened.query(AIConversation).filter_by(session_id="restore-chat").all()
+            assert len(messages) == 1 and messages[0].user_id == "41"
+            assert "审批已完成" in messages[0].content
     finally:
         engine.dispose()
 

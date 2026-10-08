@@ -379,6 +379,24 @@ describe('useChatMessages', () => {
     expect(result).toBe(true)
   })
 
+  it.each(['session', 'mod', 'account', 'live-message'])('ignores a late history response after %s changes', async (change) => {
+    const sid = ref('current')
+    const chat = useChatMessages(sid)
+    const api = (await import('@/api/chat')).default
+    let finish!: (value: any) => void
+    vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const pending = chat.syncFromServer()
+    if (change === 'session') sid.value = 'other'
+    if (change === 'mod') activeModIdRef.value = 'other-mod'
+    if (change === 'account') (await import('@/utils/productReadAccountScope')).productReadAccountEpoch.value++
+    if (change === 'live-message') chat.addMessage('new live request', 'user')
+    await nextTick()
+    finish({ messages: [{ role: 'ai', content: 'old approval result' }] })
+    expect(await pending).toBe(false)
+    expect(chat.messages.value.some(row => row.content.includes('old approval result'))).toBe(false)
+    activeModIdRef.value = ''
+  })
+
   it('syncFromServer restores approval, trace, and terminal business result metadata', async () => {
     const chatApi = (await import('@/api/chat')).default
     vi.mocked(chatApi.getConversation).mockResolvedValueOnce({
