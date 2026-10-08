@@ -31,8 +31,19 @@ export function resolveDesktopBackendBindHost(): string {
 
 export const DESKTOP_BACKEND_BIND_HOST = resolveDesktopBackendBindHost()
 
-/** 检测 bindHost:port 是否可绑定（未被占用）。桌面模式不做端口避让，启动前必须预检。 */
-export function isPortAvailable(port: number, bindHost = DESKTOP_BACKEND_BIND_HOST): Promise<boolean> {
+/** Windows 壳仅预检本机端口，避免临时 LAN 监听触发第二份防火墙授权；后台仍按原地址监听。 */
+export async function isPortAvailable(port: number, bindHost = process.platform === 'win32' ? '127.0.0.1' : DESKTOP_BACKEND_BIND_HOST): Promise<boolean> {
+  // Windows 允许 wildcard 与 loopback 同端口绑定，先连接检查，不能仅凭 loopback bind 判空闲。
+  if (process.platform === 'win32' && port > 0) {
+    const occupied = await new Promise<boolean>(resolve => {
+      const socket = net.createConnection({ host: '127.0.0.1', port })
+      const finish = (value: boolean) => { socket.destroy(); resolve(value) }
+      socket.once('connect', () => finish(true))
+      socket.once('error', (error: NodeJS.ErrnoException) => finish(error.code !== 'ECONNREFUSED'))
+      socket.setTimeout(1_000, () => finish(true))
+    })
+    if (occupied) return false
+  }
   return new Promise(resolve => {
     const tester = net.createServer()
     tester.once('error', () => resolve(false))

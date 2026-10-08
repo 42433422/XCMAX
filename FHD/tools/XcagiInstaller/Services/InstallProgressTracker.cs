@@ -30,25 +30,9 @@ public static class InstallProgressTracker
         return Math.Max(DefaultEstimatedBytes, Math.Max(baseline + 80_000_000, fromPayload));
     }
 
-    /// <summary>静默 NSIS 解压完毕时关键文件应齐全；进程可能仍挂起。</summary>
-    public static bool IsInstallComplete(string installDirectory)
-    {
-        if (string.IsNullOrWhiteSpace(installDirectory) || !Directory.Exists(installDirectory))
-            return false;
+    public static bool IsInstallComplete(string installDirectory) => InstallCompletionDetector.IsComplete(installDirectory);
 
-        var appExe = Path.Combine(installDirectory, "XCAGI.exe");
-        if (!File.Exists(appExe))
-            return false;
-
-        var asar = Path.Combine(installDirectory, "resources", "app.asar");
-        if (!File.Exists(asar))
-            return false;
-
-        var backend = Path.Combine(installDirectory, "resources", "backend", "xcagi-backend.exe");
-        return File.Exists(backend);
-    }
-
-    public static async Task<bool> MonitorInstallAsync(
+    public static async Task MonitorInstallAsync(
         Process process,
         string installDirectory,
         long estimatedTotalBytes,
@@ -61,8 +45,6 @@ public static class InstallProgressTracker
         var targetBytes = Math.Max(estimatedTotalBytes, 1);
         var lastSize = 0L;
         var stagnantLoops = 0;
-        var completeStallLoops = 0;
-        var hungAfterComplete = false;
 
         while (!process.HasExited)
         {
@@ -74,21 +56,6 @@ public static class InstallProgressTracker
             {
                 stagnantLoops = 0;
                 lastSize = current;
-            }
-
-            if (IsInstallComplete(installDirectory))
-            {
-                completeStallLoops++;
-                // 文件已齐全但 NSIS 子进程未退出（常见）：约 5s 后视为完成
-                if (completeStallLoops >= 12)
-                {
-                    hungAfterComplete = true;
-                    break;
-                }
-            }
-            else
-            {
-                completeStallLoops = 0;
             }
 
             var sizePct = (int)Math.Min(99, current * 100 / targetBytes);
@@ -119,8 +86,6 @@ public static class InstallProgressTracker
             await Task.Delay(400, cancellationToken).ConfigureAwait(false);
         }
 
-        progress?.Report(new InstallProgressUpdate(100, "安装完成"));
-        return hungAfterComplete;
     }
 
     private static long EstimateInstallDurationMs(long estimatedTotalBytes)

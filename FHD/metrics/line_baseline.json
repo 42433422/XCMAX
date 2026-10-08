@@ -1,5 +1,5 @@
 {
-  "lines": 2297066,
+  "lines": 2297033,
   "updated": "2026-10-08",
-  "note": "PR2188 installed Mac regressions: ES2015 BigInt approval crash plus silent XLSX overwrite. Total +133 versus main: +30 compiled-target regression/comment, +103 download collision/case-alias/recreated-session/cancellation tests and safety handler after replacing inline code. Explicit reviewed exception, not net deletion; no unrelated docs removed or approval/signature gates weakened."
+  "note": "Retains main 8b3727ba Mac approval/mirror/SSOT and Windows startup, installer safety and maintained-line reductions. PR2188 adds exactly 133 maintained lines versus that main: 30 for ES2015 compiled approval regression/comment and 103 for download collision, case-alias, shared-session and cancellation regressions plus replacement safety handler. Explicit reviewed increase; no unrelated docs removed or approval/signature gates weakened."
 }

@@ -276,6 +276,7 @@ if (-not $SkipUiInstaller) {
     $publishArgs += "-p:LicenseFilePath=$licenseSrc"
   }
   & dotnet @publishArgs
+  if ($LASTEXITCODE -ne 0) { throw "WPF installer publish failed with exit code $LASTEXITCODE" }
 
   $uiExe = Get-ChildItem $uiOut -Filter "XcagiInstaller.exe" | Select-Object -First 1
   if (-not $uiExe) {
@@ -286,6 +287,11 @@ if (-not $SkipUiInstaller) {
     Remove-Item $finalSetupPath -Force
   }
   Move-Item $uiExe.FullName $finalSetupPath -Force
+  if ($env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '1') {
+    & node -e "require(process.argv[1]).default({path:process.argv[2]}).catch(error=>{console.error(error.message);process.exitCode=1})" (Join-Path $Root 'desktop/build/windows-sign.cjs') $finalSetupPath
+    if ($LASTEXITCODE -ne 0) { throw "Final WPF installer signing failed with exit code $LASTEXITCODE" }
+    & (Join-Path $PSScriptRoot 'verify-windows-signature.ps1') -Path $finalSetupPath -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME
+  }
   Remove-Item $uiOut -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item $stagingNsis -Force -ErrorAction SilentlyContinue
   if ($nsisExe -and (Test-Path $nsisExe.FullName) -and $nsisExe.FullName -ne $finalSetupPath) {
