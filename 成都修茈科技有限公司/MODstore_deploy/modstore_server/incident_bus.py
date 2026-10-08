@@ -76,7 +76,7 @@ def _parse_binding_event_key(stored: str) -> tuple[str, str]:
 
 def _incident_payload(row: IncidentEvent) -> Dict[str, Any]:
     """Reject damaged event data before routing or replacing durable evidence."""
-    data = json.loads(row.payload_json or "{}")
+    data = json.loads(str(row.payload_json or "{}"))
     if not isinstance(data, dict):
         raise ValueError(f"incident {row.id}: payload must be a JSON object")
     return data
