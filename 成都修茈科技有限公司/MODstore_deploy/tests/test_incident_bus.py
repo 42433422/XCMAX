@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from functools import partial
 
 import pytest
 
@@ -22,6 +23,11 @@ def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "incident.sqlite"))
     # 单测断言派发副作用时保持同步，避免线程竞态。
     monkeypatch.setenv("MODSTORE_INCIDENT_SYNC_DISPATCH", "1")
+    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "modstore_server.node_coordinator.claim_incident_for_node",
+        lambda _event_id: {"claimed": True},
+    )
     models.init_db()
     yield tmp_path
     models._engine = None
@@ -30,13 +36,26 @@ def fresh_db(tmp_path, monkeypatch):
 
 @pytest.fixture
 def admin_user(fresh_db):
-    with models.get_session_factory()() as db:
-        db.add(
-            models.User(
-                username="incident_admin", password_hash="x", email="inc@example.com", is_admin=True
-            )
-        )
-        db.commit()
+    from tests.test_customer_service_api import _make_user
+
+    return _make_user("incident-admin", admin=True)
+
+
+@pytest.fixture
+def generic_calls(monkeypatch):
+    calls = {"orchestrator": 0, "team": 0, "market": 0}
+
+    def fail(kind, *_args, **_kwargs):
+        calls[kind] += 1
+        raise AssertionError(f"workflow signal reached generic {kind}")
+
+    for kind, module, method in (
+        ("orchestrator", "unified_autonomy_orchestrator", "orchestrate_incident"),
+        ("team", "incident_team_orchestrator", "dispatch_incident_team"),
+        ("market", "employee_task_market", "dispatch_incident_via_market"),
+    ):
+        monkeypatch.setattr(f"modstore_server.{module}.{method}", partial(fail, kind))
+    return calls
 
 
 @pytest.mark.parametrize("gate", ["", "gate-secret"])
@@ -57,7 +76,6 @@ def test_incident_employee_input_allows_high_risk_shell(monkeypatch, gate):
 def test_publish_dedupes_within_window(fresh_db, monkeypatch, support_chars, prior):
     from modstore_server.unified_autonomy_orchestrator import orchestrate_incident
 
-    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
     monkeypatch.setattr("modstore_server.incident_bus._dispatch_incident", lambda *a, **k: None)
     payload = {
         "support_bundle_base64": "A" * support_chars,
@@ -142,7 +160,6 @@ def test_employee_lifecycle_events_do_not_dispatch_back_to_employees(admin_user,
         return {"ok": True}
 
     monkeypatch.setattr("modstore_server.incident_bus.execute_employee_task", fake_execute)
-    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
     monkeypatch.setattr(
         "modstore_server.employee_autonomy_service.ingest_suggestion_event_payload",
         lambda *a, **k: None,
@@ -156,7 +173,9 @@ def test_employee_lifecycle_events_do_not_dispatch_back_to_employees(admin_user,
     assert calls["n"] == 0
 
 
-def test_successful_task_event_skips_deterministic_duty_without_real_input(admin_user, monkeypatch):
+def test_successful_task_event_skips_deterministic_duty_without_real_input(
+    admin_user, monkeypatch, generic_calls
+):
     sf = models.get_session_factory()
     with sf() as s:
         s.add(
@@ -177,37 +196,12 @@ def test_successful_task_event_skips_deterministic_duty_without_real_input(admin
         )
         s.commit()
 
-    generic_calls = {"orchestrator": 0, "team": 0, "market": 0}
     employee_calls: list[str] = []
 
-    def fail_generic(kind):
-        def _fail(*_args, **_kwargs):
-            generic_calls[kind] += 1
-            raise AssertionError(f"successful lifecycle event reached {kind}")
-
-        return _fail
-
-    monkeypatch.setattr(
-        "modstore_server.unified_autonomy_orchestrator.orchestrate_incident",
-        fail_generic("orchestrator"),
-    )
-    monkeypatch.setattr(
-        "modstore_server.incident_team_orchestrator.dispatch_incident_team",
-        fail_generic("team"),
-    )
-    monkeypatch.setattr(
-        "modstore_server.employee_task_market.dispatch_incident_via_market",
-        fail_generic("market"),
-    )
     monkeypatch.setattr(
         "modstore_server.incident_bus.execute_employee_task",
         lambda employee_id, *_args, **_kwargs: (employee_calls.append(employee_id) or {"ok": True}),
     )
-    monkeypatch.setattr(
-        "modstore_server.node_coordinator.claim_incident_for_node",
-        lambda _event_id: {"claimed": True},
-    )
-    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
 
     assert publish(
         "employee.task.done",
@@ -225,11 +219,6 @@ def test_successful_task_event_without_subscription_is_record_only(admin_user, m
         "modstore_server.incident_bus.execute_employee_task",
         lambda employee_id, *_args, **_kwargs: (calls.append(employee_id) or {"ok": True}),
     )
-    monkeypatch.setattr(
-        "modstore_server.node_coordinator.claim_incident_for_node",
-        lambda _event_id: {"claimed": True},
-    )
-    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
 
     assert publish(
         "employee.task.done",
@@ -239,7 +228,9 @@ def test_successful_task_event_without_subscription_is_record_only(admin_user, m
     assert calls == []
 
 
-def test_change_request_submission_only_dispatches_explicit_auditor(admin_user, monkeypatch):
+def test_change_request_submission_only_dispatches_explicit_auditor(
+    admin_user, monkeypatch, generic_calls
+):
     sf = models.get_session_factory()
     with sf() as s:
         s.add(
@@ -260,37 +251,12 @@ def test_change_request_submission_only_dispatches_explicit_auditor(admin_user, 
         )
         s.commit()
 
-    generic_calls = {"orchestrator": 0, "team": 0, "market": 0}
     employee_calls: list[str] = []
 
-    def fail_generic(kind):
-        def _fail(*_args, **_kwargs):
-            generic_calls[kind] += 1
-            raise AssertionError(f"change-request workflow signal reached {kind}")
-
-        return _fail
-
-    monkeypatch.setattr(
-        "modstore_server.unified_autonomy_orchestrator.orchestrate_incident",
-        fail_generic("orchestrator"),
-    )
-    monkeypatch.setattr(
-        "modstore_server.incident_team_orchestrator.dispatch_incident_team",
-        fail_generic("team"),
-    )
-    monkeypatch.setattr(
-        "modstore_server.employee_task_market.dispatch_incident_via_market",
-        fail_generic("market"),
-    )
     monkeypatch.setattr(
         "modstore_server.incident_bus.execute_employee_task",
         lambda employee_id, *_args, **_kwargs: (employee_calls.append(employee_id) or {"ok": True}),
     )
-    monkeypatch.setattr(
-        "modstore_server.node_coordinator.claim_incident_for_node",
-        lambda _event_id: {"claimed": True},
-    )
-    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
 
     assert publish(
         "ops.change_request.submitted",
@@ -318,40 +284,16 @@ def test_change_request_submission_only_dispatches_explicit_auditor(admin_user, 
 def test_binding_only_workflow_signal_skips_generic_incident_fanout(
     admin_user,
     monkeypatch,
+    generic_calls,
     event_type,
     payload,
 ):
-    generic_calls = {"orchestrator": 0, "team": 0, "market": 0}
     employee_calls: list[str] = []
 
-    def fail_generic(kind):
-        def _fail(*_args, **_kwargs):
-            generic_calls[kind] += 1
-            raise AssertionError(f"binding-only workflow signal reached {kind}")
-
-        return _fail
-
-    monkeypatch.setattr(
-        "modstore_server.unified_autonomy_orchestrator.orchestrate_incident",
-        fail_generic("orchestrator"),
-    )
-    monkeypatch.setattr(
-        "modstore_server.incident_team_orchestrator.dispatch_incident_team",
-        fail_generic("team"),
-    )
-    monkeypatch.setattr(
-        "modstore_server.employee_task_market.dispatch_incident_via_market",
-        fail_generic("market"),
-    )
     monkeypatch.setattr(
         "modstore_server.incident_bus.execute_employee_task",
         lambda employee_id, *_args, **_kwargs: (employee_calls.append(employee_id) or {"ok": True}),
     )
-    monkeypatch.setattr(
-        "modstore_server.node_coordinator.claim_incident_for_node",
-        lambda _event_id: {"claimed": True},
-    )
-    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
 
     assert publish(event_type, payload, source="workflow-signal-test")
     assert generic_calls == {"orchestrator": 0, "team": 0, "market": 0}
@@ -413,11 +355,6 @@ def test_reviewed_duty_binding_runs_after_generic_incident_team_claim(admin_user
         return {"ok": True}
 
     monkeypatch.setattr("modstore_server.incident_bus.execute_employee_task", execute)
-    monkeypatch.setattr(
-        "modstore_server.node_coordinator.claim_incident_for_node",
-        lambda _event_id: {"claimed": True},
-    )
-    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
 
     assert publish(
         "on_error",

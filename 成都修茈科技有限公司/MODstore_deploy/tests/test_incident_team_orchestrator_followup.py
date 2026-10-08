@@ -34,18 +34,9 @@ def fresh_db(tmp_path, monkeypatch):
 
 @pytest.fixture
 def admin_user(fresh_db):
-    sf = models.get_session_factory()
-    with sf() as s:
-        s.add(
-            models.User(
-                username="admin",
-                password_hash="x",
-                email="admin@example.com",
-                is_admin=True,
-            )
-        )
-        s.commit()
-    yield "admin"
+    from tests.test_customer_service_api import _make_user
+
+    return _make_user("team-admin", admin=True)
 
 
 def _make_results(handler_failed_role: str, error_text: str) -> list[Dict[str, Any]]:
