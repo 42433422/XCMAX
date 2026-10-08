@@ -72,16 +72,14 @@ def ordered_employee_rows(conn, owner: str):
     exists = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE name='attendance_employee_order'"
     ).fetchone()
-    join = (
-        "LEFT JOIN attendance_employee_order o ON o.employee_id=e.id AND o.owner_user_id=e.owner_user_id"
+    query = (
+        "SELECT e.* FROM attendance_employees e LEFT JOIN attendance_employee_order o "
+        "ON o.employee_id=e.id AND o.owner_user_id=e.owner_user_id "
+        "WHERE e.owner_user_id=? ORDER BY o.rank IS NULL, o.rank, e.id"
         if exists
-        else ""
+        else "SELECT * FROM attendance_employees WHERE owner_user_id=? ORDER BY id"
     )
-    order = "o.rank IS NULL, o.rank, e.id" if exists else "e.id"
-    return conn.execute(
-        f"SELECT e.* FROM attendance_employees e {join} WHERE e.owner_user_id=? ORDER BY {order}",
-        (owner,),
-    ).fetchall()
+    return conn.execute(query, (owner,)).fetchall()
 
 
 def order_revision(rows) -> str:
