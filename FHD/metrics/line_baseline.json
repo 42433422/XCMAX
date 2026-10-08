@@ -1,5 +1,5 @@
 {
-  "lines": 2296930,
+  "lines": 2296933,
   "updated": "2026-10-08",
-  "note": "Installed Mac acceptance item 90: sales approval lacked a visible total and business terms. Add a read-only exact-decimal preview, missing-term and immutable-payload regressions, and required Mod version/mirror synchronization; no approval or execution permission changes."
+  "note": "Installed Mac item 90 approval preview, missing commercial term and immutable-payload regression coverage, required Mod mirror/version update, with restored mandatory Mac release SSOT contract; no source or execution permission relaxation."
 }
