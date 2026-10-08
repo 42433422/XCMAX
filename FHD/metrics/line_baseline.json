@@ -1,5 +1,5 @@
 {
-  "lines": 2296783,
+  "lines": 2296782,
   "updated": "2026-10-08",
-  "note": "Installed EDF Mac blockers: online sales planner repeat/compound safety regressions (+106); report download intercept and trusted-origin regressions (+30). Windows startup probe explicitly bypasses Node globalAgent proxyEnv; stronger real proxy regression replaces ineffective post-start env stubs (net -1); latest Mac integration reductions retained. New exact-main installer revalidation remains required."
+  "note": "Installed EDF Mac blockers: online sales planner repeat/compound safety regressions (+106); report download intercept and trusted-origin regressions (+30). Windows startup real proxy regression (net -1), latest Mac reductions retained; NSIS license UTF8 signature preserves all text and changelog blank removed (net -1). Exact-main VM revalidation remains required."
 }
