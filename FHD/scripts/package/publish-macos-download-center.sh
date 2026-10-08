@@ -57,9 +57,33 @@ python3 "$script_root/scripts/package/generate-download-manifest.py" \
   --android-git-sha "$(jq -er .android_git_sha "$metadata_source")" --release-metadata-source "$metadata_source" \
   --auto-update-base "$immutable_base" --official-download-base "$immutable_base" \
   --output "$tmpdir/manifest.json" --download-release-output "$tmpdir/download-release.json"
+# A trusted current global snapshot is mandatory; never derive other platforms from the Mac-only directory.
+if [ "$mode" = --dry-run ] && [ -n "${XCAGI_PUBLIC_DOWNLOAD_SNAPSHOT_DIR:-}" ]; then
+  cp "$XCAGI_PUBLIC_DOWNLOAD_SNAPSHOT_DIR/download-release.json" "$tmpdir/current-pointer.json"
+  cp "$XCAGI_PUBLIC_DOWNLOAD_SNAPSHOT_DIR/manifest.json" "$tmpdir/current-manifest.json"
+else
+  curl --http1.1 -fsSL --retry 3 --connect-timeout 15 --max-time 120 'https://xiu-ci.com/download-release.json' -o "$tmpdir/current-pointer.json"
+  manifest_url="$(python3 - "$tmpdir/current-pointer.json" <<'PYMETA'
+import json, sys, urllib.parse
+url=json.load(open(sys.argv[1]))['manifest_url'];p=urllib.parse.urlsplit(url)
+assert p.scheme=='https' and p.hostname=='xiu-ci.com' and not p.username and p.port in (None,443)
+print(url)
+PYMETA
+)"
+  curl --http1.1 -fsSL --retry 3 --connect-timeout 15 --max-time 120 "$manifest_url" -o "$tmpdir/current-manifest.json"
+fi
+(cd "$script_root" && python3 - "$tmpdir" "$sku_dir/pair-review.json" <<'PYMETA'
+import json, pathlib, sys
+from scripts.release.prepare_mac_candidate_pair import merge_download_metadata
+p=pathlib.Path(sys.argv[1]);load=lambda name:json.loads((p/name).read_text())
+public,manifest=merge_download_metadata(load('current-pointer.json'),load('current-manifest.json'),load('download-release.json'),load('manifest.json'),json.load(open(sys.argv[2])))
+for name,data in [('download-release.json',public),('manifest.json',manifest)]:
+    (p/name).write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n')
+PYMETA
+)
 jq -e '.release_ready == false and (.channels.official_download.enterprise.mac | length) == 2' "$tmpdir/manifest.json" >/dev/null
 if [ "$mode" = --dry-run ]; then
-  echo 'OFFLINE verification complete; no network writes, no release_ready change, no customer delivery PASS.'; exit 0
+  echo 'Verification complete; public metadata may have been read; no network writes, no release_ready change, no customer delivery PASS.'; exit 0
 fi
 test "${XCAGI_MAC_PUBLICATION_AUTHORIZED_SHA:-}" = "$release_git_sha"
 test -n "${DESKTOP_SSH_KEY:-}"
@@ -87,6 +111,11 @@ publish_json_atomically() {
   scp "${ssh_opts[@]}" "$source" "root@$host:$remote_tmp"
   ssh "${ssh_opts[@]}" "root@$host" "chmod 0644 '$remote_tmp' && mv -f '$remote_tmp' '$target'"
 }
+curl --http1.1 -fsSL --retry 3 --connect-timeout 15 --max-time 120 'https://xiu-ci.com/download-release.json' -o "$tmpdir/latest-pointer.json"
+cmp "$tmpdir/current-pointer.json" "$tmpdir/latest-pointer.json"
+manifest_url="$(jq -er .manifest_url "$tmpdir/current-pointer.json")"
+curl --http1.1 -fsSL --retry 3 --connect-timeout 15 --max-time 120 "$manifest_url" -o "$tmpdir/latest-manifest.json"
+cmp "$tmpdir/current-manifest.json" "$tmpdir/latest-manifest.json"
 for root in "$remote_root" "/var/www/xcagi-v$version"; do
   publish_json_atomically "$tmpdir/manifest.json" "$root/manifest.json"
   publish_json_atomically "$tmpdir/download-release.json" "$root/download-release.json"

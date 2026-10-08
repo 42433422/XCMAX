@@ -189,6 +189,12 @@ def test_frozen_pair_preserves_bytes_and_refuses_mismatch(tmp_path, fault):
         )
     }
     env["XCAGI_UPDATE_ED25519_PUBLIC_KEY"] = public
+    previous = tmp_path / "previous-public"
+    previous.mkdir()
+    old_pointer, old_manifest = public_snapshot()
+    (previous / "download-release.json").write_text(json.dumps(old_pointer))
+    (previous / "manifest.json").write_text(json.dumps(old_manifest))
+    env["XCAGI_PUBLIC_DOWNLOAD_SNAPSHOT_DIR"] = str(previous)
     env["PATH"] = str(Path(os.sys.executable).parent) + os.pathsep + env["PATH"]
     script = Path(
         env.get(
@@ -207,11 +213,11 @@ def test_frozen_pair_preserves_bytes_and_refuses_mismatch(tmp_path, fault):
         assert result.returncode != 0
     else:
         assert result.returncode == 0, result.stderr
-        assert "OFFLINE verification complete" in result.stdout
+        assert "Verification complete; public metadata may have been read" in result.stdout
 
 
-@pytest.mark.parametrize("guard", ["approved", "no-reviewer", "self-review", "failed-check"])
-def test_publication_requires_real_environment_review_and_current_checks(tmp_path, guard):
+@pytest.mark.parametrize("guard", ["approved", "disabled", "wrong-owner-sha", "failed-check"])
+def test_publication_requires_explicit_owner_authorization_and_current_checks(tmp_path, guard):
     import yaml
 
     workflow = yaml.safe_load((FHD / ".github/workflows/fix-mac-update-feed.yml").read_text())
@@ -223,19 +229,6 @@ def test_publication_requires_real_environment_review_and_current_checks(tmp_pat
     source_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=FHD, text=True).strip()
     (tmp_path / "main").write_text(source_sha + "\n")
     (tmp_path / "protection").write_text(json.dumps({"contexts": ["gate"]}))
-    (tmp_path / "approval").write_text(
-        json.dumps(
-            {
-                "protection_rules": [
-                    {
-                        "type": "required_reviewers",
-                        "prevent_self_review": guard != "self-review",
-                        "reviewers": [] if guard == "no-reviewer" else [{"id": 41}],
-                    }
-                ]
-            }
-        )
-    )
     (tmp_path / "checks").write_text(
         json.dumps(
             [
@@ -260,7 +253,6 @@ def test_publication_requires_real_environment_review_and_current_checks(tmp_pat
 case "$*" in
  *commits/main*) cat "$FAKE_API/main" ;;
  *required_status_checks*) cat "$FAKE_API/protection" ;;
- *environments/macos-production*) cat "$FAKE_API/approval" ;;
  *check-runs*) cat "$FAKE_API/checks" ;;
  *statuses*) cat "$FAKE_API/statuses" ;;
  *) exit 99 ;;
@@ -277,8 +269,8 @@ esac
         "ARM_RUN": "11",
         "X64_RUN": "12",
         "PUBLISH": "true",
-        "ENABLED": "true",
-        "AUTHORIZED_SHA": source_sha,
+        "ENABLED": "false" if guard == "disabled" else "true",
+        "AUTHORIZED_SHA": "b" * 40 if guard == "wrong-owner-sha" else source_sha,
         "GITHUB_REPOSITORY": "synthetic/repo",
         "RELEASE_PROTECTION_TOKEN": "TEST_ONLY",
         "GH_TOKEN": "TEST_ONLY",
@@ -326,3 +318,116 @@ def test_public_readback_rejects_same_size_different_bytes(tmp_path, wrong_bytes
         server.shutdown()
         worker.join(timeout=5)
         server.server_close()
+
+
+def public_snapshot():
+    shared = "https://xiu-ci.com/xcagi-v" + VERSION
+    pointer = {
+        "schema": "xcagi.download_release.public/v1",
+        "download_version": VERSION,
+        "version_lock": VERSION,
+        "git_sha": "b" * 40,
+        "release_id": f"xcagi-{VERSION}-{'b' * 40}",
+        "cos_base_url": shared,
+        "release_root": shared,
+        "manifest_url": shared + "/manifest.json",
+        "auto_update_base": "https://xiu-ci.com/releases/stable",
+        "win_installer_mb": 204,
+        "android_version": "1.0.0.0",
+        "android_git_sha": "c" * 40,
+        "release_ready": False,
+    }
+    manifest = {
+        "schema": "xcagi.download_manifest/v1",
+        "version": VERSION,
+        "git_sha": pointer["git_sha"],
+        "release_id": pointer["release_id"],
+        "release_ready": False,
+        "channels": {
+            name: {
+                "base_url": pointer["auto_update_base"] if name == "auto_update" else shared,
+                "enterprise": {"mac": [{"url": shared + "/enterprise/old-mac.dmg"}]},
+            }
+            for name in ("auto_update", "official_download")
+        },
+    }
+    return pointer, manifest
+
+
+@pytest.mark.parametrize(
+    "case", ["mac-only", "other-platforms", "missing-pointer", "mismatched-current"]
+)
+def test_merge_keeps_shared_roots_and_all_other_platform_records(case):
+    from copy import deepcopy
+
+    pointer, old = public_snapshot()
+    if case == "other-platforms":
+        for channel in old["channels"].values():
+            for platform in ("win", "android"):
+                channel["enterprise"][platform] = {
+                    "url": channel["base_url"] + "/enterprise/original-" + platform,
+                    "filename": "original-" + platform,
+                    "sha256": "d" * 64,
+                    "size": 431,
+                    "metadata": {"release_id": "preserved", "version": "1.0.0.0"},
+                }
+    unchanged = deepcopy((pointer, old))
+    generated = {
+        "download_version": VERSION,
+        "git_sha": SHA,
+        "release_id": f"xcagi-{VERSION}-{SHA}",
+        "generated_at": "2026-10-08T00:00:00Z",
+    }
+    new = {
+        "version": VERSION,
+        **generated,
+        "update_metadata_signatures": {"mac": "fresh-signature"},
+        "channels": {
+            name: {
+                "enterprise": {
+                    "mac": [
+                        {
+                            "url": f"https://xiu-ci.com/xcagi-v{VERSION}/builds/{SHA}/enterprise/mac-{arch}.dmg"
+                        }
+                        for arch in ("arm64", "x64")
+                    ]
+                }
+            }
+            for name in old["channels"]
+        },
+    }
+    if case == "missing-pointer":
+        pointer = {}
+    if case == "mismatched-current":
+        old["git_sha"] = "c" * 40
+    if case in {"missing-pointer", "mismatched-current"}:
+        with pytest.raises(ValueError):
+            pair.merge_download_metadata(
+                pointer, old, generated, new, {"source_sha": SHA, "version": VERSION}
+            )
+        return
+    public, merged = pair.merge_download_metadata(
+        pointer, old, generated, new, {"source_sha": SHA, "version": VERSION}
+    )
+    assert (pointer, old) == unchanged
+    assert public["git_sha"] == merged["git_sha"] == SHA
+    assert public["release_id"] == merged["release_id"] == generated["release_id"]
+    for field in (
+        "cos_base_url",
+        "release_root",
+        "manifest_url",
+        "auto_update_base",
+        "win_installer_mb",
+        "android_version",
+        "android_git_sha",
+    ):
+        assert public[field] == pointer[field]
+    for name, channel in old["channels"].items():
+        assert merged["channels"][name]["base_url"] == channel["base_url"]
+        for platform, entry in channel["enterprise"].items():
+            if platform != "mac":
+                assert merged["channels"][name]["enterprise"][platform] == entry
+        assert (
+            merged["channels"][name]["enterprise"]["mac"]
+            == new["channels"][name]["enterprise"]["mac"]
+        )

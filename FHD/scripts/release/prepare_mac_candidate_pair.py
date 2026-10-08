@@ -46,6 +46,57 @@ def digest(path: Path, algorithm: str = "sha256") -> str:
     return h.hexdigest()
 
 
+def merge_download_metadata(
+    pointer: dict, previous: dict, generated: dict, mac_manifest: dict, review: dict
+) -> tuple[dict, dict]:
+    from copy import deepcopy
+    from urllib.parse import urlsplit
+
+    version, old_sha = pointer.get("download_version"), pointer.get("git_sha", "")
+    if not (
+        pointer.get("schema") == "xcagi.download_release.public/v1"
+        and previous.get("schema") == "xcagi.download_manifest/v1"
+        and re.fullmatch(r"[0-9a-f]{40}", old_sha)
+        and previous.get("version") == version == generated.get("download_version")
+        and previous.get("git_sha") == old_sha
+        and pointer.get("release_id") == previous.get("release_id") == f"xcagi-{version}-{old_sha}"
+    ):
+        raise ValueError("trusted same-version current public pointer/manifest identity required")
+    if not (
+        generated.get("git_sha") == mac_manifest.get("git_sha") == review.get("source_sha")
+        and generated.get("release_id") == mac_manifest.get("release_id")
+        and review.get("version") == version
+    ):
+        raise ValueError("new Mac candidate identity mismatch")
+    for field in ("cos_base_url", "release_root", "manifest_url", "auto_update_base"):
+        url = urlsplit(pointer.get(field, ""))
+        if (
+            url.scheme != "https"
+            or url.hostname != "xiu-ci.com"
+            or url.username
+            or url.port not in (None, 443)
+        ):
+            raise ValueError("trusted shared public download roots required")
+    merged, public = deepcopy(previous), deepcopy(pointer)
+    for key in ("version", "git_sha", "release_id", "generated_at"):
+        merged[key] = mac_manifest[key]
+    for key in ("git_sha", "release_id", "generated_at"):
+        public[key] = generated[key]
+    merged["release_ready"] = public["release_ready"] = False
+    for channel in ("official_download", "auto_update"):
+        if not isinstance(merged.get("channels", {}).get(channel), dict):
+            raise ValueError("current shared channel missing")
+        merged["channels"][channel].setdefault("enterprise", {})["mac"] = mac_manifest["channels"][
+            channel
+        ]["enterprise"]["mac"]
+    merged.setdefault("update_metadata_signatures", {})["mac"] = mac_manifest[
+        "update_metadata_signatures"
+    ]["mac"]
+    public["mac_release"] = deepcopy(review)
+    merged["mac_release"] = deepcopy(review)
+    return public, merged
+
+
 def prepare(root: Path, output: Path, sha: str, version: str, key_pem: str) -> dict:
     if not re.fullmatch(r"[0-9a-f]{40}", sha) or not re.fullmatch(r"\d+\.\d+\.\d+\.\d+", version):
         raise ValueError("exact SHA and four-part version required")

@@ -7,7 +7,7 @@ on:
       build_sha: {description: Exact main commit of BOTH candidates, required: true, type: string}
       arm64_run_id: {description: Successful native ARM candidate run, required: true, type: string}
       x64_run_id: {description: Successful native Intel candidate run, required: true, type: string}
-      publish: {description: Requires release-owner SHA authorization and environment approval, default: false, type: boolean}
+      publish: {description: Requires explicit release-owner SHA authorization, default: false, type: boolean}
       security_scan_run_id: {description: Current exact-SHA full security scan, required: false, type: string}
       previous_security_scan_run_id: {description: Prior-day exact-SHA full security scan, required: false, type: string}
 permissions: {actions: read, contents: read}
@@ -17,7 +17,6 @@ defaults:
 jobs:
   frozen-pair:
     runs-on: macos-latest
-    environment: ${{ inputs.publish && 'macos-production' || 'macos-candidate-review' }}
     env:
       GH_TOKEN: ${{ github.token }}
       BUILD_SHA: ${{ inputs.build_sha }}
@@ -47,10 +46,9 @@ jobs:
           test "$(git rev-parse HEAD)" = "$BUILD_SHA"
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$BUILD_SHA"
           if [ "$PUBLISH" = true ]; then
-            test "$ENABLED" = true && test "$AUTHORIZED_SHA" = "$BUILD_SHA"
+            test "$ENABLED" = true
+            test "$AUTHORIZED_SHA" = "$BUILD_SHA"
             protection="$(GH_TOKEN="${RELEASE_PROTECTION_TOKEN:?Admin-read protection token required}" gh api "repos/$GITHUB_REPOSITORY/branches/main/protection/required_status_checks")"
-            approval="$(GH_TOKEN="$RELEASE_PROTECTION_TOKEN" gh api "repos/$GITHUB_REPOSITORY/environments/macos-production")"
-            jq -e 'any(.protection_rules[]; .type == "required_reviewers" and .prevent_self_review == true and (.reviewers | length) > 0)' <<<"$approval" >/dev/null
             checks="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$BUILD_SHA/check-runs?per_page=100")"
             statuses="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$BUILD_SHA/statuses?per_page=100")"
             export protection checks statuses

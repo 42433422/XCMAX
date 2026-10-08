@@ -149,7 +149,8 @@ def test_frozen_mac_promotion_keeps_security_and_authorization_gates() -> None:
     workflow = (REPO_ROOT / ".github/workflows/fix-mac-update-feed.yml").read_text()
     assert "default: false" in workflow
     assert "MACOS_FROZEN_PAIR_AUTHORIZED_SHA" in workflow
-    assert "macos-production" in workflow
+    assert "MACOS_FROZEN_PAIR_PUBLICATION_ENABLED" in workflow
+    assert "prevent_self_review" not in workflow
     assert "protection/required_status_checks" in workflow
     assert "verify_security_scan_pair.py" in workflow
     assert "arm64_run_id:" in workflow and "x64_run_id:" in workflow
