@@ -16,7 +16,7 @@
 | 行业中性种子池（L2） | 安装包 `industry-seeds/`（仅 enterprise + open 行业） | 引导选行业后单拷，不全量激活 |
 | 账号定制 Mod（L3） | **不进安装包** | entitlement + Catalog |
 | 客户快速开始 | [QUICK_START.md](QUICK_START.md) | 5 分钟内本地可访问 |
-| 客户运维 | [customer/CUSTOMER_SUPPORT.md](customer/CUSTOMER_SUPPORT.md) | 版本/日志/回滚口径一致 |
+| 客户运维 | [security/LOCAL_DATA_POLICY.md](security/LOCAL_DATA_POLICY.md) | 版本/日志/回滚口径一致 |
 | 技术验收 API | `GET /api/platform-shell/deliverable-status` | `deliverable: true` |
 | 一键装包 API | `POST /api/mod-store/bootstrap-edition-pack?edition=generic` | `success: true` |
 | 自动化验收 | `scripts/dev/deliverable_smoke.ps1` | 全部 [OK] |

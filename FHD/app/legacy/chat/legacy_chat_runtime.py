@@ -201,8 +201,9 @@ def chat_stream_text(
                 text_parts.append(str(content))
                 yield str(content)
             tc_list = getattr(delta, "tool_calls", None) or []
-            for tc in tc_list:
-                idx = int(getattr(tc, "index", 0) or 0)
+            for position, tc in enumerate(tc_list):
+                index = getattr(tc, "index", None)
+                idx = position if index is None else int(index)
                 cur = tool_calls_by_idx.get(idx)
                 if cur is None:
                     cur = {

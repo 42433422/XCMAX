@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -31,6 +32,39 @@ class _Tc:
     def __init__(self, tc_id: str, name: str, arguments: str) -> None:
         self.id = tc_id
         self.function = SimpleNamespace(name=name, arguments=arguments)
+
+
+def _chat_response(content="", tool_calls=None):
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content, tool_calls=tool_calls))]
+    )
+
+
+def _tool_chunk(name, arguments):
+    call = _Tc("tc1", name, arguments)
+    call.index = 0
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                delta=SimpleNamespace(content=None, tool_calls=[call]), finish_reason="tool_calls"
+            )
+        ]
+    )
+
+
+@contextmanager
+def _planner_tools(execute_tool):
+    with (
+        patch(
+            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
+            return_value=[{"type": "function"}],
+        ),
+        patch(
+            "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
+            return_value=execute_tool,
+        ),
+    ):
+        yield
 
 
 class TestParseGenerateOfficeFormat:
@@ -311,6 +345,7 @@ class TestAppendToolMessages:
         append_tool_messages(messages2, tcs, workspace_root="/tmp", execute_tool=execute_tool)
         payload = json.loads(messages2[0]["content"])
         assert payload.get("error") == "duplicate_tool_call"
+        assert payload.get("success") is False
 
     @pytest.mark.parametrize("tenant_id", [1, 2])
     def test_parallel_execution(self, tenant_id):
@@ -393,13 +428,7 @@ class TestChat:
 
     def test_chat_returns_dict_on_text_response(self):
         mock_client = MagicMock()
-        mock_msg = MagicMock()
-        mock_msg.content = "Hello!"
-        mock_msg.tool_calls = None
-        mock_choice = MagicMock()
-        mock_choice.message = mock_msg
-        mock_resp = MagicMock()
-        mock_resp.choices = [mock_choice]
+        mock_resp = _chat_response("Hello!", None)
         mock_client.chat.completions.create.return_value = mock_resp
         mock_client.is_modstore_openai_compatible = False
 
@@ -413,40 +442,17 @@ class TestChat:
 
     def test_chat_with_tool_calls(self):
         mock_client = MagicMock()
-        # First call: returns tool call
-        mock_msg1 = MagicMock()
-        mock_msg1.content = ""
         tc = _Tc("tc1", "excel_analysis", '{"query":"test"}')
-        mock_msg1.tool_calls = [tc]
-        mock_choice1 = MagicMock()
-        mock_choice1.message = mock_msg1
-        mock_resp1 = MagicMock()
-        mock_resp1.choices = [mock_choice1]
+        mock_resp1 = _chat_response("", [tc])
 
-        # Second call: returns text
-        mock_msg2 = MagicMock()
-        mock_msg2.content = "Done!"
-        mock_msg2.tool_calls = None
-        mock_choice2 = MagicMock()
-        mock_choice2.message = mock_msg2
-        mock_resp2 = MagicMock()
-        mock_resp2.choices = [mock_choice2]
+        mock_resp2 = _chat_response("Done!", None)
 
         mock_client.chat.completions.create.side_effect = [mock_resp1, mock_resp2]
         mock_client.is_modstore_openai_compatible = False
 
         execute_tool = MagicMock(return_value='{"success": true}')
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             result = chat("analyze", client=mock_client, model="test-model")
         assert isinstance(result, dict)
         assert "调用工具" in result["thinking_steps"]
@@ -458,14 +464,8 @@ class TestChat:
     @pytest.mark.parametrize("iterations", [1, 2])
     def test_chat_max_iterations_reached(self, pending, iterations):
         mock_client = MagicMock()
-        mock_msg = MagicMock()
-        mock_msg.content = ""
         tc = _Tc("tc1", "excel_analysis", '{"query":"test"}')
-        mock_msg.tool_calls = [tc]
-        mock_choice = MagicMock()
-        mock_choice.message = mock_msg
-        mock_resp = MagicMock()
-        mock_resp.choices = [mock_choice]
+        mock_resp = _chat_response("", [tc])
         mock_client.chat.completions.create.return_value = mock_resp
         mock_client.is_modstore_openai_compatible = False
 
@@ -473,16 +473,7 @@ class TestChat:
             return_value=json.dumps({"success": not pending, "pending_approval": pending})
         )
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             result = chat(
                 "analyze", client=mock_client, model="test-model", max_iterations=iterations
             )
@@ -493,14 +484,8 @@ class TestChat:
 
     def test_chat_requires_token_returns_json_string(self):
         mock_client = MagicMock()
-        mock_msg = MagicMock()
-        mock_msg.content = ""
         tc = _Tc("tc1", "import_excel_to_database", "{}")
-        mock_msg.tool_calls = [tc]
-        mock_choice = MagicMock()
-        mock_choice.message = mock_msg
-        mock_resp = MagicMock()
-        mock_resp.choices = [mock_choice]
+        mock_resp = _chat_response("", [tc])
         mock_client.chat.completions.create.return_value = mock_resp
         mock_client.is_modstore_openai_compatible = False
 
@@ -508,16 +493,7 @@ class TestChat:
             return_value='{"requires_token": true, "token_name": "DB_WRITE_TOKEN"}'
         )
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             result = chat("import", client=mock_client, model="test-model")
         assert isinstance(result, str)
         data = json.loads(result)
@@ -553,35 +529,14 @@ class TestChatStreamText:
 
     def test_yields_tool_call_label(self):
         mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        delta = MagicMock()
-        delta.content = None
-        delta.tool_calls = [MagicMock()]
-        delta.tool_calls[0].index = 0
-        delta.tool_calls[0].id = "tc1"
-        fn = MagicMock()
-        fn.name = "excel_analysis"
-        fn.arguments = '{"query":"test"}'
-        delta.tool_calls[0].function = fn
-        chunk.choices[0].delta = delta
-        chunk.choices[0].finish_reason = "tool_calls"
+        chunk = _tool_chunk("excel_analysis", '{"query":"test"}')
 
         mock_client.chat.completions.create.return_value = iter([chunk])
         mock_client.is_modstore_openai_compatible = False
 
         execute_tool = MagicMock(return_value='{"success": true}')
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             parts = list(
                 chat_stream_text(
                     "analyze", client=mock_client, model="test-model", max_iterations=1
@@ -592,19 +547,7 @@ class TestChatStreamText:
 
     def test_yields_requires_token_dict(self):
         mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        delta = MagicMock()
-        delta.content = None
-        delta.tool_calls = [MagicMock()]
-        delta.tool_calls[0].index = 0
-        delta.tool_calls[0].id = "tc1"
-        fn = MagicMock()
-        fn.name = "import_excel_to_database"
-        fn.arguments = "{}"
-        delta.tool_calls[0].function = fn
-        chunk.choices[0].delta = delta
-        chunk.choices[0].finish_reason = "tool_calls"
+        chunk = _tool_chunk("import_excel_to_database", "{}")
 
         mock_client.chat.completions.create.return_value = iter([chunk])
         mock_client.is_modstore_openai_compatible = False
@@ -613,16 +556,7 @@ class TestChatStreamText:
             return_value='{"requires_token": true, "token_name": "DB_WRITE_TOKEN"}'
         )
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             parts = list(chat_stream_text("import", client=mock_client, model="test-model"))
         dict_parts = [p for p in parts if isinstance(p, dict)]
         assert any(p.get("_planner_sse") == "requires_token" for p in dict_parts)
@@ -678,19 +612,7 @@ class TestChatStreamSseEvents:
 
     def test_requires_token_event(self):
         mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        delta = MagicMock()
-        delta.content = None
-        delta.tool_calls = [MagicMock()]
-        delta.tool_calls[0].index = 0
-        delta.tool_calls[0].id = "tc1"
-        fn = MagicMock()
-        fn.name = "import_excel_to_database"
-        fn.arguments = "{}"
-        delta.tool_calls[0].function = fn
-        chunk.choices[0].delta = delta
-        chunk.choices[0].finish_reason = "tool_calls"
+        chunk = _tool_chunk("import_excel_to_database", "{}")
 
         mock_client.chat.completions.create.return_value = iter([chunk])
         mock_client.is_modstore_openai_compatible = False
@@ -699,16 +621,91 @@ class TestChatStreamSseEvents:
             return_value='{"requires_token": true, "token_name": "DB_WRITE_TOKEN"}'
         )
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             events = list(chat_stream_sse_events("import", client=mock_client, model="test-model"))
         types = [e["type"] for e in events]
         assert "requires_token" in types
+
+
+@pytest.mark.parametrize(
+    "native, mode",
+    [(True, "missing"), (False, "missing"), (True, "explicit"), (True, "fragmented")],
+)
+def test_market_complete_tool_calls_without_indices_preserve_arguments(monkeypatch, native, mode):
+    from app.services.conversation.modstore_adapter import ModstoreOpenAICompatibleClient
+
+    expected = {
+        "business_db_read": {"entity": "customers", "name": "Mac393验收客户"},
+        "execute_erp_capability": {"capability": "sales.create_order", "params": {"quantity": 2}},
+    }
+    calls = [
+        {
+            "id": name,
+            "type": "function",
+            "function": {
+                "name": name,
+                "arguments": json.dumps(args),
+            },
+        }
+        for name, args in expected.items()
+    ]
+    if mode != "missing":
+        for index, call in enumerate(calls):
+            call["index"] = index
+    chunk = {"choices": [{"delta": {"tool_calls": calls}, "finish_reason": "tool_calls"}]}
+    chunks = [chunk]
+    if mode == "fragmented":
+        partials = [[], []]
+        for call in calls:
+            function = call["function"]
+            arguments = function["arguments"]
+            middle = len(arguments) // 2
+            for i, part in enumerate([arguments[:middle], arguments[middle:]]):
+                partials[i].append(
+                    {
+                        "index": call["index"],
+                        "id": call["id"],
+                        "function": {"name": function["name"], "arguments": part},
+                    }
+                )
+        chunks = [
+            {
+                "choices": [
+                    {"delta": {"tool_calls": part}, "finish_reason": "tool_calls" if i else None}
+                ]
+            }
+            for i, part in enumerate(partials)
+        ]
+    response = {"choices": [{"message": {"tool_calls": calls}, "finish_reason": "tool_calls"}]}
+    adapter = SimpleNamespace(
+        default_model="test-model",
+        default_provider="test",
+        model_name="test-model",
+        stream_chat_completion_sync=lambda **_: iter(map(json.dumps, chunks)),
+        chat_completion_sync=lambda **_: response,
+    )
+    monkeypatch.setenv("XCAGI_MODSTORE_USE_NATIVE_STREAM", "1" if native else "0")
+    observed = {}
+
+    def execute(name, arguments, *_args, **_kwargs):
+        observed[name] = json.loads(arguments)
+        return json.dumps(
+            {
+                "success": name == "business_db_read",
+                "pending_approval": name == "execute_erp_capability",
+                "message": "await approval",
+            }
+        )
+
+    with (
+        patch("app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry", return_value=[]),
+        patch(
+            "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool", return_value=execute
+        ),
+    ):
+        parts = list(
+            chat_stream_text("创建销售订单，先审批", client=ModstoreOpenAICompatibleClient(adapter))
+        )
+    assert observed == expected
+    assert "await approval" in parts
+    assert [r["params"] for r in get_last_tool_records()] == list(expected.values())

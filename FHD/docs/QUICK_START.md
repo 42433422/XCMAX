@@ -26,7 +26,7 @@
 2. 首次启动：若提示装 Mod 包，在 **扩展市场** 点 **一键装齐通用包**。
 3. 验证：浏览器或壳内打开 → **智能对话** 可用；`GET http://127.0.0.1:5000/api/platform-shell/deliverable-status` 中 `"deliverable": true`。
 
-详见 [customer/CUSTOMER_SUPPORT.md](customer/CUSTOMER_SUPPORT.md)。
+详见 [security/LOCAL_DATA_POLICY.md](security/LOCAL_DATA_POLICY.md)。
 
 ---
 
@@ -60,7 +60,7 @@ cd XCAGI
 start-xcagi.bat        # 或 xcagi-backend.cmd，读取 .env 中的 DATABASE_URL
 ```
 
-桌面模式默认 SQLite，可跳过 `alembic` 与 PostgreSQL。详见 [guides/DESKTOP_DATABASE_DELIVERY.md](guides/DESKTOP_DATABASE_DELIVERY.md)。
+桌面模式默认 SQLite，可跳过 `alembic` 与 PostgreSQL。详见 [desktop_platform_parity_ssot.md](desktop_platform_parity_ssot.md)。
 
 ### 3. 验证
 

@@ -142,9 +142,17 @@ async def intake_customer_issue(
     number = request_identity(int(user.id), body.source, body.source_ref)
 
     def response(ticket: CustomerServiceTicket, *, replayed: bool) -> dict[str, Any]:
-        evidence = json_loads(ticket.evidence_json, {})
-        if evidence.get("intake_request_sha256") != request_digest:
-            raise HTTPException(409, "相同需求标识已绑定其他内容，请使用新的 source_ref")
+        from modstore_server.customer_issue_support_reports import record_support_report
+
+        saved = record_support_report(
+            db,
+            ticket,
+            owner=user,
+            values=values,
+            request_digest=request_digest,
+        )
+        _route_work_order(db, body, user, ticket)
+        _wake_owner_intake(ticket.id, body.source)
         return {
             "success": True,
             "replayed": replayed,
@@ -152,16 +160,15 @@ async def intake_customer_issue(
             "ticket_no": ticket.ticket_no,
             "ticket": ticket_payload(ticket),
             "dispatch_status": "queued",
+            "support_bundle_saved": bool(bundle_b64) and saved,
+            "support_bundle_sha256": bundle_sha if bundle_b64 and saved else "",
         }
 
     existing = (
         db.query(CustomerServiceTicket).filter_by(ticket_no=number, user_id=int(user.id)).first()
     )
     if existing:
-        payload = response(existing, replayed=True)
-        _route_work_order(db, body, user, existing)
-        _wake_owner_intake(existing.id, body.source)
-        return payload
+        return response(existing, replayed=True)
     private_rework = body.source == "private_mod_rework"
     intent = "custom_delivery" if private_rework else "product_issue"
     if private_rework:
@@ -231,13 +238,8 @@ async def intake_customer_issue(
         )
         if not existing:
             raise
-        payload = response(existing, replayed=True)
-        _route_work_order(db, body, user, existing)
-        _wake_owner_intake(existing.id, body.source)
-        return payload
+        return response(existing, replayed=True)
     db.refresh(ticket)
-    _route_work_order(db, body, user, ticket)
-    _wake_owner_intake(ticket.id, body.source)
     return response(ticket, replayed=False)
 
 
