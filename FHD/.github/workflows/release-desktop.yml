@@ -128,8 +128,10 @@ jobs:
         env:
           DELIVERY_VERSION: ${{ inputs.version }}
         run: |
+          dotnet run --project tools/XcagiInstaller.Tests/XcagiInstaller.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer process regression failed' }
           scripts/package/test-windows-signature-policy.ps1
-          scripts/package/build-installer.ps1 -Version $env:DELIVERY_VERSION -ProductSku enterprise -SkipUiInstaller
+          scripts/package/build-installer.ps1 -Version $env:DELIVERY_VERSION -ProductSku enterprise
       - name: Verify resources, install, start, and uninstall
         shell: pwsh
         env:
@@ -496,7 +498,9 @@ jobs:
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller -SkipFrontend
+          dotnet run --project tools/XcagiInstaller.Tests/XcagiInstaller.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer process regression failed' }
+          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipFrontend
       - name: Verify Windows enterprise installer
         shell: pwsh
         run: |

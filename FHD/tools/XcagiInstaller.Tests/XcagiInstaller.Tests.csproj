@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup><Compile Include="../XcagiInstaller/Services/NsisSilentInstaller.cs" Link="NsisSilentInstaller.cs"/><Compile Include="../XcagiInstaller/Services/InstallProgressTracker.cs" Link="InstallProgressTracker.cs"/><Compile Include="../XcagiInstaller/Services/InstallCompletionDetector.cs" Link="InstallCompletionDetector.cs"/><Compile Include="../XcagiInstaller/Services/InstallProgressUpdate.cs" Link="InstallProgressUpdate.cs"/></ItemGroup>
+</Project>

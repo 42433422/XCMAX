@@ -9,8 +9,10 @@
   "first_start": "FAIL: /api/ping exceeded 180000ms and direct loopback refused",
   "late_backend": "Actual EDF runtime later became healthy; does not erase first-start failure",
   "relaunch": "Normal tray Exit then shortcut Open reached login; no forced kill or backend manual launch",
-  "authentication": "No test login submitted; keyboard automation input did not enter the VM",
+  "authentication": "Normal Windows UI enterprise login and company/industry onboarding succeeded for same synthetic TEST customer; clipboard restored disabled; no token injection. Does not erase first-start failure.",
   "original_ticket_number": null,
+  "latest_main_verified": "189ab2ab0d0992de6ccdb8840e33923571e28eeb",
+  "previous_integration_pr": "Merged without Windows review patches",
   "issues": [
     {
       "id": "WIN-20261008-LICENSE",
@@ -20,7 +22,7 @@
     {
       "id": "WIN-20261008-INSTALLER-STYLE",
       "problem": "Release CI explicitly skips existing modern WPF wrapper",
-      "repair": "Prior mainline history located; wrapper safety and delivery path review pending"
+      "repair": "Existing WPF path restored in review source; real child exit required, crash retry no longer deletes installation directory, /S compatibility and final-wrapper signing enforced; original negative control fails 5/7 and repaired 7/7 pass. Exact-main rebuilt installer and customer VM revalidation pending."
     },
     {
       "id": "WIN-20261008-COLD-START",
@@ -36,11 +38,17 @@
       "id": "WIN-20261008-AUTH-STARTUP",
       "problem": "Unauthenticated generic home and conversations404 before enterprise login",
       "repair": "Early shell load and temporary SKU generic fallback identified as possible path; actual request correlation and fix pending"
+    },
+    {
+      "id": "WIN-20261008-NETWORK-PROMPTS",
+      "problem": "First start requested Windows network access separately for the main program and backend",
+      "repair": "Windows shell probe now uses loopback and checks occupied listeners by outbound connection; backend LAN pairing retained. 91 related tests and TypeScript pass; rebuilt exact-main VM prompt-count revalidation pending."
     }
   ],
   "integration_pr": "https://github.com/42433422/XCMAX/pull/2186",
   "common_backend_owner": "Mac primary; actual role acknowledgment still required",
   "final_16_nodes_passed": 0,
+  "network_source_tests": { "passed": 91, "failed": 0, "typescript": "PASS", "customer_vm": "PENDING" },
   "original_raw_records_preserved": true,
   "files": [
     {
@@ -92,6 +100,28 @@
       "path": "electron-backend-first-start.redacted.log",
       "sha256": "84dbcbbf593b977a9a7df35707a4059259d468d50896d46d1a97e012c5d5531f",
       "bytes": 819
+    },
+    {
+      "path": "test-normal-login-receipt.json",
+      "sha256": "2eb9d36b49532ecba48467d5e29e351bba6c7d9688543846c408b872051c99a1",
+      "bytes": 694
+    },
+    {
+      "path": "test-coating-workspace-opened.png",
+      "sha256": "68a9480ad2506631351be19e66abae70f8c47b48d5f80cbdb2da16530d21186c",
+      "bytes": 61830
     }
-  ]
+  ],
+  "ticket_path": "Information: dedicated customer support and same ticket history; intelligent chat assists submission via customer-candidate then issues/intake. No original ticket number yet; private customization is separate.",
+  "source_regressions": {
+    "scope": "Host build/process regression only, not customer VM acceptance",
+    "wrapper_process_original_failed_cases": 5,
+    "wrapper_process_fixed_passed_cases": 7,
+    "actual_wpf_build": "PASS 0 warnings 0 errors",
+    "actual_wpf_argument_parser_passed_cases": 4,
+    "signing_policy_fixture_passed_cases": 10,
+    "rebuilt_exact_main_installer": "PENDING",
+    "actual_final_signature": "NOT_TESTED",
+    "full_16_vm_revalidation": "PENDING"
+  }
 }

@@ -60,7 +60,7 @@
                      Foreground="{StaticResource TextPrimary}"
                      HorizontalAlignment="Center" />
           <TextBlock x:Name="WelcomeSubtitleText"
-                     Text="8.0 · 企业 AI 员工宿主"
+                     Text="企业 AI 员工宿主"
                      FontSize="13"
                      Foreground="{StaticResource TextMuted}"
                      HorizontalAlignment="Center"
