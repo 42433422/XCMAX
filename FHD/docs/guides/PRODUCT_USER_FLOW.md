@@ -178,7 +178,7 @@ sequenceDiagram
 
 ### 6.3 升级与运维
 
-见 [customer/CUSTOMER_SUPPORT.md](../customer/CUSTOMER_SUPPORT.md)：备份 userData → 安装新版本 → 验证 `deliverable-status`。
+见 [security/LOCAL_DATA_POLICY.md](../security/LOCAL_DATA_POLICY.md)：备份 userData → 安装新版本 → 验证 `deliverable-status`。
 
 ---
 

@@ -40,9 +40,9 @@
 | 3 | [`guides/PRODUCT_USER_FLOW.md`](guides/PRODUCT_USER_FLOW.md) | 安装 → 首启 → 行业 MOD → 日常使用 |
 | 4 | [`DELIVERABLE_PRODUCT.md`](DELIVERABLE_PRODUCT.md) | 交付物清单与验收 API |
 | 5 | [`../VERSION.md`](../VERSION.md) | 当前产品版本与企业版交付边界 |
-| 6 | [`guides/DESKTOP_DATABASE_DELIVERY.md`](guides/DESKTOP_DATABASE_DELIVERY.md) | 桌面 SQLite 交付 |
+| 6 | [`desktop_platform_parity_ssot.md`](desktop_platform_parity_ssot.md) | 桌面 SQLite 交付 |
 | 7 | [`ops/README.md`](../../ops/README.md) | 生产服务与发布运维 |
-| 8 | [`customer/CUSTOMER_SUPPORT.md`](customer/CUSTOMER_SUPPORT.md) | 客户升级 / 日志 / 回滚 |
+| 8 | [`security/LOCAL_DATA_POLICY.md`](security/LOCAL_DATA_POLICY.md) | 客户升级 / 日志 / 回滚 |
 
 **本地命令（仓根）**
 

@@ -517,3 +517,105 @@ def test_unknown_host_failure_stays_pending_and_same_id_can_be_verified(receipt_
     assert second["record"]["failure_recorded"] is True and second["record"]["verified"] is False
     assert len(evidence["receipt_events"]) == 2
     assert record_receipt(ticket, evidence, failed, owner_id=11)["replayed"] is True
+
+
+def test_same_work_order_support_reports_are_durable(client, auth_headers, monkeypatch):
+    from modstore_server import customer_service_api
+    from modstore_server.models import OutboxEvent, get_session_factory
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    monkeypatch.setattr(customer_service_api, "_schedule_customer_ticket_incident", lambda _: None)
+    bundles = []
+    for version in range(2):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            archive.writestr("manifest.json", json.dumps({"synthetic": version}))
+        raw = stream.getvalue()
+        bundles.append(
+            {
+                "support_bundle_sha256": hashlib.sha256(raw).hexdigest(),
+                "support_bundle_base64": base64.b64encode(raw).decode(),
+            }
+        )
+    candidate = client.post(
+        "/api/work-orders/customer-candidate",
+        headers=auth_headers,
+        json={
+            "dedup_key": uuid.uuid4().hex,
+            "reason": "product_defect",
+            "expected": "saves",
+            "actual": "fails",
+            "confidence": 0.95,
+            **{k: v for k, v in bundles[0].items() if k.endswith("sha256")},
+            "client_instance_id": "original",
+            "product_version": "1.0.0.4",
+            "git_sha": "a" * 40,
+            "platform": "Windows",
+        },
+    )
+    wo = candidate.json()["wo_id"]
+    body = {
+        "source": "customer_feedback",
+        "source_ref": wo,
+        "work_order_id": wo,
+        "title": "Synthetic repeat",
+        "description": "Same original failure",
+        **bundles[0],
+    }
+    first = client.post("/api/customer-service/issues/intake", json=body, headers=auth_headers)
+    assert first.status_code == 200, first.text
+    for metadata in (
+        {},
+        {"customer_instance_id": "mac", "product_version": "1.0.0.5", "git_sha": "b" * 40},
+    ):
+        supplement = {**body, **bundles[1], **metadata}
+        for _ in range(2):
+            result = client.post(
+                "/api/customer-service/issues/intake", json=supplement, headers=auth_headers
+            )
+            assert result.status_code == 200, result.text
+            assert result.json()["ticket_id"] == first.json()["ticket_id"]
+            assert (
+                result.json()["support_bundle_saved"]
+                and result.json()["support_bundle_sha256"] == bundles[1]["support_bundle_sha256"]
+            )
+    assert (
+        client.post(
+            "/api/customer-service/issues/intake",
+            headers=auth_headers,
+            json={**supplement, "description": "A different failure"},
+        ).status_code
+        == 409
+    )
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, first.json()["ticket_id"])
+        evidence = json.loads(ticket.evidence_json)
+        assert all(evidence[key] == value for key, value in bundles[0].items())
+        reports = evidence["support_reports"]
+        assert len(reports) == 2 and reports[-1]["customer_instance_id"] == "mac"
+        assert all(all(row[key] == value for key, value in bundles[1].items()) for row in reports)
+        events = (
+            db.query(OutboxEvent)
+            .filter(OutboxEvent.aggregate_id.like(ticket.ticket_no + ":%"))
+            .order_by(OutboxEvent.id)
+            .all()
+        )
+        assert len(events) == 3
+        payloads = [json.loads(row.payload_json) for row in events]
+        assert payloads[0]["support_bundle_sha256"] == bundles[0]["support_bundle_sha256"]
+        assert all(
+            row["ticket_id"] == ticket.id
+            and row["work_order_id"] == wo
+            and all(row[key] == value for key, value in bundles[1].items())
+            for row in payloads[1:]
+        )
+        ticket.status = "closed"
+        db.commit()
+    assert (
+        client.post(
+            "/api/customer-service/issues/intake",
+            headers=auth_headers,
+            json={**supplement, "customer_instance_id": "another"},
+        ).status_code
+        == 409
+    )
