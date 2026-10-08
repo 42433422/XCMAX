@@ -161,6 +161,7 @@
         <table v-if="section === 'personnel'">
           <thead>
             <tr>
+              <th>导出顺序</th>
               <th>姓名</th>
               <th>工号</th>
               <th>部门</th>
@@ -172,6 +173,9 @@
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.id">
+              <td><input type="number" :value="row.order_position" min="1" :max="rosterTotal"
+                :disabled="saving" :aria-label="`${row.employee_name}的导出序号`" style="width:5em"
+                @change="moveEmployee(row, Number(($event.target as HTMLInputElement).value))" /></td>
               <td class="primary-cell">{{ row.employee_name || '—' }}</td>
               <td>{{ row.employee_no || '—' }}</td>
               <td>{{ row.department || '未分配' }}</td>
@@ -287,6 +291,8 @@
   const editorError = ref('');
   const rows = ref<DataRow[]>([]);
   const total = ref(0);
+  const rosterTotal = ref(0);
+  const orderRevision = ref('');
   const page = ref(1);
   const pageSize = 25;
   const search = ref('');
@@ -334,7 +340,7 @@
   const pageDescription = computed(
     () =>
       ({
-        personnel: '维护考勤名单、工号、所属部门与考勤组。',
+        personnel: '修改导出序号即可移动人员并自动保存；转换预览和导出沿用此顺序，新人员排在末尾。',
         departments: '维护组织部门、上级部门和对应考勤组。',
         schedules: '查看人员名单中的考勤组与人数；客户模板规则在定制转换功能内维护。',
         records: '按人员、部门和月份查询导入后的逐日考勤明细。',
@@ -415,6 +421,8 @@
       if (generation !== loadGeneration) return;
       rows.value = Array.isArray(data?.items) ? data.items : [];
       total.value = Number(data?.total) || 0;
+      rosterTotal.value = Number(data?.roster_total) || total.value;
+      orderRevision.value = data?.order_revision || '';
       if (props.section === 'records')
         months.value = Array.isArray(data?.months) ? data.months : [];
       if (props.section === 'personnel') void loadDepartmentNames();
@@ -426,6 +434,21 @@
     } finally {
       if (generation === loadGeneration) loading.value = false;
     }
+  }
+
+  async function moveEmployee(row: DataRow, position: number) {
+    if (saving.value) return;
+    saving.value = true;
+    try {
+      await requestJson(`/api/mod/attendance-industry/employees/${row.id}/move`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position, revision: orderRevision.value }),
+      });
+      await loadData(true);
+    } catch (cause) {
+      await loadData(true);
+      error.value = cause instanceof Error ? cause.message : String(cause);
+    } finally { saving.value = false; }
   }
 
   function applyFilters() {

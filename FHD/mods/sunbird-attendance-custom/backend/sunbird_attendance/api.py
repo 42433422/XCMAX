@@ -134,6 +134,10 @@ def register(router):
             raise HTTPException(422, str(result.get("error") or "考勤转换失败"))
         result.pop("input", None)
         result.pop("output", None)
+        result["personnel_order"] = [
+            {"position": i, "department": dept, "name": name}
+            for i, (dept, _, name) in enumerate(roster, 1)
+        ]
         result["download_path"] = f"/api/mod/{MOD_ID}/attendance/download?file={output.name}"
         return {"success": True, "data": result}
 

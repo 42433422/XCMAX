@@ -1,11 +1,4 @@
-"""考勤人员、部门与逐日记录管理；数据留在考勤模块私有库，按登录账号隔离。
-
-隔离语义（fail-closed）：
-- 读：仅返回 ``owner_user_id == 当前登录账号`` 的行；未登录 → 空结果。
-- 写：新行归属当前登录账号；未登录 → 401。
-- 改/删：目标行不属于当前账号 → 404（不泄露存在性）。
-- 历史存量：首次访问幂等迁移，旧行归属太阳鸟交付账号。
-"""
+"""Owner-scoped attendance management and persistent roster order."""
 
 import sqlite3
 from contextlib import closing
@@ -13,45 +6,46 @@ from contextlib import closing
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from app.mod_sdk.attendance_roster import (
+    ensure_roster_schema,
+    order_revision,
+    ordered_employee_rows,
+)
+
 try:
     from .owner_scope import migrate_owner_column, owner_from_request
 except ImportError:  # mod_manager 以顶层模块名加载 backend/*.py
     from owner_scope import migrate_owner_column, owner_from_request
 
 
+EMPLOYEE_FIELDS = [
+    "employee_name",
+    "department",
+    "main_department",
+    "attendance_group",
+    "employee_no",
+    "position",
+    "user_id",
+]
+EMPLOYEE_SELECT = (
+    "SELECT id, " + ", ".join(EMPLOYEE_FIELDS) + " FROM attendance_employees WHERE id = ?"
+)
+
+
+def _error(message: str, status: int = 500) -> JSONResponse:
+    return JSONResponse({"success": False, "message": message}, status_code=status)
+
+
 def _unauthorized() -> JSONResponse:
-    return JSONResponse(
-        {"success": False, "message": "请先登录后再管理考勤数据"},
-        status_code=401,
-    )
+    return _error("请先登录后再管理考勤数据", 401)
 
 
 def _connect_for_write(db_path):
-    """首次录入建表（含 owner_user_id），不覆盖已交付名单或历史记录。
-
-    新库唯一约束包含 owner_user_id：不同账号可维护同名人员/部门。
-    旧库在同一事务内重建唯一约束并保留数据及 schema 对象，升级后也按账号判重。
-    """
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), timeout=30)
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS attendance_employees ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, source_file TEXT NOT NULL DEFAULT 'manual', "
-            "employee_name TEXT NOT NULL, department TEXT NOT NULL DEFAULT '', "
-            "main_department TEXT NOT NULL DEFAULT '', attendance_group TEXT NOT NULL DEFAULT '', "
-            "employee_no TEXT NOT NULL DEFAULT '', position TEXT NOT NULL DEFAULT '', "
-            "user_id TEXT NOT NULL DEFAULT '', owner_user_id TEXT NOT NULL DEFAULT '', "
-            "UNIQUE(source_file, employee_name, department, owner_user_id))"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS attendance_departments ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, source_file TEXT NOT NULL DEFAULT 'manual', "
-            "department TEXT NOT NULL, main_department TEXT NOT NULL DEFAULT '', "
-            "attendance_group TEXT NOT NULL DEFAULT '', owner_user_id TEXT NOT NULL DEFAULT '', "
-            "UNIQUE(source_file, department, attendance_group, owner_user_id))"
-        )
+        ensure_roster_schema(conn)
         migrate_owner_column(db_path)
         conn.execute("BEGIN IMMEDIATE")
         return conn
@@ -64,12 +58,8 @@ def _has_table(db_path, table):
     if not db_path.is_file():
         return False
     with closing(sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True)) as conn:
-        return (
-            conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
-            ).fetchone()
-            is not None
-        )
+        query = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"
+        return conn.execute(query, (table,)).fetchone() is not None
 
 
 def _check_employee_duplicate(conn, fields, owner, employee_id=0):
@@ -124,7 +114,7 @@ def register(router, *, logger, get_database_path) -> None:
             }
         except sqlite3.Error:
             logger.exception("读取排班资源失败")
-            return JSONResponse({"success": False, "message": "读取排班资源失败"}, status_code=500)
+            return _error("读取排班资源失败", 500)
 
     @router.get("/employees", response_model=None)
     async def list_employees(
@@ -142,33 +132,62 @@ def register(router, *, logger, get_database_path) -> None:
         migrate_owner_column(db_path)
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        like = f"%{(search or '').strip()}%"
         try:
-            where = (
-                "owner_user_id = ? AND (employee_name LIKE ? OR department LIKE ? "
-                "OR employee_no LIKE ? OR position LIKE ? OR user_id LIKE ?)"
-            )
-            params = (owner, like, like, like, like, like)
-            cur.execute(f"SELECT COUNT(*) FROM attendance_employees WHERE {where}", params)
-            total = int(cur.fetchone()[0] or 0)
-            offset = (page - 1) * page_size
-            cur.execute(
-                "SELECT id, employee_name, department, main_department, attendance_group, employee_no, position, user_id "
-                f"FROM attendance_employees WHERE {where} ORDER BY id LIMIT ? OFFSET ?",
-                (*params, page_size, offset),
-            )
-            items = [dict(r) for r in cur.fetchall()]
+            all_rows = ordered_employee_rows(conn, owner)
+            needle = search.strip().casefold()
+            items = [
+                dict(row, order_position=i)
+                for i, row in enumerate(all_rows, 1)
+                if not needle
+                or any(
+                    needle in str(row[key] or "").casefold()
+                    for key in ("employee_name", "department", "employee_no", "position", "user_id")
+                )
+            ]
             return {
                 "success": True,
-                "data": {"items": items, "total": total, "page": page, "page_size": page_size},
+                "data": {
+                    "items": items[(page - 1) * page_size : page * page_size],
+                    "total": len(items),
+                    "roster_total": len(all_rows),
+                    "order_revision": order_revision(all_rows),
+                    "page": page,
+                    "page_size": page_size,
+                },
             }
-        except sqlite3.Error:
-            logger.exception("读取人员管理失败")
-            return JSONResponse(
-                {"success": False, "message": "读取人员管理失败"},
-                status_code=500,
+        finally:
+            conn.close()
+
+    @router.post("/employees/{employee_id}/move", response_model=None)
+    async def move_employee(request: Request, employee_id: int, body: dict):
+        owner = owner_from_request(request)
+        if not owner:
+            return _unauthorized()
+        conn = _connect_for_write(get_database_path())
+        try:
+            rows = ordered_employee_rows(conn, owner)
+            ids = [row["id"] for row in rows]
+            if employee_id not in ids:
+                return _error("人员不存在", 404)
+            if body.get("revision") != order_revision(rows):
+                return _error("名单已变化，请刷新后重新排序", 409)
+            position = body.get("position")
+            if type(position) is not int or not 1 <= position <= len(ids):
+                return _error("请输入有效的人员序号", 400)
+            ids.remove(employee_id)
+            ids.insert(position - 1, employee_id)
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS attendance_employee_order ("
+                "owner_user_id TEXT NOT NULL, employee_id INTEGER NOT NULL, rank INTEGER NOT NULL, "
+                "PRIMARY KEY(owner_user_id, employee_id))"
             )
+            conn.execute("DELETE FROM attendance_employee_order WHERE owner_user_id=?", (owner,))
+            conn.executemany(
+                "INSERT INTO attendance_employee_order VALUES (?,?,?)",
+                [(owner, eid, rank) for rank, eid in enumerate(ids)],
+            )
+            conn.commit()
+            return {"success": True, "data": {"position": position}}
         finally:
             conn.close()
 
@@ -177,22 +196,11 @@ def register(router, *, logger, get_database_path) -> None:
         owner = owner_from_request(request)
         if not owner:
             return _unauthorized()
-        payload = body if isinstance(body, dict) else {}
+        payload = body
         employee_name = str(payload.get("employee_name") or "").strip()
         if not employee_name:
-            return JSONResponse(
-                {"success": False, "message": "姓名不能为空"},
-                status_code=400,
-            )
-        fields = {
-            "employee_name": employee_name,
-            "department": str(payload.get("department") or "").strip(),
-            "main_department": str(payload.get("main_department") or "").strip(),
-            "attendance_group": str(payload.get("attendance_group") or "").strip(),
-            "employee_no": str(payload.get("employee_no") or "").strip(),
-            "position": str(payload.get("position") or "").strip(),
-            "user_id": str(payload.get("user_id") or "").strip(),
-        }
+            return _error("姓名不能为空", 400)
+        fields = {key: str(payload.get(key) or "").strip() for key in EMPLOYEE_FIELDS}
         db_path = get_database_path()
         conn = _connect_for_write(db_path)
         try:
@@ -205,24 +213,17 @@ def register(router, *, logger, get_database_path) -> None:
             )
             conn.commit()
             row = conn.execute(
-                "SELECT id, employee_name, department, main_department, attendance_group, employee_no, position, user_id "
-                "FROM attendance_employees WHERE id = ?",
+                EMPLOYEE_SELECT,
                 (cur.lastrowid,),
             ).fetchone()
             return {"success": True, "data": dict(row) if row else {"id": cur.lastrowid, **fields}}
         except sqlite3.IntegrityError:
             conn.rollback()
-            return JSONResponse(
-                {"success": False, "message": "该人员已存在，请勿重复添加"},
-                status_code=409,
-            )
+            return _error("该人员已存在，请勿重复添加", 409)
         except sqlite3.Error:
             conn.rollback()
             logger.exception("新增人员失败")
-            return JSONResponse(
-                {"success": False, "message": "新增人员失败"},
-                status_code=500,
-            )
+            return _error("新增人员失败", 500)
         finally:
             conn.close()
 
@@ -231,22 +232,11 @@ def register(router, *, logger, get_database_path) -> None:
         owner = owner_from_request(request)
         if not owner:
             return _unauthorized()
-        payload = body if isinstance(body, dict) else {}
+        payload = body
         employee_name = str(payload.get("employee_name") or "").strip()
         if not employee_name:
-            return JSONResponse(
-                {"success": False, "message": "姓名不能为空"},
-                status_code=400,
-            )
-        fields = (
-            employee_name,
-            str(payload.get("department") or "").strip(),
-            str(payload.get("main_department") or "").strip(),
-            str(payload.get("attendance_group") or "").strip(),
-            str(payload.get("employee_no") or "").strip(),
-            str(payload.get("position") or "").strip(),
-            str(payload.get("user_id") or "").strip(),
-        )
+            return _error("姓名不能为空", 400)
+        fields = tuple(str(payload.get(key) or "").strip() for key in EMPLOYEE_FIELDS)
         conn = _connect_for_write(get_database_path())
         try:
             _check_employee_duplicate(conn, fields, owner, employee_id)
@@ -258,30 +248,20 @@ def register(router, *, logger, get_database_path) -> None:
             )
             if cur.rowcount == 0:
                 conn.rollback()
-                return JSONResponse(
-                    {"success": False, "message": "人员不存在"},
-                    status_code=404,
-                )
+                return _error("人员不存在", 404)
             conn.commit()
             row = conn.execute(
-                "SELECT id, employee_name, department, main_department, attendance_group, employee_no, position, user_id "
-                "FROM attendance_employees WHERE id = ?",
+                EMPLOYEE_SELECT,
                 (employee_id,),
             ).fetchone()
             return {"success": True, "data": dict(row) if row else None}
         except sqlite3.IntegrityError:
             conn.rollback()
-            return JSONResponse(
-                {"success": False, "message": "人员信息与现有记录重复"},
-                status_code=409,
-            )
+            return _error("人员信息与现有记录重复", 409)
         except sqlite3.Error:
             conn.rollback()
             logger.exception("更新人员失败")
-            return JSONResponse(
-                {"success": False, "message": "更新人员失败"},
-                status_code=500,
-            )
+            return _error("更新人员失败", 500)
         finally:
             conn.close()
 
@@ -298,19 +278,13 @@ def register(router, *, logger, get_database_path) -> None:
             )
             if cur.rowcount == 0:
                 conn.rollback()
-                return JSONResponse(
-                    {"success": False, "message": "人员不存在"},
-                    status_code=404,
-                )
+                return _error("人员不存在", 404)
             conn.commit()
             return {"success": True, "data": {"id": employee_id}}
         except sqlite3.Error:
             conn.rollback()
             logger.exception("删除人员失败")
-            return JSONResponse(
-                {"success": False, "message": "删除人员失败"},
-                status_code=500,
-            )
+            return _error("删除人员失败", 500)
         finally:
             conn.close()
 
@@ -355,10 +329,7 @@ def register(router, *, logger, get_database_path) -> None:
             }
         except sqlite3.Error:
             logger.exception("读取部门管理失败")
-            return JSONResponse(
-                {"success": False, "message": "读取部门管理失败"},
-                status_code=500,
-            )
+            return _error("读取部门管理失败", 500)
         finally:
             conn.close()
 
@@ -367,13 +338,10 @@ def register(router, *, logger, get_database_path) -> None:
         owner = owner_from_request(request)
         if not owner:
             return _unauthorized()
-        payload = body if isinstance(body, dict) else {}
+        payload = body
         department = str(payload.get("department") or "").strip()
         if not department:
-            return JSONResponse(
-                {"success": False, "message": "部门名称不能为空"},
-                status_code=400,
-            )
+            return _error("部门名称不能为空", 400)
         fields = {
             "department": department,
             "main_department": str(payload.get("main_department") or department).strip(),
@@ -398,17 +366,11 @@ def register(router, *, logger, get_database_path) -> None:
             return {"success": True, "data": data}
         except sqlite3.IntegrityError:
             conn.rollback()
-            return JSONResponse(
-                {"success": False, "message": "该部门已存在，请勿重复添加"},
-                status_code=409,
-            )
+            return _error("该部门已存在，请勿重复添加", 409)
         except sqlite3.Error:
             conn.rollback()
             logger.exception("新增部门失败")
-            return JSONResponse(
-                {"success": False, "message": "新增部门失败"},
-                status_code=500,
-            )
+            return _error("新增部门失败", 500)
         finally:
             conn.close()
 
@@ -417,13 +379,10 @@ def register(router, *, logger, get_database_path) -> None:
         owner = owner_from_request(request)
         if not owner:
             return _unauthorized()
-        payload = body if isinstance(body, dict) else {}
+        payload = body
         department = str(payload.get("department") or "").strip()
         if not department:
-            return JSONResponse(
-                {"success": False, "message": "部门名称不能为空"},
-                status_code=400,
-            )
+            return _error("部门名称不能为空", 400)
         main_department = str(payload.get("main_department") or department).strip()
         attendance_group = str(payload.get("attendance_group") or "").strip()
         conn = _connect_for_write(get_database_path())
@@ -435,10 +394,7 @@ def register(router, *, logger, get_database_path) -> None:
             ).fetchone()
             if previous is None:
                 conn.rollback()
-                return JSONResponse(
-                    {"success": False, "message": "部门不存在"},
-                    status_code=404,
-                )
+                return _error("部门不存在", 404)
             old_department = str(previous["department"] or "")
             conn.execute(
                 "UPDATE attendance_departments SET department = ?, main_department = ?, attendance_group = ? "
@@ -462,17 +418,11 @@ def register(router, *, logger, get_database_path) -> None:
             return {"success": True, "data": dict(row) if row else None}
         except sqlite3.IntegrityError:
             conn.rollback()
-            return JSONResponse(
-                {"success": False, "message": "部门信息与现有记录重复"},
-                status_code=409,
-            )
+            return _error("部门信息与现有记录重复", 409)
         except sqlite3.Error:
             conn.rollback()
             logger.exception("更新部门失败")
-            return JSONResponse(
-                {"success": False, "message": "更新部门失败"},
-                status_code=500,
-            )
+            return _error("更新部门失败", 500)
         finally:
             conn.close()
 
@@ -489,10 +439,7 @@ def register(router, *, logger, get_database_path) -> None:
             ).fetchone()
             if row is None:
                 conn.rollback()
-                return JSONResponse(
-                    {"success": False, "message": "部门不存在"},
-                    status_code=404,
-                )
+                return _error("部门不存在", 404)
             department = str(row["department"] or "")
             employee_count = int(
                 conn.execute(
@@ -503,13 +450,7 @@ def register(router, *, logger, get_database_path) -> None:
             )
             if employee_count:
                 conn.rollback()
-                return JSONResponse(
-                    {
-                        "success": False,
-                        "message": f"该部门仍有 {employee_count} 名人员，请先调整人员所属部门",
-                    },
-                    status_code=409,
-                )
+                return _error(f"该部门仍有 {employee_count} 名人员，请先调整人员所属部门", 409)
             conn.execute(
                 "DELETE FROM attendance_departments WHERE id = ? AND owner_user_id = ?",
                 (department_id, owner),
@@ -519,10 +460,7 @@ def register(router, *, logger, get_database_path) -> None:
         except sqlite3.Error:
             conn.rollback()
             logger.exception("删除部门失败")
-            return JSONResponse(
-                {"success": False, "message": "删除部门失败"},
-                status_code=500,
-            )
+            return _error("删除部门失败", 500)
         finally:
             conn.close()
 
@@ -600,9 +538,6 @@ def register(router, *, logger, get_database_path) -> None:
             }
         except sqlite3.Error:
             logger.exception("读取考勤记录失败")
-            return JSONResponse(
-                {"success": False, "message": "读取考勤记录失败"},
-                status_code=500,
-            )
+            return _error("读取考勤记录失败", 500)
         finally:
             conn.close()
