@@ -6,9 +6,11 @@
 
 import logging
 import os
-import shutil
 import sqlite3
+import time
+from contextlib import closing
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
@@ -182,7 +184,25 @@ class DatabaseService(NeuroEventPublisherMixin):
             if db_dir and not os.path.exists(db_dir):
                 os.makedirs(db_dir, exist_ok=True)
 
-            shutil.copy2(backup_path, db_path)
+            if os.path.exists(db_path) and os.path.samefile(backup_path, db_path):
+                return {"success": False, "message": "备份与当前数据库不能是同一文件"}
+            deadline = time.monotonic() + 2.0
+
+            def check_progress(status: int, remaining: int, total: int) -> None:
+                if status != sqlite3.SQLITE_DONE and time.monotonic() >= deadline:
+                    raise sqlite3.OperationalError("恢复被数据库占用阻断，未完成；请稍后重试")
+
+            with closing(
+                sqlite3.connect(Path(backup_path).resolve().as_uri() + "?mode=ro", uri=True)
+            ) as source:
+                if source.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                    return {"success": False, "message": "备份完整性检查失败，未恢复"}
+                with closing(sqlite3.connect(db_path, timeout=0)) as target:
+                    # SQLite manages destination WAL and its atomic write transaction.
+                    # Replacing the live file bypasses both and corrupts open connections.
+                    source.backup(target, progress=check_progress, sleep=0.01)
+                    if target.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                        return {"success": False, "message": "恢复完整性检查失败"}
 
             logger.info("数据库恢复成功：从 %s 恢复到 %s", backup_path, db_path)
 
