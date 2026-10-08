@@ -1,7 +1,5 @@
 name: Mod Auto Publish
-
-# Standard main host plus independently versioned, explicitly public Mods.
-# Private customer artifacts use the owner-bound production-center channel.
+# Public Mods use the main host; private releases use the owner-bound production center.
 on:
   pull_request:
     branches: [main]
@@ -51,7 +49,7 @@ jobs:
       - name: Resolve exact main sources, version bumps and successful checks
         id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_PROTECTION_TOKEN }}
           REQUESTED_MOD_ID: ${{ inputs.mod_id }}
         run: |
           set -euo pipefail
