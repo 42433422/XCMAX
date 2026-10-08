@@ -1,118 +1,28 @@
 using System.Diagnostics;
-using System.IO;
 
 namespace XcagiInstaller.Services;
 
-/// <summary>
-/// 静默 NSIS 无进度回调时，通过安装目录体积与关键文件判断真实进度。
-/// </summary>
 public static class InstallProgressTracker
 {
-    // 企业版含 Electron + PyInstaller 后端，解压后常达 800MB～1.5GB
-    private const long DefaultEstimatedBytes = 900L * 1024 * 1024;
-
-    public static long EstimateInstalledBytes(string setupExePath, string installDirectory)
-    {
-        long compressed = 0;
-        try
-        {
-            if (File.Exists(setupExePath))
-                compressed = new FileInfo(setupExePath).Length;
-        }
-        catch
-        {
-            // ignore
-        }
-
-        var baseline = GetDirectorySize(installDirectory);
-        // 静默 NSIS 内嵌 Electron + 后端，膨胀倍数高于普通应用
-        var fromPayload = compressed > 0 ? (long)(compressed * 3.2) : 0;
-        return Math.Max(DefaultEstimatedBytes, Math.Max(baseline + 80_000_000, fromPayload));
-    }
-
-    public static bool IsInstallComplete(string installDirectory) => InstallCompletionDetector.IsComplete(installDirectory);
-
+    // Stage markers only: installed files never imply the child exited successfully.
     public static async Task MonitorInstallAsync(
-        Process process,
-        string installDirectory,
-        long estimatedTotalBytes,
-        IProgress<InstallProgressUpdate>? progress,
-        CancellationToken cancellationToken = default)
+        Process process, string installDirectory,
+        IProgress<InstallProgressUpdate>? progress, CancellationToken cancellationToken = default)
     {
-        var lastReported = 0;
-        var targetBytes = Math.Max(estimatedTotalBytes, 1);
-
+        var lastReported = -1;
         while (!process.HasExited)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var current = GetDirectorySize(installDirectory);
-            var sizePct = (int)Math.Min(99, current * 100 / targetBytes);
-            var blended = sizePct;
-
-            if (IsInstallComplete(installDirectory))
-                blended = Math.Max(blended, 95);
-
-            var pct = Math.Max(lastReported, Math.Min(99, blended));
-            if (pct > lastReported + 3)
-                pct = lastReported + 3;
-
-            if (pct != lastReported)
+            var percent = InstallCompletionDetector.IsComplete(installDirectory) ? 95
+                : File.Exists(Path.Combine(installDirectory, "resources", "app.asar")) ? 65
+                : File.Exists(Path.Combine(installDirectory, "XCAGI.exe")) ? 35 : 0;
+            if (percent > lastReported)
             {
-                lastReported = pct;
-                progress?.Report(new InstallProgressUpdate(pct, DescribeStage(installDirectory, current, pct)));
+                lastReported = percent;
+                progress?.Report(new InstallProgressUpdate(percent, percent == 95
+                    ? "正在等待安装进程完成…" : percent == 0 ? "正在初始化安装…" : "正在部署应用文件…"));
             }
-
-            await Task.Delay(400, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
         }
-
-    }
-
-    private static string DescribeStage(string installDirectory, long bytesWritten, int percent)
-    {
-        if (bytesWritten < 5_000_000)
-            return "正在初始化安装…";
-
-        var appExe = Path.Combine(installDirectory, "XCAGI.exe");
-        if (!File.Exists(appExe))
-            return $"正在释放文件… {percent}%";
-
-        var asar = Path.Combine(installDirectory, "resources", "app.asar");
-        if (!File.Exists(asar))
-            return $"正在部署应用资源… {percent}%";
-
-        if (percent < 85)
-            return $"正在部署本地服务与前端… {percent}%";
-
-        return "正在创建快捷方式并完成配置…";
-    }
-
-    public static long GetDirectorySize(string path)
-    {
-        if (!Directory.Exists(path))
-            return 0;
-
-        long total = 0;
-        try
-        {
-            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-            {
-                try
-                {
-                    var info = new FileInfo(file);
-                    if (info.Exists)
-                        total += info.Length;
-                }
-                catch
-                {
-                    // 部分文件可能被 NSIS 占用
-                }
-            }
-        }
-        catch
-        {
-            // ignore
-        }
-
-        return total;
     }
 }

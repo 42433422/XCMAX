@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
-using System.Windows.Threading;
 using XcagiInstaller.Services;
 
 namespace XcagiInstaller;
@@ -29,10 +28,6 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _installCts;
 
     private const double ExtractPhaseMax = 12;
-
-    private double _displayProgress;
-    private double _targetProgress;
-    private DispatcherTimer? _progressSmoothTimer;
 
     public MainWindow()
     {
@@ -316,8 +311,8 @@ public partial class MainWindow : Window
 
         var installProgress = new Progress<InstallProgressUpdate>(u =>
         {
-            var overall = ExtractPhaseMax + u.Percent * (100 - ExtractPhaseMax) / 100.0;
-            UpdateInstallProgress(overall, u.Status);
+            var overall = ExtractPhaseMax + Math.Min(u.Percent, 98) * (100 - ExtractPhaseMax) / 100.0;
+            UpdateInstallProgress(overall, u.Percent == 100 ? "本体安装完成，正在准备收尾…" : u.Status);
         });
 
         var result = await NsisSilentInstaller.RunAsync(
@@ -351,41 +346,43 @@ public partial class MainWindow : Window
             }
         }
 
+        UpdateInstallProgress(99, "正在完成快捷方式与启动设置…");
+        var desktopShortcut = DesktopShortcutCheck.IsChecked == true;
+        var runAfterInstall = RunAfterInstallCheck.IsChecked == true;
+        string extras;
+        try { extras = await PostInstallTasks.RunAsync(() => ApplyPostInstallTasks(_installedAppExe, desktopShortcut, runAfterInstall, sunbirdNote)); }
+        catch (Exception ex) { ShowError(ex.Message); return; }
         UpdateInstallProgress(100, "安装完成");
-        await Task.Delay(450).ConfigureAwait(true);
-
-        var extras = ApplyPostInstallTasks(sunbirdNote);
-        StopProgressSmoothTimer();
         CompletePathText.Text = result.InstallDir ?? "";
         CompleteExtrasText.Text = extras;
         _step = WizardStep.Complete;
         ApplyStepUi();
     }
 
-    private string ApplyPostInstallTasks(string? sunbirdNote = null)
+    private static string ApplyPostInstallTasks(string? installedAppExe, bool desktopShortcut, bool runAfterInstall, string? sunbirdNote)
     {
-        if (string.IsNullOrEmpty(_installedAppExe))
+        if (string.IsNullOrEmpty(installedAppExe))
             return sunbirdNote ?? "";
 
         var notes = new List<string>();
         if (!string.IsNullOrWhiteSpace(sunbirdNote))
             notes.Add(sunbirdNote);
 
-        if (DesktopShortcutCheck.IsChecked == true)
+        if (desktopShortcut)
         {
-            if (PostInstallTasks.TryCreateDesktopShortcut(_installedAppExe))
+            if (PostInstallTasks.TryCreateDesktopShortcut(installedAppExe))
                 notes.Add("已创建桌面快捷方式");
             else
                 notes.Add("桌面快捷方式创建失败");
         }
 
-        PostInstallTasks.TryCreateStartMenuShortcut(_installedAppExe);
+        PostInstallTasks.TryCreateStartMenuShortcut(installedAppExe);
 
-        if (RunAfterInstallCheck.IsChecked == true)
+        if (runAfterInstall)
         {
             try
             {
-                PostInstallTasks.TryLaunchApp(_installedAppExe);
+                PostInstallTasks.TryLaunchApp(installedAppExe);
                 notes.Add("已启动 XCAGI");
             }
             catch (Exception ex)
@@ -400,45 +397,10 @@ public partial class MainWindow : Window
     private void BeginInstallProgressUi()
     {
         InstallProgress.IsIndeterminate = false;
-        _displayProgress = 0;
-        _targetProgress = 0;
         InstallProgress.Value = 0;
         InstallPercentText.Visibility = Visibility.Visible;
         InstallPercentText.Text = "0%";
         InstallStatusText.Text = "准备中…";
-        StartProgressSmoothTimer();
-    }
-
-    private void StartProgressSmoothTimer()
-    {
-        _progressSmoothTimer?.Stop();
-        _progressSmoothTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(45) };
-        _progressSmoothTimer.Tick += (_, _) =>
-        {
-            if (_displayProgress < _targetProgress)
-            {
-                var gap = _targetProgress - _displayProgress;
-                var step = Math.Max(0.35, gap * 0.14);
-                _displayProgress = Math.Min(_targetProgress, _displayProgress + step);
-            }
-            else
-            {
-                _displayProgress = _targetProgress;
-            }
-
-            InstallProgress.Value = _displayProgress;
-            InstallPercentText.Text = $"{_displayProgress:0}%";
-
-            if (_step != WizardStep.Installing)
-                StopProgressSmoothTimer();
-        };
-        _progressSmoothTimer.Start();
-    }
-
-    private void StopProgressSmoothTimer()
-    {
-        _progressSmoothTimer?.Stop();
-        _progressSmoothTimer = null;
     }
 
     private void UpdateInstallProgress(double percent, string status)
@@ -450,11 +412,9 @@ public partial class MainWindow : Window
         }
 
         var clamped = Math.Clamp(percent, 0, 100);
-        _targetProgress = Math.Max(_targetProgress, clamped);
+        InstallProgress.Value = Math.Max(InstallProgress.Value, clamped);
+        InstallPercentText.Text = $"{InstallProgress.Value:0}%";
         InstallStatusText.Text = status;
-
-        if (_progressSmoothTimer == null)
-            StartProgressSmoothTimer();
     }
 
     private static string DescribeExtractStatus(double extractPercent) =>
@@ -469,7 +429,6 @@ public partial class MainWindow : Window
     private void ShowError(string message)
     {
         NsisSilentInstaller.Trace("GUI install failed: " + message);
-        StopProgressSmoothTimer();
         ErrorMessageText.Text = message;
         _step = WizardStep.Error;
         ApplyStepUi();
@@ -477,7 +436,6 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        StopProgressSmoothTimer();
         _installCts?.Cancel();
         base.OnClosed(e);
     }

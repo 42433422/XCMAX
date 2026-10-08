@@ -43,6 +43,16 @@
       "id": "WIN-20261008-NETWORK-PROMPTS",
       "problem": "First start requested Windows network access separately for the main program and backend",
       "repair": "Windows shell preflight now reads all TCP listeners via hidden netstat, then binds only loopback; outbound NIC probe negative control retained. 92 related tests and TypeScript pass; exact-main VM prompt-count revalidation pending."
+    },
+    {
+      "id": "WIN-20261008-INSTALL-DURATION",
+      "problem": "Normal Windows install takes excessively long; 12 to 96 to 99 and final success observed",
+      "repair": "Phase times and VM memory/NEM/update/antimalware evidence retained; full duration not captured. Recursive progress scan removed in review; exact-main VM comparison pending."
+    },
+    {
+      "id": "WIN-20261008-COMPLETION-UI",
+      "problem": "99 percent with completed text, then actual Windows not-responding dialog before final success",
+      "repair": "Completion updates moved after STA background shell work; actual WPF old progress regression fails, fixed dispatcher/progress/apartment/failure contracts and seven real-child cases pass. Not yet delivered."
     }
   ],
   "integration_pr": "https://github.com/42433422/XCMAX/pull/2187",
@@ -129,5 +139,17 @@
     "actual_final_signature": "NOT_TESTED",
     "full_16_vm_revalidation": "PENDING"
   },
-  "diagnostic_c": "EDF isolated C: official nonempty scheduled backup restored and GUI T001/TEST/18.50 read back; corrupt/empty/truncated rejected without database change. Normal uninstall from running application left zero related processes, retained data; normal same-EDF reinstall and new export read back. Not update-failure application/database rollback, not final frozen acceptance."
+  "diagnostic_c": "EDF isolated C: official nonempty scheduled backup restored and GUI T001/TEST/18.50 read back; corrupt/empty/truncated rejected without database change. Normal uninstall from running application left zero related processes, retained data; normal same-EDF reinstall and new export read back. Not update-failure application/database rollback, not final frozen acceptance.",
+  "current_6302_diagnostic": {
+    "sha": "6302d7064683ed3096eaa6281b7b07486811128e",
+    "installer_sha256": "6ee6ffa7129818556bbb298de8ceb6b7147a5d301aaf41572018058ffc961caa",
+    "scope": "Independent clean task VM diagnostic, not frozen acceptance",
+    "normal_install": "Actual final success after wait, installed build-info matches",
+    "first_start": "FAIL: normal installer launch exceeds 180000ms",
+    "late_ready": "Original backend later listens and ping responds; does not erase first-start failure",
+    "normal_exit": "Tray Exit; tasklist confirms no XCAGI application or backend",
+    "evidence_root": "C:/dev/xcagi-windows-closeout-20261007/evidence/WIN-A-DIAG-CURRENT-20261008",
+    "snapshot": "Live checkpoint failed, no claim of saved recoverable RAM",
+    "new_a0d": "Hash/version verified, not yet run"
+  }
 }
