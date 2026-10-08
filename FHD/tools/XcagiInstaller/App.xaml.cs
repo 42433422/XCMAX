@@ -135,7 +135,7 @@ public partial class App : System.Windows.Application
                 }
 
                 if (arg.StartsWith("/D=", StringComparison.OrdinalIgnoreCase))
-                    installDirectory = arg["/D=".Length..];
+                    installDirectory = string.Join(" ", args[i..])["/D=".Length..];
             }
 
             return new SilentInstallOptions(enabled, installDirectory, deploySunbirdSeed);
