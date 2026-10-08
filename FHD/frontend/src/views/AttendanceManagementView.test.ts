@@ -34,6 +34,24 @@ describe('AttendanceManagementView', () => {
     HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
   })
 
+  it('moves a searched person to an absolute roster position and reloads saved order', async () => {
+    apiFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'POST') return response({ position: 1 })
+      return response({ items: [{ id: 68, employee_name: '尾排', order_position: 68 }], total: 1, roster_total: 68, order_revision: 'saved-revision' })
+    })
+    const wrapper = mountView('personnel')
+    await flushPromises()
+    const control = wrapper.find('tbody input[type="number"]')
+    expect(control.attributes('max')).toBe('68')
+    await control.setValue(1)
+    await flushPromises()
+    expect(apiFetch).toHaveBeenCalledWith('/api/mod/attendance-industry/employees/68/move', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ position: 1, revision: 'saved-revision' }),
+    }))
+    expect(apiFetch.mock.calls.filter(([url]) => url.includes('/employees?')).length).toBe(2)
+    wrapper.unmount()
+  })
+
   it.each(['personnel', 'departments'] as const)('edits %s in a modal and cancels without changing the list', async (section) => {
     apiFetch.mockReturnValue(response({ items: [{ id: 2, employee_name: '张三', department: '生产部' }], total: 80 }))
     const wrapper = mountView(section)
