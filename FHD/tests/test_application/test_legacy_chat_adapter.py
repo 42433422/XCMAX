@@ -345,6 +345,7 @@ class TestAppendToolMessages:
         append_tool_messages(messages2, tcs, workspace_root="/tmp", execute_tool=execute_tool)
         payload = json.loads(messages2[0]["content"])
         assert payload.get("error") == "duplicate_tool_call"
+        assert payload.get("success") is False
 
     @pytest.mark.parametrize("tenant_id", [1, 2])
     def test_parallel_execution(self, tenant_id):
@@ -441,11 +442,9 @@ class TestChat:
 
     def test_chat_with_tool_calls(self):
         mock_client = MagicMock()
-        # First call: returns tool call
         tc = _Tc("tc1", "excel_analysis", '{"query":"test"}')
         mock_resp1 = _chat_response("", [tc])
 
-        # Second call: returns text
         mock_resp2 = _chat_response("Done!", None)
 
         mock_client.chat.completions.create.side_effect = [mock_resp1, mock_resp2]
