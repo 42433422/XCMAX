@@ -1,0 +1,32 @@
+{
+  "event_id": 1,
+  "dispatched_count": 1,
+  "claim_ok": false,
+  "handler_failed_count": 1,
+  "handler_failed_roles": [
+    "verify"
+  ],
+  "team": [
+    {
+      "employee_id": "intake-dispatcher",
+      "role": "scout",
+      "ok": true,
+      "status": "unknown"
+    },
+    {
+      "employee_id": "user-customer-service-officer",
+      "role": "fix",
+      "ok": true,
+      "status": "unknown"
+    },
+    {
+      "employee_id": "test-qa-runner",
+      "role": "verify",
+      "ok": false,
+      "status": "unknown"
+    }
+  ],
+  "resolution_state": "received",
+  "actual_ai_run_id": null,
+  "scope": "Actual incident metadata, not proof of AI execution or repair"
+}

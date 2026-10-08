@@ -40,38 +40,17 @@ public static class InstallProgressTracker
         CancellationToken cancellationToken = default)
     {
         var lastReported = 0;
-        var started = Stopwatch.StartNew();
-        var expectedMs = EstimateInstallDurationMs(estimatedTotalBytes);
         var targetBytes = Math.Max(estimatedTotalBytes, 1);
-        var lastSize = 0L;
-        var stagnantLoops = 0;
 
         while (!process.HasExited)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var current = GetDirectorySize(installDirectory);
-            if (current <= lastSize)
-                stagnantLoops++;
-            else
-            {
-                stagnantLoops = 0;
-                lastSize = current;
-            }
-
             var sizePct = (int)Math.Min(99, current * 100 / targetBytes);
-            var timePct = expectedMs > 0
-                ? (int)Math.Min(99, started.ElapsedMilliseconds * 100 / expectedMs)
-                : 0;
-
-            var blended = Math.Max(sizePct, timePct);
+            var blended = sizePct;
 
             if (IsInstallComplete(installDirectory))
                 blended = Math.Max(blended, 95);
-            else if (lastReported >= 75 && stagnantLoops > 8)
-            {
-                var creep = (int)Math.Min(99, 75 + started.ElapsedMilliseconds / 5000);
-                blended = Math.Max(blended, creep);
-            }
 
             var pct = Math.Max(lastReported, Math.Min(99, blended));
             if (pct > lastReported + 3)
@@ -80,7 +59,7 @@ public static class InstallProgressTracker
             if (pct != lastReported)
             {
                 lastReported = pct;
-                progress?.Report(new InstallProgressUpdate(pct, DescribeStage(installDirectory, current, pct, stagnantLoops)));
+                progress?.Report(new InstallProgressUpdate(pct, DescribeStage(installDirectory, current, pct)));
             }
 
             await Task.Delay(400, cancellationToken).ConfigureAwait(false);
@@ -88,14 +67,7 @@ public static class InstallProgressTracker
 
     }
 
-    private static long EstimateInstallDurationMs(long estimatedTotalBytes)
-    {
-        // 大体积 + 海量小文件（PyInstaller）；上限 15 分钟
-        var fromSize = (long)(estimatedTotalBytes / (4.5 * 1024 * 1024) * 1000);
-        return Math.Clamp(fromSize + 20_000, 35_000, 900_000);
-    }
-
-    private static string DescribeStage(string installDirectory, long bytesWritten, int percent, int stagnantLoops)
+    private static string DescribeStage(string installDirectory, long bytesWritten, int percent)
     {
         if (bytesWritten < 5_000_000)
             return "正在初始化安装…";
@@ -110,9 +82,6 @@ public static class InstallProgressTracker
 
         if (percent < 85)
             return $"正在部署本地服务与前端… {percent}%";
-
-        if (stagnantLoops > 8)
-            return $"正在完成安装与注册（杀毒软件可能拖慢，请耐心等待）… {percent}%";
 
         return "正在创建快捷方式并完成配置…";
     }
