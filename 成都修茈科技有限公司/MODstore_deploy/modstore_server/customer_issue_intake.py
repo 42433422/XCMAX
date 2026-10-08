@@ -149,9 +149,7 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
 
 def dispatch_pending_issue_events(ticket_id: int) -> None:
     """Retry original intake while retaining dispatched outbox evidence."""
-    from modstore_server.models import get_session_factory
-
-    with get_session_factory()() as db:
+    with db_outbox.get_session_factory()() as db:
         ticket = db.get(CustomerServiceTicket, ticket_id)
         if ticket is None or ticket.status in {"resolved", "closed"}:
             return
