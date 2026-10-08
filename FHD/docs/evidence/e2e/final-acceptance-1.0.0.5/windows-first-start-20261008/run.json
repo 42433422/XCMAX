@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-10-08T01:12:38.687241+00:00",
+  "observed_at": "2026-10-08T09:12:38.687241+08:00",
   "vm_role": "Independent clean task A; original A and B data preserved",
   "product_version": "1.0.0.5",
   "git_sha": "edf274051b0e6cb5e5d25d99c2bbeb3cb0cf857b",
@@ -10,9 +10,9 @@
   "late_backend": "Actual EDF runtime later became healthy; does not erase first-start failure",
   "relaunch": "Normal tray Exit then shortcut Open reached login; no forced kill or backend manual launch",
   "authentication": "Normal Windows UI enterprise login and company/industry onboarding succeeded for same synthetic TEST customer; clipboard restored disabled; no token injection. Does not erase first-start failure.",
-  "original_ticket_number": null,
-  "latest_main_verified": "189ab2ab0d0992de6ccdb8840e33923571e28eeb",
-  "previous_integration_pr": "Merged without Windows review patches",
+  "original_ticket_number": "CI4dccaeeafc95a9e05a96dc18735233fd8c9b7a0d65713616",
+  "latest_main_verified": "8b3727bab3968edb1991d8b0039f635965f9eb18",
+  "previous_integration_pr": "2187 merged; installed diagnostic remains EDF",
   "issues": [
     {
       "id": "WIN-20261008-LICENSE",
@@ -42,14 +42,14 @@
     {
       "id": "WIN-20261008-NETWORK-PROMPTS",
       "problem": "First start requested Windows network access separately for the main program and backend",
-      "repair": "Windows shell probe now uses loopback and checks occupied listeners by outbound connection; backend LAN pairing retained. 91 related tests and TypeScript pass; rebuilt exact-main VM prompt-count revalidation pending."
+      "repair": "Windows shell preflight now reads all TCP listeners via hidden netstat, then binds only loopback; outbound NIC probe negative control retained. 92 related tests and TypeScript pass; exact-main VM prompt-count revalidation pending."
     }
   ],
   "integration_pr": "https://github.com/42433422/XCMAX/pull/2187",
   "common_backend_owner": "Mac primary; actual role acknowledgment still required",
   "final_16_nodes_passed": 0,
   "network_source_tests": {
-    "passed": 91,
+    "passed": 92,
     "failed": 0,
     "typescript": "PASS",
     "customer_vm": "PENDING"
@@ -117,16 +117,17 @@
       "bytes": 61830
     }
   ],
-  "ticket_path": "Information: dedicated customer support and same ticket history; intelligent chat assists submission via customer-candidate then issues/intake. No original ticket number yet; private customization is separate.",
+  "ticket_path": "Information is the main customer-support/history entry; chat assists. Normal Windows chat submitted original WO-6a5a4e928046; authoritative body and support ZIP persisted. Management UI, actual AI execution, delivery and customer closure remain pending; intake accepted is not AI acceptance.",
   "source_regressions": {
     "scope": "Host build/process regression only, not customer VM acceptance",
     "wrapper_process_original_failed_cases": 5,
     "wrapper_process_fixed_passed_cases": 7,
     "actual_wpf_build": "PASS 0 warnings 0 errors",
-    "actual_wpf_argument_parser_passed_cases": 4,
+    "actual_wpf_argument_parser_passed_cases": 5,
     "signing_policy_fixture_passed_cases": 10,
     "rebuilt_exact_main_installer": "PENDING",
     "actual_final_signature": "NOT_TESTED",
     "full_16_vm_revalidation": "PENDING"
-  }
+  },
+  "diagnostic_c": "EDF isolated C: official nonempty scheduled backup restored and GUI T001/TEST/18.50 read back; corrupt/empty/truncated rejected without database change. Normal uninstall from running application left zero related processes, retained data; normal same-EDF reinstall and new export read back. Not update-failure application/database rollback, not final frozen acceptance."
 }
