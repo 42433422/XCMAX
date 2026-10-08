@@ -1,4 +1,4 @@
-// mods/sunbird-attendance-custom/frontend/src/index.js
+// FHD/mods/sunbird-attendance-custom/frontend/src/index.js
 async function mount(root, sdk) {
   if (sdk.version !== 1) throw new Error("\u6B64\u6269\u5C55\u9700\u8981\u5BBF\u4E3B SDK v1");
   const node = (tag, text = "") => {
@@ -12,7 +12,7 @@ async function mount(root, sdk) {
   const status = node("p", "\u6B63\u5728\u8BFB\u53D6\u5F53\u524D\u8D26\u53F7\u914D\u7F6E\u2026");
   status.setAttribute("role", "status");
   const output = node("div");
-  page.append(title, node("p", "\u4F7F\u7528\u5F53\u524D\u8D26\u53F7\u7684\u4EBA\u5458\u540D\u5355\u3001\u6A21\u677F\u4E0E\u73ED\u5236\u89C4\u5219\u751F\u6210\u8003\u52E4\u8868\u3002"), status);
+  page.append(title, node("p", "\u5728\u4EBA\u5458\u7BA1\u7406\u4E2D\u4FEE\u6539\u5BFC\u51FA\u5E8F\u53F7\u5E76\u4FDD\u5B58\uFF0C\u8F6C\u6362\u4F7F\u7528\u5F53\u524D\u8D26\u53F7\u7684\u987A\u5E8F\u3001\u6A21\u677F\u4E0E\u73ED\u5236\u89C4\u5219\u3002"), status);
   root.append(page);
   let policy = {};
   const controls = [];
@@ -79,7 +79,9 @@ async function mount(root, sdk) {
     const link = node("a", "\u4E0B\u8F7D\u8F6C\u6362\u540E\u7684\u8003\u52E4\u8868");
     link.href = path;
     link.download = "";
-    output.append(link);
+    const preview = node("ol");
+    for (const person of result.personnel_order || []) preview.append(node("li", `${person.name} \xB7 ${person.department}`));
+    output.append(link, node("h2", "\u5BFC\u51FA\u4EBA\u5458\u987A\u5E8F"), preview);
     status.textContent = `\u8F6C\u6362\u5B8C\u6210\uFF1A${result.employees_matched} \u4EBA\uFF0C${result.rows_used_for_template} \u6761\u8003\u52E4\u8BB0\u5F55\u3002`;
   }), output);
   page.append(node("h2", "\u8F6C\u6362\u89C4\u5219"));
