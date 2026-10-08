@@ -26,6 +26,18 @@ STEPS = (
 )
 
 
+def desktop_public_key() -> str:
+    # Trust the client key in the exact checked-out main, never the supplied signing key.
+    source = (Path(__file__).resolve().parents[2] / "desktop/desktop-config.ts").read_text()
+    block = source.split("export const ED25519_PUBLIC_KEY_PEM = [", 1)[1].split("].join('\\n')", 1)[
+        0
+    ]
+    parts = [value for value in re.findall(r"'([^']*)'", block) if value]
+    if parts[0] != "-----BEGIN PUBLIC KEY-----" or parts[-1] != "-----END PUBLIC KEY-----":
+        raise ValueError("client trust anchor could not be read")
+    return parts[0] + "\n" + "".join(parts[1:-1]) + "\n" + parts[-1] + "\n"
+
+
 def digest(path: Path, algorithm: str = "sha256") -> str:
     h = hashlib.new(algorithm)
     with path.open("rb") as stream:

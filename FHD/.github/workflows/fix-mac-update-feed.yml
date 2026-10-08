@@ -82,13 +82,8 @@ jobs:
         run: |
           set -euo pipefail
           pip install --quiet cryptography PyYAML
-          export XCAGI_UPDATE_ED25519_PUBLIC_KEY="$(python - <<'PY'
-          import os
-          from cryptography.hazmat.primitives import serialization
-          k=serialization.load_pem_private_key(os.environ['XCAGI_UPDATE_ED25519_PRIVATE_KEY'].replace('\\n','\n').encode(),password=None)
-          print(k.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo).decode())
-          PY
-          )"
+          export XCAGI_UPDATE_ED25519_PUBLIC_KEY="$(python -c 'from scripts.release.prepare_mac_candidate_pair import desktop_public_key; print(desktop_public_key())')"
+          { echo 'XCAGI_UPDATE_ED25519_PUBLIC_KEY<<MAC_CLIENT_KEY'; printf '%s\n' "$XCAGI_UPDATE_ED25519_PUBLIC_KEY"; echo 'MAC_CLIENT_KEY'; } >> "$GITHUB_ENV"
           python scripts/release/prepare_mac_candidate_pair.py --input "$PAIR_ROOT" --output "$PAIR_OUTPUT" --sha "$BUILD_SHA" --version "$PRODUCT_VERSION"
           python scripts/dev/sign_update_metadata.py "$PAIR_OUTPUT/latest-mac.yml"
           for arch in arm64 x64; do
@@ -112,6 +107,8 @@ jobs:
             hdiutil detach "$mount_dir" -quiet; trap - EXIT; rmdir "$mount_dir"
             zip_dir="$(mktemp -d)"; ditto -x -k "$PAIR_OUTPUT/XCAGI-Enterprise-$PRODUCT_VERSION-mac-$arch.zip" "$zip_dir"
             codesign --verify --deep --strict --verbose=2 "$zip_dir/XCAGI.app"
+            xcrun stapler validate "$zip_dir/XCAGI.app"
+            spctl -a -vv -t exec "$zip_dir/XCAGI.app"
             codesign -dv --verbose=4 "$zip_dir/XCAGI.app" 2>&1 | grep -Fx "TeamIdentifier=G26WSH472M"
             rm -rf "$zip_dir"
           done

@@ -10,6 +10,11 @@ case "$mode" in --dry-run|--publish) ;; *) exit 2 ;; esac
 script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 metadata_source="$script_root/config/download_release.json"
 latest_mac="$sku_dir/latest-mac.yml"
+if [ "$mode" = --publish ]; then
+  test -n "${XCAGI_UPDATE_ED25519_PUBLIC_KEY:-}"
+  trusted="$(cd "$script_root" && python3 -c 'from scripts.release.prepare_mac_candidate_pair import desktop_public_key; print(desktop_public_key())')"
+  test "$XCAGI_UPDATE_ED25519_PUBLIC_KEY" = "$trusted"
+fi
 # Recompute every staged digest. A first-DMG match cannot certify the other architecture.
 python3 - "$sku_dir" "$version" "$release_git_sha" <<'PY'
 import base64, hashlib, json, os, pathlib, sys
@@ -71,6 +76,8 @@ rsync -av --partial --delay-updates --include='*.dmg' --include='*.zip' --includ
 for file in "$sku_dir"/*.dmg "$sku_dir"/*.zip "$sku_dir"/*.zip.blockmap; do
   name="$(basename "$file")"; expected="$(shasum -a 256 "$file" | awk '{print $1}')"
   actual="$(ssh "${ssh_opts[@]}" "root@$host" "sha256sum '$remote_payload/$name' | cut -d ' ' -f1")"; test "$actual" = "$expected"
+  public_sha="$(curl --http1.1 -fsSL --retry 3 --connect-timeout 15 --max-time 5400 "$immutable_base/enterprise/$name" | shasum -a 256 | awk '{print $1}')"
+  test "$public_sha" = "$expected"
   size="$(wc -c < "$file" | tr -d ' ')"
   public_size="$(curl --http1.1 -fsSI --retry 3 --connect-timeout 15 --max-time 120 "$immutable_base/enterprise/$name" | awk 'tolower($1)=="content-length:" {gsub("\r","",$2); n=$2} END {print n}')"; test "$public_size" = "$size"
 done

@@ -287,3 +287,42 @@ esac
         ["bash", "-c", step["run"]], cwd=FHD, env=env, capture_output=True, text=True
     )
     assert (result.returncode == 0) is (guard == "approved"), result.stderr
+
+
+@pytest.mark.parametrize("wrong_bytes", [False, True])
+def test_public_readback_rejects_same_size_different_bytes(tmp_path, wrong_bytes):
+    import http.server
+    import threading
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            content = b"WRONG" if wrong_bytes else b"RIGHT"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    source = (FHD / "scripts/package/publish-macos-download-center.sh").read_text()
+    check = source[source.index('  public_sha="$(') : source.index('  size="$(wc -c')]
+    env = {
+        "PATH": os.environ["PATH"],
+        "NO_PROXY": "127.0.0.1",
+        "immutable_base": f"http://127.0.0.1:{server.server_port}",
+        "name": "synthetic.zip",
+        "expected": hashlib.sha256(b"RIGHT").hexdigest(),
+    }
+    try:
+        result = subprocess.run(
+            ["bash", "-c", "set -euo pipefail\n" + check], env=env, capture_output=True, text=True
+        )
+        assert (result.returncode == 0) is (not wrong_bytes)
+    finally:
+        server.shutdown()
+        worker.join(timeout=5)
+        server.server_close()
