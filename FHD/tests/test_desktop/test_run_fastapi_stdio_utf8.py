@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pytest
+
 from XCAGI import run_fastapi
 
 

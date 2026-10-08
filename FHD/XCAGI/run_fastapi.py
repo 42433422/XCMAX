@@ -25,7 +25,6 @@ RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
 _XCAGI_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _XCAGI_DIR.parent
 
-# 自动寻找端口的范围（macOS AirPlay 常占用 5000）
 _PORT_PROBE_RANGE = range(5000, 5021)
 
 
