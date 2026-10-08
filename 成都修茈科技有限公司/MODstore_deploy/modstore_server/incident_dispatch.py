@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Any, Dict, List
 
@@ -267,10 +266,7 @@ def _dispatch_incident_body(event_id: int) -> None:
             binding_list.append((int(b.priority or 5), eid_sub))
         binding_ids = [eid for _, eid in sorted(binding_list)]
         catalog_ids = _catalog_employee_ids(session)
-        try:
-            payload = json.loads(ev.payload_json or "{}")
-        except json.JSONDecodeError:
-            payload = {}
+        payload = facade._incident_payload(ev)
         event_type = str(ev.event_type or "")
         source = str(ev.source or "")
         summary = str(payload.get("summary") or source or "incident")

@@ -284,22 +284,15 @@ def test_runtime_exact_case_client_files_generation(receipt_case, change):
 def test_intake_owner_bound_atomic_idempotent(client):
     from modstore_server.api.deps import get_current_user
     from modstore_server.app import app
-    from modstore_server.models import OutboxEvent, User, UserMod, get_session_factory
+    from modstore_server.models import OutboxEvent, UserMod, get_session_factory
     from modstore_server.models_cs import CustomerServiceTicket
+    from tests.test_customer_service_api import _make_user
 
     sf = get_session_factory()
+    owner = _make_user("private-intake")
     with sf() as db:
-        user = User(
-            username=uuid.uuid4().hex,
-            email=uuid.uuid4().hex + "@test.invalid",
-            password_hash="x",
-        )
-        db.add(user)
-        db.flush()
-        db.add(UserMod(user_id=user.id, mod_id="private-entitlement"))
+        db.add(UserMod(user_id=owner.id, mod_id="private-entitlement"))
         db.commit()
-        db.refresh(user)
-        owner = NS(id=user.id, is_admin=False)
     app.dependency_overrides[get_current_user] = lambda: owner
     body = {
         "source": "private_mod_rework",
@@ -348,13 +341,17 @@ def test_intake_owner_bound_atomic_idempotent(client):
         app.dependency_overrides.pop(get_current_user, None)
 
 
-def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(client, monkeypatch):
+@pytest.mark.parametrize("incident_state", ["truncated", "identity_erased", "healthy"])
+def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(
+    client, monkeypatch, incident_state
+):
     from modstore_server import customer_service_api
     from modstore_server.auth_service import create_access_token
     from modstore_server.db.ops_events import OutboxEvent
     from modstore_server.db.work_orders import WorkOrderEvent
-    from modstore_server.models import User, get_session_factory
+    from modstore_server.models import IncidentEvent, get_session_factory
     from modstore_server.models_cs import CustomerServiceTicket
+    from tests.test_customer_service_api import _make_user
 
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w") as bundle:
@@ -367,16 +364,8 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(c
         lambda _payload: None,
     )
     sf = get_session_factory()
-    with sf() as db:
-        user = User(
-            username=uuid.uuid4().hex,
-            email=uuid.uuid4().hex + "@test.invalid",
-            password_hash="x",
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        headers = {"Authorization": f"Bearer {create_access_token(user.id, user.username)}"}
+    user = _make_user("feedback")
+    headers = {"Authorization": f"Bearer {create_access_token(user.id, user.username)}"}
     candidate = client.post(
         "/api/work-orders/customer-candidate",
         json={
@@ -396,6 +385,7 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(c
     wo_id = candidate.json()["wo_id"]
     with zipfile.ZipFile(archive, "w") as bundle:
         bundle.writestr("manifest.json", '{"redacted":true,"retry":true}')
+        bundle.writestr("logs/backend.log", "X" * 45000)
     raw = archive.getvalue()
     sha = hashlib.sha256(raw).hexdigest()
     body = {
@@ -435,6 +425,67 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(c
         )
         receipts = [json.loads(event.ref or "{}") for event in wo_events if event.event == "gate"]
         assert {item.get("gate_status") for item in receipts} == {"ROUTED", "COLLECTED"}
+    from modstore_server import incident_bus
+
+    original = (
+        json.dumps(payload)
+        if incident_state == "healthy"
+        else (json.dumps(payload)[:8000] if incident_state == "truncated" else '{"_team_claim":{}}')
+    )
+    original_outbox = ("dispatched", "original failure", 7)
+    with sf() as db:
+        outbox = db.get(OutboxEvent, events[0].id)
+        outbox.status, outbox.last_error, outbox.attempts = original_outbox
+        incident = IncidentEvent(
+            event_type="ops.intake.customer_ticket",
+            source="customer-issue-intake",
+            fingerprint=hashlib.sha256(outbox.event_id.encode()).hexdigest(),
+            payload_json=original,
+        )
+        db.add(incident)
+        db.commit()
+        original_id, outbox_id = incident.id, outbox.id
+    calls = []
+    monkeypatch.setenv("MODSTORE_INCIDENT_SYNC_DISPATCH", "1")
+    monkeypatch.setattr(incident_bus, "_dispatch_incident", calls.append)
+    monkeypatch.setattr(incident_bus, "_publish_stream_shadow", lambda *a, **k: None)
+    monkeypatch.setattr(
+        customer_service_api,
+        "_schedule_customer_ticket_incident",
+        customer_service_api._publish_customer_ticket_incident,
+    )
+    for _ in range(2):
+        retry = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
+        assert retry.status_code == 200 and retry.json()["ticket_id"] == ticket.id
+    other = _make_user("other-feedback")
+    denied = client.post(
+        "/api/customer-service/issues/intake",
+        json=body,
+        headers={"Authorization": f"Bearer {create_access_token(other.id, other.username)}"},
+    )
+    assert denied.status_code == 409
+    with sf() as db:
+        restored = (
+            db.query(IncidentEvent)
+            .filter_by(fingerprint=incident.fingerprint)
+            .order_by(IncidentEvent.id)
+            .all()
+        )
+        assert len(restored) == (1 if incident_state == "healthy" else 2)
+        assert db.get(IncidentEvent, original_id).payload_json == original
+        replay_payload = json.loads(restored[-1].payload_json)
+        assert all(
+            replay_payload[k] == payload[k]
+            for k in ("ticket_id", "user_id", "ticket_no", "work_order_id", "support_bundle_base64")
+        )
+        if incident_state != "healthy":
+            assert replay_payload["_incident_replay"] == {
+                "original_event_id": original_id,
+                "original_payload_sha256": hashlib.sha256(original.encode()).hexdigest(),
+            }
+        outbox = db.get(OutboxEvent, outbox_id)
+        assert (outbox.status, outbox.last_error, outbox.attempts) == original_outbox
+        assert calls == ([] if incident_state == "healthy" else [restored[-1].id])
     marker = f"unpersisted-{uuid.uuid4().hex}"
     body.update(source_ref="bad-work-order", title=marker, work_order_id="WO-111111111111")
     bad = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
