@@ -22,11 +22,11 @@ import {
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 import { checkPendingRollback } from './rollback'
 import { configureUpdater } from './updater'
+import { configureDesktopDownloads } from './desktop-downloads'
 import {
   handleDesktopWindowOpen,
   handleDesktopWillNavigate,
   isBenignDesktopLoadAbort,
-  safeDownloadFilename,
 } from './desktop-navigation'
 
 /** 闪屏进度 0–100；供启动阶段与单测共用。 */
@@ -236,13 +236,7 @@ export async function createWindow(): Promise<void> {
   })
   // 未注册 will-download 时 Chromium 只把文件留在下载目录的 <guid>.tmp，
   // 客户看不到「文件名: xxx.xlsx」对应的文件。显式落盘到下载目录并保留业务文件名。
-  mainWindow.webContents.session.on('will-download', (_event, item) => {
-    const target = path.join(app.getPath('downloads'), safeDownloadFilename(item.getFilename()))
-    item.setSavePath(target)
-    item.once('done', (_doneEvent, state) => {
-      writeBackendLog(`[download] ${state} -> ${target}\n`)
-    })
-  })
+  configureDesktopDownloads(mainWindow.webContents.session, () => app.getPath('downloads'), writeBackendLog)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return { action: handleDesktopWindowOpen(url, DEFAULT_PORT, target => shell.openExternal(target), message => console.warn(message), target => mainWindow.webContents.downloadURL(target)) }
   })

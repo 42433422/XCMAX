@@ -27,7 +27,8 @@ export function salesApprovalPreview(request?: ApprovalRequest | null) {
   let amount: string | null = null
   if (terms.length && terms.every(term => term !== null)) {
     const scale = Math.max(...terms.map(term => term!.scale))
-    const sum = terms.reduce((total, term) => total + term!.value * 10n ** BigInt(scale - term!.scale), 0n)
+    // ES2015 builds lower ** to Math.pow, which rejects BigInt operands.
+    const sum = terms.reduce((total, term) => total + term!.value * BigInt('1' + '0'.repeat(scale - term!.scale)), 0n)
     const digits = sum.toString().padStart(scale + 1, '0')
     amount = `${scale ? digits.slice(0, -scale) : digits}.${(scale ? digits.slice(-scale) : '').padEnd(2, '0')}`
   }
