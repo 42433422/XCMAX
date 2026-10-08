@@ -65,14 +65,12 @@ public sealed class NsisSilentInstaller
             return InstallResult.Fail($"启动失败：{ex.Message}");
         }
 
-        var estimated = InstallProgressTracker.EstimateInstalledBytes(setupExePath, dir);
-
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(30));
         try
         {
             await InstallProgressTracker.MonitorInstallAsync(
-                process, dir, estimated, progress, timeout.Token).ConfigureAwait(false);
+                process, dir, progress, timeout.Token).ConfigureAwait(false);
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
