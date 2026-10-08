@@ -46,7 +46,8 @@ def record_dispatch_failure(payload: dict[str, Any], error: str) -> None:
 
 
 def enqueue_issue(
-    db: Session, ticket: CustomerServiceTicket, *, revision: str = "", private_factory: bool = False
+    db: Session, ticket: CustomerServiceTicket, *, revision: str = "", private_factory: bool = False,
+    support_report: dict[str, Any] | None = None
 ) -> str:
     evidence = json_loads(ticket.evidence_json, {})
     if not isinstance(evidence, dict):
@@ -100,6 +101,8 @@ def enqueue_issue(
         "product_version": evidence.get("product_version", ""),
         "git_sha": evidence.get("git_sha", ""),
     }
+    if support_report:
+        payload.update(support_report)
     if ticket.intent == "custom_delivery":
         payload["delivery_managed_by"] = "custom_delivery"
     if private_factory:

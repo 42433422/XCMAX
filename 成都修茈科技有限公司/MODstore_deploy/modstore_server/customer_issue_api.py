@@ -142,9 +142,61 @@ async def intake_customer_issue(
     number = request_identity(int(user.id), body.source, body.source_ref)
 
     def response(ticket: CustomerServiceTicket, *, replayed: bool) -> dict[str, Any]:
-        evidence = json_loads(ticket.evidence_json, {})
-        if evidence.get("intake_request_sha256") != request_digest:
+        previous = str(ticket.evidence_json)
+        evidence = json_loads(previous, {})
+        context_keys = {
+            "support_bundle_sha256",
+            "support_bundle_base64",
+            "customer_instance_id",
+            "product_version",
+            "git_sha",
+            "installed_version",
+        }
+        same_issue = (
+            body.source == "customer_feedback"
+            and bool(body.work_order_id)
+            and all(
+                evidence.get(key, "") == value
+                for key, value in values.items()
+                if key not in context_keys
+            )
+        )
+        if evidence.get("intake_request_sha256") != request_digest and not same_issue:
             raise HTTPException(409, "相同需求标识已绑定其他内容，请使用新的 source_ref")
+        report = {key: values[key] for key in context_keys}
+        reports = evidence.get("support_reports", [])
+        saved = report == {key: evidence.get(key, "") for key in context_keys} or any(
+            all(item.get(key, "") == value for key, value in report.items()) for item in reports
+        )
+        if replayed and bundle_b64 and same_issue and not saved:
+            if ticket.status in _CLOSED:
+                raise HTTPException(409, "原工单已关闭，请先通过客户复验入口重开")
+            revision = hashlib.sha256(json_dumps(report).encode()).hexdigest()
+            evidence["support_reports"] = [
+                *reports,
+                {**report, "received_at": datetime.now(UTC).isoformat()},
+            ]
+            changed = (
+                db.query(CustomerServiceTicket)
+                .filter_by(id=ticket.id, user_id=int(user.id), evidence_json=previous)
+                .update({"evidence_json": json_dumps(evidence)}, synchronize_session=False)
+            )
+            if changed != 1:
+                db.rollback()
+                raise HTTPException(409, "工单已有并发补报，请重试同一请求")
+            db.refresh(ticket)
+            event_id = enqueue_issue(db, ticket, revision=revision, support_report=report)
+            audit(
+                db,
+                event_type="issue_support_report",
+                ticket_id=ticket.id,
+                session_id=ticket.session_id,
+                actor=user,
+                detail={"support_bundle_sha256": bundle_sha, "event_id": event_id},
+            )
+            db.commit()
+            db.refresh(ticket)
+            saved = True
         return {
             "success": True,
             "replayed": replayed,
@@ -152,6 +204,8 @@ async def intake_customer_issue(
             "ticket_no": ticket.ticket_no,
             "ticket": ticket_payload(ticket),
             "dispatch_status": "queued",
+            "support_bundle_saved": bool(bundle_b64) and saved,
+            "support_bundle_sha256": bundle_sha if bundle_b64 and saved else "",
         }
 
     existing = (

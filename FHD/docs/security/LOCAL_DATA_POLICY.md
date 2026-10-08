@@ -1,7 +1,7 @@
 # 本地数据安全策略（Wave 0 SSOT）
 
 > v10 线内迭代 · 桌面私有化与 Web 企业版共用原则  
-> 关联：[SECURITY.md](../../SECURITY.md) · [ENTERPRISE_AUDIT.md](../ENTERPRISE_AUDIT.md) · [CUSTOMER_SUPPORT.md](../customer/CUSTOMER_SUPPORT.md)
+> 关联：[SECURITY.md](../../SECURITY.md) · [ENTERPRISE_AUDIT.md](../ENTERPRISE_AUDIT.md) · [双端发布](../desktop_platform_parity_ssot.md)
 
 ## 1. 数据分类
 
@@ -67,3 +67,7 @@ Wave 0 **不**在 Electron 冷启时自动 purge，避免误删；运维/用户�
 ## 6. 变更记录
 
 - **2026-07-05**：Wave 0 首版 — schema/registry SSOT、诊断包鉴权与日志脱敏、上传鉴权、purge CLI。
+
+支持补报沿原客户、原工单提交已脱敏 ZIP；只有正常 200 回执的 `support_bundle_saved=true` 且 `support_bundle_sha256` 与本次原包一致，才表示本次附件已持久保存。旧工单查询、排队与健康检查不能替代附件保存、Para 执行或客户复验。
+
+升级与回滚须核对对应 [Mac](../MACOS_RELEASE_SSOT.md) / [Windows](../WINDOWS_RELEASE_SSOT.md) 同一主线产物，保留原 userData、Mod、日志和恢复点；恢复后实际回读业务及任务，不以仅复制数据库或恢复提示成功判定通过。服务响应时间按客户合同执行。

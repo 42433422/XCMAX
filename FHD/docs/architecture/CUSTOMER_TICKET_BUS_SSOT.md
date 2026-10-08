@@ -1,6 +1,6 @@
 # 客服工单总线 SSOT
 
-> 更新日期：2026-10-06
+> 更新日期：2026-10-09
 
 ## 定轨
 
@@ -22,3 +22,5 @@
 ## 验收
 
 一张 `CS*` 工单：`dispatched_count > 0`，`_cs_progress.lifecycle_*` 非空，且非全员 `handler_failed`。真实闭环按 [ticket-loop.run.json](../evidence/e2e/final-acceptance-1.0.0.5/ticket-loop.run.json) 53 项与 [gates.json](../evidence/e2e/final-acceptance-1.0.0.5/gates.json) 闸门 17–23 判定；目前只有本机集成证据 [ticket-loop-local-20261006](../evidence/e2e/ticket-loop-local-20261006/run.jsonl)，未闭环。
+
+同账号、同 source_ref/WO、同需求正文的跨版本支持补报追加到 `support_reports`，保留原附件、上下文及历史 outbox；新增同单事件携带本次支持包。重复补报幂等，不同正文或账号不得覆盖原案；闭单新补报须先由客户正常重开。
