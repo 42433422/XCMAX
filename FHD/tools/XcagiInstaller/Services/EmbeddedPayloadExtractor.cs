@@ -56,11 +56,7 @@ public static class EmbeddedPayloadExtractor
             {
                 if (progress != null)
                 {
-                    for (var p = 20.0; p <= 100.0; p += 20.0)
-                    {
-                        progress.Report(p);
-                        await Task.Delay(40, cancellationToken).ConfigureAwait(false);
-                    }
+                    progress.Report(100);
                 }
 
                 return cacheExe;

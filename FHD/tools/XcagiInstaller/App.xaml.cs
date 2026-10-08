@@ -18,12 +18,12 @@ public partial class App : System.Windows.Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         try
         {
-            WriteSilentLog("silent install start");
+            NsisSilentInstaller.Trace("silent install start");
             var setupExe = await PayloadLocator.ResolveSetupExeAsync(
                 cancellationToken: CancellationToken.None).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(setupExe))
                 throw new InvalidOperationException("Unable to resolve embedded setup payload.");
-            WriteSilentLog($"payload={setupExe};{DescribeFile(setupExe)}");
+            NsisSilentInstaller.Trace($"payload={setupExe};{DescribeFile(setupExe)}");
 
             var result = await NsisSilentInstaller.RunAsync(
                 setupExe,
@@ -31,20 +31,20 @@ public partial class App : System.Windows.Application
                 cancellationToken: CancellationToken.None).ConfigureAwait(false);
             if (!result.Success)
                 throw new InvalidOperationException(result.Error ?? "Silent install failed.");
-            WriteSilentLog($"installed={result.InstallDir};app={result.AppExePath}");
+            NsisSilentInstaller.Trace($"installed={result.InstallDir};app={result.AppExePath}");
 
             if (options.DeploySunbirdSeed && SunbirdSeedExtractor.HasEmbeddedSeed())
             {
                 await SunbirdSeedExtractor.DeployToUserDataAsync(
                     cancellationToken: CancellationToken.None).ConfigureAwait(false);
-                WriteSilentLog("sunbird seed deployed");
+                NsisSilentInstaller.Trace("sunbird seed deployed");
             }
 
             ShutdownOnUiThread(0);
         }
         catch (Exception ex)
         {
-            WriteSilentLog("failed: " + ex);
+            NsisSilentInstaller.Trace("failed: " + ex);
             ShutdownOnUiThread(1);
         }
     }
@@ -58,19 +58,6 @@ public partial class App : System.Windows.Application
         }
 
         Dispatcher.Invoke(() => Shutdown(exitCode));
-    }
-
-    private static void WriteSilentLog(string message)
-    {
-        try
-        {
-            var path = Path.Combine(Path.GetTempPath(), "xcagi-installer-silent.log");
-            File.AppendAllText(path, $"[{DateTimeOffset.UtcNow:O}] {message}{Environment.NewLine}");
-        }
-        catch
-        {
-            // Silent install logging must never hide the real install result.
-        }
     }
 
     private static string DescribeFile(string path)

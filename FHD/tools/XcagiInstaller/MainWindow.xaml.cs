@@ -468,6 +468,7 @@ public partial class MainWindow : Window
 
     private void ShowError(string message)
     {
+        NsisSilentInstaller.Trace("GUI install failed: " + message);
         StopProgressSmoothTimer();
         ErrorMessageText.Text = message;
         _step = WizardStep.Error;
