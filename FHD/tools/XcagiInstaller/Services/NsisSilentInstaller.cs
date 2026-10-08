@@ -4,6 +4,12 @@ namespace XcagiInstaller.Services;
 
 public sealed class NsisSilentInstaller
 {
+    public static void Trace(string message)
+    {
+        try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "xcagi-installer-silent.log"), $"[{DateTimeOffset.UtcNow:O}] {message}{Environment.NewLine}"); }
+        catch { /* Diagnostics cannot change the installation result. */ }
+    }
+
     public static string DefaultInstallDirectory()
     {
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -36,6 +42,7 @@ public sealed class NsisSilentInstaller
         }
 
         var args = $"/S /D={dir}";
+        Trace($"install requested: payload={setupExePath};target={dir}");
         var psi = new ProcessStartInfo
         {
             FileName = setupExePath,
@@ -50,9 +57,11 @@ public sealed class NsisSilentInstaller
         {
             if (!process.Start())
                 return InstallResult.Fail("无法启动安装进程。");
+            Trace($"child started: pid={process.Id}");
         }
         catch (Exception ex)
         {
+            Trace($"child start failed: {ex}");
             return InstallResult.Fail($"启动失败：{ex.Message}");
         }
 
@@ -68,6 +77,7 @@ public sealed class NsisSilentInstaller
         }
         catch (OperationCanceledException)
         {
+            Trace(cancellationToken.IsCancellationRequested ? "installation cancelled" : "installation timed out");
             try
             {
                 if (!process.HasExited)
@@ -80,6 +90,7 @@ public sealed class NsisSilentInstaller
             return InstallResult.Fail(cancellationToken.IsCancellationRequested ? "安装已取消。" : "安装超时，未确认完成。");
         }
         // Existing files cannot prove this installation succeeded or justify deleting user data.
+        Trace($"child exited: code={process.ExitCode};complete={InstallCompletionDetector.IsComplete(dir)}");
         if (process.ExitCode != 0)
             return InstallResult.Fail($"安装程序退出码 {process.ExitCode}。");
         if (!InstallCompletionDetector.IsComplete(dir))
