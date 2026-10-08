@@ -134,9 +134,7 @@ async def submit_product_issue(
         return {"state": "OWNER_ROUTE_UNAVAILABLE"}
     identity = build_identity()
     client_id = desktop_installation_id()
-    # 市场端建单接口要求 product_version 非空且至少 1 字符。未打包运行、构建身份
-    # 文件缺失或损坏的客户端拿不到版本号时也必须能建单，否则客户上报缺陷只会得到
-    # 「受理服务尚未送达」，问题再次被挡在闭环之外。
+    # 市场要求非空版本；未打包/身份损坏时仍可建单。
     version_label = identity.get("product_version") or "unknown"
     context = {
         "expected": triage["expected"],
@@ -163,10 +161,7 @@ async def submit_product_issue(
     if not wo_id:
         return {"state": "OWNER_ROUTE_UNAVAILABLE"}
     title = f"客户端产品缺陷 · {reason[:100]}"
-    # description 是市场端判定「同一需求标识是否绑定同一内容」的一部分：同一工单
-    # 重复上报（客户重测、补报）必须原样复用，否则会被判成内容不同而 409，客户
-    # 永远拿不到工单编号。每次都变的支持包摘要只经 support_bundle_sha256 字段传递，
-    # 市场端也明确把它排除在该身份判定之外。
+    # 同一需求正文保持稳定；补报附件及运行身份由接收端单独持久化。
     description = (
         f"work_order_id：{wo_id}\n客户原话：{reason}\n"
         f"预期：{triage['expected']}\n实际：{triage['actual']}"
@@ -193,9 +188,7 @@ async def submit_product_issue(
             },
         )
     except (RuntimeError, ConnectionError):
-        # 该 Work Order 已有受理工单但内容摘要不同（客户端格式升级、客户补报），
-        # 市场会以 409 拒绝而不是重放。此时必须回查已有工单并复用其编号，否则
-        # 客户重复上报同一问题只会得到「受理服务尚未送达」。
+        # 回查只证明原工单存在，不能证明本次附件已保存。
         logger.info("client product issue intake not replayed; falling back to lookup")
     if (
         result.get("success") is not True
@@ -206,13 +199,18 @@ async def submit_product_issue(
         if not existing:
             return {"state": "OWNER_ROUTE_UNAVAILABLE", "work_order_id": wo_id}
         result = {**existing, "success": True}
+    saved = (
+        result.get("support_bundle_saved") is True
+        and result.get("support_bundle_sha256") == evidence["sha256"]
+    )
     return {
         "state": "ROUTED",
         "work_order_id": wo_id,
         "owner_ticket_id": result["ticket_id"],
         "owner_ticket_no": result["ticket_no"],
-        "support_bundle_sha256": evidence["sha256"],
-        **({"screenshots": evidence["screenshots"]} if evidence.get("screenshots") else {}),
+        "support_bundle_saved": saved,
+        "support_bundle_sha256": evidence["sha256"] if saved else "",
+        **({"screenshots": evidence["screenshots"]} if saved and evidence.get("screenshots") else {}),
     }
 
 
