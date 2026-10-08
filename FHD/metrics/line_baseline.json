@@ -1,5 +1,5 @@
 {
-  "lines": 2296786,
+  "lines": 2296930,
   "updated": "2026-10-08",
-  "note": "Installed EDF Mac blockers: online sales planner repeat/compound safety regressions (+106); report download intercept and trusted-origin regressions (+30). New exact-main installer revalidation remains required."
+  "note": "Installed Mac acceptance item 90: sales approval lacked a visible total and business terms. Add a read-only exact-decimal preview, missing-term and immutable-payload regressions, and required Mod version/mirror synchronization; no approval or execution permission changes."
 }

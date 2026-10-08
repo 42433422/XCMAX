@@ -1,11 +1,42 @@
 import type { ApprovalRequest, ApprovalWorkflowExecution } from '@/api/approval'
 
-/**
- * 拆分自 ApprovalWorkspaceView.vue 脚本的纯工具函数
- * （原第 293–297、322–325、409–423、556–602 行）；逻辑逐字迁移，行为不变。
- */
+/** Approval presentation helpers; never mutate or execute the approved payload. */
 
 export const FINAL_STATUSES = ['approved', 'rejected', 'withdrawn', 'cancelled'] as const
+
+/** Display persisted sales terms without changing the approved tool payload. */
+export function salesApprovalPreview(request?: ApprovalRequest | null) {
+  const data = request?.business_data
+  if (request?.business_type !== 'workflow_tool' || data?.tool_id !== 'sales'
+    || !['create_order', 'quote'].includes(data.action || '') || !data.params) return null
+  const params = data.params
+  const items = Array.isArray(params.items) ? params.items.map(item =>
+    item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : {}) : []
+  const decimal = (value: unknown) => {
+    if (typeof value !== 'number' && typeof value !== 'string') return null
+    const text = String(value).trim()
+    if (text.length > 40 || !/^\d+(?:\.\d+)?$/.test(text)) return null
+    const [whole, fraction = ''] = text.split('.')
+    return { value: BigInt(whole + fraction), scale: fraction.length }
+  }
+  const terms = items.map(item => {
+    const quantity = decimal(item.quantity), price = decimal(item.unit_price)
+    return quantity && quantity.value > 0n && price
+      ? { value: quantity.value * price.value, scale: quantity.scale + price.scale } : null
+  })
+  let amount: string | null = null
+  if (terms.length && terms.every(term => term !== null)) {
+    const scale = Math.max(...terms.map(term => term!.scale))
+    const sum = terms.reduce((total, term) => total + term!.value * 10n ** BigInt(scale - term!.scale), 0n)
+    const digits = sum.toString().padStart(scale + 1, '0')
+    amount = `${scale ? digits.slice(0, -scale) : digits}.${(scale ? digits.slice(-scale) : '').padEnd(2, '0')}`
+  }
+  return {
+    operation: data.action === 'quote' ? '创建销售报价' : '创建销售订单',
+    customer: typeof params.customer_name === 'string' && params.customer_name.trim() ? params.customer_name : '未填写', items, amount,
+    currency: params.currency === undefined ? 'CNY' : typeof params.currency === 'string' ? params.currency : '币种待确认',
+  }
+}
 
 export const isFinalStatus = (status: string) =>
   (FINAL_STATUSES as readonly string[]).includes(status)

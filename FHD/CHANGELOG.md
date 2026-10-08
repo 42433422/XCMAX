@@ -5,6 +5,7 @@
 ---
 
 ## Unreleased（1.0.0.5 之后的累积变更）
+- 销售审批详情按已保存的实际工具参数显示中文客户、商品、数量、单价和精确十进制合计；缺少价格或数量时显示金额待确认，保留原始参数，不改变批准后的执行载荷；审批 Mod 与镜像升至 1.0.0.2，新安装包仍须实机复验。
 - 修复 SUNBIRD 生成私包失败后的原单返工死路：可选择已有主线考勤 Mod，保留原工单与生产历史；账号权益和发行源码身份校验通过才启动，仍需签包、客户验收、安装与业务验证。
 - 修复 Mac 实机销售订单请求误入产品写入及联网规划丢参：明确的单笔销售请求在模型规划前保留客户、型号、数量、单价与人工审批，不再额外生成销售确认；复合请求仍走完整规划，缺参仍澄清。修正类型重复声明，并在员工安装失败时显示实际原因；新安装包仍须实机复验。
 - Mac OTA rollback preserves committed SQLite WAL records if recovery recording fails and restarts in the original data directory and port; installer checks isolate the app, wait for login UI, and retain startup video and failure evidence. Legacy backend-only Mac markers require a verified complete old package and nonempty database snapshot checked for SQLite integrity before replacing either app or database; invalid or cross-platform markers never mix an old backend into the new signed app; recovery resources are isolated by SKU and architecture. Generated AI reports download through the existing window instead of leaving an empty child; trusted local origin and port checks remain enforced, with final installer revalidation required.
