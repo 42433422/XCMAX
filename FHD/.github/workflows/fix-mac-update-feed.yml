@@ -1,284 +1,138 @@
-# 紧急修复：从成功的 Release Desktop run 恢复可追溯 ZIP，原子修复 stable/official feed。
+# CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Fix macOS update feed
-
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: Product version (four-part)
-        required: true
-        default: "1.0.0.0"
-      source_run_id:
-        description: Successful Release Desktop run containing the canonical macOS artifact
-        required: true
-      zip_name:
-        description: Canonical enterprise macOS ZIP filename
-        required: true
-        default: "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
-      build_sha:
-        description: Exact 40-character release commit embedded in the canonical ZIP
-        required: true
-      security_scan_run_id:
-        description: Current successful full security scan run ID for build_sha
-        required: true
-      previous_security_scan_run_id:
-        description: Previous-day successful full security scan run ID for build_sha
-        required: true
-
-permissions:
-  actions: read
-  contents: write
-
+      version: {description: Four-part frozen version, required: true, type: string}
+      build_sha: {description: Exact main commit of BOTH candidates, required: true, type: string}
+      arm64_run_id: {description: Successful native ARM candidate run, required: true, type: string}
+      x64_run_id: {description: Successful native Intel candidate run, required: true, type: string}
+      publish: {description: Requires release-owner SHA authorization and environment approval, default: false, type: boolean}
+      security_scan_run_id: {description: Current exact-SHA full security scan, required: false, type: string}
+      previous_security_scan_run_id: {description: Prior-day exact-SHA full security scan, required: false, type: string}
+permissions: {actions: read, contents: read}
 defaults:
   run:
     working-directory: FHD
-
 jobs:
-  republish-mac-feed:
-    runs-on: ubuntu-latest
+  frozen-pair:
+    runs-on: macos-latest
+    environment: ${{ inputs.publish && 'macos-production' || 'macos-candidate-review' }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_SHA: ${{ inputs.build_sha }}
+      PRODUCT_VERSION: ${{ inputs.version }}
+      ARM_RUN: ${{ inputs.arm64_run_id }}
+      X64_RUN: ${{ inputs.x64_run_id }}
+      PAIR_ROOT: ${{ runner.temp }}/frozen-mac-pair
+      PAIR_OUTPUT: ${{ runner.temp }}/frozen-mac-pair-output
+      XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.build_sha }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+        with: {ref: '${{ inputs.build_sha }}'}
       - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Verify exact release SHA
+        with: {python-version: '3.12'}
+      - name: Validate main identity and publication authorization
         env:
-          BUILD_SHA: ${{ inputs.build_sha }}
+          PUBLISH: ${{ inputs.publish }}
+          AUTHORIZED_SHA: ${{ vars.MACOS_FROZEN_PAIR_AUTHORIZED_SHA }}
+          ENABLED: ${{ vars.MACOS_FROZEN_PAIR_PUBLICATION_ENABLED }}
+          RELEASE_PROTECTION_TOKEN: ${{ secrets.RELEASE_PROTECTION_TOKEN }}
         run: |
           set -euo pipefail
-          if [[ ! "${BUILD_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
-            echo "::error::build_sha must be a full 40-character Git SHA."
-            exit 1
+          [[ "$BUILD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PRODUCT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$ARM_RUN" =~ ^[1-9][0-9]*$ && "$X64_RUN" =~ ^[1-9][0-9]*$ ]]
+          test "$ARM_RUN" != "$X64_RUN"
+          test "$(git rev-parse HEAD)" = "$BUILD_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$BUILD_SHA"
+          if [ "$PUBLISH" = true ]; then
+            test "$ENABLED" = true && test "$AUTHORIZED_SHA" = "$BUILD_SHA"
+            protection="$(GH_TOKEN="${RELEASE_PROTECTION_TOKEN:?Admin-read protection token required}" gh api "repos/$GITHUB_REPOSITORY/branches/main/protection/required_status_checks")"
+            checks="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$BUILD_SHA/check-runs?per_page=100")"
+            statuses="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$BUILD_SHA/statuses?per_page=100")"
+            export protection checks statuses
+            python - <<'PY'
+          import json, os
+          p,c,s=(json.loads(os.environ[n]) for n in ('protection','checks','statuses'))
+          required=set(p.get('contexts',[]))|{v['context'] for v in p.get('checks',[])}
+          assert required, 'Readable protected checks required'
+          for name in required:
+              runs=sorted((v for page in c for v in page['check_runs'] if v['name']==name),key=lambda v:v['id'])
+              states=sorted((v for page in s for v in page if v['context']==name),key=lambda v:v['id'])
+              assert (runs[-1]['conclusion']=='success' if runs else bool(states and states[-1]['state']=='success')), name
+          PY
           fi
-          ACTUAL_SHA="$(git rev-parse HEAD)"
-          if [ "${ACTUAL_SHA}" != "${BUILD_SHA}" ]; then
-            echo "::error::checkout drift: ${ACTUAL_SHA} != ${BUILD_SHA}"
-            exit 1
-          fi
-      - name: Download normalized security evidence
-        uses: actions/download-artifact@v4
-        with:
-          name: xcagi-security-release-reports
-          path: ${{ runner.temp }}/security-reports/current
-          run-id: ${{ inputs.security_scan_run_id }}
-          github-token: ${{ github.token }}
-      - name: Download prior-day normalized security evidence
-        uses: actions/download-artifact@v4
-        with:
-          name: xcagi-security-release-reports
-          path: ${{ runner.temp }}/security-reports/previous
-          run-id: ${{ inputs.previous_security_scan_run_id }}
-          github-token: ${{ github.token }}
-      - name: Enforce exact-SHA two-day security clearance
-        run: |
-          python scripts/security/verify_security_scan_pair.py \
-            --previous-dir "${{ runner.temp }}/security-reports/previous" \
-            --current-dir "${{ runner.temp }}/security-reports/current" \
-            --release-sha "${{ inputs.build_sha }}"
-      - name: Install cryptography
-        run: pip install --quiet cryptography
-      - name: Download canonical release artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id }}
+      - name: Retrieve immutable native run and artifact identities
         run: |
           set -euo pipefail
-          if [[ ! "${SOURCE_RUN_ID}" =~ ^[0-9]+$ ]]; then
-            echo "::error::source_run_id must be numeric."
-            exit 1
-          fi
-          RUN_META="$(gh run view "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
-            --json conclusion,headSha,workflowName)"
-          RUN_CONCLUSION="$(printf '%s' "${RUN_META}" | jq -er '.conclusion')"
-          RUN_WORKFLOW="$(printf '%s' "${RUN_META}" | jq -er '.workflowName')"
-          SOURCE_RUN_SHA="$(printf '%s' "${RUN_META}" | jq -er '.headSha')"
-          if [ "${RUN_CONCLUSION}" != "success" ] || [ "${RUN_WORKFLOW}" != "Release Desktop" ]; then
-            echo "::error::source_run_id must identify a successful Release Desktop run."
-            exit 1
-          fi
-          if [[ ! "${SOURCE_RUN_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
-            echo "::error::Source run has no full Git identity."
-            exit 1
-          fi
-          SOURCE_ARTIFACT_META="$(gh api \
-            "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" \
-            --jq '[.artifacts[] | select(.name == "xcagi-desktop-macos-enterprise" and .expired == false)] | if length == 1 then .[0] else empty end')"
-          SOURCE_ARTIFACT_ID="$(printf '%s' "${SOURCE_ARTIFACT_META}" | jq -er '.id')"
-          SOURCE_ARTIFACT_SIZE="$(printf '%s' "${SOURCE_ARTIFACT_META}" | jq -er '.size_in_bytes')"
-          if [[ ! "${SOURCE_ARTIFACT_ID}" =~ ^[0-9]+$ ]] \
-            || [[ ! "${SOURCE_ARTIFACT_SIZE}" =~ ^[1-9][0-9]+$ ]]; then
-            echo "::error::Source run must contain exactly one unexpired macOS enterprise artifact."
-            exit 1
-          fi
-          echo "SOURCE_RUN_SHA=${SOURCE_RUN_SHA}" >> "${GITHUB_ENV}"
-          echo "SOURCE_ARTIFACT_ID=${SOURCE_ARTIFACT_ID}" >> "${GITHUB_ENV}"
-          echo "SOURCE_ARTIFACT_SIZE=${SOURCE_ARTIFACT_SIZE}" >> "${GITHUB_ENV}"
-          mkdir -p "${RUNNER_TEMP}/release-artifact"
-          gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
-            --name xcagi-desktop-macos-enterprise \
-            --dir "${RUNNER_TEMP}/release-artifact"
-      - name: Verify canonical ZIP identity and atomically repair both feed paths
-        timeout-minutes: 90
-        env:
-          GH_TOKEN: ${{ github.token }}
-          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
-          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
-          ZIP_NAME: ${{ github.event.inputs.zip_name }}
-          PRODUCT_VERSION: ${{ github.event.inputs.version }}
-          BUILD_SHA: ${{ github.event.inputs.build_sha }}
-          ARTIFACT_DIR: ${{ runner.temp }}/release-artifact
-        run: |
-          set -euo pipefail
-          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
-            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY missing"
-            exit 1
-          fi
-          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
-            echo "::error::SERVER_SSH_KEY or FHD_PUSH_SSH_KEY missing"
-            exit 1
-          fi
-          if [[ ! "${PRODUCT_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Invalid four-part product version: ${PRODUCT_VERSION}"
-            exit 1
-          fi
-          case "${ZIP_NAME}" in
-            "XCAGI-Enterprise-${PRODUCT_VERSION}-mac-arm64.zip"|"XCAGI-Enterprise-${PRODUCT_VERSION}-mac-x64.zip") ;;
-            *)
-              echo "::error::ZIP_NAME must be the canonical enterprise macOS ZIP for ${PRODUCT_VERSION}."
-              exit 1
-              ;;
-          esac
-          if [[ ! "${BUILD_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
-            echo "::error::build_sha must be a full 40-character Git SHA."
-            exit 1
-          fi
-
-          mapfile -t ZIP_MATCHES < <(find "${ARTIFACT_DIR}" -type f -name "${ZIP_NAME}" -print)
-          if [ "${#ZIP_MATCHES[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one ${ZIP_NAME} in the source release artifact."
-            exit 1
-          fi
-          ZIP_PATH="${ZIP_MATCHES[0]}"
-          BLOCKMAP_PATH="${ZIP_PATH}.blockmap"
-          if [ ! -f "${BLOCKMAP_PATH}" ]; then
-            echo "::error::Canonical ZIP blockmap is missing from the source release artifact."
-            exit 1
-          fi
-
-          ZIP_BUILD_SHA="$(python3 scripts/deploy/extract_zip_build_sha.py "${ZIP_PATH}")"
-          if [ -z "${ZIP_BUILD_SHA}" ]; then
-            echo "::error::Canonical ZIP has no build-info.json Git identity."
-            exit 1
-          fi
-          if [ "${ZIP_BUILD_SHA}" != "${SOURCE_RUN_SHA}" ]; then
-            echo "::error::Canonical ZIP identity differs from the source release run."
-            exit 1
-          fi
-          if [ "${BUILD_SHA}" != "${ZIP_BUILD_SHA}" ]; then
-            echo "::error::build_sha differs from the canonical ZIP identity."
-            exit 1
-          fi
-
-          MANIFEST="$(curl -fsSL --retry 3 --retry-all-errors \
-            "https://xiu-ci.com/xcagi-v${PRODUCT_VERSION}/manifest.json")"
-          MANIFEST_VERSION="$(printf '%s' "${MANIFEST}" | jq -er '.version')"
-          MANIFEST_SHA="$(printf '%s' "${MANIFEST}" | jq -er '.git_sha')"
-          if [ "${MANIFEST_VERSION}" != "${PRODUCT_VERSION}" ] || [ "${MANIFEST_SHA}" != "${ZIP_BUILD_SHA}" ]; then
-            echo "::error::Canonical ZIP identity does not match the published release manifest."
-            exit 1
-          fi
-
-          META="$(python3 scripts/deploy/hash_file_sha512.py "${ZIP_PATH}")"
-          SIZE="$(printf '%s\n' "${META}" | sed -n '1p')"
-          SHA512="$(printf '%s\n' "${META}" | sed -n '2p')"
-          TOOLCHAIN="$(printf '%s' "${PRODUCT_VERSION}" | cut -d. -f1-3)"
-          export XCAGI_PRODUCT_VERSION="${PRODUCT_VERSION}"
-          export XCAGI_BUILD_SHA="${ZIP_BUILD_SHA}"
-          node scripts/package/generate-update-metadata.mjs "${ZIP_PATH}" "${TOOLCHAIN}" mac
-          FEED_PATH="$(dirname "${ZIP_PATH}")/latest-mac.yml"
-          python scripts/dev/sign_update_metadata.py "${FEED_PATH}"
-          echo "Verified canonical release identity: ${PRODUCT_VERSION} @ ${ZIP_BUILD_SHA}"
-
-          RELEASE_TAG="xcagi-v${PRODUCT_VERSION}"
-          RELEASE_META="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
-            --json isDraft,isPrerelease,tagName)"
-          if [ "$(printf '%s' "${RELEASE_META}" | jq -er '.tagName')" != "${RELEASE_TAG}" ] \
-            || [ "$(printf '%s' "${RELEASE_META}" | jq -er '.isDraft')" != "false" ] \
-            || [ "$(printf '%s' "${RELEASE_META}" | jq -er '.isPrerelease')" != "false" ]; then
-            echo "::error::Expected an existing published stable GitHub release: ${RELEASE_TAG}"
-            exit 1
-          fi
-          gh release upload "${RELEASE_TAG}" \
-            "${ZIP_PATH}" \
-            "${BLOCKMAP_PATH}" \
-            "${FEED_PATH}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --clobber
-          BLOCKMAP_SIZE="$(wc -c < "${BLOCKMAP_PATH}" | tr -d ' ')"
-          FEED_SIZE="$(wc -c < "${FEED_PATH}" | tr -d ' ')"
-          RELEASE_ASSETS="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
-            --json assets --jq '.assets')"
-          for ASSET_SPEC in \
-            "${ZIP_NAME}:${SIZE}" \
-            "${ZIP_NAME}.blockmap:${BLOCKMAP_SIZE}" \
-            "latest-mac.yml:${FEED_SIZE}"; do
-            ASSET_NAME="${ASSET_SPEC%%:*}"
-            EXPECTED_ASSET_SIZE="${ASSET_SPEC##*:}"
-            ACTUAL_ASSET_SIZE="$(printf '%s' "${RELEASE_ASSETS}" | jq -er \
-              --arg name "${ASSET_NAME}" \
-              '[.[] | select(.name == $name)] | if length == 1 then .[0].size else empty end')"
-            if [ "${ACTUAL_ASSET_SIZE}" != "${EXPECTED_ASSET_SIZE}" ]; then
-              echo "::error::GitHub release asset size mismatch: ${ASSET_NAME}"
-              exit 1
-            fi
+          mkdir -p "$PAIR_ROOT"
+          for spec in "arm64:$ARM_RUN" "x64:$X64_RUN"; do
+            arch="${spec%%:*}"; run="${spec##*:}"; dest="$PAIR_ROOT/$arch"; mkdir "$dest"
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" > "$dest/run.json"
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100" > "$dest/jobs.json"
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/artifacts?per_page=100" --jq \
+              ".artifacts | map(select(.name == \"mac-acceptance-$BUILD_SHA-$arch\" and .expired == false)) | if length == 1 then .[0] else error(\"unique candidate artifact required\") end" > "$dest/artifact.json"
+            id="$(jq -er .id "$dest/artifact.json")"
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$dest/artifact.zip"
           done
-          echo "Published canonical updater as a persistent GitHub stable-release fallback."
-
-          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
-          STABLE_DEST="/var/www/update/releases/stable/enterprise"
-          OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"
-          mkdir -p ~/.ssh
-          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
-          chmod 600 ~/.ssh/id_ci
-          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-
-          ARTIFACT_HEADERS="$(curl -sS -D - -o /dev/null \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip")"
-          ARTIFACT_URL="$(printf '%s\n' "${ARTIFACT_HEADERS}" \
-            | sed -n 's/^[Ll]ocation: //p' | tr -d '\r' | tail -n 1)"
-          if [ -z "${ARTIFACT_URL}" ]; then
-            echo "::error::GitHub did not return a signed artifact download URL."
-            exit 1
-          fi
-          ARTIFACT_URL_B64="$(printf '%s' "${ARTIFACT_URL}" | base64 | tr -d '\n')"
-          unset ARTIFACT_HEADERS ARTIFACT_URL
-
-          REMOTE_WORK="/tmp/xcagi-feed-repair-${GITHUB_RUN_ID}"
-          ssh "${SSH_OPTS[@]}" "root@${HOST}" "rm -rf '${REMOTE_WORK}' && mkdir -p '${REMOTE_WORK}'"
-          scp "${SSH_OPTS[@]}" \
-            scripts/deploy/hash_file_sha512.py \
-            scripts/deploy/extract_zip_build_sha.py \
-            scripts/deploy/restore_mac_feed_from_artifact.sh \
-            "root@${HOST}:${REMOTE_WORK}/"
-          scp "${SSH_OPTS[@]}" "${FEED_PATH}" "root@${HOST}:${REMOTE_WORK}/latest-mac.yml"
-          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-            "ARTIFACT_URL_B64='${ARTIFACT_URL_B64}' \
-             EXPECTED_ARTIFACT_SIZE='${SOURCE_ARTIFACT_SIZE}' \
-             REMOTE_WORK='${REMOTE_WORK}' \
-             ZIP_NAME='${ZIP_NAME}' \
-             EXPECTED_BUILD_SHA='${ZIP_BUILD_SHA}' \
-             EXPECTED_SIZE='${SIZE}' \
-             EXPECTED_SHA512='${SHA512}' \
-             STABLE_DEST='${STABLE_DEST}' \
-             OFFICIAL_DEST='${OFFICIAL_DEST}' \
-             bash '${REMOTE_WORK}/restore_mac_feed_from_artifact.sh'"
-          echo "Repaired identical ZIP updater artifacts and latest-mac.yml at stable and official paths."
+      - name: Validate original bytes and generate pair metadata offline
+        run: |
+          set -euo pipefail
+          pip install --quiet cryptography PyYAML
+          export XCAGI_UPDATE_ED25519_PUBLIC_KEY="$(python - <<'PY'
+          import os
+          from cryptography.hazmat.primitives import serialization
+          k=serialization.load_pem_private_key(os.environ['XCAGI_UPDATE_ED25519_PRIVATE_KEY'].replace('\\n','\n').encode(),password=None)
+          print(k.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo).decode())
+          PY
+          )"
+          python scripts/release/prepare_mac_candidate_pair.py --input "$PAIR_ROOT" --output "$PAIR_OUTPUT" --sha "$BUILD_SHA" --version "$PRODUCT_VERSION"
+          python scripts/dev/sign_update_metadata.py "$PAIR_OUTPUT/latest-mac.yml"
+          for arch in arm64 x64; do
+            dmg="$PAIR_OUTPUT/XCAGI-Enterprise-$PRODUCT_VERSION-mac-$arch.dmg"
+            codesign --verify --verbose=2 "$dmg"
+            xcrun stapler validate "$dmg"
+            spctl -a -vv -t open --context context:primary-signature "$dmg"
+            mount_dir="$(mktemp -d)"
+            hdiutil attach -nobrowse -readonly -quiet -mountpoint "$mount_dir" "$dmg"
+            trap 'hdiutil detach "$mount_dir" -quiet' EXIT
+            app="$mount_dir/XCAGI.app"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            spctl -a -vv -t exec "$app"
+            codesign -dv --verbose=4 "$app" 2>&1 | grep -Fx "TeamIdentifier=G26WSH472M"
+            python - "$app" "$BUILD_SHA" "$PRODUCT_VERSION" "$arch" <<'PY'
+          import json, pathlib, struct, sys
+          app=pathlib.Path(sys.argv[1]);info=json.loads((app/'Contents/Resources/build-info.json').read_text())
+          assert info['gitSha']==sys.argv[2] and info['version']==sys.argv[3]
+          assert struct.unpack('<II',(app/'Contents/MacOS/XCAGI').read_bytes()[:8])==(0xfeedfacf,{'arm64':0x100000c,'x64':0x1000007}[sys.argv[4]])
+          PY
+            hdiutil detach "$mount_dir" -quiet; trap - EXIT; rmdir "$mount_dir"
+            zip_dir="$(mktemp -d)"; ditto -x -k "$PAIR_OUTPUT/XCAGI-Enterprise-$PRODUCT_VERSION-mac-$arch.zip" "$zip_dir"
+            codesign --verify --deep --strict --verbose=2 "$zip_dir/XCAGI.app"
+            codesign -dv --verbose=4 "$zip_dir/XCAGI.app" 2>&1 | grep -Fx "TeamIdentifier=G26WSH472M"
+            rm -rf "$zip_dir"
+          done
+          bash scripts/package/publish-macos-download-center.sh "$PRODUCT_VERSION" "$BUILD_SHA" "$PAIR_OUTPUT" --dry-run
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.publish }}
+        with: {name: xcagi-security-release-reports, path: '${{ runner.temp }}/security/current', run-id: '${{ inputs.security_scan_run_id }}', github-token: '${{ github.token }}'}
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.publish }}
+        with: {name: xcagi-security-release-reports, path: '${{ runner.temp }}/security/previous', run-id: '${{ inputs.previous_security_scan_run_id }}', github-token: '${{ github.token }}'}
+      - name: Enforce unchanged exact-SHA two-day security clearance
+        if: ${{ inputs.publish }}
+        run: python scripts/security/verify_security_scan_pair.py --previous-dir "$RUNNER_TEMP/security/previous" --current-dir "$RUNNER_TEMP/security/current" --release-sha "$BUILD_SHA"
+      - name: Publish authorized original pair and read back both architectures
+        if: ${{ inputs.publish }}
+        env:
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+          XCAGI_MAC_PUBLICATION_AUTHORIZED_SHA: ${{ vars.MACOS_FROZEN_PAIR_AUTHORIZED_SHA }}
+          FHD_PUSH_HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$BUILD_SHA"
+          bash scripts/package/publish-macos-download-center.sh "$PRODUCT_VERSION" "$BUILD_SHA" "$PAIR_OUTPUT" --publish
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with: {name: 'mac-frozen-pair-review-${{ inputs.build_sha }}', path: '${{ runner.temp }}/frozen-mac-pair-output', if-no-files-found: error}

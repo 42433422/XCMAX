@@ -129,35 +129,19 @@ def test_release_page_keeps_same_version_windows_interim_visible() -> None:
     ]
 
 
-def test_macos_release_flow_publishes_download_center_metadata_and_has_recovery_path() -> None:
-    mac_workflow = (
-        REPO_ROOT / "FHD" / ".github" / "workflows" / "release-desktop-mac-ota.yml"
-    ).read_text(encoding="utf-8")
-    recovery_workflow = (
-        REPO_ROOT / "FHD" / ".github" / "workflows" / "publish-macos-download-center.yml"
-    ).read_text(encoding="utf-8")
-    publish_script = (
-        REPO_ROOT / "FHD" / "scripts" / "package" / "publish-macos-download-center.sh"
-    ).read_text(encoding="utf-8")
-
-    assert "Publish download center metadata and changelog" in mac_workflow
-    assert "publish-macos-download-center.sh" in mac_workflow
-    assert "release_sha:" in mac_workflow
-    assert "security_scan_run_id:" in mac_workflow
-    assert "previous_security_scan_run_id:" in mac_workflow
-    assert "verify_security_scan_pair.py" in mac_workflow
-    assert "ref: ${{ inputs.release_sha }}" in mac_workflow
-    assert "source_run_id:" in recovery_workflow
-    assert "ref: ${{ inputs.release_git_sha }}" in recovery_workflow
-    assert 'step_ok("Enforce exact-SHA two-day security clearance")' in recovery_workflow
-    assert "gh run download" in recovery_workflow
-    assert "publish-macos-download-center.sh" in recovery_workflow
-    assert "release_ready == false" in publish_script
-    assert 'contains("太阳鸟")' in publish_script
-    assert "chmod a+rx" in publish_script
-    assert "sha256sum '${remote_dmg}'" in publish_script
-    assert "curl --http1.1 -fsSI" in publish_script
-    assert 'release_subdir="xcagi-v${version}"' in publish_script
-    assert 'ln -s "$(cd "${sku_dir}" && pwd)"' in publish_script
-    assert "download-release.json" in publish_script
-    assert "download/releases?release-run=" in publish_script
+def test_macos_release_builds_are_separate_from_authorized_frozen_pair_promotion() -> None:
+    workflows = REPO_ROOT / "FHD/.github/workflows"
+    build = (workflows / "release-desktop-mac-ota.yml").read_text()
+    promote = (workflows / "fix-mac-update-feed.yml").read_text()
+    legacy = (workflows / "publish-macos-download-center.yml").read_text()
+    script = (REPO_ROOT / "FHD/scripts/package/publish-macos-download-center.sh").read_text()
+    assert "default: true" in build and "Build-only lane" in build
+    assert "publish-macos-download-center.sh" not in build
+    assert "arm64_run_id:" in promote and "x64_run_id:" in promote
+    assert "default: false" in promote and "verify_security_scan_pair.py" in promote
+    assert "MACOS_FROZEN_PAIR_AUTHORIZED_SHA" in promote
+    assert "exit 1" in legacy and "Use Fix macOS update feed" in legacy
+    assert "ssh " not in legacy
+    assert "release_ready == false" in script
+    assert "--official-download-base" in script
+    assert "--dry-run" in script and "XCAGI_MAC_PUBLICATION_AUTHORIZED_SHA" in script
