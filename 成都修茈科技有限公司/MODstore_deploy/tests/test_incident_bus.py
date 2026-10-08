@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 import modstore_server.models as models
@@ -26,8 +28,20 @@ def fresh_db(tmp_path, monkeypatch):
     models._SessionFactory = None
 
 
-def test_incident_employee_input_allows_high_risk_shell(monkeypatch):
-    monkeypatch.delenv("MODSTORE_RISK_HIGH_GATE_TOKEN", raising=False)
+@pytest.fixture
+def admin_user(fresh_db):
+    with models.get_session_factory()() as db:
+        db.add(
+            models.User(
+                username="incident_admin", password_hash="x", email="inc@example.com", is_admin=True
+            )
+        )
+        db.commit()
+
+
+@pytest.mark.parametrize("gate", ["", "gate-secret"])
+def test_incident_employee_input_allows_high_risk_shell(monkeypatch, gate):
+    monkeypatch.setenv("MODSTORE_RISK_HIGH_GATE_TOKEN", gate)
     inp = _incident_employee_input(
         incident_payload={"summary": "pytest lastfailed 非空"},
         event_type="on_quality_fail",
@@ -35,65 +49,92 @@ def test_incident_employee_input_allows_high_risk_shell(monkeypatch):
     )
     assert inp["allow_high_risk_real_run"] is True
     assert inp["incident"]["summary"] == "pytest lastfailed 非空"
-    assert "high_risk_gate_token" not in inp
-
-    monkeypatch.setenv("MODSTORE_RISK_HIGH_GATE_TOKEN", "gate-secret")
-    inp2 = _incident_employee_input(
-        incident_payload={},
-        event_type="on_error",
-        source="nginx",
-    )
-    assert inp2["high_risk_gate_token"] == "gate-secret"
+    assert inp.get("high_risk_gate_token", "") == gate
 
 
-def test_publish_dedupes_within_window(fresh_db, monkeypatch):
-    sf = models.get_session_factory()
-    with sf() as s:
-        s.add(
-            models.User(
-                username="incident_admin",
-                password_hash="x",
-                email="inc@example.com",
-                is_admin=True,
-            )
-        )
-        s.commit()
+@pytest.mark.parametrize("support_chars", [0, 8000, 60540, 100000])
+@pytest.mark.parametrize("prior", [None, '{"ticket_id":', '{"_team_claim": {}}'])
+def test_publish_dedupes_within_window(fresh_db, monkeypatch, support_chars, prior):
+    from modstore_server.unified_autonomy_orchestrator import orchestrate_incident
 
-    monkeypatch.setattr(
-        "modstore_server.incident_bus.execute_employee_task",
-        lambda *a, **k: {"ok": True},
-    )
-
-    assert publish("on_error", {"summary": "dup-test"}, source="unit") is True
-    assert publish("on_error", {"summary": "dup-test"}, source="unit") is False
-
-
-def test_publish_accepts_extended_dedupe_window(fresh_db, monkeypatch):
     monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
     monkeypatch.setattr("modstore_server.incident_bus._dispatch_incident", lambda *a, **k: None)
-
+    payload = {
+        "support_bundle_base64": "A" * support_chars,
+        "ticket_id": 1,
+        "ticket_no": "CI-regression",
+        "user_id": 1,
+        "work_order_id": "WO-regression",
+    }
     kwargs = {
-        "source": "storage-pressure-self-heal",
-        "fingerprint": "storage-pressure:repair_failed",
+        "source": "customer-issue-intake",
+        "fingerprint": "original-outbox",
         "dedupe_minutes": 24 * 60,
     }
-    assert publish("log.anomaly", {"status": "repair_failed"}, **kwargs) is True
-    assert publish("log.anomaly", {"status": "repair_failed"}, **kwargs) is False
-
-
-def test_employee_lifecycle_events_do_not_dispatch_back_to_employees(fresh_db, monkeypatch):
-    sf = models.get_session_factory()
-    with sf() as s:
-        s.add(
-            models.User(
-                username="incident_admin",
-                password_hash="x",
-                email="inc2@example.com",
-                is_admin=True,
+    if prior is not None:
+        with models.get_session_factory()() as db:
+            db.add(
+                models.IncidentEvent(
+                    event_type="ops.intake.customer_ticket",
+                    source=kwargs["source"],
+                    fingerprint=kwargs["fingerprint"],
+                    payload_json=prior,
+                )
             )
-        )
-        s.commit()
+            db.commit()
+    assert publish("ops.intake.customer_ticket", payload, **kwargs) is True
+    assert publish("ops.intake.customer_ticket", payload, **kwargs) is False
+    sf = models.get_session_factory()
+    with sf() as db:
+        events = db.query(models.IncidentEvent).order_by(models.IncidentEvent.id).all()
+        event = events[-1]
+        restored = json.loads(event.payload_json)
+        assert all(restored[key] == value for key, value in payload.items())
+        if prior is not None:
+            assert len(events) == 2 and events[0].payload_json == prior
+            assert restored["_incident_replay"]["original_event_id"] == events[0].id
+        eid = event.id
+    assert orchestrate_incident(eid)["should_dispatch"]
+    from modstore_server import employee_task_market as market
 
+    monkeypatch.setattr(
+        market,
+        "rank_market_candidates",
+        lambda _: {
+            "ok": True,
+            "candidates": [{"employee_id": "fixture-worker", "score": 1}],
+        },
+    )
+    monkeypatch.setattr(market, "execute_employee_task", lambda *a, **k: {"ok": True})
+    assert market.dispatch_incident_via_market(eid)["claimed"]
+    with sf() as db:
+        restored = json.loads(db.get(models.IncidentEvent, eid).payload_json)
+        assert all(restored[key] == value for key, value in payload.items())
+
+
+@pytest.mark.parametrize("damaged", ['{"ticket_id": 1, "support": "', "[]"])
+def test_damaged_incident_cannot_dispatch_or_replace_evidence(fresh_db, monkeypatch, damaged):
+    from modstore_server.incident_dispatch import _dispatch_incident_body
+    from modstore_server.unified_autonomy_orchestrator import orchestrate_incident
+
+    with models.get_session_factory()() as db:
+        event = models.IncidentEvent(
+            event_type="ops.intake.customer_ticket", source="unit", payload_json=damaged
+        )
+        db.add(event)
+        db.commit()
+        eid = event.id
+    from modstore_server.employee_task_market import rank_market_candidates
+
+    for dispatch in (orchestrate_incident, _dispatch_incident_body, rank_market_candidates):
+        with pytest.raises(ValueError):
+            dispatch(eid)
+        with models.get_session_factory()() as db:
+            event = db.get(models.IncidentEvent, eid)
+            assert event.payload_json == damaged and event.dispatched_count == 0
+
+
+def test_employee_lifecycle_events_do_not_dispatch_back_to_employees(admin_user, monkeypatch):
     calls = {"n": 0}
 
     def fake_execute(*_args, **_kwargs):
@@ -115,17 +156,9 @@ def test_employee_lifecycle_events_do_not_dispatch_back_to_employees(fresh_db, m
     assert calls["n"] == 0
 
 
-def test_successful_task_event_skips_deterministic_duty_without_real_input(fresh_db, monkeypatch):
+def test_successful_task_event_skips_deterministic_duty_without_real_input(admin_user, monkeypatch):
     sf = models.get_session_factory()
     with sf() as s:
-        s.add(
-            models.User(
-                username="binding_admin",
-                password_hash="x",
-                email="binding@example.com",
-                is_admin=True,
-            )
-        )
         s.add(
             models.CatalogItem(
                 pkg_id="employee-planner",
@@ -186,19 +219,7 @@ def test_successful_task_event_skips_deterministic_duty_without_real_input(fresh
     assert employee_calls == []
 
 
-def test_successful_task_event_without_subscription_is_record_only(fresh_db, monkeypatch):
-    sf = models.get_session_factory()
-    with sf() as s:
-        s.add(
-            models.User(
-                username="record_admin",
-                password_hash="x",
-                email="record@example.com",
-                is_admin=True,
-            )
-        )
-        s.commit()
-
+def test_successful_task_event_without_subscription_is_record_only(admin_user, monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(
         "modstore_server.incident_bus.execute_employee_task",
@@ -218,17 +239,9 @@ def test_successful_task_event_without_subscription_is_record_only(fresh_db, mon
     assert calls == []
 
 
-def test_change_request_submission_only_dispatches_explicit_auditor(fresh_db, monkeypatch):
+def test_change_request_submission_only_dispatches_explicit_auditor(admin_user, monkeypatch):
     sf = models.get_session_factory()
     with sf() as s:
-        s.add(
-            models.User(
-                username="change_request_admin",
-                password_hash="x",
-                email="change-request@example.com",
-                is_admin=True,
-            )
-        )
         s.add(
             models.CatalogItem(
                 pkg_id="change-request-auditor",
@@ -303,23 +316,11 @@ def test_change_request_submission_only_dispatches_explicit_auditor(fresh_db, mo
     ],
 )
 def test_binding_only_workflow_signal_skips_generic_incident_fanout(
-    fresh_db,
+    admin_user,
     monkeypatch,
     event_type,
     payload,
 ):
-    sf = models.get_session_factory()
-    with sf() as s:
-        s.add(
-            models.User(
-                username="workflow_signal_admin",
-                password_hash="x",
-                email="workflow-signal@example.com",
-                is_admin=True,
-            )
-        )
-        s.commit()
-
     generic_calls = {"orchestrator": 0, "team": 0, "market": 0}
     employee_calls: list[str] = []
 
@@ -357,17 +358,9 @@ def test_binding_only_workflow_signal_skips_generic_incident_fanout(
     assert employee_calls == []
 
 
-def test_reviewed_duty_binding_runs_after_generic_incident_team_claim(fresh_db, monkeypatch):
+def test_reviewed_duty_binding_runs_after_generic_incident_team_claim(admin_user, monkeypatch):
     sf = models.get_session_factory()
     with sf() as session:
-        session.add(
-            models.User(
-                username="reviewed_duty_admin",
-                password_hash="x",
-                email="reviewed-duty@example.com",
-                is_admin=True,
-            )
-        )
         session.add(
             models.EmployeeTriggerBinding(
                 employee_id="log-monitor-incident",
