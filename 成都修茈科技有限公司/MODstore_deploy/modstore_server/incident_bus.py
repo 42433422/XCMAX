@@ -74,6 +74,14 @@ def _parse_binding_event_key(stored: str) -> tuple[str, str]:
     return s, ""
 
 
+def _incident_payload(row: IncidentEvent) -> Dict[str, Any]:
+    """Reject damaged event data before routing or replacing durable evidence."""
+    data = json.loads(str(row.payload_json or "{}"))
+    if not isinstance(data, dict):
+        raise ValueError(f"incident {row.id}: payload must be a JSON object")
+    return data
+
+
 def _fingerprint(payload: Dict[str, Any], source: str) -> str:
     raw = json.dumps({"s": source, "p": payload}, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:64]
@@ -148,14 +156,35 @@ def publish(
                 IncidentEvent.fingerprint == fp,
                 IncidentEvent.created_at >= cutoff,
             )
+            .order_by(IncidentEvent.id.desc())
             .first()
         )
         if old:
-            return False
+            if (
+                event_type != "ops.intake.customer_ticket"
+                or source != "customer-issue-intake"
+                or old.source != source
+            ):
+                return False
+            try:
+                previous = _incident_payload(old)
+            except ValueError:
+                previous = {}
+            if previous.get("ticket_id") or not payload.get("ticket_id"):
+                return False
+            payload = {
+                **payload,
+                "_incident_replay": {
+                    "original_event_id": int(old.id),
+                    "original_payload_sha256": hashlib.sha256(
+                        (old.payload_json or "").encode()
+                    ).hexdigest(),
+                },
+            }
         ev = IncidentEvent(
             event_type=event_type,
             source=source,
-            payload_json=json.dumps(payload, ensure_ascii=False)[:8000],
+            payload_json=json.dumps(payload, ensure_ascii=False),
             fingerprint=fp,
             dispatched_count=0,
         )
@@ -280,14 +309,11 @@ def _catalog_employee_ids(session) -> set[str]:
 
 
 def _incident_event_type(event_id: int) -> str:
-    sf = get_session_factory()
-    with sf() as session:
-        ev = (
-            session.query(IncidentEvent.event_type)
-            .filter(IncidentEvent.id == int(event_id))
-            .first()
-        )
-        return str(ev[0] or "") if ev else ""
+    with get_session_factory()() as session:
+        ev = session.get(IncidentEvent, int(event_id))
+        if ev:
+            _incident_payload(ev)
+        return str(ev.event_type or "") if ev else ""
 
 
 def _incident_employee_input(

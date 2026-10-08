@@ -288,7 +288,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                     )
                     cs_progress = {"ok": False, "error": str(exc)[:300]}
                     updated["_cs_progress"] = cs_progress
-            ev2.payload_json = json.dumps(updated, ensure_ascii=False)[:8000]
+            ev2.payload_json = json.dumps(updated, ensure_ascii=False)
             ev2.dispatched_count = int(ev2.dispatched_count or 0) + 1
             session.commit()
     return {
