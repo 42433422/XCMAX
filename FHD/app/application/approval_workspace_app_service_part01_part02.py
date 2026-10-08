@@ -250,10 +250,24 @@ def _resume_pending_ai_workflow_after_approval(
                 "message": safe_message,
             }
         engine = WorkflowEngine(tool_dispatcher=_dispatch_tool_for_approval)
+        from app.application.agent_orchestrator import get_agent_run_repository
+
+        nodes = list(getattr(plan_obj, "nodes", []) or [])
+        restore_run = (
+            get_agent_run_repository().get(str(runtime_ctx.get("agent_run_id") or ""))
+            if (
+                len(nodes) == 1
+                and (getattr(nodes[0], "tool_id", None), getattr(nodes[0], "action", None))
+                == ("system_maintenance", "restore_database")
+            )
+            else None
+        )
         run_result = engine.run(plan=plan_obj, runtime_context=runtime_ctx, max_retries=1)
         from app.application.agent_orchestrator.chat_trace_part03 import resolve_legacy_approval
 
-        legacy_run_id = resolve_legacy_approval(approval_request_id, runtime_ctx, run_result)
+        legacy_run_id = resolve_legacy_approval(
+            approval_request_id, runtime_ctx, run_result, run_before_restore=restore_run
+        )
         approval_service.remove_pending_workflow(approval_request_id)
         _engine_success = bool(run_result.success)
         (_engine_code, _engine_message) = _facade().canonical_workflow_outcome(

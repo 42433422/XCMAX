@@ -11,7 +11,11 @@ def _facade():
 
 
 def resolve_legacy_approval(
-    request_id: str, context: dict[str, _facade().Any], result: _facade().Any = None
+    request_id: str,
+    context: dict[str, _facade().Any],
+    result: _facade().Any = None,
+    *,
+    run_before_restore: _facade().AgentRun | None = None,
 ) -> str:
     """记录已执行审批的真实结果；仅更新同账号/租户/Mod且精确匹配审批的观察任务。"""
     from app.application.agent_orchestrator.unified_task import (
@@ -23,9 +27,10 @@ def resolve_legacy_approval(
     if not run_id:
         return ""
     repo = _facade().get_agent_run_repository()
-    run = repo.get(run_id)
+    run = repo.get(run_id) or run_before_restore
     if (
         run is None
+        or run.run_id != run_id
         or run.intent not in {"legacy_chat_adapter", "legacy_tool_chain"}
         or run.status != "waiting_user"
     ):
@@ -38,6 +43,17 @@ def resolve_legacy_approval(
             runtime_context=context,
         )
     except UnifiedTaskConflictError:
+        return ""
+    original = run.metadata.get("runtime_context") or {}
+    if any(
+        str(original.get(key) or "") != str(context.get(key) or "")
+        for key in (
+            "task_id",
+            "session_id",
+            "conversation_id",
+            "turn_id",
+        )
+    ):
         return ""
     calls = [
         call
