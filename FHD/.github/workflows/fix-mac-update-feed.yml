@@ -49,6 +49,8 @@ jobs:
           if [ "$PUBLISH" = true ]; then
             test "$ENABLED" = true && test "$AUTHORIZED_SHA" = "$BUILD_SHA"
             protection="$(GH_TOKEN="${RELEASE_PROTECTION_TOKEN:?Admin-read protection token required}" gh api "repos/$GITHUB_REPOSITORY/branches/main/protection/required_status_checks")"
+            approval="$(GH_TOKEN="$RELEASE_PROTECTION_TOKEN" gh api "repos/$GITHUB_REPOSITORY/environments/macos-production")"
+            jq -e 'any(.protection_rules[]; .type == "required_reviewers" and .prevent_self_review == true and (.reviewers | length) > 0)' <<<"$approval" >/dev/null
             checks="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$BUILD_SHA/check-runs?per_page=100")"
             statuses="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$BUILD_SHA/statuses?per_page=100")"
             export protection checks statuses

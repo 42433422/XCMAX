@@ -208,3 +208,82 @@ def test_frozen_pair_preserves_bytes_and_refuses_mismatch(tmp_path, fault):
     else:
         assert result.returncode == 0, result.stderr
         assert "OFFLINE verification complete" in result.stdout
+
+
+@pytest.mark.parametrize("guard", ["approved", "no-reviewer", "self-review", "failed-check"])
+def test_publication_requires_real_environment_review_and_current_checks(tmp_path, guard):
+    import yaml
+
+    workflow = yaml.safe_load((FHD / ".github/workflows/fix-mac-update-feed.yml").read_text())
+    step = next(
+        s
+        for s in workflow["jobs"]["frozen-pair"]["steps"]
+        if s.get("name") == "Validate main identity and publication authorization"
+    )
+    source_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=FHD, text=True).strip()
+    (tmp_path / "main").write_text(source_sha + "\n")
+    (tmp_path / "protection").write_text(json.dumps({"contexts": ["gate"]}))
+    (tmp_path / "approval").write_text(
+        json.dumps(
+            {
+                "protection_rules": [
+                    {
+                        "type": "required_reviewers",
+                        "prevent_self_review": guard != "self-review",
+                        "reviewers": [] if guard == "no-reviewer" else [{"id": 41}],
+                    }
+                ]
+            }
+        )
+    )
+    (tmp_path / "checks").write_text(
+        json.dumps(
+            [
+                {
+                    "check_runs": [
+                        {
+                            "name": "gate",
+                            "id": 2,
+                            "conclusion": "failure" if guard == "failed-check" else "success",
+                        }
+                    ]
+                }
+            ]
+        )
+    )
+    # An older success status must not override a currently failing protected check.
+    (tmp_path / "statuses").write_text(
+        json.dumps([[{"context": "gate", "id": 1, "state": "success"}]])
+    )
+    gh = tmp_path / "gh"
+    gh.write_text("""#!/bin/bash
+case "$*" in
+ *commits/main*) cat "$FAKE_API/main" ;;
+ *required_status_checks*) cat "$FAKE_API/protection" ;;
+ *environments/macos-production*) cat "$FAKE_API/approval" ;;
+ *check-runs*) cat "$FAKE_API/checks" ;;
+ *statuses*) cat "$FAKE_API/statuses" ;;
+ *) exit 99 ;;
+esac
+""")
+    gh.chmod(0o700)
+    env = {
+        "PATH": os.pathsep.join(
+            (str(tmp_path), str(Path(os.sys.executable).parent), os.environ["PATH"])
+        ),
+        "FAKE_API": str(tmp_path),
+        "BUILD_SHA": source_sha,
+        "PRODUCT_VERSION": VERSION,
+        "ARM_RUN": "11",
+        "X64_RUN": "12",
+        "PUBLISH": "true",
+        "ENABLED": "true",
+        "AUTHORIZED_SHA": source_sha,
+        "GITHUB_REPOSITORY": "synthetic/repo",
+        "RELEASE_PROTECTION_TOKEN": "TEST_ONLY",
+        "GH_TOKEN": "TEST_ONLY",
+    }
+    result = subprocess.run(
+        ["bash", "-c", step["run"]], cwd=FHD, env=env, capture_output=True, text=True
+    )
+    assert (result.returncode == 0) is (guard == "approved"), result.stderr
