@@ -1,0 +1,16 @@
+
+[2026-10-08T00:47:33.860Z] XCAGI desktop backend bootstrap
+{
+  "platform": "win32",
+  "arch": "x64",
+  "packaged": true,
+  "resourcesPath": "C:\\Users\\xcagi-test\\AppData\\Local\\Programs\\XCAGI\\resources",
+  "userData": "C:\\Users\\xcagi-test\\AppData\\Roaming\\XCAGI",
+  "sku": "enterprise"
+}
+[crash] local crash capture enabled dir=C:\Users\xcagi-test\AppData\Roaming\XCAGI\crash-dumps
+[spawn] C:\Users\xcagi-test\AppData\Local\Programs\XCAGI\resources\backend\xcagi-backend.exe --desktop --headless --host 0.0.0.0 --port 17500 --data-dir C:\Users\xcagi-test\AppData\Roaming\XCAGI
+[cwd] C:\Users\xcagi-test\AppData\Local\Programs\XCAGI\resources\backend
+[updater] install receipt deferred: fetch failed
+[autonomy] controller started
+[crash] upload failed for settings.dat, will retry next startup
