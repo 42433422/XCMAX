@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.legacy.chat import legacy_chat_adapter as adapter
 from app.legacy.chat.legacy_chat_adapter import (
     _parse_generate_office_format,
     _planner_tools_max_workers,
@@ -53,16 +54,16 @@ def _tool_chunk(name, arguments):
 
 
 @contextmanager
+def _planner_registry(registry):
+    with patch.object(adapter, "_get_workflow_tool_registry", return_value=registry):
+        yield
+
+
+@contextmanager
 def _planner_tools(execute_tool):
     with (
-        patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[{"type": "function"}],
-        ),
-        patch(
-            "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-            return_value=execute_tool,
-        ),
+        _planner_registry([{"type": "function"}]),
+        patch.object(adapter, "_resolve_chat_execute_tool", return_value=execute_tool),
     ):
         yield
 
@@ -432,10 +433,7 @@ class TestChat:
         mock_client.chat.completions.create.return_value = mock_resp
         mock_client.is_modstore_openai_compatible = False
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             result = chat("hi", client=mock_client, model="test-model")
         assert isinstance(result, dict)
         assert result["text"] == "Hello!"
@@ -519,10 +517,7 @@ class TestChatStreamText:
         mock_client.chat.completions.create.return_value = iter([chunk1, chunk2])
         mock_client.is_modstore_openai_compatible = False
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             parts = list(chat_stream_text("hi", client=mock_client, model="test-model"))
         assert "Hello" in parts
         assert " World" in parts
@@ -601,10 +596,7 @@ class TestChatStreamSseEvents:
         mock_client.chat.completions.create.return_value = iter([chunk])
         mock_client.is_modstore_openai_compatible = False
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             events = list(chat_stream_sse_events("hi", client=mock_client, model="test-model"))
         types = [e["type"] for e in events]
         assert "token" in types
