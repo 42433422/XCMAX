@@ -1,9 +1,7 @@
 # CI SSOT: generated from FHD/.github/workflows/mod-auto-publish.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Mod Auto Publish
-
-# Standard main host plus independently versioned, explicitly public Mods.
-# Private customer artifacts use the owner-bound production-center channel.
+# Public Mods use the main host; private releases use the owner-bound production center.
 on:
   pull_request:
     branches: [main]
@@ -53,7 +51,7 @@ jobs:
       - name: Resolve exact main sources, version bumps and successful checks
         id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_PROTECTION_TOKEN }}
           REQUESTED_MOD_ID: ${{ inputs.mod_id }}
         run: |
           set -euo pipefail
