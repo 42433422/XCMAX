@@ -51,6 +51,7 @@ import {
   setAutoLaunchEnabled,
 } from './app-shell'
 import { registerDesktopIpcHandlers } from './ipc-handlers'
+import { syncWindowsBackupTasks } from './backup-task-sync'
 
 // 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）
 // 注：单测环境通过 XCAGI_DESKTOP_TEST=1 跳过 bootstrap()，但模块顶层仍有副作用，
@@ -159,6 +160,7 @@ function bootstrap(): void {
             writeBackendLog(`[autolaunch] initial enable failed: ${init.reason}\n`)
           }
         }
+        syncWindowsBackupTasks(app.getPath('userData'))
       }
 
       registerDesktopIpcHandlers()

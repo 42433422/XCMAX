@@ -27,6 +27,7 @@ def test_weekly_backup_keeps_cadence_after_missed_sunday() -> None:
     assert "$action.Arguments" in install
     assert "XcagiDailyBackup" in install and "XcagiWeeklyBackup" in install
     assert "$trigger.DaysOfWeek = 1" in install
+    assert '-DataDir "$APPDATA\\XCAGI"' in custom_install
     assert "Installation continues." in custom_install
     assert "Abort" not in custom_install
     assert "backup scheduled task registration failed" not in installer
