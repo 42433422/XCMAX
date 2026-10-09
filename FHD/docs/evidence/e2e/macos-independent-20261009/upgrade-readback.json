@@ -1,0 +1,19 @@
+{
+  "upgraded_health_sha": "1faec8e5c569925eef35b0bea657755b6b3f832a",
+  "login": "SUNBIRD",
+  "products": [
+    {
+      "id": 2,
+      "name": "Mac旧版升级包装盒",
+      "model_number": "MAC-OLD1-20261008",
+      "price": 12.5
+    },
+    {
+      "id": 1,
+      "name": "Mac升级验收包装盒",
+      "model_number": "MAC-UPG-20261007",
+      "price": 12.5
+    }
+  ],
+  "quick_check": "ok"
+}

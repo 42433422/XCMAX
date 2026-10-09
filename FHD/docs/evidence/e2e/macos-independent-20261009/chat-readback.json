@@ -1,0 +1,24 @@
+{
+  "status": 200,
+  "session_id": "mv088mnx6rn3tjl24d",
+  "messages": [
+    {
+      "id": 1,
+      "role": "assistant",
+      "intent": "business_harness_result",
+      "content": "审批已拒绝，业务任务已取消，未继续执行。审批单：6fc7d7a7b21f402aa694501ecb178910。"
+    },
+    {
+      "id": 2,
+      "role": "assistant",
+      "intent": "business_harness_result",
+      "content": "审批已完成，业务操作执行成功。审批业务执行完成。记录 ID：1；客户 ID：1。审批单：6f30129f4a93420c9b1c1a54aa814df8。"
+    },
+    {
+      "id": 3,
+      "role": "assistant",
+      "intent": "business_harness_result",
+      "content": "审批已完成，业务操作执行成功。数据库恢复成功。审批单：9b99ff1061024c6e9640e5c5cc05932f。"
+    }
+  ]
+}

@@ -1,0 +1,173 @@
+{
+  "login": {
+    "status": 200,
+    "success": true,
+    "username": "SUNBIRD",
+    "user_id": 2,
+    "role": "user",
+    "permission_count": 16,
+    "has_shipment_edit": true
+  },
+  "mods": {
+    "status": 200,
+    "count": 24,
+    "promised": {
+      "attendance-industry": true,
+      "sunbird-attendance-custom": false,
+      "taiyangniao-pro": false
+    },
+    "ids": [
+      "xcagi-erp-domain-bridge",
+      "xcagi-planner-bridge",
+      "xcagi-office-employee-pack-bridge",
+      "xcagi-planner-excel-tools",
+      "xcagi-lan-license-bridge",
+      "xcagi-neuro-bus-bridge",
+      "xcagi-core-workflow-employees",
+      "accessories-packaging-industry",
+      "xcagi-customer-service-bridge",
+      "xcagi-model-payment-bridge",
+      "xcagi-approval-bridge",
+      "attendance-industry",
+      "lan-gate-ai-employee",
+      "xcagi-workflow-visualization-bridge",
+      "csv-full-read-employee",
+      "csv-generate-employee",
+      "excel-full-read-employee",
+      "excel-generate-employee",
+      "pdf-full-read-employee",
+      "pdf-generate-employee",
+      "ppt-full-read-employee",
+      "ppt-generate-employee",
+      "word-full-read-employee",
+      "word-generate-employee"
+    ]
+  },
+  "attendance": {
+    "status": 200,
+    "keys": [
+      "success",
+      "mod_id",
+      "message"
+    ]
+  },
+  "taiyangniao": {
+    "status": 403,
+    "keys": [
+      "success",
+      "error",
+      "message"
+    ]
+  },
+  "sunbird": {
+    "status": 404,
+    "keys": [
+      "success",
+      "message"
+    ]
+  },
+  "products": {
+    "status": 200,
+    "body_type": "dict",
+    "rows": [
+      {
+        "id": 1,
+        "name": "Mac1fa验收包装盒",
+        "model_number": "MAC-1FA-20261009",
+        "price": 12.5
+      }
+    ]
+  },
+  "customers": {
+    "status": 200,
+    "body_type": "dict",
+    "rows": [
+      {
+        "id": 1,
+        "customer_name": "Mac1fa验收客户-20261009"
+      }
+    ]
+  },
+  "approvals": {
+    "status": 200,
+    "items": [
+      {
+        "id": 4,
+        "status": "approved",
+        "title": "智能对话写操作：system_maintenance.restore_database",
+        "request_no": "9b99ff1061024c6e9640e5c5cc05932f"
+      },
+      {
+        "id": 3,
+        "status": "pending",
+        "title": "智能对话写操作：system_maintenance.backup_database",
+        "request_no": "573488650bc74d84a903122771edb73a"
+      },
+      {
+        "id": 2,
+        "status": "approved",
+        "title": "智能对话写操作：sales.create_order",
+        "request_no": "6f30129f4a93420c9b1c1a54aa814df8"
+      },
+      {
+        "id": 1,
+        "status": "rejected",
+        "title": "智能对话写操作：sales.create_order",
+        "request_no": "6fc7d7a7b21f402aa694501ecb178910"
+      }
+    ]
+  },
+  "chat": {
+    "status": 404,
+    "messages": [],
+    "top_keys": [
+      "success",
+      "message"
+    ]
+  },
+  "db_readback": {
+    "orders": [
+      {
+        "order_no": "SO20261009083703",
+        "customer_id": 1,
+        "customer_name": "Mac1fa验收客户-20261009",
+        "state": "confirmed",
+        "total_amount": 25
+      }
+    ],
+    "items": [
+      {
+        "order_id": 1,
+        "product_id": 1,
+        "product_name": "Mac1fa验收包装盒",
+        "quantity": 2,
+        "unit_price": 12.5,
+        "amount": 25
+      }
+    ],
+    "products": [
+      {
+        "id": 1,
+        "name": "Mac1fa验收包装盒",
+        "model_number": "MAC-1FA-20261009",
+        "price": 12.5
+      }
+    ]
+  },
+  "product_link": {
+    "order_item_matches_product_row": true
+  },
+  "csrf_present": true,
+  "shipment": {
+    "status": 200,
+    "success": true,
+    "message": "发货单生成成功",
+    "doc_name": "发货单_26-1000001A_20261010_000039.xlsx"
+  },
+  "shipment_file": {
+    "status": 200,
+    "bytes": 4809,
+    "xlsx_magic": true,
+    "sha256": "74c253b3ccdfe6826109a79bf22ac239e235e3b6fb1f3b8c59014746f852390b"
+  }
+}

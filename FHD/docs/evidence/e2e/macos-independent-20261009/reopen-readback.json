@@ -1,0 +1,25 @@
+{
+  "after_reopen": true,
+  "health": "healthy",
+  "git_sha": "1faec8e5c569",
+  "login": {
+    "status": 200,
+    "username": "SUNBIRD",
+    "user_id": 2
+  },
+  "orders": [
+    [
+      "SO20261009083703",
+      "Mac1fa验收客户-20261009",
+      25,
+      "confirmed"
+    ]
+  ],
+  "quick_check": "ok",
+  "product_status": 200,
+  "chat_status": 200,
+  "chat_count": 3,
+  "shipment_status": 200,
+  "shipment_bytes": 4809,
+  "shipment_magic": true
+}

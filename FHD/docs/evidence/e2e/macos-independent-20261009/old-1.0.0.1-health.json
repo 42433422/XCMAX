@@ -1,0 +1,23 @@
+{
+  "status": "degraded",
+  "version": "1.0.0.1",
+  "service": "xcagi-fastapi",
+  "runtime": {
+    "status": "healthy",
+    "degraded_reasons": []
+  },
+  "degradedReasons": [
+    "LLM_RUNTIME_UNAVAILABLE"
+  ],
+  "build": {
+    "admin_console_sha256": "",
+    "admin_console_git_sha": "",
+    "artifact_sha256": "",
+    "built_at": "",
+    "git_sha": "",
+    "image_digest": ""
+  },
+  "neuro": {
+    "status": "healthy"
+  }
+}

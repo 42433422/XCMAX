@@ -1,0 +1,25 @@
+{
+  "status": "healthy",
+  "version": "1.0.0.5",
+  "service": "xcagi-fastapi",
+  "runtime": {
+    "status": "healthy",
+    "degraded_reasons": []
+  },
+  "degradedReasons": [],
+  "build": {
+    "admin_console_sha256": "",
+    "admin_console_git_sha": "",
+    "artifact_sha256": "",
+    "built_at": "2026-10-08T23:27:09.955Z",
+    "git_sha": "1faec8e5c569925eef35b0bea657755b6b3f832a",
+    "image_digest": "",
+    "product_version": "1.0.0.5",
+    "release_id": "xcagi-1.0.0.5-1faec8e5c569925eef35b0bea657755b6b3f832a"
+  },
+  "git_sha": "1faec8e5c569925eef35b0bea657755b6b3f832a",
+  "release_id": "xcagi-1.0.0.5-1faec8e5c569925eef35b0bea657755b6b3f832a",
+  "neuro": {
+    "status": "healthy"
+  }
+}
