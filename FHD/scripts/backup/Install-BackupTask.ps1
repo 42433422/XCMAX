@@ -1,4 +1,5 @@
-# Registers daily backups at 12:30 and weekly backups at 13:30 for the interactive user.
+# Registers XcagiDailyBackup at 12:30 and XcagiWeeklyBackup on Sunday at 13:30.
+# Task Scheduler COM works from the 32-bit PowerShell that a 32-bit NSIS stub launches.
 [CmdletBinding()]
 param(
   [string]$ExternalDir = "",
@@ -6,26 +7,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-
-$TaskNameDaily = "XcagiDailyBackup"
-$TaskNameWeekly = "XcagiWeeklyBackup"
 $ScriptDir = Split-Path $MyInvocation.MyCommand.Path -Parent
 $BackupScript = Join-Path $ScriptDir "XcagiBackup.ps1"
-
-if (-not (Test-Path $BackupScript)) {
+if (-not (Test-Path -LiteralPath $BackupScript)) {
   Write-Error "XcagiBackup.ps1 not found at: $BackupScript"
   exit 1
 }
 
-if (-not (Get-Module -ListAvailable -Name ScheduledTasks)) {
-  Write-Error "ScheduledTasks module not available (requires Windows 8+ / Server 2012+)"
-  exit 1
-}
-
-$pwshArgs = @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "`"$BackupScript`"")
-if ($DataDir) { $pwshArgs += @("-DataDir", "`"$DataDir`"") }
-if ($ExternalDir) { $pwshArgs += @("-ExternalDir", "`"$ExternalDir`"") }
-$ArgumentLine = $pwshArgs -join " "
+$powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
+$baseArgs = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$BackupScript`""
+if ($DataDir) { $baseArgs += " -DataDir `"$DataDir`"" }
+if ($ExternalDir) { $baseArgs += " -ExternalDir `"$ExternalDir`"" }
 
 function Register-BackupTask {
   param(
@@ -34,45 +26,48 @@ function Register-BackupTask {
     [Parameter(Mandatory = $true)][datetime]$At
   )
 
-  $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-  if ($existing) {
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
-    Write-Host "removed existing task: $TaskName"
-  }
+  $service = New-Object -ComObject Schedule.Service
+  $service.Connect()
+  $folder = $service.GetFolder("\")
+  try { $folder.DeleteTask($TaskName, 0) } catch { Write-Host "no previous task: $TaskName" }
 
-  $taskArguments = if ($Cadence -eq "Weekly") { "$ArgumentLine -Weekly" } else { $ArgumentLine }
-  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $taskArguments
+  $task = $service.NewTask(0)
+  $task.RegistrationInfo.Description = "XCAGI $Cadence backup"
+  $task.Settings.Enabled = $true
+  $task.Settings.AllowDemandStart = $true
+  $task.Settings.StartWhenAvailable = $true
+  $task.Settings.DisallowStartIfOnBatteries = $false
+  $task.Settings.StopIfGoingOnBatteries = $false
+  $task.Settings.ExecutionTimeLimit = "PT30M"
+  $task.Settings.RestartCount = 2
+  $task.Settings.RestartInterval = "PT5M"
+  $action = $task.Actions.Create(0)
+  $action.Path = $powershell
+  $action.Arguments = $(if ($Cadence -eq "Weekly") { "$baseArgs -Weekly" } else { $baseArgs })
+  $trigger = $task.Triggers.Create($(if ($Cadence -eq "Daily") { 2 } else { 3 }))
+  $trigger.StartBoundary = $At.ToString("yyyy-MM-ddTHH:mm:ss")
+  $trigger.Enabled = $true
   if ($Cadence -eq "Daily") {
-    $taskTrigger = New-ScheduledTaskTrigger -Daily -At $At
+    $trigger.DaysInterval = 1
   } else {
-    $taskTrigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At $At
+    $trigger.DaysOfWeek = 1
+    $trigger.WeeksInterval = 1
   }
-
-  $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
-  $settings = New-ScheduledTaskSettingsSet `
-    -AllowStartIfOnBatteries `
-    -DontStopIfGoingOnBatteries `
-    -StartWhenAvailable `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 30) `
-    -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 5)
-
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $taskTrigger `
-    -Principal $principal -Settings $settings -Force | Out-Null
-
+  $task.Principal.LogonType = 3
+  $task.Principal.RunLevel = 0
+  try {
+    $folder.RegisterTaskDefinition($TaskName, $task, 6, $null, $null, 3) | Out-Null
+  } catch {
+    $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    Write-Host "retry register as ${user}: $($_.Exception.Message)"
+    $folder.RegisterTaskDefinition($TaskName, $task, 6, $user, $null, 3) | Out-Null
+  }
   Write-Host "registered task: $TaskName cadence=$Cadence at=$($At.ToString('HH:mm'))"
 }
 
 $at = Get-Date -Hour 12 -Minute 30 -Second 0 -Millisecond 0
-$weeklyAt = $at.AddHours(1)
-Register-BackupTask -TaskName $TaskNameDaily -Cadence Daily -At $at
-Register-BackupTask -TaskName $TaskNameWeekly -Cadence Weekly -At $weeklyAt
-
+Register-BackupTask -TaskName "XcagiDailyBackup" -Cadence Daily -At $at
+Register-BackupTask -TaskName "XcagiWeeklyBackup" -Cadence Weekly -At $at.AddHours(1)
 Write-Host "=== XCMAX backup tasks installed ==="
-Write-Host "  Daily  : $TaskNameDaily  @ 12:30 every day"
-Write-Host "  Weekly : $TaskNameWeekly @ $($weeklyAt.ToString('HH:mm')) every Sunday"
-if ($ExternalDir) {
-  Write-Host "  External backup dir: $ExternalDir"
-}
-Write-Host "  Log: %APPDATA%\XCAGI\logs\backup.log"
-Write-Host "Manual trigger test:"
-Write-Host "  Start-ScheduledTask -TaskName $TaskNameDaily"
+if ($ExternalDir) { Write-Host "External backup dir: $ExternalDir" }
+exit 0
