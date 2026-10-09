@@ -1,5 +1,6 @@
 <template>
   <div class="im-messenger">
+    <SharedIssueAcceptancePanel />
     <div class="im-body">
       <ConversationSidebar
         :is-admin-customer-service-console="isAdminCustomerServiceConsole"
@@ -142,6 +143,7 @@ import {
   type ExternalAppEntry,
   type SystemEmployeeEntry,
 } from '@/composables/messenger/useMessengerEntries'
+import SharedIssueAcceptancePanel from '@/components/SharedIssueAcceptancePanel.vue'
 import KellaiCustomerInbox from '@/components/im/KellaiCustomerInbox.vue'
 import AiGroupChatView from '@/views/AiGroupChatView.vue'
 import MessengerContactPicker from '@/views/im/MessengerContactPicker.vue'
