@@ -22,7 +22,7 @@ import {
   triggerRollback,
   type RollbackTriggerResult,
 } from './rollback'
-import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
+import { relayBackendOutput, terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { desktopBackendEnv } from './backend-env'
 import { sanitizeBackendProxyEnv } from './backend-env-utils'
 import { createForceUpgradeHandler } from './desktop-resilience'
@@ -33,10 +33,7 @@ export const POST_UPDATE_STABILITY_MS = 5_000
 function rotateBackendLogIfNeeded(logPath: string): void {
   const maxBytes = 8 * 1024 * 1024
   try {
-    if (!fs.existsSync(logPath)) {
-      return
-    }
-    if (fs.statSync(logPath).size < maxBytes) {
+    if (!fs.existsSync(logPath) || fs.statSync(logPath).size < maxBytes) {
       return
     }
     const rotated = `${logPath}.1`
@@ -58,9 +55,7 @@ function ensureBackendLogStream(): fs.WriteStream | null {
     fs.mkdirSync(logDir, { recursive: true })
     const logPath = path.join(logDir, 'electron-backend.log')
     rotateBackendLogIfNeeded(logPath)
-    desktopRuntime.backendLogStream = fs.createWriteStream(logPath, {
-      flags: 'a'
-    })
+    desktopRuntime.backendLogStream = fs.createWriteStream(logPath, { flags: 'a' })
     desktopRuntime.backendLogStream.write(`\n[${new Date().toISOString()}] XCAGI desktop backend bootstrap\n`)
     desktopRuntime.backendLogStream.write(
       JSON.stringify(
@@ -330,14 +325,8 @@ export async function startBackend(): Promise<void> {
     windowsHide: true
   })
   desktopRuntime.backendProcess = child
-  child.stdout.on('data', data => {
-    process.stdout.write(`[xcagi-backend] ${data}`)
-    writeBackendLog(`[stdout] ${data}`)
-  })
-  child.stderr.on('data', data => {
-    process.stderr.write(`[xcagi-backend] ${data}`)
-    writeBackendLog(`[stderr] ${data}`)
-  })
+  child.stdout.on('data', data => relayBackendOutput('stdout', data, app.isPackaged, writeBackendLog))
+  child.stderr.on('data', data => relayBackendOutput('stderr', data, app.isPackaged, writeBackendLog))
   child.on('error', error => {
     handleBackendSpawnError(error)
   })
@@ -423,11 +412,11 @@ function runBackendMigration(): Promise<string> {
     let backupAttachError: unknown
     child.stderr.on('data', data => {
       stderr += String(data)
-      process.stderr.write(`[xcagi-migrate] ${data}`)
+      relayBackendOutput('stderr', data, app.isPackaged, writeBackendLog, 'migrate')
     })
     child.stdout.on('data', data => {
       stdout += String(data)
-      process.stdout.write(`[xcagi-migrate] ${data}`)
+      relayBackendOutput('stdout', data, app.isPackaged, writeBackendLog, 'migrate')
       if (!databaseBackupPath) {
         const match = stdout.match(/^XCAGI_MIGRATION_BACKUP=(.+)$/m)
         const candidate = match?.[1]?.trim() || ''
@@ -479,17 +468,8 @@ export async function stopBackend(): Promise<void> {
 }
 
 /**
- * 非阻塞错误提示。
- *
- * `dialog.showErrorBox` 是**同步** API：无人点击「确定」时它会永久阻塞主进程事件循环
- * （表现为 9222 端口 TCP 可连但 HTTP 无响应、`app.quit()` 永不执行）。
- *
- * 仅换成 `showMessageBox` 还不够：macOS 上不带 BrowserWindow 时它走
- * `NSAlert.runModal` → `NSApplication runModalForWindow:`，同样同步阻塞主进程
- * （2026-10-03 用 exact-main 候选包 sample 实测，调用栈停在 -[NSAlert runModal]）。
- * 更新后启动失败时这会让 `app.quit()` 永不执行，回滚 helper 等到 120s 超时才放弃，
- * 自动回滚因此失败。必须挂到窗口上成为 window-modal sheet；确实没有窗口时只写日志，
- * 绝不以模态阻塞退出路径。
+ * Attach an async dialog to a live window: showErrorBox and unparented macOS
+ * NSAlert block quit and rollback. With no window, preserve the error in the log.
  */
 function showBackendErrorBox(message: string, detail: string): void {
   const win = BrowserWindow.getAllWindows().find(candidate => !candidate.isDestroyed())

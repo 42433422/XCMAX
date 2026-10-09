@@ -1,5 +1,5 @@
 {
-  "lines": 2298127,
+  "lines": 2298124,
   "updated": "2026-10-09",
-  "note": "棘轮下调 Related duplicate-tool results now explicitly report success=false in both serial and parallel paths so existing trace rules mark skipped execution failed; no duplicate execution or historical trace mutation. Existing negative assertion retained and strengthened; 485 related legacy/trace regressions pass, reducing one further maintained line (total5 versus main393ab316). Exact-main native and original Para/customer acceptance remain pending."
+  "note": "棘轮下调 Related duplicate-tool results now explicitly report success=false in both serial and parallel paths so existing trace rules mark skipped execution failed; no duplicate execution or historical trace mutation. Existing negative assertion retained and strengthened; 485 related legacy/trace regressions pass, reducing one further maintained line (total5 versus main393ab316). Exact-main native and original Para/customer acceptance remain pending. Reconciled protected main1faec8e5/PR2198 without changing its repair. Windows windowed UTF-8 streams and packaged backend/migration file-only relay remain intact; original EPIPE and VM180-second failures retained. Complete resolved-index count is2298124,3 lower than protected main1faec8e5; combined baseline lowered after measurement; no protection or acceptance relaxation."
 }

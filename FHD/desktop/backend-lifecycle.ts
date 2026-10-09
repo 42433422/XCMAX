@@ -8,6 +8,14 @@ export interface StoppableChildProcess {
 
 export type ChildStopResult = 'already-exited' | 'terminated' | 'killed' | 'kill-timeout'
 
+export function relayBackendOutput(
+  channel: 'stdout' | 'stderr', data: Buffer, packaged: boolean,
+  log: (line: string) => void, tag = 'backend',
+): void {
+  log(`[${channel}] ${data}`)
+  if (!packaged) process[channel].write(`[xcagi-${tag}] ${data}`)
+}
+
 function hasExited(child: StoppableChildProcess): boolean {
   return child.exitCode !== null || child.signalCode !== null
 }
