@@ -97,6 +97,8 @@ function Backup-And-Version {
   $dailyScriptArg = ([string]$daily.Actions[0].Arguments).Replace('/', '\')
   $weeklyScriptArg = ([string]$weekly.Actions[0].Arguments).Replace('/', '\')
   Check ($daily.Actions[0].Execute -match 'powershell.exe' -and $dailyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\')) -and $dailyScriptArg -match '-NoProfile.*-NonInteractive.*-ExecutionPolicy Bypass' -and $weekly.Actions[0].Execute -match 'powershell.exe' -and $weeklyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\')) -and $weeklyScriptArg -match '-NoProfile.*-NonInteractive.*-ExecutionPolicy Bypass') 'backup_task_action' 'daily and weekly task actions use noninteractive policy flags and the packaged backup script'
+  $expectedBackupData = if ($env:XCAGI_DESKTOP_USER_DATA_DIR) { $env:XCAGI_DESKTOP_USER_DATA_DIR } else { $dataRoot }
+  Check ($dailyScriptArg -match [regex]::Escape("-DataDir `"$expectedBackupData`"") -and $weeklyScriptArg -match [regex]::Escape("-DataDir `"$expectedBackupData`"") -and $weeklyScriptArg -match '-Weekly') 'backup_task_data_dir' "daily and weekly tasks target $expectedBackupData"
   $taskUser = ([string]$daily.Principal.UserId -split '\\')[-1]
   Check ($taskUser -eq $env:USERNAME -and $weekly.Principal.UserId -eq $daily.Principal.UserId -and $daily.Principal.LogonType -eq 'Interactive' -and $weekly.Principal.LogonType -eq 'Interactive' -and $daily.Principal.RunLevel -eq 'Limited' -and $weekly.Principal.RunLevel -eq 'Limited') 'backup_task_identity' "user=$taskUser; daily=$($daily.Principal.LogonType)/$($daily.Principal.RunLevel); weekly=$($weekly.Principal.LogonType)/$($weekly.Principal.RunLevel)"
   Check ($weekly.Triggers.Count -gt 0) 'backup_weekly_trigger' 'weekly trigger exists'
