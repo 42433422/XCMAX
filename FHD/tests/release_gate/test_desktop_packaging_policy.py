@@ -20,9 +20,16 @@ def test_weekly_backup_keeps_cadence_after_missed_sunday() -> None:
     scripts = REPO_ROOT / "scripts" / "backup"
     install = (scripts / "Install-BackupTask.ps1").read_text(encoding="utf-8")
     backup = (scripts / "XcagiBackup.ps1").read_text(encoding="utf-8")
-    assert "-StartWhenAvailable" in install
-    assert 'if ($Cadence -eq "Weekly") { "$ArgumentLine -Weekly" }' in install
-    assert "-Argument $taskArguments" in install
+    installer = (REPO_ROOT / "desktop" / "build" / "installer.nsh").read_text(encoding="utf-8")
+    custom_install = installer.split("!macro customInstall", 1)[1].split("!macroend", 1)[0]
+    assert "$task.Settings.StartWhenAvailable = $true" in install
+    assert 'if ($Cadence -eq "Weekly") { "$baseArgs -Weekly" }' in install
+    assert "$action.Arguments" in install
+    assert "XcagiDailyBackup" in install and "XcagiWeeklyBackup" in install
+    assert "$trigger.DaysOfWeek = 1" in install
+    assert "Installation continues." in custom_install
+    assert "Abort" not in custom_install
+    assert "backup scheduled task registration failed" not in installer
     assert "[switch]$Weekly" in backup and "($Weekly -or (Get-Date).DayOfWeek" in backup
     assert 'Write-Log "ERROR: failed to create weekly copy: $_"\n      throw' in backup
 
