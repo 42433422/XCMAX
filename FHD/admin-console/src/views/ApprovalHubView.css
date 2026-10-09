@@ -20,7 +20,7 @@
 .facts dt { color: #64748b; }
 .facts dd { margin: 0; overflow-wrap: anywhere; color: #172033; }
 .work-order summary { padding: 0 16px 12px; color: #0f6fc6; cursor: pointer; font-size: 12px; }
-.payload { max-height: 420px; overflow: auto; margin: 0 16px 16px; padding: 12px; border-radius: 10px; background: #0f172a; color: #e2e8f0; font-size: 11px; }
+.payload { max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 16px 16px; padding: 12px; border-radius: 10px; background: #0f172a; color: #e2e8f0; font-size: 11px; }
 .drawer-actions { justify-content: flex-start; padding: 0 16px 16px; }
 .work-order > .muted { margin: 0 16px 16px; }
 .ticket-trail { padding: 0 16px 16px; }
