@@ -1,5 +1,5 @@
 {
-  "lines": 2300296,
+  "lines": 2300334,
   "updated": "2026-10-11",
-  "note": "Main after #2257 plus #2240 Para dispatch ticket chain (+762, unchanged). The extra +8 comes from #2257 (ci-cd workflow, FHD SSOT + root copy) which merged to main without a baseline raise; absorbed here so the gate stays green. Reviewed --force waiver documented in PR #2240 body."
+  "note": "#2254 合并 main(#2240) 后重算：自愈/PR CI 并发规则（concurrency 组 + cancel-in-progress，FHD/MODstore 源与根目录生成副本）及能力中心页面重新生成，共 +38 行"
 }
