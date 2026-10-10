@@ -1,5 +1,5 @@
 {
-  "lines": 2299810,
+  "lines": 2300296,
   "updated": "2026-10-11",
-  "note": "#2222 on main 034077d8 (after #2257): main baseline plus the upgraded-DB credit/journal column repair (82 migration, 209 tests, 1 changelog)."
+  "note": "Main after #2257 plus #2240 Para dispatch ticket chain (+762, unchanged). The extra +8 comes from #2257 (ci-cd workflow, FHD SSOT + root copy) which merged to main without a baseline raise; absorbed here so the gate stays green. Reviewed --force waiver documented in PR #2240 body."
 }
