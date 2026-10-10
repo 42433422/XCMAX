@@ -182,6 +182,9 @@ def finalize_legacy_chat_run(
     _facade()._append_retrieval_calls_to_final_output(run)
     _facade()._append_memory_references_to_final_output(run)
     _facade()._append_artifacts_to_final_output(run)
+    from app.application.agent_orchestrator.business_harness import mark_unexecuted_order_run
+
+    mark_unexecuted_order_run(run, message)
     if run.status == "waiting_user":
         run.add_event("step.waiting_user", str(payload.get("message") or "等待用户授权"), {})
     elif run.status == "failed":
@@ -263,6 +266,10 @@ def create_chat_trace_run(
     _facade()._append_retrieval_calls_to_final_output(run)
     _facade()._append_memory_references_to_final_output(run)
     _facade()._append_artifacts_to_final_output(run)
+    from app.application.agent_orchestrator.business_harness import mark_unexecuted_order_run
+
+    if mark_unexecuted_order_run(run, message):
+        status = "failed"
     if status == "waiting_user":
         run.add_event(
             "step.waiting_user",
@@ -275,7 +282,7 @@ def create_chat_trace_run(
             },
         )
     elif status == "failed":
-        run.error = _facade()._payload_error_message(payload)
+        run.error = run.error or _facade()._payload_error_message(payload)
         run.add_event("run.failed", run.error, {"response_preview": text[:500]})
     else:
         run.add_event("run.completed", "Chat 响应已完成", {"response_preview": text[:500]})

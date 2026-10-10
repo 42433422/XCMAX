@@ -8,11 +8,18 @@ all execution entry points can share the same contract.
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
 BUSINESS_HARNESS_PROTOCOL = "xcagi.business-harness.v1"
 TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
+ERP_ORDER_TOOL_NAME = "execute_erp_capability"
+UNEXECUTED_ORDER_ERROR = "业务动作未执行：没有工具调用，订单、审批和单据都未生成"
+_ORDER_WRITE_RE = re.compile(r"开单|开一张|创建销售订单|新建订单|生成.{0,12}单据")
+_ORDER_NEGATED_RE = re.compile(
+    r"(?:不要|别|勿|无需|不用).{0,6}(?:开单|开一张|创建销售订单|新建订单|生成单据)"
+)
 
 _FACT_KEYS = (
     "id",
@@ -175,6 +182,43 @@ def _pending_approval_summary(pending: dict[str, Any]) -> str:
     )
 
 
+def order_write_requested(message: str) -> bool:
+    """True when the user asked to create an order or a downloadable document."""
+    text = str(message or "")
+    if _ORDER_NEGATED_RE.search(text):
+        return False
+    return _ORDER_WRITE_RE.search(text) is not None
+
+
+def forced_order_tool_choice(message: str, tools: list[Any] | None) -> dict[str, Any] | None:
+    """Force the registered ERP tool so an order request cannot end as plain text."""
+    if not order_write_requested(message):
+        return None
+    names = {
+        str((tool.get("function") or {}).get("name") or "").strip()
+        for tool in tools or []
+        if isinstance(tool, dict)
+    }
+    if ERP_ORDER_TOOL_NAME not in names:
+        return None
+    return {"type": "function", "function": {"name": ERP_ORDER_TOOL_NAME}}
+
+
+def mark_unexecuted_order_run(run: Any, message: str) -> bool:
+    """Downgrade a text-only order turn so the task is not shown as completed."""
+    if str(getattr(run, "status", "")) != "completed":
+        return False
+    if not order_write_requested(message):
+        return False
+    if list(getattr(run, "tool_calls", []) or []):
+        return False
+    if list(getattr(run, "artifacts", []) or []):
+        return False
+    run.status = "failed"
+    run.error = UNEXECUTED_ORDER_ERROR
+    return True
+
+
 def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     """Attach a bounded, user-readable terminal result to a completed run."""
     status = _text(getattr(run, "status", ""), limit=32)
@@ -191,15 +235,30 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     pending = _pending_approval_signal(payloads)
     # 审批门后的业务动作**未执行**：此处报 success=true 正是界面谎称
     # 「智能任务执行完成」的来源。终态以审批事实为准，而非外层对话是否正常结束。
-    result_status = "pending_approval" if pending else status
+    unexecuted = (
+        mark_unexecuted_order_run(run, str(getattr(run, "message", "") or ""))
+        or str(getattr(run, "error", "") or "") == UNEXECUTED_ORDER_ERROR
+    )
+    if unexecuted:
+        status = "failed"
+    if pending:
+        result_status = "pending_approval"
+    elif unexecuted:
+        result_status = "failed"
+    else:
+        result_status = status
+    if pending:
+        summary = _pending_approval_summary(pending)
+    elif unexecuted:
+        summary = UNEXECUTED_ORDER_ERROR
+    else:
+        summary = _result_summary(run, payloads)
     result = {
         "protocol": BUSINESS_HARNESS_PROTOCOL,
         "status": result_status,
         "success": result_status == "completed",
         "pending_approval": bool(pending),
-        "summary": (
-            _pending_approval_summary(pending) if pending else _result_summary(run, payloads)
-        ),
+        "summary": summary,
         "facts": _result_facts(payloads),
         "task_id": identity["task_id"],
         "turn_id": identity["turn_id"],
@@ -230,7 +289,12 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
 __all__ = [
     "BUSINESS_HARNESS_PROTOCOL",
     "TERMINAL_RUN_STATUSES",
+    "ERP_ORDER_TOOL_NAME",
+    "UNEXECUTED_ORDER_ERROR",
     "ensure_business_harness_context",
     "ensure_terminal_business_result",
+    "forced_order_tool_choice",
     "harness_event_context",
+    "mark_unexecuted_order_run",
+    "order_write_requested",
 ]
