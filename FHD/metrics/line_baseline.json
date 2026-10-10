@@ -1,5 +1,5 @@
 {
-  "lines": 2298578,
+  "lines": 2298710,
   "updated": "2026-10-10",
-  "note": "#2211 后续：补齐剩余未鉴权端点（共享鉴权模块、FHD 同步接收校验）及每个端点的 401/403/200/503 测试；已同时删除未挂载的 legacy routes_registry 配置路由"
+  "note": "#2211 后续：补齐剩余未鉴权端点（新增 MODstore service_auth、FHD xcmax_sync_peer_auth 鉴权模块及 sync/receive 鉴权测试，此前未跟踪未计入）"
 }
