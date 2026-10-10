@@ -1,5 +1,5 @@
 {
-  "lines": 2302637,
+  "lines": 2299527,
   "updated": "2026-10-10",
-  "note": "#2235 (warehouse setup guide, tenant-scoped bridge shipment print, chat download routing, closed-loop guidance codes, tests, mod mirror, changelog) adds about +785 lines; the rest of this raise is main already above its committed baseline (2298742) after the #2220 merge, re-measured with git ls-files on the merged tree."
+  "note": "#2235 on top of main baseline 2298742 (+785): warehouse setup guide, tenant-scoped bridge shipment print, chat download routing, closed-loop guidance codes, tests, mod mirror and changelog."
 }
