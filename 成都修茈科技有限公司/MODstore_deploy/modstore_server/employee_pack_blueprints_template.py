@@ -231,6 +231,17 @@ def render_employee_pack_employee_py(
     )
 
 
+# Generated run routes require a signed-in host user; fail closed when the host has no auth.
+RUN_AUTH_GUARD_PY = (
+    "def _require_run_user(request: Request):\n"
+    "    try:\n"
+    "        from app.infrastructure.auth.dependencies import require_identified_user  # type: ignore\n"
+    "    except Exception:  # noqa: BLE001\n"
+    "        raise HTTPException(401, '宿主未提供登录校验，拒绝执行员工')\n"
+    "    return require_identified_user(request, x_user_id=request.headers.get('X-User-ID'))\n\n\n"
+)
+
+
 def render_employee_pack_blueprints_py(
     *, pack_id: str, employee_id: str, stem: str, label: str
 ) -> str:
@@ -246,12 +257,15 @@ def render_employee_pack_blueprints_py(
         "import logging\n"
         "import os\n"
         "from typing import Any, Dict, Optional\n\n"
-        "from fastapi import APIRouter\n\n"
+        "from fastapi import APIRouter, Depends, HTTPException, Request\n\n"
         "logger = logging.getLogger(__name__)\n\n"
         "EMPLOYEE_ID = " + emp_lit + "\n"
         "STEM = " + stem_lit + "\n"
-        "LABEL = " + lab_lit + "\n\n\n"
-        "def _resolve_mod_path(mod_id: str) -> Optional[str]:\n"
+        "LABEL = "
+        + lab_lit
+        + "\n\n\n"
+        + RUN_AUTH_GUARD_PY
+        + "def _resolve_mod_path(mod_id: str) -> Optional[str]:\n"
         "    try:\n"
         "        from app.infrastructure.mods import get_mod_registry  # type: ignore\n\n"
         "        meta = get_mod_registry().get_mod_metadata(mod_id)\n"
@@ -433,7 +447,7 @@ def render_employee_pack_blueprints_py(
         "    async def list_employees():\n"
         "        return {'success': True, 'data': [{'id': emp_id, 'label': LABEL, 'summary': ''}]}\n\n"
         "    @router.post('/employees/' + emp_id + '/run')\n"
-        "    async def emp_run(payload: Dict[str, Any] | None = None):\n"
+        "    async def emp_run(payload: Dict[str, Any] | None = None, _user=Depends(_require_run_user)):\n"
         "        return await _dispatch_run(mod_id, emp_id, stem, payload)\n\n"
         "    @router.get('/employees/' + emp_id + '/status')\n"
         "    async def emp_status():\n"
