@@ -1,5 +1,5 @@
 {
-  "lines": 2298382,
+  "lines": 2298510,
   "updated": "2026-10-10",
-  "note": "Authentication for the MODstore production-line, config and sync-receive write endpoints, plus the CSRF bearer-bypass fix. About 63 lines are the fix, about 148 are its regression tests, and 1 is the changelog entry."
+  "note": "Shared raise for three related PRs so they merge in any order: self-heal explicit LLM endpoint guard (+27), #2067 customer-slot regression tests (+16), and #2067 quantity/unit-price extraction with tests and changelog (+85)."
 }
