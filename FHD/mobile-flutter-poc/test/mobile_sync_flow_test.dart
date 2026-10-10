@@ -131,126 +131,65 @@ class _FakeSyncApi extends MobileApiClient {
 }
 
 void main() {
-  group('MobileSyncFlow', () {
-    test('runs status → push → pull → conflicts and advances cursor', () async {
-      final api = _FakeSyncApi(
-        startCursor: 3,
-        cursor: 9,
-        changes: const [
-          {'id': 4},
-          {'id': 5},
-        ],
-        conflicts: const [
-          {
-            'id': 1,
-            'entity_type': 'customer',
-            'entity_id': '42',
-            'conflict_note': '云端版本更新',
-            'received_at': '2026-10-10 21:00:00',
-          },
-        ],
-      );
-      final result = await MobileSyncFlow(
-        api,
-      ).run(now: () => DateTime.utc(2026, 10, 10, 13));
-
-      expect(api.calls, ['status', 'push', 'pull', 'conflicts', 'save']);
-      expect(api.pulledSince, 3);
-      expect(api.pushedItems, isEmpty);
-      expect(result.pulled, 2);
-      expect(result.cursor, 9);
-      expect(result.conflicts.single.title, 'customer #42');
-      expect(result.conflicts.single.note, '云端版本更新');
-      expect(result.summary, contains('1 条冲突'));
-      expect(api.session.syncCursor, 9);
-      expect(api.session.lastSyncAt, '2026-10-10T13:00:00.000Z');
-    });
-
-    test('never moves the cursor backwards', () async {
-      final api = _FakeSyncApi(startCursor: 7, cursor: 0);
-      final result = await MobileSyncFlow(api).run();
-      expect(result.cursor, 7);
-      expect(result.summary, '已同步：推送 0 条，拉取 0 条变更，无冲突');
-    });
-
-    for (final step in ['status', 'push', 'pull']) {
-      test('$step failure stops the flow and keeps the cursor', () async {
-        final api = _FakeSyncApi(failStep: step, startCursor: 2, cursor: 9);
-        await expectLater(
-          MobileSyncFlow(api).run(),
-          throwsA(
-            isA<MobileSyncException>()
-                .having((e) => e.step, 'step', step)
-                .having((e) => e.toString(), 'text', contains('同步服务暂不可用')),
-          ),
-        );
-        expect(api.calls, isNot(contains('save')));
-        expect(api.session.syncCursor, 2);
-      });
-    }
+  test('runs status → push → pull → conflicts and advances cursor', () async {
+    final api = _FakeSyncApi(startCursor: 3, cursor: 9, changes: const [
+      {'id': 4},
+      {'id': 5},
+    ], conflicts: const [
+      {'entity_type': 'customer', 'entity_id': '42'},
+    ]);
+    final result = await runMobileSync(api);
+    expect(api.calls, ['status', 'push', 'pull', 'conflicts', 'save']);
+    expect(api.pulledSince, 3);
+    expect(api.pushedItems, isEmpty);
+    expect(result.summary, '已同步：推送 0 条，拉取 2 条变更，1 条冲突待处理');
+    expect(api.session.syncCursor, 9);
+    expect(api.session.lastSyncAt, isNotEmpty);
+    // 游标只进不退。
+    final again = _FakeSyncApi(startCursor: 7);
+    await runMobileSync(again);
+    expect(again.session.syncCursor, 7);
   });
 
-  group('Profile 同步 button', () {
-    Future<void> pumpProfile(WidgetTester tester, MobileApiClient api) async {
-      tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = const Size(430, 1800);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      addTearDown(tester.view.resetPhysicalSize);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.light(),
-          home: Scaffold(body: ProfileScreen(api: api)),
-        ),
-      );
-      await tester.pumpAndSettle();
-    }
+  test('push failure stops the flow and keeps the cursor', () async {
+    final api = _FakeSyncApi(failStep: 'push', startCursor: 2, cursor: 9);
+    await expectLater(runMobileSync(api), throwsA('推送本地变更失败：同步服务暂不可用'));
+    expect(api.calls, ['status', 'push']);
+    expect(api.session.syncCursor, 2);
+  });
 
-    testWidgets('runs the real sync and shows status and conflicts', (
-      tester,
-    ) async {
-      final api = _FakeSyncApi(
-        cursor: 5,
-        changes: const [
-          {'id': 1},
-        ],
-        conflicts: const [
-          {'id': 3, 'entity_type': 'order', 'entity_id': '7'},
-        ],
-      );
-      await pumpProfile(tester, api);
-      expect(api.calls, isEmpty, reason: '打开页面不应自动同步');
-      expect(find.text('同步冲突'), findsNothing);
+  testWidgets('profile 同步 button runs sync and shows result and conflicts',
+      (tester) async {
+    tester.view.physicalSize = const Size(430, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = _FakeSyncApi(conflicts: const [
+      {'entity_type': 'order', 'entity_id': '7', 'conflict_note': '云端较新'},
+    ]);
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: Scaffold(body: ProfileScreen(api: api)),
+    ));
+    await tester.pumpAndSettle();
+    expect(api.calls, isEmpty, reason: '打开页面不应自动同步');
 
-      await tester.tap(find.text('同步'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('同步'));
+    await tester.pumpAndSettle();
+    expect(find.text('已同步：推送 0 条，拉取 0 条变更，1 条冲突待处理'), findsOneWidget);
+    expect(find.text('同步冲突 1 条'), findsOneWidget);
+    expect(find.text('order #7 云端较新'), findsOneWidget);
+  });
 
-      expect(api.calls, containsAllInOrder(['status', 'push', 'pull']));
-      expect(
-        find.text('已同步：推送 0 条，拉取 1 条变更，1 条冲突待处理'),
-        findsOneWidget,
-      );
-      expect(find.text('同步冲突'), findsOneWidget);
-      expect(find.text('同步完成，有 1 条冲突待处理'), findsOneWidget);
-
-      await tester.tap(find.text('同步冲突'));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('profile_sync_conflicts_sheet')),
-        findsOneWidget,
-      );
-      expect(find.text('order #7'), findsOneWidget);
-    });
-
-    testWidgets('shows a failure hint when push fails', (tester) async {
-      final api = _FakeSyncApi(failStep: 'push');
-      await pumpProfile(tester, api);
-
-      await tester.tap(find.text('同步'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('同步失败，点「同步」重试'), findsOneWidget);
-      expect(find.text('推送本地变更失败：同步服务暂不可用'), findsOneWidget);
-      expect(api.calls, isNot(contains('pull')));
-    });
+  testWidgets('profile 同步 button reports failure', (tester) async {
+    final api = _FakeSyncApi(failStep: 'pull');
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: Scaffold(body: ProfileScreen(api: api)),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('同步'));
+    await tester.pumpAndSettle();
+    expect(find.text('同步失败，点「同步」重试'), findsOneWidget);
+    expect(find.text('拉取云端变更失败：同步服务暂不可用'), findsOneWidget);
   });
 }

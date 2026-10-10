@@ -23,7 +23,6 @@ part 'profile_screen_state.part.dart';
 part 'profile_screen_editors.part.dart';
 part 'profile_screen_hero.part.dart';
 part 'profile_screen_wallet.part.dart';
-part 'profile_screen_sync.part.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.api});
