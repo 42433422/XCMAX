@@ -13,7 +13,8 @@
     "modstore_git_sha": null,
     "fhd_git_sha": null,
     "scheduler_running": null,
-    "checked_at": null
+    "checked_at": null,
+    "note": "2026-10-11 00:41（UTC+8）生产 nginx（/etc/nginx/conf.d/xiu-ci.com.conf，不在仓库）把 /fhd-api/api/health 从 2026-06-30 写死的 {\"status\":\"ok\"} 改为反代 fhd-full 127.0.0.1:5100/api/health?lite=true，外网可读 git_sha/release_id，fhd 宕机时返回 502/504；备份 xiu-ci.com.conf.bak-20261011004028-before-fhd-health-proxy。当时 fhd_git_sha=e5b2412、modstore_git_sha=df452b7，尚不一致，仅为环境记录，不是验收结果。"
   },
   "candidate": {
     "source_sha": null,

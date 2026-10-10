@@ -202,6 +202,11 @@ def test_explanatory_or_general_chat_is_not_intercepted(message: str) -> None:
     assert safety.classify_business_chat_intent(message) is None
 
 
+def test_explicit_product_defect_is_not_an_attendance_export() -> None:
+    message = "导出考勤表时报错。期望：下载本月考勤。实际：页面提示失败。"
+    assert safety.classify_business_chat_intent(message) is None
+
+
 def test_natural_employee_lookup_uses_real_personnel_store(business_db: tuple[Path, Path]) -> None:
     result = safety.try_handle_business_chat_action("1001号员工叫什么名字？")
     assert result is not None
