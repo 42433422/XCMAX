@@ -28,7 +28,12 @@ def index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 "assets": {
                     "demo-clip.webm": {"key": KEY, "sha256": SHA, "size": 1234, "source": KEY},
                     # 不在证据前缀下的键必须被拒绝，防止借索引签任意对象。
-                    "evil.png": {"key": "secrets/prod.env", "sha256": SHA, "size": 1, "source": "x"},
+                    "evil.png": {
+                        "key": "secrets/prod.env",
+                        "sha256": SHA,
+                        "size": 1,
+                        "source": "x",
+                    },
                     "../up.png": {"key": KEY, "sha256": SHA, "size": 1, "source": KEY},
                 }
             }
@@ -88,7 +93,9 @@ def test_unconfigured_cos_falls_back_to_local_copy(index: Path) -> None:
     assert resp.headers["cache-control"] == "no-store"
 
 
-def test_unregistered_or_unsafe_names_are_rejected(index: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unregistered_or_unsafe_names_are_rejected(
+    index: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _enable_cos(monkeypatch)
     seen = _mock_cos(monkeypatch, lambda r: httpx.Response(200))
     client = _client()
@@ -98,13 +105,16 @@ def test_unregistered_or_unsafe_names_are_rejected(index: Path, monkeypatch: pyt
     assert seen == []
 
 
-def test_matching_object_redirects_to_short_lived_presigned_url(index: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_matching_object_redirects_to_short_lived_presigned_url(
+    index: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _enable_cos(monkeypatch)
     monkeypatch.setenv("XCMAX_EVIDENCE_URL_TTL_SECONDS", "900")
     seen = _mock_cos(
         monkeypatch,
         lambda r: httpx.Response(
-            200, headers={"x-cos-meta-sha256": SHA, "content-length": "1234", "x-cos-version-id": "v1"}
+            200,
+            headers={"x-cos-meta-sha256": SHA, "content-length": "1234", "x-cos-version-id": "v1"},
         ),
     )
     client = _client()
@@ -116,7 +126,9 @@ def test_matching_object_redirects_to_short_lived_presigned_url(index: Path, mon
     assert "secret-test-only" not in resp.headers["location"]
     start, end = [int(x) for x in loc.query.split("q-sign-time=")[1].split("&")[0].split(";")]
     assert end - start == 960  # 60 秒时钟偏差 + 900 秒有效期
-    assert seen[0].method == "HEAD" and seen[0].headers["authorization"].startswith("q-sign-algorithm=sha1")
+    assert seen[0].method == "HEAD" and seen[0].headers["authorization"].startswith(
+        "q-sign-algorithm=sha1"
+    )
 
     # 第二次访问命中核验缓存，不再 HEAD。
     client.get("/api/public/evidence/demo-clip.webm", follow_redirects=False)
@@ -155,11 +167,16 @@ def test_unreachable_cos_serves_local_copy(index: Path, monkeypatch: pytest.Monk
     assert resp.headers["location"] == "/capabilities/assets/evidence/demo-clip.webm"
 
 
-def test_verify_reports_index_and_object_metadata(index: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_verify_reports_index_and_object_metadata(
+    index: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _enable_cos(monkeypatch)
     _mock_cos(
         monkeypatch,
-        lambda r: httpx.Response(200, headers={"x-cos-meta-sha256": SHA, "content-length": "1234", "x-cos-version-id": "v9"}),
+        lambda r: httpx.Response(
+            200,
+            headers={"x-cos-meta-sha256": SHA, "content-length": "1234", "x-cos-version-id": "v9"},
+        ),
     )
     body = _client().get("/api/public/evidence/verify/demo-clip.webm").json()
     assert body["match"] is True
@@ -182,4 +199,8 @@ def test_committed_index_only_allows_evidence_media() -> None:
     assert assets
     for name, entry in assets.items():
         assert api._valid_entry(name, entry), name
-        assert entry["key"].lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov"))
+        assert (
+            entry["key"]
+            .lower()
+            .endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov"))
+        )

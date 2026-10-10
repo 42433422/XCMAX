@@ -46,7 +46,9 @@ LOCAL_PREFIX = "/capabilities/assets/evidence/"
 ALLOWED_KEY_PREFIXES = ("FHD/docs/evidence/", "成都修茈科技有限公司/capabilities/assets/evidence/")
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-]{0,254}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
-_DEFAULT_INDEX = Path(__file__).resolve().parents[2] / "data" / "capabilities" / "evidence-index.json"
+_DEFAULT_INDEX = (
+    Path(__file__).resolve().parents[2] / "data" / "capabilities" / "evidence-index.json"
+)
 _OK_CACHE_SECONDS = 600
 _FAIL_CACHE_SECONDS = 60
 _NO_STORE = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
@@ -72,7 +74,9 @@ def cos_config() -> CosConfig | None:
     secret_key = os.environ.get("XCMAX_EVIDENCE_COS_SECRET_KEY", "").strip()
     if not (bucket and region and secret_id and secret_key):
         return None
-    if not re.fullmatch(r"[a-z0-9][a-z0-9\-]{1,61}-\d{5,}", bucket) or not re.fullmatch(r"[a-z]{2}-[a-z\-]+", region):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9\-]{1,61}-\d{5,}", bucket) or not re.fullmatch(
+        r"[a-z]{2}-[a-z\-]+", region
+    ):
         logger.warning("evidence COS bucket/region malformed; falling back to local copies")
         return None
     try:
@@ -157,9 +161,7 @@ class _IndexCache:
                     logger.exception("evidence index unreadable: %s", path)
                     raw_assets = {}
                 self._assets = {
-                    name: entry
-                    for name, entry in raw_assets.items()
-                    if _valid_entry(name, entry)
+                    name: entry for name, entry in raw_assets.items() if _valid_entry(name, entry)
                 }
                 self._path, self._mtime = path, mtime
             return self._assets
@@ -202,7 +204,9 @@ def _transport() -> httpx.AsyncBaseTransport | None:
 
 async def head_object(cfg: CosConfig, key: str) -> httpx.Response:
     now = int(time.time())
-    auth = cos_authorization(cfg.secret_id, cfg.secret_key, "head", key, {"host": cfg.host}, now - 60, now + 300)
+    auth = cos_authorization(
+        cfg.secret_id, cfg.secret_key, "head", key, {"host": cfg.host}, now - 60, now + 300
+    )
     async with httpx.AsyncClient(timeout=5.0, transport=_transport()) as client:
         return await client.head(object_url(cfg, key), headers={"Authorization": auth})
 
@@ -240,7 +244,11 @@ async def verify_object(name: str, entry: dict[str, Any], cfg: CosConfig | None)
                 size = int(resp.headers.get("content-length", ""))
             except ValueError:
                 size = None
-            found.update(cos_sha256=sha or None, cos_size=size, cos_version_id=resp.headers.get("x-cos-version-id"))
+            found.update(
+                cos_sha256=sha or None,
+                cos_size=size,
+                cos_version_id=resp.headers.get("x-cos-version-id"),
+            )
             if not sha:
                 found["reason"] = "对象缺少 x-cos-meta-sha256 元数据"
             elif sha != entry["sha256"]:
@@ -258,7 +266,9 @@ async def verify_object(name: str, entry: dict[str, Any], cfg: CosConfig | None)
 
 
 def _local(name: str) -> RedirectResponse:
-    return RedirectResponse(LOCAL_PREFIX + quote(name, safe=""), status_code=302, headers=dict(_NO_STORE))
+    return RedirectResponse(
+        LOCAL_PREFIX + quote(name, safe=""), status_code=302, headers=dict(_NO_STORE)
+    )
 
 
 # ---------------------------------------------------------------- routes
@@ -291,7 +301,9 @@ async def verify_evidence(name: str) -> JSONResponse:
     return JSONResponse(result, headers=dict(_NO_STORE))
 
 
-@router.api_route("/{name}", methods=["GET", "HEAD"], summary="跳转到证据原件（COS 预签名或站内副本）")
+@router.api_route(
+    "/{name}", methods=["GET", "HEAD"], summary="跳转到证据原件（COS 预签名或站内副本）"
+)
 async def get_evidence(name: str) -> RedirectResponse:
     entry = lookup(name)
     if entry is None:
@@ -303,4 +315,6 @@ async def get_evidence(name: str) -> RedirectResponse:
     if not result["match"]:
         logger.warning("evidence %s served from local copy: %s", name, result.get("reason"))
         return _local(name)
-    return RedirectResponse(presigned_get_url(cfg, entry["key"]), status_code=302, headers=dict(_NO_STORE))
+    return RedirectResponse(
+        presigned_get_url(cfg, entry["key"]), status_code=302, headers=dict(_NO_STORE)
+    )
