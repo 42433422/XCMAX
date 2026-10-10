@@ -93,41 +93,19 @@ class _FakeSyncApi extends MobileApiClient {
     return _ok({'items': conflicts});
   }
 
-  // ProfileScreen 其余加载项保持离线安全。
+  // 个人页其余加载项离线失败即可（页面会吞掉错误）。
   @override
-  Future<MobileEnvelope<WalletBalanceData>> walletBalance() async =>
-      MobileEnvelope<WalletBalanceData>(
-        success: true,
-        message: '',
-        data: WalletBalanceData.mobileCurrentFallback(),
-        raw: const {'ok': true},
-      );
+  Future<MobileEnvelope<WalletBalanceData>> walletBalance() => throw 'offline';
 
   @override
-  Future<void> saveWalletBalanceJson(String json) async {}
+  Future<MobileEnvelope<Map<String, Object?>>> me() => throw 'offline';
 
   @override
   Future<MobileAppConfigData> appConfig({
-    int currentVersionCode = MobileBuildConfig.versionCode,
-    String sku = MobileBuildConfig.productSku,
-  }) async =>
-      const MobileAppConfigData(
-        ok: true,
-        legalVersion: '1',
-        profilePage: MobileProfilePageConfig.disabled(),
-        raw: {'ok': true},
-      );
-
-  @override
-  Future<MobileEnvelope<Map<String, Object?>>> me() async =>
-      const MobileEnvelope<Map<String, Object?>>(
-        success: true,
-        message: '',
-        data: {
-          'user': {'username': 'admin', 'display_name': 'admin'},
-        },
-        raw: {'ok': true},
-      );
+    int currentVersionCode = 0,
+    String sku = '',
+  }) =>
+      throw 'offline';
 }
 
 void main() {
