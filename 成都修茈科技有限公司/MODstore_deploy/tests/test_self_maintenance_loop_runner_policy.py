@@ -36,6 +36,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
     _matches_focused_test_command,
+    _path_python_interpreter_candidates,
     _qa_task_text,
     _reconcile_requested_merge_feedback,
     _reconcile_retort_scope_remediations,
@@ -2254,6 +2255,51 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     )
 
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
+
+
+def test_path_python_interpreter_candidates_include_high_minor_versions(monkeypatch):
+    seen = []
+
+    def fake_which(name):
+        seen.append(name)
+        if name == "python3.14":
+            return "/opt/py314/bin/python3.14"
+        return None
+
+    monkeypatch.setattr(loop_runner.shutil, "which", fake_which)
+
+    paths = [str(path) for path in _path_python_interpreter_candidates()]
+
+    assert "/opt/py314/bin/python3.14" in paths
+    assert "python3.14" in seen
+
+
+def test_focused_test_command_prefers_path_python_over_scheduler_executable(monkeypatch, tmp_path):
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", raising=False)
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", raising=False)
+    monkeypatch.delenv("MODSTORE_RUNTIME_ROOT", raising=False)
+    monkeypatch.setenv("MODSTORE_DEPLOY_ROOT", str(tmp_path))
+
+    compatible = tmp_path / "python3.14"
+    compatible.write_text("")
+    compatible.chmod(0o755)
+
+    def fake_which(name):
+        if name == "python3.14":
+            return str(compatible)
+        return None
+
+    def supports(candidate):
+        return str(candidate) == str(compatible)
+
+    monkeypatch.setattr(loop_runner.shutil, "which", fake_which)
+    monkeypatch.setattr(loop_runner, "_python_supports_focused_tests", supports)
+    monkeypatch.setattr(loop_runner.sys, "executable", str(tmp_path / "scheduler-python"))
+
+    command = _focused_test_command()
+
+    assert str(compatible) in command
+    assert "test_self_maintenance_loop_runner_policy.py" in command
 
 
 def test_high_risk_report_detects_standalone_qa_fail():

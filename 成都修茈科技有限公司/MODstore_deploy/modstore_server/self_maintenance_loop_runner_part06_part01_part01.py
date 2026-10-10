@@ -255,6 +255,24 @@ def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
     return probe.returncode == 0
 
 
+def _path_python_interpreter_candidates() -> _facade().List[_facade().Path]:
+    """Discover PATH interpreters without capping at a fixed minor version."""
+
+    shutil = _facade().shutil
+    names = ["python3", "python"]
+    for minor in range(11, 50):
+        names.append(f"python3.{minor}")
+    candidates: _facade().List[_facade().Path] = []
+    seen: set[str] = set()
+    for name in names:
+        resolved = shutil.which(name)
+        if not resolved or resolved in seen:
+            continue
+        seen.add(resolved)
+        candidates.append(_facade().Path(resolved))
+    return candidates
+
+
 def _focused_test_command() -> str:
     """Resolve one executable QA command from the running MODstore environment.
 
@@ -287,6 +305,7 @@ def _focused_test_command() -> str:
             if runtime_root
             else None
         ),
+        *_path_python_interpreter_candidates(),
         _facade().Path(_facade().sys.executable),
     ]
     test_python = next(

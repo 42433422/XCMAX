@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-10-10T21:30:00+00:00",
+  "symptom": "自维护调度器在仅安装 Python 3.14（或更高次版本）且 MODstore venv 缺失时，仍回退到不含 pytest 的 sys.executable，导致结构化 QA 误判 mandatory focused-test 证据失败。",
+  "root_cause": "_focused_test_command 只尝试显式 venv 与 sys.executable，未在 PATH 上按次版本探测 python3.11+ 兼容解释器，历史上还存在仅枚举到 python3.13 的上限。",
+  "fix_diff": "diff --git a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\n--- a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\n@@ -255,6 +255,23 @@ def _python_supports_focused_tests(candidate: _facade().Path) -> bool:\n     return probe.returncode == 0\n \n \n+def _path_python_interpreter_candidates() -> _facade().List[_facade().Path]:\n+    \"\"\"Discover PATH interpreters without capping at a fixed minor version.\"\"\"\n+\n+    shutil = _facade().shutil\n+    names = [\"python3\", \"python\"]\n+    for minor in range(11, 50):\n+        names.append(f\"python3.{minor}\")\n+    candidates: _facade().List[_facade().Path] = []\n+    seen: set[str] = set()\n+    for name in names:\n+        resolved = shutil.which(name)\n+        if not resolved or resolved in seen:\n+            continue\n+        seen.add(resolved)\n+        candidates.append(_facade().Path(resolved))\n+    return candidates\n+\n+\n def _focused_test_command() -> str:\n@@ -287,6 +304,7 @@ def _focused_test_command() -> str:\n             if runtime_root\n             else None\n         ),\n+        *_path_python_interpreter_candidates(),\n         _facade().Path(_facade().sys.executable),\n     ]\n",
+  "metadata": {
+    "component": "self_maintenance_loop_runner",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "Apply when structured review/QA reports that focused pytest evidence failed while a PATH python3.N (N>=11) with pytest exists but MODstore .venv is absent and sys.executable is an older scheduler interpreter.",
+    "patch_strategy": "Add _path_python_interpreter_candidates() that probes python3, python, and python3.11 through python3.49 via shutil.which, then insert those candidates before sys.executable in _focused_test_command while still requiring _python_supports_focused_tests.",
+    "rollback_plan": "Remove _path_python_interpreter_candidates and the unpacked extension from the focused-test candidate list, restoring venv-then-sys.executable resolution only.",
+    "required_tests": [
+      "test_self_maintenance_loop_runner_policy.py::test_path_python_interpreter_candidates_include_high_minor_versions",
+      "test_self_maintenance_loop_runner_policy.py::test_focused_test_command_prefers_path_python_over_scheduler_executable"
+    ]
+  }
+}

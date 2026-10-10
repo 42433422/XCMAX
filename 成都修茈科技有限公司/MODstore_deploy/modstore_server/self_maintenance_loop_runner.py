@@ -295,6 +295,7 @@ from modstore_server.self_maintenance_loop_runner_part06 import (
     _reconcile_requested_merge_feedback as _reconcile_requested_merge_feedback,
     _base_para_input as _base_para_input,
     _python_supports_focused_tests as _python_supports_focused_tests,
+    _path_python_interpreter_candidates as _path_python_interpreter_candidates,
     _focused_test_command as _focused_test_command,
     _code_task_text as _code_task_text,
     _evaluate_retort_clarification_before_review as _evaluate_retort_clarification_before_review,
