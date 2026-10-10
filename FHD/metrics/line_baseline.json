@@ -1,5 +1,5 @@
 {
-  "lines": 2299526,
-  "updated": "2026-10-10",
-  "note": "Main after #2218/#2220 (2298742) plus the unified Mac acceptance fix #2214 incl. #2224 (#2067 explicit quantity/unit price, longest-name match, approval preview, async-safe defect intake, tests, changelog; +190), plus +16 reserved for the #2219 customer-slot regression tests. Plus the Self-Heal stale-failure filter #2249 (+578: gate module self_heal_freshness.py and acceptance tests; raised explicitly, no unrelated deletions to keep the PR scoped)."
+  "lines": 2301180,
+  "updated": "2026-10-11",
+  "note": "Merged main (#2257 backend-test single pytest, +8 lines it did not add to the baseline) into the COS-backed capability evidence change; this PR itself remains +1646 (evidence whitelist, MODstore presign/verify endpoint, tests, builder/page script/styles, 1 changelog line)."
 }

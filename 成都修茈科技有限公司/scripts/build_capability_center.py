@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+from urllib.parse import quote
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -21,6 +22,16 @@ CATALOG_PATH = WEBSITE_DIR / "data" / "capabilities" / "catalog.json"
 OUT_DIR = WEBSITE_DIR / "capabilities"
 PUBLIC_DATA_PATH = WEBSITE_DIR / "data" / "capabilities.json"
 EVIDENCE_ASSET_DIR = OUT_DIR / "assets" / "evidence"
+# 证据原件对外经 MODstore 签发短时效 COS 预签名 URL（桶保持私有）；后端或 COS 不可用时
+# 回退到同名本地副本 /capabilities/assets/evidence/<name>。
+EVIDENCE_INDEX_REL = "data/capabilities/evidence-index.json"
+EVIDENCE_API_PREFIX = "/api/public/evidence"
+EVIDENCE_LOCAL_PREFIX = "/capabilities/assets/evidence"
+# 已上传到证据桶的仓库路径前缀；对象键与仓库路径一致。
+EVIDENCE_COS_PREFIXES = ("FHD/docs/evidence/", "成都修茈科技有限公司/capabilities/assets/evidence/")
+EVIDENCE_PUBLIC_COPY_PREFIX = "成都修茈科技有限公司/capabilities/assets/evidence/"
+# 只有截图与录像原件进证据桶；JSON / 日志体积小、页面已逐件展示 SHA-256，继续由站内提供。
+EVIDENCE_COS_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov")
 PROJECT_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 STATUS_META = {
@@ -117,6 +128,66 @@ def evidence_asset_name(feature: str, rel: str, platform: str | None = None,
     qualified = platform and Path(rel).name in (collisions or set())
     prefix = f"{feature}-{platform}" if qualified else feature
     return f"{prefix}-{Path(rel).name}"
+
+
+_SHA_CACHE: dict[str, tuple[str, int]] = {}
+_EVIDENCE_INDEX: dict[str, dict] = {}
+
+
+def file_digest(rel: str) -> tuple[str, int] | None:
+    """仓库内文件的 SHA-256 与字节数（同一次构建内缓存）。"""
+    if rel not in _SHA_CACHE:
+        try:
+            raw = e(rel).read_bytes()
+        except OSError:
+            return None
+        _SHA_CACHE[rel] = (hashlib.sha256(raw).hexdigest(), len(raw))
+    return _SHA_CACHE[rel]
+
+
+def evidence_cos_key(rel: str, name: str) -> str:
+    """COS 对象键：源文件已在证据桶前缀下用原路径，否则用公开副本路径。"""
+    if rel.startswith(EVIDENCE_COS_PREFIXES):
+        return rel
+    return EVIDENCE_PUBLIC_COPY_PREFIX + name
+
+
+def register_evidence(name: str, rel: str) -> dict | None:
+    """登记一份公开证据：页面链接、后端白名单与哈希核验共用这一份索引。"""
+    if not rel.lower().endswith(EVIDENCE_COS_SUFFIXES):
+        return None
+    digest = file_digest(rel)
+    if digest is None:
+        return None
+    entry = {"key": evidence_cos_key(rel, name), "source": rel, "sha256": digest[0], "size": digest[1]}
+    previous = _EVIDENCE_INDEX.get(name)
+    if previous and previous["sha256"] != entry["sha256"]:
+        raise ValueError(f"公开证据重名但内容不同：{name}（{previous['source']} / {rel}）")
+    _EVIDENCE_INDEX.setdefault(name, entry)
+    return _EVIDENCE_INDEX[name]
+
+
+def evidence_url(name: str, rel: str) -> str:
+    """证据原件 URL：截图 / 录像走后端预签名跳转；其余文件或源文件缺失时保留站内路径。"""
+    if register_evidence(name, rel) is None:
+        return f"{EVIDENCE_LOCAL_PREFIX}/{name}"
+    return f"{EVIDENCE_API_PREFIX}/{quote(name, safe='')}"
+
+
+def evidence_index_payload() -> str:
+    index = {
+        "schema": "xcmax.capability-evidence-index/v1",
+        "note": "能力中心公开证据白名单：name → COS 对象键与 SHA-256；后端只为此处登记的对象签发预签名 URL。",
+        "api_prefix": EVIDENCE_API_PREFIX,
+        "local_prefix": EVIDENCE_LOCAL_PREFIX,
+    }
+    head = json.dumps(index, ensure_ascii=False, indent=2)[:-2]
+    # 每件证据一行：便于审阅差异，也不让索引按字段撑大仓库行数。
+    rows = ",\n".join(f"    {json.dumps(k, ensure_ascii=False)}: "
+                      f"{json.dumps(_EVIDENCE_INDEX[k], ensure_ascii=False, separators=(',', ':'))}"
+                      for k in sorted(_EVIDENCE_INDEX))
+    return f'{head},\n  "assets": {{\n{rows}\n  }}\n}}\n'
+
 
 
 def public_asset_matches(feature: str, rel: str, platform: str | None = None,
@@ -653,7 +724,7 @@ def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
 
 
 def css(href: str) -> str:
-    return f'<link rel="stylesheet" href="{href}?v=20260922b" />'
+    return f'<link rel="stylesheet" href="{href}?v=20261010a" />'
 
 
 def header_html(page_key: str, title_suffix: str, description: str, canonical: str) -> str:
@@ -1015,8 +1086,18 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         )
 
     def asset(fid: str, path: str, platform: str | None = None) -> str:
-        """证据资产在站点内的相对路径（构建时会把原始文件复制到 assets/evidence/）。"""
-        return f"/capabilities/assets/evidence/{esc(evidence_asset_name(fid, path, platform, collisions))}"
+        """证据原件 URL：经后端签发 COS 预签名地址；本地副本仍复制到 assets/evidence/ 作回退。"""
+        return esc(evidence_url(evidence_asset_name(fid, path, platform, collisions), path))
+
+    def verify_control(fid: str, path: str, platform: str | None = None) -> str:
+        """页面内哈希核验：对照构建索引、COS 对象元数据 x-cos-meta-sha256。"""
+        name = evidence_asset_name(fid, path, platform, collisions)
+        entry = register_evidence(name, path)
+        if entry is None:
+            return ""
+        return (f'<span class="cap-verify" data-evidence="{esc(name)}" data-sha256="{entry["sha256"]}">'
+                f'<button type="button" class="cap-verify-btn">核验哈希</button>'
+                f'<span class="cap-verify-result" aria-live="polite"></span></span>')
 
     def run_lines(pairs: list[tuple[str, dict]], platform: str) -> str:
         if not pairs:
@@ -1038,22 +1119,24 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             p = m["path"]
             src = asset(f["id"], p, platform)
             outcome = esc(m.get("outcome") or "资料收录")
-            digest = f"；SHA-256：{esc(m['sha256'])}" if m.get("sha256") else ""
+            known = m.get("sha256") or (file_digest(p) or ("",))[0]
+            digest = f"；SHA-256：<code>{esc(known)}</code>" if known else ""
             review = "媒体内容已复核，" if m.get("visual_review") == "accepted" else ""
             visible = f"；画面内容：{esc(m['visible_result'])}" if m.get("visible_result") else ""
             cap = (f"{review}记录结论：{outcome}{visible}{digest}"
-                   f"（原始文件：{esc(p)}）")
+                   f"（原始文件：{esc(p)}）{verify_control(f['id'], p, platform)}")
             suffix = Path(p).suffix.lower()
             if suffix in (".mp4", ".webm", ".mov"):
                 videos.append(
                     f'<figure class="cap-shot"><video controls preload="metadata" '
-                    f'playsinline src="{src}"></video><figcaption>{cap}</figcaption></figure>')
+                    f'playsinline src="{src}"></video><figcaption>{cap} '
+                    f'<a href="{src}" target="_blank" rel="noopener">下载原始录像</a></figcaption></figure>')
             else:
                 shots.append(
                     f'<figure class="cap-shot"><a class="cap-shot-link" href="{src}" '
                     f'target="_blank" rel="noopener"><img src="{src}" '
                     f'alt="{esc(f["name"])} 已复核截图" loading="lazy" /></a>'
-                    f'<figcaption>{cap}</figcaption></figure>')
+                    f'<figcaption>{cap} <a href="{src}" target="_blank" rel="noopener">查看原图</a></figcaption></figure>')
         out = ""
         if videos:
             out += ('<div class="cap-evidence-media"><h3>实机录像 / 操作流程</h3>'
@@ -1269,14 +1352,19 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         {un_html}
         {docs_html}
       </div>
+      <p class="cap-section-note cap-evidence-origin">证据原件存放于私有对象存储，页面通过短时效签名地址读取原图与原始录像；
+      「核验哈希」会对照本页登记的 SHA-256 与存储对象元数据。对象存储不可用时自动改用站内副本，
+      也可下载原件后用 <code>sha256sum</code> 自行核对。</p>
     </div>
   </section>
 </main>
+<script src="/capabilities/assets/evidence.js?v=20261010a"></script>
 {footer_html()}"""
 
 
 def write_outputs(data: dict, domains_full: list[dict]) -> dict[str, str]:
     outputs: dict[str, str] = {}
+    _EVIDENCE_INDEX.clear()
     outputs["capabilities/index.html"] = render_index(data, domains_full)
     outputs["capabilities/catalog.html"] = render_catalog(data)
     for d in domains_full:
@@ -1284,6 +1372,7 @@ def write_outputs(data: dict, domains_full: list[dict]) -> dict[str, str]:
             for f in m["features"]:
                 outputs[f"capabilities/feature/{f['id']}.html"] = render_feature(f, d, m, data)
     outputs["data/capabilities.json"] = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    outputs[EVIDENCE_INDEX_REL] = evidence_index_payload()
     return {p: "\n".join(line.rstrip() for line in body.splitlines()) + "\n"
             for p, body in outputs.items()}
 

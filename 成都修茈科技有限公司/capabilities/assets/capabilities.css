@@ -486,3 +486,13 @@
   .capm-matrix, .capm-legend { grid-template-columns: 1fr; }
   .cap-toolbar, .capm-map-toolbar { grid-template-columns: 1fr; }
 }
+
+/* 证据原件哈希核验（evidence.js） */
+.cap-verify { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: 6px; }
+.cap-verify-btn { font: inherit; font-size: 12px; padding: 1px 8px; border: 1px solid var(--border, #d0d7e2); border-radius: 999px; background: #fff; color: inherit; cursor: pointer; }
+.cap-verify-btn:disabled { opacity: .6; cursor: progress; }
+.cap-verify-result { font-size: 12px; }
+.cap-verify-result.is-ok { color: #12a150; }
+.cap-verify-result.is-warn { color: #b76e00; }
+.cap-verify-result.is-bad { color: #e5484d; }
+.cap-evidence-origin { margin-top: 18px; }
