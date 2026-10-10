@@ -1,5 +1,5 @@
 {
-  "lines": 2300296,
+  "lines": 2300496,
   "updated": "2026-10-11",
-  "note": "Main after #2257 plus #2240 Para dispatch ticket chain (+762, unchanged). The extra +8 comes from #2257 (ci-cd workflow, FHD SSOT + root copy) which merged to main without a baseline raise; absorbed here so the gate stays green. Reviewed --force waiver documented in PR #2240 body."
+  "note": "合入 main b932b1b6（基线 2300296）后按 #2261 相对 main 净增 200 行重算（2300296+200）；本 PR 改动未变，仅同步 main（Refs #2261）"
 }
