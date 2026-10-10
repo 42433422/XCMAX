@@ -1,5 +1,5 @@
 {
-  "lines": 2300303,
+  "lines": 2300296,
   "updated": "2026-10-11",
-  "note": "#2235 (+769) on top of main baseline 2299526; main after #2257 is itself +8 over that baseline (CI workflow lines from #2257 backend-test single pytest), carried here so the gate reflects main + #2235."
+  "note": "Main after #2257 plus #2240 Para dispatch ticket chain (+762, unchanged). The extra +8 comes from #2257 (ci-cd workflow, FHD SSOT + root copy) which merged to main without a baseline raise; absorbed here so the gate stays green. Reviewed --force waiver documented in PR #2240 body."
 }
