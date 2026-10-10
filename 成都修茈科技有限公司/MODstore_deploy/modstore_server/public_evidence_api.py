@@ -301,9 +301,7 @@ async def verify_evidence(name: str) -> JSONResponse:
     return JSONResponse(result, headers=dict(_NO_STORE))
 
 
-@router.api_route(
-    "/{name}", methods=["GET", "HEAD"], summary="跳转到证据原件（COS 预签名或站内副本）"
-)
+@router.get("/{name}", summary="跳转到证据原件（COS 预签名或站内副本）")
 async def get_evidence(name: str) -> RedirectResponse:
     entry = lookup(name)
     if entry is None:
