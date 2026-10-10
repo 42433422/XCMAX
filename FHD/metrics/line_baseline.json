@@ -1,5 +1,5 @@
 {
-  "lines": 2298170,
+  "lines": 2298382,
   "updated": "2026-10-10",
-  "note": "Windows backup tasks must follow the active customer data directory, and the interim installer upload retries a stalled copy. These 46 lines are that fix."
+  "note": "Authentication for the MODstore production-line, config and sync-receive write endpoints, plus the CSRF bearer-bypass fix. About 63 lines are the fix, about 148 are its regression tests, and 1 is the changelog entry."
 }
