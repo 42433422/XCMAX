@@ -34,8 +34,11 @@ from typing import Any
 # ``sys.path``. Keep the FHD package root importable regardless of the
 # caller's working directory (including GitHub Actions' working directory).
 ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+for _import_root in (ROOT, Path(__file__).resolve().parent):
+    if str(_import_root) not in sys.path:
+        sys.path.insert(0, str(_import_root))
+
+import self_heal_freshness as freshness
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -1027,6 +1030,7 @@ def create_remediation_issue(
     log_excerpt: str,
     errors: list[ErrorEntry],
     head_repo: str = "",
+    markers: list[str] | None = None,
     token: str | None = None,
     repo: str | None = None,
     client: Any = None,
@@ -1058,7 +1062,9 @@ def create_remediation_issue(
         f"- Run ID: `{run_id}`\n"
         f"- Branch: `{branch or 'unknown'}`\n"
         f"- Head Repository: `{head_repo or repo}`\n"
-        f"- Correlation/Fingerprint: `{fingerprint}`\n\n"
+        f"- Correlation/Fingerprint: `{fingerprint}`\n"
+        + "".join(f"- {mark}\n" for mark in markers or [])
+        + "\n"
         "### 提取结果\n\n"
         f"{error_lines}\n\n"
         "### 运行日志摘录\n\n"
@@ -1192,6 +1198,12 @@ def main(argv: list[str] | None = None) -> int:
         print("::error::[heal] no failed run_id provided")
         return 2
 
+    # 过期失败过滤：在下载日志 / 调 LLM / 建单之前判定；跳过=0，查询失败拦截=2。
+    gate = check_freshness(args.workflow, run_id, token, repo)
+    if gate.action != freshness.PROCEED:
+        return 0 if gate.action == freshness.SKIP else 2
+    gated = gate.reason == "current_head"
+
     print(f"[heal] fetch logs for run_id={run_id} repo={repo}")
     log_text = fetch_workflow_logs(run_id, token=token, repo=repo)
     if not log_text:
@@ -1260,6 +1272,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[skip] durable fingerprint {fingerprint[:8]} already tracked by {existing_issue}")
         return 0
 
+    markers = freshness.source_markers(gate, include_source=gated) if gate.run_attempt else []
+    if markers:
+        lookup_ok, marked_issue = find_source_incident(markers, token, repo)
+        if marked_issue:
+            print(f"[skip] same source event already tracked by {marked_issue}")
+            return 0
+        if not lookup_ok and gated:
+            print(
+                "::error::[heal] incident marker lookup failed; fail-closed, no issue or dispatch"
+            )
+            return 2
+
     # LLM 兜底（仅对通过去重与预算门禁的 needs-human fix）
     needs_human_errors = [f.error for f in fixes if f.needs_human]
     if needs_human_errors:
@@ -1286,7 +1310,13 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print("[heal] LLM unavailable (fail-open), 仅使用规则匹配结果")
 
+    if gated:  # 派单前再查一次：排队或处理期间 PR / 分支可能已推新提交
+        gate = check_freshness(args.workflow, run_id, token, repo)
+        if gate.action != freshness.PROCEED:
+            return 0 if gate.action == freshness.SKIP else 2
+
     issue_url = create_remediation_issue(
+        markers=markers,
         run_id=run_id,
         workflow=args.workflow,
         branch=args.branch,
@@ -1336,49 +1366,49 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run_id_from_env() -> int | None:
     """从 workflow_run 事件 payload 中提取 run_id（GitHub Actions 环境）。"""
-    payload_path = os.environ.get("GITHUB_EVENT_PATH")
-    if not payload_path:
-        return None
-    try:
-        with open(payload_path, "r", encoding="utf-8") as f:
-            payload = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return None
-    wf_run = payload.get("workflow_run") or {}
-    run_id = wf_run.get("id") or wf_run.get("run_id")
-    if isinstance(run_id, int):
-        return run_id
+    run_id = freshness.event_workflow_run().get("id")
     if isinstance(run_id, str) and run_id.isdigit():
         return int(run_id)
-    return None
+    return run_id if isinstance(run_id, int) else None
 
 
-def _branch_from_env() -> str:
-    """从 workflow_run 事件 payload 中提取分支名。"""
-    payload_path = os.environ.get("GITHUB_EVENT_PATH")
-    if not payload_path:
-        return ""
+def _github_getter(token: str, repo: str) -> freshness.Getter:
+    """只读 GitHub 查询；网络/解析异常统一转为 LookupFailed（fail-closed）。"""
+    client = httpx.Client(timeout=30.0) if httpx is not None else None
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
+
+    def get(path: str, params: dict[str, Any]) -> tuple[int, Any]:
+        if client is None or not token or not repo:
+            raise freshness.LookupFailed("GitHub client/token/repo unavailable")
+        try:
+            resp = client.get(f"{GITHUB_API}{path}", headers=headers, params=params)
+            return resp.status_code, resp.json()
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - fail-closed boundary
+            raise freshness.LookupFailed(f"GET {path}: {type(exc).__name__}") from exc
+
+    return get
+
+
+def check_freshness(workflow: str, run_id: int, token: str, repo: str) -> freshness.Decision:
+    """过期失败过滤（只读）；结果写日志与 job summary。"""
+    decision = freshness.evaluate(
+        workflow=workflow,
+        run_id=run_id,
+        repo=repo,
+        get=_github_getter(token, repo),
+        event_run=freshness.event_workflow_run(),
+    )
+    freshness.record(decision)
+    return decision
+
+
+def find_source_incident(markers: list[str], token: str, repo: str) -> tuple[bool, str]:
+    """按 run id+attempt / workflow@head_sha 标记查重；返回 (查询成功, 已有 issue)。"""
     try:
-        with open(payload_path, "r", encoding="utf-8") as f:
-            payload = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return ""
-    wf_run = payload.get("workflow_run") or {}
-    return str(wf_run.get("head_branch") or "")
-
-
-def _workflow_name_from_env() -> str:
-    """从 workflow_run 事件 payload 中提取 workflow 名称。"""
-    payload_path = os.environ.get("GITHUB_EVENT_PATH")
-    if not payload_path:
-        return ""
-    try:
-        with open(payload_path, "r", encoding="utf-8") as f:
-            payload = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return ""
-    wf_run = payload.get("workflow_run") or {}
-    return str(wf_run.get("name") or "")
+        return True, freshness.find_marked_issue(_github_getter(token, repo), repo, markers)
+    except (freshness.LookupFailed, *RECOVERABLE_ERRORS) as exc:
+        print(f"[freshness] incident marker lookup failed: {exc}")
+        return False, ""
 
 
 if __name__ == "__main__":
