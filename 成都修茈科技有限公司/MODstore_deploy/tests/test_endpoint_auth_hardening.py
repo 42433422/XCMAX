@@ -286,7 +286,8 @@ def test_legacy_registry_has_no_config_routes() -> None:
     assert not paths & {"/api/config", "/api/export/fhd-shell-mods"}
 
 
-def _mount_generated(source: str, monkeypatch, host_auth) -> TestClient:
+def _mount_generated(source: str, monkeypatch, host_auth, tmp_path) -> TestClient:
+    import importlib.util
     import sys
     import types
 
@@ -296,8 +297,12 @@ def _mount_generated(source: str, monkeypatch, host_auth) -> TestClient:
         fake = types.ModuleType("app.infrastructure.auth.dependencies")
         fake.require_identified_user = host_auth
         monkeypatch.setitem(sys.modules, "app.infrastructure.auth.dependencies", fake)
-    module = types.ModuleType("generated_blueprints")
-    exec(compile(source, "generated_blueprints.py", "exec"), module.__dict__)
+    path = tmp_path / "generated_blueprints.py"
+    path.write_text(source, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("generated_blueprints", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
     monkeypatch.setattr(module, "_dispatch_run", AsyncMock(return_value={"ok": True}))
     app = FastAPI()
     module.register_fastapi_routes(app, "pack")
@@ -313,7 +318,7 @@ def _host_auth(request, x_user_id=None):
 
 
 @pytest.mark.parametrize("kind", ["employee_pack", "mod_suite"])
-def test_generated_employee_run_routes_require_host_login(monkeypatch, kind) -> None:
+def test_generated_employee_run_routes_require_host_login(monkeypatch, tmp_path, kind) -> None:
     from modstore_server.employee_pack_blueprints_template import (
         render_employee_pack_blueprints_py,
     )
@@ -327,10 +332,10 @@ def test_generated_employee_run_routes_require_host_login(monkeypatch, kind) -> 
         src = render_suite_blueprints_py("pack", "Pack", [{"id": "emp", "label": "Emp"}])
     url = "/api/mod/pack/employees/emp/run"
 
-    client = _mount_generated(src, monkeypatch, _host_auth)
+    client = _mount_generated(src, monkeypatch, _host_auth, tmp_path)
     assert client.post(url, json={}).status_code == 401
     ok = client.post(url, json={}, headers={"Cookie": "session_id=ok"})
     assert ok.status_code == 200
 
-    no_host = _mount_generated(src, monkeypatch, None)
+    no_host = _mount_generated(src, monkeypatch, None, tmp_path)
     assert no_host.post(url, json={}, headers={"Cookie": "session_id=ok"}).status_code == 401

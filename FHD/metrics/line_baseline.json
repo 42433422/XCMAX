@@ -1,5 +1,5 @@
 {
-  "lines": 2298710,
+  "lines": 2298715,
   "updated": "2026-10-10",
-  "note": "#2211 后续：补齐剩余未鉴权端点（新增 MODstore service_auth、FHD xcmax_sync_peer_auth 鉴权模块及 sync/receive 鉴权测试，此前未跟踪未计入）"
+  "note": "#2211 后续：生成蓝图测试改用 importlib 加载（AI review 禁止 exec），+5 行"
 }
