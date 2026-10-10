@@ -29,6 +29,16 @@ def test_match_product_name_contains() -> None:
     assert hit["model_number"] == "ZH-01"
 
 
+def test_match_product_prefers_longest_contained_name() -> None:
+    catalog = [
+        {"name": "MAC验收0929产品", "model_number": "MAC-0929", "price": 3.5},
+        {"name": "MAC验收0929产品13687", "model_number": "M13687", "price": 12.5},
+    ]
+    hit = match_product("MAC验收0929产品13687 数量2", "", None, catalog)
+    assert hit is not None
+    assert hit["model_number"] == "M13687"
+
+
 def test_prepare_parsed_products_computes_amount() -> None:
     rows = prepare_parsed_products(
         input_products=[
