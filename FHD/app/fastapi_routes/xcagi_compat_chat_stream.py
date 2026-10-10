@@ -160,6 +160,8 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         has_pending_workflow
         or sales_closed_loop_route
         or _sales_route.get("intent") in {"desktop", "workflow"}
+        # #2067：开单与 /api/ai/chat 同一套规则识别（process_chat），不交给 LLM 规划器。
+        or _sales_route.get("intent") == "shipment"
         or (
             controlled_entity_named
             and _looks_like_business_db_write(
