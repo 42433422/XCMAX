@@ -43,6 +43,10 @@ WORKFLOW_EXECUTION_FAILED_CODE = "workflow_execution_failed"
 AGENT_RUN_UNAVAILABLE_CODE = "agent_run_unavailable"
 WORKFLOW_SNAPSHOT_UNAVAILABLE_CODE = "workflow_snapshot_unavailable"
 WORKFLOW_PLAN_UNAVAILABLE_CODE = "workflow_plan_unavailable"
+# 销售闭环因「没有仓库 / 没有库存」失败：用户可以自己补齐，给出固定的操作引导。
+WAREHOUSE_NOT_INITIALIZED_CODE = "warehouse_not_initialized"
+INVENTORY_NOT_READY_CODE = "inventory_not_ready"
+SETUP_GUIDANCE_CODES = frozenset({WAREHOUSE_NOT_INITIALIZED_CODE, INVENTORY_NOT_READY_CODE})
 
 _SAFE_OUTCOME_MESSAGES = {
     WORKFLOW_EXECUTION_SUCCESS_CODE: "AI 工作流执行完成",
@@ -50,6 +54,12 @@ _SAFE_OUTCOME_MESSAGES = {
     AGENT_RUN_UNAVAILABLE_CODE: "Agent Run 不可用",
     WORKFLOW_SNAPSHOT_UNAVAILABLE_CODE: "持久化工作流快照不可用",
     WORKFLOW_PLAN_UNAVAILABLE_CODE: "工作流计划不可用",
+    WAREHOUSE_NOT_INITIALIZED_CODE: (
+        "当前企业还没有可用仓库：请先在「库存管理」点击「初始化默认仓库」，为产品入库后再重新提交"
+    ),
+    INVENTORY_NOT_READY_CODE: (
+        "仓库中这个产品没有足够的可用库存：请先在「库存管理 → 入库」登记库存后再重新提交"
+    ),
 }
 
 
@@ -67,10 +77,43 @@ def canonical_workflow_outcome(*, success: bool, code: str = "") -> tuple[str, s
                 AGENT_RUN_UNAVAILABLE_CODE,
                 WORKFLOW_SNAPSHOT_UNAVAILABLE_CODE,
                 WORKFLOW_PLAN_UNAVAILABLE_CODE,
+                WAREHOUSE_NOT_INITIALIZED_CODE,
+                INVENTORY_NOT_READY_CODE,
             }
             else WORKFLOW_EXECUTION_FAILED_CODE
         )
     return safe_code, _SAFE_OUTCOME_MESSAGES[safe_code]
+
+
+def closed_loop_setup_failure_code(agent_run: Any) -> str | None:
+    """从失败的 Agent Run 中识别「仓库未初始化 / 库存未入库」两类可自助修复的闭环失败。
+
+    只比对结构化字段（``error_code`` + ``failed_step``），返回固定安全码，
+    不转发任何底层文本。
+    """
+    for step in list(getattr(agent_run, "steps", []) or []):
+        candidates = [getattr(step, "output", None)]
+        candidates.extend(list(getattr(step, "observations", []) or []))
+        for out in candidates:
+            if not isinstance(out, dict):
+                continue
+            nested = out.get("result") if isinstance(out.get("result"), dict) else None
+            for row in (out, nested):
+                if not isinstance(row, dict):
+                    continue
+                if row.get("error_code") != "CLOSED_LOOP_EXECUTION_FAILED":
+                    continue
+                failed_step = str(row.get("failed_step") or "")
+                message = str(row.get("message") or "")
+                if failed_step == "resolve_warehouse" and message.startswith(
+                    "当前租户下无可用仓库"
+                ):
+                    return WAREHOUSE_NOT_INITIALIZED_CODE
+                if failed_step == "resolve_inventory" and message.startswith(
+                    "可交付库存台账匹配数为 0"
+                ):
+                    return INVENTORY_NOT_READY_CODE
+    return None
 
 
 def _build_workflow_snapshot(

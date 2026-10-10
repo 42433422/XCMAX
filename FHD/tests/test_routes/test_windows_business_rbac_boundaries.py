@@ -215,3 +215,81 @@ def test_mod_shipment_routes_keep_permission_and_file_tenant_scope(
         assert calls == []
     monkeypatch.setattr(dependencies, "resolve_session_user", lambda _request: None)
     assert client.get(base + "/download/note.xlsx").status_code == 401
+
+
+@pytest.mark.parametrize(
+    "tenant,allowed,status", [(None, True, 403), (23, False, 403), (23, True, 200)]
+)
+def test_mod_shipment_print_resolves_files_only_inside_the_session_tenant(
+    tmp_path, monkeypatch, tenant, allowed, status
+):
+    """租户发货单打印走门面 Mod：文件只在本租户目录下解析，旧 /api/shipment/print 仍 403。"""
+    from pathlib import Path
+
+    from app.fastapi_routes import shipment_orders
+    from app.infrastructure.mods.mod_manager import import_mod_backend_py
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    user = SimpleNamespace(id=8, tenant_id=tenant, role="user", is_active=True)
+    monkeypatch.setattr(dependencies, "resolve_session_user", lambda _request: user)
+    monkeypatch.setattr(
+        "app.application.facades.session_facade.get_auth_service",
+        lambda: SimpleNamespace(has_permission=lambda *_args: allowed),
+    )
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    for tid in (23, 24):
+        folder = tmp_path / "tenants" / str(tid) / "shipment_outputs"
+        folder.mkdir(parents=True)
+        (folder / f"t{tid}.xlsx").write_bytes(str(tid).encode())
+    calls = []
+
+    def fake_agent(**kwargs):
+        calls.append((current_tenant_id(), kwargs["params"]["file_path"]))
+        return {"success": True}
+
+    monkeypatch.setattr(shipment_orders, "_run_shipment_orders_agent", fake_agent)
+    mod = import_mod_backend_py(
+        str(Path(__file__).resolve().parents[2] / "mods" / "xcagi-erp-domain-bridge"),
+        "xcagi-erp-domain-bridge",
+        "blueprints",
+    )
+    app = FastAPI()
+    mod.register_fastapi_routes(app, "xcagi-erp-domain-bridge")
+    client = TestClient(app, raise_server_exceptions=False)
+    base = "/api/mod/xcagi-erp-domain-bridge/shipment/print"
+    own = client.post(base, json={"file_path": "t23.xlsx", "tenant_id": 24})
+    assert own.status_code == status
+    if status != 200:
+        assert calls == []
+        return
+    assert len(calls) == 1 and calls[0][0] == 23
+    assert Path(calls[0][1]).parent == (tmp_path / "tenants" / "23" / "shipment_outputs").resolve()
+    other = str(tmp_path / "tenants" / "24" / "shipment_outputs" / "t24.xlsx")
+    for probe in ("t24.xlsx", other, "../24/shipment_outputs/t24.xlsx", "..\\24\\t24.xlsx"):
+        assert client.post(base, json={"file_path": probe}).status_code == 404, probe
+    assert len(calls) == 1
+
+
+def test_legacy_shipment_generate_still_fails_closed_for_tenant_sessions(monkeypatch):
+    """旧接口没有租户隔离：企业租户会话继续 403，不能用放开它来冒充修复。"""
+    from app.fastapi_routes import shipment_orders
+    from app.infrastructure.auth import business_scope_gate
+
+    user = SimpleNamespace(id=8, tenant_id=23, role="user", tier="user", is_active=True)
+    monkeypatch.setattr(business_scope_gate, "resolve_session_user", lambda _request: user)
+    monkeypatch.setattr(business_scope_gate, "get_logged_in_user", lambda _request: user)
+    monkeypatch.setattr(
+        "app.application.facades.session_facade.get_auth_service",
+        lambda: SimpleNamespace(has_permission=lambda *_args: True),
+    )
+    client = _client(shipment_orders.router)
+    for sku in ("enterprise", "personal"):
+        monkeypatch.setattr(business_scope_gate, "resolve_product_sku", lambda sku=sku: sku)
+        for method, path, body in (
+            ("post", "/api/shipment/generate", {"unit_name": "客户B", "products": [{"name": "A"}]}),
+            ("post", "/api/shipment/print", {"file_path": "x.xlsx"}),
+            ("get", "/api/shipment/download/x.xlsx", None),
+        ):
+            response = getattr(client, method)(path, **({"json": body} if body else {}))
+            assert response.status_code == 403, (sku, path)
+            assert "尚未提供安全的租户数据隔离" in response.text

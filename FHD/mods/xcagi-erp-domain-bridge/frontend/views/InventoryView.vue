@@ -15,6 +15,16 @@
       <p v-if="exportMessage" role="status" aria-live="polite">{{ exportMessage }}</p>
       <p v-if="exportError" role="alert" class="text-danger">{{ exportError }}</p>
 
+      <section v-if="warehouseSetupNeeded" class="warehouse-setup-guide" role="status" data-testid="warehouse-setup-guide">
+        <strong>还没有可用仓库</strong>
+        <span>新装或从旧版升级后，需要先初始化仓库，才能入库、出库和执行销售发货。</span>
+        <span>初始化后请为要销售的产品办理「入库」。</span>
+        <button class="btn btn-primary" data-testid="warehouse-setup-init" :disabled="warehouseSetupBusy" @click="initDefaultWarehouse">
+          {{ warehouseSetupBusy ? '正在初始化…' : '初始化默认仓库' }}
+        </button>
+        <span v-if="warehouseSetupError" role="alert" class="text-danger">{{ warehouseSetupError }}</span>
+      </section>
+
       <div class="search-box">
         <select v-model="selectedWarehouse" style="min-width:180px;" @change="applyInventoryFilters">
           <option value="">全部仓库</option>
@@ -237,14 +247,38 @@ export default {
     const { exporting, exportMessage, exportError, exportInventory } = useInventoryExport(inventoryFilters)
     let inventoryRequestId = 0
 
+    const warehousesLoaded = ref(false)
+    const warehouseSetupBusy = ref(false)
+    const warehouseSetupError = ref('')
+    const activeWarehouses = computed(() => warehouses.value.filter((w) => (w.status || 'active') === 'active'))
+    const warehouseSetupNeeded = computed(() => warehousesLoaded.value && activeWarehouses.value.length === 0)
+
     const loadWarehouses = async () => {
       try {
         const res = await get('/api/inventory/warehouses')
         if (res.success) {
           warehouses.value = res.data || []
+          warehousesLoaded.value = true
         }
       } catch (e) {
         console.error('加载仓库失败', e)
+      }
+    }
+
+    const initDefaultWarehouse = async () => {
+      warehouseSetupBusy.value = true
+      warehouseSetupError.value = ''
+      try {
+        const res = await post('/api/inventory/setup/warehouse', {})
+        if (!res.success) throw new Error(res.message || '初始化仓库失败')
+        await loadWarehouses()
+        const created = res.data || {}
+        if (created.id) selectedWarehouse.value = created.id
+        await appAlert(res.message || '已创建默认仓库，请先入库再销售发货')
+      } catch (e) {
+        warehouseSetupError.value = e instanceof Error ? e.message : '初始化仓库失败，请稍后重试'
+      } finally {
+        warehouseSetupBusy.value = false
       }
     }
 
@@ -393,7 +427,11 @@ export default {
 
     return {
       inventoryList,
-      warehouses,
+      warehouses: activeWarehouses,
+      warehouseSetupNeeded,
+      warehouseSetupBusy,
+      warehouseSetupError,
+      initDefaultWarehouse,
       products,
       lowStockList,
       loading,
@@ -444,5 +482,6 @@ export default {
   gap: 10px;
   margin-top: 15px;
 }
+.warehouse-setup-guide { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #f0b429; border-radius: 10px; background: #fffbea; color: #5c4400; }
 .tutorial-inventory-proof { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #e7c46a; border-radius: 10px; background: #fff8df; color: #6f5314; }
 </style>
