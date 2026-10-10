@@ -75,19 +75,10 @@ class DispatchRequest(BaseModel):
 def _service_view(task: MacControlTask) -> dict:
     payload = view(task)
     # Only the fields the dispatcher needs; no customer facts or delivery traces.
-    return {
-        key: payload[key]
-        for key in (
-            "id",
-            "state",
-            "reason",
-            "para_task_id",
-            "device_id",
-            "created_at",
-            "updated_at",
-            "execution",
-        )
-    } | {"terminal": task.state in TERMINAL}
+    keys = ("id", "state", "reason", "para_task_id", "device_id", "created_at", "updated_at")
+    return {key: payload[key] for key in (*keys, "execution")} | {
+        "terminal": task.state in TERMINAL
+    }
 
 
 @router.post("/tasks", status_code=202)

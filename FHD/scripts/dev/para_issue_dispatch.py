@@ -13,14 +13,8 @@ sends any LLM key. It:
 
 Merging stays with the normal CI/review gates; this script never merges.
 
-Exit codes:
-  0  PR created from Para's branch
-  2  owner confirmation missing
-  3  rejected (estimated change too large)
-  4  issue missing `ai-implement` label or not open
-  5  Para dispatch unavailable / not configured
-  6  Para finished without a usable branch, or PR creation failed
-  7  Para task failed, was cancelled, or timed out
+Exit codes: 0 PR created; 2 owner confirmation missing; 3 too large; 4 no label/not open;
+5 Para dispatch unavailable; 6 no usable branch / PR failed; 7 Para failed/cancelled/timed out.
 """
 
 from __future__ import annotations
@@ -269,15 +263,24 @@ def run(args: argparse.Namespace) -> None:
         _finish(result, "no_branch", f"分支不可用：{branch or 'missing'}", 6)
 
     title = str(issue.get("title") or "")[:60]
+    # A PR opened with the workflow's GITHUB_TOKEN never triggers pull_request
+    # workflows, so required CI would never start. Open it with CI_COMMIT_TOKEN.
+    pr_token = os.environ.get("PR_CREATE_TOKEN", "").strip()
+    if not pr_token:
+        _finish(
+            result, "pr_failed", "PR_CREATE_TOKEN 未配置：GITHUB_TOKEN 开的 PR 不会触发必需 CI", 6
+        )
     pr = impl._gh_post(
         f"https://api.github.com/repos/{repo}/pulls",
-        args.token,
+        pr_token,
         {
             "title": f"para(issue #{number}): {title}",
             "head": branch,
             "base": args.base_branch,
             "body": (
-                f"## 关联 issue\n\nCloses #{number}\n\n"
+                f"## 关联 issue\n\nRefs #{number}\n\n"
+                "> 用 `Refs` 而不是 `Closes`：合入代码不等于缺陷已解决。需要安装包验收的缺陷，"
+                "必须在新包实机验收通过后再关单。\n\n"
                 f"## 执行方\n\nPara（devfleet）控制任务 `{result.control_task_id}`，"
                 f"Para 任务 `{result.para_task_id}`，工具 `{args.tool}`，提交 `{result.head_sha}`。\n"
                 "本链路不调用任何 LLM key。\n\n"
@@ -300,7 +303,7 @@ def run(args: argparse.Namespace) -> None:
         args.token,
         f"✅ Para 修复完成。\n\n- Para 任务：`{result.para_task_id}`\n"
         f"- 分支：`{branch}` @ `{result.head_sha[:12]}`\n- PR：{result.pr_url}\n\n"
-        "等 CI 全绿后合并。",
+        "等 CI 全绿后合并；合并后不会自动关单，需安装包验收的缺陷要在新包实机验收通过后再关闭。",
     )
     _finish(result, "pr_created", result.pr_url, 0)
 

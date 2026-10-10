@@ -27,6 +27,7 @@ def test_script_and_workflow_do_not_reference_llm_keys():
     assert "XCAGI_LLM" not in workflow
     assert "para_issue_dispatch.py" in workflow
     assert "MODSTORE_PARA_DISPATCH_TOKEN" in workflow
+    assert "PR_CREATE_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}" in workflow
 
 
 def test_branch_prefers_pushed_report():
@@ -101,6 +102,7 @@ def test_missing_dispatch_token_exits_5(issue, monkeypatch):
 
 def test_completed_task_opens_pr(issue, monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_DISPATCH_TOKEN", "x" * 40)
+    monkeypatch.setenv("PR_CREATE_TOKEN", "pat")
     sent = {}
 
     class Client:
@@ -125,7 +127,8 @@ def test_completed_task_opens_pr(issue, monkeypatch):
     assert exc.value.code == 0
     assert sent["tool"] == "cursor" and sent["github_issue"] == 5
     pulls = [b for u, b in issue if u.endswith("/pulls")]
-    assert pulls and pulls[0]["head"] == "devfleet/fix" and "Closes #5" in pulls[0]["body"]
+    assert pulls and pulls[0]["head"] == "devfleet/fix"
+    assert "Refs #5" in pulls[0]["body"] and "Closes #" not in pulls[0]["body"]
 
 
 def test_failed_task_exits_7(issue, monkeypatch):

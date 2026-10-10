@@ -6,7 +6,8 @@ name: AI Issue Implement
 #   - 预估变更 >5 文件时拒做
 #   - 修复交给 Para（devfleet，优先 cursor）执行，经 MODstore 派单专用服务令牌下发；
 #     本链路不调用任何 LLM key（2026-10-10 用户规则：发版解决问题必须经过 Para）
-#   - Para 推送分支后创建 PR（`ai-generated` + `para`），CI 全绿后才合并
+#   - Para 推送分支后创建 PR（`ai-generated` + `para`），CI 全绿后才合并；PR 正文用 Refs 不用 Closes，
+#     需安装包验收的缺陷在新包实机验收通过后再关单
 #
 # 触发条件：
 #   1. issues 事件（labeled: ai-implement）
@@ -56,6 +57,8 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+      # GITHUB_TOKEN 开的 PR 不会触发 pull_request workflow，必需 CI 不会启动；改用 CI_COMMIT_TOKEN 开 PR。
+      PR_CREATE_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
