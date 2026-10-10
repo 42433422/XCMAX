@@ -6,7 +6,9 @@ name: AI Issue Implement
 #   - issue 打 `ai-implement` 标签时触发
 #   - 授权：命中 config/auto-implement-allowlist.yaml 域标签，或 owner 评论「确认」
 #   - 预估变更 >5 文件时拒做
-#   - 实现后创建 PR 标 `ai-generated` + `risk:r1`，经 SLA 二次守卫 + 48h 观察期 + `hold-merge` veto 后自动合并
+#   - 修复交给 Para（devfleet，优先 cursor）执行，经 MODstore 派单专用服务令牌下发；
+#     本链路不调用任何 LLM key（2026-10-10 用户规则：发版解决问题必须经过 Para）
+#   - Para 推送分支后创建 PR（`ai-generated` + `para`），CI 全绿后才合并
 #
 # 触发条件：
 #   1. issues 事件（labeled: ai-implement）
@@ -53,13 +55,14 @@ jobs:
         github.event.comment.body == '/approve-implementation') &&
        contains(github.event.issue.labels.*.name, 'ai-implement'))
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 90
+    concurrency:
+      group: ai-issue-implement-${{ github.event.issue.number || github.event.inputs.issue_number }}
+      cancel-in-progress: false
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_REPOSITORY: ${{ github.repository }}
-      XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
-      XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
-      XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+      MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,7 +77,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
-          pip install PyGithub
 
       - name: Resolve issue number
         id: resolve
@@ -87,23 +89,22 @@ jobs:
             echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Validate & implement issue
+      - name: Validate & hand issue to Para
         working-directory: FHD
         env:
           ISSUE_NUMBER: ${{ steps.resolve.outputs.issue_number }}
+          BASE_BRANCH: ${{ github.event.inputs.target_branch || 'main' }}
         run: |
-          python scripts/dev/ai_issue_implement.py \
+          python scripts/dev/para_issue_dispatch.py \
             --issue-number "$ISSUE_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
-            --token "$GITHUB_TOKEN" \
-            --llm-api-key "${XCAGI_LLM_API_KEY:-}" \
-            --base-branch "${{ github.event.inputs.target_branch || 'main' }}" \
-            --apply
+            --base-branch "$BASE_BRANCH" \
+            --tool cursor
 
       - name: Upload implementation log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ai-issue-implement-log-${{ steps.resolve.outputs.issue_number }}
-          path: FHD/test_reports/ai_issue_implement_${{ steps.resolve.outputs.issue_number }}.json
+          path: FHD/test_reports/para_issue_dispatch_${{ steps.resolve.outputs.issue_number }}.json
           if-no-files-found: ignore
