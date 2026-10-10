@@ -87,7 +87,6 @@ abstract class _RepoServicesBase extends _RepoChatBase {
     return response.data?.notifications ?? const <PendingNotification>[];
   }
 
-
   Future<List<OnboardingIndustry>> loadOnboardingIndustries() async {
     final response = await _client.onboardingIndustries();
     if (!response.success) {
@@ -338,19 +337,29 @@ abstract class _RepoServicesBase extends _RepoChatBase {
     _imWebSocket.disconnect();
   }
 
+  /// IM WebSocket 地址。
+  ///
+  /// - LAN：沿用局域网主机推导（行为不变）。
+  /// - cloud：与 REST 走同一个后端基地址（[MobileApiClient.resolveSessionBaseUrl]），
+  ///   因此构建参数 `XCAGI_MOBILE_BASE_URL` 覆盖后 WS 也跟着走；未覆盖时仍是线上
+  ///   `wss://xiu-ci.com/fhd-api/ws/im`。此前 cloud 模式写死线上地址，导致自建/测试
+  ///   后端的 App 永远连不上实时通道。
   Future<String> _imWebSocketUrl(String sessionId) async {
     final session = await _client.loadSession();
-    final host = session.fhdHost.trim();
-    final mode = session.serverMode.trim().toLowerCase() == 'lan'
-        ? MobileServerMode.lan
-        : MobileServerMode.cloud;
-    return MobileServerRouter(
-      fhdHost: host.isNotEmpty ? host : '127.0.0.1',
-      mode: mode,
-      enterpriseFhdBaseUrlRaw: MobileBuildConfig.enterpriseFhdBaseUrl,
-      modstoreBaseUrlRaw: MobileBuildConfig.modstoreBaseUrl,
-    ).fhdImWebSocketUrl(sessionId);
+    if (session.serverMode.trim().toLowerCase() == 'lan') {
+      final host = session.fhdHost.trim();
+      return MobileServerRouter(
+        fhdHost: host.isNotEmpty ? host : '127.0.0.1',
+        mode: MobileServerMode.lan,
+      ).fhdImWebSocketUrl(sessionId);
+    }
+    final base = await _client.resolveSessionBaseUrl();
+    return MobileServerRouter.webSocketUrlForHttpBase(base, sessionId);
   }
+
+  /// 测试/诊断用：当前会话会连接的 IM WebSocket 地址。
+  Future<String> imWebSocketUrlForSession(String sessionId) =>
+      _imWebSocketUrl(sessionId);
 
   Future<int> openImDirect(int peerUserId) async {
     if (peerUserId <= 0) {
@@ -401,5 +410,4 @@ abstract class _RepoServicesBase extends _RepoChatBase {
       createdAt: '刚刚',
     );
   }
-
 }
