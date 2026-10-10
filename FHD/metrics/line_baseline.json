@@ -1,5 +1,5 @@
 {
-  "lines": 2299710,
+  "lines": 2299718,
   "updated": "2026-10-11",
-  "note": "#2067 首启回归测试子进程 PYTHONPATH 修正（Refs #2067）"
+  "note": "Main 034077d88 基线 2299526，加 #2261 首启 import 死锁修复净增：registry 修正 + 首启竞态回归测试 test_llm_registry_first_launch_import_2067.py（含子进程 sys.path 修正）+ CHANGELOG（Refs #2067）"
 }
