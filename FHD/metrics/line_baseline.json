@@ -1,5 +1,5 @@
 {
-  "lines": 2298382,
+  "lines": 2298674,
   "updated": "2026-10-10",
-  "note": "Authentication for the MODstore production-line, config and sync-receive write endpoints, plus the CSRF bearer-bypass fix. About 63 lines are the fix, about 148 are its regression tests, and 1 is the changelog entry."
+  "note": "Repair of the customer credit and finance-journal columns missing from upgraded desktop databases (Windows U8 acceptance). About 82 lines are the forward-only Alembic repair, about 209 are its SQLite and desktop-startup regression tests, and 1 is the changelog entry."
 }
