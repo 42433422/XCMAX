@@ -1,0 +1,16 @@
+{
+  "_comment": "Auto-generated extraction of the Windows real-machine review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "platform": "windows",
+  "feature": "dt-install-sign",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "2f17625609d387605d91139e3553186e47fc8d0f70896efefdf93ab43ca113c8",
+  "visible_content": null,
+  "full_feature_acceptance": false,
+  "visual_review_state": "not_a_ui_frame",
+  "frame_modality": "terminal_probe",
+  "video_modality": "terminal_probe",
+  "source": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/dt-install-sign.png"
+}

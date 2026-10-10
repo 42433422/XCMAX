@@ -1,0 +1,158 @@
+{
+  "_comment": "登记与本轮 Windows 真机取证重叠的 #1988 改动；用于避免两边同时改同一块代码。",
+  "register_type": "cross-pr-overlap",
+  "owner": "windows-evidence",
+  "generated_at": "2026-09-20",
+  "windows_branch": "evidence/windows-real-machine-1.0.0.5",
+  "windows_branch_base": "25621226a6a7952913e66ddd9e03363a99f8ceda",
+  "windows_evidence_product_version": "1.0.0.5",
+  "windows_evidence_release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "overlapping_pr": {
+    "number": 1988,
+    "title": "codex/macos-evidence-quality",
+    "merge_commit": "25621226a6a7952913e66ddd9e03363a99f8ceda",
+    "base_before_merge": "1bbe829cd",
+    "state": "merged",
+    "changed_files": 532
+  },
+  "merge_condition_status": {
+    "user_condition": "遇到 #1988 已覆盖的问题,先记录,等它合并后复验,不要两边同时改同一块代码",
+    "satisfied": true,
+    "note": "#1988 已合并进 main，且本轮分支即以该合并提交为基线，因此不存在“两边同时改同一块代码”的冲突面：本轮不修改任何 #1988 触及的文件。"
+  },
+  "must_not_co_modify": {
+    "reason": "这些路径属于 #1988 的能力中心 / 证据复核范围，本轮一律不改。",
+    "capability_center_paths": [
+      "成都修茈科技有限公司/data/capabilities/catalog.json",
+      "成都修茈科技有限公司/data/capabilities.json",
+      "成都修茈科技有限公司/scripts/build_capability_center.py",
+      "成都修茈科技有限公司/capabilities/**"
+    ],
+    "capability_center_changed_files": 327,
+    "macos_evidence_paths": [
+      "FHD/docs/evidence/e2e/macos-visual-review-20260920/**",
+      "FHD/docs/evidence/e2e/macos-acceptance-20260920/**"
+    ],
+    "macos_evidence_changed_files": 162,
+    "windows_scope": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/** (本轮唯一新增范围)",
+    "verified_this_round": "git status 显示本轮只新增 windows-real-machine-1.0.0.5/ 一个目录"
+  },
+  "known_overlaps": [
+    {
+      "id": "O1",
+      "area": "能力中心证据复核（#1988 主体）",
+      "detail": "150 张旧截图复核为 46 张唯一原图；重复/空白/错页/仅导航画面不再作为通过证据；未成立完整实机验收不显示“已验证”。",
+      "windows_relation": "本轮 W1 是同一问题在 Windows 端的体现：96/99 帧为终端 API 探针录屏，故 verified_recommended 为 0。",
+      "action": "不修改能力中心；由唯一集成方在灌回 #1986 产品中心时统一处理。"
+    },
+    {
+      "id": "O2",
+      "area": "base-login 状态由 verified 降为 partial",
+      "detail": "成都修茈科技有限公司/capabilities/base-login.html 的 st-verified 改为 st-partial。",
+      "windows_relation": "本轮 base-login 结论为 BLOCKED（无 SUNBIRD 企业凭据，无法完成登录）。",
+      "action": "不改该 HTML；本轮不重复下调，只登记。"
+    },
+    {
+      "id": "O3",
+      "area": "只读否定词与型号字段提取",
+      "detail": "FHD/app/domain/services/conversation/chat_tool_intent.py、FHD/app/infrastructure/persistence/compat_db/product_queries.py、FHD/tests/test_application/test_negated_request_no_write_plan.py",
+      "windows_relation": "相关 Windows 目录条目（ai-intent 等）本轮为 BLOCKED。",
+      "action": "不改这些文件；待含该修复的新构建出包后复验。"
+    },
+    {
+      "id": "O4",
+      "area": "ERP Mod 两个导出入口（报价单/产品导出）",
+      "detail": "FHD/app/infrastructure/documents/price_list_export.py、FHD/app/infrastructure/repositories/product_repository_export_mixin.py、FHD/app/fastapi_routes/xcagi_compat_product_actions.py、FHD/mods/xcagi-erp-domain-bridge/backend/blueprints.py",
+      "windows_relation": "Windows 端 erp-trade 导出相关条目证据采集于 #1988 之前。",
+      "action": "不改这些文件；需对含 #1988 修复的构建重新取证。"
+    },
+    {
+      "id": "O5",
+      "area": "首次配置私有客户包",
+      "detail": "FHD/frontend/src/views/product-onboarding/useProductOnboardingActions.ts、FHD/tests/test_deep_mods/test_customer_delivery_seed.py",
+      "windows_relation": "Windows 端 ind-customer 相关条目证据采集于 #1988 之前。",
+      "action": "不改这些文件；需重新取证。"
+    },
+    {
+      "id": "O6",
+      "area": "知识导入抽屉遮挡悬浮助理",
+      "detail": "FHD/frontend/src/components/persy/PersyImportDrawer.vue / .css、FHD/frontend/src/components/FloatingChatAssistant.test.ts",
+      "windows_relation": "Windows 端 ai-knowledge / 悬浮助理相关条目证据采集于 #1988 之前。",
+      "action": "不改这些文件；需重新取证。"
+    },
+    {
+      "id": "O7",
+      "area": "依赖升级",
+      "detail": "FHD/XCAGI/requirements.lock.txt（AnyIO 锁到 4.14.2）、成都修茈科技有限公司/MODstore_deploy/market/package.json（adm-zip 升 0.6.1）",
+      "windows_relation": "依赖变化可能影响本机后端行为。",
+      "action": "不改这些文件；重新取证时记录新依赖版本。"
+    }
+  ],
+  "windows_evidence_staleness": {
+    "finding": "W7",
+    "severity": "high",
+    "statement": "本轮 Windows 证据采集于 release_sha 54325894cc6e3fc2becfcbc98697a099310d9420，而 main 当前为 25621226a（含 #1988 对 FHD/app/**、FHD/frontend/src/** 等产品代码的修改）。因此凡行为依赖这些改动的能力，其 Windows 证据相对 main 已过期。",
+    "affected_product_code_files": [
+      "FHD/XCAGI/mods/xcagi-erp-domain-bridge/backend/blueprints.py",
+      "FHD/XCAGI/requirements.lock.txt",
+      "FHD/app/domain/services/conversation/chat_tool_intent.py",
+      "FHD/app/fastapi_routes/domains/product/routes.py",
+      "FHD/app/fastapi_routes/mod_store_route_handlers_part01.py",
+      "FHD/app/fastapi_routes/xcagi_compat_product_actions.py",
+      "FHD/app/infrastructure/documents/price_list_export.py",
+      "FHD/app/infrastructure/persistence/compat_db/product_queries.py",
+      "FHD/app/infrastructure/repositories/product_repository_export_mixin.py",
+      "FHD/app/mod_sdk/host_services.py",
+      "FHD/frontend/src/api/modStore.full.test.ts",
+      "FHD/frontend/src/api/modStore.ts",
+      "FHD/frontend/src/components/FloatingChatAssistant.test.ts",
+      "FHD/frontend/src/components/persy/PersyImportDrawer.css",
+      "FHD/frontend/src/components/persy/PersyImportDrawer.test.ts",
+      "FHD/frontend/src/components/persy/PersyImportDrawer.vue",
+      "FHD/frontend/src/composables/useChatPersistence.coverage.test.ts",
+      "FHD/frontend/src/composables/useChatPersistence.ts",
+      "FHD/frontend/src/constants/platformShell.ts",
+      "FHD/frontend/src/views/ProductOnboardingView.coverage.test.ts",
+      "FHD/frontend/src/views/product-onboarding/useProductOnboardingActions.ts",
+      "FHD/mods/xcagi-erp-domain-bridge/backend/blueprints.py"
+    ],
+    "affected_test_files": [
+      "FHD/tests/test_application/test_negated_request_no_write_plan.py",
+      "FHD/tests/test_deep_mods/test_customer_delivery_seed.py",
+      "FHD/tests/test_erp_products_facade.py",
+      "FHD/tests/test_infrastructure/test_price_list_export.py",
+      "FHD/tests/test_infrastructure/test_price_list_export_ext2.py",
+      "FHD/tests/test_infrastructure/test_price_list_export_ext3.py",
+      "FHD/tests/test_infrastructure/test_product_queries_branch_cov.py",
+      "FHD/tests/test_infrastructure/test_product_repository_export_mixin.py",
+      "FHD/tests/test_routes/test_mod_store_routes_cov.py",
+      "FHD/tests/test_routes/test_product_compat_routes.py",
+      "FHD/tests/test_routes/test_xcagi_compat_product.py",
+      "FHD/tests/test_routes/test_xcagi_compat_product_branch_cov.py"
+    ],
+    "required_action": "待发布一个包含 25621226a 的新构建后，对上述受影响能力重新做 Windows 真机取证；在此之前不得据此标绿。"
+  },
+  "defects_found_in_prior_manifest": [
+    {
+      "id": "W2",
+      "detail": "dt-neurobus、dt-integrity 记为 PASS 但仅有 /api/health 探针，无功能专属证据。",
+      "handling": "本轮 recommended_catalog_status 降为 implemented。"
+    },
+    {
+      "id": "W3",
+      "detail": "base-login、base-rbac 的 verdict=BLOCKED 但 verdict_reason 写成“verified ... all six evidence elements present”。",
+      "handling": "本轮按 verdict 重新派生 verdict_reason，原值保留于 prior_verdict_reason。"
+    },
+    {
+      "id": "W6",
+      "detail": "dt-element-find、dt-desktop-workflow 的 catalog 状态为 planned 且无 impl 证据，但本机探针返回 2xx。",
+      "handling": "本轮不上调任何状态（recommended_catalog_status 为 null），仅登记差异。"
+    }
+  ],
+  "next_steps_for_integrator": [
+    "等 macOS 侧同样产出各自的 Evidence Manifest。",
+    "由唯一集成方把 Windows / macOS 两份 Manifest 一并灌回 #1986 的产品中心（catalog.evidence.runs / review）。",
+    "灌回时不要把本轮的终端 API 探针录屏当作产品 UI 验收证据。",
+    "对 #1988 触及且 Windows 证据已过期的能力，待新构建出包后重新取证再判定状态。"
+  ]
+}

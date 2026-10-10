@@ -1,0 +1,11 @@
+=== on-machine RBAC surface probe (unauthenticated, desktop runtime) ===
+probed_at: 2026-09-19 22:25:17
+GET /api/rbac/roles -> HTTP 401 {"success":false,"error_code":"http_401","message":"{'success': False, 'message': {'code': 'UNAUTHORIZED', 'message': '请先登录'}}","path":"/api/rbac/roles"}
+GET /api/rbac/users -> HTTP 404 {"success":false,"message":"资源不存在：/api/rbac/users"}
+GET /api/rbac/permissions -> HTTP 401 {"success":false,"error_code":"http_401","message":"{'success': False, 'message': {'code': 'UNAUTHORIZED', 'message': '请先登录'}}","path":"/api/rbac/permissions"}
+GET /api/rbac/policies -> HTTP 404 {"success":false,"message":"资源不存在：/api/rbac/policies"}
+GET /api/xcmax/admin/session -> HTTP 403 {"success":false,"message":"桌面端不支持管理员账号登录，请使用网页版管理端","error":{"code":"ADMIN_DESKTOP_FORBIDDEN","message":"桌面端不支持管理员账号登录，请使用网页版管理端"},"valid":false}
+GET /api/xcmax-admin/session -> HTTP 404 {"success":false,"message":"资源不存在：/api/xcmax-admin/session"}
+
+=== health: rbac business route component state ===
+business_route:rbac -> ok=True required=False detail=[]

@@ -1,0 +1,109 @@
+{
+  "_comment": "Auto-generated from the Windows real-machine evidence run; DO NOT EDIT historical outcomes.",
+  "kind": "feature-acceptance",
+  "platform": "windows",
+  "feature": "dt-integrity",
+  "status": "passed",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-20",
+  "reviewed_at": "2026-09-20",
+  "passed": 0,
+  "failed": 0,
+  "evidence_modality": "local_api_probe",
+  "visual_review_state": "not_a_ui_frame",
+  "full_feature_acceptance": false,
+  "visible_content": null,
+  "media": [
+    {
+      "feature": "dt-integrity",
+      "kind": "screenshot",
+      "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/dt-integrity.png",
+      "sha256": "19cdd7cdacd7d6545d4747168eb75bd46c2abfc8e591b0107e01f727d64fecc0",
+      "bytes": 236595,
+      "frame_modality": "terminal_probe",
+      "visual_review": "not_a_ui_frame",
+      "review_basis": "terminal API probe recording on this machine; not a product-UI frame",
+      "visible_result": null,
+      "reviewed_at": "2026-09-20"
+    },
+    {
+      "feature": "dt-integrity",
+      "kind": "video",
+      "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/dt-integrity.mp4",
+      "sha256": "1d25fb5a3912c70f1f15c7a2d1608f55ef386640b1063bdd4051edb650b09c97",
+      "bytes": 425263,
+      "frame_modality": "terminal_probe",
+      "visual_review": "not_a_ui_frame",
+      "review_basis": "terminal API probe recording on this machine; not a product-UI frame",
+      "visible_result": null,
+      "reviewed_at": "2026-09-20"
+    }
+  ],
+  "cases": [
+    {
+      "input": "Windows real-machine verification of 运行完整性与健康检查 (dt-integrity)",
+      "actions": "Runtime integrity and health check: the packaged backend reports every required component as healthy, with the build identity matching the frozen release SHA.",
+      "expected": "All components marked required are healthy and the reported git SHA equals the released build SHA.",
+      "observed": "status is reported below; the two non-required industry MOD components are absent locally by design and are listed as degraded reasons only.",
+      "result": "passed"
+    }
+  ],
+  "six_elements": {
+    "screenshot": true,
+    "video": true,
+    "log": true,
+    "product_version": true,
+    "app_sha": true,
+    "verify_time": true
+  },
+  "evidence_kind": "local_api",
+  "machine": {
+    "hostname": "佳诺",
+    "os": "Microsoft Windows 11 家庭版 中文版",
+    "version": "10.0.26200",
+    "arch": "AMD64",
+    "ram_gb": 15.6
+  },
+  "baseline": {
+    "product_version": "1.0.0.5",
+    "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "installer": {
+      "name": "XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+      "bytes": 248514275,
+      "sha256_expected": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+      "sha256_measured": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+      "authenticode": "NotSigned"
+    },
+    "install_root": "C:\\XCAGI-evidence-1.0.0.5",
+    "user_data_dir": "C:\\XCAGI-evidence-data-1.0.0.5\\userData",
+    "clean_baseline": "全新独立安装目录 + 全新空 userData 目录（C:\\XCAGI-evidence-data-1.0.0.5\\userData，取证前为空），安装包从公网 https://xiu-ci.com 下载并校验 SHA256",
+    "installed_at": "2026-09-19 20:31:36",
+    "cold_start_seconds": 41.4,
+    "health": {
+      "status": "healthy",
+      "version": "1.0.0.5",
+      "git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "release_id": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420"
+    },
+    "build_info": {
+      "releaseId": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420",
+      "schema_version": 1,
+      "gitSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "version": "1.0.0.5"
+    },
+    "sku": {
+      "schema_version": 1,
+      "sku": "enterprise"
+    },
+    "app_exe_sha256": "41a272575d43faa7c71d079716078c7539c4078d5133abde9a0839e25217078c",
+    "machine": {
+      "hostname": "佳诺",
+      "os": "Microsoft Windows 11 家庭版 中文版",
+      "version": "10.0.26200",
+      "arch": "AMD64",
+      "ram_gb": 15.6
+    }
+  }
+}
