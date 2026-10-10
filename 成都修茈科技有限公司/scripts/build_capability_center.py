@@ -180,9 +180,14 @@ def evidence_index_payload() -> str:
         "note": "能力中心公开证据白名单：name → COS 对象键与 SHA-256；后端只为此处登记的对象签发预签名 URL。",
         "api_prefix": EVIDENCE_API_PREFIX,
         "local_prefix": EVIDENCE_LOCAL_PREFIX,
-        "assets": {k: _EVIDENCE_INDEX[k] for k in sorted(_EVIDENCE_INDEX)},
     }
-    return json.dumps(index, ensure_ascii=False, indent=2) + "\n"
+    head = json.dumps(index, ensure_ascii=False, indent=2)[:-2]
+    # 每件证据一行：便于审阅差异，也不让索引按字段撑大仓库行数。
+    rows = ",\n".join(f"    {json.dumps(k, ensure_ascii=False)}: "
+                      f"{json.dumps(_EVIDENCE_INDEX[k], ensure_ascii=False, separators=(',', ':'))}"
+                      for k in sorted(_EVIDENCE_INDEX))
+    return f'{head},\n  "assets": {{\n{rows}\n  }}\n}}\n'
+
 
 
 def public_asset_matches(feature: str, rel: str, platform: str | None = None,
