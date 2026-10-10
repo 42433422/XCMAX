@@ -1,5 +1,5 @@
 {
-  "lines": 2299194,
+  "lines": 2302637,
   "updated": "2026-10-10",
-  "note": "#2235 warehouse setup guide (application helper + routes + InventoryView guide), tenant-scoped bridge shipment print, chat download routing, closed-loop guidance codes, with tests, mod mirror and changelog"
+  "note": "#2235 warehouse setup guide, tenant-scoped bridge shipment print, chat download routing, closed-loop guidance codes, with tests, mod mirror and changelog (re-applied on top of main after #2220)"
 }
