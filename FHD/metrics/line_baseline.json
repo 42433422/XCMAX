@@ -1,5 +1,5 @@
 {
-  "lines": 2299636,
+  "lines": 2299637,
   "updated": "2026-10-11",
-  "note": "CI speedup D2: backend-test split into 4 pytest-split shards + aggregate backend-test job (shared setup steps appear in both jobs); workflow source + generated root copy."
+  "note": "#2263 分片暴露的两处测试顺序依赖修复：test_mobile_api_extensions client fixture 显式关闭 desktop fast-start（+1 行，与 test_mobile_api.py 一致）；test_invalidate_registry 断言移入 patch 作用域（0 行）"
 }

@@ -16,6 +16,7 @@ from app.fastapi_routes import mobile_api_extensions as mobile_ext  # noqa: E402
 def client(monkeypatch):
     monkeypatch.setenv("LAN_GUARD_ENABLED", "0")
     monkeypatch.setenv("LAN_CIDR_GUARD_ENABLED", "0")
+    monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "0")
     from app.fastapi_app.factory import create_fastapi_app
 
     return TestClient(create_fastapi_app(enable_cors=False))
