@@ -493,7 +493,28 @@ class TestMatchRules:
 # =====================================================================
 
 
+_LLM_ENDPOINT = "https://llm.internal.test/v1/fix"
+
+
 class TestCallLlm:
+    def test_missing_endpoint_never_sends_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """未配置 XCAGI_LLM_ENDPOINT 时不得把密钥发往任何默认/占位地址。"""
+        monkeypatch.delenv("XCAGI_LLM_ENDPOINT", raising=False)
+        err = heal.ErrorEntry("ruff", "F401", "msg", "f", 1, "raw")
+        client = MagicMock()
+        assert heal.call_llm([err], api_key="secret", client=client) is None
+        client.post.assert_not_called()
+
+    def test_endpoint_from_env_is_used(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("XCAGI_LLM_ENDPOINT", _LLM_ENDPOINT)
+        err = heal.ErrorEntry("ruff", "F401", "msg", "f", 1, "raw")
+        client = MagicMock()
+        resp = MagicMock()
+        resp.status_code = 500
+        client.post.return_value = resp
+        assert heal.call_llm([err], api_key="k", client=client) is None
+        assert client.post.call_args.args[0] == _LLM_ENDPOINT
+
     def test_no_api_key_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_LLM_API_KEY", raising=False)
         err = heal.ErrorEntry("ruff", "F401", "msg", "f", 1, "raw")
@@ -507,7 +528,7 @@ class TestCallLlm:
         err = heal.ErrorEntry("ruff", "F401", "msg", "f", 1, "raw")
         client = MagicMock()
         client.post.side_effect = TimeoutError("timeout")
-        result = heal.call_llm([err], api_key="k", client=client)
+        result = heal.call_llm([err], api_key="k", endpoint=_LLM_ENDPOINT, client=client)
         assert result is None
 
     def test_http_500_returns_none(self) -> None:
@@ -516,7 +537,7 @@ class TestCallLlm:
         resp = MagicMock()
         resp.status_code = 500
         client.post.return_value = resp
-        result = heal.call_llm([err], api_key="k", client=client)
+        result = heal.call_llm([err], api_key="k", endpoint=_LLM_ENDPOINT, client=client)
         assert result is None
 
     def test_valid_response_returns_fixes(self) -> None:
@@ -535,7 +556,7 @@ class TestCallLlm:
             ]
         }
         client.post.return_value = resp
-        result = heal.call_llm([err], api_key="k", client=client)
+        result = heal.call_llm([err], api_key="k", endpoint=_LLM_ENDPOINT, client=client)
         assert result is not None
         assert len(result) == 1
         assert result[0].needs_human is False

@@ -1,5 +1,5 @@
 {
-  "lines": 2298572,
+  "lines": 2298615,
   "updated": "2026-10-10",
-  "note": "Mac acceptance blockers unified with #2224: explicit quantity/unit-price orders (#2067) with filler guard, longest-name product match, approval preview for execute_closed_loop, defect reports routed to issue intake (async-safe); fixes, regression tests and changelog. Legacy shipment download keeps its tenant 403."
+  "note": "Shared raise: #2218 self-heal endpoint guard (merged), unified Mac acceptance fix #2214 incl. #2224 (#2067 explicit quantity/unit price, longest-name match, approval preview, async-safe defect intake, tests, changelog), plus +16 reserved for the #2219 customer-slot regression tests so it can merge after this."
 }
