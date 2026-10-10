@@ -1,5 +1,5 @@
 {
-  "lines": 2298569,
+  "lines": 2298801,
   "updated": "2026-10-10",
-  "note": "Main's shared raise (self-heal guard +27, #2067 customer-slot tests +16, #2067 quantity/unit-price +85) plus the AI review placeholder-endpoint guard (+59), so the remaining PRs still merge in any order."
+  "note": "Merge origin/main (#2220 auth) plus AI review placeholder-endpoint guard (+59)."
 }
