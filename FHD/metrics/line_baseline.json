@@ -1,5 +1,5 @@
 {
-  "lines": 2298510,
+  "lines": 2298948,
   "updated": "2026-10-10",
-  "note": "Shared raise for three related PRs so they merge in any order: self-heal explicit LLM endpoint guard (+27), #2067 customer-slot regression tests (+16), and #2067 quantity/unit-price extraction with tests and changelog (+85)."
+  "note": "Main after #2218/#2220 (2298742) plus the unified Mac acceptance fix #2214 incl. #2224 (#2067 explicit quantity/unit price, longest-name match, approval preview, async-safe defect intake, tests, changelog; +190), plus +16 reserved for the #2219 customer-slot regression tests."
 }
