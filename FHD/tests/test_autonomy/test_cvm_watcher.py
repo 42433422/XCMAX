@@ -402,6 +402,7 @@ class TestTick:
         healthy_adapter: CvmAutonomyAdapter,
     ) -> None:
         """健康 truth → 不派生信号 → 不产出 plan → 不执行 action。"""
+        healthy_adapter._probe_disk_usage = lambda: 50.0  # type: ignore[method-assign]  # 健康=磁盘也健康，不读宿主真实磁盘
         state = WatcherState()
 
         truth, signals, plans, audits = tick(healthy_adapter, ALL_POLICIES, state)
@@ -514,6 +515,7 @@ class TestTickUnfreezeIntegration:
         # health_ok=True, compose running → 不派生 signal，不触发其他 plan
         adapter_for_test._health_probe = lambda url: True
         adapter_for_test._compose_status_probe = lambda root: ("running", True)
+        adapter_for_test._probe_disk_usage = lambda: 50.0  # type: ignore[method-assign]  # 健康=磁盘也健康，不读宿主真实磁盘
         state = WatcherState()
 
         truth, signals, plans, audits = tick(adapter_for_test, ALL_POLICIES, state)
