@@ -91,7 +91,9 @@ _RACE_SCRIPT = textwrap.dedent(
 
 def test_health_probe_during_first_market_account_import_keeps_facade_loadable():
     env = dict(os.environ)
-    env["PYTHONPATH"] = os.pathsep.join([str(FHD_ROOT), *[p for p in sys.path if p]])
+    # 只追加 FHD 根目录；不要整份拷贝 sys.path（pytest 会插入 scripts/autonomy 等目录，
+    # 其中的 types.py 会在子进程里遮蔽标准库）。
+    env["PYTHONPATH"] = os.pathsep.join(p for p in (str(FHD_ROOT), env.get("PYTHONPATH", "")) if p)
     proc = subprocess.run(
         [sys.executable, "-c", _RACE_SCRIPT],
         cwd=str(FHD_ROOT),
