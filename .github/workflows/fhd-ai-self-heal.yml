@@ -34,8 +34,8 @@ on:
         required: false
         default: ""
 
-# CI 提速：同一源工作流+源分支的失败只保留最新一次自愈；非失败事件、手动触发、
-# 部署/巡检类触发源（列表与 job 级一致）按 run_id 独占分组，不会被取消。
+# CI 提速：同一源工作流+源分支的失败只保留最新一次自愈；不同分支/工作流互不挤占。
+# 非失败事件、手动触发、部署/巡检类触发源按 run_id 独占分组，永不取消或丢弃。
 concurrency:
   group: >-
     ai-self-heal-${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' && !contains(fromJSON('["cvm-autonomy-watcher", "Deploy MODstore Production", "fhd-deploy", "Capacity staging monthly", "Deploy corp site (xiu-ci.com)"]'), github.event.workflow_run.name)) && format('src-{0}-{1}', github.event.workflow_run.name, github.event.workflow_run.head_branch) || format('run-{0}', github.run_id) }}
@@ -56,11 +56,6 @@ jobs:
   self-heal:
     # 仅当 workflow_run 失败时触发；workflow_dispatch 手动触发不受此条件限制
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure' }}
-    # 保留原全仓串行（熔断计数/去重）；部署/巡检类触发源独占，不被顶掉。
-    concurrency:
-      group: >-
-        ai-self-heal-${{ (github.event_name == 'workflow_run' && contains(fromJSON('["cvm-autonomy-watcher", "Deploy MODstore Production", "fhd-deploy", "Capacity staging monthly", "Deploy corp site (xiu-ci.com)"]'), github.event.workflow_run.name)) && format('ops-{0}', github.run_id) || github.repository_id }}
-      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
