@@ -1,5 +1,5 @@
 {
-  "lines": 2300288,
+  "lines": 2300296,
   "updated": "2026-10-11",
-  "note": "Main after #2249 plus #2240 Para dispatch ticket chain: service-token dispatch API mac_control_dispatch_api.py + 9 tests, para_issue_dispatch.py + 7 tests, ai-issue-implement workflow (FHD SSOT + synced root copy). Reviewed --force waiver documented in PR #2240 body."
+  "note": "Main after #2257 plus #2240 Para dispatch ticket chain (+762, unchanged). The extra +8 comes from #2257 (ci-cd workflow, FHD SSOT + root copy) which merged to main without a baseline raise; absorbed here so the gate stays green. Reviewed --force waiver documented in PR #2240 body."
 }
