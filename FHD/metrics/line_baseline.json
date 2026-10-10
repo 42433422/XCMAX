@@ -1,5 +1,5 @@
 {
-  "lines": 2299718,
+  "lines": 2300296,
   "updated": "2026-10-11",
-  "note": "Main 034077d88 基线 2299526，加 #2261 首启 import 死锁修复净增：registry 修正 + 首启竞态回归测试 test_llm_registry_first_launch_import_2067.py（含子进程 sys.path 修正）+ CHANGELOG（Refs #2067）"
+  "note": "Main after #2257 plus #2240 Para dispatch ticket chain (+762, unchanged). The extra +8 comes from #2257 (ci-cd workflow, FHD SSOT + root copy) which merged to main without a baseline raise; absorbed here so the gate stays green. Reviewed --force waiver documented in PR #2240 body."
 }
