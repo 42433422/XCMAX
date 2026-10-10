@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -21,13 +21,15 @@ class PipelineRunRequest(BaseModel):
     context: Optional[Dict[str, Any]] = None
 
 
-class StepApprovalRequest(BaseModel):
-    admin_user_id: int = 0
-
-
 class StepRejectionRequest(BaseModel):
-    admin_user_id: int = 0
     reason: str = ""
+
+
+def _require_admin_user(authorization: Optional[str] = Header(None)) -> Any:
+    """Approver identity comes from the bearer token, never from the request body."""
+    from modstore_server.api.deps import get_current_user, require_admin
+
+    return require_admin(user=get_current_user(authorization=authorization))
 
 
 @router.get("/five-line-status")
@@ -45,7 +47,9 @@ async def api_pipeline_status():
 
 
 @router.post("/run")
-async def api_pipeline_run(body: PipelineRunRequest = PipelineRunRequest()):
+async def api_pipeline_run(
+    body: PipelineRunRequest = PipelineRunRequest(), _admin: Any = Depends(_require_admin_user)
+):
     from modstore_server.production_line_orchestrator import run_production_line
 
     result = await run_production_line(
@@ -57,12 +61,12 @@ async def api_pipeline_run(body: PipelineRunRequest = PipelineRunRequest()):
 
 
 @router.post("/steps/{step_id}/approve")
-async def api_step_approve(step_id: str, body: StepApprovalRequest = StepApprovalRequest()):
+async def api_step_approve(step_id: str, admin: Any = Depends(_require_admin_user)):
     from modstore_server.production_line_orchestrator import (
         approve_production_line_step,
     )
 
-    result = await approve_production_line_step(step_id, admin_user_id=body.admin_user_id)
+    result = await approve_production_line_step(step_id, admin_user_id=int(admin.id))
     return {
         "ok": True,
         "data": {"step_id": result.step_id, "status": result.status.value},
@@ -70,11 +74,15 @@ async def api_step_approve(step_id: str, body: StepApprovalRequest = StepApprova
 
 
 @router.post("/steps/{step_id}/reject")
-async def api_step_reject(step_id: str, body: StepRejectionRequest = StepRejectionRequest()):
+async def api_step_reject(
+    step_id: str,
+    body: StepRejectionRequest = StepRejectionRequest(),
+    admin: Any = Depends(_require_admin_user),
+):
     from modstore_server.production_line_orchestrator import reject_production_line_step
 
     result = await reject_production_line_step(
-        step_id, admin_user_id=body.admin_user_id, reason=body.reason
+        step_id, admin_user_id=int(admin.id), reason=body.reason
     )
     return {
         "ok": True,
@@ -83,7 +91,7 @@ async def api_step_reject(step_id: str, body: StepRejectionRequest = StepRejecti
 
 
 @router.post("/stop")
-async def api_pipeline_stop():
+async def api_pipeline_stop(_admin: Any = Depends(_require_admin_user)):
     from modstore_server.production_line_orchestrator import (
         get_production_line_orchestrator,
     )

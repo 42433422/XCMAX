@@ -242,13 +242,16 @@ def retail_quantity_price_order(text: str) -> dict | None:
     match = _RETAIL_QTY_PRICE.match((text or "").strip())
     if match is None:
         return None
+    unit_name = match.group("unit").strip()
+    if looks_like_conversational_filler(unit_name):
+        return None
     quantity = float(match.group("qty"))
     price = float(match.group("price"))
     if quantity <= 0 or price < 0:
         return None
     return {
         "success": True,
-        "unit_name": match.group("unit").strip(),
+        "unit_name": unit_name,
         "products": [
             {
                 "name": match.group("product").strip(),

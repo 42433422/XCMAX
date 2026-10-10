@@ -25,11 +25,13 @@ async def execute_compat_chat(
     runtime_context = _facade().runtime_context_with_tier(runtime_context, tier)
     from app.fastapi_routes.xcagi_compat_chat_stream import (
         _apply_client_issue_outcome,
-        _classify_and_submit_client_issue,
+        _classify_and_submit_client_issue_async,
         _client_issue_reply,
     )
 
-    issue_receipt = _classify_and_submit_client_issue(request, runtime_context, body.message, "")
+    issue_receipt = await _classify_and_submit_client_issue_async(
+        request, runtime_context, body.message, ""
+    )
     if issue_reply := _client_issue_reply(issue_receipt):
         payload = _apply_client_issue_outcome(
             _facade()._xcagi_compat_reply_payload(issue_reply), issue_receipt

@@ -10,11 +10,11 @@ from app.services.tools_execution.order_parser_helpers import (
     extract_explicit_unit_name,
     loose_order_fallback,
     normalize_chinese_digits,
-    retail_quantity_price_order,
     normalize_model_number_token,
     normalize_quantity_token,
     normalize_trailing_unit_name,
     parse_cn_number,
+    retail_quantity_price_order,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
