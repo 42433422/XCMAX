@@ -10,6 +10,25 @@ import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 part 'im_messenger_widgets.part.dart';
 
+/// IM 实时通道状态文案：只在握手真正成功后才显示“已连接”。
+String imWsStatusText(
+  ImWsConnectionState state, {
+  required bool conversationOpen,
+  bool attached = true,
+}) {
+  switch (state) {
+    case ImWsConnectionState.connected:
+      return 'WebSocket 已连接，消息实时同步';
+    case ImWsConnectionState.connecting:
+      return '正在连接 WebSocket…';
+    case ImWsConnectionState.reconnecting:
+      return 'WebSocket 已断开，正在重连…（新消息需下拉刷新）';
+    case ImWsConnectionState.disconnected:
+      if (conversationOpen && !attached) return '正在连接 WebSocket…';
+      return conversationOpen ? 'WebSocket 未连接，新消息需下拉刷新' : 'WebSocket 未连接';
+  }
+}
+
 class ImMessengerScreen extends StatefulWidget {
   const ImMessengerScreen({
     super.key,
@@ -34,8 +53,10 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
   var _messages = const <ImMessage>[];
   var _error = '';
   var _working = false;
-  var _wsConnected = false;
+  var _wsState = ImWsConnectionState.disconnected;
+  var _wsAttached = false;
   StreamSubscription<Map<String, Object?>>? _wsSubscription;
+  StreamSubscription<ImWsConnectionState>? _wsStateSubscription;
 
   @override
   void initState() {
@@ -57,6 +78,7 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
   @override
   void dispose() {
     _wsSubscription?.cancel();
+    _wsStateSubscription?.cancel();
     _repository.disconnectImWebSocket();
     _peerController.dispose();
     _draftController.dispose();
@@ -66,12 +88,16 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
   Future<void> _attachWebSocket() async {
     _wsSubscription?.cancel();
     _wsSubscription = _repository.imWebSocketEvents.listen(_onWebSocketEvent);
+    _wsStateSubscription?.cancel();
+    _wsStateSubscription = _repository.imWebSocketStates.listen((state) {
+      if (!mounted) return;
+      setState(() => _wsState = state);
+    });
     await _repository.connectImWebSocket();
     if (!mounted) return;
-    setState(() => _wsConnected = _repository.imWebSocketConnected);
-    Future<void>.delayed(const Duration(milliseconds: 400), () {
-      if (!mounted) return;
-      setState(() => _wsConnected = _repository.imWebSocketConnected);
+    setState(() {
+      _wsAttached = true;
+      _wsState = _repository.imWebSocketState;
     });
   }
 
@@ -90,15 +116,15 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
           createdAt: '刚刚',
         ),
       ];
-      _wsConnected = _repository.imWebSocketConnected;
+      _wsState = _repository.imWebSocketState;
     });
   }
 
-  String get _wsStatusText {
-    if (_wsConnected) return 'WebSocket 已连接，消息实时同步';
-    if (_conversationId > 0) return '正在连接 WebSocket…';
-    return 'WebSocket 未连接';
-  }
+  String get _wsStatusText => imWsStatusText(
+        _wsState,
+        conversationOpen: _conversationId > 0,
+        attached: _wsAttached,
+      );
 
   @override
   Widget build(BuildContext context) {

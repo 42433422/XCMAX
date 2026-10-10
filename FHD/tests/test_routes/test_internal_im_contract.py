@@ -226,3 +226,42 @@ def test_mark_read_default_explicit_success_and_errors() -> None:
         with _im_runtime(service):
             response = internal_im.im_mark_read(1, {}, SimpleNamespace(id=7))
         assert response.status_code == status
+
+
+@pytest.mark.asyncio
+async def test_post_message_pushes_realtime_to_other_members_like_web_route() -> None:
+    """手机端发消息必须像网页端一样经 WS 实时推给对方（不推给发送者自己）。"""
+    service = MagicMock()
+    service.send_message.return_value = {
+        "message": {"id": 11, "body": "hi", "sender_user_id": 7},
+        "member_user_ids": [7, 58],
+        "updated_at_ms": 456,
+    }
+    service.employee_id_for_conversation.return_value = ""
+    tasks = BackgroundTasks()
+    with _im_runtime(service):
+        result = internal_im.im_post_message(3, tasks, {"body": "hi"}, SimpleNamespace(id=7))
+    assert result["success"] is True
+
+    hub = SimpleNamespace(send_to_user=AsyncMock())
+    with patch("app.infrastructure.im.ws_hub.im_ws_hub", hub):
+        await tasks()
+    sent = [(c.args[0], c.args[1]["type"]) for c in hub.send_to_user.await_args_list]
+    assert sent == [(58, "message"), (58, "im.message")]
+    sync_payload = hub.send_to_user.await_args_list[1].args[1]
+    assert sync_payload == {
+        "type": "im.message",
+        "conversation_id": 3,
+        "message": {"id": 11, "body": "hi", "sender_user_id": 7},
+        "updated_at_ms": 456,
+    }
+
+
+@pytest.mark.asyncio
+async def test_post_message_ws_push_failure_is_best_effort() -> None:
+    hub = SimpleNamespace(send_to_user=AsyncMock(side_effect=RuntimeError("ws down")))
+    with patch("app.infrastructure.im.ws_hub.im_ws_hub", hub):
+        await internal_im._push_mobile_im_message(
+            7, 3, {"message": {"id": 1}, "member_user_ids": [7, 8]}
+        )
+    hub.send_to_user.assert_awaited()

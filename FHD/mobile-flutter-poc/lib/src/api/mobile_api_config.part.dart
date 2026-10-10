@@ -114,8 +114,12 @@ class MobileServerRouter {
     }
   }
 
-  String fhdImWebSocketUrl(String sessionId) {
-    final http = fhdBaseUrl().replaceFirst(RegExp(r'/+$'), '');
+  String fhdImWebSocketUrl(String sessionId) =>
+      webSocketUrlForHttpBase(fhdBaseUrl(), sessionId);
+
+  /// 由 HTTP(S) 后端基地址推导 IM WebSocket 地址（https→wss，http→ws）。
+  static String webSocketUrlForHttpBase(String httpBase, String sessionId) {
+    final http = httpBase.trim().replaceFirst(RegExp(r'/+$'), '');
     final ws = http.startsWith('https://')
         ? 'wss://${http.substring('https://'.length)}'
         : http.startsWith('http://')
