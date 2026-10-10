@@ -1,5 +1,5 @@
 {
-  "lines": 2298510,
+  "lines": 2299194,
   "updated": "2026-10-10",
-  "note": "Shared raise for three related PRs so they merge in any order: self-heal explicit LLM endpoint guard (+27), #2067 customer-slot regression tests (+16), and #2067 quantity/unit-price extraction with tests and changelog (+85)."
+  "note": "#2235 warehouse setup guide (application helper + routes + InventoryView guide), tenant-scoped bridge shipment print, chat download routing, closed-loop guidance codes, with tests, mod mirror and changelog"
 }
