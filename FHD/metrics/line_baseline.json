@@ -1,5 +1,5 @@
 {
-  "lines": 2298510,
+  "lines": 2298752,
   "updated": "2026-10-10",
-  "note": "Shared raise for three related PRs so they merge in any order: self-heal explicit LLM endpoint guard (+27), #2067 customer-slot regression tests (+16), and #2067 quantity/unit-price extraction with tests and changelog (+85)."
+  "note": "工单闭环总账 Para 处理方判定：新增只读校验脚本与测试（检测本地大模型回退即判失败）"
 }
