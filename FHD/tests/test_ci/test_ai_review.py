@@ -370,7 +370,55 @@ class TestMatchRules:
 # =====================================================================
 
 
+_LLM_ENDPOINT = "https://llm.internal.test/v1/review"
+
+
+def _review_finding() -> review.Finding:
+    return review.Finding(
+        file_path="f",
+        line=1,
+        rule="eval",
+        severity="high",
+        snippet="eval()",
+        suggestion="don't",
+    )
+
+
 class TestCallLlmReview:
+    def test_missing_endpoint_never_sends_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """未配置 endpoint / base_url+model 时不得把密钥发往任何默认/占位地址。"""
+        monkeypatch.delenv("XCAGI_LLM_ENDPOINT", raising=False)
+        monkeypatch.delenv("XCAGI_LLM_BASE_URL", raising=False)
+        monkeypatch.delenv("XCAGI_LLM_MODEL", raising=False)
+        client = MagicMock()
+        assert (
+            review.call_llm_review(_review_finding(), api_key="secret", client=client)
+            == "unavailable"
+        )
+        client.post.assert_not_called()
+
+    def test_base_url_without_model_never_sends_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("XCAGI_LLM_ENDPOINT", raising=False)
+        monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://llm.internal.test")
+        monkeypatch.delenv("XCAGI_LLM_MODEL", raising=False)
+        client = MagicMock()
+        assert (
+            review.call_llm_review(_review_finding(), api_key="secret", client=client)
+            == "unavailable"
+        )
+        client.post.assert_not_called()
+
+    def test_endpoint_from_env_is_used(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("XCAGI_LLM_ENDPOINT", _LLM_ENDPOINT)
+        client = MagicMock()
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"verdict": "medium"}
+        client.post.return_value = resp
+        assert review.call_llm_review(_review_finding(), api_key="k", client=client) == "medium"
+        assert client.post.call_args.args[0] == _LLM_ENDPOINT
+        assert client.post.call_args.kwargs["headers"]["Authorization"] == "Bearer k"
+
     def test_no_api_key_returns_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_LLM_API_KEY", raising=False)
         finding = review.Finding(
@@ -394,7 +442,7 @@ class TestCallLlmReview:
         )
         client = MagicMock()
         client.post.side_effect = TimeoutError("timeout")
-        result = review.call_llm_review(finding, api_key="k", client=client)
+        result = review.call_llm_review(finding, api_key="k", endpoint=_LLM_ENDPOINT, client=client)
         assert result == "unavailable"
 
     def test_http_500_returns_unavailable(self) -> None:
@@ -410,7 +458,7 @@ class TestCallLlmReview:
         resp = MagicMock()
         resp.status_code = 500
         client.post.return_value = resp
-        result = review.call_llm_review(finding, api_key="k", client=client)
+        result = review.call_llm_review(finding, api_key="k", endpoint=_LLM_ENDPOINT, client=client)
         assert result == "unavailable"
 
     def test_valid_response_returns_verdict(self) -> None:
@@ -427,7 +475,7 @@ class TestCallLlmReview:
         resp.status_code = 200
         resp.json.return_value = {"verdict": "high"}
         client.post.return_value = resp
-        result = review.call_llm_review(finding, api_key="k", client=client)
+        result = review.call_llm_review(finding, api_key="k", endpoint=_LLM_ENDPOINT, client=client)
         assert result == "high"
 
     def test_invalid_verdict_returns_unavailable(self) -> None:
@@ -444,7 +492,7 @@ class TestCallLlmReview:
         resp.status_code = 200
         resp.json.return_value = {"verdict": "bogus"}
         client.post.return_value = resp
-        result = review.call_llm_review(finding, api_key="k", client=client)
+        result = review.call_llm_review(finding, api_key="k", endpoint=_LLM_ENDPOINT, client=client)
         assert result == "unavailable"
 
     def test_minimax_token_plan_uses_anthropic_protocol(
