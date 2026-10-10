@@ -1,5 +1,5 @@
 {
-  "lines": 2299621,
+  "lines": 2300296,
   "updated": "2026-10-11",
-  "note": "update-branch 合入 main 034077d88（#2257 工作流 +8 行，main 基线未含）后重算；main 基线 2299526 + #2260 流式通道开单识别修复与回归测试、CHANGELOG 净增（Refs #2067）"
+  "note": "Main after #2257 plus #2240 Para dispatch ticket chain (+762, unchanged). The extra +8 comes from #2257 (ci-cd workflow, FHD SSOT + root copy) which merged to main without a baseline raise; absorbed here so the gate stays green. Reviewed --force waiver documented in PR #2240 body."
 }
