@@ -1,5 +1,5 @@
 {
-  "lines": 2299556,
+  "lines": 2300296,
   "updated": "2026-10-11",
-  "note": "CI speedup: per-PR concurrency (cancel superseded PR runs; push/schedule/dispatch never cancelled) and per-source-branch self-heal concurrency; rebased onto #2257."
+  "note": "Main after #2257 plus #2240 Para dispatch ticket chain (+762, unchanged). The extra +8 comes from #2257 (ci-cd workflow, FHD SSOT + root copy) which merged to main without a baseline raise; absorbed here so the gate stays green. Reviewed --force waiver documented in PR #2240 body."
 }
