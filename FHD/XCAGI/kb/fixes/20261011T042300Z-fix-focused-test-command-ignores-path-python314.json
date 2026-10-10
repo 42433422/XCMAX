@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-10-11T04:23:00+00:00",
+  "symptom": "自维护 code 步骤生成的 focused pytest 命令在 MODstore .venv 缺失时回退到无 pytest 的调度器解释器，即使 PATH 上存在 python3.14 等兼容解释器也会误报 mandatory 测试失败。",
+  "root_cause": "_focused_test_command() 只尝试 deploy/runtime .venv 与 sys.executable，未在 PATH 上泛化发现 python3.11+ 可执行文件；兼容解释器探测也未强制 sys.version_info >= (3, 11)。",
+  "fix_diff": "diff --git a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\nindex c518cdd510..e78feae491 100644\n--- a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\n@@ -238,13 +238,71 @@ def _base_para_input(\n     return data\n \n \n+_PATH_PYTHON_NAME = _facade().re.compile(r\"^python3(?:\\.(\\d+(?:\\.\\d+)*))?$\", _facade().re.IGNORECASE)\n+_MIN_FOCUS_PYTHON = (3, 11)\n+\n+\n+def _python_name_version(name: str) -> _facade().Optional[_facade().Tuple[int, ...]]:\n+    match = _PATH_PYTHON_NAME.match(name)\n+    if not match:\n+        return None\n+    minor = match.group(1)\n+    if not minor:\n+        return (3, 0)\n+    return (3,) + tuple(int(part) for part in minor.split(\".\"))\n+\n+\n+def _discover_path_python_candidates() -> _facade().List[_facade().Path]:\n+    \"\"\"Discover versioned ``python3.*`` executables on PATH (3.11+ names only).\"\"\"\n+\n+    seen: set[str] = set()\n+    ranked: _facade().List[_facade().Tuple[_facade().Tuple[int, ...], _facade().Path]] = []\n+\n+    def consider(path: _facade().Path) -> None:\n+        version = _python_name_version(path.name)\n+        if version is None:\n+            return\n+        if version != (3, 0) and version < _MIN_FOCUS_PYTHON:\n+            return\n+        key = str(path)\n+        if key in seen:\n+            return\n+        seen.add(key)\n+        ranked.append((version, path))\n+\n+    for command in (\"python3\", \"python\"):\n+        located = _facade().shutil.which(command)\n+        if located:\n+            consider(_facade().Path(located))\n+\n+    for directory in _facade().os.environ.get(\"PATH\", \"\").split(_facade().os.pathsep):\n+        if not directory:\n+            continue\n+        try:\n+            entries = _facade().os.listdir(directory)\n+        except OSError:\n+            continue\n+        for entry in sorted(entries):\n+            path = _facade().Path(directory) / entry\n+            if path.is_file():\n+                consider(path)\n+\n+    ranked.sort(key=lambda item: item[0], reverse=True)\n+    return [path for _, path in ranked]\n+\n+\n def _python_supports_focused_tests(candidate: _facade().Path) -> bool:\n     \"\"\"Return whether a Python executable has the loop's test dependencies.\"\"\"\n     if not candidate.is_file() or not _facade().os.access(candidate, _facade().os.X_OK):\n         return False\n     try:\n         probe = _facade().subprocess.run(\n-            [str(candidate), \"-c\", \"import apscheduler, pytest\"],\n+            [\n+                str(candidate),\n+                \"-c\",\n+                \"import sys; import apscheduler, pytest; \"\n+                \"raise SystemExit(0 if sys.version_info >= (3, 11) else 1)\",\n+            ],\n             check=False,\n             capture_output=True,\n             text=True,\n@@ -287,6 +345,7 @@ def _focused_test_command() -> str:\n             if runtime_root\n             else None\n         ),\n+        *_discover_path_python_candidates(),\n         _facade().Path(_facade().sys.executable),\n     ]\n     test_python = next(\n",
+  "metadata": {
+    "component": "self_maintenance_loop_runner",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "当调度器进程的解释器缺少 pytest/apscheduler，且 worker PATH 上存在 python3.11+（含 python3.14）但 MODstore .venv 未就绪时，code/QA 任务仍要求使用 sys.executable 跑 focused pytest。",
+    "patch_strategy": "在 _focused_test_command 候选链中插入 _discover_path_python_candidates()，按版本降序扫描 PATH 上的 python3.*；在 _python_supports_focused_tests 探针中同时校验依赖与 sys.version_info >= (3, 11)。",
+    "rollback_plan": "移除 PATH 发现函数及其在 candidates 中的展开，并将探针恢复为仅 import apscheduler, pytest。",
+    "required_tests": [
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  }
+}

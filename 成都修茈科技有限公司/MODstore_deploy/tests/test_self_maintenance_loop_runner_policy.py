@@ -1,4 +1,5 @@
 import json
+import shlex
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -51,6 +52,9 @@ from modstore_server.self_maintenance_loop_runner import (
     close_loop_memory_items,
     ensure_clean_baseline,
     loop_memory_path,
+)
+from modstore_server.self_maintenance_loop_runner_part06_part01_part01 import (
+    _discover_path_python_candidates,
 )
 from modstore_server.self_maintenance_para_merge_remediation import (
     classify_para_merge_review_detail,
@@ -2254,6 +2258,39 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     )
 
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
+
+
+def test_discover_path_python_candidates_skips_old_and_prefers_newer(monkeypatch, tmp_path):
+    for name in ("python3.10", "python3.12", "python3.14"):
+        path = tmp_path / name
+        path.write_text("")
+        path.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    names = [candidate.name for candidate in _discover_path_python_candidates()]
+
+    assert "python3.10" not in names
+    assert names.index("python3.14") < names.index("python3.12")
+
+
+def test_focused_test_command_prefers_compatible_path_python(monkeypatch, tmp_path):
+    deploy = tmp_path / "deploy"
+    deploy.mkdir()
+    monkeypatch.setenv("MODSTORE_DEPLOY_ROOT", str(deploy))
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", raising=False)
+    python314 = tmp_path / "python3.14"
+    python314.write_text("")
+    python314.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    def selective_supports(candidate):
+        return candidate.name == "python3.14"
+
+    monkeypatch.setattr(loop_runner, "_python_supports_focused_tests", selective_supports)
+
+    command = _focused_test_command()
+
+    assert command.startswith(f"{shlex.quote(str(python314))} -m pytest")
 
 
 def test_high_risk_report_detects_standalone_qa_fail():

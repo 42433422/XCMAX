@@ -238,13 +238,79 @@ def _base_para_input(
     return data
 
 
+_PATH_PYTHON_NAME = _facade().re.compile(
+    r"^python3(?:\.(\d+(?:\.\d+)*))?$", _facade().re.IGNORECASE
+)
+_MIN_FOCUS_PYTHON = (3, 11)
+
+
+def _python_name_version(name: str) -> _facade().Optional[_facade().Tuple[int, ...]]:
+    match = _PATH_PYTHON_NAME.match(name)
+    if not match:
+        return None
+    minor = match.group(1)
+    if not minor:
+        return (3, 0)
+    return (3,) + tuple(int(part) for part in minor.split("."))
+
+
+def _discover_path_python_candidates() -> _facade().List[_facade().Path]:
+    """Discover versioned ``python3.*`` executables on PATH (3.11+ names only)."""
+
+    seen: set[str] = set()
+    ranked: _facade().List[_facade().Tuple[_facade().Tuple[int, ...], _facade().Path]] = []
+
+    def consider(path: _facade().Path) -> None:
+        version = _python_name_version(path.name)
+        if version is None:
+            return
+        if version != (3, 0) and version < _MIN_FOCUS_PYTHON:
+            return
+        key = str(path)
+        if key in seen:
+            return
+        seen.add(key)
+        ranked.append((version, path))
+
+    for command in ("python3", "python"):
+        located = _facade().shutil.which(command)
+        if located:
+            consider(_facade().Path(located))
+
+    for directory in _facade().os.environ.get("PATH", "").split(_facade().os.pathsep):
+        if not directory:
+            continue
+        try:
+            entries = _facade().os.listdir(directory)
+        except OSError:
+            continue
+        for entry in sorted(entries):
+            if entry not in {"python", "python3"} and not _PATH_PYTHON_NAME.match(entry):
+                continue
+            path = _facade().Path(directory) / entry
+            try:
+                if not path.is_file():
+                    continue
+            except OSError:
+                continue
+            consider(path)
+
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [path for _, path in ranked]
+
+
 def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
     """Return whether a Python executable has the loop's test dependencies."""
     if not candidate.is_file() or not _facade().os.access(candidate, _facade().os.X_OK):
         return False
     try:
         probe = _facade().subprocess.run(
-            [str(candidate), "-c", "import apscheduler, pytest"],
+            [
+                str(candidate),
+                "-c",
+                "import sys; import apscheduler, pytest; "
+                "raise SystemExit(0 if sys.version_info >= (3, 11) else 1)",
+            ],
             check=False,
             capture_output=True,
             text=True,
@@ -287,6 +353,7 @@ def _focused_test_command() -> str:
             if runtime_root
             else None
         ),
+        *_discover_path_python_candidates(),
         _facade().Path(_facade().sys.executable),
     ]
     test_python = next(
