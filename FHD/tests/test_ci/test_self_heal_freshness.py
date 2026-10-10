@@ -303,3 +303,17 @@ def test_main_deploy_failure_keeps_existing_flow(
     assert _run_main(main_env, workflow="fhd-deploy") == 2
     assert len(main_env["issue"]) == 1 and main_env["dispatch"] == [1]
     assert main_env["issue"][0]["markers"] == ["Self-Heal-Run: `7/1`"]
+
+
+def test_main_uses_trigger_run_sha_not_github_sha(
+    monkeypatch: pytest.MonkeyPatch, main_env: dict, tmp_path: Path
+) -> None:
+    """github.sha 在 workflow_run 下指向默认分支，判定必须用触发运行的 head_sha / run_attempt。"""
+    monkeypatch.setenv("GITHUB_SHA", NEW)  # 自愈 workflow 自身的 sha = 默认分支 head
+    gh = FakeGitHub(pr_head=NEW)  # PR 当前 head 恰好也等于 github.sha
+    _use(monkeypatch, gh)
+    assert _run_main(main_env) == 0  # 若误用 github.sha 会判为 current_head 并派单
+    assert main_env["issue"] == [] and main_env["dispatch"] == []
+    assert f"/repos/{REPO}/actions/runs/7" in gh.calls
+    text = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert all(s in text for s in ("stale_head", "run `7`", "attempt `1`", OLD, NEW))

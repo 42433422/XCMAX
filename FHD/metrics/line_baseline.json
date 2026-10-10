@@ -1,5 +1,5 @@
 {
-  "lines": 2299306,
-  "updated": "2026-10-10",
-  "note": "Self-Heal stale-failure filter (+564): new tested gate module self_heal_freshness.py + acceptance tests covering stale/current/rerun/dedup/race/fail-closed/deploy boundaries; no unrelated dead code deleted to keep this PR scoped"
+  "lines": 2299320,
+  "updated": "2026-10-11",
+  "note": "Self-Heal stale-failure filter (+578): new tested gate module self_heal_freshness.py + acceptance tests (stale/current/rerun/dedup/race/fail-closed/deploy boundaries/trigger-run sha vs github.sha); no unrelated dead code deleted to keep this PR scoped"
 }
