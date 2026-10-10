@@ -217,10 +217,19 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
 
 
 @router.get("/api/shipment/download/{filename:path}")
-def shipment_download(filename: str):
+def shipment_download(request: Request, filename: str):
     if not filename or "/" in filename or "\\" in filename:
         return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
-    file_path = _resolve_shipment_output_path(filename)
+    from app.infrastructure.auth.dependencies import resolve_session_user
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    user = resolve_session_user(request)
+    tenant_id = getattr(user, "tenant_id", None) if user is not None else None
+    if tenant_id is not None:
+        with tenant_scope(int(tenant_id)):
+            file_path = _resolve_shipment_output_path(filename)
+    else:
+        file_path = _resolve_shipment_output_path(filename)
     if file_path is None:
         return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
     return FileResponse(file_path, filename=filename, media_type="application/octet-stream")

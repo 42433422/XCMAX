@@ -26,6 +26,9 @@ def _request_path(request: Request) -> str:
 
 def uses_tenant_scoped_store(request: Request) -> bool:
     path = _request_path(request)
+    if path.startswith("/api/shipment/download/"):
+        user = resolve_session_user(request)
+        return user is not None and getattr(user, "tenant_id", None) is not None
     if path in {
         "/api/orders/webhooks",
         "/api/shipment/shipment-records/records",
