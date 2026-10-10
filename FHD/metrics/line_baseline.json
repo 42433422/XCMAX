@@ -1,5 +1,5 @@
 {
-  "lines": 2299034,
-  "updated": "2026-10-10",
-  "note": "Merge main into #2222: main baseline (2298742, incl. #2218 and #2220) plus the upgraded-DB credit/journal column repair (+292: 82 migration, 209 tests, 1 changelog)."
+  "lines": 2299224,
+  "updated": "2026-10-11",
+  "note": "Merge main into #2222 (after #2214): main baseline 2298948 plus the upgraded-DB credit/journal column repair (82 migration, 209 tests, 1 changelog)."
 }
