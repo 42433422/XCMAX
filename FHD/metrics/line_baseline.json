@@ -1,5 +1,5 @@
 {
-  "lines": 2298742,
+  "lines": 2299306,
   "updated": "2026-10-10",
-  "note": "Merge main into #2220: endpoint auth baseline (2298715) plus the self-heal endpoint guard from #2218 (+27)."
+  "note": "Self-Heal stale-failure filter (+564): new tested gate module self_heal_freshness.py + acceptance tests covering stale/current/rerun/dedup/race/fail-closed/deploy boundaries; no unrelated dead code deleted to keep this PR scoped"
 }
