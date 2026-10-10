@@ -1,5 +1,5 @@
 {
-  "lines": 2299553,
+  "lines": 2299556,
   "updated": "2026-10-11",
-  "note": "CI speedup: per-PR concurrency (cancel superseded PR runs; push/schedule/dispatch never cancelled) and per-source-branch self-heal concurrency; workflow source + generated root copies."
+  "note": "CI speedup: per-PR concurrency (cancel superseded PR runs; push/schedule/dispatch never cancelled) and per-source-branch self-heal concurrency; rebased onto #2257."
 }
