@@ -247,7 +247,9 @@ def pull_from_remote(
 
     url = f"http://{host}:{port}/api/xcmax/sync/changes?since_cursor={cursor}&limit=200"
     try:
-        req = urllib.request.Request(url, method="GET")
+        token = (os.environ.get("XCMAX_SYNC_SHARED_SECRET") or "").strip()
+        headers = {"X-XCMAX-Sync-Token": token} if token else {}
+        req = urllib.request.Request(url, headers=headers, method="GET")
         with _open_sync_request(_DIRECT_HTTP_OPENER, req, timeout=10) as resp:
             body = json.loads(resp.read(1024 * 512).decode("utf-8", errors="replace"))
         changes = body.get("data") or []

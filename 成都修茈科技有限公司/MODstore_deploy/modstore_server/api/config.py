@@ -18,7 +18,7 @@ from modstore_server.api.deps import require_admin
 from modstore_server.api.dto import ConfigDTO, ExportFhdShellDTO
 from modstore_server.infrastructure import library_paths
 
-router = APIRouter(tags=["config"])
+router = APIRouter(tags=["config"], dependencies=[Depends(require_admin)])
 
 
 def _configured_repo_path(raw: str, *, field: str) -> str:
@@ -80,7 +80,7 @@ def api_export_fhd_shell_mods(
     return {"ok": True, "path": str(target), "count": n}
 
 
-@router.put("/api/config", dependencies=[Depends(require_admin)])
+@router.put("/api/config")
 def put_config(body: ConfigDTO):
     lr = (body.library_root or "").strip()
     xr = (body.xcagi_root or "").strip()
