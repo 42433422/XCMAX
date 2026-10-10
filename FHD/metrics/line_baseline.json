@@ -1,5 +1,5 @@
 {
-  "lines": 2298715,
+  "lines": 2298742,
   "updated": "2026-10-10",
-  "note": "#2211 后续：生成蓝图测试改用 importlib 加载（AI review 禁止 exec），+5 行"
+  "note": "Merge main into #2220: endpoint auth baseline (2298715) plus the self-heal endpoint guard from #2218 (+27)."
 }
