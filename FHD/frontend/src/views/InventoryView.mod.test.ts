@@ -1,8 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getMock, productsGetMock, downloadMock, downloadBlobMock } = vi.hoisted(() => ({
+const { getMock, postMock, productsGetMock, downloadMock, downloadBlobMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
+  postMock: vi.fn(),
   productsGetMock: vi.fn(),
   downloadMock: vi.fn(),
   downloadBlobMock: vi.fn(),
@@ -10,7 +11,7 @@ const { getMock, productsGetMock, downloadMock, downloadBlobMock } = vi.hoisted(
 
 vi.mock('@/api', () => ({
   get: getMock,
-  post: vi.fn(),
+  post: postMock,
   api: { download: downloadMock },
 }))
 
@@ -169,5 +170,49 @@ describe('ERP domain bridge InventoryView', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('新库存结果')
     expect(wrapper.text()).not.toContain('旧库存结果')
+  })
+
+  it('shows a warehouse setup guide when no active warehouse exists and initializes one on click', async () => {
+    let warehouseRows: Array<Record<string, unknown>> = [{ id: 9, name: '旧仓', status: 'deleted' }]
+    getMock.mockImplementation((path: string) => {
+      if (path === '/api/inventory/warehouses') return Promise.resolve({ success: true, data: warehouseRows })
+      return Promise.resolve({ success: true, data: [], total: 0 })
+    })
+    postMock.mockImplementation(async (path: string) => {
+      expect(path).toBe('/api/inventory/setup/warehouse')
+      warehouseRows = [...warehouseRows, { id: 11, name: '默认仓库', status: 'active' }]
+      return { success: true, data: { id: 11, name: '默认仓库', created: true }, message: '已创建默认仓库，请先入库再销售发货' }
+    })
+    const wrapper = mount(InventoryView)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="warehouse-setup-guide"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('旧仓')
+    await wrapper.get('[data-testid="warehouse-setup-init"]').trigger('click')
+    await flushPromises()
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="warehouse-setup-guide"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('默认仓库')
+    expect((wrapper.get('.search-box select').element as HTMLSelectElement).value).toBe('11')
+  })
+
+  it('keeps the guide and shows the server error when initialization is refused', async () => {
+    getMock.mockImplementation((path: string) =>
+      Promise.resolve(path === '/api/inventory/warehouses' ? { success: true, data: [] } : { success: true, data: [], total: 0 }),
+    )
+    postMock.mockRejectedValue(new Error('权限不足'))
+    const wrapper = mount(InventoryView)
+    await flushPromises()
+    await wrapper.get('[data-testid="warehouse-setup-init"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="warehouse-setup-guide"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="warehouse-setup-guide"] [role="alert"]').text()).toContain('权限不足')
+  })
+
+  it('does not show the setup guide when an active warehouse exists', async () => {
+    const wrapper = mount(InventoryView)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="warehouse-setup-guide"]').exists()).toBe(false)
   })
 })

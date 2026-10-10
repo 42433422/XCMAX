@@ -282,6 +282,56 @@ def inventory_locations_put(
     )
 
 
+def _warehouse_setup_user(request: Request, permission_code: str) -> Any:
+    """仓库初始化只对已登录且有企业归属的会话开放，并按企业 SKU 做 RBAC。"""
+    from fastapi import HTTPException
+
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+    from app.mod_sdk.product_skus import resolve_product_sku
+
+    user = get_logged_in_user(request)
+    if getattr(user, "tenant_id", None) is None:
+        raise HTTPException(status_code=403, detail="企业归属缺失")
+    if resolve_product_sku() == "enterprise":
+        from app.application.facades.session_facade import get_auth_service
+
+        if not get_auth_service().has_permission(user, permission_code):
+            raise HTTPException(status_code=403, detail="权限不足")
+    return user
+
+
+@router.get("/api/inventory/setup/warehouse")
+def inventory_warehouse_setup_status(request: Request):
+    """当前企业是否已有可用仓库（新装或旧版升级后没有仓库时，前端据此显示引导）。"""
+    from app.application.inventory_default_warehouse import warehouse_setup_status
+    from app.db.session import get_db
+
+    user = _warehouse_setup_user(request, "shipment.view")
+    with get_db() as db:
+        status = warehouse_setup_status(db, int(user.tenant_id))
+    return {"success": True, "data": status}
+
+
+@router.post("/api/inventory/setup/warehouse")
+def inventory_warehouse_setup_init(request: Request):
+    """幂等初始化当前企业的默认仓库；已有可用仓库时不新建。"""
+    from app.application.inventory_default_warehouse import ensure_default_warehouse
+    from app.db.session import get_db
+
+    user = _warehouse_setup_user(request, "shipment.edit")
+    with get_db() as db:
+        warehouse, created = ensure_default_warehouse(db, int(user.tenant_id))
+        data = {
+            "id": warehouse.id,
+            "code": warehouse.code,
+            "name": warehouse.name,
+            "status": warehouse.status,
+            "created": bool(created),
+        }
+    message = "已创建默认仓库，请先入库再销售发货" if created else "已有可用仓库，无需初始化"
+    return {"success": True, "data": data, "message": message}
+
+
 @router.get("/api/inventory/warehouses")
 def inventory_warehouses_list(status: str | None = Query(default=None)):
     return _svc().get_warehouses(status=status)

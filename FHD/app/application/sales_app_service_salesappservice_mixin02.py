@@ -187,7 +187,11 @@ class _SalesAppServicePart02Mixin:
             .first()
         )
         if wh is None:
-            raise _facade().ClosedLoopExecutionError("resolve_warehouse", "当前租户下无可用仓库")
+            raise _facade().ClosedLoopExecutionError(
+                "resolve_warehouse",
+                "当前租户下无可用仓库：请先在「库存管理」点击「初始化默认仓库」，"
+                "为要销售的产品办理入库后，再重新提交这笔销售",
+            )
         return {"id": wh.id, "code": wh.code}
 
     def _closed_loop_resolve_inventory_source(
@@ -211,6 +215,12 @@ class _SalesAppServicePart02Mixin:
             .limit(2)
             .all()
         )
+        if not ledgers:
+            raise _facade().ClosedLoopExecutionError(
+                "resolve_inventory",
+                "可交付库存台账匹配数为 0（应为恰好 1）：该仓库里这个产品没有足够的可用库存，"
+                "请先在「库存管理 → 入库」登记库存",
+            )
         if len(ledgers) != 1:
             raise _facade().ClosedLoopExecutionError(
                 "resolve_inventory", f"可交付库存台账匹配数为 {len(ledgers)}（应为恰好 1）"
