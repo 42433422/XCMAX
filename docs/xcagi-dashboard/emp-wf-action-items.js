@@ -319,5 +319,10 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 
-  global.EmpWfActionItems = { renderPatches, renderUpdates };
+  global.EmpWfActionItems = {
+    renderPatches,
+    renderUpdates,
+    /* 仅本机开发环境自动登录 MODstore；线上页面不尝试默认账号 */
+    modstoreToken: () => (isLocalHost() ? modstoreToken() : Promise.resolve(null)),
+  };
 })(typeof window !== 'undefined' ? window : globalThis);

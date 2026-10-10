@@ -1,5 +1,5 @@
 {
-  "lines": 2298615,
+  "lines": 2298948,
   "updated": "2026-10-10",
-  "note": "Shared raise: #2218 self-heal endpoint guard (merged), unified Mac acceptance fix #2214 incl. #2224 (#2067 explicit quantity/unit price, longest-name match, approval preview, async-safe defect intake, tests, changelog), plus +16 reserved for the #2219 customer-slot regression tests so it can merge after this."
+  "note": "Main after #2218/#2220 (2298742) plus the unified Mac acceptance fix #2214 incl. #2224 (#2067 explicit quantity/unit price, longest-name match, approval preview, async-safe defect intake, tests, changelog; +190), plus +16 reserved for the #2219 customer-slot regression tests."
 }

@@ -5,6 +5,10 @@ from __future__ import annotations
 
 import importlib
 
+from fastapi import Depends
+
+from app.fastapi_routes.xcmax_sync_peer_auth import require_sync_peer
+
 
 def _facade():
     return importlib.import_module("app.fastapi_routes.xcmax_admin")
@@ -227,9 +231,17 @@ async def sync_changes(
         return {"success": True, "data": [], "count": 0, "note": str(exc)}
 
 
-@_facade().router.post("/sync/receive", response_model=None)
-async def sync_receive(body: dict | list):
-    """接收远端推来的变更，写入 inbox，立即尝试应用，并记录审计日志。"""
+@_facade().router.post(
+    "/sync/receive", response_model=None, dependencies=[Depends(require_sync_peer)]
+)
+async def sync_receive(body: dict | list = _facade().Body(default=None)):
+    """接收远端推来的变更，写入 inbox，立即尝试应用，并记录审计日志。
+
+    须携带 ``X-XCMAX-Sync-Token``（与 ``XCMAX_SYNC_SHARED_SECRET`` 一致）。"""
+    if body is None:
+        return _facade().JSONResponse(
+            {"success": False, "message": "missing body"}, status_code=400
+        )
     try:
         from app.db.xcmax_sync import SyncDb
 
