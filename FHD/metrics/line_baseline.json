@@ -1,5 +1,5 @@
 {
-  "lines": 2300295,
+  "lines": 2300303,
   "updated": "2026-10-11",
-  "note": "#2235 on top of main baseline 2299526 after #2249 (+769): warehouse setup guide, tenant-scoped bridge shipment print, chat download routing, closed-loop guidance codes, tests, mod mirror and changelog."
+  "note": "#2235 (+769) on top of main baseline 2299526; main after #2257 is itself +8 over that baseline (CI workflow lines from #2257 backend-test single pytest), carried here so the gate reflects main + #2235."
 }
