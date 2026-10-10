@@ -304,7 +304,7 @@ def _warehouse_setup_user(request: Request, permission_code: str) -> Any:
 def inventory_warehouse_setup_status(request: Request):
     """当前企业是否已有可用仓库（新装或旧版升级后没有仓库时，前端据此显示引导）。"""
     from app.db.session import get_db
-    from app.services.inventory_default_warehouse import warehouse_setup_status
+    from app.application.inventory_default_warehouse import warehouse_setup_status
 
     user = _warehouse_setup_user(request, "shipment.view")
     with get_db() as db:
@@ -316,7 +316,7 @@ def inventory_warehouse_setup_status(request: Request):
 def inventory_warehouse_setup_init(request: Request):
     """幂等初始化当前企业的默认仓库；已有可用仓库时不新建。"""
     from app.db.session import get_db
-    from app.services.inventory_default_warehouse import ensure_default_warehouse
+    from app.application.inventory_default_warehouse import ensure_default_warehouse
 
     user = _warehouse_setup_user(request, "shipment.edit")
     with get_db() as db:

@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from app.db.base import Base
 from app.db.models import Warehouse
 from app.infrastructure.tenant_scope import tenant_scope
-from app.services.inventory_default_warehouse import (
+from app.application.inventory_default_warehouse import (
     DEFAULT_WAREHOUSE_NAME,
     default_warehouse_code,
     ensure_default_warehouse,
