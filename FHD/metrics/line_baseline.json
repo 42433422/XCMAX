@@ -1,5 +1,5 @@
 {
-  "lines": 2298382,
+  "lines": 2298578,
   "updated": "2026-10-10",
-  "note": "Authentication for the MODstore production-line, config and sync-receive write endpoints, plus the CSRF bearer-bypass fix. About 63 lines are the fix, about 148 are its regression tests, and 1 is the changelog entry."
+  "note": "#2211 后续：补齐剩余未鉴权端点（共享鉴权模块、FHD 同步接收校验）及每个端点的 401/403/200/503 测试；已同时删除未挂载的 legacy routes_registry 配置路由"
 }
