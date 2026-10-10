@@ -1,5 +1,5 @@
 {
-  "lines": 2298802,
+  "lines": 2299034,
   "updated": "2026-10-10",
-  "note": "Shared raise for the related PRs so they merge in any order: self-heal explicit LLM endpoint guard (+27), #2067 customer-slot regression tests (+16), #2067 quantity/unit-price extraction with tests and changelog (+85), and #2222 repair of the customer credit and finance-journal columns missing from upgraded desktop databases (+292: about 82 lines forward-only Alembic repair, 209 SQLite and desktop-startup regression tests, 1 changelog entry)."
+  "note": "Merge main into #2222: main baseline (2298742, incl. #2218 and #2220) plus the upgraded-DB credit/journal column repair (+292: 82 migration, 209 tests, 1 changelog)."
 }
