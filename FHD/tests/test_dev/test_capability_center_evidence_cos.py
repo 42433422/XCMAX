@@ -18,9 +18,9 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 API = "/api/public/evidence/"
-INDEX = json.loads(
-    (SITE / "data/capabilities/evidence-index.json").read_text(encoding="utf-8")
-)["assets"]
+INDEX = json.loads((SITE / "data/capabilities/evidence-index.json").read_text(encoding="utf-8"))[
+    "assets"
+]
 
 
 def test_media_routes_through_backend_and_other_files_stay_local() -> None:
@@ -33,15 +33,8 @@ def test_media_routes_through_backend_and_other_files_stay_local() -> None:
         == hashlib.sha256((ROOT / png).read_bytes()).hexdigest()
     )
     # JSON / 日志不进桶，仍由站内提供；缺失的源文件也不登记。
-    run_json = (
-        next(SITE.glob("capabilities/assets/evidence/*.json"))
-        .relative_to(ROOT)
-        .as_posix()
-    )
-    assert (
-        MODULE.evidence_url("x.json", run_json)
-        == "/capabilities/assets/evidence/x.json"
-    )
+    run_json = next(SITE.glob("capabilities/assets/evidence/*.json")).relative_to(ROOT).as_posix()
+    assert MODULE.evidence_url("x.json", run_json) == "/capabilities/assets/evidence/x.json"
     assert (
         MODULE.evidence_url("gone.png", "FHD/docs/evidence/does-not-exist.png")
         == "/capabilities/assets/evidence/gone.png"
@@ -64,16 +57,12 @@ def _page_refs() -> dict[str, set[str]]:
     refs: dict[str, set[str]] = {}
     for page in sorted((SITE / "capabilities/feature").glob("*.html")):
         html = page.read_text(encoding="utf-8")
-        for attr, url in re.findall(
-            r'\b(src|href)="(/api/public/evidence/[^"]+)"', html
-        ):
+        for attr, url in re.findall(r'\b(src|href)="(/api/public/evidence/[^"]+)"', html):
             refs.setdefault(unquote(url[len(API) :]), set()).add(page.name)
     return refs
 
 
-def test_every_backend_evidence_link_is_indexed_and_has_matching_local_fallback() -> (
-    None
-):
+def test_every_backend_evidence_link_is_indexed_and_has_matching_local_fallback() -> None:
     refs = _page_refs()
     assert refs, "详情页应通过后端读取证据原件"
     assert set(refs) == set(INDEX), "页面引用与证据白名单必须一一对应"
@@ -92,9 +81,7 @@ def test_detail_pages_show_originals_playable_video_and_hash_controls() -> None:
         assert "/capabilities/assets/evidence.js?v=" in html, page.name
         for video in re.findall(r"<video[^>]*>", html):
             assert "controls" in video and "playsinline" in video, page.name
-        for name, sha in re.findall(
-            r'data-evidence="([^"]+)" data-sha256="([0-9a-f]{64})"', html
-        ):
+        for name, sha in re.findall(r'data-evidence="([^"]+)" data-sha256="([0-9a-f]{64})"', html):
             assert INDEX[name]["sha256"] == sha, (page.name, name)
             assert f"<code>{sha}</code>" in html, (page.name, name)
         # 截图链接与 <img> 指向同一原件，不提供缩略图替身。
