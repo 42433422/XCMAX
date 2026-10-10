@@ -1,5 +1,5 @@
 {
-  "lines": 2298382,
+  "lines": 2299998,
   "updated": "2026-10-10",
-  "note": "Authentication for the MODstore production-line, config and sync-receive write endpoints, plus the CSRF bearer-bypass fix. About 63 lines are the fix, about 148 are its regression tests, and 1 is the changelog entry."
+  "note": "Capability-center evidence media served from the private COS bucket through short-lived presigned URLs. About 850 lines are the generated one-line-per-asset evidence whitelist (846 screenshots/videos), about 300 are the MODstore presign/verify endpoint, about 260 are its and the page-builder regression tests, about 200 are the builder, page script and styles, and 1 is the changelog entry."
 }
