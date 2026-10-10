@@ -1,5 +1,5 @@
 {
-  "lines": 2300296,
+  "lines": 2300639,
   "updated": "2026-10-11",
-  "note": "Main after #2257 plus #2240 Para dispatch ticket chain (+762, unchanged). The extra +8 comes from #2257 (ci-cd workflow, FHD SSOT + root copy) which merged to main without a baseline raise; absorbed here so the gate stays green. Reviewed --force waiver documented in PR #2240 body."
+  "note": "工单闭环总账 Para 处理方判定：新增只读校验脚本与测试；合并 main 后重算"
 }
