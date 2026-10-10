@@ -5,14 +5,22 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from modstore_server.api.service_auth import (
+    require_admin_or_internal,
+    require_admin_user,
+    require_ops_line_peer_or_admin,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin/production-line", tags=["admin-production-line"])
+_READ = [Depends(require_admin_or_internal)]
+_ADMIN = [Depends(require_admin_user)]
+_OPS_PEER = [Depends(require_ops_line_peer_or_admin)]
 
 
 class PipelineRunRequest(BaseModel):
@@ -25,21 +33,14 @@ class StepRejectionRequest(BaseModel):
     reason: str = ""
 
 
-def _require_admin_user(authorization: Optional[str] = Header(None)) -> Any:
-    """Approver identity comes from the bearer token, never from the request body."""
-    from modstore_server.api.deps import get_current_user, require_admin
-
-    return require_admin(user=get_current_user(authorization=authorization))
-
-
-@router.get("/five-line-status")
+@router.get("/five-line-status", dependencies=_READ)
 async def api_five_line_status():
     from modstore_server.production_line_orchestrator import get_five_line_status
 
     return {"ok": True, "data": get_five_line_status()}
 
 
-@router.get("/status")
+@router.get("/status", dependencies=_READ)
 async def api_pipeline_status():
     from modstore_server.production_line_orchestrator import get_production_line_status
 
@@ -48,7 +49,7 @@ async def api_pipeline_status():
 
 @router.post("/run")
 async def api_pipeline_run(
-    body: PipelineRunRequest = PipelineRunRequest(), _admin: Any = Depends(_require_admin_user)
+    body: PipelineRunRequest = PipelineRunRequest(), _admin: Any = Depends(require_admin_user)
 ):
     from modstore_server.production_line_orchestrator import run_production_line
 
@@ -61,7 +62,7 @@ async def api_pipeline_run(
 
 
 @router.post("/steps/{step_id}/approve")
-async def api_step_approve(step_id: str, admin: Any = Depends(_require_admin_user)):
+async def api_step_approve(step_id: str, admin: Any = Depends(require_admin_user)):
     from modstore_server.production_line_orchestrator import (
         approve_production_line_step,
     )
@@ -77,7 +78,7 @@ async def api_step_approve(step_id: str, admin: Any = Depends(_require_admin_use
 async def api_step_reject(
     step_id: str,
     body: StepRejectionRequest = StepRejectionRequest(),
-    admin: Any = Depends(_require_admin_user),
+    admin: Any = Depends(require_admin_user),
 ):
     from modstore_server.production_line_orchestrator import reject_production_line_step
 
@@ -91,7 +92,7 @@ async def api_step_reject(
 
 
 @router.post("/stop")
-async def api_pipeline_stop(_admin: Any = Depends(_require_admin_user)):
+async def api_pipeline_stop(_admin: Any = Depends(require_admin_user)):
     from modstore_server.production_line_orchestrator import (
         get_production_line_orchestrator,
     )
@@ -101,7 +102,7 @@ async def api_pipeline_stop(_admin: Any = Depends(_require_admin_user)):
     return {"ok": True, "message": "流水线已停止"}
 
 
-@router.get("/operations-health")
+@router.get("/operations-health", dependencies=_READ)
 async def api_operations_health():
     """运营线逐步健康度（优先拉 FHD，失败则仅返回 orchestrator 摘要）。"""
     import os
@@ -125,9 +126,9 @@ async def api_operations_health():
     return {"ok": True, "source": "orchestrator", "data": get_production_line_status()}
 
 
-@router.post("/event")
+@router.post("/event", dependencies=_OPS_PEER)
 async def api_operations_event(body: Dict[str, Any]):
-    """接收 FHD operations_line_bridge 事件 → 六线事件轨路由（可选 secret）。"""
+    """接收 FHD operations_line_bridge 事件 → 六线事件轨路由（须 X-Ops-Line-Secret 或管理员）。"""
     from modstore_server.six_line_event_router import handle_operations_line_event
 
     routed = handle_operations_line_event(body if isinstance(body, dict) else {})
@@ -139,7 +140,7 @@ async def api_operations_event(body: Dict[str, Any]):
     return {"ok": True, "received": body.get("step_id"), "routing": routed}
 
 
-@router.post("/incident")
+@router.post("/incident", dependencies=_OPS_PEER)
 async def api_operations_incident(body: Dict[str, Any]):
     """对齐 FHD `/api/admin/production-line/incident`：写入 incident-bus，避免事件只进 outbox。"""
     from modstore_server.incident_bus import publish_unified_incident
@@ -190,7 +191,7 @@ async def api_operations_incident(body: Dict[str, Any]):
     }
 
 
-@router.get("/event-rail/status")
+@router.get("/event-rail/status", dependencies=_READ)
 async def api_event_rail_status():
     """事件轨状态：路由表条数、digest backlog 积压。"""
     from modstore_server.six_line_event_router import get_event_rail_status
@@ -198,7 +199,7 @@ async def api_event_rail_status():
     return {"ok": True, "data": get_event_rail_status()}
 
 
-@router.get("/time-rail/graph")
+@router.get("/time-rail/graph", dependencies=_READ)
 async def api_time_rail_graph():
     """时间轨机器可读 workflow 图（节点 + 边 + phase）。"""
     from modstore_server.time_rail_workflow import graph_api_payload
@@ -206,7 +207,7 @@ async def api_time_rail_graph():
     return graph_api_payload()
 
 
-@router.get("/time-rail/status")
+@router.get("/time-rail/status", dependencies=_READ)
 async def api_time_rail_status(node_id: Optional[str] = None):
     """时间轨节点 runtime：last_run / ok / guard_active。"""
     from modstore_server.time_rail_workflow import collect_node_runtime_status
@@ -216,7 +217,7 @@ async def api_time_rail_status(node_id: Optional[str] = None):
     return {"ok": True, "data": data}
 
 
-@router.post("/time-rail/maintenance/sync")
+@router.post("/time-rail/maintenance/sync", dependencies=_ADMIN)
 async def api_time_rail_maintenance_sync(limit: int = 32):
     """把缺证时间轨节点同步进事件轨 backlog，供下一次 Vibe 自维护。"""
     from modstore_server.time_rail_workflow import sync_missing_evidence_backlog
@@ -224,14 +225,14 @@ async def api_time_rail_maintenance_sync(limit: int = 32):
     return {"ok": True, "data": sync_missing_evidence_backlog(limit=limit)}
 
 
-@router.post("/webhook-outbox/process")
+@router.post("/webhook-outbox/process", dependencies=_ADMIN)
 async def api_webhook_outbox_process(limit: int = 20):
     from modstore_server.cs_webhook_outbox import process_pending_outbox
 
     return {"ok": True, "data": process_pending_outbox(limit=limit)}
 
 
-@router.get("/webhook-outbox/status")
+@router.get("/webhook-outbox/status", dependencies=_READ)
 async def api_webhook_outbox_status():
     """Non-PII retry-queue health; imported legacy rows are never replayed here."""
     from modstore_server.cs_webhook_outbox import outbox_status_summary
@@ -239,14 +240,14 @@ async def api_webhook_outbox_status():
     return {"ok": True, "data": outbox_status_summary()}
 
 
-@router.post("/webhook-outbox/replay/{landing_contact_id}")
+@router.post("/webhook-outbox/replay/{landing_contact_id}", dependencies=_ADMIN)
 async def api_webhook_replay(landing_contact_id: int):
     from modstore_server.cs_webhook_outbox import replay_by_landing_contact_id
 
     return {"ok": True, "data": replay_by_landing_contact_id(int(landing_contact_id))}
 
 
-@router.get("/steps")
+@router.get("/steps", dependencies=_READ)
 async def api_pipeline_steps(line: str = "production"):
     from modstore_server.production_line_orchestrator import (
         OPERATIONS_LINE_STEPS,
