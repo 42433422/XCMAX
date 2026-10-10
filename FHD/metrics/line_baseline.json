@@ -1,5 +1,5 @@
 {
-  "lines": 2299861,
+  "lines": 2300639,
   "updated": "2026-10-11",
-  "note": "Main baseline 2299526 (after #2249) plus #2257 backend-test single-pytest (+8, merged without raising the baseline), plus the ticket-loop Para acceptance guard #2243 (+327: read-only ledger checker FHD/scripts/release/ticket_loop_ledger_check.py, its tests, SSOT note; raised explicitly, no unrelated deletions to keep the PR scoped)."
+  "note": "工单闭环总账 Para 处理方判定：新增只读校验脚本与测试；合并 main 后重算"
 }
