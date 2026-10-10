@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.services.tools_execution.order_parser import _parse_order_text
+from app.services.tools_execution.order_parser_helpers import looks_like_conversational_filler
 
 
 class TestParseOrderTextEmptyAndInvalid:
@@ -140,6 +141,21 @@ class TestParseOrderTextCustomerSlot2067:
             result = _parse_order_text(text)
             assert result["success"] is False, text
             assert not result.get("unit_name"), text
+
+    def test_issue_repro_message_keeps_customer_slot(self):
+        """WO-26b0cfd509b8 原话：1.0.0.5 候选包抽成「好的」/「已识别订单」。"""
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": ""}):
+            result = _parse_order_text("客户闭环验收客户 发货单：客户闭环测试商品A 数量24 单价3.5")
+        assert result["success"] is True
+        assert result["unit_name"] == "客户闭环验收客户"
+        assert not looks_like_conversational_filler(result["unit_name"])
+        assert result["products"][0]["name"].startswith("客户闭环测试商品A")
+
+    def test_issue_repro_assistant_replies_never_become_customer(self):
+        """原工单三次尝试里抽到的值，本身都不能当成订单文本里的客户。"""
+        for text in ("已识别订单，正在生成发货单…", '已识别订单，请点击"确认执行"生成发货单。'):
+            result = _parse_order_text(text)
+            assert result.get("unit_name") in (None, ""), text
 
     def test_plain_two_token_fallback_still_works(self):
         result = _parse_order_text("张三 产品A")
