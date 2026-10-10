@@ -1,5 +1,5 @@
 {
-  "lines": 2300303,
-  "updated": "2026-10-10",
-  "note": "Merge origin/main (#2220 auth). Capability-center evidence media from private COS via short-lived presigned URLs: about 850 generated whitelist lines (846 assets), about 330 MODstore presign/verify, about 260 regression tests, about 200 builder/page/styles, 1 changelog."
+  "lines": 2300404,
+  "updated": "2026-10-11",
+  "note": "Merged main (#2220 endpoint auth) on top of the COS-backed capability evidence change. The previous merge baseline undercounted the combined tree by 101 lines; this is the exact combined count: #2220's auth modules and tests plus the evidence whitelist (846 media), the MODstore presign/verify endpoint, its and the page-builder tests, builder/page script/styles and one changelog line."
 }
