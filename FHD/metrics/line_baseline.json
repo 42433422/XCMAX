@@ -1,5 +1,5 @@
 {
-  "lines": 2299526,
-  "updated": "2026-10-10",
-  "note": "Main after #2218/#2220 (2298742) plus the unified Mac acceptance fix #2214 incl. #2224 (#2067 explicit quantity/unit price, longest-name match, approval preview, async-safe defect intake, tests, changelog; +190), plus +16 reserved for the #2219 customer-slot regression tests. Plus the Self-Heal stale-failure filter #2249 (+578: gate module self_heal_freshness.py and acceptance tests; raised explicitly, no unrelated deletions to keep the PR scoped)."
+  "lines": 2300639,
+  "updated": "2026-10-11",
+  "note": "工单闭环总账 Para 处理方判定：新增只读校验脚本与测试；合并 main 后重算"
 }
