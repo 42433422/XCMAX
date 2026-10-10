@@ -1,5 +1,5 @@
 {
-  "lines": 2298441,
+  "lines": 2298569,
   "updated": "2026-10-10",
-  "note": "AI review: no placeholder LLM endpoint fallback, so the API key is never sent to an unrelated host (+15 fix, +44 regression tests)."
+  "note": "Main's shared raise (self-heal guard +27, #2067 customer-slot tests +16, #2067 quantity/unit-price +85) plus the AI review placeholder-endpoint guard (+59), so the remaining PRs still merge in any order."
 }
