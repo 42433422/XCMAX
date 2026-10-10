@@ -684,6 +684,10 @@ def call_llm_review(
 ) -> str:
     """LLM 复核单条 finding，返回 'high'/'medium'/'low'/'false-positive'。
 
+    Without ``XCAGI_LLM_ENDPOINT`` (or ``XCAGI_LLM_BASE_URL`` + ``XCAGI_LLM_MODEL``)
+    no request is sent and ``unavailable`` is returned; there is no placeholder
+    fallback endpoint, so the API key never leaves for an unrelated host.
+
     Any unavailable or malformed response returns ``unavailable`` so the
     required review check can fail closed.  ``false-positive`` is reserved for
     an explicit reviewer verdict and is never synthesized from an exception.
@@ -733,8 +737,8 @@ def call_llm_review(
             "max_tokens": 512,
             "messages": [{"role": "user", "content": prompt}],
         }
-    else:
-        request_url = explicit_endpoint or "https://api.example.com/v1/review"
+    elif explicit_endpoint:
+        request_url = explicit_endpoint
         headers = {
             "Authorization": f"Bearer {normalized_key}",
             "Content-Type": "application/json",
@@ -746,6 +750,13 @@ def call_llm_review(
             "file": finding.file_path,
             "line": finding.line,
         }
+    else:
+        # 曾默认回退到 https://api.example.com/v1/review：该地址与本项目无关，
+        # 会把 Bearer XCAGI_LLM_API_KEY 发给第三方主机。未配置时直接判定不可用（fail-closed）。
+        print(
+            "[review] XCAGI_LLM_ENDPOINT / XCAGI_LLM_BASE_URL+MODEL not configured; skip LLM review"
+        )
+        return "unavailable"
     try:
         if client is None:
             client = httpx.Client(timeout=timeout)

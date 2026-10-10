@@ -1,5 +1,5 @@
 {
-  "lines": 2298382,
+  "lines": 2298441,
   "updated": "2026-10-10",
-  "note": "Authentication for the MODstore production-line, config and sync-receive write endpoints, plus the CSRF bearer-bypass fix. About 63 lines are the fix, about 148 are its regression tests, and 1 is the changelog entry."
+  "note": "AI review: no placeholder LLM endpoint fallback, so the API key is never sent to an unrelated host (+15 fix, +44 regression tests)."
 }
