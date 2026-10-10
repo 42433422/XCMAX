@@ -45,14 +45,33 @@
       "tenant": null
     }
   },
+  "processor_policy": {
+    "rule": "发版解决问题必须走 Para：AI 处理相关条目判 PASS 时，每张已填工单的 processing 必须含一次 para_delegate 成功完成（accepted、completed、ok 均为 true 且有 Para 任务号），且不得出现任何本地大模型/本地执行回退；检测到回退即判 FAIL，不算通过。由 FHD/scripts/release/ticket_loop_ledger_check.py 校验。",
+    "required_handler": "para_delegate",
+    "forbidden_local_handlers": ["agent", "vibe_edit", "vibe_heal", "vibe_code", "cursor_delegate", "direct_python", "llm_md"],
+    "applies_to_items": [17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 41, 48, 49],
+    "gate": 19
+  },
   "tickets": {
     "resolved": {
       "ticket_id": null,
-      "work_order_id": null
+      "work_order_id": null,
+      "processing": {
+        "para_task_id": null,
+        "para_device_id": null,
+        "handler_outputs_evidence": null,
+        "handlers_attempted": []
+      }
     },
     "reopened": {
       "ticket_id": null,
-      "work_order_id": null
+      "work_order_id": null,
+      "processing": {
+        "para_task_id": null,
+        "para_device_id": null,
+        "handler_outputs_evidence": null,
+        "handlers_attempted": []
+      }
     }
   },
   "items": [
