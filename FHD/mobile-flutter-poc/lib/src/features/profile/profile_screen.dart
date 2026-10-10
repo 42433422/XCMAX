@@ -8,6 +8,7 @@ import '../../api/mobile_api.dart';
 import '../../api/mobile_models.dart';
 import '../../api/mobile_session_store.dart';
 import '../../data/mobile_repository_scope.dart';
+import '../../data/mobile_sync_flow.dart';
 import '../../policy/avatar_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_avatar.dart';
@@ -22,6 +23,7 @@ part 'profile_screen_state.part.dart';
 part 'profile_screen_editors.part.dart';
 part 'profile_screen_hero.part.dart';
 part 'profile_screen_wallet.part.dart';
+part 'profile_screen_sync.part.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.api});

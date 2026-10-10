@@ -11,6 +11,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   var _serverModeLabel = '远程同步可用';
   var _profilePage = const MobileProfilePageConfig.disabled();
   var _syncing = false;
+  var _syncSummary = '';
+  var _syncConflicts = const <MobileSyncConflict>[];
   var _hasLocalDisplayName = false;
   var _hasLocalAvatar = false;
   var _hasLocalAccountKind = false;
@@ -55,9 +57,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         serverModeLabel: _serverModeLabel,
                         profilePage: _profilePage.enabled ? _profilePage : null,
                         syncing: _syncing,
+                        syncStatusText: _syncSummary,
                         onEdit: _showProfileEditor,
                         onSync: _refreshProfileState,
                       ),
+                      if (_syncConflicts.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        WeCellGroup(
+                          children: [
+                            WeCell(
+                              title: '同步冲突',
+                              subtitle: '${_syncConflicts.length} 条待处理，点开查看',
+                              icon: Icons.sync_problem,
+                              iconColor: colors.warning,
+                              iconBg: Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer,
+                              showDivider: false,
+                              onTap: () => showMobileSyncConflictsSheet(
+                                context,
+                                _syncConflicts,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       _WalletBalanceCard(
                         wallet: wallet,
@@ -290,12 +314,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _loadCachedProfile(),
         _refreshAppConfig(),
         _refreshMe(),
+        _runDataSync(),
       ]);
     } finally {
       if (mounted) {
         setState(() => _syncing = false);
       }
     }
+  }
+
+  /// 真实数据同步：状态 → 推送 → 拉取 → 冲突（见 [MobileSyncFlow]）。
+  Future<void> _runDataSync() async {
+    try {
+      final result = await MobileSyncFlow(_api).run();
+      if (!mounted) return;
+      setState(() {
+        _syncSummary = result.summary;
+        _syncConflicts = result.conflicts;
+      });
+      if (result.warning.isNotEmpty) {
+        _showSyncSnack('同步完成，但${result.warning}');
+      } else if (result.conflicts.isNotEmpty) {
+        _showSyncSnack('同步完成，有 ${result.conflicts.length} 条冲突待处理');
+      }
+    } on MobileSyncException catch (error) {
+      if (!mounted) return;
+      setState(() => _syncSummary = '同步失败，点「同步」重试');
+      _showSyncSnack(error.toString());
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _syncSummary = '同步失败，点「同步」重试');
+      _showSyncSnack('同步失败：$error');
+    }
+  }
+
+  void _showSyncSnack(String message) {
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _openConnectPc() {
