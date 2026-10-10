@@ -1,5 +1,5 @@
 {
-  "lines": 2300639,
+  "lines": 2300764,
   "updated": "2026-10-11",
-  "note": "工单闭环总账 Para 处理方判定：新增只读校验脚本与测试；合并 main 后重算"
+  "note": "#2263 合并 main(#2243) 后重算：取 main 基线 2300639 + 本 PR 净增 125（backend-test 4 分片工作流两份同源 workflow 约 +116、pytest-split 依赖 2 行、分片暴露的 4 处非密封测试修复 +7：mobile fixture 关 fast-start +1、cvm_watcher 两个 tick 用例固定磁盘 +2、edition bootstrap smoke 隔离 ModRegistry 单例 +4）"
 }

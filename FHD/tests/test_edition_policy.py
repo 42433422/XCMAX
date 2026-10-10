@@ -258,7 +258,11 @@ async def test_bootstrap_edition_pack_smoke(monkeypatch, tmp_path):
     monkeypatch.setenv("XCAGI_MINIMAL_EDITION", "1")
 
     from app.infrastructure.mods.mod_manager import ModManager
+    from app.infrastructure.mods.registry import ModRegistry
 
+    # load_all_mods() 会把 tmp_path 下仅含 manifest 的 bridge 写进进程级 ModRegistry 单例；
+    # 用独立实例隔离，测试结束由 monkeypatch 还原，避免污染后续用例（如 office pack catalog）。
+    monkeypatch.setattr(ModRegistry, "_instance", ModRegistry())
     mm = ModManager(mods_root=str(target))
     monkeypatch.setattr(
         "app.infrastructure.mods.mod_manager.get_mod_manager",
