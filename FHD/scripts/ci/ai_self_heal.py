@@ -840,6 +840,7 @@ def call_llm(
 
     fail-open 策略：
     - 缺 api_key → 返回 None
+    - 缺 XCAGI_LLM_ENDPOINT → 返回 None（不再回退到占位地址，避免把密钥发给第三方）
     - httpx 缺失 → 返回 None
     - 超时/网络错误 → 返回 None
     - 任意异常 → 返回 None
@@ -849,7 +850,12 @@ def call_llm(
         return None
     if httpx is None and client is None:
         return None
-    endpoint = endpoint or os.environ.get("XCAGI_LLM_ENDPOINT", "https://api.example.com/v1/fix")
+    endpoint = (endpoint or os.environ.get("XCAGI_LLM_ENDPOINT") or "").strip()
+    if not endpoint:
+        # 曾默认回退到 https://api.example.com/v1/fix：该地址在 GitHub runner 上可解析，
+        # 每次自愈都会把 Bearer XCAGI_LLM_API_KEY 发给与本项目无关的主机且永远失败。
+        print("[heal] XCAGI_LLM_ENDPOINT not configured; skip LLM fallback")
+        return None
     payload = {
         "errors": [
             {
