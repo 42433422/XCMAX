@@ -235,9 +235,10 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     pending = _pending_approval_signal(payloads)
     # 审批门后的业务动作**未执行**：此处报 success=true 正是界面谎称
     # 「智能任务执行完成」的来源。终态以审批事实为准，而非外层对话是否正常结束。
-    unexecuted = mark_unexecuted_order_run(
-        run, str(getattr(run, "message", "") or "")
-    ) or str(getattr(run, "error", "") or "") == UNEXECUTED_ORDER_ERROR
+    unexecuted = (
+        mark_unexecuted_order_run(run, str(getattr(run, "message", "") or ""))
+        or str(getattr(run, "error", "") or "") == UNEXECUTED_ORDER_ERROR
+    )
     if unexecuted:
         status = "failed"
     if pending:

@@ -1,5 +1,5 @@
 {
-  "lines": 2298170,
+  "lines": 2298312,
   "updated": "2026-10-10",
-  "note": "Windows backup tasks must follow the active customer data directory, and the interim installer upload retries a stalled copy. These 46 lines are that fix."
+  "note": "An order request that ends with no tool call and no document is a failed task, not a completed one. These 142 lines are that guard, its regression tests, the changelog entry, and the formatting required by CI."
 }
