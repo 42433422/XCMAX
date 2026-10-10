@@ -16,6 +16,19 @@ def _facade() -> Any:
     return legacy_chat_adapter
 
 
+def _opening_tool_choice(
+    user_message: str, tools: list[Any], runtime_context: dict[str, Any] | None
+) -> Any:
+    from app.application.agent_orchestrator.business_harness import forced_order_tool_choice
+    from app.application.document_employee_routing import forced_document_tool_choice
+
+    return (
+        forced_document_tool_choice(user_message, tools, runtime_context)
+        or forced_order_tool_choice(user_message, tools)
+        or "auto"
+    )
+
+
 def _approval_wait_text() -> str:
     for record in _facade().get_last_tool_records():
         output = record.get("output") or {}
@@ -56,9 +69,7 @@ def chat(
         cli = client
     mdl = _facade()._resolve_chat_model_for_client(cli, model)
     tools = _facade()._get_workflow_tool_registry()
-    from app.application.document_employee_routing import forced_document_tool_choice
-
-    tool_choice = forced_document_tool_choice(user_message, tools, runtime_context) or "auto"
+    tool_choice = _opening_tool_choice(user_message, tools, runtime_context)
     tool_outputs: list[str] = []
     for _ in range(max_iterations):
         c = cli.chat.completions.create(
@@ -176,9 +187,7 @@ def chat_stream_text(
         cli = client
     mdl = _facade()._resolve_chat_model_for_client(cli, model)
     tools = _facade()._get_workflow_tool_registry()
-    from app.application.document_employee_routing import forced_document_tool_choice
-
-    tool_choice = forced_document_tool_choice(user_message, tools, runtime_context) or "auto"
+    tool_choice = _opening_tool_choice(user_message, tools, runtime_context)
     for _ in range(max_iterations):
         stream = cli.chat.completions.create(
             model=mdl,
