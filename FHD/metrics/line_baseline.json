@@ -1,5 +1,5 @@
 {
-  "lines": 2298948,
+  "lines": 2299630,
   "updated": "2026-10-10",
-  "note": "Main after #2218/#2220 (2298742) plus the unified Mac acceptance fix #2214 incl. #2224 (#2067 explicit quantity/unit price, longest-name match, approval preview, async-safe defect intake, tests, changelog; +190), plus +16 reserved for the #2219 customer-slot regression tests."
+  "note": "Merge origin/main (#2214 Mac acceptance / #2067). Shared raise for mobile IM #2228 (+409) and mobile sync #2229 (+273) so they merge in any order."
 }
