@@ -1,5 +1,5 @@
 {
-  "lines": 2298197,
+  "lines": 2298510,
   "updated": "2026-10-10",
-  "note": "self-heal: require explicit LLM endpoint (+tests)"
+  "note": "Shared raise for three related PRs so they merge in any order: self-heal explicit LLM endpoint guard (+27), #2067 customer-slot regression tests (+16), and #2067 quantity/unit-price extraction with tests and changelog (+85)."
 }

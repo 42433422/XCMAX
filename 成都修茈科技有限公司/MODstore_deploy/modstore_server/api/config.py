@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from modman.fhd_shell_export import write_fhd_shell_mods_json
 from modman.repo_config import (
@@ -14,6 +14,7 @@ from modman.repo_config import (
     resolved_xcagi,
     resolved_xcagi_backend_url,
 )
+from modstore_server.api.deps import require_admin
 from modstore_server.api.dto import ConfigDTO, ExportFhdShellDTO
 from modstore_server.infrastructure import library_paths
 
@@ -79,7 +80,7 @@ def api_export_fhd_shell_mods(
     return {"ok": True, "path": str(target), "count": n}
 
 
-@router.put("/api/config")
+@router.put("/api/config", dependencies=[Depends(require_admin)])
 def put_config(body: ConfigDTO):
     lr = (body.library_root or "").strip()
     xr = (body.xcagi_root or "").strip()

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import importlib
 import json
 import logging
@@ -11,7 +12,7 @@ import os
 import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -19,6 +20,19 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger("modstore_server.xcmax_admin_api")
 router = APIRouter(prefix="/api/xcmax", tags=["xcmax-admin"])
 _SYNC_UNAVAILABLE = "同步服务暂时不可用，请稍后重试"
+
+
+SYNC_SECRET_ENV = "XCMAX_SYNC_SHARED_SECRET"
+
+
+def require_sync_peer(x_xcmax_sync_token: str | None = Header(None)) -> None:
+    """Machine-to-machine auth for node pushes; fails closed when the secret is unset."""
+    expected = (os.environ.get(SYNC_SECRET_ENV) or "").strip()
+    if not expected:
+        raise HTTPException(503, "同步接收未配置共享密钥")
+    supplied = (x_xcmax_sync_token or "").strip()
+    if not supplied or not hmac.compare_digest(supplied.encode(), expected.encode()):
+        raise HTTPException(401, "同步凭证无效")
 
 
 def _facade():
@@ -116,7 +130,7 @@ async def sync_changes(
         return {"success": True, "data": [], "count": 0, "note": _SYNC_UNAVAILABLE}
 
 
-@router.post("/sync/receive", response_model=None)
+@router.post("/sync/receive", response_model=None, dependencies=[Depends(require_sync_peer)])
 async def sync_receive(body: dict | list = Body(default=None)) -> dict[str, Any]:
     """接收来自本地节点的变更。
 
