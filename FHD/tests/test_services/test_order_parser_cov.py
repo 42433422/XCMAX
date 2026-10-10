@@ -1114,3 +1114,17 @@ class TestNoContainerSubBranches:
         with patch.object(_mod, "normalize_trailing_unit_name", side_effect=_stubbed_normalize):
             r = _parse_order_text("客户PP GG-03 规格18")
         assert "success" in r  # falls through to split fallback
+
+
+def test_retail_quantity_price_keeps_explicit_count_and_price():
+    from app.services.tools_execution.order_parser import _parse_order_text
+
+    parsed = _parse_order_text("MAC验收0929客户 发货单：MAC验收0929产品13687 数量2 单价12.50")
+    assert parsed["success"] is True
+    assert parsed["unit_name"] == "MAC验收0929客户"
+    product = parsed["products"][0]
+    assert product["name"] == "MAC验收0929产品13687"
+    assert product["quantity_kg"] == 2
+    assert product["tin_spec"] == 1.0
+    assert product["unit_price"] == 12.5
+    assert product["amount"] == 25.0
