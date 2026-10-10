@@ -1,5 +1,5 @@
 {
-  "lines": 2300057,
+  "lines": 2300071,
   "updated": "2026-10-10",
-  "note": "Capability-center evidence media served from the private COS bucket through short-lived presigned URLs. About 850 lines are the generated one-line-per-asset evidence whitelist (846 screenshots/videos), about 330 are the MODstore presign/verify endpoint, about 280 are its and the page-builder regression tests, about 200 are the builder, page script and styles, and 1 is the changelog entry."
+  "note": "Merged main; capability-center evidence media served from the private COS bucket through short-lived presigned URLs. About 850 lines are the generated one-line-per-asset evidence whitelist (846 screenshots/videos), about 330 are the MODstore presign/verify endpoint, about 260 are its and the page-builder regression tests, about 200 are the builder, page script and styles, and 1 is the changelog entry."
 }
