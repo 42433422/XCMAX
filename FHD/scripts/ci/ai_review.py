@@ -733,8 +733,8 @@ def call_llm_review(
             "max_tokens": 512,
             "messages": [{"role": "user", "content": prompt}],
         }
-    else:
-        request_url = explicit_endpoint or "https://api.example.com/v1/review"
+    elif explicit_endpoint:
+        request_url = explicit_endpoint
         headers = {
             "Authorization": f"Bearer {normalized_key}",
             "Content-Type": "application/json",
@@ -746,6 +746,11 @@ def call_llm_review(
             "file": finding.file_path,
             "line": finding.line,
         }
+    else:
+        # 曾回退到 https://api.example.com/v1/review 并附带 Bearer 密钥；
+        # 未配置 endpoint / base_url+model 时直接判 unavailable，不向任何默认地址发密钥。
+        print("[review] LLM endpoint not configured; skip LLM verdict")
+        return "unavailable"
     try:
         if client is None:
             client = httpx.Client(timeout=timeout)

@@ -312,8 +312,20 @@ def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
     if not api_key:
         return {"ok": False, "error": "LLM_API_KEY 未配置"}
     base = os.environ.get("XCAGI_LLM_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
-    model = os.environ.get("XCAGI_LLM_MODEL", "deepseek-chat")
+    model = (os.environ.get("XCAGI_LLM_MODEL") or "deepseek-chat").strip()
+    # 与 ai_review.py 保持一致：catalog 里的 "minimax/<model>" 与 "minimaxsk-cp-…" 前缀
+    # 不是提供方接受的模型名/密钥，直接透传会被拒绝。
+    if model.lower().startswith("minimax/"):
+        model = model.split("/", 1)[1]
+    api_key = str(api_key).strip()
+    if api_key.lower().startswith("minimaxsk-cp-"):
+        api_key = api_key[len("minimax") :]
+    import urllib.error
+    import urllib.parse
     import urllib.request
+
+    url = _chat_completions_url(base)
+    logger.info("LLM request host=%s model=%s", urllib.parse.urlsplit(url).hostname, model)
 
     system_prompt = (
         "你是 XCMAX 项目的代码实现助手。"
@@ -354,7 +366,7 @@ def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
             }
         ).encode("utf-8")
         req = urllib.request.Request(
-            _chat_completions_url(base),
+            url,
             data=body,
             headers={
                 "Authorization": f"Bearer {api_key}",
@@ -372,9 +384,54 @@ def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
                 continue
             plan["ok"] = True
             return plan
+        except urllib.error.HTTPError as exc:
+            last_error = (
+                f"HTTP Error {exc.code}: {exc.reason}{_provider_error_detail(exc, api_key)}"
+            )
+            if exc.code in {401, 402, 403, 404}:
+                # 鉴权/计费/模型路径错误重试也不会好，避免重复消耗额度。
+                break
         except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             last_error = str(exc)
     return {"ok": False, "error": f"LLM 调用失败（重试 1 次后）：{last_error}"}
+
+
+def _provider_error_detail(exc: Any, api_key: str) -> str:
+    """Return the provider's own error type/message (never the key) for diagnosis.
+
+    HTTP 402 alone cannot distinguish "balance/quota exhausted" from "model not
+    covered by this plan"; the provider body (e.g. ``insufficient_balance_error``
+    or MiniMax ``base_resp.status_msg``) can.
+    """
+
+    try:
+        raw = exc.read(4096).decode("utf-8", errors="replace")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    detail = raw
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        data = None
+    if isinstance(data, dict):
+        err = data.get("error")
+        base_resp = data.get("base_resp")
+        parts: list[str] = []
+        if isinstance(err, dict):
+            parts += [str(err.get(k)) for k in ("type", "code", "message") if err.get(k)]
+        elif err:
+            parts.append(str(err))
+        if isinstance(base_resp, dict):
+            parts += [
+                str(base_resp.get(k)) for k in ("status_code", "status_msg") if base_resp.get(k)
+            ]
+        if parts:
+            detail = " | ".join(parts)
+    if api_key:
+        detail = detail.replace(api_key, "***")
+    detail = re.sub(r"(sk-[A-Za-z0-9_-]{4})[A-Za-z0-9_-]+", r"\1***", detail)
+    detail = " ".join(detail.split())[:300]
+    return f" ({detail})" if detail else ""
 
 
 def _parse_llm_plan(content: str) -> tuple[dict[str, Any] | None, str]:

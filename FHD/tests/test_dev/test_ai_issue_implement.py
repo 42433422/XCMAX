@@ -735,6 +735,62 @@ class TestCallLlmStrictJsonRetry:
         assert calls == 2
 
 
+class TestCallLlmProviderErrors:
+    def test_402_surfaces_provider_reason_without_key_and_skips_retry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import io
+        import urllib.error
+
+        calls = 0
+        secret = "sk-cp-SECRETVALUE1234567890"
+        body = json.dumps(
+            {
+                "type": "error",
+                "error": {
+                    "type": "insufficient_balance_error",
+                    "message": f"insufficient balance for key {secret}",
+                },
+            }
+        ).encode("utf-8")
+
+        def fake_urlopen(req: urllib.request.Request, timeout: int) -> _FakeHttpResponse:
+            nonlocal calls
+            calls += 1
+            raise urllib.error.HTTPError(
+                req.full_url, 402, "Payment Required", None, io.BytesIO(body)
+            )
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        result = _ai_impl._call_llm(prompt="implement safely", api_key=secret)
+
+        assert result["ok"] is False
+        assert "HTTP Error 402" in result["error"]
+        assert "insufficient_balance_error" in result["error"]
+        assert "SECRETVALUE" not in result["error"]
+        assert calls == 1
+
+    def test_minimax_catalog_prefixes_are_normalized(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://api.minimaxi.com")
+        monkeypatch.setenv("XCAGI_LLM_MODEL", "minimax/MiniMax-M2.7")
+        seen: list[urllib.request.Request] = []
+
+        def fake_urlopen(req: urllib.request.Request, timeout: int) -> _FakeHttpResponse:
+            seen.append(req)
+            return _FakeHttpResponse('{"files": [], "estimated_files": 0}')
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        result = _ai_impl._call_llm(prompt="implement safely", api_key="minimaxsk-cp-test")
+
+        assert result["ok"] is True
+        req = seen[0]
+        assert req.full_url == "https://api.minimaxi.com/v1/chat/completions"
+        assert req.get_header("Authorization") == "Bearer sk-cp-test"
+        assert json.loads(bytes(req.data or b"{}"))["model"] == "MiniMax-M2.7"
+
+
 class TestParseLlmPlan:
     def test_rejects_python_literal_instead_of_relaxing_json(self) -> None:
         plan, error = _ai_impl._parse_llm_plan("{'files': []}")
