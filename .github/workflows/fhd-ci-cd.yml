@@ -169,7 +169,11 @@ jobs:
 
   backend-test:
     needs: guard-temp-scripts
-    runs-on: ubuntu-latest
+    # 本仓库自己的分支（push，或 head 仓库 == 本仓库的 pull_request）走自托管 runner
+    # box-linux-1（标签 xcmax-backend；rootless docker + 低权限用户 ghrunner）。
+    # 外部 fork 的 PR、schedule、workflow_dispatch 一律继续走 GitHub 托管 ubuntu-latest，
+    # 绝不让不受信代码落到自托管机器上。job 名保持 backend-test（required check 不变）。
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","xcmax-backend"]') || 'ubuntu-latest' }}
     outputs:
       skip: ${{ steps.paths.outputs.skip }}
     services:
