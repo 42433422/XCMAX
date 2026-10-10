@@ -1,5 +1,5 @@
 {
-  "lines": 2298791,
+  "lines": 2299192,
   "updated": "2026-10-10",
-  "note": "Mobile IM realtime fix: WS URL follows the configured backend, real connection-state display, and mobile-sent messages pushed over WS (shared fan-out with the web route). About 137 lines are the fix, about 271 are its regression tests, and 1 is the changelog entry."
+  "note": "Shared raise for three related PRs so they merge in any order: self-heal explicit LLM endpoint guard (+27), #2067 customer-slot regression tests (+16), and #2067 quantity/unit-price extraction with tests and changelog (+85). Plus a shared raise for the two mobile fixes so they also merge in any order: mobile IM realtime fix #2228 (+409: about 137 fix lines, 271 regression tests, 1 changelog line) and mobile sync entry #2229 (+273: about 100 fix lines, 172 tests, 1 changelog line; compressed from +475)."
 }
