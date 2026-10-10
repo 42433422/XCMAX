@@ -1,5 +1,5 @@
 {
-  "lines": 2300421,
+  "lines": 2300764,
   "updated": "2026-10-11",
-  "note": "#2263 合并 main(#2240) 后重算：backend-test 4 分片工作流（两份同源 workflow 各约 +58 行）+ pytest-split 依赖 2 行 + 分片暴露的 4 处非密封测试修复（mobile fixture 关 fast-start +1、invalidate_registry 断言移入 patch 0、cvm_watcher 两个 tick 用例固定磁盘 50% +2、edition bootstrap smoke 隔离 ModRegistry 单例 +4）"
+  "note": "#2263 合并 main(#2243) 后重算：取 main 基线 2300639 + 本 PR 净增 125（backend-test 4 分片工作流两份同源 workflow 约 +116、pytest-split 依赖 2 行、分片暴露的 4 处非密封测试修复 +7：mobile fixture 关 fast-start +1、cvm_watcher 两个 tick 用例固定磁盘 +2、edition bootstrap smoke 隔离 ModRegistry 单例 +4）"
 }
