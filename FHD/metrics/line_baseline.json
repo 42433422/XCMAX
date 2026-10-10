@@ -1,5 +1,5 @@
 {
-  "lines": 2299424,
+  "lines": 2299630,
   "updated": "2026-10-10",
-  "note": "Merge origin/main (#2220 auth). Shared raise for mobile IM #2228 (+409) and mobile sync #2229 (+273) so they merge in any order."
+  "note": "Merge origin/main (#2214 Mac acceptance / #2067). Shared raise for mobile IM #2228 (+409) and mobile sync #2229 (+273) so they merge in any order."
 }
