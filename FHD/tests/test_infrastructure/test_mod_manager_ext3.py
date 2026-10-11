@@ -145,20 +145,12 @@ class TestAllModsRoots:
 
 
 class TestRepoLayoutModsCandidates:
-    def test_returns_candidates(self, tmp_path):
-        mods_dir = tmp_path / "mods"
-        mods_dir.mkdir()
-        with patch(
-            "app.infrastructure.mods.mod_manager.os.path.dirname", return_value=str(tmp_path)
-        ):
-            result = mod_manager._repo_layout_mods_candidates()
-        assert isinstance(result, list)
-
-    def test_skips_nonexistent_dirs(self, tmp_path):
-        with patch(
-            "app.infrastructure.mods.mod_manager.os.path.dirname",
-            return_value=str(tmp_path / "nonexistent"),
-        ):
+    @pytest.mark.parametrize("present", [True, False])
+    def test_existing_and_missing_candidates(self, tmp_path, present):
+        if present:
+            (tmp_path / "mods").mkdir()
+        root = tmp_path if present else tmp_path / "nonexistent"
+        with patch("app.infrastructure.mods.mod_manager.os.path.dirname", return_value=str(root)):
             result = mod_manager._repo_layout_mods_candidates()
         assert isinstance(result, list)
 
@@ -205,13 +197,9 @@ class TestRegisterSingleModHttpRoutes:
 
 
 class TestRestoreEntitlementsFromSessionId:
-    def test_with_empty_session(self):
-        # Empty session should return immediately without calling anything
-        mod_manager._restore_entitlements_from_session_id("")
-
-    def test_with_import_error(self):
-        # The function catches RECOVERABLE_ERRORS, so ImportError should not raise
-        mod_manager._restore_entitlements_from_session_id("sid1")
+    @pytest.mark.parametrize("sid", ["", "sid1"])
+    def test_existing_session_restore(self, sid):
+        assert mod_manager._restore_entitlements_from_session_id(sid) is None
 
 
 class TestModAllowedForApiLoad:
@@ -257,10 +245,10 @@ class TestMountOnDiskPrimaryClientMods:
 
 
 class TestLoadModRoutes:
-    def test_with_loaded_mods(self, tmp_path):
+    @pytest.mark.parametrize("loaded", [True, False])
+    def test_loaded_routes_and_missing_app(self, tmp_path, loaded):
         mm = mod_manager.ModManager(mods_root=str(tmp_path))
-        mm._loaded_mods = ["test_mod"]
-        mock_registry = Mock()
+        mm._loaded_mods = ["test_mod"] if loaded else []
         meta = ModMetadata(
             id="test_mod",
             name="Test",
@@ -268,31 +256,15 @@ class TestLoadModRoutes:
             mod_path=str(tmp_path),
             backend_entry="backend.main",
         )
-        mock_registry.list_mods.return_value = [meta]
-        mock_app = Mock()
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
-            ),
-            patch("app.infrastructure.mods.mod_manager._register_single_mod_http_routes"),
-            patch(
-                "app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods",
-                return_value=[],
-            ),
-            patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
-            patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
-        ):
-            mod_manager.load_mod_routes(mock_app, mm)
-
-    def test_without_app(self, tmp_path):
-        mm = mod_manager.ModManager(mods_root=str(tmp_path))
-        mm._loaded_mods = []
         mock_registry = Mock()
-        mock_registry.list_mods.return_value = []
+        mock_registry.list_mods.return_value = [meta] if loaded else []
         with (
             patch(
                 "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
             ),
+            patch(
+                "app.infrastructure.mods.mod_manager._register_single_mod_http_routes"
+            ) as register,
             patch(
                 "app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods",
                 return_value=[],
@@ -300,7 +272,8 @@ class TestLoadModRoutes:
             patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
             patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
         ):
-            mod_manager.load_mod_routes(None, mm)
+            mod_manager.load_mod_routes(Mock() if loaded else None, mm)
+        assert register.call_count == int(loaded)
 
 
 class TestLoadEmployeePackRoutes:

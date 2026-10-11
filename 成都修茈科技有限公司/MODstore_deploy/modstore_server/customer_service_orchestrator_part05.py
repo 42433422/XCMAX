@@ -11,7 +11,6 @@ from modstore_server.customer_issue_delivery_contract import (
     team_succeeded,
 )
 
-
 CLOSED_CUSTOMER_ISSUE_STATES = frozenset({"resolved", "closed", "done", "rejected"})
 
 

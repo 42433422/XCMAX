@@ -21,9 +21,9 @@ from sqlalchemy.orm import Session
 from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.customer_issue_delivery_contract import issue_resolution
 from modstore_server.customer_issue_intake import enqueue_issue, request_identity
+from modstore_server.customer_service_orchestrator import CLOSED_CUSTOMER_ISSUE_STATES as _CLOSED
+from modstore_server.customer_service_orchestrator import customer_issue_payload as _issue_row
 from modstore_server.customer_service_orchestrator import (
-    CLOSED_CUSTOMER_ISSUE_STATES as _CLOSED,
-    customer_issue_payload as _issue_row,
     ticket_payload,
 )
 from modstore_server.customer_service_tools import audit, json_dumps, json_loads
@@ -321,7 +321,12 @@ class CustomerIssueDecisionBody(BaseModel):
 
 
 def _sync_customer_decision_work_order(
-    db: Session, ticket: CustomerServiceTicket, evidence: dict[str, Any], user: User, decision: str, key: str
+    db: Session,
+    ticket: CustomerServiceTicket,
+    evidence: dict[str, Any],
+    user: User,
+    decision: str,
+    key: str,
 ) -> None:
     wo_id = str(evidence.get("work_order_id") or "")
     if not wo_id:
