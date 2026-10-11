@@ -1,5 +1,5 @@
 {
-  "lines": 2302019,
+  "lines": 2302039,
   "updated": "2026-10-11",
-  "note": "合入 main 7cabf40b（基线 2301916）后按 #2260 相对 main 净增 103 行重算（2301916+103）；本 PR 改动未变，仅同步 main（Refs #2260）"
+  "note": "main 8cac2ba（基线 2302019）+ 本 PR 净增 20 行（2302019+20）：#2279 提交真实台账后 release_gate 用例改从清空模板构造（_template），修 main 上 Release gate 4 项失败，闭环路径修复非新功能"
 }

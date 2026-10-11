@@ -22,6 +22,26 @@ def _ledger() -> dict:
     return json.loads((LEDGER_DIR / "ticket-loop.run.json").read_text(encoding="utf-8"))
 
 
+def _template() -> dict:
+    """已提交台账会记录真实轮次（#2279 起），用例从清空后的模板构造，避免随真实数据漂移。"""
+    ledger = copy.deepcopy(_ledger())
+    for key in ("source_sha", "installer_sha256"):
+        ledger["candidate"][key] = None
+    for who in ("customer_a", "customer_b"):
+        ledger["accounts"][who] = {"alias": None, "tenant": None}
+    for ticket in ledger["tickets"].values():
+        ticket["ticket_id"] = None
+        ticket["processing"] = {
+            "para_task_id": None,
+            "para_device_id": None,
+            "handler_outputs_evidence": None,
+            "handlers_attempted": [],
+        }
+    for item in ledger["items"]:
+        item.update(result="UNKNOWN", observed_at=None, evidence=[])
+    return ledger
+
+
 def _gates() -> dict:
     return json.loads((LEDGER_DIR / "gates.json").read_text(encoding="utf-8"))
 
@@ -38,7 +58,7 @@ PARA_OK = {
 
 
 def _filled(attempts: list[dict], *, pass_items=(24,)) -> dict:
-    ledger = copy.deepcopy(_ledger())
+    ledger = _template()
     ledger["candidate"]["source_sha"] = "a" * 40
     ledger["candidate"]["installer_sha256"] = "b" * 64
     ledger["accounts"]["customer_a"] = {"alias": "TEST-A", "tenant": "tenant-a"}
@@ -98,7 +118,7 @@ def test_missing_processing_evidence_fails() -> None:
 
 
 def test_pass_without_evidence_or_identity_fails() -> None:
-    ledger = copy.deepcopy(_ledger())
+    ledger = _template()
     for item in ledger["items"]:
         if item["no"] == 8:
             item["result"] = "PASS"
