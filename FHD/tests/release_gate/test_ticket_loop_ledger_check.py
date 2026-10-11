@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import importlib.util
 import json
+import runpy
 from pathlib import Path
 
 import pytest
@@ -10,22 +10,16 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 LEDGER_DIR = FHD_ROOT / "docs" / "evidence" / "e2e" / "final-acceptance-1.0.0.5"
 
 
-def _module():
-    script = FHD_ROOT / "scripts" / "release" / "ticket_loop_ledger_check.py"
-    spec = importlib.util.spec_from_file_location("ticket_loop_ledger_check", script)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+CHECK = runpy.run_path(str(FHD_ROOT / "scripts/release/ticket_loop_ledger_check.py"))
 
 
-def _ledger() -> dict:
-    return json.loads((LEDGER_DIR / "ticket-loop.run.json").read_text(encoding="utf-8"))
+def _read(name: str) -> dict:
+    return json.loads((LEDGER_DIR / name).read_text(encoding="utf-8"))
 
 
 def _template() -> dict:
     """已提交台账会记录真实轮次（#2279 起），用例从清空后的模板构造，避免随真实数据漂移。"""
-    ledger = _ledger()
+    ledger = _read("ticket-loop.run.json")
     ledger["candidate"].update(source_sha=None, installer_sha256=None)
     for who in ("customer_a", "customer_b"):
         ledger["accounts"][who] = {"alias": None, "tenant": None}
@@ -37,10 +31,6 @@ def _template() -> dict:
     for item in ledger["items"]:
         item.update(result="UNKNOWN", observed_at=None, evidence=[])
     return ledger
-
-
-def _gates() -> dict:
-    return json.loads((LEDGER_DIR / "gates.json").read_text(encoding="utf-8"))
 
 
 PARA_OK = {
@@ -63,7 +53,9 @@ def _filled(attempts: list[dict], *, pass_items=(24,)) -> dict:
     ledger["tickets"]["resolved"]["processing"]["handlers_attempted"] = attempts
     for item in ledger["items"]:
         if item["no"] in pass_items:
-            item.update(result="PASS", observed_at="2026-10-10T15:00:00Z", evidence=["runs/ticket.json"])
+            item.update(
+                result="PASS", observed_at="2026-10-10T15:00:00Z", evidence=["runs/ticket.json"]
+            )
     return ledger
 
 
@@ -72,13 +64,11 @@ def _codes(errs: list[dict]) -> set[str]:
 
 
 def test_committed_ledger_and_gates_have_no_violations() -> None:
-    mod = _module()
-    assert mod.check_ledger(_ledger(), _gates(), LEDGER_DIR) == []
-    assert mod.main(["--ledger", str(LEDGER_DIR / "ticket-loop.run.json")]) == 0
+    assert CHECK["main"](["--ledger", str(LEDGER_DIR / "ticket-loop.run.json")]) == 0
 
 
 def test_ledger_declares_para_policy_for_ai_processing_items() -> None:
-    policy = _ledger()["processor_policy"]
+    policy = _read("ticket-loop.run.json")["processor_policy"]
     assert policy["required_handler"] == "para_delegate"
     assert {"agent", "llm_md", "cursor_delegate", "direct_python"} <= set(
         policy["forbidden_local_handlers"]
@@ -86,16 +76,24 @@ def test_ledger_declares_para_policy_for_ai_processing_items() -> None:
     assert {19, 24, 26, 48, 49} <= set(policy["applies_to_items"])
 
 
-@pytest.mark.parametrize("attempts, expected", [
-    ([PARA_OK], set()),
-    ([{**PARA_OK, "ok": False, "completed": False, "error": "device offline"},
-      {"handler": "agent", "ok": True}], {"para_fallback_detected", "para_not_completed"}),
-    ([PARA_OK, {"handler": "llm_md", "ok": True}], {"para_fallback_detected"}),
-    ([{**PARA_OK, "completed": False, "status": "para_task_accepted"}], {"para_not_completed"}),
-    ([], {"para_evidence_missing"}),
-])
+PARA_FAILED = dict(PARA_OK, ok=False, completed=False, error="device offline")
+PARA_ACCEPTED = dict(PARA_OK, completed=False, status="para_task_accepted")
+LOCAL_OK = {"handler": "agent", "ok": True}
+FALLBACK, INCOMPLETE = "para_fallback_detected", "para_not_completed"
+
+
+@pytest.mark.parametrize(
+    "attempts, expected",
+    [
+        ([PARA_OK], set()),
+        ([PARA_FAILED, LOCAL_OK], {FALLBACK, INCOMPLETE}),
+        ([PARA_OK, {"handler": "llm_md", "ok": True}], {"para_fallback_detected"}),
+        ([PARA_ACCEPTED], {INCOMPLETE}),
+        ([], {"para_evidence_missing"}),
+    ],
+)
 def test_para_processing_outcomes(attempts: list[dict], expected: set[str]) -> None:
-    assert _codes(_module().check_ledger(_filled(attempts))) == expected
+    assert _codes(CHECK["check_ledger"](_filled(attempts))) == expected
 
 
 def test_pass_without_evidence_or_identity_fails() -> None:
@@ -103,7 +101,7 @@ def test_pass_without_evidence_or_identity_fails() -> None:
     for item in ledger["items"]:
         if item["no"] == 8:
             item["result"] = "PASS"
-    codes = _codes(_module().check_ledger(ledger))
+    codes = _codes(CHECK["check_ledger"](ledger))
     assert {
         "pass_without_observed_at",
         "pass_without_evidence",
@@ -118,16 +116,16 @@ def test_reopen_needs_distinct_ticket_and_tenants_must_differ() -> None:
     ledger["tickets"]["reopened"]["ticket_id"] = "CS-1"
     ledger["tickets"]["reopened"]["processing"] = ledger["tickets"]["resolved"]["processing"].copy()
     ledger["accounts"]["customer_b"]["tenant"] = "tenant-a"
-    codes = _codes(_module().check_ledger(ledger))
+    codes = _codes(CHECK["check_ledger"](ledger))
     assert {"reopened_ticket_same_as_resolved", "accounts_same_tenant"} <= codes
 
 
 def test_gate_19_green_requires_all_items_pass() -> None:
-    gates = _gates()
+    gates = _read("gates.json")
     for gate in gates["gates"]:
         if gate["no"] == 19:
             gate["status"] = "GREEN"
-    errs = _module().check_ledger(_filled([PARA_OK]), gates)
+    errs = CHECK["check_ledger"](_filled([PARA_OK]), gates)
     assert any(e["code"] == "gate_green_without_pass" and e["gate"] == 19 for e in errs)
 
 
@@ -137,5 +135,5 @@ def test_handler_outputs_evidence_file_is_loaded(tmp_path: Path) -> None:
     )
     ledger = _filled([])
     ledger["tickets"]["resolved"]["processing"]["handler_outputs_evidence"] = "outputs.json"
-    errs = _module().check_ledger(ledger, base=tmp_path)
+    errs = CHECK["check_ledger"](ledger, base=tmp_path)
     assert _codes(errs) == {"para_fallback_detected"}
