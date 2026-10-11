@@ -1,5 +1,5 @@
 {
-  "lines": 2300334,
+  "lines": 2302019,
   "updated": "2026-10-11",
-  "note": "#2254 合并 main(#2240) 后重算：自愈/PR CI 并发规则（concurrency 组 + cancel-in-progress，FHD/MODstore 源与根目录生成副本）及能力中心页面重新生成，共 +38 行"
+  "note": "合入 main 7cabf40b（基线 2301916）后按 #2260 相对 main 净增 103 行重算（2301916+103）；本 PR 改动未变，仅同步 main（Refs #2260）"
 }
