@@ -18,12 +18,8 @@ def _module():
     return module
 
 
-def _ledger() -> dict:
-    return json.loads((LEDGER_DIR / "ticket-loop.run.json").read_text(encoding="utf-8"))
-
-
-def _gates() -> dict:
-    return json.loads((LEDGER_DIR / "gates.json").read_text(encoding="utf-8"))
+def _ledger(filename="ticket-loop.run.json") -> dict:
+    return json.loads((LEDGER_DIR / filename).read_text(encoding="utf-8"))
 
 
 PARA_OK = {
@@ -43,6 +39,7 @@ def _filled(attempts: list[dict], *, pass_items=(24,)) -> dict:
     ledger["candidate"]["installer_sha256"] = "b" * 64
     ledger["accounts"]["customer_a"] = {"alias": "TEST-A", "tenant": "tenant-a"}
     ledger["accounts"]["customer_b"] = {"alias": "TEST-B", "tenant": "tenant-b"}
+    ledger["tickets"]["reopened"]["ticket_id"] = None
     ledger["tickets"]["resolved"]["ticket_id"] = "CS-1"
     ledger["tickets"]["resolved"]["processing"]["para_task_id"] = "para-task-1"
     ledger["tickets"]["resolved"]["processing"]["handlers_attempted"] = attempts
@@ -60,7 +57,7 @@ def _codes(errs: list[dict]) -> set[str]:
 
 def test_committed_ledger_and_gates_have_no_violations() -> None:
     mod = _module()
-    assert mod.check_ledger(_ledger(), _gates(), LEDGER_DIR) == []
+    assert mod.check_ledger(_ledger(), _ledger("gates.json"), LEDGER_DIR) == []
     assert mod.main(["--ledger", str(LEDGER_DIR / "ticket-loop.run.json")]) == 0
 
 
@@ -99,9 +96,10 @@ def test_missing_processing_evidence_fails() -> None:
 
 def test_pass_without_evidence_or_identity_fails() -> None:
     ledger = copy.deepcopy(_ledger())
+    ledger.update(candidate={}, accounts={}, tickets={})
     for item in ledger["items"]:
         if item["no"] == 8:
-            item["result"] = "PASS"
+            item.update(result="PASS", observed_at=None, evidence=[])
     codes = _codes(_module().check_ledger(ledger))
     assert {
         "pass_without_observed_at",
@@ -124,7 +122,7 @@ def test_reopen_needs_distinct_ticket_and_tenants_must_differ() -> None:
 
 
 def test_gate_19_green_requires_all_items_pass() -> None:
-    gates = copy.deepcopy(_gates())
+    gates = copy.deepcopy(_ledger("gates.json"))
     for gate in gates["gates"]:
         if gate["no"] == 19:
             gate["status"] = "GREEN"
