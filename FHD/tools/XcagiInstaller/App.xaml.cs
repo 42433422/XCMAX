@@ -8,7 +8,14 @@ public partial class App : System.Windows.Application
 {
     protected override async void OnStartup(StartupEventArgs e)
     {
-        var options = SilentInstallOptions.Parse(e.Args);
+        SilentInstallOptions options;
+        try { options = SilentInstallOptions.Parse(e.Args); }
+        catch (NotSupportedException ex)
+        {
+            NsisSilentInstaller.Trace(ex.Message);
+            ShutdownOnUiThread(1);
+            return;
+        }
         if (!options.Enabled)
         {
             base.OnStartup(e);
@@ -32,13 +39,6 @@ public partial class App : System.Windows.Application
             if (!result.Success)
                 throw new InvalidOperationException(result.Error ?? "Silent install failed.");
             NsisSilentInstaller.Trace($"installed={result.InstallDir};app={result.AppExePath}");
-
-            if (options.DeploySunbirdSeed && SunbirdSeedExtractor.HasEmbeddedSeed())
-            {
-                await SunbirdSeedExtractor.DeployToUserDataAsync(
-                    cancellationToken: CancellationToken.None).ConfigureAwait(false);
-                NsisSilentInstaller.Trace("sunbird seed deployed");
-            }
 
             ShutdownOnUiThread(0);
         }
@@ -77,14 +77,12 @@ public partial class App : System.Windows.Application
 
     private sealed record SilentInstallOptions(
         bool Enabled,
-        string? InstallDirectory,
-        bool DeploySunbirdSeed)
+        string? InstallDirectory)
     {
         public static SilentInstallOptions Parse(string[] args)
         {
             var enabled = false;
             string? installDirectory = null;
-            var deploySunbirdSeed = false;
 
             for (var i = 0; i < args.Length; i += 1)
             {
@@ -100,8 +98,7 @@ public partial class App : System.Windows.Application
                 if (arg.Equals("--sunbird-seed", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/sunbird-seed", StringComparison.OrdinalIgnoreCase))
                 {
-                    deploySunbirdSeed = true;
-                    continue;
+                    throw new NotSupportedException("The retired --sunbird-seed option is not supported.");
                 }
 
                 if (arg.Equals("--install-dir", StringComparison.OrdinalIgnoreCase) ||
@@ -125,7 +122,7 @@ public partial class App : System.Windows.Application
                     installDirectory = string.Join(" ", args[i..])["/D=".Length..];
             }
 
-            return new SilentInstallOptions(enabled, installDirectory, deploySunbirdSeed);
+            return new SilentInstallOptions(enabled, installDirectory);
         }
     }
 }

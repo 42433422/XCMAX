@@ -163,12 +163,6 @@
                       Style="{StaticResource ModernCheckBoxStyle}"
                       Content="安装完成后打开 XCAGI"
                       IsChecked="True" />
-            <CheckBox x:Name="FetchSunbirdDataCheck"
-                      Style="{StaticResource ModernCheckBoxStyle}"
-                      Content="获取太阳鸟业务数据（考勤模板与人员花名册）"
-                      IsChecked="True"
-                      Margin="0,8,0,0"
-                      Visibility="Collapsed" />
           </StackPanel>
         </StackPanel>
 

@@ -69,12 +69,6 @@ public partial class MainWindow : Window
         }
 
         ApplyStepUi();
-        if (SunbirdSeedExtractor.HasEmbeddedSeed())
-        {
-            FetchSunbirdDataCheck.Visibility = Visibility.Visible;
-            Title = "太阳鸟 PRO";
-            WelcomeSubtitleText.Text = "10.0 · 太阳鸟考勤定制安装";
-        }
     }
 
     private void SyncAgreeFromWelcome(object sender, RoutedEventArgs e)
@@ -328,29 +322,11 @@ public partial class MainWindow : Window
         }
 
         _installedAppExe = result.AppExePath;
-        var sunbirdNote = "";
-        if (FetchSunbirdDataCheck.IsChecked == true && SunbirdSeedExtractor.HasEmbeddedSeed())
-        {
-            UpdateInstallProgress(94, "正在写入太阳鸟业务数据…");
-            try
-            {
-                var sunbirdProgress = new Progress<string>(msg => UpdateInstallProgress(96, msg));
-                var deployed = await SunbirdSeedExtractor.DeployToUserDataAsync(
-                    progress: sunbirdProgress,
-                    cancellationToken: _installCts.Token).ConfigureAwait(true);
-                sunbirdNote = deployed ? "已获取太阳鸟业务数据" : "太阳鸟业务数据未写入";
-            }
-            catch (Exception ex)
-            {
-                sunbirdNote = $"业务数据获取失败：{ex.Message}";
-            }
-        }
-
         UpdateInstallProgress(99, "正在完成快捷方式与启动设置…");
         var desktopShortcut = DesktopShortcutCheck.IsChecked == true;
         var runAfterInstall = RunAfterInstallCheck.IsChecked == true;
         string extras;
-        try { extras = await PostInstallTasks.RunAsync(() => ApplyPostInstallTasks(_installedAppExe, desktopShortcut, runAfterInstall, sunbirdNote)); }
+        try { extras = await PostInstallTasks.RunAsync(() => ApplyPostInstallTasks(_installedAppExe, desktopShortcut, runAfterInstall)); }
         catch (Exception ex) { ShowError(ex.Message); return; }
         UpdateInstallProgress(100, "安装完成");
         CompletePathText.Text = result.InstallDir ?? "";
@@ -359,15 +335,12 @@ public partial class MainWindow : Window
         ApplyStepUi();
     }
 
-    private static string ApplyPostInstallTasks(string? installedAppExe, bool desktopShortcut, bool runAfterInstall, string? sunbirdNote)
+    private static string ApplyPostInstallTasks(string? installedAppExe, bool desktopShortcut, bool runAfterInstall)
     {
         if (string.IsNullOrEmpty(installedAppExe))
-            return sunbirdNote ?? "";
+            return "";
 
         var notes = new List<string>();
-        if (!string.IsNullOrWhiteSpace(sunbirdNote))
-            notes.Add(sunbirdNote);
-
         if (desktopShortcut)
         {
             if (PostInstallTasks.TryCreateDesktopShortcut(installedAppExe))
