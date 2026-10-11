@@ -44,6 +44,8 @@
 
 ## 恢复示例
 
+2026-10-12 #2300：XCAGI 退役小程序规格、旧 Alembic/变更/安全说明及两个重复贡献政策（6 文件 / 1,519 行）已归档至 `~/XCMAX-archives/docs-20261012-pr2300-net-deletion/`；`MANIFEST.json` 记录原提交 `5f8de62c`、逐文件 SHA256 与行数，复制后逐项校验一致再删除。现行迁移公约见 `FHD/docs/guides/ALEMBIC_MIGRATION_GUIDE.md`，其余现行政策见 `FHD/CHANGELOG.md`、`FHD/SECURITY.md` 和 `FHD/.github/`。
+
 2026-10-07 Windows 闭环整理：未登记 SSOT 的 2026-03-17 Excel 迁移快照 `FHD/docs/migration_report.md` 已外置至 `~/XCMAX-archives/docs-20261007-windows-closeout/`；原文与 SHA256 见该目录的 `MANIFEST.txt`，当前迁移入口以 `FHD/docs/MIGRATION_REGISTRY.md` 为准。
 
 ```bash
