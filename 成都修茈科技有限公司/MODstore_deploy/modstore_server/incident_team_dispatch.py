@@ -171,14 +171,15 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             or bool(result.get("blocked_by_risk_gate"))
             or str(result.get("reason") or "").strip().lower() == "blocked_by_risk_gate"
         )
+        succeeded = not risk_blocked and execution_succeeded(result)
         row = {
             "employee_id": employee_id,
             "handler_outputs": handler_output_digest(result),
-            "ok": (not risk_blocked and execution_succeeded(result)),
+            "ok": succeeded,
             "role": role,
             "route": route,
             "result": result,
-            "status": status or ("blocked_by_risk_gate" if risk_blocked else "unknown"),
+            "status": status or ("completed" if succeeded else "failed"),
         }
         results.append(row)
         if role == "scout":

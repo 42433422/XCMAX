@@ -204,7 +204,6 @@ import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
-import { APPROVAL_GRANT_REJECTED_MESSAGE, approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import { showAppToast } from '@/composables/useAppToast'
 import { getIndustryPreset, getIndustryQuickButtons } from '@/constants/industryPresets'
 import { useRouter } from 'vue-router'
@@ -226,7 +225,7 @@ import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
-import { resolveWorkspaceSessionId, useRoutedTaskWorkspace } from '@/composables/useRoutedTaskWorkspace'
+import { resolveWorkspaceSessionId, useRoutedTaskWorkspace, useTaskApprovalFeedback } from '@/composables/useRoutedTaskWorkspace'
 
 const props = withDefaults(
   defineProps<{
@@ -298,7 +297,6 @@ const {
   refetchTaskOrderNumber,
   setCustomOrderNumber,
   cancelTask,
-  showTaskConfirm,
   onExcelAnalyzeFileChange,
   bindExcelSheetToChat,
   bindAllExcelSheetsToChat,
@@ -348,22 +346,9 @@ async function controlWorkspaceTask(action: 'approve' | 'pause' | 'cancel' | 're
   if (taskCenterStore.error) showAppToast(taskCenterStore.error, 'error', { duration: 8000 })
 }
 
-async function approveTaskWithFeedback(taskId: string): Promise<void> {
-  try {
-    await approveTask(taskId)
-  } catch (reason) {
-    showAppToast(reason instanceof Error && reason.message ? reason.message : APPROVAL_GRANT_REJECTED_MESSAGE, 'error', { duration: 8000 })
-  }
-}
-
-async function approveRunFromChat(runId: string): Promise<void> {
-  try {
-    await approveRunWithFreshGrant(runId, { runtimeContext: { source: 'chat_run_trace_approval' } })
-  } catch (reason) {
-    showAppToast(reason instanceof Error && reason.message ? reason.message : APPROVAL_GRANT_REJECTED_MESSAGE, 'error', { duration: 8000 })
-  }
-  await syncSessionMessages()
-}
+const { approveTaskWithFeedback, approveRunFromChat } = useTaskApprovalFeedback({
+  currentSessionId, approveTask, syncSessionMessages,
+})
 
 const messageInput = ref('')
 

@@ -76,21 +76,30 @@ def _metrics():
         return session.query(models.EmployeeExecutionMetric).all()
 
 
-def test_para_first_fix_skips_planning_llm_and_records_zero_tokens(para_ready):
+@pytest.mark.parametrize(
+    "employee,handlers",
+    [
+        ("vibe-coding-maintainer", ["agent"]),
+        ("change-request-auditor", ["llm_md", "echo", "agent"]),
+        ("test-qa-runner", ["llm_md", "echo"]),
+    ],
+)
+def test_para_first_skips_llm_and_records_zero_tokens(para_ready, monkeypatch, employee, handlers):
+    monkeypatch.setattr(ee, "load_employee_pack_resolved", lambda _s, _e: _pack(handlers))
     out = ee.execute_employee_task(
-        "vibe-coding-maintainer",
-        "你是事故处理小组的 fix。只删除一行。",
+        employee,
+        "处理原工单",
         {
-            "role": "fix",
-            "allow_high_risk_real_run": True,
+            "_trusted_incident_team_execution": True,
             "suppress_lifecycle_events": True,
+            "allow_high_risk_real_run": True,
         },
         0,
         bench_llm_override=("deepseek", "deepseek-chat"),
     )
-    assert out["llm_tokens"] == 0
-    assert not out.get("handler_failed")
-    assert para_ready["para"] == 1
+    assert out["llm_tokens"] == 0 and not out.get("handler_failed")
+    assert para_ready == {"para": 1, "agent": 0}
+    assert [o["handler"] for o in out["result"]["outputs"]] == ["para_delegate"]
     metrics = _metrics()
     assert metrics and all(int(m.llm_tokens or 0) == 0 for m in metrics)
 
@@ -137,24 +146,3 @@ def test_skip_can_be_disabled_and_ignores_non_para_roles(monkeypatch):
     assert _para_first_skip_cognition("test-qa-runner", ["llm_md"], {"burn_in": True}) is False
     monkeypatch.setenv("MODSTORE_PARA_FIRST_SKIP_COGNITION", "0")
     assert _para_first_skip_cognition("vibe-coding-maintainer", ["agent"], {}) is False
-
-
-def test_para_first_scout_outputs_only_para_row(para_ready, monkeypatch):
-    """工单 37/38 scout 配置 llm_md,echo,agent：Para 优先后只留 Para 一行，不再出现 llm_md 回退行。"""
-    monkeypatch.setattr(
-        ee,
-        "load_employee_pack_resolved",
-        lambda _s, _e: {**_pack(["llm_md", "echo", "agent"]), "pack_id": "change-request-auditor"},
-    )
-    out = ee.execute_employee_task(
-        "change-request-auditor",
-        "你是事故处理小组的 scout。",
-        {
-            "role": "scout",
-            "_trusted_incident_team_execution": True,
-            "suppress_lifecycle_events": True,
-        },
-        0,
-    )
-    assert out["llm_tokens"] == 0
-    assert [o.get("handler") for o in out["result"]["outputs"]] == ["para_delegate"]

@@ -3235,6 +3235,10 @@ class TestTryHandleDynamicWorkflow:
             ):
                 result = svc._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result["from_agent"] is True
+        mock_inst.continue_run.assert_called_once_with(
+            "run_1", approved_by="u1", runtime_context={"message": "hello"}
+        )
+        assert "u1" not in svc._pending_workflows
 
     def test_pending_workflow_confirm_with_approval(self):
         svc = _make_svc()

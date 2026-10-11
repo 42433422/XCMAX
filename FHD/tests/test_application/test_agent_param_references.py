@@ -172,6 +172,9 @@ def test_stock_out_resolves_symbolic_default_warehouse_only_when_unique(db):
     assert result["success"] is True
     db.expire_all()
     assert float(db.query(InventoryLedger).one().available_quantity) == 3
+    transaction = db.query(InventoryTransaction).one()
+    assert transaction.product_id == product.id
+    assert transaction.warehouse_id == warehouses[0].id
 
 
 def test_stock_out_refuses_symbolic_warehouse_when_ambiguous(db):

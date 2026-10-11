@@ -140,6 +140,14 @@ class TestWorkflowPlanStore:
         assert store.list_active("u1") == []
         assert store.load(plan.plan_id)["status"] == "cancelled"
 
+    def test_session_filter_preserves_other_sessions_and_user_ownership(self, session_factory):
+        store = WorkflowPlanStore(session_factory=session_factory)
+        for owner, session in [("u1", "old"), ("u1", "new"), ("u2", "new")]:
+            plan = plan_from_dict({**plan_to_dict(_plan()), "plan_id": f"{owner}-{session}"})
+            store.save(plan=plan, status="pending_awaiting", user_id=owner, session_id=session)
+        assert [row["plan_id"] for row in store.list_active("u1", session_id="new")] == ["u1-new"]
+        assert len(store.list_active("u1")) == 2
+
     def test_upsert_same_plan_id_updates(self, session_factory):
         store = WorkflowPlanStore(session_factory=session_factory)
         plan = _plan()

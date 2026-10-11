@@ -54,19 +54,14 @@ class _AIChatApplicationServicePart03Mixin:
             _facade().logger.exception("workflow 工具调度失败")
             return {"success": False, "message": "工作流工具调度失败"}
 
-    def _hydrate_pending_workflow(self, user_id: str) -> bool:
-        """从 DB 载入用户最近的可续跑计划并水合到内存待确认槽。
-
-        配合 ``WorkflowPlanStore`` 落库的计划，实现进程重启/换会话后仍能恢复长任务。
-        水合成 ``kind="workflow"`` 的待确认记录，进入通用确认分支并用 ``resume`` 续跑。
-        返回是否成功水合。
-        """
+    def _hydrate_pending_workflow(self, user_id: str, session_id: str) -> bool:
+        """仅恢复当前会话的待确认计划；跨会话续跑须从明确的任务入口处理。"""
         try:
             from app.application.workflow.plan_store import WorkflowPlanStore
             from app.application.workflow.types import plan_from_dict
 
-            active = WorkflowPlanStore().list_active(user_id, limit=1)
-            if not active:
+            active = WorkflowPlanStore().list_active(user_id, limit=1, session_id=session_id)
+            if not active or active[0].get("status") != "pending_awaiting":
                 return False
             plan = plan_from_dict(active[0].get("plan") or {})
             if plan is None or not plan.nodes:

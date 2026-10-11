@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
+from pathlib import Path
 
 import pytest
 
@@ -26,37 +28,71 @@ def _employee_result(outputs, **extra):
     }
 
 
-PARA_OK = {"handler": "para_delegate", "ok": True, "status": "completed", "task_id": "p1"}
+PARA_OK = {
+    "handler": "para_delegate",
+    "ok": True,
+    "accepted": True,
+    "completed": True,
+    "status": "para_task_completed",
+    "para_result": {"task_id": "p1", "merge_commit_sha": "a" * 40},
+}
 
 
-def test_para_completed_with_informational_rows_is_success():
-    # 工单 37/38 的 scout（llm_md, echo, agent）/ verify（llm_md, echo）真实输出形状
-    res = _employee_result(
-        [PARA_OK, {"handler": "llm_md", "output": ""}, {"handler": "echo", "output": ""}]
+@pytest.mark.parametrize(
+    "outputs,expected",
+    [
+        (
+            [
+                PARA_OK,
+                {"handler": "llm_md", "output": ""},
+                {"handler": "echo", "output": ""},
+            ],
+            True,
+        ),
+        ([{"handler": "llm_md", "output": "看起来修好了"}], False),
+        ([PARA_OK, {"handler": "llm_md", "error": "llm failed"}], False),
+        (
+            [
+                {"handler": "para_delegate", "ok": False, "error": "120s 内无代码变更"},
+                {"handler": "llm_md", "output": "x"},
+            ],
+            False,
+        ),
+    ],
+)
+def test_handler_execution_contract(outputs, expected):
+    assert execution_succeeded(_employee_result(outputs)) is expected
+
+
+@pytest.mark.parametrize(
+    "completed,accepted,expected",
+    [
+        (True, True, []),
+        (False, True, ["para_not_completed"]),
+        (True, False, ["para_not_completed"]),
+    ],
+)
+@pytest.mark.parametrize("snapshot", [{"task_id": "p1"}, {"id": "p1"}, {"task": {"id": "p1"}}])
+def test_real_ledger_accepts_digest_evidence(tmp_path, completed, accepted, expected, snapshot):
+    checker = (
+        Path(__file__).resolve().parents[3] / "FHD/scripts/release/ticket_loop_ledger_check.py"
     )
-    assert execution_succeeded(res) is True
-
-
-def test_informational_rows_alone_are_not_delivery():
-    assert (
-        execution_succeeded(_employee_result([{"handler": "llm_md", "output": "看起来修好了"}]))
-        is False
+    spec = importlib.util.spec_from_file_location("ticket_ledger", checker)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    digest = handler_output_digest(
+        _employee_result(
+            [{**PARA_OK, "para_result": snapshot, "completed": completed, "accepted": accepted}]
+        )
     )
-
-
-def test_informational_row_with_error_still_fails():
-    res = _employee_result([PARA_OK, {"handler": "llm_md", "error": "llm failed"}])
-    assert execution_succeeded(res) is False
-
-
-def test_para_failure_is_not_masked():
-    res = _employee_result(
-        [
-            {"handler": "para_delegate", "ok": False, "error": "120s 内未检测到有效代码变更"},
-            {"handler": "llm_md", "output": "x"},
-        ]
+    (tmp_path / "handlers.json").write_text(json.dumps(digest))
+    errors = module.check_para_processing(
+        "resolved",
+        {"para_task_id": "p1", "handler_outputs_evidence": "handlers.json"},
+        {},
+        tmp_path,
     )
-    assert execution_succeeded(res) is False
+    assert [e["code"] for e in errors] == expected
 
 
 def test_digest_redacts_secrets_and_drops_raw_payload():
@@ -65,9 +101,14 @@ def test_digest_redacts_secrets_and_drops_raw_payload():
             {
                 **PARA_OK,
                 "api_key": "sk-live-should-not-appear-123456",
+                "output": {"summary": "处理说明 token=abc"},
                 "error": "Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz0123 token=abc",
                 "tool_fallback_attempts": [
-                    {"tool_name": "claude_code", "status": "failed", "error": "not logged in"}
+                    {
+                        "tool_name": "claude_code",
+                        "status": "failed",
+                        "error": "not logged in",
+                    }
                 ],
             },
             {"handler": "llm_md", "output": "长文本" * 100},
@@ -79,6 +120,7 @@ def test_digest_redacts_secrets_and_drops_raw_payload():
     for secret in ("sk-live-should-not-appear", "ghp_abcdef", "hunter2", 'abc"'):
         assert secret not in blob
     assert digest["outputs"][0]["ok"] is True
+    assert digest["outputs"][0]["summary"] == "处理说明 token=[redacted]"
     assert digest["outputs"][0]["tool_fallback_attempts"][0]["tool_name"] == "claude_code"
     assert digest["outputs"][1] == {"handler": "llm_md", "output_chars": 300}
     assert digest["llm_tokens"] == 0
@@ -116,7 +158,11 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch):
         if employee_id == "fix-1":
             return _employee_result([PARA_OK])
         return _employee_result(
-            [PARA_OK, {"handler": "llm_md", "output": ""}, {"handler": "echo", "output": ""}]
+            [
+                PARA_OK,
+                {"handler": "llm_md", "output": ""},
+                {"handler": "echo", "output": ""},
+            ]
         )
 
     monkeypatch.setattr(
@@ -153,4 +199,5 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch):
         "llm_md",
         "echo",
     ]
-    assert scout["handler_outputs"]["outputs"][0]["status"] == "completed"
+    assert scout["status"] == "completed"
+    assert scout["handler_outputs"]["outputs"][0]["completed"] is True

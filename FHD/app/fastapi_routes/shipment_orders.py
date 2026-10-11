@@ -17,7 +17,6 @@ import importlib
 import logging
 import os
 import re
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -25,9 +24,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.application.facades.query_facade import query_service
 from app.bootstrap import get_shipment_application_service_core
-from app.db.models import ShipmentRecord
 from app.fastapi_routes import shipment_agent_runtime as _shipment_agent_runtime
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -82,26 +79,13 @@ def _safe_shipment_export_path(result: dict[str, Any]) -> str | None:
 
 
 def _next_order_number_payload(suffix: str = "A") -> dict[str, Any]:
-    today = datetime.now()
-    year = today.strftime("%y")
-    month = today.strftime("%m")
-    start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    next_month = (start + timedelta(days=32)).replace(day=1)
-    count = query_service.count(
-        ShipmentRecord,
-        created_at__gte=start,
-        created_at__lt=next_month,
-    )
-    next_sequence = int(count) + 1
-    order_number = f"{year}-{month}-{next_sequence:05d}{suffix}"
-    return {
-        "success": True,
-        "data": {
-            "order_number": order_number,
-            "sequence": next_sequence,
-            "year_month": f"{year}-{month}",
-        },
-    }
+    from app.services.shipment_order_number import reserve_order_number
+
+    try:
+        return {"success": True, "data": reserve_order_number(suffix)}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("订单取号失败")
+        raise HTTPException(status_code=503, detail="订单取号失败，请稍后重试") from exc
 
 
 @router.get("/orders/next_number")
@@ -111,11 +95,7 @@ def orders_next_number_root(suffix: str = Query(default="A")):
 
 @router.get("/api/shipment/orders/next_number")
 def orders_next_number_under_shipment(suffix: str = Query(default="A")):
-    # 与归档 ``shipment.get_next_order_number`` 一致：后缀须为单个大写字母，否则回退 A
-    suf = (suffix or "").strip().upper()
-    if not (len(suf) == 1 and re.fullmatch(r"[A-Z]", suf)):
-        suf = "A"
-    return _next_order_number_payload(suf)
+    return _next_order_number_payload(suffix)
 
 
 @router.get("/api/orders/next_number")

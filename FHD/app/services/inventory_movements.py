@@ -220,8 +220,8 @@ class InventoryMovementsMixin:
             quantity = _positive_movement_quantity(quantity)
         except ValueError:
             return {"success": False, "message": "出库数量必须是有效正数"}
-        product_id = _positive_id(product_id)
-        if product_id is None:
+        resolved_product_id = _positive_id(product_id)
+        if resolved_product_id is None:
             return {
                 "success": False,
                 "error_code": "invalid_product_reference",
@@ -229,16 +229,16 @@ class InventoryMovementsMixin:
             }
         with _facade().get_db() as db, worker_write_guard(db):
             try:
-                warehouse_id, problem = _stock_out_warehouse_id(db, warehouse_id)
-                if problem:
+                resolved_warehouse_id, problem = _stock_out_warehouse_id(db, warehouse_id)
+                if resolved_warehouse_id is None:
                     return {
                         "success": False,
                         "error_code": "invalid_warehouse_reference",
                         "message": problem,
                     }
                 query = db.query(_facade().InventoryLedger).filter(
-                    _facade().InventoryLedger.product_id == product_id,
-                    _facade().InventoryLedger.warehouse_id == warehouse_id,
+                    _facade().InventoryLedger.product_id == resolved_product_id,
+                    _facade().InventoryLedger.warehouse_id == resolved_warehouse_id,
                     _facade().InventoryLedger.available_quantity >= quantity,
                 )
                 if batch_no:
@@ -255,8 +255,8 @@ class InventoryMovementsMixin:
                 transaction = _facade().InventoryTransaction(
                     ledger_id=ledger.id,
                     transaction_type="out",
-                    product_id=product_id,
-                    warehouse_id=warehouse_id,
+                    product_id=resolved_product_id,
+                    warehouse_id=resolved_warehouse_id,
                     location_id=location_id,
                     batch_no=batch_no,
                     quantity=-quantity,

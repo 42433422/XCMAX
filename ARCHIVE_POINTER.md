@@ -69,3 +69,5 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 **体积说明**（2026-06-05）：`du -sh Desktop/XCMAX` 约 **9.7G**（清 frontend 与归档重复的 `node_modules` 残留 ~2.6G 后；`FHD/.venv` **ln -s** `m0-venv-20260605`；含 `FHD/.git` ~**9.4G**）；尽调交付树（不含 `.git`）约 **~0.3G**。可重建依赖在 `m0-venv-20260605`（`npm ci` / rsync 恢复）。详见 `FHD/docs/CLAIMED_VS_ACTUAL.md`。
 
 2026-10-09 原工单支持指引归并：未登记的 `FHD/docs/customer/CUSTOMER_SUPPORT.md` 与 `FHD/docs/guides/DESKTOP_DATABASE_DELIVERY.md` 外置至 `~/XCMAX-archives/docs-20261009-original-ticket-support/`，原文及 SHA256 见 `MANIFEST.json`；当前入口为数据安全、双端发布与客服工单总线 SSOT。
+
+2026-10-11 发布断点收口：未登记的旧 `FHD/docs/DEPLOYMENT.md`、`deploy/RELEASE_CHECKLIST.md` 和 2026-06-05 已结束的 `ai-agent-v1-plan.md` 外置至 `~/XCMAX-archives/docs-20261011-delivery-breakpoints/`；原文与 SHA256 见 `MANIFEST.json`。旧仓库、K8s 与 demo 完成声明不作为本轮发布依据；当前入口为双端发布和客服工单 SSOT，历史 demo 与证据仍保留。

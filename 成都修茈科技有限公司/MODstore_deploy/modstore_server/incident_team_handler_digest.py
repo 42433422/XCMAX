@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List
 
-_SECRET_KEY_RE = re.compile(r"(?i)(key|token|secret|password|passwd|credential|authorization)")
 _SECRET_VALUE_RE = re.compile(
     r"(?i)(bearer\s+|(?:api[_-]?key|password|passwd|token|secret|authorization)\s*[:=]\s*)"
     r"[^\s,;'\"]+"
@@ -18,6 +17,8 @@ _SCALAR_KEYS = (
     "handler",
     "ok",
     "success",
+    "accepted",
+    "completed",
     "status",
     "execution_status",
     "skipped",
@@ -26,10 +27,17 @@ _SCALAR_KEYS = (
     "error_code",
     "failure_kind",
     "summary",
+    "output_summary",
+    "output_error",
     "para_task_id",
     "task_id",
     "tool_name",
     "tool_fallback_used",
+    "cause",
+    "next_step",
+    "change_summary",
+    "change_request_id",
+    "pull_request_url",
 )
 _TEXT_LIMIT = 300
 
@@ -40,7 +48,7 @@ def redact_text(value: Any, limit: int = _TEXT_LIMIT) -> str:
     return text[:limit]
 
 
-def _scalar(key: str, value: Any) -> Any:
+def _scalar(value: Any) -> Any:
     if isinstance(value, bool) or value is None:
         return value
     if isinstance(value, (int, float)):
@@ -53,20 +61,35 @@ def _row_digest(row: Any) -> Dict[str, Any]:
         return {"handler": "?", "type": type(row).__name__}
     out: Dict[str, Any] = {}
     for key in _SCALAR_KEYS:
-        if key in row and not _SECRET_KEY_RE.search(key) and row.get(key) not in ("", None):
-            out[key] = _scalar(key, row.get(key))
+        if key in row and row.get(key) not in ("", None):
+            out[key] = _scalar(row.get(key))
+    snapshot = row.get("para_result")
+    if isinstance(snapshot, dict):
+        task = snapshot.get("task")
+        task_id = (
+            snapshot.get("task_id")
+            or snapshot.get("id")
+            or (task.get("id") if isinstance(task, dict) else None)
+        )
+        if task_id:
+            out.setdefault("task_id", _scalar(task_id))
+        for key in ("branch", "merge_commit_sha"):
+            if snapshot.get(key):
+                out.setdefault(key, _scalar(snapshot[key]))
     nested = row.get("output")
     if isinstance(nested, dict):
         for key in ("status", "error", "error_code", "summary"):
             if nested.get(key) not in ("", None):
-                out[f"output_{key}"] = _scalar(key, nested.get(key))
+                out[f"output_{key}"] = _scalar(nested.get(key))
+                if key == "summary":
+                    out.setdefault("summary", out["output_summary"])
     elif nested not in ("", None):
         out["output_chars"] = len(str(nested))
     attempts = row.get("tool_fallback_attempts")
     if isinstance(attempts, list):
         out["tool_fallback_attempts"] = [
             {
-                k: _scalar(k, a.get(k))
+                k: _scalar(a.get(k))
                 for k in ("tool_name", "status", "error")
                 if isinstance(a, dict) and a.get(k) not in ("", None)
             }
@@ -88,7 +111,7 @@ def handler_output_digest(result: Any) -> Dict[str, Any]:
     }
     for key in ("status", "execution_status", "error", "failure_kind"):
         if result.get(key) not in ("", None):
-            digest[key] = _scalar(key, result.get(key))
+            digest[key] = _scalar(result.get(key))
     if result.get("handler_failed"):
         digest["handler_failed"] = True
     if "llm_tokens" in result:
@@ -98,7 +121,7 @@ def handler_output_digest(result: Any) -> Dict[str, Any]:
             digest["llm_tokens"] = 0
     if result.get("cognition_error"):
         digest["cognition_error"] = redact_text(result.get("cognition_error"))
-    handlers: List[str] = [str(h) for h in nested.get("handlers") or [] if h][:12]
+    handlers: List[str] = [redact_text(h) for h in nested.get("handlers") or [] if h][:12]
     if handlers:
         digest["handlers"] = handlers
     return digest

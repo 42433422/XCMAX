@@ -118,5 +118,15 @@ def record_team_progress(
         team=[{k: row.get(k) for k in ("role", "employee_id", "ok", "status")} for row in rows],
         updated_at=datetime.now(UTC).isoformat(),
     )
+    from modstore_server.incident_team_handler_digest import handler_output_digest
+
+    resolution["processing"] = [
+        {
+            "role": row.get("role"),
+            **handler_output_digest({**row["handler_outputs"], "result": row["handler_outputs"]}),
+        }
+        for row in rows
+        if isinstance(row.get("handler_outputs"), dict)
+    ]
     evidence["resolution"] = resolution
     return resolution

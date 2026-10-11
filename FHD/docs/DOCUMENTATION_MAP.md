@@ -12,7 +12,7 @@
 | [QUICK_START.md](QUICK_START.md) | 快速启动 |
 | [MIGRATION_REGISTRY.md](MIGRATION_REGISTRY.md) | 迁移与入口统一登记 |
 | [TECH_STACK.md](TECH_STACK.md) | 技术栈摘要 |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | 部署相关 |
+| [SSOT_INDEX.md](SSOT_INDEX.md) | 发布与部署入口 |
 | [reports/capacity-planning.md](reports/capacity-planning.md) | 容量规划、k6 `scripts/loadtest` 基线与目标 SLO；MODstore 全链路数字见姊妹仓 `MODstore_deploy/docs/perf-benchmark-public.md` |
 | [reports/FHD_DEPTH_ASSESSMENT_REVISED_2026-05-03.md](reports/FHD_DEPTH_ASSESSMENT_REVISED_2026-05-03.md) | FHD/XCAGI 深度评估（修订版，与源码核实对齐） |
 | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 覆盖率 `fail_under` 分阶段目标与补测清单 |

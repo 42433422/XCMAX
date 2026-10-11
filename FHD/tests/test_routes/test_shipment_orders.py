@@ -40,22 +40,24 @@ def _mock_svc(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
 class TestOrdersNextNumber:
     @pytest.mark.parametrize(
-        "url,count,suffix,expected_suffix",
-        [
-            ("/orders/next_number", 5, "A", "A"),
-            ("/api/orders/next_number", 0, "A", "A"),
-            ("/api/shipment/orders/next_number", 0, "B", "B"),
-            ("/api/shipment/orders/next_number", 0, "12", "A"),
-        ],
+        "path",
+        ["/orders/next_number", "/api/orders/next_number", "/api/shipment/orders/next_number"],
     )
-    def test_number(self, client, url, count, suffix, expected_suffix):
-        with patch.object(shipment_orders, "query_service") as query:
-            query.count.return_value = count
-            response = client.get(url, params={"suffix": suffix})
+    def test_shared_reservation(self, client, path):
+        with patch("app.services.shipment_order_number.reserve_order_number") as reserve:
+            reserve.return_value = {"order_number": "26-10-00006B", "sequence": 6}
+            response = client.get(path, params={"suffix": "B"})
             assert response.status_code == 200
-            data = response.json()["data"]
-            assert data["sequence"] == count + 1
-            assert data["order_number"].endswith(expected_suffix)
+            assert response.json()["data"] == reserve.return_value
+            reserve.assert_called_once_with("B")
+
+    def test_allocation_failure(self, client):
+        with patch(
+            "app.services.shipment_order_number.reserve_order_number", side_effect=OSError("disk")
+        ):
+            response = client.get("/orders/next_number")
+            assert response.status_code == 503
+            assert "取号失败" in response.json()["detail"]
 
 
 # shipment generate

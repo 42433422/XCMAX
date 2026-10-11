@@ -528,6 +528,17 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
                     "employee_id": "change-request-auditor",
                     "ok": False,
                     "status": "handler_failed",
+                    "handler_outputs": {
+                        "outputs": [
+                            {
+                                "handler": "para_delegate",
+                                "accepted": True,
+                                "completed": False,
+                                "task_id": "p1",
+                                "output_summary": "未产生修复 token=should-be-redacted",
+                            }
+                        ]
+                    },
                 },
                 {
                     "role": "fix",
@@ -564,6 +575,15 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
             .all()
         )
         assert any("员工处理进展" in (m.content or "") for m in msgs)
+        assert "未产生修复" in msgs[0].content and "下一步" in msgs[0].content
+        assert "should-be-redacted" not in msgs[0].content
+        from modstore_server.customer_service_tools import json_loads
+
+        resolution = json_loads(ticket.evidence_json, {})["resolution"]
+        assert resolution["ticket_id"] == ticket_id
+        recorded = resolution["processing"][0]["outputs"][0]
+        assert recorded["task_id"] == "p1"
+        assert recorded["output_summary"] == "未产生修复 token=[redacted]"
 
 
 def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
