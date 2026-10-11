@@ -26,6 +26,7 @@
         @shipment-download-click="handleShipmentDownloadClick"
         @approval-confirm="confirmWorkflowFromCard"
         @approval-cancel="cancelWorkflowFromCard"
+        @approve-run="approveRunFromChat"
       />
       <div v-if="isTaskPaneResizable" class="chat-pane-handle-slot">
         <PaneResizeHandle
@@ -73,7 +74,7 @@
         @retry-task="retryTask"
         @pause-task="pauseTask"
         @resume-task="resumeTask"
-        @approve-task="approveTask"
+        @approve-task="approveTaskWithFeedback"
         @cancel-task-by-id="cancelTaskById"
         @copy-assistant-push="copyAssistantPushContent"
         @open-assistant-float="openAssistantFloatFromTaskPanel"
@@ -203,6 +204,8 @@ import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
+import { APPROVAL_GRANT_REJECTED_MESSAGE, approveRunWithFreshGrant } from '@/api/agentRunApproval'
+import { showAppToast } from '@/composables/useAppToast'
 import { getIndustryPreset, getIndustryQuickButtons } from '@/constants/industryPresets'
 import { useRouter } from 'vue-router'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
@@ -340,8 +343,26 @@ const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList
     markTaskRead: taskCenterStore.markTaskRead,
   })
 
-function controlWorkspaceTask(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): void {
-  void taskCenterStore.controlTask(workspaceTaskId.value, action)
+async function controlWorkspaceTask(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): Promise<void> {
+  await taskCenterStore.controlTask(workspaceTaskId.value, action)
+  if (taskCenterStore.error) showAppToast(taskCenterStore.error, 'error', { duration: 8000 })
+}
+
+async function approveTaskWithFeedback(taskId: string): Promise<void> {
+  try {
+    await approveTask(taskId)
+  } catch (reason) {
+    showAppToast(reason instanceof Error && reason.message ? reason.message : APPROVAL_GRANT_REJECTED_MESSAGE, 'error', { duration: 8000 })
+  }
+}
+
+async function approveRunFromChat(runId: string): Promise<void> {
+  try {
+    await approveRunWithFreshGrant(runId, { runtimeContext: { source: 'chat_run_trace_approval' } })
+  } catch (reason) {
+    showAppToast(reason instanceof Error && reason.message ? reason.message : APPROVAL_GRANT_REJECTED_MESSAGE, 'error', { duration: 8000 })
+  }
+  await syncSessionMessages()
 }
 
 const messageInput = ref('')
