@@ -334,12 +334,14 @@ class TestValidateRequiredParams:
         "请你恢复数据库 xcagi.db.20261011_160815.bak",
         "现在恢复数据库 xcagi.db.20261011_160815.bak",
         "麻烦你先恢复数据库 xcagi.db.20261011_160815.bak",
+        "请备份数据库。执行前先给我确认，需要审批的操作提交审批。",
+        "备份数据库，不恢复",
     ],
 )
 @pytest.mark.parametrize("entry", ["plan", "_fallback_plan"])
 def test_actual_restore_requests_use_one_registered_high_risk_step(message, entry):
     registry = {
-        "system_maintenance": {"actions": {"restore_database": {}}},
+        "system_maintenance": {"actions": {"restore_database": {}, "backup_database": {}}},
         **_SAMPLE_REGISTRY,
     }
     planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
@@ -353,9 +355,13 @@ def test_actual_restore_requests_use_one_registered_high_risk_step(message, entr
         )
     assert len(plan.nodes) == 1 and validate_plan_graph(plan) is None
     node = plan.nodes[0]
-    assert (node.tool_id, node.action) == ("system_maintenance", "restore_database")
-    assert node.params == {"backup_file": "xcagi.db.20261011_160815.bak"}
-    assert (node.risk, node.idempotent) == ("high", False)
+    backup = message.startswith(("请备份", "备份"))
+    assert (node.tool_id, node.action) == (
+        "system_maintenance",
+        "backup_database" if backup else "restore_database",
+    )
+    assert node.params == ({} if backup else {"backup_file": "xcagi.db.20261011_160815.bak"})
+    assert (node.risk, node.idempotent) == ("medium" if backup else "high", False)
     assert HybridRiskGate().evaluate(plan, context={}).requires_confirmation
 
 
@@ -363,10 +369,11 @@ def test_actual_restore_requests_use_one_registered_high_risk_step(message, entr
     "message",
     [
         "如何恢复数据库",
+        "不要备份数据库",
+        "备份数据库失败，帮我排查",
         "不要恢复数据库",
         "不恢复数据库",
         "只查看恢复数据库的方法",
-        "备份数据库，不恢复",
         "不要再恢复数据库，备份为 xcagi.db.20261011_160815.bak",
         "恢复数据库 xcagi.db.20261011_160815.bak 失败，帮我排查原因",
         "请排查恢复数据库 xcagi.db.20261011_160815.bak 失败的原因",
@@ -379,9 +386,9 @@ def test_actual_restore_requests_use_one_registered_high_risk_step(message, entr
     ],
 )
 def test_restore_does_not_turn_questions_negations_or_backup_into_write(message):
-    from app.application.workflow.sql_execution_policy import database_restore_plan
+    from app.application.workflow.sql_execution_policy import database_maintenance_plan
 
-    assert database_restore_plan(message, "p", {}) is None
+    assert database_maintenance_plan(message, "p", {}) is None
 
 
 @pytest.mark.parametrize(
@@ -393,12 +400,13 @@ def test_restore_does_not_turn_questions_negations_or_backup_into_write(message)
             {"system_maintenance": {"actions": {"restore_database": {}}}},
         ),
         ("恢复数据库，使用xcagi.db.20261011_160815.bak", {}),
+        ("请备份数据库", {}),
     ],
 )
 def test_restore_missing_file_or_entitlement_clarifies_without_business_write(message, registry):
-    from app.application.workflow.sql_execution_policy import database_restore_plan
+    from app.application.workflow.sql_execution_policy import database_maintenance_plan
 
-    plan = database_restore_plan(message, "p", registry)
+    plan = database_maintenance_plan(message, "p", registry)
     assert [(n.tool_id, n.action, n.risk) for n in plan.nodes] == [("clarify", "ask", "low")]
 
 

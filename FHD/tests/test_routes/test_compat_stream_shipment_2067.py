@@ -79,22 +79,36 @@ def test_stream_entry_creates_order_with_explicit_quantity_and_price(
     assert document["doc_name"] == "发货单_2067.xlsx"
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        ISSUE_MESSAGE,
+        "请备份数据库。执行前先给我确认，需要审批的操作提交审批。",
+        "请恢复数据库，使用备份 xcagi.db.20261011_160815.bak。执行前先给我确认。",
+    ],
+)
 def test_stream_entry_hands_shipment_to_the_same_chat_service(
     monkeypatch: pytest.MonkeyPatch,
+    message: str,
 ) -> None:
     _no_llm(monkeypatch)
-    calls: list[dict[str, Any]] = []
-
-    class _Service:
-        _pending_workflows: dict[str, Any] = {}
-
-        def process_chat(self, **kwargs: Any) -> dict[str, Any]:
-            calls.append(kwargs)
-            return {"success": True, "response": "已生成发货单"}
-
-    monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: _Service())
-    body = chat_helpers.XcagiCompatChatBody(message=ISSUE_MESSAGE, user_id="u-2067")
+    service = MagicMock(_pending_workflows={})
+    service.process_chat.return_value = {"success": True, "response": "已生成发货单"}
+    monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
+    body = chat_helpers.XcagiCompatChatBody(message=message, user_id="u-2067")
     raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
 
-    assert [call["message"] for call in calls] == [ISSUE_MESSAGE]
+    service.process_chat.assert_called_once()
+    assert service.process_chat.call_args.kwargs["message"] == message
     assert _events(raw)[-1]["result"]["response"] == "已生成发货单"
+
+
+def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch):
+    service = AIChatApplicationService()
+    monkeypatch.setattr(service, "_hydrate_pending_workflow", lambda *_a: False)
+    trace = MagicMock(side_effect=AssertionError("取消不得创建闲聊业务任务"))
+    monkeypatch.setattr(service, "_attach_deterministic_workflow_trace", trace)
+    result = service.process_chat("u-cancel", "取消", context={"session_id": "s"}, source="normal")
+    trace.assert_not_called()
+    assert result["data"]["action"] == "clarification_required"
+    assert service._pending_workflows == {}
