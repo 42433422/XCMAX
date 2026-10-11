@@ -71,8 +71,12 @@ def _actions_real(
         and isinstance(reasoning.get("input"), dict)
         and reasoning["input"].get("_trusted_incident_team_execution")
     )
+    # 跳过规划 LLM 后 llm_md/echo 只会回显空文本，且台账把 llm_md 视为本地回退，不再产出。
+    skip_echo = reasoning.get("skipped_cognition_reason") == "para_first"
     for handler in handlers:
         if (skip_local_after_para_ok or para_only) and str(handler) in _LOCAL_FALLBACK_HANDLERS:
+            continue
+        if skip_echo and str(handler) in ("llm_md", "echo"):
             continue
         if handler == "echo":
             outputs.append({"handler": "echo", "output": reasoning.get("reasoning", "")})
