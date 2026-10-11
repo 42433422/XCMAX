@@ -1,12 +1,4 @@
-"""
-Mod Authentication and Context Management
-
-Enhances the original Mod isolation to prevent header forgery using HMAC signatures.
-This addresses the critical security issue where any client could fake X-XCAGI-Active-Mod-Id.
-
-Usage:
-    from app.infrastructure.mods.mod_auth import ModContext, mod_context_middleware
-"""
+"""Signed Mod context and entitlement-gated request dispatch."""
 
 import hashlib
 import hmac
@@ -100,8 +92,6 @@ class ModContext:
             return None
         v = str(mod_id).strip()
         # Same regex as request_active_mod_ctx.py
-        import re
-
         if re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", v):
             return v
         return None
@@ -117,8 +107,7 @@ class ModContext:
 
     @staticmethod
     def _load_mod_permissions(mod_id: str) -> list[str]:
-        """Load permissions for a Mod. In production, this would query DB or config."""
-        # Placeholder - in real implementation, load from database or manifest.json
+        """Legacy static permissions; entitlement checks remain in middleware."""
         default_permissions = ["read:products", "read:customers", "write:shipments"]
         if mod_id.startswith("admin"):
             default_permissions.append("admin:*")
