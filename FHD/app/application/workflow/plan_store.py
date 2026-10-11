@@ -82,6 +82,7 @@ class WorkflowPlanStore:
         user_id: str | None = None,
         session_id: str | None = None,
         message: str | None = None,
+        require_commit: bool = False,
     ) -> str:
         """按 ``plan.plan_id`` upsert 计划快照，返回 ``plan_id``。"""
         plan_id = plan.plan_id
@@ -115,9 +116,13 @@ class WorkflowPlanStore:
                     row.runtime_context = _dump_json(dict(runtime_context or {}))
                     row.status = status
                     session.commit()
+                elif require_commit:
+                    raise RuntimeError("workflow_plan concurrent save did not commit")
         except RECOVERABLE_ERRORS:
             session.rollback()
             logger.warning("workflow_plan 保存失败 plan=%s（主流程继续）", plan_id)
+            if require_commit:
+                raise
         finally:
             session.close()
         return plan_id

@@ -10,18 +10,7 @@ def _facade():
     return importlib.import_module("app.application.ai_chat_app_service")
 
 
-CONFIRM_WORDS = {
-    "确认",
-    "是",
-    "是的",
-    "好的",
-    "好",
-    "继续",
-    "执行",
-    "确认执行",
-    "ok",
-    "yes",
-}
+CONFIRM_WORDS = {"确认", "是", "是的", "好的", "好", "继续", "执行", "确认执行", "ok", "yes"}
 CANCEL_WORDS = {"取消", "否", "不要", "停止", "no"}
 
 
@@ -213,6 +202,16 @@ class _DynamicWorkflowPendingResumeMixin:
                     ),
                 )
             if text in CANCEL_WORDS:
+                runtime = dict(pending.get("runtime_context") or {})
+                runtime.setdefault("user_id", user_id)
+                plan = pending["plan"]
+                if not self._persist_plan_state(plan, runtime, status="cancelled"):
+                    return True, {
+                        "success": False,
+                        "message": "取消未保存，请重试；计划仍保留待处理。",
+                        "response": "取消未保存，请重试；计划仍保留待处理。",
+                        "data": {"action": "workflow_cancel_failed", "plan_id": plan.plan_id},
+                    }
                 self._pending_workflows.pop(user_id, None)
                 return (
                     True,
@@ -223,7 +222,10 @@ class _DynamicWorkflowPendingResumeMixin:
                         "data": {
                             "text": "已取消本次工作流执行。",
                             "action": "workflow_cancelled",
-                            "data": {},
+                            "data": {
+                                "plan_id": plan.plan_id,
+                                "task_id": runtime.get("task_id", ""),
+                            },
                         },
                     },
                 )
