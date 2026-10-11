@@ -14,6 +14,19 @@ CONFIRM_WORDS = {"确认", "是", "是的", "好的", "好", "继续", "执行",
 CANCEL_WORDS = {"取消", "否", "不要", "停止", "no"}
 
 
+def _control_reply(text, action, data=None, *, success=True, message="处理完成", display_text=None):
+    return True, {
+        "success": success,
+        "message": message,
+        "response": text,
+        "data": {
+            "text": text if display_text is None else display_text,
+            "action": action,
+            "data": {} if data is None else data,
+        },
+    }
+
+
 class _DynamicWorkflowPendingResumeMixin:
     def _resume_pending_dynamic_workflow(self, user_id: str, message: str, text: str, context=None):
         text = text.strip().lower().rstrip("。.!！")
@@ -44,29 +57,20 @@ class _DynamicWorkflowPendingResumeMixin:
                 if invalid_plan
                 else "请说明要确认什么，或回到原任务继续处理；当前会话没有待确认的操作。"
             )
-            return True, {
-                "success": not invalid_plan,
-                "message": "需要澄清",
-                "response": reply,
-                "data": {"text": reply, "action": "clarification_required", "data": {}},
-            }
+            return _control_reply(
+                reply, "clarification_required", success=not invalid_plan, message="需要澄清"
+            )
         if pending:
             if pending.get("kind") == "clarification":
                 continued = self._continue_after_clarification(user_id, pending, message)
                 if continued is not None:
                     return (True, continued)
-                return (
-                    True,
-                    {
-                        "success": True,
-                        "message": "需要澄清",
-                        "response": "仍无法唯一确定操作目标，请回复候选序号或唯一 ID（例如「1」）。",
-                        "data": {
-                            "text": "仍无法唯一确定操作目标，请回复候选序号或唯一 ID。",
-                            "action": "clarification_required",
-                            "data": {"requires_confirmation": True},
-                        },
-                    },
+                return _control_reply(
+                    "仍无法唯一确定操作目标，请回复候选序号或唯一 ID（例如「1」）。",
+                    "clarification_required",
+                    {"requires_confirmation": True},
+                    message="需要澄清",
+                    display_text="仍无法唯一确定操作目标，请回复候选序号或唯一 ID。",
                 )
             if text in CONFIRM_WORDS:
                 pending_plan = _facade().cast("PlanGraph | None", pending.get("plan"))
@@ -139,18 +143,12 @@ class _DynamicWorkflowPendingResumeMixin:
                                 approval_requests.append(metadata)
                     except RuntimeError:
                         self._pending_workflows.pop(user_id, None)
-                        return (
-                            True,
-                            {
-                                "success": False,
-                                "message": "审批请求创建失败",
-                                "response": "审批请求创建失败，数据库未写入",
-                                "data": {
-                                    "text": "审批请求创建失败，数据库未写入",
-                                    "action": "approval_failed",
-                                    "data": {"plan_id": pending_plan.plan_id},
-                                },
-                            },
+                        return _control_reply(
+                            "审批请求创建失败，数据库未写入",
+                            "approval_failed",
+                            {"plan_id": pending_plan.plan_id},
+                            success=False,
+                            message="审批请求创建失败",
                         )
                     self._pending_workflows.pop(user_id, None)
                     approval_path = str(
@@ -165,20 +163,12 @@ class _DynamicWorkflowPendingResumeMixin:
                         "approval_requests": approval_requests,
                         "approval_path": approval_path,
                     }
-                    return (
-                        True,
-                        {
-                            "success": True,
-                            "message": "处理完成",
-                            "response": f"已提交审批请求：{', '.join(approval_request_ids)}。请前往审批工作台逐笔处理。",
-                            "data": {
-                                "text": f"已提交审批请求：{', '.join(approval_request_ids)}。请前往审批工作台逐笔处理。",
-                                "action": "approval_pending",
-                                "data": _facade()._enrich_confirmation_inner(
-                                    approval_inner, action="approval_pending"
-                                ),
-                            },
-                        },
+                    return _control_reply(
+                        f"已提交审批请求：{', '.join(approval_request_ids)}。请前往审批工作台逐笔处理。",
+                        "approval_pending",
+                        _facade()._enrich_confirmation_inner(
+                            approval_inner, action="approval_pending"
+                        ),
                     )
                 agent_run_id = str(pending.get("agent_run_id") or "").strip()
                 if agent_run_id:
@@ -223,20 +213,9 @@ class _DynamicWorkflowPendingResumeMixin:
                         "data": {"action": "workflow_cancel_failed", "plan_id": plan.plan_id},
                     }
                 self._pending_workflows.pop(user_id, None)
-                return (
-                    True,
-                    {
-                        "success": True,
-                        "message": "处理完成",
-                        "response": "已取消本次工作流执行。",
-                        "data": {
-                            "text": "已取消本次工作流执行。",
-                            "action": "workflow_cancelled",
-                            "data": {
-                                "plan_id": plan.plan_id,
-                                "task_id": runtime.get("task_id", ""),
-                            },
-                        },
-                    },
+                return _control_reply(
+                    "已取消本次工作流执行。",
+                    "workflow_cancelled",
+                    {"plan_id": plan.plan_id, "task_id": runtime.get("task_id", "")},
                 )
         return (False, None)

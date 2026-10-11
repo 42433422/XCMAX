@@ -10,6 +10,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import Column, MetaData, Table, insert, literal_column, select
+from sqlalchemy.dialects.sqlite import dialect
+from sqlalchemy.schema import DropTable
+
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -30,6 +34,7 @@ _LIVE_AUDIT_TABLES = frozenset(
         "approval_delegations",
         "workflow_plans",
         "workflow_checkpoints",
+        "workflow_definitions",
         "workflow_runs",
         "workflow_run_steps",
         "ai_action_audit",
@@ -38,6 +43,10 @@ _LIVE_AUDIT_TABLES = frozenset(
         "shipment_audit_events",
     }
 )
+
+
+class _RestoreAuditReferenceError(sqlite3.IntegrityError):
+    """The snapshot cannot retain current execution evidence safely."""
 
 
 class DatabaseService(NeuroEventPublisherMixin):
@@ -184,6 +193,9 @@ class DatabaseService(NeuroEventPublisherMixin):
 
             return {"success": True, "message": "数据库恢复成功"}
 
+        except _RestoreAuditReferenceError as error:
+            logger.warning("数据库恢复被审计关联阻断：%s", error)
+            return {"success": False, "message": str(error)}
         except RECOVERABLE_ERRORS:
             logger.exception("数据库恢复失败")
             return {"success": False, "message": "数据库恢复失败"}
@@ -193,6 +205,7 @@ class DatabaseService(NeuroEventPublisherMixin):
         source: sqlite3.Connection, current: sqlite3.Connection, staged: sqlite3.Connection
     ) -> int:
         source.backup(staged)
+        backup_violations = set(staged.execute("PRAGMA foreign_key_check").fetchall())
         version = int(current.execute("PRAGMA data_version").fetchone()[0])
         current.execute("BEGIN")
         try:
@@ -202,12 +215,15 @@ class DatabaseService(NeuroEventPublisherMixin):
             for name, schema in tables:
                 if name not in _LIVE_AUDIT_TABLES:
                     continue
-                table = f'"{name}"'
-                staged.execute(f"DROP TABLE IF EXISTS {table}")
+                table = Table(name, MetaData())
+                staged.execute(str(DropTable(table, if_exists=True).compile(dialect=dialect())))
                 staged.execute(schema)
-                rows = current.execute(f"SELECT * FROM {table}")
-                placeholders = ",".join("?" for _ in rows.description)
-                staged.executemany(f"INSERT INTO {table} VALUES ({placeholders})", rows)
+                rows = current.execute(
+                    str(select(literal_column("*")).select_from(table).compile(dialect=dialect()))
+                )
+                for description in rows.description or ():
+                    table.append_column(Column(description[0]))
+                staged.executemany(str(insert(table).compile(dialect=dialect())), rows)
                 for (definition,) in current.execute(
                     "SELECT sql FROM sqlite_master WHERE type IN ('index','trigger') AND tbl_name=? AND sql IS NOT NULL",
                     (name,),
@@ -220,6 +236,16 @@ class DatabaseService(NeuroEventPublisherMixin):
                         staged.execute(
                             "INSERT INTO sqlite_sequence VALUES (?, ?)", (name, sequence)
                         )
+            # Existing business-only snapshot violations are unchanged by this merge;
+            # retained audit must have valid parents, including accounts restored from
+            # the snapshot. Never retain live credentials merely to satisfy an audit FK.
+            if any(
+                violation[0] in _LIVE_AUDIT_TABLES or violation not in backup_violations
+                for violation in staged.execute("PRAGMA foreign_key_check")
+            ):
+                raise _RestoreAuditReferenceError(
+                    "恢复将破坏当前审计关联，未恢复；请选择包含相关记录的备份"
+                )
             staged.commit()
         finally:
             current.rollback()

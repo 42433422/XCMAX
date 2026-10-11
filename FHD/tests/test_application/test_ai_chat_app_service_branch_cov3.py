@@ -1,26 +1,4 @@
-"""测试 ai_chat_app_service 的分支覆盖（第三轮，聚焦未覆盖的异常与边界分支）。
-
-覆盖目标（与 _branch_cov.py / _branch_cov2.py 互补，重点补齐缺失分支）：
-- _inject_excel_vector_context：top_k 解析失败、query success=False、query 异常、excel_vector_index_id
-- _excel_analysis_payload_present：多种上下文形状
-- _attach_deterministic_workflow_trace：导入失败、file_context 非字典
-- _extract_excel_import_records：Unnamed 列提升、reloaded 路径、ambiguous_price_columns、
-  llm_roles 覆盖、header_roles 覆盖、unit_key 冲突、packaging_or_measure_ratio、dedup
-- _try_handle_dynamic_workflow：unit_products_db 各分支、短指令无上下文、excel_analysis 各分支、
-  normal profile 路由、pro_default shipment、pending 确认/取消
-- _execute_customers_intent：add+created=True、add+created=False、add 失败、query、无意图
-- _execute_shipment_generate：parsed.success=True+doc success、parsed.success=False、异常
-- _execute_shipments_query：空订单、非空订单、异常
-- _build_order_text_from_products：空 products、空 unit_name、matches>=1（7+组）、
-  matches>=1（<7组）、products 无 model
-- _try_merge_split_model：第一模式命中、第二模式命中、无命中
-- _format_workflow_tool_success_line：employee list/query、employee 其他、business_db read、
-  business_db 其他、其他工具带 message、其他工具无 message
-- _execute_pro_mode_tools：shipment_generate 各 slot 组合
-- _execute_products_query：keyword 含「的」+ resolved、keyword 含「的」+ 未 resolved、
-  各种 unit_name/model_number/keyword 组合
-- process_chat：空消息、ConnectionError、TimeoutError、api_key 异常、connection 异常、其他异常
-"""
+"""AI 聊天业务解析、异常及待确认工作流边界回归。"""
 
 from __future__ import annotations
 
@@ -152,11 +130,6 @@ def test_restart_confirmation_hydrates_only_current_session_pending_plan(status)
 # ---------------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
-# _inject_excel_vector_context 补充分支
-# ---------------------------------------------------------------------------
-
-
 class TestInjectExcelVectorContextEdge:
     """_inject_excel_vector_context 异常与边界分支补充。"""
 
@@ -237,108 +210,44 @@ class TestInjectExcelVectorContextEdge:
         assert result is ctx
 
 
-# ---------------------------------------------------------------------------
-# _excel_analysis_payload_present 补充分支
-# ---------------------------------------------------------------------------
-
-
 class TestExcelAnalysisPayloadPresentEdge:
     """_excel_analysis_payload_present 边界分支补充。"""
 
-    def test_context_none_returns_false(self):
-        assert AIChatApplicationService._excel_analysis_payload_present(None) is False
-
-    def test_context_not_dict_returns_false(self):
-        assert AIChatApplicationService._excel_analysis_payload_present("not dict") is False  # type: ignore[arg-type]
-
-    def test_excel_analysis_not_dict_returns_false(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present({"excel_analysis": "x"})
-            is False
-        )
-
-    def test_excel_analysis_empty_returns_false(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present({"excel_analysis": {}})
-            is False
-        )
-
-    def test_summary_present_returns_true(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"summary": "test"}}
-            )
-            is True
-        )
-
-    def test_summary_whitespace_returns_false(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"summary": "   "}}
-            )
-            is False
-        )
-
-    def test_fields_list_non_empty_returns_true(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"fields": [{"name": "a"}]}}
-            )
-            is True
-        )
-
-    def test_fields_empty_list_returns_false(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"fields": []}}
-            )
-            is False
-        )
-
-    def test_fields_not_list_returns_false(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"fields": "not list"}}
-            )
-            is False
-        )
-
-    def test_preview_data_with_sample_rows_returns_true(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"preview_data": {"sample_rows": [{"a": 1}]}}}
-            )
-            is True
-        )
-
-    def test_preview_data_with_empty_sample_rows_returns_false(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"preview_data": {"sample_rows": []}}}
-            )
-            is False
-        )
-
-    def test_grid_preview_with_two_rows_returns_true(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"preview_data": {"grid_preview": {"rows": [[1], [2]]}}}}
-            )
-            is True
-        )
-
-    def test_grid_preview_with_one_row_returns_false(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"preview_data": {"grid_preview": {"rows": [[1]]}}}}
-            )
-            is False
-        )
-
-
-# ---------------------------------------------------------------------------
-# _attach_deterministic_workflow_trace 补充分支
-# ---------------------------------------------------------------------------
+    @pytest.mark.parametrize(
+        "context, expected",
+        [
+            (None, False),
+            ("not dict", False),
+            ({"excel_analysis": "x"}, False),
+            ({"excel_analysis": {}}, False),
+            ({"excel_analysis": {"summary": "test"}}, True),
+            ({"excel_analysis": {"summary": "   "}}, False),
+            ({"excel_analysis": {"fields": [{"name": "a"}]}}, True),
+            ({"excel_analysis": {"fields": []}}, False),
+            ({"excel_analysis": {"fields": "not list"}}, False),
+            ({"excel_analysis": {"preview_data": {"sample_rows": [{"a": 1}]}}}, True),
+            ({"excel_analysis": {"preview_data": {"sample_rows": []}}}, False),
+            ({"excel_analysis": {"preview_data": {"grid_preview": {"rows": [[1], [2]]}}}}, True),
+            ({"excel_analysis": {"preview_data": {"grid_preview": {"rows": [[1]]}}}}, False),
+        ],
+        ids=[
+            "context_none",
+            "context_not_dict",
+            "analysis_not_dict",
+            "analysis_empty",
+            "summary_present",
+            "summary_whitespace",
+            "fields_non_empty",
+            "fields_empty",
+            "fields_not_list",
+            "sample_rows_non_empty",
+            "sample_rows_empty",
+            "grid_two_rows",
+            "grid_one_row",
+        ],
+    )
+    def test_payload_shapes(self, context, expected):
+        assert AIChatApplicationService._excel_analysis_payload_present(context) is expected
 
 
 class TestAttachDeterministicWorkflowTraceEdge:
@@ -421,11 +330,6 @@ class TestAttachDeterministicWorkflowTraceEdge:
             "workflow_intent": "test",
             "workflow_trace_mode": "deterministic_shortcut",
         }
-
-
-# ---------------------------------------------------------------------------
-# _try_handle_dynamic_workflow 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestTryHandleDynamicWorkflowEdge:
@@ -629,7 +533,9 @@ class TestTryHandleDynamicWorkflowEdge:
         from app.application.workflow.types import PlanGraph, WorkflowNode
 
         svc = _make_svc()
-        plan = PlanGraph("plan_test", "test_intent", nodes=[WorkflowNode("approval_node", "db", "write")])
+        plan = PlanGraph(
+            "plan_test", "test_intent", nodes=[WorkflowNode("approval_node", "db", "write")]
+        )
         svc._pending_workflows["u1"] = {
             "plan": plan,
             "runtime_context": {"message": "test"},
@@ -677,20 +583,30 @@ class TestTryHandleDynamicWorkflowEdge:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
-# _execute_customers_intent 补充分支
-# ---------------------------------------------------------------------------
-
-
 class TestExecuteCustomersIntentEdge:
     """_execute_customers_intent 异常分支补充。"""
 
-    def test_add_intent_with_unit_name_created_true(self):
+    @pytest.mark.parametrize(
+        "outcome, expected, exact",
+        [
+            ({"success": True, "created": True, "unit_name": "ACME"}, "单位已创建", False),
+            ({"success": True, "created": False, "unit_name": "ACME"}, "单位已存在", False),
+            ({"success": False, "message": "db error"}, "db error", True),
+            (RuntimeError("boom"), "处理单位失败", False),
+        ],
+        ids=["created", "already_exists", "failed", "exception"],
+    )
+    def test_add_intent_with_unit_name(self, outcome, expected, exact):
         svc = _make_svc()
         response_data = {"data": {}}
+        effect = (
+            {"side_effect": outcome}
+            if isinstance(outcome, Exception)
+            else {"return_value": outcome}
+        )
         with patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "created": True, "unit_name": "ACME"},
+            **effect,
         ):
             result = svc._execute_customers_intent(
                 response_data=response_data,
@@ -698,52 +614,10 @@ class TestExecuteCustomersIntentEdge:
                 parsed_params={},
                 original_message="添加单位 ACME",
             )
-        assert "单位已创建" in result["response"]
-
-    def test_add_intent_with_unit_name_created_false(self):
-        svc = _make_svc()
-        response_data = {"data": {}}
-        with patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "created": False, "unit_name": "ACME"},
-        ):
-            result = svc._execute_customers_intent(
-                response_data=response_data,
-                slots={"unit_name": "ACME"},
-                parsed_params={},
-                original_message="添加单位 ACME",
-            )
-        assert "单位已存在" in result["response"]
-
-    def test_add_intent_with_unit_name_creation_failed(self):
-        svc = _make_svc()
-        response_data = {"data": {}}
-        with patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": False, "message": "db error"},
-        ):
-            result = svc._execute_customers_intent(
-                response_data=response_data,
-                slots={"unit_name": "ACME"},
-                parsed_params={},
-                original_message="添加单位 ACME",
-            )
-        assert result["response"] == "db error"
-
-    def test_add_intent_with_unit_name_exception(self):
-        svc = _make_svc()
-        response_data = {"data": {}}
-        with patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            side_effect=RuntimeError("boom"),
-        ):
-            result = svc._execute_customers_intent(
-                response_data=response_data,
-                slots={"unit_name": "ACME"},
-                parsed_params={},
-                original_message="添加单位 ACME",
-            )
-        assert "处理单位失败" in result["response"]
+        if exact:
+            assert result["response"] == expected
+        else:
+            assert expected in result["response"]
 
     def test_add_intent_without_unit_name_returns_followup(self):
         svc = _make_svc()
@@ -808,15 +682,19 @@ class TestExecuteCustomersIntentEdge:
         assert result["response"] == "ok"
 
 
-# ---------------------------------------------------------------------------
-# _execute_shipment_generate 补充分支
-# ---------------------------------------------------------------------------
-
-
 class TestExecuteShipmentGenerateEdge:
     """_execute_shipment_generate 异常分支补充。"""
 
-    def test_parsed_success_doc_success_with_doc_name(self):
+    @pytest.mark.parametrize(
+        "document_result, expected",
+        [
+            ({"success": True, "doc_name": "order-001.docx"}, "order-001.docx"),
+            ({"success": True}, "已生成发货单"),
+            ({"success": False, "message": "template missing"}, "template missing"),
+        ],
+        ids=["with_doc_name", "without_doc_name", "document_failed"],
+    )
+    def test_parsed_success_document_result(self, document_result, expected):
         svc = _make_svc()
         response_data = {"data": {}}
         with (
@@ -827,45 +705,9 @@ class TestExecuteShipmentGenerateEdge:
             patch("app.bootstrap.get_shipment_app_service") as mock_get,
         ):
             mock_svc = mock_get.return_value
-            mock_svc.generate_shipment_document.return_value = {
-                "success": True,
-                "doc_name": "order-001.docx",
-            }
+            mock_svc.generate_shipment_document.return_value = document_result
             result = svc._execute_shipment_generate(response_data, {}, {"text": "order"})
-        assert "order-001.docx" in result["response"]
-
-    def test_parsed_success_doc_success_without_doc_name(self):
-        svc = _make_svc()
-        response_data = {"data": {}}
-        with (
-            patch(
-                "app.application.facades.tools_facade._parse_order_text",
-                return_value={"success": True, "unit_name": "ACME", "products": []},
-            ),
-            patch("app.bootstrap.get_shipment_app_service") as mock_get,
-        ):
-            mock_svc = mock_get.return_value
-            mock_svc.generate_shipment_document.return_value = {"success": True}
-            result = svc._execute_shipment_generate(response_data, {}, {"text": "order"})
-        assert "已生成发货单" in result["response"]
-
-    def test_parsed_success_doc_failed(self):
-        svc = _make_svc()
-        response_data = {"data": {}}
-        with (
-            patch(
-                "app.application.facades.tools_facade._parse_order_text",
-                return_value={"success": True, "unit_name": "ACME", "products": []},
-            ),
-            patch("app.bootstrap.get_shipment_app_service") as mock_get,
-        ):
-            mock_svc = mock_get.return_value
-            mock_svc.generate_shipment_document.return_value = {
-                "success": False,
-                "message": "template missing",
-            }
-            result = svc._execute_shipment_generate(response_data, {}, {"text": "order"})
-        assert "template missing" in result["response"]
+        assert expected in result["response"]
 
     def test_parsed_failure_returns_message(self):
         svc = _make_svc()
@@ -886,11 +728,6 @@ class TestExecuteShipmentGenerateEdge:
         ):
             result = svc._execute_shipment_generate(response_data, {}, {"text": "order"})
         assert "生成发货单失败" in result["response"]
-
-
-# ---------------------------------------------------------------------------
-# _execute_shipments_query 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteShipmentsQueryEdge:
@@ -962,11 +799,6 @@ class TestExecuteShipmentsQueryEdge:
         assert "暂无订单记录" in result["response"]
 
 
-# ---------------------------------------------------------------------------
-# _build_order_text_from_products 补充分支
-# ---------------------------------------------------------------------------
-
-
 class TestBuildOrderTextFromProductsEdge:
     """_build_order_text_from_products 边界分支补充。"""
 
@@ -1020,11 +852,6 @@ class TestBuildOrderTextFromProductsEdge:
         assert "25" in result
 
 
-# ---------------------------------------------------------------------------
-# _try_merge_split_model 补充分支
-# ---------------------------------------------------------------------------
-
-
 class TestTryMergeSplitModelEdge:
     """_try_merge_split_model 边界分支补充。"""
 
@@ -1060,11 +887,6 @@ class TestTryMergeSplitModelEdge:
         result = svc._try_merge_split_model("5003A 规格 30", product_template)
         assert "5003A" in result
         assert "30" in result
-
-
-# ---------------------------------------------------------------------------
-# _format_workflow_tool_success_line 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestFormatWorkflowToolSuccessLineEdge:
@@ -1191,11 +1013,6 @@ class TestFormatWorkflowToolSuccessLineEdge:
         assert "成功" in result[0]
 
 
-# ---------------------------------------------------------------------------
-# _execute_pro_mode_tools 补充分支（shipment_generate 各 slot 组合）
-# ---------------------------------------------------------------------------
-
-
 class TestExecuteProModeToolsEdge:
     """_execute_pro_mode_tools shipment_generate 各 slot 组合分支补充。"""
 
@@ -1297,11 +1114,6 @@ class TestExecuteProModeToolsEdge:
         assert result["toolCall"]["params"]["extra"] == "val"
 
 
-# ---------------------------------------------------------------------------
-# _execute_products_query 补充分支
-# ---------------------------------------------------------------------------
-
-
 class TestExecuteProductsQueryEdge:
     """_execute_products_query 边界分支补充。"""
 
@@ -1348,47 +1160,24 @@ class TestExecuteProductsQueryEdge:
         assert result["data"]["unit_name"] == "测试单位"
         assert result["data"]["model_number"] == "123B"
 
-    def test_model_number_and_unit_name(self):
+    @pytest.mark.parametrize(
+        "slots, products, expected",
+        [
+            ({"model_number": "M1", "unit_name": "ACME"}, [{"id": 1}], "查询到 1"),
+            ({"model_number": "M1"}, [], "未找到"),
+            ({"unit_name": "ACME"}, [{"id": 1}, {"id": 2}], "查询到 2"),
+        ],
+        ids=["model_and_unit", "model_only", "unit_only"],
+    )
+    def test_model_and_unit_filters(self, slots, products, expected):
         svc = _make_svc()
         response_data = {"data": {}}
         with patch("app.bootstrap.get_products_service") as mock_get:
             mock_svc = mock_get.return_value
-            mock_svc.get_products.return_value = {"data": [{"id": 1}]}
-            result = svc._execute_products_query(
-                response_data,
-                {"model_number": "M1", "unit_name": "ACME"},
-                {},
-            )
-        mock_svc.get_products.assert_called_once_with(model_number="M1", unit_name="ACME")
-        assert "查询到 1" in result["response"]
-
-    def test_model_number_only(self):
-        svc = _make_svc()
-        response_data = {"data": {}}
-        with patch("app.bootstrap.get_products_service") as mock_get:
-            mock_svc = mock_get.return_value
-            mock_svc.get_products.return_value = {"data": []}
-            result = svc._execute_products_query(
-                response_data,
-                {"model_number": "M1"},
-                {},
-            )
-        mock_svc.get_products.assert_called_once_with(model_number="M1")
-        assert "未找到" in result["response"]
-
-    def test_unit_name_only(self):
-        svc = _make_svc()
-        response_data = {"data": {}}
-        with patch("app.bootstrap.get_products_service") as mock_get:
-            mock_svc = mock_get.return_value
-            mock_svc.get_products.return_value = {"data": [{"id": 1}, {"id": 2}]}
-            result = svc._execute_products_query(
-                response_data,
-                {"unit_name": "ACME"},
-                {},
-            )
-        mock_svc.get_products.assert_called_once_with(unit_name="ACME")
-        assert "查询到 2" in result["response"]
+            mock_svc.get_products.return_value = {"data": products}
+            result = svc._execute_products_query(response_data, slots, {})
+        mock_svc.get_products.assert_called_once_with(**slots)
+        assert expected in result["response"]
 
     def test_keyword_only(self):
         svc = _make_svc()
@@ -1426,11 +1215,6 @@ class TestExecuteProductsQueryEdge:
                 {},
             )
         assert "查询产品失败" in result["response"]
-
-
-# ---------------------------------------------------------------------------
-# process_chat 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestProcessChatEdge:
@@ -1496,7 +1280,8 @@ class TestProcessChatEdge:
                 result = svc.process_chat("u1", "测试消息", None, None, None)
         assert "AI 服务响应超时" in result["message"]
 
-    def test_recoverable_error_with_api_key_returns_fallback(self):
+    @pytest.mark.parametrize("error", ["API_KEY invalid", "connection refused", "unknown error"])
+    def test_recoverable_errors_return_fallback(self, error):
         svc = _make_svc()
         with (
             patch("app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received"),
@@ -1518,61 +1303,7 @@ class TestProcessChatEdge:
         ):
             with patch("asyncio.new_event_loop") as mock_new_loop:
                 mock_loop = MagicMock()
-                mock_loop.run_until_complete.side_effect = RuntimeError("API_KEY invalid")
-                mock_new_loop.return_value = mock_loop
-                result = svc.process_chat("u1", "测试消息", None, None, None)
-        assert "AI 服务暂时不可用" in result["message"]
-
-    def test_recoverable_error_with_connection_returns_fallback(self):
-        svc = _make_svc()
-        with (
-            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received"),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._inject_excel_vector_context",
-                side_effect=lambda message, context: context,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._handle_confirmation_flow",
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_handle_dynamic_workflow",
-                return_value=None,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._persist_chat_turn",
-            ),
-            patch("asyncio.set_event_loop"),
-        ):
-            with patch("asyncio.new_event_loop") as mock_new_loop:
-                mock_loop = MagicMock()
-                mock_loop.run_until_complete.side_effect = RuntimeError("connection refused")
-                mock_new_loop.return_value = mock_loop
-                result = svc.process_chat("u1", "测试消息", None, None, None)
-        assert "AI 服务暂时不可用" in result["message"]
-
-    def test_recoverable_error_other_returns_fallback(self):
-        svc = _make_svc()
-        with (
-            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received"),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._inject_excel_vector_context",
-                side_effect=lambda message, context: context,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._handle_confirmation_flow",
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_handle_dynamic_workflow",
-                return_value=None,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._persist_chat_turn",
-            ),
-            patch("asyncio.set_event_loop"),
-        ):
-            with patch("asyncio.new_event_loop") as mock_new_loop:
-                mock_loop = MagicMock()
-                mock_loop.run_until_complete.side_effect = RuntimeError("unknown error")
+                mock_loop.run_until_complete.side_effect = RuntimeError(error)
                 mock_new_loop.return_value = mock_loop
                 result = svc.process_chat("u1", "测试消息", None, None, None)
         assert "AI 服务暂时不可用" in result["message"]
@@ -1633,11 +1364,6 @@ class TestProcessChatEdge:
             file_context = {"file_path": "/tmp/test.xlsx", "sheet_name": "Sheet1"}
             result = svc.process_chat("u1", "随便说点什么", {}, None, file_context)
         assert result["response"] == "ok"
-
-
-# ---------------------------------------------------------------------------
-# _extract_excel_import_records 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestExtractExcelImportRecordsEdge:
@@ -2063,11 +1789,6 @@ class TestExtractExcelImportRecordsEdge:
             )
         assert err is None
         assert len(records) == 2
-
-
-# ---------------------------------------------------------------------------
-# _build_response / _handle_tool_call 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestBuildResponseEdge:

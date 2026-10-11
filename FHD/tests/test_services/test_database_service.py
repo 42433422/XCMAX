@@ -74,6 +74,105 @@ class TestBackupDatabase:
 
 class TestRestoreDatabase:
     @pytest.mark.parametrize(
+        "case",
+        ["workflow-parent", "missing-actor", "business-orphan", "audit-orphan", "same-row-orphan"],
+    )
+    def test_restore_preserves_parent_chain_or_refuses_orphaned_audit(
+        self, tmp_path, monkeypatch, case
+    ):
+        from sqlalchemy import create_engine, select
+        from sqlalchemy.orm import Session
+
+        from app.db.base import Base
+        from app.db.models import User
+        from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRequest
+        from app.db.models.workflow import WorkflowDefinition, WorkflowRun, WorkflowRunStep
+
+        live, backup = tmp_path / "live.db", tmp_path / "snapshot.bak"
+        engine = create_engine(f"sqlite:///{live}")
+        audit = (WorkflowDefinition, WorkflowRun, WorkflowRunStep, ApprovalRequest)
+        Base.metadata.create_all(
+            engine,
+            tables=[model.__table__ for model in (*audit, User, ApprovalFlow, ApprovalFlowNode)],
+        )
+        service = DatabaseService()
+        monkeypatch.setattr(service, "_get_db_path", lambda: str(live))
+        try:
+            with Session(engine) as db:
+                db.add(User(id=1, username="actor", password="test", role="user"))
+                db.add(ApprovalFlow(id=1, flow_key="restore", flow_name="Restore"))
+                if case in {"audit-orphan", "same-row-orphan"}:
+                    db.add(
+                        ApprovalRequest(
+                            id=1,
+                            request_no="old-orphan",
+                            flow_id=1,
+                            applicant_id=1,
+                            business_type="workflow_tool",
+                            title="Old",
+                        )
+                    )
+                db.commit()
+            with sqlite3.connect(live) as db:
+                db.execute("pragma journal_mode=wal")
+                db.execute("create table products(price real)")
+                db.execute("insert into products values(12.5)")
+                if case == "business-orphan":
+                    db.execute("update users set created_by=99")
+                if case in {"audit-orphan", "same-row-orphan"}:
+                    db.execute("update approval_requests set applicant_id=99")
+            with sqlite3.connect(live) as db, sqlite3.connect(backup) as target:
+                db.backup(target)
+            original_backup = backup.read_bytes()
+            with Session(engine) as db:
+                db.get(User, 1).role = "admin"
+                if case in {"missing-actor", "same-row-orphan"}:
+                    db.add(User(id=2, username="new-actor", password="test"))
+                db.add(WorkflowDefinition(id=2, name="Created after backup", nodes="[]"))
+                db.add(WorkflowRun(id=2, definition_id=2, status="succeeded"))
+                db.add(WorkflowRunStep(id=2, run_id=2, node_id="done", status="succeeded"))
+                db.add(
+                    ApprovalRequest(
+                        id=2,
+                        request_no="new-request",
+                        flow_id=1,
+                        applicant_id=2 if case == "missing-actor" else 1,
+                        business_type="workflow_tool",
+                        title="New",
+                    )
+                )
+                db.commit()
+            with sqlite3.connect(live) as db:
+                db.execute("update products set price=13.75")
+                if case == "same-row-orphan":
+                    db.execute("update approval_requests set applicant_id=2 where id=1")
+                prior_violations = db.execute("pragma foreign_key_check").fetchall()
+            with engine.connect() as db:
+                receipts = [db.execute(select(model.__table__)).fetchall() for model in audit]
+            restored = case in {"workflow-parent", "business-orphan"}
+            result = service.restore_database(str(backup))
+            assert result["success"] is restored
+            if not restored:
+                assert "审计关联" in result["message"]
+            with engine.connect() as db:
+                assert [
+                    db.execute(select(model.__table__)).fetchall() for model in audit
+                ] == receipts
+            with sqlite3.connect(live) as db:
+                assert db.execute("select price from products").fetchone()[0] == (
+                    12.5 if restored else 13.75
+                )
+                assert db.execute("select role from users where id=1").fetchone()[0] == (
+                    "user" if restored else "admin"
+                )
+                assert db.execute("pragma foreign_key_check").fetchall() == prior_violations
+                assert db.execute("pragma integrity_check").fetchone() == ("ok",)
+            assert backup.read_bytes() == original_backup
+            assert not list(tmp_path.glob("xcagi-restore-*"))
+        finally:
+            engine.dispose()
+
+    @pytest.mark.parametrize(
         "case", ["new-audit", "schema-mismatch", "concurrent-write", "slow-copy"]
     )
     def test_restore_preserves_live_audit_or_refuses_before_commit(

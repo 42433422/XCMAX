@@ -3079,7 +3079,7 @@ class TestTryHandleDynamicWorkflow:
 
     def test_pending_workflow_confirm(self):
         svc = _make_svc()
-        plan = _make_plan()
+        plan = _make_plan(nodes=[_make_node()])
         svc._pending_workflows["u1"] = {
             "plan": plan,
             "runtime_context": {"message": "hello"},
@@ -3105,7 +3105,7 @@ class TestTryHandleDynamicWorkflow:
 
     def test_pending_workflow_cancel(self):
         svc = _make_svc()
-        plan = _make_plan()
+        plan = _make_plan(nodes=[_make_node()])
         svc._pending_workflows["u1"] = {
             "plan": plan,
             "runtime_context": {"tenant_id": "42", "local_user_id": "7"},
@@ -3119,7 +3119,7 @@ class TestTryHandleDynamicWorkflow:
 
     def test_pending_workflow_confirm_with_agent_run(self):
         svc = _make_svc()
-        plan = _make_plan()
+        plan = _make_plan(nodes=[_make_node()])
         svc._pending_workflows["u1"] = {
             "plan": plan,
             "runtime_context": {"message": "hello"},
