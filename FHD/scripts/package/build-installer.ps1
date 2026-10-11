@@ -119,6 +119,7 @@ if ($buildSha -notmatch '^[0-9a-fA-F]{40}$') {
   throw "Windows installer requires an exact 40-character Git SHA, got '$buildSha'"
 }
 $buildSha = $buildSha.ToLowerInvariant()
+$env:XCAGI_BUILD_SHA = $buildSha
 $releaseId = "xcagi-$Version-$buildSha"
 $buildInfoPath = Join-Path $Root "desktop\resources\build-info.json"
 $buildInfo = @{
@@ -257,6 +258,8 @@ if (-not $SkipUiInstaller) {
   Copy-Item $nsisExe.FullName $stagingNsis -Force
 
   $uiProj = Join-Path $Root "tools\XcagiInstaller\XcagiInstaller.csproj"
+  & node (Join-Path $PSScriptRoot 'generate-windows-rollback-helper.mjs')
+  if ($LASTEXITCODE -ne 0) { throw "Shared Windows rollback helper generation failed" }
   $uiOut = Join-Path $outDir "ui-build"
   New-Item -ItemType Directory -Force -Path $uiOut | Out-Null
 
@@ -269,6 +272,8 @@ if (-not $SkipUiInstaller) {
     "-p:IncludeNativeLibrariesForSelfExtract=true",
     "-p:EnableCompressionInSingleFile=true",
     "-p:Version=$Version",
+    "-p:InformationalVersion=$Version+$env:XCAGI_BUILD_SHA",
+    "-p:IncludeSourceRevisionInInformationalVersion=false",
     "-p:SetupPayloadPath=$stagingNsis",
     "-o", $uiOut
   )
