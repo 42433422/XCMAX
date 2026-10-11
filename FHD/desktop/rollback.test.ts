@@ -105,11 +105,18 @@ describe('rollback — prepareRollback', () => {
         fs.writeFileSync(target, value)
       }
       write('mods/northwind/manifest.json', '{"id":"northwind","version":"2.3.0"}')
+      write('mods/index.json', '{"installed":["northwind","customer-reporting"]}')
       fs.mkdirSync(path.join(userData, 'mods', 'northwind', 'empty-preserved'), { recursive: true })
       write('mods/customer-reporting/backend/report.py', 'authorized customer Mod')
       write('mods/northwind/logs/private.log', 'excluded log')
+      write('mods/northwind/backend/models/product.py', 'old authorized Mod model')
+      write('models/private-model.bin', 'root-owned model data')
+      write('logs/private.log', 'root-owned log')
+      write('uploads/customer-file.bin', 'root-owned upload')
+      write('secrets/private-token.txt', 'root-owned secret')
       write('products__northwind.db', 'per-Mod DB')
       write('data/mod_dbs/customer-reporting.db', 'private Mod DB')
+      write('data/mod_dbs/private/uploads/customer.db', 'private Mod DB below a specially named folder')
       write('data/xcagi.db', 'main DB')
       windowsRollbackMocks.launchWindowsFullRollback.mockClear()
       const { prepareRollback, checkPendingRollback, triggerRollback } = await import('./rollback.js')
@@ -124,13 +131,17 @@ describe('rollback — prepareRollback', () => {
       expect(createHash('sha256').update(fs.readFileSync(path.join(preparedSnapshotRoot!, 'mods', 'northwind', 'manifest.json'))).digest('hex')).toBe(preparedSnapshotHash)
       expect(marker?.expectedOwnedFiles).toMatchObject({
         'mods\\northwind\\manifest.json': expect.any(String),
+        'mods\\index.json': expect.any(String),
+        'mods\\northwind\\backend\\models\\product.py': expect.any(String),
         'mods\\customer-reporting\\backend\\report.py': expect.any(String),
         'products__northwind.db': expect.any(String),
         'data\\mod_dbs\\customer-reporting.db': expect.any(String),
+        'data\\mod_dbs\\private\\uploads\\customer.db': expect.any(String),
       })
       expect(marker?.expectedOwnedFiles).not.toHaveProperty('data\\xcagi.db')
       expect(marker?.expectedOwnedDirectories).toContain('mods\\northwind\\empty-preserved')
-      expect(Object.keys(marker?.expectedOwnedFiles || {}).some(name => name.includes('private.log'))).toBe(false)
+      expect(marker?.expectedOwnedFiles).toHaveProperty('mods\\northwind\\logs\\private.log')
+      expect(Object.keys(marker?.expectedOwnedFiles || {}).some(name => /^(models|logs|uploads|secrets)[\\/]/i.test(name))).toBe(false)
       await triggerRollback('test owned state handoff')
       const options = windowsRollbackMocks.launchWindowsFullRollback.mock.calls[0]?.[0] as { ownedUserDataRoot?: string; ownedBackupRoot?: string; expectedOwnedFiles?: Record<string, string>; expectedOwnedDirectories?: string[] }
       expect(options.ownedUserDataRoot).toBe(userData)

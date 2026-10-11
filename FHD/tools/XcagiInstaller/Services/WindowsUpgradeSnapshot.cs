@@ -52,24 +52,20 @@ internal sealed class WindowsUpgradeSnapshot
             catch (InvalidOperationException) { }
         }
     }
-    private static bool ExcludedOwnedPath(string relative) => relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(part => part.Equals("logs", StringComparison.OrdinalIgnoreCase) || part.Equals("secrets", StringComparison.OrdinalIgnoreCase) || part.Equals("uploads", StringComparison.OrdinalIgnoreCase) || part.Equals("models", StringComparison.OrdinalIgnoreCase) || part.Equals("rollback", StringComparison.OrdinalIgnoreCase));
     private static IEnumerable<string> EnumerateOwnedFiles(string userData)
     {
         var mods = Path.Combine(userData, "mods");
-        if (Directory.Exists(mods)) foreach (var file in Directory.EnumerateFiles(mods, "*", SearchOption.AllDirectories))
-        {
-            var rel = Path.GetRelativePath(userData, file); if (!ExcludedOwnedPath(rel)) yield return file;
-        }
+        if (Directory.Exists(mods)) foreach (var file in Directory.EnumerateFiles(mods, "*", SearchOption.AllDirectories)) yield return file;
         foreach (var file in Directory.EnumerateFiles(userData, "*", SearchOption.TopDirectoryOnly))
             if (System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(file), "^(products|inventory|voice_learning|error_collection)(__[A-Za-z0-9_-]+)?\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) yield return file;
         var data = Path.Combine(userData, "data");
         if (Directory.Exists(data))
         {
             foreach (var file in Directory.EnumerateFiles(data, "*", SearchOption.TopDirectoryOnly))
-                if (System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(file), "^.+\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) && !System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(file), "^xcagi\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) && !ExcludedOwnedPath(Path.GetRelativePath(userData, file))) yield return file;
+                if (System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(file), "^.+\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) && !System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(file), "^xcagi\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) yield return file;
             var modDbs = Path.Combine(data, "mod_dbs");
             if (Directory.Exists(modDbs)) foreach (var file in Directory.EnumerateFiles(modDbs, "*", SearchOption.AllDirectories))
-                if (System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(file), "^.+\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) && !ExcludedOwnedPath(Path.GetRelativePath(userData, file))) yield return file;
+                if (System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(file), "^.+\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) yield return file;
         }
     }
     private static IEnumerable<string> EnumerateOwnedDirectories(string userData)
@@ -81,11 +77,11 @@ internal sealed class WindowsUpgradeSnapshot
             var scan = rootName == "mods" ? root : Path.Combine(root, "mod_dbs");
             if (rootName == "data" && Directory.Exists(scan)) yield return Path.Combine("data", "mod_dbs");
             if (!Directory.Exists(scan)) continue;
-            foreach (var directory in Directory.EnumerateDirectories(scan, "*", SearchOption.AllDirectories))
+            if (rootName == "mods")
             {
-                var relative = Path.GetRelativePath(userData, directory);
-                if (!ExcludedOwnedPath(relative)) yield return relative;
+                foreach (var directory in Directory.EnumerateDirectories(scan, "*", SearchOption.AllDirectories)) yield return Path.GetRelativePath(userData, directory);
             }
+            else foreach (var directory in Directory.EnumerateDirectories(scan, "*", SearchOption.AllDirectories)) yield return Path.GetRelativePath(userData, directory);
         }
     }
     private static void ValidateOwnedState(string userData, out long byteCount, out List<string> files)

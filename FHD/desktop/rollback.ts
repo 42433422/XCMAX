@@ -97,10 +97,10 @@ function validateOwnedRollbackMarker(marker: RollbackMarker, rollbackRoot: strin
   const dataDbName = /^.+\.db(?:-(?:wal|shm|journal))?$/i
   for (const [relative, expectedHash] of Object.entries(marker.expectedOwnedFiles)) {
     const pieces = relative.split(/[\\/]/)
-    const excluded = pieces.some(piece => ['logs', 'secrets', 'uploads', 'models', 'rollback'].includes(piece.toLowerCase()))
-    const allowed = !excluded && (pieces[0]?.toLowerCase() === 'mods' && pieces.length >= 2
+    const modPath = pieces[0]?.toLowerCase() === 'mods' && pieces.length >= 2
+    const allowed = modPath
       || pieces.length === 1 && dbName.test(pieces[0] || '')
-      || pieces[0]?.toLowerCase() === 'data' && (pieces.length === 2 && dataDbName.test(pieces[1] || '') || pieces[1]?.toLowerCase() === 'mod_dbs' && pieces.length >= 3 && dataDbName.test(pieces[pieces.length - 1] || '')))
+      || pieces[0]?.toLowerCase() === 'data' && (pieces.length === 2 && dataDbName.test(pieces[1] || '') && !/^xcagi\.db(?:-(?:wal|shm|journal))?$/i.test(pieces[1] || '') || pieces[1]?.toLowerCase() === 'mod_dbs' && pieces.length >= 3 && dataDbName.test(pieces[pieces.length - 1] || ''))
     if (!allowed || pieces.some(piece => !piece || piece === '.' || piece === '..') || !/^[0-9a-f]{64}$/i.test(expectedHash)) {
       throw new Error(`Windows Mod/数据库恢复记录路径或哈希无效：${relative}`)
     }
@@ -115,7 +115,7 @@ function validateOwnedRollbackMarker(marker: RollbackMarker, rollbackRoot: strin
     const pieces = relative.split(/[\\/]/)
     const allowed = pieces[0]?.toLowerCase() === 'mods' && pieces.length >= 1
       || pieces[0]?.toLowerCase() === 'data' && (pieces.length === 1 || pieces[1]?.toLowerCase() === 'mod_dbs')
-    if (!allowed || pieces.some(piece => !piece || piece === '.' || piece === '..') || pieces.some(piece => ['logs', 'secrets', 'uploads', 'models', 'rollback'].includes(piece.toLowerCase()))) {
+    if (!allowed || pieces.some(piece => !piece || piece === '.' || piece === '..')) {
       throw new Error(`Windows Mod/数据库恢复记录目录无效：${relative}`)
     }
     const directory = resolveInside(backupRoot, relative)
@@ -125,8 +125,20 @@ function validateOwnedRollbackMarker(marker: RollbackMarker, rollbackRoot: strin
   }
 }
 
-function isExcludedOwnedPath(relative: string): boolean {
-  return relative.split(path.sep).some(part => ['logs', 'secrets', 'uploads', 'models', 'rollback'].includes(part.toLowerCase()))
+function isOwnedModPath(relative: string, directory: boolean): boolean {
+  const pieces = relative.split(/[\\/]/)
+  return pieces[0]?.toLowerCase() === 'mods'
+    && pieces.length >= (directory ? 1 : 2)
+    && pieces.every(piece => Boolean(piece) && piece !== '.' && piece !== '..')
+}
+
+function isOwnedDatabasePath(relative: string): boolean {
+  const pieces = relative.split(/[\\/]/)
+  const dbName = /^.+\.db(?:-(?:wal|shm|journal))?$/i
+  if (pieces.length === 1) return /^(products|inventory|voice_learning|error_collection)(__[a-z0-9_-]+)?\.db(?:-(?:wal|shm|journal))?$/i.test(pieces[0] || '')
+  if (pieces[0]?.toLowerCase() !== 'data') return false
+  if (pieces.length === 2) return dbName.test(pieces[1] || '') && !/^xcagi\.db(?:-(?:wal|shm|journal))?$/i.test(pieces[1] || '')
+  return pieces[1]?.toLowerCase() === 'mod_dbs' && dbName.test(pieces[pieces.length - 1] || '')
 }
 
 function hashFileSync(file: string): string {
@@ -155,7 +167,6 @@ function enumerateOwnedFiles(userData: string): string[] {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const candidate = path.join(dir, entry.name)
         const relative = path.relative(userData, candidate)
-        if (isExcludedOwnedPath(relative)) continue
         if (entry.isSymbolicLink()) throw new Error(`回滚快照拒绝 Mod 链接路径：${relative}`)
         if (entry.isDirectory()) visit(candidate)
         else if (entry.isFile()) files.push(candidate)
@@ -175,7 +186,6 @@ function enumerateOwnedFiles(userData: string): string[] {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const candidate = path.join(dir, entry.name)
       const relative = path.relative(userData, candidate)
-      if (isExcludedOwnedPath(relative)) continue
       if (entry.isSymbolicLink()) throw new Error(`回滚快照拒绝数据库链接：${relative}`)
       if (entry.isDirectory() && recursive) addDbFiles(candidate, true)
       else if (entry.isFile() && /\.db(?:-(?:wal|shm|journal))?$/i.test(entry.name) && !(relative.split(path.sep).length === 2 && relative.split(path.sep)[0]?.toLowerCase() === 'data' && /^xcagi\.db(?:-(?:wal|shm|journal))?$/i.test(entry.name))) files.push(candidate)
@@ -197,7 +207,6 @@ function enumerateOwnedDirectories(userData: string): string[] {
         if (!entry.isDirectory()) continue
         const candidate = path.join(dir, entry.name)
         const relative = path.relative(userData, candidate)
-        if (isExcludedOwnedPath(relative)) continue
         if (entry.isSymbolicLink()) throw new Error(`回滚快照拒绝链接目录：${relative}`)
         directories.add(relative)
         visit(candidate)
@@ -220,7 +229,7 @@ function snapshotWindowsOwnedState(userData: string, backupRoot: string): { file
   let total = 0
   for (const file of files) {
     const relative = path.relative(userData, file)
-    if (!isPathInside(userData, file) || isExcludedOwnedPath(relative)) throw new Error(`Mod 或数据库快照路径越界：${relative}`)
+    if (!isPathInside(userData, file) || !(isOwnedModPath(relative, false) || isOwnedDatabasePath(relative))) throw new Error(`Mod 或数据库快照路径越界：${relative}`)
     const info = fs.lstatSync(file)
     if (!info.isFile() || info.isSymbolicLink()) throw new Error(`Mod 或数据库快照拒绝链接路径：${relative}`)
     if (info.size > maximumSingleFile) throw new Error(`单个 Mod 或数据库文件超过 8 GiB 安全边界：${relative}`)

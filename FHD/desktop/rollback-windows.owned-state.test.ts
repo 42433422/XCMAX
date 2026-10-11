@@ -53,4 +53,32 @@ describe('Windows rollback owned state', () => {
     expect(script).toContain("$ownedBackupRoot = ''")
     expect(script).toContain("FromBase64String('e30=')")
   })
+
+  it('owns special-named descendants by Mod location and leaves root special directories outside inventory', () => {
+    const inventory = {
+      'mods/northwind/backend/models/product.py': 'a'.repeat(64),
+      'mods/northwind/backend/logs/build.py': 'b'.repeat(64),
+      'mods/northwind/backend/uploads/handler.py': 'c'.repeat(64),
+      'mods/northwind/backend/secrets/parser.py': 'd'.repeat(64),
+      'mods/northwind/backend/rollback/repair.py': 'e'.repeat(64),
+      'data/mod_dbs/private/uploads/customer.db': 'f'.repeat(64),
+    }
+    const script = buildWindowsRollbackScript({
+      currentPid: 4242, installDir: 'C:\\XCAGI', backupRoot: 'C:\\userData\\rollback\\app',
+      appPath: 'C:\\XCAGI\\XCAGI.exe', markerPath: 'C:\\userData\\rollback-marker.json',
+      appliedPath: 'C:\\userData\\rollback-applied.json', logPath: 'C:\\userData\\rollback\\helper.log',
+      ownedUserDataRoot: 'C:\\userData', ownedBackupRoot: 'C:\\userData\\rollback\\owned\\state',
+      expectedOwnedFiles: inventory,
+      expectedOwnedDirectories: ['mods', 'mods/northwind', 'mods/northwind/backend/models', 'mods/northwind/backend/logs', 'data', 'data/mod_dbs', 'data/mod_dbs/private/uploads'],
+      applied: { appliedAt: '2026-10-12T00:00:00.000Z', reason: 'test', fromVersion: 'candidate', toVersion: 'old' },
+      restartApp: false,
+    })
+    expect(script).toContain(Buffer.from(JSON.stringify(inventory)).toString('base64'))
+    expect(script).toContain('Get-ChildItem -LiteralPath $modRoot -Recurse -File -Force)')
+    expect(script).not.toContain('function Test-OwnedPath')
+    expect(inventory).not.toHaveProperty('models/private-model.bin')
+    expect(inventory).not.toHaveProperty('logs/private.log')
+    expect(inventory).not.toHaveProperty('uploads/customer-file.bin')
+    expect(inventory).not.toHaveProperty('secrets/private-token.txt')
+  })
 })
