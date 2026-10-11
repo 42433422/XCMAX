@@ -102,6 +102,11 @@ def test_pass_without_evidence_or_identity_fails() -> None:
     for item in ledger["items"]:
         if item["no"] == 8:
             item["result"] = "PASS"
+            item.pop("observed_at", None)
+            item.pop("evidence", None)
+    ledger["candidate"] = {}
+    ledger["accounts"] = {}
+    ledger["tickets"] = {}
     codes = _codes(_module().check_ledger(ledger))
     assert {
         "pass_without_observed_at",

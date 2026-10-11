@@ -136,10 +136,12 @@ def check_ledger(
     para_items = tuple(policy.get("applies_to_items") or DEFAULT_PARA_ITEMS)
     tickets = ledger.get("tickets") or {}
     if _passed(items, para_items):
-        for name in ("resolved", "reopened"):
-            t = tickets.get(name) or {}
-            if name == "resolved" or t.get("ticket_id"):
-                errs.extend(check_para_processing(name, t.get("processing"), policy, base))
+        t_resolved = tickets.get("resolved") or {}
+        errs.extend(check_para_processing("resolved", t_resolved.get("processing"), policy, base))
+    if _passed(items, REOPEN_ITEMS):
+        t_reopened = tickets.get("reopened") or {}
+        if t_reopened.get("ticket_id"):
+            errs.extend(check_para_processing("reopened", t_reopened.get("processing"), policy, base))
 
     identity_pass = [
         n
