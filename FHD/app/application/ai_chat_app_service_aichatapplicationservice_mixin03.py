@@ -90,11 +90,8 @@ class _AIChatApplicationServicePart03Mixin:
         runtime_context: dict[str, _facade().Any] | None,
         status: str,
         message: str | None = None,
-    ) -> None:
-        """把动态工作流计划（含 runtime_context）落库，供跨会话续跑。
-
-        从 ``runtime_context`` 提取 ``user_id``/``session_id``；保存失败仅告警，不阻断主流程。
-        """
+    ) -> bool:
+        """保存计划快照；成功提交返回 True，失败返回 False，调用方据此决定是否完成操作。"""
         try:
             from app.application.workflow.plan_store import WorkflowPlanStore
 
@@ -119,11 +116,14 @@ class _AIChatApplicationServicePart03Mixin:
                 user_id=user_id,
                 session_id=session_id,
                 message=message,
+                require_commit=status == "cancelled",
             )
+            return True
         except _facade().RECOVERABLE_ERRORS:
             _facade().logger.warning(
                 "计划持久化失败 plan_id=%s status=%s", getattr(plan, "plan_id", "?"), status
             )
+            return False
 
     def _run_workflow_with_state_updates(
         self,
