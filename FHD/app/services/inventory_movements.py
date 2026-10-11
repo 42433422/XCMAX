@@ -33,6 +33,33 @@ def _positive_movement_quantity(value: Any) -> float:
     return quantity
 
 
+_DEFAULT_WAREHOUSE_ALIASES = {"default", "default_warehouse", "current_tenant_default", "默认仓库"}
+
+
+def _positive_id(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None or not str(value).strip().isdigit():
+        return None
+    number = int(str(value).strip())
+    return number if number > 0 else None
+
+
+def _stock_out_warehouse_id(db: Any, warehouse_id: Any) -> tuple[int | None, str]:
+    """整数仓库编号原样使用；符号/名称只在当前租户内唯一匹配时才解析（#2288）。"""
+    numeric = _positive_id(warehouse_id)
+    if numeric is not None:
+        return numeric, ""
+    text = str(warehouse_id or "").strip()
+    query = db.query(_facade().Warehouse).filter(_facade().Warehouse.status == "active")
+    if text.casefold() not in _DEFAULT_WAREHOUSE_ALIASES:
+        query = query.filter(_facade().Warehouse.name == text)
+    rows = query.limit(2).all() if text else []
+    if len(rows) == 1:
+        return int(rows[0].id), ""
+    if not rows and text.casefold() in _DEFAULT_WAREHOUSE_ALIASES:
+        return None, "当前企业还没有可用仓库：请先在「库存管理」点击「初始化默认仓库」并为产品入库"
+    return None, "无法确定出库仓库：请说明从哪个仓库出库"
+
+
 class InventoryMovementsMixin:
     if TYPE_CHECKING:
 
@@ -193,8 +220,22 @@ class InventoryMovementsMixin:
             quantity = _positive_movement_quantity(quantity)
         except ValueError:
             return {"success": False, "message": "出库数量必须是有效正数"}
+        product_id = _positive_id(product_id)
+        if product_id is None:
+            return {
+                "success": False,
+                "error_code": "invalid_product_reference",
+                "message": "出库产品编号无效：请先查询并确认要出库的具体产品",
+            }
         with _facade().get_db() as db, worker_write_guard(db):
             try:
+                warehouse_id, problem = _stock_out_warehouse_id(db, warehouse_id)
+                if problem:
+                    return {
+                        "success": False,
+                        "error_code": "invalid_warehouse_reference",
+                        "message": problem,
+                    }
                 query = db.query(_facade().InventoryLedger).filter(
                     _facade().InventoryLedger.product_id == product_id,
                     _facade().InventoryLedger.warehouse_id == warehouse_id,
