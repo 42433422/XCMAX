@@ -46,6 +46,8 @@ def _filled(attempts: list[dict], *, pass_items=(24,)) -> dict:
     ledger["tickets"]["resolved"]["ticket_id"] = "CS-1"
     ledger["tickets"]["resolved"]["processing"]["para_task_id"] = "para-task-1"
     ledger["tickets"]["resolved"]["processing"]["handlers_attempted"] = attempts
+    # committed 总账里 reopened 可能已有 ticket_id；未显式测重开时不应触发 Para 校验
+    ledger["tickets"]["reopened"]["ticket_id"] = None
     for item in ledger["items"]:
         if item["no"] in pass_items:
             item["result"] = "PASS"
@@ -102,6 +104,12 @@ def test_pass_without_evidence_or_identity_fails() -> None:
     for item in ledger["items"]:
         if item["no"] == 8:
             item["result"] = "PASS"
+            item["observed_at"] = None
+            item["evidence"] = []
+    # committed 总账可能已填账号/工单/候选版本，本测只验证「裸 PASS」违规
+    ledger["candidate"] = {}
+    ledger["accounts"] = {}
+    ledger["tickets"] = {}
     codes = _codes(_module().check_ledger(ledger))
     assert {
         "pass_without_observed_at",
