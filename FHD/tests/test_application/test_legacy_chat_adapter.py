@@ -53,6 +53,14 @@ def _tool_chunk(name, arguments):
     )
 
 
+def _client(response, *, side_effect=False):
+    client = MagicMock(is_modstore_openai_compatible=False)
+    setattr(
+        client.chat.completions.create, "side_effect" if side_effect else "return_value", response
+    )
+    return client
+
+
 @contextmanager
 def _planner_registry(registry):
     with patch.object(adapter, "_get_workflow_tool_registry", return_value=registry):
@@ -69,35 +77,23 @@ def _planner_tools(execute_tool):
 
 
 class TestParseGenerateOfficeFormat:
-    def test_docx(self):
-        assert _parse_generate_office_format('{"output_format":"docx"}') == "docx"
-
-    def test_xlsx(self):
-        assert _parse_generate_office_format('{"output_format":"xlsx"}') == "xlsx"
-
-    def test_uppercase_format(self):
-        assert _parse_generate_office_format('{"output_format":"DOCX"}') == "docx"
-
-    def test_unknown_format_returns_empty(self):
-        assert _parse_generate_office_format('{"output_format":"pdf"}') == ""
-
-    def test_empty_string_returns_empty(self):
-        assert _parse_generate_office_format("") == ""
-
-    def test_none_returns_empty(self):
-        assert _parse_generate_office_format(None) == ""
-
-    def test_invalid_json_returns_empty(self):
-        assert _parse_generate_office_format("not json") == ""
-
-    def test_non_dict_returns_empty(self):
-        assert _parse_generate_office_format("[1,2]") == ""
-
-    def test_missing_key_returns_empty(self):
-        assert _parse_generate_office_format('{"other":"val"}') == ""
-
-    def test_blank_format_returns_empty(self):
-        assert _parse_generate_office_format('{"output_format":"  "}') == ""
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ('{"output_format":"docx"}', "docx"),
+            ('{"output_format":"xlsx"}', "xlsx"),
+            ('{"output_format":"DOCX"}', "docx"),
+            ('{"output_format":"pdf"}', ""),
+            ("", ""),
+            (None, ""),
+            ("not json", ""),
+            ("[1,2]", ""),
+            ('{"other":"val"}', ""),
+            ('{"output_format":"  "}', ""),
+        ],
+    )
+    def test_formats(self, raw, expected):
+        assert _parse_generate_office_format(raw) == expected
 
 
 class TestToolKey:
@@ -108,186 +104,110 @@ class TestToolKey:
 
 
 class TestResolveChatModelForClient:
-    def test_explicit_model_takes_precedence(self):
-        assert _resolve_chat_model_for_client(None, "gpt-4") == "gpt-4"
-
-    def test_modstore_client_with_default_model(self):
-        client = MagicMock()
-        client.is_modstore_openai_compatible = True
-        client.default_model = "my-model"
-        client.default_provider = "prov"
-        assert _resolve_chat_model_for_client(client, None) == "prov/my-model"
-
-    def test_modstore_client_model_only(self):
-        client = MagicMock()
-        client.is_modstore_openai_compatible = True
-        client.default_model = "my-model"
-        client.default_provider = ""
-        assert _resolve_chat_model_for_client(client, None) == "my-model"
-
-    def test_modstore_client_no_model_falls_back(self):
-        client = MagicMock()
-        client.is_modstore_openai_compatible = True
-        client.default_model = ""
-        client.default_provider = "prov"
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter.resolve_chat_model",
-            return_value="fallback-model",
-        ):
-            assert _resolve_chat_model_for_client(client, None) == "fallback-model"
-
-    def test_non_modstore_client_falls_back(self):
-        client = MagicMock()
-        client.is_modstore_openai_compatible = False
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter.resolve_chat_model",
-            return_value="fallback-model",
-        ):
-            assert _resolve_chat_model_for_client(client, None) == "fallback-model"
-
-    def test_none_client_falls_back(self):
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter.resolve_chat_model",
-            return_value="fallback-model",
-        ):
-            assert _resolve_chat_model_for_client(None, None) == "fallback-model"
+    @pytest.mark.parametrize(
+        "compatible,default_model,provider,explicit,expected",
+        [
+            (None, "", "", "gpt-4", "gpt-4"),
+            (True, "my-model", "prov", None, "prov/my-model"),
+            (True, "my-model", "", None, "my-model"),
+            (True, "", "prov", None, "fallback-model"),
+            (False, "", "", None, "fallback-model"),
+            (None, "", "", None, "fallback-model"),
+        ],
+    )
+    def test_model_resolution(self, compatible, default_model, provider, explicit, expected):
+        client = (
+            None
+            if compatible is None
+            else MagicMock(
+                is_modstore_openai_compatible=compatible,
+                default_model=default_model,
+                default_provider=provider,
+            )
+        )
+        with patch.object(adapter, "resolve_chat_model", return_value="fallback-model"):
+            assert _resolve_chat_model_for_client(client, explicit) == expected
 
 
 class TestToolStreamCallLabel:
-    def test_generate_office_docx(self):
-        assert (
-            _tool_stream_call_label("generate_office_document", '{"output_format":"docx"}')
-            == "生成 Word 文档（.docx）"
-        )
-
-    def test_generate_office_xlsx(self):
-        assert (
-            _tool_stream_call_label("generate_office_document", '{"output_format":"xlsx"}')
-            == "生成 Excel 工作簿（.xlsx）"
-        )
-
-    def test_generate_office_unknown_format(self):
-        result = _tool_stream_call_label("generate_office_document", '{"output_format":"pdf"}')
-        assert result == "生成可下载文档（Word 或 Excel）"
-
-    def test_known_tool_label(self):
-        assert _tool_stream_call_label("excel_analysis", "{}") == "读取或分析 Excel"
-
-    def test_unknown_tool_returns_name(self):
-        assert _tool_stream_call_label("custom_tool", "{}") == "custom_tool"
+    @pytest.mark.parametrize(
+        "name,args,expected",
+        [
+            ("generate_office_document", '{"output_format":"docx"}', "生成 Word 文档（.docx）"),
+            ("generate_office_document", '{"output_format":"xlsx"}', "生成 Excel 工作簿（.xlsx）"),
+            (
+                "generate_office_document",
+                '{"output_format":"pdf"}',
+                "生成可下载文档（Word 或 Excel）",
+            ),
+            ("excel_analysis", "{}", "读取或分析 Excel"),
+            ("custom_tool", "{}", "custom_tool"),
+        ],
+    )
+    def test_tool_labels(self, name, args, expected):
+        assert _tool_stream_call_label(name, args) == expected
 
 
 class TestSlowToolWaitMessage:
-    def test_import_excel(self):
-        msg = _slow_tool_wait_message("import_excel_to_database", "{}")
-        assert msg is not None
-        assert "导入数据库" in msg
-
-    def test_generate_office_docx(self):
-        msg = _slow_tool_wait_message("generate_office_document", '{"output_format":"docx"}')
-        assert msg is not None
-        assert "Word" in msg
-
-    def test_generate_office_xlsx(self):
-        msg = _slow_tool_wait_message("generate_office_document", '{"output_format":"xlsx"}')
-        assert msg is not None
-        assert "Excel" in msg
-
-    def test_generate_office_no_format(self):
-        msg = _slow_tool_wait_message("generate_office_document", "{}")
-        assert msg is not None
-        assert "可下载文件" in msg
-
-    def test_other_tool_returns_none(self):
-        assert _slow_tool_wait_message("excel_analysis", "{}") is None
+    @pytest.mark.parametrize(
+        "name,args,marker",
+        [
+            ("import_excel_to_database", "{}", "导入数据库"),
+            ("generate_office_document", '{"output_format":"docx"}', "Word"),
+            ("generate_office_document", '{"output_format":"xlsx"}', "Excel"),
+            ("generate_office_document", "{}", "可下载文件"),
+            ("excel_analysis", "{}", None),
+        ],
+    )
+    def test_wait_messages(self, name, args, marker):
+        message = _slow_tool_wait_message(name, args)
+        if marker is None:
+            assert message is None
+        else:
+            assert message is not None and marker in message
 
 
 class TestPostToolRoundHint:
-    def test_docx_ok(self):
-        tcs = [_Tc("1", "generate_office_document", '{"output_format":"docx"}')]
-        payloads = [{"success": True, "download_url": "http://x"}]
-        hint = _post_tool_round_hint(tcs, payloads)
-        assert "Word" in hint
+    doc = "generate_office_document"
+    docx, xlsx = '{"output_format":"docx"}', '{"output_format":"xlsx"}'
+    ok = {"success": True, "download_url": "http://x"}
 
-    def test_xlsx_ok(self):
-        tcs = [_Tc("1", "generate_office_document", '{"output_format":"xlsx"}')]
-        payloads = [{"success": True, "download_url": "http://x"}]
-        hint = _post_tool_round_hint(tcs, payloads)
-        assert "Excel" in hint
-
-    def test_import_ok(self):
-        tcs = [_Tc("1", "import_excel_to_database", "{}")]
-        payloads = [{"success": True}]
-        hint = _post_tool_round_hint(tcs, payloads)
-        assert "导入" in hint
-
-    def test_docx_and_xlsx_ok(self):
-        tcs = [
-            _Tc("1", "generate_office_document", '{"output_format":"docx"}'),
-            _Tc("2", "generate_office_document", '{"output_format":"xlsx"}'),
-        ]
-        payloads = [
-            {"success": True, "download_url": "http://x"},
-            {"success": True, "download_url": "http://y"},
-        ]
-        hint = _post_tool_round_hint(tcs, payloads)
-        assert "Word" in hint and "Excel" in hint
-
-    def test_failure_message(self):
-        tcs = [_Tc("1", "generate_office_document", '{"output_format":"docx"}')]
-        payloads = [{"success": False, "message": "some error"}]
-        hint = _post_tool_round_hint(tcs, payloads)
-        assert "未成功" in hint
-
-    def test_duplicate_tool_call_error(self):
-        tcs = [_Tc("1", "generate_office_document", '{"output_format":"docx"}')]
-        payloads = [{"error": "duplicate_tool_call", "hint": "dup"}]
-        hint = _post_tool_round_hint(tcs, payloads)
-        assert "未成功" in hint
-
-    def test_no_download_url(self):
-        tcs = [_Tc("1", "generate_office_document", '{"output_format":"docx"}')]
-        payloads = [{"success": True}]
-        hint = _post_tool_round_hint(tcs, payloads)
-        assert "未成功" in hint
-
-    def test_requires_token_skipped(self):
-        tcs = [_Tc("1", "import_excel_to_database", "{}")]
-        payloads = [{"requires_token": True}]
-        hint = _post_tool_round_hint(tcs, payloads)
-        assert "工具已返回结果" in hint
-
-    def test_empty_tool_calls(self):
-        hint = _post_tool_round_hint([])
-        assert "工具已返回结果" in hint
-
-    def test_generic_fallback(self):
-        tcs = [_Tc("1", "unknown_tool", "{}")]
-        payloads = [{}]
-        hint = _post_tool_round_hint(tcs, payloads)
-        assert "工具已返回结果" in hint
+    @pytest.mark.parametrize(
+        "tools,payloads,markers",
+        [
+            ([(doc, docx)], [ok], ("Word",)),
+            ([(doc, xlsx)], [ok], ("Excel",)),
+            ([("import_excel_to_database", "{}")], [{"success": True}], ("导入",)),
+            (
+                [(doc, docx), (doc, xlsx)],
+                [ok, {"success": True, "download_url": "http://y"}],
+                ("Word", "Excel"),
+            ),
+            ([(doc, docx)], [{"success": False, "message": "some error"}], ("未成功",)),
+            ([(doc, docx)], [{"error": "duplicate_tool_call", "hint": "dup"}], ("未成功",)),
+            ([(doc, docx)], [{"success": True}], ("未成功",)),
+            ([("import_excel_to_database", "{}")], [{"requires_token": True}], ("工具已返回结果",)),
+            ([], [], ("工具已返回结果",)),
+            ([("unknown_tool", "{}")], [{}], ("工具已返回结果",)),
+        ],
+    )
+    def test_round_hints(self, tools, payloads, markers):
+        tcs = [_Tc(str(index + 1), name, args) for index, (name, args) in enumerate(tools)]
+        payloads = json.loads(json.dumps(payloads))
+        hint = _post_tool_round_hint(tcs, payloads) if tcs else _post_tool_round_hint([])
+        assert all(marker in hint for marker in markers)
 
 
 class TestPlannerToolsMaxWorkers:
-    def test_default_is_8(self, monkeypatch):
-        monkeypatch.delenv("FHD_PLANNER_TOOLS_MAX_PARALLEL", raising=False)
-        assert _planner_tools_max_workers() == 8
-
-    def test_custom_value(self, monkeypatch):
-        monkeypatch.setenv("FHD_PLANNER_TOOLS_MAX_PARALLEL", "4")
-        assert _planner_tools_max_workers() == 4
-
-    def test_invalid_value_falls_back(self, monkeypatch):
-        monkeypatch.setenv("FHD_PLANNER_TOOLS_MAX_PARALLEL", "abc")
-        assert _planner_tools_max_workers() == 8
-
-    def test_clamped_to_1_minimum(self, monkeypatch):
-        monkeypatch.setenv("FHD_PLANNER_TOOLS_MAX_PARALLEL", "0")
-        assert _planner_tools_max_workers() == 1
-
-    def test_clamped_to_32_maximum(self, monkeypatch):
-        monkeypatch.setenv("FHD_PLANNER_TOOLS_MAX_PARALLEL", "100")
-        assert _planner_tools_max_workers() == 32
+    @pytest.mark.parametrize(
+        "value,expected", [(None, 8), ("4", 4), ("abc", 8), ("0", 1), ("100", 32)]
+    )
+    def test_worker_limits(self, monkeypatch, value, expected):
+        if value is None:
+            monkeypatch.delenv("FHD_PLANNER_TOOLS_MAX_PARALLEL", raising=False)
+        else:
+            monkeypatch.setenv("FHD_PLANNER_TOOLS_MAX_PARALLEL", value)
+        assert _planner_tools_max_workers() == expected
 
 
 class TestResetPlannerToolDedupState:
@@ -428,10 +348,8 @@ class TestChat:
         reset_planner_tool_dedup_state()
 
     def test_chat_returns_dict_on_text_response(self):
-        mock_client = MagicMock()
         mock_resp = _chat_response("Hello!", None)
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(mock_resp)
 
         with _planner_registry([]):
             result = chat("hi", client=mock_client, model="test-model")
@@ -439,14 +357,12 @@ class TestChat:
         assert result["text"] == "Hello!"
 
     def test_chat_with_tool_calls(self):
-        mock_client = MagicMock()
         tc = _Tc("tc1", "excel_analysis", '{"query":"test"}')
         mock_resp1 = _chat_response("", [tc])
 
         mock_resp2 = _chat_response("Done!", None)
 
-        mock_client.chat.completions.create.side_effect = [mock_resp1, mock_resp2]
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client([mock_resp1, mock_resp2], side_effect=True)
 
         execute_tool = MagicMock(return_value='{"success": true}')
 
@@ -461,11 +377,9 @@ class TestChat:
     @pytest.mark.parametrize("pending", [False, True])
     @pytest.mark.parametrize("iterations", [1, 2])
     def test_chat_max_iterations_reached(self, pending, iterations):
-        mock_client = MagicMock()
         tc = _Tc("tc1", "excel_analysis", '{"query":"test"}')
         mock_resp = _chat_response("", [tc])
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(mock_resp)
 
         execute_tool = MagicMock(
             return_value=json.dumps({"success": not pending, "pending_approval": pending})
@@ -481,11 +395,9 @@ class TestChat:
         assert mock_client.chat.completions.create.call_count == (1 if pending else iterations)
 
     def test_chat_requires_token_returns_json_string(self):
-        mock_client = MagicMock()
         tc = _Tc("tc1", "import_excel_to_database", "{}")
         mock_resp = _chat_response("", [tc])
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(mock_resp)
 
         execute_tool = MagicMock(
             return_value='{"requires_token": true, "token_name": "DB_WRITE_TOKEN"}'
@@ -503,7 +415,6 @@ class TestChatStreamText:
         reset_planner_tool_dedup_state()
 
     def test_yields_text_content(self):
-        mock_client = MagicMock()
         chunk1 = MagicMock()
         chunk1.choices = [MagicMock()]
         chunk1.choices[0].delta = MagicMock(content="Hello")
@@ -514,8 +425,7 @@ class TestChatStreamText:
         chunk2.choices[0].delta = MagicMock(content=" World")
         chunk2.choices[0].finish_reason = "stop"
 
-        mock_client.chat.completions.create.return_value = iter([chunk1, chunk2])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk1, chunk2]))
 
         with _planner_registry([]):
             parts = list(chat_stream_text("hi", client=mock_client, model="test-model"))
@@ -523,11 +433,9 @@ class TestChatStreamText:
         assert " World" in parts
 
     def test_yields_tool_call_label(self):
-        mock_client = MagicMock()
         chunk = _tool_chunk("excel_analysis", '{"query":"test"}')
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
         execute_tool = MagicMock(return_value='{"success": true}')
 
@@ -541,11 +449,9 @@ class TestChatStreamText:
         assert any("调用工具" in p for p in text_parts)
 
     def test_yields_requires_token_dict(self):
-        mock_client = MagicMock()
         chunk = _tool_chunk("import_excel_to_database", "{}")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
         execute_tool = MagicMock(
             return_value='{"requires_token": true, "token_name": "DB_WRITE_TOKEN"}'
@@ -587,14 +493,12 @@ class TestChatStreamSseEvents:
         assert not any(event["type"] == "done" for event in events)
 
     def test_yields_token_and_done_events(self):
-        mock_client = MagicMock()
         chunk = MagicMock()
         chunk.choices = [MagicMock()]
         chunk.choices[0].delta = MagicMock(content="Hi")
         chunk.choices[0].finish_reason = "stop"
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
         with _planner_registry([]):
             events = list(chat_stream_sse_events("hi", client=mock_client, model="test-model"))
@@ -603,11 +507,9 @@ class TestChatStreamSseEvents:
         assert "done" in types
 
     def test_requires_token_event(self):
-        mock_client = MagicMock()
         chunk = _tool_chunk("import_excel_to_database", "{}")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
         execute_tool = MagicMock(
             return_value='{"requires_token": true, "token_name": "DB_WRITE_TOKEN"}'
@@ -701,3 +603,87 @@ def test_market_complete_tool_calls_without_indices_preserve_arguments(monkeypat
     assert observed == expected
     assert "await approval" in parts
     assert [r["params"] for r in get_last_tool_records()] == list(expected.values())
+
+
+_BACKUP_MESSAGE = (
+    "请手动备份当前隔离验收数据库，使用正常数据库备份功能，包含刚刚的客户、商品以及销售订单SO20261009083703。"
+    "只生成数据库备份，不恢复、不修改业务数据。需要审批时先提交手动审批。"
+)
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(
+    "case", ["missing", "read", "read_pending", "wrong_action", "failed", "pending", "success"]
+)
+def test_backup_requires_matching_executor_receipt(stream, case):
+    name = "business_db_read" if case.startswith("read") else "execute_erp_capability"
+    if case == "missing":
+        name = None
+    action = "restore_database" if case == "wrong_action" else "backup_database"
+    output = {
+        "success": case in ("read", "success"),
+        "pending_approval": case in ("read_pending", "wrong_action", "pending"),
+    }
+    ready = case in ("pending", "success")
+    fake = "备份操作已成功提交，审批单号79b74e314847452fbb07b49c8c7b291f"
+    output = {**output, "message": "executor-fixture实际回执"}
+    args = {"tool_id": "system_maintenance", "action": action, "params": {}}
+    tc = _Tc("backup-call", name, json.dumps(args)) if name else None
+    if tc:
+        tc.index = 0
+    delta = SimpleNamespace(content=fake, tool_calls=[tc] if tc else [])
+    client = MagicMock(is_modstore_openai_compatible=False)
+    response = _chat_response(fake, [tc] if tc else [])
+    client.chat.completions.create.return_value = (
+        iter([SimpleNamespace(choices=[SimpleNamespace(delta=delta, finish_reason="stop")])])
+        if stream
+        else response
+    )
+    execute = MagicMock(return_value=json.dumps(output))
+    context = {"actor_id": 2, "tenant_id": 1, "task_id": "isolated-backup-fixture"}
+    kwargs = {"client": client, "model": "test", "runtime_context": context}
+    tools = [{"type": "function", "function": {"name": "execute_erp_capability"}}]
+    with (
+        _planner_registry(tools),
+        patch.object(adapter, "_resolve_chat_execute_tool", return_value=execute),
+    ):
+        if stream:
+            result = list(chat_stream_sse_events(_BACKUP_MESSAGE, **kwargs))
+            assert result[-1]["type"] == ("done" if ready else "error")
+        elif ready:
+            result = chat(_BACKUP_MESSAGE, **kwargs)
+        else:
+            with pytest.raises(RuntimeError, match="未执行"):
+                chat(_BACKUP_MESSAGE, **kwargs)
+            result = []
+    assert fake not in str(result)
+    assert client.chat.completions.create.call_count == 1
+    assert client.chat.completions.create.call_args.kwargs["tool_choice"] == {
+        "type": "function",
+        "function": {"name": "execute_erp_capability"},
+    }
+    assert execute.call_count == bool(name)
+    if name:
+        assert json.loads(execute.call_args.args[1]) == args
+        assert execute.call_args.kwargs["runtime_context"] == context
+    if ready:
+        assert "executor-fixture实际回执" in str(result)
+        assert get_last_tool_records()[0]["output"] == output
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "请不要备份数据库",
+        "请解释如何备份数据库",
+        "请查看数据库备份列表",
+        "请恢复数据库备份",
+        "请把数据库备份删除",
+    ],
+)
+def test_backup_read_explanation_negative_restore_and_delete_stay_normal(message):
+    client = MagicMock(is_modstore_openai_compatible=False)
+    client.chat.completions.create.return_value = _chat_response("说明")
+    with _planner_registry([{"type": "function", "function": {"name": "execute_erp_capability"}}]):
+        assert chat(message, client=client, model="test")["text"] == "说明"
+    assert client.chat.completions.create.call_args.kwargs["tool_choice"] == "auto"

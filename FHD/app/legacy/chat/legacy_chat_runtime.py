@@ -26,16 +26,22 @@ def _approval_wait_text() -> str:
     return ""
 
 
-def _backup_result_ready() -> bool:
-    return any(
-        row.get("tool_name") == "execute_erp_capability"
-        and (row.get("params") or {}).get("tool_id") == "system_maintenance"
-        and (row.get("params") or {}).get("action") == "backup_database"
-        and any(
-            (row.get("output") or {}).get(key) is True for key in ("success", "pending_approval")
-        )
-        for row in _facade().get_last_tool_records()
-    )
+_BACKUP_KEY = ("execute_erp_capability", "system_maintenance", "backup_database")
+_BACKUP_NOT_EXECUTED = "数据库备份未执行，未创建备份或提交审批；请重试。"
+
+
+def _backup_reply() -> dict[str, Any] | None:
+    for row in _facade().get_last_tool_records():
+        params, output = row.get("params") or {}, row.get("output") or {}
+        tool_id = params.get("tool_id") or params.get("capability_id")
+        if (row.get("tool_name"), tool_id, params.get("action")) != _BACKUP_KEY:
+            continue
+        if output.get("success") is True or output.get("pending_approval") is True:
+            text = str(output.get("message") or json.dumps(output, ensure_ascii=False))
+            reply: dict[str, Any] = {"response": text, "text": text}
+            reply["pending_approval"] = output.get("pending_approval") is True
+            return _facade()._attach_last_tool_records(reply)
+    return None
 
 
 def _format_tool_calls(tool_calls: list[Any]) -> list[dict[str, Any]]:
@@ -141,14 +147,18 @@ def chat(
                     ),
                     ensure_ascii=False,
                 )
+            if backup_required:
+                if reply := _backup_reply():
+                    return reply
+                raise RuntimeError(_BACKUP_NOT_EXECUTED)
             if waiting := _approval_wait_text():
                 return _facade()._attach_last_tool_records(
                     {"response": waiting, "text": waiting, "pending_approval": True}
                 )
             tool_choice = "auto"
             continue
-        if backup_required and not _backup_result_ready():
-            raise RuntimeError("数据库备份未执行，未创建备份或提交审批；请重试。")
+        if backup_required:
+            raise RuntimeError(_BACKUP_NOT_EXECUTED)
         result = str(msg.content or "").strip()
         if has_image_input and (not result):
             raise _facade().EmptyMultimodalResponseError(
@@ -209,7 +219,7 @@ def chat_stream_text(
             content = getattr(delta, "content", None)
             if content:
                 text_parts.append(str(content))
-                if not backup_required or _backup_result_ready():
+                if not backup_required:
                     yield str(content)
             tc_list = getattr(delta, "tool_calls", None) or []
             for position, tc in enumerate(tc_list):
@@ -266,6 +276,14 @@ def chat_stream_text(
                     "message": token_request.get("message"),
                 }
                 return
+            if backup_required:
+                reply = _backup_reply()
+                yield (
+                    reply["text"]
+                    if reply
+                    else {"_planner_sse": "error", "message": _BACKUP_NOT_EXECUTED}
+                )
+                return
             if waiting := _approval_wait_text():
                 yield waiting
                 return
@@ -284,11 +302,8 @@ def chat_stream_text(
             yield _facade()._post_tool_round_hint(tcs, tool_payloads)
             tool_choice = "auto"
             continue
-        if backup_required and not _backup_result_ready():
-            yield {
-                "_planner_sse": "error",
-                "message": "数据库备份未执行，未创建备份或提交审批；请重试。",
-            }
+        if backup_required:
+            yield {"_planner_sse": "error", "message": _BACKUP_NOT_EXECUTED}
             return
         if text_parts:
             return
