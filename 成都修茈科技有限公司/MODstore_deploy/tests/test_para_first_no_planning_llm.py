@@ -137,3 +137,24 @@ def test_skip_can_be_disabled_and_ignores_non_para_roles(monkeypatch):
     assert _para_first_skip_cognition("test-qa-runner", ["llm_md"], {"burn_in": True}) is False
     monkeypatch.setenv("MODSTORE_PARA_FIRST_SKIP_COGNITION", "0")
     assert _para_first_skip_cognition("vibe-coding-maintainer", ["agent"], {}) is False
+
+
+def test_para_first_scout_outputs_only_para_row(para_ready, monkeypatch):
+    """工单 37/38 scout 配置 llm_md,echo,agent：Para 优先后只留 Para 一行，不再出现 llm_md 回退行。"""
+    monkeypatch.setattr(
+        ee,
+        "load_employee_pack_resolved",
+        lambda _s, _e: {**_pack(["llm_md", "echo", "agent"]), "pack_id": "change-request-auditor"},
+    )
+    out = ee.execute_employee_task(
+        "change-request-auditor",
+        "你是事故处理小组的 scout。",
+        {
+            "role": "scout",
+            "_trusted_incident_team_execution": True,
+            "suppress_lifecycle_events": True,
+        },
+        0,
+    )
+    assert out["llm_tokens"] == 0
+    assert [o.get("handler") for o in out["result"]["outputs"]] == ["para_delegate"]
