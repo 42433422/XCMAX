@@ -1,12 +1,9 @@
-"""
-数据库管理服务模块
-
-提供数据库备份、恢复等业务逻辑。
-"""
+"""SQLite 热备份和保留执行审计的原子恢复。"""
 
 import logging
 import os
 import sqlite3
+import tempfile
 import time
 from contextlib import closing
 from datetime import datetime
@@ -18,16 +15,33 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+# Restore business data without rolling back execution evidence or approval grants.
+_LIVE_AUDIT_TABLES = frozenset(
+    {
+        "agent_runs",
+        "agent_tasks",
+        "agent_task_commands",
+        "agent_task_executions",
+        "agent_approval_consumptions",
+        "approval_requests",
+        "approval_records",
+        "approval_flows",
+        "approval_flow_nodes",
+        "approval_delegations",
+        "workflow_plans",
+        "workflow_checkpoints",
+        "workflow_runs",
+        "workflow_run_steps",
+        "ai_action_audit",
+        "ai_conversations",
+        "ai_conversation_sessions",
+        "shipment_audit_events",
+    }
+)
+
 
 class DatabaseService(NeuroEventPublisherMixin):
-    """数据库服务类"""
-
-    def __init__(self):
-        """初始化数据库服务"""
-        pass
-
     def _get_db_path(self) -> str | None:
-        """获取数据库文件路径"""
         from app.db import get_runtime_engine
 
         url = get_runtime_engine().url
@@ -39,7 +53,6 @@ class DatabaseService(NeuroEventPublisherMixin):
         return None
 
     def _get_backup_dir(self) -> str:
-        """获取备份目录"""
         from app.utils.path_io.path_utils import get_data_dir
 
         backup_dir = os.path.join(get_data_dir(), "database_backups")
@@ -47,51 +60,25 @@ class DatabaseService(NeuroEventPublisherMixin):
         return backup_dir
 
     def backup_database(self) -> dict[str, Any]:
-        """
-        备份数据库
-
-        使用 sqlite3.backup() API 做在线热备份，避免 shutil.copy2 在 WAL 模式下
-        丢失未 checkpoint 的写入内容。备份后跑 integrity_check 校验一致性，
-        校验失败删除半成品并返回失败。
-
-        Returns:
-            结果字典：
-                - success: 是否成功
-                - message: 响应消息
-                - file_path: 备份文件路径
-                - filename: 备份文件名
-        """
+        """在线备份并校验完整性；失败不保留半成品。"""
+        failure = {"success": False, "file_path": None, "filename": None}
         try:
             db_path = self._get_db_path()
 
             if not db_path:
-                return {
-                    "success": False,
-                    "message": "仅支持 SQLite 数据库备份",
-                    "file_path": None,
-                    "filename": None,
-                }
+                return {**failure, "message": "仅支持 SQLite 数据库备份"}
 
             if not os.path.exists(db_path):
-                return {
-                    "success": False,
-                    "message": f"数据库文件不存在：{db_path}",
-                    "file_path": None,
-                    "filename": None,
-                }
+                return {**failure, "message": f"数据库文件不存在：{db_path}"}
 
             backup_dir = self._get_backup_dir()
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            db_filename = os.path.basename(db_path)
-            backup_filename = f"{db_filename}.{timestamp}.bak"
+            backup_filename = f"{os.path.basename(db_path)}.{datetime.now():%Y%m%d_%H%M%S}.bak"
             backup_path = os.path.join(backup_dir, backup_filename)
 
             if not self._hot_backup(db_path, backup_path):
                 return {
-                    "success": False,
+                    **failure,
                     "message": f"在线热备份失败（数据库可能损坏或被锁定）：{db_path}",
-                    "file_path": None,
-                    "filename": None,
                 }
 
             logger.info("数据库备份成功：%s", backup_path)
@@ -105,66 +92,29 @@ class DatabaseService(NeuroEventPublisherMixin):
 
         except RECOVERABLE_ERRORS:
             logger.exception("数据库备份失败")
-            return {
-                "success": False,
-                "message": "数据库备份失败",
-                "file_path": None,
-                "filename": None,
-            }
+            return {**failure, "message": "数据库备份失败"}
 
     @staticmethod
     def _hot_backup(src_path: str, dst_path: str) -> bool:
-        """用 sqlite3.backup() API 做在线热备份，备份后校验完整性。
-
-        shutil.copy2 是文件级拷贝，SQLite 在 WAL 模式下写入先进 WAL 文件再
-        checkpoint，文件级拷贝会漏掉 WAL 内容得到不一致的库。sqlite3.backup()
-        是 SQLite 官方推荐的在线热备份 API，会合并 WAL 保证备份一致。
-        """
-        src_conn = None
-        dst_conn = None
+        """SQLite 热备份合并 WAL，并在关闭连接前校验完整性。"""
         try:
-            src_conn = sqlite3.connect(src_path)
-            dst_conn = sqlite3.connect(dst_path)
-            src_conn.backup(dst_conn)
+            with (
+                closing(sqlite3.connect(src_path)) as source,
+                closing(sqlite3.connect(dst_path)) as target,
+            ):
+                source.backup(target)
+                if target.execute("PRAGMA integrity_check").fetchone() == ("ok",):
+                    return True
         except sqlite3.Error as e:
             logger.error("hot backup failed: %s", e)
-            try:
-                os.remove(dst_path)
-            except OSError:
-                pass
-            return False
-        finally:
-            if dst_conn is not None:
-                dst_conn.close()
-            if src_conn is not None:
-                src_conn.close()
-
         try:
-            check_conn = sqlite3.connect(dst_path)
-            result = check_conn.execute("PRAGMA integrity_check").fetchone()
-            check_conn.close()
-            ok = bool(result) and result[0] == "ok"
-        except sqlite3.Error as e:
-            logger.error("integrity_check failed for backup %s: %s", dst_path, e)
-            ok = False
-        if not ok:
-            try:
-                os.remove(dst_path)
-            except OSError:
-                pass
-            return False
-        return True
+            os.remove(dst_path)
+        except OSError:
+            pass
+        return False
 
     def restore_database(self, backup_file: str) -> dict[str, Any]:
-        """
-        恢复数据库
-
-        Args:
-            backup_file: 备份文件路径或文件名
-
-        Returns:
-            结果字典
-        """
+        """原子恢复业务快照，保留当前任务和审批审计。"""
         try:
             db_path = self._get_db_path()
 
@@ -186,23 +136,49 @@ class DatabaseService(NeuroEventPublisherMixin):
 
             if os.path.exists(db_path) and os.path.samefile(backup_path, db_path):
                 return {"success": False, "message": "备份与当前数据库不能是同一文件"}
-            deadline = time.monotonic() + 2.0
-
-            def check_progress(status: int, remaining: int, total: int) -> None:
-                if status != sqlite3.SQLITE_DONE and time.monotonic() >= deadline:
-                    raise sqlite3.OperationalError("恢复被数据库占用阻断，未完成；请稍后重试")
-
             with closing(
                 sqlite3.connect(Path(backup_path).resolve().as_uri() + "?mode=ro", uri=True)
             ) as source:
                 if source.execute("PRAGMA integrity_check").fetchone() != ("ok",):
                     return {"success": False, "message": "备份完整性检查失败，未恢复"}
-                with closing(sqlite3.connect(db_path, timeout=0)) as target:
-                    # SQLite manages destination WAL and its atomic write transaction.
-                    # Replacing the live file bypasses both and corrupts open connections.
-                    source.backup(target, progress=check_progress, sleep=0.01)
-                    if target.execute("PRAGMA integrity_check").fetchone() != ("ok",):
-                        return {"success": False, "message": "恢复完整性检查失败"}
+                with tempfile.TemporaryDirectory(
+                    prefix="xcagi-restore-", dir=db_dir or "."
+                ) as work:
+                    with (
+                        closing(sqlite3.connect(db_path, timeout=0)) as watcher,
+                        closing(sqlite3.connect(os.path.join(work, "staged.db"))) as staged,
+                    ):
+                        version = self._stage_restore(source, watcher, staged)
+                        deadline = time.monotonic() + 2.0
+                        locked = False
+
+                        def check_progress(status: int, remaining: int, total: int) -> None:
+                            nonlocal locked
+                            if (
+                                status in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
+                                and time.monotonic() >= deadline
+                            ):
+                                raise sqlite3.OperationalError(
+                                    "恢复被数据库占用阻断，未完成；请稍后重试"
+                                )
+                            if not locked and status == sqlite3.SQLITE_OK:
+                                # The first page holds the destination write lock. Refuse a
+                                # snapshot if another writer changed evidence before that lock.
+                                if watcher.execute("PRAGMA data_version").fetchone()[0] != version:
+                                    raise sqlite3.OperationalError(
+                                        "恢复准备期间数据库已变化，未恢复；请重试"
+                                    )
+                                locked = True
+
+                        if staged.execute("PRAGMA page_count").fetchone()[0] < 2:
+                            raise sqlite3.OperationalError("备份缺少业务表，未恢复")
+                        with closing(sqlite3.connect(db_path, timeout=0)) as target:
+                            staged.backup(target, pages=1, progress=check_progress, sleep=0.01)
+                            if target.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                                return {
+                                    "success": False,
+                                    "message": "恢复完整性检查失败",
+                                }
 
             logger.info("数据库恢复成功：从 %s 恢复到 %s", backup_path, db_path)
 
@@ -212,16 +188,47 @@ class DatabaseService(NeuroEventPublisherMixin):
             logger.exception("数据库恢复失败")
             return {"success": False, "message": "数据库恢复失败"}
 
-    def list_backups(self) -> dict[str, Any]:
-        """
-        列出所有备份文件
+    @staticmethod
+    def _stage_restore(
+        source: sqlite3.Connection, current: sqlite3.Connection, staged: sqlite3.Connection
+    ) -> int:
+        source.backup(staged)
+        version = int(current.execute("PRAGMA data_version").fetchone()[0])
+        current.execute("BEGIN")
+        try:
+            tables = current.execute(
+                "SELECT name, sql FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+            for name, schema in tables:
+                if name not in _LIVE_AUDIT_TABLES:
+                    continue
+                table = f'"{name}"'
+                staged.execute(f"DROP TABLE IF EXISTS {table}")
+                staged.execute(schema)
+                rows = current.execute(f"SELECT * FROM {table}")
+                placeholders = ",".join("?" for _ in rows.description)
+                staged.executemany(f"INSERT INTO {table} VALUES ({placeholders})", rows)
+                for (definition,) in current.execute(
+                    "SELECT sql FROM sqlite_master WHERE type IN ('index','trigger') AND tbl_name=? AND sql IS NOT NULL",
+                    (name,),
+                ):
+                    staged.execute(definition)
+            if any(name == "sqlite_sequence" for name, _ in tables):
+                for name, sequence in current.execute("SELECT name, seq FROM sqlite_sequence"):
+                    if name in _LIVE_AUDIT_TABLES:
+                        staged.execute("DELETE FROM sqlite_sequence WHERE name=?", (name,))
+                        staged.execute(
+                            "INSERT INTO sqlite_sequence VALUES (?, ?)", (name, sequence)
+                        )
+            staged.commit()
+        finally:
+            current.rollback()
+        if current.execute("PRAGMA data_version").fetchone()[0] != version:
+            raise sqlite3.OperationalError("恢复准备期间数据库已变化，未恢复；请重试")
+        return version
 
-        Returns:
-            结果字典：
-                - success: 是否成功
-                - backups: 备份文件列表
-                - count: 备份数量
-        """
+    def list_backups(self) -> dict[str, Any]:
+        """按创建时间倒序列出备份文件。"""
         try:
             backup_dir = self._get_backup_dir()
 
@@ -258,15 +265,7 @@ class DatabaseService(NeuroEventPublisherMixin):
             }
 
     def delete_backup(self, backup_file: str) -> dict[str, Any]:
-        """
-        删除备份文件
-
-        Args:
-            backup_file: 备份文件路径或文件名
-
-        Returns:
-            结果字典
-        """
+        """删除指定备份文件。"""
         try:
             if not os.path.isabs(backup_file):
                 backup_dir = self._get_backup_dir()
@@ -289,7 +288,6 @@ class DatabaseService(NeuroEventPublisherMixin):
 
 
 def get_database_service() -> DatabaseService:
-    """获取数据库服务实例"""
     return DatabaseService()
 
 
