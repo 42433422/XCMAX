@@ -217,6 +217,17 @@ function bootstrap(): void {
         })
       }
 
+      if (pendingRollback?.recoveryRequired) {
+        const rollback = await triggerRollbackSafe('Windows 后端迁移失败后的持久恢复')
+        showStartupFailureNotice(
+          rollback?.scheduled
+            ? 'Windows 数据迁移失败，正在通过已验证恢复记录还原旧程序、Mod 与数据库；请等待 XCAGI 自动重启。'
+            : 'Windows 数据迁移失败，恢复尚未启动。恢复记录和快照已保留；请不要继续更新，并重启 XCAGI 重试或联系支持。',
+        )
+        app.quit()
+        return
+      }
+
       try {
         // 先出 Splash，再并行拉起后端，避免用户长时间无窗口反馈
         await createWindow()

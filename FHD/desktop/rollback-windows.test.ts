@@ -111,7 +111,12 @@ describe('Windows full application rollback helper', () => {
       },
     }
     const script = buildWindowsRollbackScript(options)
-    const encoded = Buffer.from(script, 'utf16le').toString('base64')
+    const scriptPath = path.join(dataDir, 'rollback-helper-test.ps1')
+    fs.writeFileSync(scriptPath, script, 'utf8')
+    const scriptSha256 = createHash('sha256').update(script).digest('hex')
+    const loader = buildWindowsRollbackFileLoader(scriptPath, scriptSha256)
+    const encoded = Buffer.from(loader, 'utf16le').toString('base64')
+    expect(encoded.length).toBeLessThan(32767)
     let executionError = ''
     try {
       await execFileAsync(
@@ -120,8 +125,6 @@ describe('Windows full application rollback helper', () => {
           '-NoLogo',
           '-NoProfile',
           '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
           '-EncodedCommand',
           encoded,
         ],

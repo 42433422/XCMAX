@@ -26,6 +26,11 @@ export interface WindowsRollbackLaunchOptions {
   waitTimeoutSeconds?: number
   expectedAppFiles?: Record<string, string>
   expectedDatabaseSha256?: string
+  /** Optional inventory for customer-owned Mods and supported SQLite files. */
+  ownedUserDataRoot?: string
+  ownedBackupRoot?: string
+  expectedOwnedFiles?: Record<string, string>
+  expectedOwnedDirectories?: string[]
   /** Internal launch handshake. Omitted by the C# installer template generator. */
   helperStatusPath?: string
   helperStatusToken?: string
@@ -92,6 +97,10 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
       : ''
   const restartApp = options.restartApp !== false
   const expectedAppFiles = Buffer.from(JSON.stringify(options.expectedAppFiles || {})).toString('base64')
+  const ownedUserDataRoot = options.ownedUserDataRoot ? resolveTargetPath(options.ownedUserDataRoot) : ''
+  const ownedBackupRoot = options.ownedBackupRoot ? resolveTargetPath(options.ownedBackupRoot) : ''
+  const expectedOwnedFiles = Buffer.from(JSON.stringify(options.expectedOwnedFiles || {})).toString('base64')
+  const expectedOwnedDirectories = Buffer.from(JSON.stringify(options.expectedOwnedDirectories || [])).toString('base64')
 
   return [
     "$ErrorActionPreference = 'Stop'",
@@ -112,12 +121,22 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     `$databaseBackupPath = ${powershellLiteral(databaseBackupPath)}`,
     `$expectedAppFiles = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${expectedAppFiles}')) | ConvertFrom-Json`,
     `$expectedDatabaseSha256 = ${powershellLiteral(options.expectedDatabaseSha256 || '')}`,
+    `$ownedUserDataRoot = ${powershellLiteral(ownedUserDataRoot)}`,
+    `$ownedBackupRoot = ${powershellLiteral(ownedBackupRoot)}`,
+    `$expectedOwnedFiles = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${expectedOwnedFiles}')) | ConvertFrom-Json`,
+    `$expectedOwnedDirectories = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${expectedOwnedDirectories}')) | ConvertFrom-Json`,
+    `$ownedStaging = if ($ownedBackupRoot) { Join-Path (Split-Path -Parent $ownedBackupRoot) 'os' } else { "" }`,
+    `$ownedFailed = if ($ownedBackupRoot) { Join-Path (Split-Path -Parent $ownedBackupRoot) 'of' } else { "" }`,
     `$stagingDir = "$installDir.xcagi-rollback-staging"`,
     `$failedDir = "$installDir.xcagi-failed"`,
     `$databaseStaging = if ($databasePath) { "$databasePath.xcagi-rollback-staging" } else { "" }`,
     `$databaseFailed = if ($databasePath) { "$databasePath.xcagi-failed" } else { "" }`,
     '$appliedWritten = $appQuarantined = $databaseQuarantined = $false',
-    '$stagingCreated = $databaseStagingCreated = $false',
+    '$stagingCreated = $databaseStagingCreated = $ownedStagingCreated = $false',
+    '$ownedQuarantined = $false',
+    '$ownedQuarantinedFiles = @()',
+    '$ownedPromotedFiles = @()',
+    '$ownedOriginalDirectories = @()',
     '$helperReady = $false',
     'function File-Sha256([string]$file) {',
     '  $stream = [IO.File]::OpenRead($file); $hash = [Security.Cryptography.SHA256]::Create()',
@@ -142,6 +161,46 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '    if (Test-Path -LiteralPath "$from$suffix") { Move-Item -LiteralPath "$from$suffix" -Destination "$to$suffix" -Force }',
     '  }',
     '}',
+    'function Get-OwnedFiles([string]$root) {',
+    '  $result = @(); if (-not $root -or -not (Test-Path -LiteralPath $root)) { return $result }',
+    '  $root = [IO.Path]::GetFullPath($root).TrimEnd("\\")',
+    '  $modRoot = Join-Path $root "mods"; if (Test-Path -LiteralPath $modRoot) { $result += @(Get-ChildItem -LiteralPath $modRoot -Recurse -File -Force | Where-Object { Test-OwnedPath $_.FullName.Substring($root.Length).TrimStart("\\") }) }',
+    '  $rootDb = Get-ChildItem -LiteralPath $root -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "(?i)^(products|inventory|voice_learning|error_collection)(__[a-z0-9_-]+)?\\.db(?:-(?:wal|shm|journal))?$" }; $result += @($rootDb)',
+    '  $dataRoot = Join-Path $root "data"; if (Test-Path -LiteralPath $dataRoot) {',
+    '    $result += @(Get-ChildItem -LiteralPath $dataRoot -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "(?i)^.+\\.db(?:-(?:wal|shm|journal))?$" -and $_.Name -notmatch "(?i)^xcagi\\.db(?:-(?:wal|shm|journal))?$" })',
+    '    $modDbRoot = Join-Path $dataRoot "mod_dbs"; if (Test-Path -LiteralPath $modDbRoot) { $result += @(Get-ChildItem -LiteralPath $modDbRoot -Recurse -File -Force | Where-Object { $_.Name -match "(?i)^.+\\.db(?:-(?:wal|shm|journal))?$" }) }',
+    '  }',
+    '  return @($result | Sort-Object -Property FullName -Unique)',
+    '}',
+    'function Get-OwnedDirectories([string]$root) {',
+    '  $result = @(); if (-not $root -or -not (Test-Path -LiteralPath $root)) { return $result }; $root = [IO.Path]::GetFullPath($root).TrimEnd("\\")',
+    '  foreach ($top in @("mods", "data")) { $base = Join-Path $root $top; if (-not (Test-Path -LiteralPath $base)) { continue }; $result += $top; if ($top -eq "mods") { $scan = $base } else { $scan = Join-Path $base "mod_dbs"; if (Test-Path -LiteralPath $scan) { $result += "data\\mod_dbs" } }; if (Test-Path -LiteralPath $scan) { $result += @(Get-ChildItem -LiteralPath $scan -Recurse -Directory -Force | Where-Object { Test-OwnedPath $_.FullName.Substring($root.Length).TrimStart("\\") } | ForEach-Object { $_.FullName.Substring($root.Length).TrimStart("\\") }) } }',
+    '  return @($result | Sort-Object -Unique)',
+    '}',
+    'function Test-OwnedPath([string]$value) { foreach ($part in $value.Split([char]92)) { if ($part -in @("logs", "secrets", "uploads", "models", "rollback")) { return $false } }; return $true }',
+    'function Assert-OwnedInventory([string]$root, $expected) {',
+    '  $root = [IO.Path]::GetFullPath($root).TrimEnd("\\"); $actual = @(Get-OwnedFiles $root)',
+    '  if ($actual.Count -ne @($expected.PSObject.Properties).Count) { throw "owned state file set mismatch (actual=$($actual.Count), expected=$(@($expected.PSObject.Properties).Count))" }',
+    '  foreach ($entry in @($expected.PSObject.Properties)) { $file = [IO.Path]::GetFullPath((Join-Path $root $entry.Name)); if (-not $file.StartsWith($root + "\\", [StringComparison]::OrdinalIgnoreCase)) { throw "owned state path escaped" }; if (-not (Test-Path -LiteralPath $file) -or (File-Sha256 $file) -ne $entry.Value) { throw "owned state checksum mismatch: $($entry.Name)" } }',
+    '  if (@(Get-ChildItem -LiteralPath $root -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw "owned state link rejected" }',
+    '}',
+    'function Restore-OwnedState([ref]$stagingRef, [ref]$quarantineRef, [ref]$quarantinedFilesRef, [ref]$promotedFilesRef, [ref]$originalDirectoriesRef) {',
+    '  if (-not $ownedUserDataRoot -or -not $ownedBackupRoot) { return }',
+    '  if ((Test-Path -LiteralPath $ownedStaging) -or (Test-Path -LiteralPath $ownedFailed)) { throw "retained owned-state rollback files must be recovered first" }',
+    '  if (-not (Test-Path -LiteralPath $ownedBackupRoot)) { throw "owned-state snapshot missing" }',
+    '  Assert-OwnedInventory $ownedBackupRoot $expectedOwnedFiles',
+    '  $backupDirectories = @(Get-OwnedDirectories $ownedBackupRoot); if ($backupDirectories.Count -ne @($expectedOwnedDirectories).Count -or @($expectedOwnedDirectories | Where-Object { $_ -notin $backupDirectories }).Count) { throw "owned state directory snapshot mismatch" }',
+    '  if (@(Get-ChildItem -LiteralPath $ownedUserDataRoot -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw "owned state link rejected" }',
+    '  $originalDirectoriesRef.Value = @(Get-OwnedDirectories $ownedUserDataRoot)',
+    '  New-Item -ItemType Directory -Path $ownedStaging | Out-Null; $stagingRef.Value = $true',
+    '  foreach ($entry in @($expectedOwnedFiles.PSObject.Properties)) { $src = Join-Path $ownedBackupRoot $entry.Name; $dst = Join-Path $ownedStaging $entry.Name; New-Item -ItemType Directory -Path (Split-Path -Parent $dst) -Force | Out-Null; Copy-Item -LiteralPath $src -Destination $dst; if ((File-Sha256 $dst) -ne $entry.Value) { throw "owned-state staged checksum mismatch" } }',
+    '  $current = @(Get-OwnedFiles $ownedUserDataRoot); New-Item -ItemType Directory -Path $ownedFailed | Out-Null; $quarantineRef.Value = $true',
+    '  foreach ($file in $current) { $rel = $file.FullName.Substring(([IO.Path]::GetFullPath($ownedUserDataRoot).TrimEnd("\\")).Length).TrimStart("\\"); $dest = Join-Path $ownedFailed $rel; New-Item -ItemType Directory -Path (Split-Path -Parent $dest) -Force | Out-Null; Move-Item -LiteralPath $file.FullName -Destination $dest; $quarantinedFilesRef.Value += $rel }',
+    '  foreach ($entry in @($expectedOwnedFiles.PSObject.Properties)) { $src = Join-Path $ownedStaging $entry.Name; $dst = Join-Path $ownedUserDataRoot $entry.Name; New-Item -ItemType Directory -Path (Split-Path -Parent $dst) -Force | Out-Null; Move-Item -LiteralPath $src -Destination $dst; $promotedFilesRef.Value += $entry.Name }',
+    '  Assert-OwnedInventory $ownedUserDataRoot $expectedOwnedFiles',
+    '  foreach ($relative in $expectedOwnedDirectories) { $directory = [IO.Path]::GetFullPath((Join-Path $ownedUserDataRoot $relative)); if (-not $directory.StartsWith(([IO.Path]::GetFullPath($ownedUserDataRoot).TrimEnd("\\") + "\\"), [StringComparison]::OrdinalIgnoreCase)) { throw "owned directory path escaped" }; New-Item -ItemType Directory -Path $directory -Force | Out-Null }',
+    '  foreach ($relative in @($ownedOriginalDirectories | Sort-Object { $_.Length } -Descending)) { if ($relative -notin $expectedOwnedDirectories) { $directory = Join-Path $ownedUserDataRoot $relative; if (Test-Path -LiteralPath $directory) { $items = @(Get-ChildItem -LiteralPath $directory -Force); if ($items.Count -eq 0) { Remove-Item -LiteralPath $directory -Force -ErrorAction Stop } } } }',
+    '}',
     'function Write-RollbackLog([string]$message) {',
     '  try {',
     '    $parent = Split-Path -Parent $logPath',
@@ -160,7 +219,7 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '}',
     'try {',
     '  Write-RollbackLog "verified rollback helper started"',
-    '  foreach ($candidate in (@($stagingDir, $failedDir, $databaseStaging, $databaseFailed) + @(if ($databaseFailed) { "$databaseFailed-wal"; "$databaseFailed-shm"; "$databaseFailed-journal" }))) {',
+    '  foreach ($candidate in (@($stagingDir, $failedDir, $databaseStaging, $databaseFailed, $ownedStaging, $ownedFailed) + @(if ($databaseFailed) { "$databaseFailed-wal"; "$databaseFailed-shm"; "$databaseFailed-journal" }))) {',
     '    if ($candidate -and (Test-Path -LiteralPath $candidate)) { throw "retained rollback files must be recovered first: $candidate" }',
     '  }',
     '  Write-HelperStatus "ready" ""',
@@ -183,6 +242,7 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '  if ($databasePath -and $databaseBackupPath -and (-not (Test-Path -LiteralPath $databaseBackupPath))) {',
     '    throw "database rollback backup missing: $databaseBackupPath"',
     '  }',
+    '  Restore-OwnedState ([ref]$ownedStagingCreated) ([ref]$ownedQuarantined) ([ref]$ownedQuarantinedFiles) ([ref]$ownedPromotedFiles) ([ref]$ownedOriginalDirectories)',
     '  New-Item -ItemType Directory -Path $stagingDir | Out-Null',
     '  $stagingCreated = $true',
     '  Assert-AppSnapshot $backupRoot',
@@ -214,6 +274,8 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '  $appliedWritten = $true',
     '  Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue',
     '  Remove-Item -LiteralPath $failedDir -Recurse -Force -ErrorAction SilentlyContinue',
+    '  if ($ownedFailed) { Remove-Item -LiteralPath $ownedFailed -Recurse -Force -ErrorAction SilentlyContinue }',
+    '  if ($ownedStaging) { Remove-Item -LiteralPath $ownedStaging -Recurse -Force -ErrorAction SilentlyContinue }',
     '  if ($databaseFailed) { foreach ($suffix in @("", "-wal", "-shm", "-journal")) { Remove-Item -LiteralPath "$databaseFailed$suffix" -Force -ErrorAction SilentlyContinue } }',
     '  Write-RollbackLog "full application rollback completed"',
     ...(restartApp
@@ -237,8 +299,17 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '  if ($databaseQuarantined) {',
     '    Move-DatabaseFiles $databaseFailed $databasePath',
     '  }',
+    '  if ($ownedQuarantined -and (Test-Path -LiteralPath $ownedFailed)) {',
+    '    $ownedCompensationFailed = $false',
+    '    foreach ($rel in $ownedPromotedFiles) { $promoted = Join-Path $ownedUserDataRoot $rel; if (Test-Path -LiteralPath $promoted) { try { Remove-Item -LiteralPath $promoted -Force -ErrorAction Stop } catch { $ownedCompensationFailed = $true; Write-RollbackLog ("owned-state compensation could not remove promoted snapshot file " + $promoted + ": " + $_.Exception.Message) } } }',
+    '    foreach ($rel in $ownedQuarantinedFiles) { $file = Join-Path $ownedFailed $rel; if (Test-Path -LiteralPath $file) { $dest = Join-Path $ownedUserDataRoot $rel; try { New-Item -ItemType Directory -Path (Split-Path -Parent $dest) -Force | Out-Null; $hash = File-Sha256 $file; Move-Item -LiteralPath $file -Destination $dest -Force -ErrorAction Stop; if ((File-Sha256 $dest) -ne $hash) { throw "restored candidate checksum mismatch" } } catch { $ownedCompensationFailed = $true; Write-RollbackLog ("owned-state compensation could not restore quarantined file " + $dest + ": " + $_.Exception.Message) } } }',
+    '    foreach ($relative in $ownedOriginalDirectories) { try { New-Item -ItemType Directory -Path (Join-Path $ownedUserDataRoot $relative) -Force | Out-Null } catch { $ownedCompensationFailed = $true; Write-RollbackLog ("owned-state compensation could not recreate candidate directory " + $relative + ": " + $_.Exception.Message) } }',
+    '    foreach ($relative in @($expectedOwnedDirectories | Sort-Object { $_.Length } -Descending)) { if ($relative -notin $ownedOriginalDirectories) { $directory = Join-Path $ownedUserDataRoot $relative; if (Test-Path -LiteralPath $directory) { try { $items = @(Get-ChildItem -LiteralPath $directory -Force); if ($items.Count -eq 0) { Remove-Item -LiteralPath $directory -Force -ErrorAction Stop } } catch { $ownedCompensationFailed = $true; Write-RollbackLog ("owned-state compensation could not remove created directory " + $relative + ": " + $_.Exception.Message) } } } }',
+    '    if (-not $ownedCompensationFailed) { Remove-Item -LiteralPath $ownedFailed -Recurse -Force -ErrorAction SilentlyContinue }',
+    '  }',
     '  if ($stagingCreated) { Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue }',
     '  if ($databaseStagingCreated -and $databaseStaging) { Remove-Item -LiteralPath $databaseStaging -Force -ErrorAction SilentlyContinue }',
+    '  if ($ownedStagingCreated -and $ownedStaging) { Remove-Item -LiteralPath $ownedStaging -Recurse -Force -ErrorAction SilentlyContinue }',
     '  exit 1',
     '}',
   ].join('\r\n')

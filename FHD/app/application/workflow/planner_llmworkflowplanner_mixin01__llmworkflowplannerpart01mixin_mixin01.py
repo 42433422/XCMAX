@@ -37,9 +37,9 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
 
         profile = resolve_tool_execution_profile(context)
         registry_for_plan = _facade()._filter_tool_registry_for_profile(tool_registry, profile)
-        from app.application.workflow.sql_execution_policy import database_restore_plan
+        from app.application.workflow.sql_execution_policy import database_maintenance_plan
 
-        restore = database_restore_plan(message, plan_id, registry_for_plan)
+        restore = database_maintenance_plan(message, plan_id, registry_for_plan)
         if restore is not None:
             return restore
         from app.application.normal_chat_dispatch import route_normal_mode_message

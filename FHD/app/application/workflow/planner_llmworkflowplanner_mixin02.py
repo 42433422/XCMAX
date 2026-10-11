@@ -93,14 +93,14 @@ class _LLMWorkflowPlannerPart02Mixin:
     ) -> _facade().PlanGraph:
         from app.application.normal_chat_dispatch import route_normal_mode_message
         from app.application.workflow.sql_execution_policy import (
-            database_restore_plan,
+            database_maintenance_plan,
             rejected_sql_plan,
         )
 
         rejected = rejected_sql_plan(message, plan_id)
         if rejected is not None:
             return rejected
-        restore = database_restore_plan(message, plan_id, tool_registry)
+        restore = database_maintenance_plan(message, plan_id, tool_registry)
         if restore is not None:
             return restore
         route = route_normal_mode_message(message)

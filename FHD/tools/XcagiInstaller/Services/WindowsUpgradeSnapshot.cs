@@ -9,15 +9,17 @@ namespace XcagiInstaller.Services;
 // Snapshot adapter; the restore/swap/compensation engine remains desktop/rollback-windows.ts.
 internal sealed class WindowsUpgradeSnapshot
 {
-    private readonly string _install, _root, _backup, _marker, _applied, _db, _dbBackup;
+    private readonly string _install, _root, _backup, _marker, _applied, _db, _dbBackup, _userData, _ownedBackup;
     private readonly Dictionary<string, string> _files;
+    private readonly Dictionary<string, string> _ownedFiles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _ownedDirectories = [];
     private string _dbHash = "";
     private string _manifestHash = "";
     private readonly string _fromVersion;
     private readonly string _candidateIdentity = typeof(WindowsUpgradeSnapshot).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? throw new IOException("安装包缺少版本身份。");
     private WindowsUpgradeSnapshot(string install, string root, string? userData)
     {
-        _install = install; _root = root; _backup = Path.Combine(root, "app");
+        _install = install; _root = root; _backup = Path.Combine(root, "app"); _userData = userData ?? ""; _ownedBackup = userData == null ? "" : Path.Combine(root, "owned");
         _marker = Path.Combine(userData ?? root, "rollback-marker.json"); _applied = Path.Combine(userData ?? root, "rollback-applied.json");
         _db = userData == null ? "" : Path.Combine(userData, "data", "xcagi.db");
         _dbBackup = _db != "" && File.Exists(_db) ? Path.Combine(root, "database-before.db") : "";
@@ -50,6 +52,61 @@ internal sealed class WindowsUpgradeSnapshot
             catch (InvalidOperationException) { }
         }
     }
+    private static bool ExcludedOwnedPath(string relative) => relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(part => part.Equals("logs", StringComparison.OrdinalIgnoreCase) || part.Equals("secrets", StringComparison.OrdinalIgnoreCase) || part.Equals("uploads", StringComparison.OrdinalIgnoreCase) || part.Equals("models", StringComparison.OrdinalIgnoreCase) || part.Equals("rollback", StringComparison.OrdinalIgnoreCase));
+    private static IEnumerable<string> EnumerateOwnedFiles(string userData)
+    {
+        var mods = Path.Combine(userData, "mods");
+        if (Directory.Exists(mods)) foreach (var file in Directory.EnumerateFiles(mods, "*", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(userData, file); if (!ExcludedOwnedPath(rel)) yield return file;
+        }
+        foreach (var file in Directory.EnumerateFiles(userData, "*", SearchOption.TopDirectoryOnly))
+            if (System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(file), "^(products|inventory|voice_learning|error_collection)(__[A-Za-z0-9_-]+)?\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) yield return file;
+        var data = Path.Combine(userData, "data");
+        if (Directory.Exists(data))
+        {
+            foreach (var file in Directory.EnumerateFiles(data, "*", SearchOption.TopDirectoryOnly))
+                if (System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(file), "^.+\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) && !System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(file), "^xcagi\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) && !ExcludedOwnedPath(Path.GetRelativePath(userData, file))) yield return file;
+            var modDbs = Path.Combine(data, "mod_dbs");
+            if (Directory.Exists(modDbs)) foreach (var file in Directory.EnumerateFiles(modDbs, "*", SearchOption.AllDirectories))
+                if (System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(file), "^.+\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) && !ExcludedOwnedPath(Path.GetRelativePath(userData, file))) yield return file;
+        }
+    }
+    private static IEnumerable<string> EnumerateOwnedDirectories(string userData)
+    {
+        foreach (var rootName in new[] { "mods", "data" })
+        {
+            var root = Path.Combine(userData, rootName); if (!Directory.Exists(root)) continue;
+            yield return rootName;
+            var scan = rootName == "mods" ? root : Path.Combine(root, "mod_dbs");
+            if (rootName == "data" && Directory.Exists(scan)) yield return Path.Combine("data", "mod_dbs");
+            if (!Directory.Exists(scan)) continue;
+            foreach (var directory in Directory.EnumerateDirectories(scan, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(userData, directory);
+                if (!ExcludedOwnedPath(relative)) yield return relative;
+            }
+        }
+    }
+    private static void ValidateOwnedState(string userData, out long byteCount, out List<string> files)
+    {
+        const long maximumSingleFile = 8L * 1024 * 1024 * 1024;
+        const long maximumSnapshot = 50L * 1024 * 1024 * 1024;
+        byteCount = 0; files = EnumerateOwnedFiles(userData).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var file in files)
+        {
+            var full = Path.GetFullPath(file); if (!Inside(userData, full)) throw new IOException("Mod 或数据库快照路径越出用户数据目录，未开始安装。");
+            var info = new FileInfo(full); if (info.Attributes.HasFlag(FileAttributes.ReparsePoint)) throw new IOException("Mod 或数据库包含链接，未开始安装。");
+            if (info.Length > maximumSingleFile) throw new IOException("单个 Mod 或数据库文件超过 8 GiB 安全快照边界，未开始安装。");
+            byteCount = checked(byteCount + info.Length); if (byteCount > maximumSnapshot) throw new IOException("Mod 与数据库总快照超过 50 GiB 安全边界，未开始安装。");
+            if (System.Text.RegularExpressions.Regex.IsMatch(full, "\\.db(?:-(?:wal|shm|journal))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                using var lockedCheck = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.None);
+            }
+        }
+        var drive = new DriveInfo(Path.GetPathRoot(userData)!); var reserve = Math.Max(1024L * 1024 * 1024, byteCount / 10);
+        if (drive.AvailableFreeSpace < checked(byteCount + reserve)) throw new IOException("可用磁盘空间不足以安全保留已授权 Mod 与数据库快照，未开始安装。");
+    }
     public static WindowsUpgradeSnapshot? Prepare(string install, string? userData, CancellationToken token)
     {
         install = Path.GetFullPath(install).TrimEnd(Path.DirectorySeparatorChar);
@@ -60,10 +117,18 @@ internal sealed class WindowsUpgradeSnapshot
         if (userData != null && (Inside(install, userData) || Inside(userData, install))) throw new IOException("程序与业务数据目录不能互相包含。");
         EnsureStopped(install); NoLinks(install);
         if (userData != null && Directory.Exists(userData)) NoLinks(userData);
+        long ownedBytes = 0; List<string> ownedSources = [];
+        if (userData != null && Directory.Exists(userData)) ValidateOwnedState(userData, out ownedBytes, out ownedSources);
         var root = Path.Combine(userData ?? Path.GetTempPath(), "rollback", "manual-" + Guid.NewGuid());
         if (Path.Combine(root, "restore.ps1").Length >= 260 || Directory.GetFiles(install, "*", SearchOption.AllDirectories).Any(file => Path.Combine(root, "app", Path.GetRelativePath(install, file)).Length >= 260)) throw new IOException("恢复备份路径超过 Windows 恢复组件限制，未开始更新；请使用较短的用户数据路径。");
         var snapshot = new WindowsUpgradeSnapshot(install, root, userData);
+        if (userData != null && Directory.Exists(userData)) snapshot._ownedDirectories.AddRange(EnumerateOwnedDirectories(userData).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase));
         if (File.Exists(snapshot._marker)) throw new IOException("上次更新尚未确认完成，请先恢复或正常启动原程序。");
+        foreach (var retained in new[] { install + ".xcagi-rollback-staging", install + ".xcagi-failed", snapshot._db + ".xcagi-rollback-staging", snapshot._db + ".xcagi-failed" })
+            if (retained.Length > install.Length && (Directory.Exists(retained) || File.Exists(retained))) throw new IOException("发现上次恢复暂存或失败现场，未开始更新；请先保留并恢复该现场：" + retained);
+        foreach (var owned in ownedSources)
+            foreach (var suffix in new[] { ".xcagi-rollback-staging", ".xcagi-failed" })
+                if (File.Exists(owned + suffix) || Directory.Exists(owned + suffix)) throw new IOException("发现已授权 Mod/数据库的恢复暂存或失败现场，未开始更新：" + owned + suffix);
         foreach (var suffix in new[] { "-wal", "-journal" })
             if (snapshot._db != "" && File.Exists(snapshot._db + suffix) && new FileInfo(snapshot._db + suffix).Length != 0) throw new IOException("业务数据库尚未正常关闭，未开始更新。");
         Directory.CreateDirectory(snapshot._backup);
@@ -80,10 +145,23 @@ internal sealed class WindowsUpgradeSnapshot
             snapshot._dbHash = Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant(); input.Position = 0;
             using var output = File.Create(snapshot._dbBackup); input.CopyTo(output);
         }
+        if (snapshot._userData != "")
+        {
+            Directory.CreateDirectory(snapshot._ownedBackup);
+            foreach (var relative in snapshot._ownedDirectories) Directory.CreateDirectory(Path.Combine(snapshot._ownedBackup, relative));
+            foreach (var source in ownedSources)
+            {
+                token.ThrowIfCancellationRequested();
+                var relative = Path.GetRelativePath(snapshot._userData, source); var target = Path.Combine(snapshot._ownedBackup, relative);
+                if (!Inside(snapshot._ownedBackup, Path.GetFullPath(target))) throw new IOException("Mod 快照路径越界，未开始安装。");
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.Copy(source, target);
+                var digest = Hash(source); if (Hash(target) != digest) throw new IOException("Mod 或数据库快照校验失败，未开始安装。"); snapshot._ownedFiles.Add(relative, digest);
+            }
+        }
         EnsureStopped(install);
         if (snapshot._dbBackup != "" && Hash(snapshot._dbBackup) != snapshot._dbHash) throw new IOException("数据库备份校验失败，未开始更新。");
-        using (var marker = new FileStream(snapshot._marker, FileMode.CreateNew, FileAccess.Write, FileShare.None)) JsonSerializer.Serialize(marker, new { mode = "windows-full", fromVersion = snapshot._fromVersion, toVersion = snapshot._candidateIdentity, preparedAt = DateTimeOffset.UtcNow.ToString("O"), appPath = Path.Combine(install, "XCAGI.exe"), backendPath = Path.Combine(install, "resources", "backend", "xcagi-backend.exe"), appBackupRelPath = Path.GetRelativePath(Path.GetDirectoryName(root)!, snapshot._backup), databasePath = snapshot._db, databaseBackupPath = snapshot._dbBackup, databaseOriginallyAbsent = snapshot._db != "" && snapshot._dbBackup == "", expectedAppFiles = snapshot._files, expectedDatabaseSha256 = snapshot._dbHash });
-        File.WriteAllText(Path.Combine(root, "snapshot-manifest.json"), JsonSerializer.Serialize(new { appFiles = snapshot._files, databaseSha256 = snapshot._dbHash }), new UTF8Encoding(false));
+        using (var marker = new FileStream(snapshot._marker, FileMode.CreateNew, FileAccess.Write, FileShare.None)) JsonSerializer.Serialize(marker, new { mode = "windows-full", fromVersion = snapshot._fromVersion, toVersion = snapshot._candidateIdentity, preparedAt = DateTimeOffset.UtcNow.ToString("O"), appPath = Path.Combine(install, "XCAGI.exe"), backendPath = Path.Combine(install, "resources", "backend", "xcagi-backend.exe"), appBackupRelPath = Path.GetRelativePath(Path.GetDirectoryName(root)!, snapshot._backup), databasePath = snapshot._db, databaseBackupPath = snapshot._dbBackup, databaseOriginallyAbsent = snapshot._db != "" && snapshot._dbBackup == "", expectedAppFiles = snapshot._files, expectedDatabaseSha256 = snapshot._dbHash, ownedUserDataRoot = snapshot._userData, ownedBackupRoot = snapshot._ownedBackup, expectedOwnedFiles = snapshot._ownedFiles, expectedOwnedDirectories = snapshot._ownedDirectories });
+        File.WriteAllText(Path.Combine(root, "snapshot-manifest.json"), JsonSerializer.Serialize(new { appFiles = snapshot._files, databaseSha256 = snapshot._dbHash, ownedFiles = snapshot._ownedFiles, ownedDirectories = snapshot._ownedDirectories }), new UTF8Encoding(false));
         snapshot._manifestHash = Hash(Path.Combine(root, "snapshot-manifest.json"));
         return snapshot;
     }
@@ -96,15 +174,16 @@ internal sealed class WindowsUpgradeSnapshot
         var manifest = Path.Combine(_root, "snapshot-manifest.json");
         if (!File.Exists(manifest) || Hash(manifest) != _manifestHash) throw new IOException("快照记录缺失或损坏，恢复未执行。");
         if (Directory.GetFiles(_backup, "*", SearchOption.AllDirectories).Length != _files.Count || _files.Any(x => !File.Exists(Path.Combine(_backup, x.Key)) || Hash(Path.Combine(_backup, x.Key)) != x.Value)) throw new IOException("备份缺失或损坏，恢复未执行。");
+        if (_ownedBackup != "" && (_ownedFiles.Any(x => !File.Exists(Path.Combine(_ownedBackup, x.Key)) || Hash(Path.Combine(_ownedBackup, x.Key)) != x.Value) || Directory.GetFiles(_ownedBackup, "*", SearchOption.AllDirectories).Length != _ownedFiles.Count)) throw new IOException("Mod 或数据库备份缺失或损坏，恢复未执行。");
         using var resource = typeof(WindowsUpgradeSnapshot).Assembly.GetManifestResourceStream("XCAGI.WindowsRollback")!;
         using var reader = new StreamReader(resource); var script = await reader.ReadToEndAsync();
         static string Literal(string value) => "'" + value.Replace("'", "''") + "'";
         var dbHash = _dbHash;
         if (_dbBackup != "" && (!File.Exists(_dbBackup) || Hash(_dbBackup) != dbHash)) throw new IOException("数据库备份缺失或损坏，恢复未执行。");
-        var paths = new Dictionary<string, string> { ["installDir"] = _install, ["backupRoot"] = _backup, ["appPath"] = Path.Combine(_install, "XCAGI.exe"), ["markerPath"] = _marker, ["appliedPath"] = _applied, ["logPath"] = Path.Combine(_root, "rollback-helper.log"), ["databasePath"] = _db, ["databaseBackupPath"] = _dbBackup, ["expectedDatabaseSha256"] = dbHash };
+        var paths = new Dictionary<string, string> { ["installDir"] = _install, ["backupRoot"] = _backup, ["appPath"] = Path.Combine(_install, "XCAGI.exe"), ["markerPath"] = _marker, ["appliedPath"] = _applied, ["logPath"] = Path.Combine(_root, "rollback-helper.log"), ["databasePath"] = _db, ["databaseBackupPath"] = _dbBackup, ["expectedDatabaseSha256"] = dbHash, ["ownedUserDataRoot"] = _userData, ["ownedBackupRoot"] = _ownedBackup };
         foreach (var pair in paths) script = script.Replace("__" + pair.Key + "__", Literal(pair.Value));
         script = script.Replace("__databaseOriginallyAbsent__", _db != "" && _dbBackup == "" ? "$true" : "$false");
-        script = script.Replace("__waitPid__", exitedInstallerPid.ToString()).Replace("__expectedAppFiles__", Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(_files)));
+        script = script.Replace("__waitPid__", exitedInstallerPid.ToString()).Replace("__expectedAppFiles__", Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(_files))).Replace("__expectedOwnedFiles__", Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(_ownedFiles))).Replace("__expectedOwnedDirectories__", Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(_ownedDirectories)));
         script = script.Replace("__appliedRecord__", Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(new { appliedAt = DateTimeOffset.UtcNow.ToString("O"), reason = "manual-installer-failed", fromVersion = _candidateIdentity, toVersion = _fromVersion })));
         var scriptPath = Path.Combine(_root, "restore.ps1");
         using (var output = new StreamWriter(new FileStream(scriptPath, FileMode.CreateNew, FileAccess.Write, FileShare.None), new UTF8Encoding(false))) output.Write(script);
@@ -118,5 +197,10 @@ internal sealed class WindowsUpgradeSnapshot
         await process.WaitForExitAsync(); await Task.WhenAll(stdout, stderr);
         if (process.ExitCode != 0 || !File.Exists(_applied)) throw new IOException("恢复未完成，原备份已保留：" + _root + " " + (await stderr).Trim());
         if (Directory.GetFiles(_install, "*", SearchOption.AllDirectories).Length != _files.Count || _files.Any(x => !File.Exists(Path.Combine(_install, x.Key)) || Hash(Path.Combine(_install, x.Key)) != x.Value) || (_dbBackup != "" && Hash(_db) != dbHash) || (_db != "" && _dbBackup == "" && new[] { "", "-wal", "-shm", "-journal" }.Any(suffix => File.Exists(_db + suffix)))) throw new IOException("恢复结果校验失败，原备份已保留：" + _root);
+        if (_userData != "")
+        {
+            var restored = EnumerateOwnedFiles(_userData).ToDictionary(file => Path.GetRelativePath(_userData, file), file => Hash(file), StringComparer.OrdinalIgnoreCase);
+            if (restored.Count != _ownedFiles.Count || _ownedFiles.Any(x => !restored.TryGetValue(x.Key, out var digest) || digest != x.Value)) throw new IOException("Mod 或数据库恢复结果校验失败，原备份已保留：" + _root);
+        }
     }
 }
