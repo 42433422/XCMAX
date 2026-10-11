@@ -32,5 +32,6 @@ def test_high_severity_dependency_floors_are_pinned_in_canonical_ssot() -> None:
     assert _pin(DESKTOP_LOCK, "aiohttp") >= Version("3.14.3")
     assert _pin(DESKTOP_LOCK, "cryptography") >= Version("50.0.0")
     assert _pin(DESKTOP_LOCK, "pillow") >= Version("12.3.0")
+    assert _pin(DESKTOP_LOCK, "multidict") >= Version("6.9.1")
     assert _pin(DESKTOP_LOCK, "transformers") >= Version("5.10.0")
     assert _pin(SERVER_LOCK, "pillow") >= Version("12.3.0")
