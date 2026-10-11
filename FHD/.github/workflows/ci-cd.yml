@@ -321,20 +321,6 @@ jobs:
         # 注意：暂不追加 --peak-floor —— 历史峰值与当前实测差距 > 0.5pt，启用即全红；
         # 启用条件见 scripts/dev/guard_coverage_floor.py docstring。
 
-      # Codecov policy: optional until CODECOV_TOKEN is in repo secrets
-      # (Settings → Secrets and variables → Actions). Without token this step is
-      # best-effort (continue-on-error); coverage.xml + htmlcov/ remain local SSOT.
-      - name: Upload coverage report
-        if: steps.paths.outputs.skip != 'true'
-        continue-on-error: true
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
-          flags: backend
-          name: xcagi-backend
-          fail_ci_if_error: false
-
       # 行为覆盖率诚实化（Delta A）：排除 coverage_ramp 注水 stub 后的真实行为口径。
       # 这是后端覆盖率门禁的唯一硬 gate（--behavior --require-backend），回退即阻断。
       - name: Behavior coverage gate (排除 coverage_ramp stub，硬门禁)
