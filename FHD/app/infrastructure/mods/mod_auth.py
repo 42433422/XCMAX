@@ -191,10 +191,14 @@ class ModContextMiddleware:
                     )
 
                     if enterprise_mod_filter_active():
+                        from app.mod_sdk.industry_seed import open_industry_seed_mod_ids
+
                         if sid:
                             await sync_entitlements_for_session(sid)
                         if (
-                            not sid and is_client_mod_id(mod_context.mod_id)
+                            not sid
+                            and is_client_mod_id(mod_context.mod_id)
+                            and mod_context.mod_id not in open_industry_seed_mod_ids()
                         ) or not is_mod_visible_for_enterprise(mod_context.mod_id):
                             await deny(
                                 403,

@@ -360,16 +360,25 @@ class TestMiddlewareCall:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "sid,allowed,status",
-        [("A", True, 204), ("B", False, 403), ("B", None, 503), ("", False, 403)],
+        "sid,allowed,status,mid",
+        [
+            ("A", True, 204, "private-A"),
+            ("B", False, 403, "private-A"),
+            ("B", None, 503, "private-A"),
+            ("", False, 403, "private-A"),
+            ("", True, 403, "private-A"),
+            ("", True, 204, "coating-industry"),
+        ],
     )
-    async def test_entitlement_scope_denial_and_failure(self, monkeypatch, sid, allowed, status):
+    async def test_entitlement_scope_denial_and_failure(
+        self, monkeypatch, sid, allowed, status, mid
+    ):
         monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", "")
         app, send = AsyncMock(), AsyncMock()
         scope = {
             "type": "http",
             "method": "GET",
-            "path": "/api/mod/private-A/probe",
+            "path": f"/api/mod/{mid}/probe",
             "headers": [(b"cookie", f"session_id={sid}".encode())],
         }
         with (
@@ -393,49 +402,15 @@ class TestMiddlewareCall:
             assert send.call_args_list[0].args[0]["status"] == status
 
     @pytest.mark.asyncio
-    async def test_value_error_in_mod_context_parsing(self, monkeypatch):
-        async def app(scope, receive, send):
-            pass
-
-        middleware = ModContextMiddleware(app)
-        scope = {
-            "type": "http",
-            "method": "GET",
-            "path": "/api/other",
-            "headers": [],
-        }
-        with patch.object(ModContext, "from_request", side_effect=ValueError("parse error")):
-            await middleware(scope, MagicMock(), MagicMock())
-
-    @pytest.mark.asyncio
-    async def test_type_error_in_mod_context_parsing(self):
-        async def app(scope, receive, send):
-            pass
-
-        middleware = ModContextMiddleware(app)
-        scope = {
-            "type": "http",
-            "method": "GET",
-            "path": "/api/other",
-            "headers": [],
-        }
-        with patch.object(ModContext, "from_request", side_effect=TypeError("type error")):
-            await middleware(scope, MagicMock(), MagicMock())
-
-    @pytest.mark.asyncio
-    async def test_runtime_error_in_mod_context_parsing(self):
-        async def app(scope, receive, send):
-            pass
-
-        middleware = ModContextMiddleware(app)
-        scope = {
-            "type": "http",
-            "method": "GET",
-            "path": "/api/other",
-            "headers": [],
-        }
-        with patch.object(ModContext, "from_request", side_effect=RuntimeError("runtime error")):
-            await middleware(scope, MagicMock(), MagicMock())
+    @pytest.mark.parametrize(
+        "failure", [ValueError("parse"), TypeError("type"), RuntimeError("runtime")]
+    )
+    async def test_mod_context_parsing_error_preserves_host_request(self, failure):
+        app = AsyncMock()
+        scope = {"type": "http", "method": "GET", "path": "/api/other", "headers": []}
+        with patch.object(ModContext, "from_request", side_effect=failure):
+            await ModContextMiddleware(app)(scope, AsyncMock(), AsyncMock())
+        app.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_app_exception_still_resets_token(self, monkeypatch):
