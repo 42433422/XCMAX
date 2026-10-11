@@ -209,9 +209,12 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     """普通版轻量槽位提取与任务分流。"""
     text = (message or "").strip()
     lower = text.lower()
+    from app.application.workflow.sql_execution_policy import database_maintenance_request
     from app.desktop_automation.service import desktop_action_request
     from app.services.intent_service import is_negation
 
+    if database_maintenance_request(text) is not None:
+        return {"intent": "workflow", "slots": {}}
     desktop = desktop_action_request(text)
     if desktop is not None:
         return {"intent": "desktop", "slots": desktop}
@@ -274,22 +277,13 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         if target_match:
             del_target = target_match.group(1).strip()
         return {"intent": "delete_entity", "slots": {"keyword": del_target}}
-    report_keywords = (
-        "报表",
-        "销售报表",
-        "库存报表",
-        "采购报表",
-        "汇总",
-        "经营看板",
-        "数据看板",
-        "统计",
-    )
+    report_keywords = "报表 销售报表 库存报表 采购报表 汇总 经营看板 数据看板 统计"
     # M11：同一类问题 —— 「其他业务实体 + 要产物」时不得停在只读汇总查询上。
     # 传空实体元组，此处只看「其他业务实体 + 产物」；单实体汇总（「导出报表」
     # 「库存报表」）保持既有 reports_query 行为不变。
     if _requires_llm_planning(text, ()):
         return {"intent": "unknown", "slots": {}}
-    if any(k in text for k in report_keywords):
+    if any(k in text for k in report_keywords.split()):
         return {"intent": "reports_query", "slots": {"keyword": ""}}
     inventory_count_keywords = ("库存盘点", "盘点", "实盘")
     if any(k in text for k in inventory_count_keywords):
@@ -308,50 +302,22 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
             "intent": "label_print",
             "slots": extract_label_print_slots(text),
         }
-    material_keywords = ("物料", "原材料", "材料")
-    if any(k in text for k in material_keywords):
-        return {"intent": "materials_query", "slots": {"keyword": ""}}
-    replenish_keywords = ("补货", "补货建议", "采购建议", "建议采购", "补多少")
-    if any(k in text for k in replenish_keywords):
-        return {"intent": "replenishment_suggest", "slots": {}}
-    mrp_keywords = ("生产工单", "生产", "工单", "BOM", "领料", "完工")
-    if any(k in text for k in mrp_keywords):
-        return {"intent": "mrp_production", "slots": {"order_id": "", "bom_id": ""}}
-    purchase_keywords = ("采购", "供应商", "进货", "采购单", "采购订单", "采购入库")
-    if any(k in text for k in purchase_keywords):
-        return {"intent": "purchase_query", "slots": {"keyword": ""}}
-    aging_keywords = ("账龄", "应收账龄", "应付账龄")
-    if any(k in text for k in aging_keywords):
-        return {"intent": "aging_report", "slots": {"account_type": "应收", "days": 30}}
-    finance_keywords = (
-        "财务",
-        "凭证",
-        "收支",
-        "应收",
-        "应付",
-        "交易流水",
-        "资金",
-        "对账",
-        "总账",
-        "记账",
-    )
-    if any(k in text for k in finance_keywords):
-        return {"intent": "finance_query", "slots": {}}
-    sales_keywords = (
-        "销售订单",
-        "报价单",
-        "销售单",
-        "下单",
-        "收款",
-        "开票",
-        "发货单确认",
-        "销售明细",
-    )
-    if any(k in text for k in sales_keywords):
-        return {"intent": "sales_query", "slots": {"keyword": ""}}
-    knowledge_keywords = ("知识库", "资料库", "帮助文档", "使用文档", "操作手册", "帮助中心")
-    if any(k in text for k in knowledge_keywords):
-        return {"intent": "knowledge_query", "slots": {}}
+    for keywords, intent, slots in (
+        ("物料 原材料 材料", "materials_query", {"keyword": ""}),
+        ("补货 补货建议 采购建议 建议采购 补多少", "replenishment_suggest", {}),
+        ("生产工单 生产 工单 BOM 领料 完工", "mrp_production", {"order_id": "", "bom_id": ""}),
+        ("采购 供应商 进货 采购单 采购订单 采购入库", "purchase_query", {"keyword": ""}),
+        ("账龄 应收账龄 应付账龄", "aging_report", {"account_type": "应收", "days": 30}),
+        ("财务 凭证 收支 应收 应付 交易流水 资金 对账 总账 记账", "finance_query", {}),
+        (
+            "销售订单 报价单 销售单 下单 收款 开票 发货单确认 销售明细",
+            "sales_query",
+            {"keyword": ""},
+        ),
+        ("知识库 资料库 帮助文档 使用文档 操作手册 帮助中心", "knowledge_query", {}),
+    ):
+        if any(keyword in text for keyword in keywords.split()):
+            return {"intent": intent, "slots": slots}
     product_subject = any(word in text for word in ("产品", "商品", "货品"))
     model_token = bool(
         _facade().re.search(
