@@ -12,7 +12,7 @@
 .btn-primary { border-color: #1890ff; background: #1890ff; color: #fff; }
 .btn-danger { border-color: #ffa39e; background: #fff1f0; color: #cf1322; }
 .banner-error { padding: 10px 12px; border: 1px solid #ffa39e; border-radius: 8px; background: #fff1f0; color: #cf1322; }
-.panel { display: flex; flex-direction: column; margin-bottom: 16px; border: 1px solid rgba(15, 76, 129, .1); border-radius: 16px; background: rgba(255, 255, 255, .94); box-shadow: 0 4px 18px rgba(15, 76, 129, .07); }
+.panel { display: flex; flex-direction: column; flex-shrink: 0; margin-bottom: 16px; border: 1px solid rgba(15, 76, 129, .1); border-radius: 16px; background: rgba(255, 255, 255, .94); box-shadow: 0 4px 18px rgba(15, 76, 129, .07); }
 .panel-head { padding: 14px 16px; border-bottom: 1px solid #eef2f7; }
 .panel-head h3 { margin: 0; font-size: 15px; }
 .risk { padding: 2px 8px; border-radius: 999px; background: #e8f3ff; color: #0f6fc6; font-size: 11px; font-weight: 700; }
