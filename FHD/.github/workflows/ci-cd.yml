@@ -164,7 +164,9 @@ jobs:
             --head "${{ github.event.pull_request.head.sha }}"
 
   backend-test:
-    needs: guard-temp-scripts
+    # P0 快速失败（2026-10-12）：SSOT 门禁 ~53s 出结论，未过不启动 27 分钟重测试。
+    # SSOT 失败时本 job 为 skipped；SSOT 本身是 required check，PR 依旧被阻断，结论不丢失。
+    needs: [guard-temp-scripts, ssot-drift-gate]
     runs-on: ubuntu-latest
     outputs:
       skip: ${{ steps.paths.outputs.skip }}
@@ -348,7 +350,9 @@ jobs:
           python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
 
   frontend-test:
-    needs: guard-temp-scripts
+    # P0 快速失败（2026-10-12）：SSOT 门禁 ~53s 出结论，未过不启动 27 分钟重测试。
+    # SSOT 失败时本 job 为 skipped；SSOT 本身是 required check，PR 依旧被阻断，结论不丢失。
+    needs: [guard-temp-scripts, ssot-drift-gate]
     runs-on: ubuntu-latest
     outputs:
       skip: ${{ steps.paths.outputs.skip }}
