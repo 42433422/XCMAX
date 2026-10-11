@@ -204,10 +204,9 @@
                      Foreground="{StaticResource AccentGreen}"
                      HorizontalAlignment="Center"
                      Margin="0,0,0,12" />
-          <TextBlock Text="安装成功"
+          <TextBlock Text="安装成功 · 100%"
                      FontFamily="{StaticResource FontFamilyDisplay}"
-                     FontSize="22"
-                     FontWeight="SemiBold"
+                     FontSize="22" FontWeight="SemiBold"
                      HorizontalAlignment="Center"
                      Margin="0,0,0,8" />
           <TextBlock x:Name="CompletePathText"
