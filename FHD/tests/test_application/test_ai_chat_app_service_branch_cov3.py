@@ -892,125 +892,98 @@ class TestTryMergeSplitModelEdge:
 class TestFormatWorkflowToolSuccessLineEdge:
     """_format_workflow_tool_success_line 边界分支补充。"""
 
-    def test_employee_list_action_with_preview(self):
+    @pytest.mark.parametrize(
+        "tool_id, action, output, node_params, expected",
+        [
+            pytest.param(
+                "employee",
+                "list",
+                {"data": {"registered_tool_count": 5}, "message": "ok"},
+                {},
+                ("5", "可调用员工"),
+                id="employee_list_action_with_preview",
+            ),
+            pytest.param(
+                "employee",
+                "list",
+                None,
+                {},
+                ("0",),
+                id="employee_list_action_without_preview",
+            ),
+            pytest.param(
+                "employee",
+                "invoke",
+                {"employee_id": "e1", "message": "done"},
+                {},
+                ("e1", "done"),
+                id="employee_other_action_with_message",
+            ),
+            pytest.param(
+                "employee",
+                "invoke",
+                {},
+                {"employee_id": "from-params"},
+                ("from-params",),
+                id="employee_other_action_no_message_uses_node_params",
+            ),
+            pytest.param(
+                "business_db",
+                "read",
+                {"data": [{"id": 1}, {"id": 2}], "message": "ok"},
+                {"entity": "products"},
+                ("products", "2"),
+                id="business_db_read_action",
+            ),
+            pytest.param(
+                "business_db",
+                "query",
+                {"data": [], "message": "ok"},
+                {"entity": "customers"},
+                ("customers", "0"),
+                id="business_db_query_action",
+            ),
+            pytest.param(
+                "business_db",
+                "create",
+                {"message": "created"},
+                {"entity": "order", "operation": "create"},
+                ("order", "create", "created"),
+                id="business_db_write_action",
+            ),
+            pytest.param(
+                "business_db",
+                "update",
+                {"entity": "shipment", "message": "updated"},
+                {},
+                ("shipment",),
+                id="business_db_with_entity_from_output",
+            ),
+            pytest.param(
+                "custom_tool",
+                "execute",
+                {"message": "custom result"},
+                {},
+                ("custom result",),
+                id="other_tool_with_message",
+            ),
+            pytest.param(
+                "custom_tool",
+                "execute",
+                {},
+                {},
+                ("成功",),
+                id="other_tool_without_message",
+            ),
+        ],
+    )
+    def test_success_line(self, tool_id, action, output, node_params, expected):
         svc = _make_svc()
-        item = SimpleNamespace(
-            node_id="n1",
-            tool_id="employee",
-            action="list",
-            output={"data": {"registered_tool_count": 5}, "message": "ok"},
-        )
-        result = svc._format_workflow_tool_success_line(item, {})
-        assert "5" in result[0]
-        assert "可调用员工" in result[0]
-
-    def test_employee_list_action_without_preview(self):
-        svc = _make_svc()
-        item = SimpleNamespace(
-            node_id="n1",
-            tool_id="employee",
-            action="list",
-            output=None,  # None output 转为 {}
-        )
-        result = svc._format_workflow_tool_success_line(item, {})
-        assert "0" in result[0]
-        # 即使 output 为 None，out 会变成 {}，preview 仍为 "{}"
+        item = SimpleNamespace(node_id="n1", tool_id=tool_id, action=action, output=output)
+        result = svc._format_workflow_tool_success_line(item, node_params)
+        for fragment in expected:
+            assert fragment in result[0]
         assert len(result) >= 1
-
-    def test_employee_other_action_with_message(self):
-        svc = _make_svc()
-        item = SimpleNamespace(
-            node_id="n1",
-            tool_id="employee",
-            action="invoke",
-            output={"employee_id": "e1", "message": "done"},
-        )
-        result = svc._format_workflow_tool_success_line(item, {})
-        assert "e1" in result[0]
-        assert "done" in result[0]
-
-    def test_employee_other_action_no_message_uses_node_params(self):
-        svc = _make_svc()
-        item = SimpleNamespace(
-            node_id="n1",
-            tool_id="employee",
-            action="invoke",
-            output={},
-        )
-        result = svc._format_workflow_tool_success_line(item, {"employee_id": "from-params"})
-        assert "from-params" in result[0]
-
-    def test_business_db_read_action(self):
-        svc = _make_svc()
-        item = SimpleNamespace(
-            node_id="n1",
-            tool_id="business_db",
-            action="read",
-            output={"data": [{"id": 1}, {"id": 2}], "message": "ok"},
-        )
-        result = svc._format_workflow_tool_success_line(item, {"entity": "products"})
-        assert "products" in result[0]
-        assert "2" in result[0]
-
-    def test_business_db_query_action(self):
-        svc = _make_svc()
-        item = SimpleNamespace(
-            node_id="n1",
-            tool_id="business_db",
-            action="query",
-            output={"data": [], "message": "ok"},
-        )
-        result = svc._format_workflow_tool_success_line(item, {"entity": "customers"})
-        assert "customers" in result[0]
-        assert "0" in result[0]
-
-    def test_business_db_write_action(self):
-        svc = _make_svc()
-        item = SimpleNamespace(
-            node_id="n1",
-            tool_id="business_db",
-            action="create",
-            output={"message": "created"},
-        )
-        result = svc._format_workflow_tool_success_line(
-            item, {"entity": "order", "operation": "create"}
-        )
-        assert "order" in result[0]
-        assert "create" in result[0]
-        assert "created" in result[0]
-
-    def test_business_db_with_entity_from_output(self):
-        svc = _make_svc()
-        item = SimpleNamespace(
-            node_id="n1",
-            tool_id="business_db",
-            action="update",
-            output={"entity": "shipment", "message": "updated"},
-        )
-        result = svc._format_workflow_tool_success_line(item, {})
-        assert "shipment" in result[0]
-
-    def test_other_tool_with_message(self):
-        svc = _make_svc()
-        item = SimpleNamespace(
-            node_id="n1",
-            tool_id="custom_tool",
-            action="execute",
-            output={"message": "custom result"},
-        )
-        result = svc._format_workflow_tool_success_line(item, {})
-        assert "custom result" in result[0]
-
-    def test_other_tool_without_message(self):
-        svc = _make_svc()
-        item = SimpleNamespace(
-            node_id="n1",
-            tool_id="custom_tool",
-            action="execute",
-            output={},
-        )
-        result = svc._format_workflow_tool_success_line(item, {})
-        assert "成功" in result[0]
 
 
 class TestExecuteProModeToolsEdge:
@@ -1369,6 +1342,42 @@ class TestProcessChatEdge:
 class TestExtractExcelImportRecordsEdge:
     """_extract_excel_import_records 边界分支补充。"""
 
+    def _extract_records(
+        self,
+        svc,
+        excel_analysis,
+        column_roles,
+        *,
+        confidence=0.9,
+        llm_roles=None,
+        default_unit="",
+        reloaded=None,
+        user_message="导入",
+    ):
+        with (
+            patch.object(
+                AIChatApplicationService, "_try_structured_reload_records", return_value=reloaded
+            ),
+            patch.object(
+                AIChatApplicationService,
+                "_infer_excel_column_roles",
+                return_value=(column_roles, confidence),
+            ),
+            patch.object(
+                AIChatApplicationService,
+                "_infer_excel_column_roles_with_llm",
+                return_value=llm_roles or {},
+            ),
+            patch.object(
+                AIChatApplicationService,
+                "_default_purchase_unit_for_import",
+                return_value=default_unit,
+            ),
+        ):
+            return svc._extract_excel_import_records(
+                excel_analysis, None, user_message=user_message
+            )
+
     def test_empty_preview_data_returns_empty(self):
         svc = _make_svc()
         records, err = svc._extract_excel_import_records({}, None, user_message="导入")
@@ -1385,35 +1394,12 @@ class TestExtractExcelImportRecordsEdge:
                 ]
             }
         }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_structured_reload_records",
-                return_value=None,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "",
-                        "product_name": "产品",
-                        "model_number": "型号",
-                        "unit_price": "单价",
-                    },
-                    0.9,
-                ),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
-                return_value={},
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._default_purchase_unit_for_import",
-                return_value="默认单位",
-            ),
-        ):
-            records, err = svc._extract_excel_import_records(
-                excel_analysis, None, user_message="导入"
-            )
+        records, err = self._extract_records(
+            svc,
+            excel_analysis,
+            {"unit_name": "", "product_name": "产品", "model_number": "型号", "unit_price": "单价"},
+            default_unit="默认单位",
+        )
         assert err is None
         assert len(records) >= 1
 
@@ -1429,35 +1415,12 @@ class TestExtractExcelImportRecordsEdge:
                 }
             }
         }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_structured_reload_records",
-                return_value=None,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "",
-                        "product_name": "产品",
-                        "model_number": "型号",
-                        "unit_price": "",
-                    },
-                    0.9,
-                ),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
-                return_value={},
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._default_purchase_unit_for_import",
-                return_value="默认单位",
-            ),
-        ):
-            records, err = svc._extract_excel_import_records(
-                excel_analysis, None, user_message="导入"
-            )
+        records, err = self._extract_records(
+            svc,
+            excel_analysis,
+            {"unit_name": "", "product_name": "产品", "model_number": "型号", "unit_price": ""},
+            default_unit="默认单位",
+        )
         assert err is None
         assert len(records) >= 1
 
@@ -1472,35 +1435,12 @@ class TestExtractExcelImportRecordsEdge:
                 ]
             }
         }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_structured_reload_records",
-                return_value=None,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "",
-                        "product_name": "产品",
-                        "model_number": "型号",
-                        "unit_price": "单价",
-                    },
-                    0.9,
-                ),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
-                return_value={},
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._default_purchase_unit_for_import",
-                return_value="默认单位",
-            ),
-        ):
-            records, err = svc._extract_excel_import_records(
-                excel_analysis, None, user_message="导入"
-            )
+        records, err = self._extract_records(
+            svc,
+            excel_analysis,
+            {"unit_name": "", "product_name": "产品", "model_number": "型号", "unit_price": "单价"},
+            default_unit="默认单位",
+        )
         assert err is None
         assert len(records) >= 1
         # After promotion, keys should be the header values
@@ -1515,30 +1455,13 @@ class TestExtractExcelImportRecordsEdge:
                 ]
             }
         }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_structured_reload_records",
-                return_value=None,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=(
-                    {"unit_name": "", "product_name": "", "model_number": "", "unit_price": ""},
-                    0.3,
-                ),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
-                return_value={"product_name": "col1", "model_number": "col2", "unit_price": "col3"},
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._default_purchase_unit_for_import",
-                return_value="",
-            ),
-        ):
-            records, err = svc._extract_excel_import_records(
-                excel_analysis, None, user_message="导入"
-            )
+        records, err = self._extract_records(
+            svc,
+            excel_analysis,
+            {"unit_name": "", "product_name": "", "model_number": "", "unit_price": ""},
+            confidence=0.3,
+            llm_roles={"product_name": "col1", "model_number": "col2", "unit_price": "col3"},
+        )
         assert err is None
 
     def test_ambiguous_price_columns_returns_error(self):
@@ -1550,30 +1473,12 @@ class TestExtractExcelImportRecordsEdge:
                 ]
             }
         }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_structured_reload_records",
-                return_value=None,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=(
-                    {"unit_name": "", "product_name": "产品", "model_number": "", "unit_price": ""},
-                    0.9,
-                ),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
-                return_value={},
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._default_purchase_unit_for_import",
-                return_value="",
-            ),
-        ):
-            records, err = svc._extract_excel_import_records(
-                excel_analysis, None, user_message="导入调价前和调价后"
-            )
+        records, err = self._extract_records(
+            svc,
+            excel_analysis,
+            {"unit_name": "", "product_name": "产品", "model_number": "", "unit_price": ""},
+            user_message="导入调价前和调价后",
+        )
         assert err == "ambiguous_price_columns"
         assert records == []
 
@@ -1587,35 +1492,12 @@ class TestExtractExcelImportRecordsEdge:
                 ]
             }
         }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_structured_reload_records",
-                return_value=None,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "col1",
-                        "product_name": "col1",
-                        "model_number": "",
-                        "unit_price": "col2",
-                    },
-                    0.9,
-                ),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
-                return_value={},
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._default_purchase_unit_for_import",
-                return_value="ACME",
-            ),
-        ):
-            records, err = svc._extract_excel_import_records(
-                excel_analysis, None, user_message="导入"
-            )
+        records, err = self._extract_records(
+            svc,
+            excel_analysis,
+            {"unit_name": "col1", "product_name": "col1", "model_number": "", "unit_price": "col2"},
+            default_unit="ACME",
+        )
         assert err is None
         # unit_key cleared due to conflict, default_unit applied
         if records:
@@ -1632,35 +1514,17 @@ class TestExtractExcelImportRecordsEdge:
                 ]
             }
         }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_structured_reload_records",
-                return_value=None,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "unit",
-                        "product_name": "product",
-                        "model_number": "",
-                        "unit_price": "price",
-                    },
-                    0.9,
-                ),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
-                return_value={},
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._default_purchase_unit_for_import",
-                return_value="ACME",
-            ),
-        ):
-            records, err = svc._extract_excel_import_records(
-                excel_analysis, None, user_message="导入"
-            )
+        records, err = self._extract_records(
+            svc,
+            excel_analysis,
+            {
+                "unit_name": "unit",
+                "product_name": "product",
+                "model_number": "",
+                "unit_price": "price",
+            },
+            default_unit="ACME",
+        )
         assert err is None
         if records:
             assert records[0]["unit_name"] == "ACME"
@@ -1676,35 +1540,16 @@ class TestExtractExcelImportRecordsEdge:
                 ]
             }
         }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_structured_reload_records",
-                return_value=None,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "unit",
-                        "product_name": "product",
-                        "model_number": "",
-                        "unit_price": "price",
-                    },
-                    0.9,
-                ),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
-                return_value={},
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._default_purchase_unit_for_import",
-                return_value="",
-            ),
-        ):
-            records, err = svc._extract_excel_import_records(
-                excel_analysis, None, user_message="导入"
-            )
+        records, err = self._extract_records(
+            svc,
+            excel_analysis,
+            {
+                "unit_name": "unit",
+                "product_name": "product",
+                "model_number": "",
+                "unit_price": "price",
+            },
+        )
         assert err is None
         # Duplicates removed
         assert len(records) == 2
@@ -1718,35 +1563,16 @@ class TestExtractExcelImportRecordsEdge:
                 ]
             }
         }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_structured_reload_records",
-                return_value=None,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "unit",
-                        "product_name": "product",
-                        "model_number": "",
-                        "unit_price": "price",
-                    },
-                    0.9,
-                ),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
-                return_value={},
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._default_purchase_unit_for_import",
-                return_value="",
-            ),
-        ):
-            records, err = svc._extract_excel_import_records(
-                excel_analysis, None, user_message="导入"
-            )
+        records, err = self._extract_records(
+            svc,
+            excel_analysis,
+            {
+                "unit_name": "unit",
+                "product_name": "product",
+                "model_number": "",
+                "unit_price": "price",
+            },
+        )
         assert err is None
         if records:
             assert records[0]["unit_price"] == 0.0
@@ -1758,35 +1584,17 @@ class TestExtractExcelImportRecordsEdge:
             {"unit": "ACME", "product": "P1", "price": "10"},
             {"unit": "ACME", "product": "P2", "price": "20"},
         ]
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._try_structured_reload_records",
-                return_value=reloaded,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "unit",
-                        "product_name": "product",
-                        "model_number": "",
-                        "unit_price": "price",
-                    },
-                    0.9,
-                ),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._infer_excel_column_roles_with_llm",
-                return_value={},
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._default_purchase_unit_for_import",
-                return_value="",
-            ),
-        ):
-            records, err = svc._extract_excel_import_records(
-                excel_analysis, None, user_message="导入"
-            )
+        records, err = self._extract_records(
+            svc,
+            excel_analysis,
+            {
+                "unit_name": "unit",
+                "product_name": "product",
+                "model_number": "",
+                "unit_price": "price",
+            },
+            reloaded=reloaded,
+        )
         assert err is None
         assert len(records) == 2
 

@@ -7,10 +7,11 @@ import tempfile
 import time
 from contextlib import closing
 from datetime import datetime
+from itertools import groupby
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Column, MetaData, Table, insert, literal_column, select
+from sqlalchemy import Column, MetaData, Table, and_, insert, literal_column, select
 from sqlalchemy.dialects.sqlite import dialect
 from sqlalchemy.schema import DropTable
 
@@ -224,6 +225,7 @@ class DatabaseService(NeuroEventPublisherMixin):
                 for description in rows.description or ():
                     table.append_column(Column(description[0]))
                 staged.executemany(str(insert(table).compile(dialect=dialect())), rows)
+                DatabaseService._check_restore_actor_identities(current, staged, table)
                 for (definition,) in current.execute(
                     "SELECT sql FROM sqlite_master WHERE type IN ('index','trigger') AND tbl_name=? AND sql IS NOT NULL",
                     (name,),
@@ -252,6 +254,80 @@ class DatabaseService(NeuroEventPublisherMixin):
         if current.execute("PRAGMA data_version").fetchone()[0] != version:
             raise sqlite3.OperationalError("恢复准备期间数据库已变化，未恢复；请重试")
         return version
+
+    @staticmethod
+    def _check_restore_actor_identities(current, staged, table: Table) -> None:
+        references = current.execute(
+            'SELECT id, seq, "from", "to" FROM pragma_foreign_key_list(?) '
+            "WHERE \"table\"='users' ORDER BY id, seq",
+            (table.name,),
+        ).fetchall()
+        if not references:
+            return
+        schemas = [
+            dict(db.execute("SELECT name, pk FROM pragma_table_info('users')"))
+            for db in (current, staged)
+        ]
+        primary = sorted((order, name) for name, order in schemas[0].items() if order)
+        for _, group in groupby(references, key=lambda row: row[0]):
+            links = list(group)
+            parents = [
+                target or (primary[seq][1] if seq < len(primary) else None)
+                for _, seq, _, target in links
+            ]
+            if any(parent is None for parent in parents):
+                raise _RestoreAuditReferenceError("无法确定当前审计关联主体，未恢复")
+            parent_names = [str(parent) for parent in parents]
+            users = Table(
+                "users", MetaData(), *(Column(name) for name in dict.fromkeys(parent_names))
+            )
+            children = [table.c[child] for _, _, child, _ in links]
+            query = (
+                select(*children)
+                .distinct()
+                .where(and_(*(column.is_not(None) for column in children)))
+            )
+            for values in current.execute(str(query.compile(dialect=dialect()))):
+                actor = (
+                    select(literal_column("*"))
+                    .select_from(users)
+                    .where(
+                        and_(
+                            *(
+                                users.c[parent] == value
+                                for parent, value in zip(parent_names, values)
+                            )
+                        )
+                    )
+                    .compile(dialect=dialect())
+                )
+                positions = actor.positiontup
+                if positions is None:
+                    raise _RestoreAuditReferenceError("无法确定当前审计关联主体，未恢复")
+                identities = []
+                for db, schema in zip((current, staged), schemas):
+                    identity = None
+                    if set(parent_names) | {"market_user_id", "tenant_id"} <= schema.keys():
+                        cursor = db.execute(
+                            str(actor), tuple(actor.params[key] for key in positions)
+                        )
+                        row = cursor.fetchone()
+                        if row is not None:
+                            record = dict(zip((column[0] for column in cursor.description), row))
+                            identity = ("scoped", (record["market_user_id"], record["tenant_id"]))
+                            # Legacy local accounts need an unchanged creation identity;
+                            # neither a reused row ID nor credentials establish ownership.
+                            if identity[1] == (None, None):
+                                identity = (
+                                    ("legacy", record["created_at"])
+                                    if record.get("created_at")
+                                    else None
+                                )
+                    identities.append(identity)
+                if None in identities or identities[0] != identities[1]:
+                    raise _RestoreAuditReferenceError(
+                        "恢复将改变当前审计关联主体，未恢复；请选择同主体备份"
+                    )
 
     def list_backups(self) -> dict[str, Any]:
         """按创建时间倒序列出备份文件。"""

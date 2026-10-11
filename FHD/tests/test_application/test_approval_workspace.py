@@ -61,7 +61,15 @@ def test_configured_restore_approval_restores_wal_and_retains_audit(
                 "create table ai_action_audit(actor text, action text, payload text)"
             )
         with sessions() as db:
-            db.add(User(id=41, username="configured-restore", password="test"))
+            db.add(
+                User(
+                    id=41,
+                    username="configured-restore",
+                    password="test",
+                    market_user_id=41,
+                    tenant_id=1,
+                )
+            )
             db.add(
                 ApprovalFlow(id=1, flow_key="configured-restore", flow_name="Configured restore")
             )
