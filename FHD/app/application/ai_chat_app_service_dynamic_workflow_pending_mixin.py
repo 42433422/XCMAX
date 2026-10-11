@@ -29,10 +29,23 @@ class _DynamicWorkflowPendingResumeMixin:
         if control and not pending and session_id:
             if self._hydrate_pending_workflow(user_id, session_id):
                 pending = self._pending_workflows.get(user_id)
-        if control and not pending:
-            reply = "请说明要确认什么，或回到原任务继续处理；当前会话没有待确认的操作。"
+        invalid_plan = False
+        if control and pending:
+            from app.application.workflow.types import PlanGraph, validate_plan_graph
+
+            try:
+                plan = pending.get("plan")
+                invalid_plan = not isinstance(plan, PlanGraph) or bool(validate_plan_graph(plan))
+            except (AttributeError, TypeError, ValueError):
+                invalid_plan = True
+        if control and (not pending or invalid_plan):
+            reply = (
+                "原待办计划缺失或损坏，请返回原任务核对后重新提交；未执行任何操作。"
+                if invalid_plan
+                else "请说明要确认什么，或回到原任务继续处理；当前会话没有待确认的操作。"
+            )
             return True, {
-                "success": True,
+                "success": not invalid_plan,
                 "message": "需要澄清",
                 "response": reply,
                 "data": {"text": reply, "action": "clarification_required", "data": {}},
@@ -57,9 +70,6 @@ class _DynamicWorkflowPendingResumeMixin:
                 )
             if text in CONFIRM_WORDS:
                 pending_plan = _facade().cast("PlanGraph | None", pending.get("plan"))
-                if pending_plan is None:
-                    self._pending_workflows.pop(user_id, None)
-                    return (True, None)
                 runtime_ctx = pending.get("runtime_context", {})
                 approval_required = pending.get("approval_required", False)
                 approval_nodes = pending.get("approval_nodes", [])
