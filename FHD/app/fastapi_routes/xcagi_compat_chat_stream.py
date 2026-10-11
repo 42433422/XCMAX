@@ -135,8 +135,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         and isinstance(_sales_route.get("payload"), dict)
         and bool(_sales_route.get("payload"))
     )
+    message_text = str(body.message or "")
     controlled_entity_named = any(
-        token in str(body.message or "")
+        token in message_text
         for token in ("客户", "购买单位", "产品", "商品", "原材料", "物料", "出货", "发货")
     )
     from app.infrastructure.tenant_scope import tenant_scope
@@ -162,16 +163,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         return
     if (
         has_pending_workflow
-        or str(body.message or "").strip().lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS
+        or message_text.strip().lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS
         or sales_closed_loop_route
-        or _sales_route.get("intent") in {"desktop", "workflow"}
         # #2067：开单与 /api/ai/chat 同一套规则识别（process_chat），不交给 LLM 规划器。
-        or _sales_route.get("intent") == "shipment"
+        or _sales_route.get("intent") in {"desktop", "workflow", "shipment"}
         or (
             controlled_entity_named
-            and _looks_like_business_db_write(
-                str(body.message or ""), str(body.message or "").lower()
-            )
+            and _looks_like_business_db_write(message_text, message_text.lower())
         )
     ):
         with tenant_scope(authenticated_tenant_id):
