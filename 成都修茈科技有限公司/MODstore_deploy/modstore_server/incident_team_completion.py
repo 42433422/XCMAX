@@ -19,6 +19,7 @@ _PENDING_CURSOR = 0
 
 
 def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
+    from modstore_server.customer_issue_shared_release import record_worker_repair
     from modstore_server.customer_service_orchestrator import (
         apply_customer_ticket_incident_progress,
     )
@@ -157,6 +158,7 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
                 apply_customer_ticket_incident_progress(
                     db, ticket_id=ticket.id, event_id=eid, team_ok=claim["ok"], team_rows=rows
                 )
+                record_worker_repair(db, ticket, eid, rows)
             db.commit()
             changed += 1
     return {"changed": changed}

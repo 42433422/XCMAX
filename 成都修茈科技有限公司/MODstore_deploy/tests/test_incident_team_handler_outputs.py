@@ -133,7 +133,12 @@ def test_digest_redacts_secrets_and_drops_raw_payload():
     ],
 )
 def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, completed, terminal):
-    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
+    from modstore_server.models_cs import (
+        CustomerServiceAction,
+        CustomerServiceMessage,
+        CustomerServiceSession,
+        CustomerServiceTicket,
+    )
 
     sf = models.get_session_factory()
     with sf() as s:
@@ -154,6 +159,15 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
         s.add(ticket)
         s.flush()
         ticket_id = ticket.id
+        cr = models.EmployeeChangeRequest(
+            source_employee_id="fix-1",
+            change_kind="code_patch",
+            status="applied",
+            staged_commit_sha="a" * 40,
+        )
+        s.add(cr)
+        s.flush()
+        cr_id = cr.id
         ev = models.IncidentEvent(
             event_type="ops.intake.customer_ticket",
             source="customer_ticket",
@@ -167,6 +181,19 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
         s.refresh(ev)
         event_id = ev.id
 
+    def repair_actions(db):
+        return db.query(CustomerServiceAction).filter_by(
+            ticket_id=ticket_id, action_type="issue.repair.result"
+        )
+
+    def readback():
+        with sf() as db:
+            ticket = db.get(CustomerServiceTicket, ticket_id)
+            resolution = json.loads(ticket.evidence_json)["resolution"]
+            claim = json.loads(db.get(models.IncidentEvent, event_id).payload_json)["_team_claim"]
+            messages = db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count()
+            return ticket, resolution, claim, messages, repair_actions(db).count()
+
     para = {
         **PARA_OK,
         "completed": completed,
@@ -175,7 +202,8 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
     assert execution_pending(_employee_result([para])) is (not completed)
 
     def fake_execute(employee_id, task, env=None, user_id=0, **kwargs):
-        return _employee_result([para, *(INFO if employee_id != "fix-1" else [])])
+        companion = [{"handler": "change_request", "ok": True, "change_request_id": cr_id}]
+        return _employee_result([para, *(INFO if employee_id != "fix-1" else companion)])
 
     monkeypatch.setattr(
         "modstore_server.incident_team_orchestrator.execute_employee_task", fake_execute
@@ -196,15 +224,13 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
 
     result = dispatch_incident_team(event_id)
     assert result["ok"] is completed
-    with sf() as s:
-        claim = json.loads(s.get(models.IncidentEvent, event_id).payload_json)["_team_claim"]
-        ticket = s.get(CustomerServiceTicket, ticket_id)
-        resolution = json.loads(ticket.evidence_json)["resolution"]
-        assert resolution["repair_verified"] is completed
-        assert resolution["state"] == ("awaiting_delivery" if completed else "processing")
-        assert ticket.status == "processing" and ticket.closed_at is None
-        if not completed:
-            assert ticket.decision_status == "pending"
+    ticket, resolution, claim, _, repairs = readback()
+    assert repairs == int(completed)
+    assert resolution["repair_verified"] is completed
+    assert resolution["state"] == ("awaiting_delivery" if completed else "processing")
+    assert ticket.status == "processing" and ticket.closed_at is None
+    if not completed:
+        assert ticket.decision_status == "pending"
     assert claim["ok"] is completed
     assert claim["handler_failed_roles"] == []
     scout = next(r for r in claim["team"] if r["role"] == "scout")
@@ -220,7 +246,6 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
         import httpx
 
         from modstore_server.incident_team_completion import reconcile_pending_teams
-        from modstore_server.models_cs import CustomerServiceMessage
 
         monkeypatch.setattr(
             "modstore_server.incident_team_orchestrator.execute_employee_task",
@@ -237,11 +262,9 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
             reconcile_pending_teams(
                 event_id=event_id, fetcher=lambda *a: pytest.fail("无号不能猜测读取")
             )
-            with sf() as db:
-                ticket = db.get(CustomerServiceTicket, ticket_id)
-                resolution = json.loads(ticket.evidence_json)["resolution"]
-                assert resolution["state"] == "awaiting_manual_review"
-                assert not resolution["repair_verified"] and ticket.closed_at is None
+            ticket, resolution, _, _, _ = readback()
+            assert resolution["state"] == "awaiting_manual_review"
+            assert not resolution["repair_verified"] and ticket.closed_at is None
             return
         if terminal in {"closed", "reopened"}:
             with sf() as db:
@@ -257,15 +280,10 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
                 return {"id": tid, "status": "completed"}
 
             assert reconcile_pending_teams(event_id=event_id, fetcher=fetch)["changed"] == 1
-            with sf() as db:
-                assert db.get(CustomerServiceTicket, ticket_id).evidence_json == original_decision
-                assert (
-                    db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count()
-                    == messages
-                )
-                assert json.loads(db.get(models.IncidentEvent, event_id).payload_json)[
-                    "_team_claim"
-                ]["ok"]
+            ticket, _, claim, latest_messages, repairs = readback()
+            assert repairs == 0 and ticket.evidence_json == original_decision
+            assert latest_messages == messages
+            assert claim["ok"]
             assert reconcile_pending_teams(event_id=event_id, fetcher=fetch)["changed"] == 0
             return
         for mismatch in ("owner", "incident"):
@@ -312,12 +330,10 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
                 raise error
 
             assert reconcile_pending_teams(event_id=event_id, fetcher=broken_fetch)["changed"] == 1
-            with sf() as db:
-                ticket = db.get(CustomerServiceTicket, ticket_id)
-                data = json.loads(ticket.evidence_json)
-                assert data["resolution"]["state"] == "processing"
-                assert "secret" not in ticket.evidence_json
-                assert "读取失败" in data["resolution"]["processing"][0]["poll_error"]
+            ticket, resolution, _, _, _ = readback()
+            assert resolution["state"] == "processing"
+            assert "secret" not in ticket.evidence_json
+            assert "读取失败" in resolution["processing"][0]["poll_error"]
         models._SessionFactory = None  # Recreate database access to simulate process restart.
         sf = models.get_session_factory()
 
@@ -335,10 +351,28 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
             )
             assert ticket.closed_at is None and ticket.status == "processing"
             count = db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count()
+            from modstore_server.customer_issue_shared_release import (
+                bind_shared_release,
+                record_worker_repair,
+            )
+            from tests.test_customer_issue_delivery_pipeline import github_fixture
+
+            actions = repair_actions(db)
+            assert actions.count() == int(terminal == "completed")
+            if terminal == "completed":
+                claim = json.loads(db.get(models.IncidentEvent, event_id).payload_json)[
+                    "_team_claim"
+                ]
+                record_worker_repair(db, ticket, event_id, claim["team"])
+                assert actions.count() == 1
+                github_fixture(monkeypatch)
+                target = bind_shared_release(db, ticket, "c" * 40)
+                assert target and target["change_request_id"] == cr_id
+                assert target["ticket_id"] == ticket_id and ticket.closed_at is None
+                db.commit()
         assert reconcile_pending_teams(event_id=event_id, fetcher=terminal_fetch)["changed"] == 0
         assert dispatch_incident_team(event_id)["ok"] is (terminal == "completed")
-        with sf() as db:
-            assert db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count() == count
+        assert readback()[3] == count
 
 
 def test_real_async_para_return_keeps_parent_task_id(monkeypatch):
