@@ -41,7 +41,25 @@ def _llm_must_not_run(*_args, **_kwargs):
 
 
 @pytest.fixture
-def para_ready(monkeypatch, fresh_db):
+def guarded_executor(monkeypatch, fresh_db):
+    import socket
+
+    monkeypatch.setattr(socket.socket, "connect", _llm_must_not_run)
+    monkeypatch.setattr(ee, "load_employee_pack_resolved", lambda _s, _e: _pack(["agent"]))
+    for name in (
+        "chat_dispatch_via_session",
+        "_cognition_sync",
+        "_cognition_real",
+        "_action_agent_runner",
+    ):
+        monkeypatch.setattr(ee, name, _llm_must_not_run)
+    monkeypatch.setattr(
+        "modstore_server.services.llm.chat_dispatch_via_platform_only", _llm_must_not_run
+    )
+
+
+@pytest.fixture
+def para_ready(monkeypatch, guarded_executor):
     calls = {"para": 0, "agent": 0}
     monkeypatch.setattr("modstore_server.para_delegate_handler.para_delegate_enabled", lambda: True)
     monkeypatch.setattr(
@@ -59,14 +77,6 @@ def para_ready(monkeypatch, fresh_db):
 
     monkeypatch.setattr("modstore_server.para_delegate_handler.dispatch_para_delegate", fake_para)
     monkeypatch.setattr(ee, "_action_agent_runner", fake_agent)
-    monkeypatch.setattr(ee, "load_employee_pack_resolved", lambda _s, _e: _pack(["agent"]))
-    monkeypatch.setattr(ee, "chat_dispatch_via_session", _llm_must_not_run)
-    monkeypatch.setattr(ee, "_cognition_sync", _llm_must_not_run)
-    monkeypatch.setattr(ee, "_cognition_real", _llm_must_not_run)
-    monkeypatch.setattr(
-        "modstore_server.services.llm.chat_dispatch_via_platform_only",
-        _llm_must_not_run,
-    )
     return calls
 
 
@@ -104,27 +114,6 @@ def test_para_first_skips_llm_and_records_zero_tokens(para_ready, monkeypatch, e
     assert metrics and all(int(m.llm_tokens or 0) == 0 for m in metrics)
 
 
-def test_incident_team_fix_does_not_fall_back_to_local_llm_when_para_fails(para_ready, monkeypatch):
-    def failed_para(*, task, input_data, employee_id):
-        para_ready["para"] += 1
-        return {"handler": "para_delegate", "ok": False, "error": "no code change"}
-
-    monkeypatch.setattr("modstore_server.para_delegate_handler.dispatch_para_delegate", failed_para)
-    out = ee.execute_employee_task(
-        "vibe-coding-maintainer",
-        "你是事故处理小组的 fix。",
-        {
-            "role": "fix",
-            "_trusted_incident_team_execution": True,
-            "suppress_lifecycle_events": True,
-        },
-        0,
-    )
-    assert out["llm_tokens"] == 0
-    assert out.get("handler_failed") is True
-    assert para_ready["agent"] == 0
-
-
 def test_skip_can_be_disabled_and_ignores_non_para_roles(monkeypatch):
     monkeypatch.setattr("modstore_server.para_delegate_handler.para_delegate_enabled", lambda: True)
     monkeypatch.setattr(
@@ -146,3 +135,69 @@ def test_skip_can_be_disabled_and_ignores_non_para_roles(monkeypatch):
     assert _para_first_skip_cognition("test-qa-runner", ["llm_md"], {"burn_in": True}) is False
     monkeypatch.setenv("MODSTORE_PARA_FIRST_SKIP_COGNITION", "0")
     assert _para_first_skip_cognition("vibe-coding-maintainer", ["agent"], {}) is False
+
+
+@pytest.mark.parametrize("preflight", ["ready_failure", "not_ready", "exception", "disabled_flag"])
+def test_trusted_incident_para_outage_never_plans_locally(para_ready, monkeypatch, preflight):
+    def readiness():
+        if preflight == "exception":
+            raise RuntimeError("synthetic unavailable Para preflight")
+        return preflight == "ready_failure"
+
+    monkeypatch.setattr(
+        "modstore_server.para_delegate_handler.para_delegate_ready_for_dispatch", readiness
+    )
+    if preflight == "disabled_flag":
+        monkeypatch.setenv("MODSTORE_PARA_FIRST_SKIP_COGNITION", "0")
+
+    def failed_dispatch(*, task, input_data, employee_id):
+        assert input_data["ticket_id"] == 1
+        assert input_data["ticket_no"] == "TEST-OUTAGE-1"
+        para_ready["para"] += 1
+        return {"handler": "para_delegate", "ok": False, "error": "synthetic Para unavailable"}
+
+    monkeypatch.setattr(
+        "modstore_server.para_delegate_handler.dispatch_para_delegate", failed_dispatch
+    )
+    out = ee.execute_employee_task(
+        "vibe-coding-maintainer",
+        "处理合成原工单 TEST-OUTAGE-1",
+        {
+            "role": "fix",
+            "_trusted_incident_team_execution": True,
+            "suppress_lifecycle_events": True,
+            "allow_high_risk_real_run": preflight != "ready_failure",
+            "ticket_id": 1,
+            "ticket_no": "TEST-OUTAGE-1",
+        },
+        0,
+    )
+    assert out["handler_failed"] is True
+    assert out.get("llm_tokens", 0) == 0
+    assert para_ready == {"para": 1, "agent": 0}
+
+
+@pytest.mark.parametrize("skip_flag", ["0", "1"])
+def test_trusted_incident_disabled_para_uses_real_failure_dispatch(
+    guarded_executor, monkeypatch, skip_flag
+):
+    monkeypatch.setenv("MODSTORE_PARA_FIRST_SKIP_COGNITION", skip_flag)
+    monkeypatch.setenv("MODSTORE_PARA_DELEGATE_ENABLED", "0")
+    out = ee.execute_employee_task(
+        "vibe-coding-maintainer",
+        "Synthetic original incident TEST-DISABLED-1",
+        {
+            "role": "fix",
+            "_trusted_incident_team_execution": True,
+            "suppress_lifecycle_events": True,
+            "ticket_id": 1,
+            "ticket_no": "TEST-DISABLED-1",
+        },
+        0,
+    )
+    assert out["handler_failed"] is True
+    assert out["llm_tokens"] == 0
+    assert out["result"]["handlers"] == ["para_delegate"]
+    assert out["result"]["outputs"] == [
+        {"handler": "para_delegate", "ok": False, "error": "MODSTORE_PARA_DELEGATE_ENABLED=0"}
+    ]

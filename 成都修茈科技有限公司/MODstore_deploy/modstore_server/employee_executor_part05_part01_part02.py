@@ -46,13 +46,19 @@ def _actions_real(
         burn_in=_facade()._flag_enabled(direct_input.get("burn_in")),
         read_only=_facade()._flag_enabled(direct_input.get("burn_in_read_only")),
     )
-    if employee_id in (
+    para_only = bool(
+        reasoning.get("skipped_cognition_reason") == "para_first"
+        and direct_input.get("_trusted_incident_team_execution") is True
+    )
+    if para_only:
+        handlers = ["para_delegate"]
+    elif employee_id in (
         "vibe-coding-maintainer",
         "change-request-auditor",
         "test-qa-runner",
     ) and (not (deterministic_council_review or reviewed_direct_burn_in)):
         handlers = _facade()._prefer_para_with_local_fallback(list(handlers), list(handlers))
-    if employee_id == "vibe-coding-maintainer":
+    if employee_id == "vibe-coding-maintainer" and not para_only:
         handlers = _facade()._filter_handlers_vibe_coding_maintainer(handlers, reasoning, task)
     outputs: _facade().List[_facade().Dict[str, _facade().Any]] = []
     skip_local_after_para_ok = False
@@ -64,13 +70,6 @@ def _actions_real(
         "cursor_delegate",
         "direct_python",
     }
-    # 事故小组工单修复且已按 Para 优先跳过规划 LLM：本地 LLM 回退同样不跑，失败交给 follow-up。
-    para_only = bool(
-        reasoning.get("skipped_cognition_reason") == "para_first"
-        and "para_delegate" in handlers
-        and isinstance(reasoning.get("input"), dict)
-        and reasoning["input"].get("_trusted_incident_team_execution")
-    )
     # 跳过规划 LLM 后 llm_md/echo 只会回显空文本，且台账把 llm_md 视为本地回退，不再产出。
     skip_echo = reasoning.get("skipped_cognition_reason") == "para_first"
     for handler in handlers:

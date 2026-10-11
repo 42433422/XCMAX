@@ -115,7 +115,7 @@ def unresolved_message(step_label: str, problems: list[str]) -> str:
     detail = "；".join(dict.fromkeys(problems))[:400]
     return (
         f"步骤「{step_label}」的参数引用了前序结果但无法确定具体值（{detail}），"
-        "为避免误操作已停止执行，未做任何修改。请说明具体的产品、客户或仓库后重新下达指令。"
+        "本步骤未执行；此前已完成的步骤保持不变。请先核对原任务进度，再说明具体的产品、客户或仓库。"
     )
 
 
@@ -137,6 +137,22 @@ def refuse_unresolved_step(run: Any, step: Any, node_outputs: dict[str, Any]) ->
             step.params = resolved
             run.add_event("step.references_resolved", f"步骤 {step.node_id} 参数引用已解析")
         return False
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+    unsafe = []
+    for completed in run.steps:
+        if completed.status != "completed":
+            continue
+        spec = get_tool_action_spec(completed.tool_id, completed.action)
+        if not (completed.idempotent and spec and spec.idempotent):
+            unsafe.append(completed.step_id)
+    if unsafe:
+        run.metadata["non_retryable"] = True
+        run.metadata["recovery"] = {
+            "state": "manual_reconciliation_required",
+            "error_code": UNRESOLVED_CODE,
+            "step_ids": unsafe,
+        }
     message = unresolved_message(step.description or step.node_id, problems)
     step.status = "failed"
     step.error = message

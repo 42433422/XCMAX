@@ -97,7 +97,7 @@ def test_unresolvable_reference_fails_before_any_tool_call():
     step = run.steps[1]
     assert run.status == "failed" and step.status == "failed"
     assert step.output["error_code"] == UNRESOLVED_CODE
-    assert "执行库存出库" in step.error and "未做任何修改" in step.error
+    assert "执行库存出库" in step.error and "本步骤未执行" in step.error
     assert "2 条" in step.error
     executor.execute.assert_not_called()
 
@@ -192,3 +192,56 @@ def test_refusal_message_reaches_the_chat_summary():
     run = _run([])
     orchestrator._execute_ready_steps(run, runtime_context={})
     assert "前序结果为空" in _result_summary(run, [])
+
+
+@pytest.mark.parametrize("stored_idempotent", [False, True])
+def test_downstream_reference_refusal_blocks_replay_of_completed_stock_out(db, stored_idempotent):
+    from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+
+    orchestrator, executor = _orchestrator()
+    run = _run([PRODUCT_ROW])
+    run.steps[0].idempotent = True
+    stock = run.steps[1]
+    stock.idempotent = stored_idempotent
+    product, warehouses = _stock(db, "默认仓库")
+    result = _out(db, product.id, warehouses[0].id)
+    assert result["success"] is True
+    stock.status, stock.output = "completed", result
+    run.steps.append(
+        AgentStep(
+            node_id="shipment",
+            tool_id="shipment",
+            action="generate",
+            risk="high",
+            depends_on=["stock_out"],
+            params={"product_id": "{{missing.id}}"},
+        )
+    )
+    orchestrator._execute_ready_steps(run, runtime_context={})
+    assert run.status == "failed" and requires_retry_reconciliation(run)
+    assert stock.status == "completed" and stock.output is result
+    assert run.metadata["recovery"]["step_ids"] == [stock.step_id]
+    assert "本步骤未执行" in run.error and "未做任何修改" not in run.error
+    executor.execute.assert_not_called()
+    orchestrator._repo.get.return_value = run
+    with pytest.raises(ValueError, match="任务执行结果尚需人工核对"):
+        orchestrator.retry_run(run.run_id)
+    db.expire_all()
+    assert float(db.query(InventoryLedger).one().available_quantity) == 3
+    assert db.query(InventoryTransaction).count() == 1
+
+
+@pytest.mark.parametrize("tool_id,blocked", [("products", False), ("unknown_tool", True)])
+def test_reference_refusal_uses_canonical_idempotency_for_previous_steps(tool_id, blocked):
+    from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+
+    orchestrator, executor = _orchestrator()
+    run = _run([])
+    run.steps[0].tool_id = tool_id
+    run.steps[0].idempotent = True
+    orchestrator._execute_ready_steps(run, runtime_context={})
+    assert run.status == "failed"
+    assert requires_retry_reconciliation(run) is blocked
+    assert run.steps[0].status == "completed"
+    assert run.final_output["node_outputs"]["query_product"] == run.steps[0].output
+    executor.execute.assert_not_called()

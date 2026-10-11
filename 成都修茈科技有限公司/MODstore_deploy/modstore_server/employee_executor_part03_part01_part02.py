@@ -22,18 +22,19 @@ def _para_first_skip_cognition(
     handler_list: _facade().List[str],
     payload: _facade().Dict[str, _facade().Any],
 ) -> bool:
-    """Para 优先岗在 Para 可派单时不再调服务端规划 LLM（发版解决问题必须经 Para）。
+    """Trusted incident repairs always leave planning to Para, including outages.
 
-    规划由 Para 执行器自己完成；服务端 chat_dispatch_via_session / platform 调用会让
-    工单修复绕开 Para 直接消耗大模型 token。确定性 direct_python、评审 burn-in 等
-    原本就不走 Para 的路径保持原样。``MODSTORE_PARA_FIRST_SKIP_COGNITION=0`` 可回退。
+    The compatibility switch only affects other employee invocations; trusted
+    incidents cannot use it to bypass Para through server-side cognition.
     """
     if str(employee_id or "") not in _PARA_FIRST_PLANNING_EMPLOYEES:
         return False
+    data = payload if isinstance(payload, dict) else {}
+    if data.get("_trusted_incident_team_execution") is True:
+        return True
     flag = _facade().os.environ.get("MODSTORE_PARA_FIRST_SKIP_COGNITION", "1")
     if str(flag).strip().lower() in {"0", "false", "no", "off"}:
         return False
-    data = payload if isinstance(payload, dict) else {}
     if str(data.get("handler") or "").strip() == "direct_python":
         return False
     if _facade()._flag_enabled(data.get("burn_in")):
