@@ -626,8 +626,10 @@ class TestTryHandleDynamicWorkflowEdge:
         mock_start.assert_called_once()
 
     def test_pending_workflow_confirm_with_approval_required(self):
+        from app.application.workflow.types import PlanGraph, WorkflowNode
+
         svc = _make_svc()
-        plan = _make_plan(nodes=[_make_node(node_id="approval_node", tool_id="db", action="write")])
+        plan = PlanGraph("plan_test", "test_intent", nodes=[WorkflowNode("approval_node", "db", "write")])
         svc._pending_workflows["u1"] = {
             "plan": plan,
             "runtime_context": {"message": "test"},
