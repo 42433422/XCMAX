@@ -39,7 +39,7 @@ def execution_succeeded(result: Any) -> bool:
             return False
         outputs = nested.get("outputs")
         if isinstance(outputs, list) and outputs:
-            return all(execution_succeeded(row) for row in outputs)
+            return _handler_outputs_succeeded(outputs)
     rows = result.get("results")
     if isinstance(rows, list) and rows:
         return all(execution_succeeded(row) for row in rows)
@@ -48,6 +48,25 @@ def execution_succeeded(result: Any) -> bool:
         or result.get("success") is True
         or status in {"success", "completed", "done", "executed", "ok"}
     )
+
+
+# 只回显服务端推理文本的 handler（无 ok/status、无 error）不是执行结果，不参与判定。
+# 之前 Para 已 completed（ok=True）时，scout/verify 的 llm_md/echo 行因缺 ok 被判失败。
+_INFORMATIONAL_HANDLERS = frozenset({"echo", "llm_md"})
+
+
+def _is_informational_row(row: Any) -> bool:
+    return (
+        isinstance(row, dict)
+        and str(row.get("handler") or "") in _INFORMATIONAL_HANDLERS
+        and not row.get("error")
+        and not any(k in row for k in ("ok", "success", "status", "execution_status"))
+    )
+
+
+def _handler_outputs_succeeded(outputs: list[Any]) -> bool:
+    decisive = [row for row in outputs if not _is_informational_row(row)]
+    return bool(decisive) and all(execution_succeeded(row) for row in decisive)
 
 
 def team_succeeded(rows: list[dict[str, Any]]) -> bool:
