@@ -328,15 +328,18 @@ class TestValidateRequiredParams:
     [
         "恢复数据库，使用备份文件 xcagi.db.20261011_160815.bak。先提交手动审批，未经批准不要执行恢复。",
         "请只恢复一次数据库，使用已有备份文件xcagi.db.20261011_160815.bak。恢复只允许执行一次，不要把提交审批和执行恢复拆成两次恢复操作。使用手动审批，先创建一张真实审批申请，批准后再恢复。",
+        "请恢复数据库 xcagi.db.20261011_160815.bak，如果失败请提示原因",
+        "请恢复数据库 xcagi.db.20261011_160815.bak 如果失败请提示原因",
+        "请帮我恢复数据库 xcagi.db.20261011_160815.bak",
+        "请你恢复数据库 xcagi.db.20261011_160815.bak",
+        "现在恢复数据库 xcagi.db.20261011_160815.bak",
+        "麻烦你先恢复数据库 xcagi.db.20261011_160815.bak",
     ],
 )
 @pytest.mark.parametrize("entry", ["plan", "_fallback_plan"])
 def test_actual_restore_requests_use_one_registered_high_risk_step(message, entry):
-
     registry = {
-        "system_maintenance": {
-            "actions": {"restore_database": {"risk": "high", "required_params": ["backup_file"]}}
-        },
+        "system_maintenance": {"actions": {"restore_database": {}}},
         **_SAMPLE_REGISTRY,
     }
     planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
@@ -350,13 +353,9 @@ def test_actual_restore_requests_use_one_registered_high_risk_step(message, entr
         )
     assert len(plan.nodes) == 1 and validate_plan_graph(plan) is None
     node = plan.nodes[0]
-    assert (node.tool_id, node.action, node.params, node.risk, node.idempotent) == (
-        "system_maintenance",
-        "restore_database",
-        {"backup_file": "xcagi.db.20261011_160815.bak"},
-        "high",
-        False,
-    )
+    assert (node.tool_id, node.action) == ("system_maintenance", "restore_database")
+    assert node.params == {"backup_file": "xcagi.db.20261011_160815.bak"}
+    assert (node.risk, node.idempotent) == ("high", False)
     assert HybridRiskGate().evaluate(plan, context={}).requires_confirmation
 
 
@@ -368,6 +367,12 @@ def test_actual_restore_requests_use_one_registered_high_risk_step(message, entr
         "不恢复数据库",
         "只查看恢复数据库的方法",
         "备份数据库，不恢复",
+        "不要再恢复数据库，备份为 xcagi.db.20261011_160815.bak",
+        "恢复数据库 xcagi.db.20261011_160815.bak 失败，帮我排查原因",
+        "请排查恢复数据库 xcagi.db.20261011_160815.bak 失败的原因",
+        "恢复数据库 xcagi.db.20261011_160815.bak 应该怎么操作",
+        "请你先不要再恢复数据库，备份为 xcagi.db.20261011_160815.bak",
+        "现在恢复数据库 xcagi.db.20261011_160815.bak 可以吗",
     ],
 )
 def test_restore_does_not_turn_questions_negations_or_backup_into_write(message):
