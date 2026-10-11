@@ -49,6 +49,12 @@ on:
         default: ""
         type: string
 
+# CI 加速：同一 PR 的旧提交自动取消（P1-4）；push/tag/schedule/dispatch 每次
+# 独立分组且 cancel-in-progress=false —— 正式发布、主线、夜间全量永不误取消。
+concurrency:
+  group: ci-cd-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   PYTHON_VERSION: "3.11"
   REGISTRY: ghcr.io
