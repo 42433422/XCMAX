@@ -79,8 +79,10 @@ def handler_output_digest(result: Any) -> Dict[str, Any]:
     """返回 {status, llm_tokens, cognition_error, outputs:[...]}，不含原始 payload 与密钥。"""
     if not isinstance(result, dict):
         return {"outputs": [], "invalid_result": True}
-    nested = result.get("result") if isinstance(result.get("result"), dict) else {}
-    outputs = nested.get("outputs") if isinstance(nested.get("outputs"), list) else []
+    raw_nested = result.get("result")
+    nested: Dict[str, Any] = raw_nested if isinstance(raw_nested, dict) else {}
+    raw_outputs = nested.get("outputs")
+    outputs: List[Any] = raw_outputs if isinstance(raw_outputs, list) else []
     digest: Dict[str, Any] = {
         "outputs": [_row_digest(row) for row in outputs[:12]],
     }
