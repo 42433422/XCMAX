@@ -1,5 +1,5 @@
 {
-  "lines": 2302298,
+  "lines": 2302300,
   "updated": "2026-10-11",
-  "note": "main 8cac2ba（基线 2302019）+ 本 PR 净增 279 行（2302019+279）：工单闭环修复 PR-B，handler 输出脱敏持久化（+104 源码）+ Para completed 时 scout/verify 被 llm_md/echo 行判 ok=false 的根因修复（+19）及回归测试（+156），闭环路径修复非新功能"
+  "note": "main 8cac2ba（基线 2302019）+ 本 PR 净增 281 行（2302019+281）：工单闭环修复 PR-B，handler 输出脱敏持久化 + Para completed 时 scout/verify 被 llm_md/echo 行判 ok=false 的根因修复及回归测试，闭环路径修复非新功能"
 }
