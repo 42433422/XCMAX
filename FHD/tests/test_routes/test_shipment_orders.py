@@ -43,21 +43,19 @@ class TestOrdersNextNumber:
         "path",
         ["/orders/next_number", "/api/orders/next_number", "/api/shipment/orders/next_number"],
     )
-    def test_shared_reservation(self, client, path):
-        with patch("app.services.shipment_order_number.reserve_order_number") as reserve:
-            reserve.return_value = {"order_number": "26-10-00006B", "sequence": 6}
-            response = client.get(path, params={"suffix": "B"})
-            assert response.status_code == 200
-            assert response.json()["data"] == reserve.return_value
-            reserve.assert_called_once_with("B")
+    def test_shared_reservation(self, client, path, _mock_svc):
+        reserve = _mock_svc.reserve_order_number
+        reserve.return_value = {"order_number": "26-10-00006B", "sequence": 6}
+        response = client.get(path, params={"suffix": "B"})
+        assert response.status_code == 200
+        assert response.json()["data"] == reserve.return_value
+        reserve.assert_called_once_with("B")
 
-    def test_allocation_failure(self, client):
-        with patch(
-            "app.services.shipment_order_number.reserve_order_number", side_effect=OSError("disk")
-        ):
-            response = client.get("/orders/next_number")
-            assert response.status_code == 503
-            assert "取号失败" in response.json()["detail"]
+    def test_allocation_failure(self, client, _mock_svc):
+        _mock_svc.reserve_order_number.side_effect = OSError("disk")
+        response = client.get("/orders/next_number")
+        assert response.status_code == 503
+        assert "取号失败" in response.json()["detail"]
 
 
 # shipment generate

@@ -46,7 +46,9 @@ def _summarize_incident_team_rows(
         if not isinstance(row, dict):
             continue
         role = role_cn.get(str(row.get("role") or "").strip(), str(row.get("role") or "执行"))
-        outcome = "已完成" if row.get("ok") else "未完成"
+        outcome = (
+            "已完成" if row.get("ok") else "处理中" if row.get("status") == "pending" else "未完成"
+        )
         outputs = (row.get("handler_outputs") or {}).get("outputs", [])
         details = [
             "；".join(
@@ -62,7 +64,16 @@ def _summarize_incident_team_rows(
             for o in outputs
             if isinstance(o, dict)
         ]
-        detail = redact_text("；".join(d for d in details if d))
+        detail = redact_text(
+            "；".join(
+                [d for d in details if d]
+                + (
+                    [row["handler_outputs"]["poll_error"]]
+                    if (row.get("handler_outputs") or {}).get("poll_error")
+                    else []
+                )
+            )
+        )
         bits.append(f"{role}{outcome}：{detail or '尚未提供原因或处理说明'}")
     return "；".join(bits[:6]) if bits else "值班员工已接手"
 
@@ -127,9 +138,6 @@ def apply_customer_ticket_incident_progress(
             "team_ok": team_ok,
         }
     resolution = record_team_progress(ticket, ev, event_id=event_id, rows=rows)
-    if not team_ok:
-        resolution["state"] = "repair_failed"
-        resolution["repair_verified"] = False
     progress = _facade()._summarize_incident_team_rows(rows)
     progress_record = {"event_id": int(event_id or 0), "team_ok": team_ok, "progress": progress}
     hint = str(summary_hint or ticket.summary or ticket.title or "").strip()[:120]
@@ -142,7 +150,11 @@ def apply_customer_ticket_incident_progress(
     reply += "下一步：" + (
         "等待正式版本交付后，请在原工单复验并确认。"
         if team_ok
-        else "继续排查或转人工处理，请保留原工单。"
+        else (
+            "等待已受理任务的处理结果，请保留原工单。"
+            if resolution["state"] == "processing"
+            else "继续排查或转人工处理，请保留原工单。"
+        )
     )
     action = _facade().build_action(
         db,
@@ -162,6 +174,8 @@ def apply_customer_ticket_incident_progress(
     action.error = ""
     db.flush()
     _facade().delivery_policy.apply_ticket_outcome(ticket, team_ok, delivery_managed)
+    if resolution["state"] == "processing":
+        ticket.decision_status = "pending"
     reports = list(ev.get("employee_reports") or [])
     reports.append(
         {

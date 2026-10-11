@@ -37,7 +37,7 @@
 |---|------|------|
 | 1 | [`QUICK_START.md`](QUICK_START.md) | 5 分钟跑通宿主 + MOD |
 | 2 | [`guides/快速启动说明.md`](guides/快速启动说明.md) | 桌面 / Docker 命令速查 |
-| 3 | [`guides/PRODUCT_USER_FLOW.md`](guides/PRODUCT_USER_FLOW.md) | 安装 → 首启 → 行业 MOD → 日常使用 |
+| 3 | [`architecture/CUSTOMER_TICKET_BUS_SSOT.md`](architecture/CUSTOMER_TICKET_BUS_SSOT.md) | 原工单处理、结果回流与客户确认 |
 | 4 | [`DELIVERABLE_PRODUCT.md`](DELIVERABLE_PRODUCT.md) | 交付物清单与验收 API |
 | 5 | [`../VERSION.md`](../VERSION.md) | 当前产品版本与企业版交付边界 |
 | 6 | [`desktop_platform_parity_ssot.md`](desktop_platform_parity_ssot.md) | 桌面 SQLite 交付 |

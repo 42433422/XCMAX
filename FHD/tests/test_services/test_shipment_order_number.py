@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 from sqlalchemy import create_engine, text
 
-from app.services import shipment_order_number as numbers
+from app.infrastructure.database import shipment_order_numbers as numbers
 
 
 @pytest.fixture
@@ -31,7 +31,9 @@ def test_shared_document_sequence_and_restart(allocator):
         db_path=str(folder / "products.db"), output_dir=str(folder)
     )
     doc1 = generator.generate_document("", {"products": [{"name": "first"}]})
-    preview = numbers.reserve_order_number()
+    from app.application.shipment_app_service import ShipmentApplicationService
+
+    preview = ShipmentApplicationService.reserve_order_number()
     doc2 = generator.generate_document("", {"products": [{"name": "second"}]})
     assert [doc1.order_number, preview["order_number"], doc2.order_number] == [
         f"{preview['year_month']}-{i:05d}A" for i in (1, 2, 3)

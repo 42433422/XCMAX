@@ -616,7 +616,7 @@ class ShipmentDocumentGenerator:
         return unit
 
     def _generate_order_number(self) -> str:
-        from app.services.shipment_order_number import reserve_order_number
+        from app.infrastructure.database.shipment_order_numbers import reserve_order_number
 
         return reserve_order_number(output_dir=self.OUTPUT_FOLDER)["order_number"]
 

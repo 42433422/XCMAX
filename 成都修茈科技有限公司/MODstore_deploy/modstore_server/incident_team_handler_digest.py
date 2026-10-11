@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List
 
+from modstore_server.customer_issue_delivery_contract import _para_task_id
+
 _SECRET_VALUE_RE = re.compile(
     r"(?i)(bearer\s+|(?:api[_-]?key|password|passwd|token|secret|authorization)\s*[:=]\s*)"
     r"[^\s,;'\"]+"
@@ -28,6 +30,11 @@ _SCALAR_KEYS = (
     "failure_kind",
     "summary",
     "output_summary",
+    "output_chars",
+    "output_status",
+    "output_error_code",
+    "branch",
+    "merge_commit_sha",
     "output_error",
     "para_task_id",
     "task_id",
@@ -65,12 +72,7 @@ def _row_digest(row: Any) -> Dict[str, Any]:
             out[key] = _scalar(row.get(key))
     snapshot = row.get("para_result")
     if isinstance(snapshot, dict):
-        task = snapshot.get("task")
-        task_id = (
-            snapshot.get("task_id")
-            or snapshot.get("id")
-            or (task.get("id") if isinstance(task, dict) else None)
-        )
+        task_id = _para_task_id(row)
         if task_id:
             out.setdefault("task_id", _scalar(task_id))
         for key in ("branch", "merge_commit_sha"):
@@ -109,7 +111,7 @@ def handler_output_digest(result: Any) -> Dict[str, Any]:
     digest: Dict[str, Any] = {
         "outputs": [_row_digest(row) for row in outputs[:12]],
     }
-    for key in ("status", "execution_status", "error", "failure_kind"):
+    for key in ("status", "execution_status", "error", "failure_kind", "poll_error"):
         if result.get(key) not in ("", None):
             digest[key] = _scalar(result.get(key))
     if result.get("handler_failed"):

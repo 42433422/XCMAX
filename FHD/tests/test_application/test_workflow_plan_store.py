@@ -148,6 +148,54 @@ class TestWorkflowPlanStore:
         assert [row["plan_id"] for row in store.list_active("u1", session_id="new")] == ["u1-new"]
         assert len(store.list_active("u1")) == 2
 
+    def test_returning_to_original_session_restores_same_run_after_slot_overwrite(
+        self, session_factory
+    ):
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+
+        from app.application.ai_chat_app_service import AIChatApplicationService
+
+        store = WorkflowPlanStore(session_factory=session_factory)
+        svc = object.__new__(AIChatApplicationService)
+        svc._pending_workflows = {}
+        with patch("app.application.workflow.plan_store.WorkflowPlanStore", return_value=store):
+            for session in ("A", "B"):
+                plan = plan_from_dict({**plan_to_dict(_plan()), "plan_id": f"plan-{session}"})
+                svc._pending_workflows["u1"] = {
+                    "plan": plan,
+                    "runtime_context": {"user_id": "u1", "session_id": session},
+                    "agent_run_id": f"run-{session}",
+                    "approval_required": session == "B",
+                    "approval_nodes": [{"node_id": "n2"}] if session == "B" else [],
+                }
+                svc._persist_plan_state(
+                    plan, svc._pending_workflows["u1"]["runtime_context"], "pending_awaiting"
+                )
+            assert svc._pending_workflows["u1"]["agent_run_id"] == "run-B"
+            orchestrator = Mock()
+            orchestrator.continue_run.return_value = SimpleNamespace(run_id="run-A")
+            svc._format_agent_run_response = Mock(return_value={"run_id": "run-A"})
+            with patch(
+                "app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator
+            ):
+                handled, response = svc._resume_pending_dynamic_workflow(
+                    "u1", "确认", "确认", {"session_id": "A"}
+                )
+            assert handled and response["run_id"] == "run-A"
+            orchestrator.continue_run.assert_called_once_with(
+                "run-A", approved_by="u1", runtime_context={"user_id": "u1", "session_id": "A"}
+            )
+            orchestrator.start_run_from_plan.assert_not_called()
+            assert (
+                store.load("plan-B")["runtime_context"]["pending_confirmation"]["agent_run_id"]
+                == "run-B"
+            )
+
+            assert svc._hydrate_pending_workflow("u1", "B")
+            assert svc._pending_workflows["u1"]["approval_required"] is True
+            assert svc._pending_workflows["u1"]["approval_nodes"] == [{"node_id": "n2"}]
+
     def test_upsert_same_plan_id_updates(self, session_factory):
         store = WorkflowPlanStore(session_factory=session_factory)
         plan = _plan()

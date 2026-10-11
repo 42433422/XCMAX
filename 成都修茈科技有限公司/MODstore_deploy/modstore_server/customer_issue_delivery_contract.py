@@ -31,6 +31,13 @@ def execution_succeeded(result: Any) -> bool:
         }
     ):
         return False
+    if result.get("handler") == "para_delegate":
+        return (
+            result.get("ok") is True
+            and result.get("accepted") is True
+            and result.get("completed") is True
+            and bool(_para_task_id(result))
+        )
     nested = result.get("result")
     if isinstance(nested, dict) and nested:
         if any(
@@ -67,6 +74,49 @@ def _is_informational_row(row: Any) -> bool:
 def _handler_outputs_succeeded(outputs: list[Any]) -> bool:
     decisive = [row for row in outputs if not _is_informational_row(row)]
     return bool(decisive) and all(execution_succeeded(row) for row in decisive)
+
+
+def _para_task_id(row: dict[str, Any]) -> Any:
+    snapshot = row.get("para_result")
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
+    task = snapshot.get("task")
+    return (
+        row.get("para_task_id")
+        or row.get("task_id")
+        or snapshot.get("task_id")
+        or snapshot.get("id")
+        or (task.get("id") if isinstance(task, dict) else None)
+    )
+
+
+def execution_pending(result: dict[str, Any]) -> bool:
+    """Accepted Para work remains pending; a failed companion handler cannot be hidden."""
+    if (
+        result.get("ok") is False
+        or result.get("success") is False
+        or result.get("status") in {"failed", "error", "handler_failed", "blocked_by_risk_gate"}
+        or any(result.get(k) for k in ("error", "handler_failed", "blocked_by_risk_gate"))
+    ):
+        return False
+    nested = result.get("result")
+    outputs = nested.get("outputs") if isinstance(nested, dict) else None
+    decisive = [row for row in outputs or [result] if not _is_informational_row(row)]
+
+    def pending(row):
+        return (
+            isinstance(row, dict)
+            and row.get("handler") == "para_delegate"
+            and row.get("ok") is True
+            and row.get("accepted") is True
+            and row.get("completed") is False
+            and not row.get("error")
+            and row.get("status") in {"para_task_accepted", "pending", "running", "queued"}
+            and bool(_para_task_id(row))
+        )
+
+    return any(pending(row) for row in decisive) and all(
+        pending(row) or execution_succeeded(row) for row in decisive
+    )
 
 
 def team_succeeded(rows: list[dict[str, Any]]) -> bool:
@@ -112,7 +162,19 @@ def record_team_progress(
     successful = team_succeeded(rows)
     # An employee run cannot establish release or customer-runtime postconditions.
     resolution.update(
-        state="awaiting_delivery" if successful else "repair_failed",
+        state=(
+            "awaiting_manual_review"
+            if any(row.get("status") == "manual_review" for row in rows)
+            else (
+                "awaiting_delivery"
+                if successful
+                else (
+                    "processing"
+                    if rows and all(row.get("ok") or row.get("status") == "pending" for row in rows)
+                    else "repair_failed"
+                )
+            )
+        ),
         incident_event_id=int(event_id),
         repair_verified=successful,
         team=[{k: row.get(k) for k in ("role", "employee_id", "ok", "status")} for row in rows],

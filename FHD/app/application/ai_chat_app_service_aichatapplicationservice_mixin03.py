@@ -66,15 +66,17 @@ class _AIChatApplicationServicePart03Mixin:
             plan = plan_from_dict(active[0].get("plan") or {})
             if plan is None or not plan.nodes:
                 return False
+            runtime_context = dict(active[0].get("runtime_context") or {})
+            confirmation = runtime_context.pop("pending_confirmation", {})
             self._pending_workflows[user_id] = {
                 "plan": plan,
-                "runtime_context": dict(active[0].get("runtime_context") or {}),
+                "runtime_context": runtime_context,
                 "pending_id": _facade().uuid.uuid4().hex,
                 "thinking_steps": "",
                 "kind": "workflow",
-                "agent_run_id": "",
-                "approval_required": False,
-                "approval_nodes": [],
+                "agent_run_id": str(confirmation.get("agent_run_id") or ""),
+                "approval_required": bool(confirmation.get("approval_required")),
+                "approval_nodes": confirmation.get("approval_nodes") or [],
                 "hydrated_from_db": True,
             }
             return True
@@ -101,6 +103,15 @@ class _AIChatApplicationServicePart03Mixin:
             session_id = (
                 str(rc.get("session_id") or rc.get("conversation_id") or "").strip() or None
             )
+            pending = self._pending_workflows.get(user_id or "") or {}
+            if (
+                status == "pending_awaiting"
+                and getattr(pending.get("plan"), "plan_id", None) == plan.plan_id
+            ):
+                rc["pending_confirmation"] = {
+                    key: pending.get(key)
+                    for key in ("agent_run_id", "approval_required", "approval_nodes")
+                }
             WorkflowPlanStore().save(
                 plan=plan,
                 runtime_context=rc,

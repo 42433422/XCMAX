@@ -31,14 +31,15 @@ class _DynamicWorkflowPendingResumeMixin:
         context = context or {}
         session_id = str(context.get("session_id") or context.get("conversation_id") or "")
         control = text in CONFIRM_WORDS | CANCEL_WORDS
-        if control and user_id not in self._pending_workflows and session_id:
-            self._hydrate_pending_workflow(user_id, session_id)
         pending = self._pending_workflows.get(user_id)
         if pending:
             runtime = pending.get("runtime_context") or {}
             pending_session = str(runtime.get("session_id") or runtime.get("conversation_id") or "")
             if (session_id or pending_session) and pending_session != session_id:
                 pending = None
+        if control and not pending and session_id:
+            if self._hydrate_pending_workflow(user_id, session_id):
+                pending = self._pending_workflows.get(user_id)
         if control and not pending:
             reply = "请说明要确认什么，或回到原任务继续处理；当前会话没有待确认的操作。"
             return True, {

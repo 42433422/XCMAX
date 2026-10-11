@@ -79,10 +79,8 @@ def _safe_shipment_export_path(result: dict[str, Any]) -> str | None:
 
 
 def _next_order_number_payload(suffix: str = "A") -> dict[str, Any]:
-    from app.services.shipment_order_number import reserve_order_number
-
     try:
-        return {"success": True, "data": reserve_order_number(suffix)}
+        return {"success": True, "data": _svc().reserve_order_number(suffix)}
     except RECOVERABLE_ERRORS as exc:
         logger.exception("订单取号失败")
         raise HTTPException(status_code=503, detail="订单取号失败，请稍后重试") from exc

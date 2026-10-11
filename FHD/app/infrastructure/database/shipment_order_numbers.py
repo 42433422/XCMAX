@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import inspect, text
+from sqlalchemy import column, inspect, select, table, text
 
 from app.db import get_runtime_engine
 from app.utils.path_io.path_utils import get_shipment_output_dir
@@ -45,16 +45,18 @@ def reserve_order_number(
             default=0,
         )
         schema = inspect(conn)
-        for table in ("orders", "shipment_orders", "sales_orders"):
-            if schema.has_table(table) and "order_number" in {
-                c["name"] for c in schema.get_columns(table)
+        for table_name in ("orders", "shipment_orders", "sales_orders"):
+            if schema.has_table(table_name) and "order_number" in {
+                c["name"] for c in schema.get_columns(table_name)
             }:
                 seed = max(
                     seed,
                     max(
                         (
                             _historical_sequence(str(row[0]), period)
-                            for row in conn.execute(text(f"SELECT order_number FROM {table}"))
+                            for row in conn.execute(
+                                select(table(table_name, column("order_number")))
+                            )
                         ),
                         default=0,
                     ),
