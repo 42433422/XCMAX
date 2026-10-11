@@ -383,11 +383,8 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
-      - name: Run unit tests
-        if: steps.paths.outputs.skip != 'true'
-        working-directory: frontend
-        run: npm run test
-
+      # 2026-10-12 CI 加速：与 test:coverage 同一测试集合（run 38164763655 实测两次均
+      # 641 test files），只跑带覆盖率的一次，省 ~240s；覆盖率只升不降语义不变。
       - name: Run unit tests with coverage
         if: steps.paths.outputs.skip != 'true'
         working-directory: frontend
