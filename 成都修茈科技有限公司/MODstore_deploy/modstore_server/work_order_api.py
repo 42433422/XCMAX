@@ -16,6 +16,7 @@ from modstore_server.db.work_orders import WorkOrderEvent
 from modstore_server.models import User
 from modstore_server.work_order_core import (
     WO_TRACKS,
+    _json_object as _loads,
     acceptance_plan,
     classify_track,
     derive_wo_id,
@@ -75,20 +76,6 @@ class GateReceiptBody(BaseModel):
     source: str = Field(default="self_heal_loop", max_length=64)
 
 
-def _now_utc() -> datetime:
-    return datetime.now(UTC)
-
-
-def _loads(raw: Any) -> dict[str, Any]:
-    if isinstance(raw, dict):
-        return raw
-    try:
-        parsed = json.loads(str(raw or "{}"))
-    except (TypeError, ValueError):
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-
 def _append_event(db: Session, *, event: dict[str, Any]) -> None:
     row = WorkOrderEvent(
         wo_id=str(event["wo_id"]),
@@ -101,8 +88,8 @@ def _append_event(db: Session, *, event: dict[str, Any]) -> None:
         to_state=str(event.get("to_state") or ""),
         ref=json.dumps(event.get("ref") or {}, ensure_ascii=False),
         note=str(event.get("note") or "")[:500],
-        at=_now_utc(),
-        ts_unix=_now_utc().timestamp(),
+        at=datetime.now(UTC),
+        ts_unix=datetime.now(UTC).timestamp(),
     )
     db.add(row)
     db.commit()
@@ -121,8 +108,7 @@ def _events_of(db: Session, wo_id: str) -> list[WorkOrderEvent]:
 def _view(db: Session, wo_id: str) -> dict[str, Any] | None:
     if not is_valid_wo_id(wo_id):
         return None
-    views = fold(_events_of(db, wo_id))
-    return views.get(wo_id)
+    return fold(_events_of(db, wo_id)).get(wo_id)
 
 
 def _created_facts(db: Session, wo_id: str) -> tuple[str, str, dict[str, Any]]:
@@ -293,7 +279,7 @@ def record_customer_decision(
     }
     transition_saved = idempotency_key and any(
         row.get("event") == "transition"
-        and row.get("to_state") == target
+        and row.get("to") == target
         and row.get("ref") == transition_ref
         for row in view.get("history") or []
     )
@@ -467,16 +453,11 @@ def acceptance(
 
 def _find_by_issue(db: Session, issue_number: int) -> dict[str, Any] | None:
     """按 issue 反查：找携带该 issue_number 的 transition 事件所属工单再折叠。"""
-    hits = db.query(WorkOrderEvent).filter(WorkOrderEvent.event == "transition").all()
-    matched_wo: str | None = None
-    for rec in hits:
+    for rec in db.query(WorkOrderEvent).filter(WorkOrderEvent.event == "transition").all():
         ref = _loads(rec.ref)
         if int(ref.get("issue_number") or 0) == int(issue_number):
-            matched_wo = str(rec.wo_id)
-            break
-    if matched_wo is None:
-        return None
-    return _view(db, matched_wo)
+            return _view(db, str(rec.wo_id))
+    return None
 
 
 @router.get("/by-issue/{issue_number}")

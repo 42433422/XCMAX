@@ -22,7 +22,8 @@ from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.customer_issue_delivery_contract import issue_resolution
 from modstore_server.customer_issue_intake import enqueue_issue, request_identity
 from modstore_server.customer_service_orchestrator import (
-    ticket_lifecycle_payload,
+    CLOSED_CUSTOMER_ISSUE_STATES as _CLOSED,
+    customer_issue_payload as _issue_row,
     ticket_payload,
 )
 from modstore_server.customer_service_tools import audit, json_dumps, json_loads
@@ -36,7 +37,6 @@ from modstore_server.models_cs import (
 from modstore_server.work_order_api import record_customer_decision, route_customer_issue
 
 router = APIRouter()
-_CLOSED = frozenset({"resolved", "closed", "done", "rejected"})
 
 
 def _wake_owner_intake(ticket_id: int, source: str) -> None:
@@ -318,33 +318,6 @@ class CustomerIssueDecisionBody(BaseModel):
     decision: Literal["resolved", "reopen"]
     note: str = Field(min_length=4, max_length=2000)
     idempotency_key: str = Field(min_length=8, max_length=128)
-
-
-def _issue_row(row: CustomerServiceTicket) -> dict[str, Any]:
-    evidence = json_loads(row.evidence_json, {})
-    resolution = evidence.get("resolution") or {}
-    state = str(resolution.get("state") or "received")
-    reports = [r for r in evidence.get("employee_reports") or [] if isinstance(r, dict)]
-    closed = row.status in _CLOSED
-    return {
-        "id": row.id,
-        "ticket_no": row.ticket_no,
-        "title": row.title,
-        "summary": row.summary,
-        "status": row.status,
-        "state": state,
-        "lifecycle_label": ticket_lifecycle_payload(row.status, row.decision_status)[
-            "lifecycle_label"
-        ],
-        "latest_result": (
-            {k: reports[-1].get(k) for k in ("team_ok", "progress", "at")} if reports else None
-        ),
-        "last_error": str(resolution.get("last_error") or ""),
-        "closed_at": row.closed_at.isoformat() if row.closed_at else "",
-        "reopen_count": len(evidence.get("reopen_history") or []),
-        "can_resolve": not closed,
-        "can_reopen": closed or state not in {"received", "reopened"},
-    }
 
 
 def _sync_customer_decision_work_order(

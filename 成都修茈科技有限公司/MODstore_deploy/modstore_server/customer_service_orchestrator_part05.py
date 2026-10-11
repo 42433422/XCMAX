@@ -4,11 +4,15 @@
 from __future__ import annotations
 
 import importlib
+from typing import Any
 
 from modstore_server.customer_issue_delivery_contract import (
     record_team_progress,
     team_succeeded,
 )
+
+
+CLOSED_CUSTOMER_ISSUE_STATES = frozenset({"resolved", "closed", "done", "rejected"})
 
 
 def _facade():
@@ -19,7 +23,7 @@ def ticket_lifecycle_stage(status: str | None = None, decision_status: str | Non
     """用户侧五阶段：1已收到 → 2处理中 → 3有结果 → 4待补充 → 5已完成。"""
     s = str(status or "").strip().lower()
     d = str(decision_status or "").strip().lower()
-    if s in {"resolved", "closed", "done", "rejected"}:
+    if s in CLOSED_CUSTOMER_ISSUE_STATES:
         return 5
     if s == "waiting_user" or d == "needs_more_info":
         return 4
@@ -345,4 +349,31 @@ def action_payload(row: _facade().Any) -> _facade().Dict[str, _facade().Any]:
         "error": row.error,
         "created_at": row.created_at.isoformat() if row.created_at else "",
         "updated_at": row.updated_at.isoformat() if row.updated_at else "",
+    }
+
+
+def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, Any]:
+    evidence = _facade().json_loads(row.evidence_json, {})
+    resolution = evidence.get("resolution") or {}
+    state = str(resolution.get("state") or "received")
+    reports = [r for r in evidence.get("employee_reports") or [] if isinstance(r, dict)]
+    closed = row.status in CLOSED_CUSTOMER_ISSUE_STATES
+    return {
+        "id": row.id,
+        "ticket_no": row.ticket_no,
+        "title": row.title,
+        "summary": row.summary,
+        "status": row.status,
+        "state": state,
+        "lifecycle_label": _facade().ticket_lifecycle_payload(row.status, row.decision_status)[
+            "lifecycle_label"
+        ],
+        "latest_result": (
+            {k: reports[-1].get(k) for k in ("team_ok", "progress", "at")} if reports else None
+        ),
+        "last_error": str(resolution.get("last_error") or ""),
+        "closed_at": row.closed_at.isoformat() if row.closed_at else "",
+        "reopen_count": len(evidence.get("reopen_history") or []),
+        "can_resolve": not closed,
+        "can_reopen": closed or state not in {"received", "reopened"},
     }

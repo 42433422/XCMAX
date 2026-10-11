@@ -385,7 +385,7 @@ class TestWorkOrderApi:
         assert r.json()["reason"] == "invalid_transition"
 
 
-def test_customer_decision_is_owner_bound_and_moves_only_inside_window(monkeypatch) -> None:
+def test_customer_decision_is_owner_bound_and_moves_only_inside_window(monkeypatch, client) -> None:
     import pytest
     from sqlalchemy import event
     from sqlalchemy.exc import OperationalError
@@ -531,6 +531,12 @@ def test_customer_decision_is_owner_bound_and_moves_only_inside_window(monkeypat
         )["replayed"]
         closed_events = db.query(WorkOrderEvent).filter_by(wo_id=wo_id, event="transition").all()
         assert sum(row.to_state == "closed" for row in closed_events) == 1
+        for state in ("reopened", "in_dev", "merged", "released", "verifying"):
+            assert api.transition(api.TransitionBody(wo_id=wo_id, to_state=state), db=db, _user=owner)["ok"]
+        before_reentry = len(db.query(WorkOrderEvent).filter_by(wo_id=wo_id).all())
+        assert customer_issue_api.decide_product_issue(ticket.id, decision, db=db, user=owner)["replayed"]
+        assert api._view(db, wo_id)["status"] == "verifying"
+        assert len(db.query(WorkOrderEvent).filter_by(wo_id=wo_id).all()) == before_reentry
         evidence["resolution"]["state"] = "rejected"
         ticket.status = "rejected"
         ticket.evidence_json = json_dumps(evidence)
