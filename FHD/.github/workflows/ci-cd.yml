@@ -146,16 +146,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-          fetch-depth: 0
+          # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
+          fetch-depth: 1
       - name: Classify changed paths (macOS)
         id: c
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category macos \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
       - name: Classify changed paths (Windows)
         id: w
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category windows \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
@@ -180,12 +183,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-          fetch-depth: 0
+          # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
+          fetch-depth: 1
 
       - name: Classify changed paths (unified classifier)
         id: paths
         if: github.event_name == 'pull_request'
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category backend \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
@@ -351,12 +356,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-          fetch-depth: 0
+          # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
+          fetch-depth: 1
 
       - name: Classify changed paths (unified classifier)
         id: paths
         if: github.event_name == 'pull_request'
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category frontend \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
