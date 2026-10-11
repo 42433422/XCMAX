@@ -306,7 +306,7 @@ class DatabaseService(NeuroEventPublisherMixin):
                     raise _RestoreAuditReferenceError("无法确定当前审计关联主体，未恢复")
                 identities = []
                 for db, schema in zip((current, staged), schemas):
-                    identity = None
+                    identity: tuple[Any, ...] | None = None
                     if set(parent_names) | {"market_user_id", "tenant_id"} <= schema.keys():
                         cursor = db.execute(
                             str(actor), tuple(actor.params[key] for key in positions)
@@ -315,11 +315,11 @@ class DatabaseService(NeuroEventPublisherMixin):
                         if row is not None:
                             record = dict(zip((column[0] for column in cursor.description), row))
                             identity = ("scoped", (record["market_user_id"], record["tenant_id"]))
-                            # Legacy local accounts need an unchanged creation identity;
+                            # A tenant only scopes data; local actors need creation identity.
                             # neither a reused row ID nor credentials establish ownership.
-                            if identity[1] == (None, None):
+                            if record["market_user_id"] is None:
                                 identity = (
-                                    ("legacy", record["created_at"])
+                                    ("legacy", record["tenant_id"], record["created_at"])
                                     if record.get("created_at")
                                     else None
                                 )

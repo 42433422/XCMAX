@@ -92,8 +92,10 @@ class TestRestoreDatabase:
             "market-missing",
             "tenant-missing",
             "legacy-created",
+            "tenant-local-created",
             "legacy-unknown",
             "legacy-mismatch",
+            "tenant-local-mismatch",
             "legacy-time-missing",
             "legacy-tag-collision",
             "old-identity-schema",
@@ -126,6 +128,7 @@ class TestRestoreDatabase:
             "market-missing": {"market_user_id": None},
             "tenant-missing": {"tenant_id": None},
             "legacy-mismatch": {"created_at": datetime(2026, 10, 2, 9, 0, 0)},
+            "tenant-local-mismatch": {"created_at": datetime(2026, 10, 2, 9, 0, 0)},
             "legacy-time-missing": {"created_at": None},
             "legacy-tag-collision": {
                 "market_user_id": "legacy",
@@ -140,7 +143,9 @@ class TestRestoreDatabase:
                         username="actor",
                         password="test",
                         role="user",
-                        market_user_id=None if case.startswith("legacy-") else 101,
+                        market_user_id=None
+                        if case.startswith(("legacy-", "tenant-local-"))
+                        else 101,
                         tenant_id=None if case.startswith("legacy-") else 10,
                         created_at=None if case == "legacy-unknown" else birth,
                     )
@@ -230,6 +235,7 @@ class TestRestoreDatabase:
                 "workflow-parent",
                 "business-orphan",
                 "legacy-created",
+                "tenant-local-created",
                 "composite-parent",
                 "implicit-parent",
             }
@@ -349,13 +355,9 @@ class TestRestoreDatabase:
         assert not list(tmp_path.glob("xcagi-restore-*"))
 
     @pytest.mark.parametrize("path,message", [(None, "仅支持 SQLite"), ("live.db", "不存在")])
-    def test_restore_unavailable(self, tmp_path, path, message):
-        svc = DatabaseService()
-        with (
-            patch.object(svc, "_get_db_path", return_value=path),
-            patch.object(svc, "_get_backup_dir", return_value=str(tmp_path)),
-        ):
-            result = svc.restore_database("nonexistent.bak")
+    def test_restore_unavailable(self, service, path, message):
+        with patch.object(service, "_get_db_path", return_value=path):
+            result = service.restore_database("nonexistent.bak")
         assert result["success"] is False
         assert message in result["message"]
 
@@ -422,25 +424,22 @@ class TestRestoreDatabase:
 
 class TestListBackups:
     @pytest.mark.parametrize("exists", [False, True])
-    def test_list_empty_or_missing_dir(self, tmp_path, exists):
+    def test_list_empty_or_missing_dir(self, tmp_path, service, exists):
         folder = tmp_path / "backups"
         if exists:
             folder.mkdir()
-        with patch.object(DatabaseService, "_get_backup_dir", return_value=str(folder)):
-            result = DatabaseService().list_backups()
+        result = service.list_backups()
         assert result["success"] is True
         assert result["count"] == 0
 
-    def test_list_finds_bak_files(self, tmp_path):
-        svc = DatabaseService()
+    def test_list_finds_bak_files(self, tmp_path, service):
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir()
         (backup_dir / "test1.bak").write_text("b1")
         (backup_dir / "test2.bak").write_text("b2")
         (backup_dir / "other.txt").write_text("not a backup")
 
-        with patch.object(svc, "_get_backup_dir", return_value=str(backup_dir)):
-            result = svc.list_backups()
+        result = service.list_backups()
 
         assert result["success"] is True
         assert result["count"] == 2
@@ -455,10 +454,8 @@ class TestListBackups:
 
 
 class TestDeleteBackup:
-    def test_delete_nonexistent_returns_failure(self, tmp_path):
-        svc = DatabaseService()
-        with patch.object(svc, "_get_backup_dir", return_value=str(tmp_path)):
-            result = svc.delete_backup("nonexistent.bak")
+    def test_delete_nonexistent_returns_failure(self, service):
+        result = service.delete_backup("nonexistent.bak")
         assert result["success"] is False
 
     @pytest.mark.parametrize("absolute", [False, True])
@@ -481,17 +478,12 @@ class TestServiceReExportGuard:
         assert services_pkg.get_database_service is correct_mod.get_database_service
         assert isinstance(services_pkg.get_database_service(), DatabaseService)
 
-    def test_backup_database_uses_hot_backup_not_shutil_copy(self, tmp_path):
-        db_file = tmp_path / "test.db"
+    def test_backup_database_uses_hot_backup_not_shutil_copy(self, tmp_path, service):
+        db_file = tmp_path / "live.db"
         with sqlite3.connect(db_file) as db:
             db.execute("CREATE TABLE t (id INTEGER)")
-        svc = DatabaseService()
-        with (
-            patch.object(svc, "_get_db_path", return_value=str(db_file)),
-            patch.object(svc, "_get_backup_dir", return_value=str(tmp_path)),
-            patch.object(DatabaseService, "_hot_backup", return_value=False) as mock_hot,
-        ):
-            result = svc.backup_database()
+        with patch.object(DatabaseService, "_hot_backup", return_value=False) as mock_hot:
+            result = service.backup_database()
         assert result["success"] is False
         assert "热备份失败" in result["message"]
         mock_hot.assert_called_once()
