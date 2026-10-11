@@ -10,6 +10,7 @@ import pytest
 from fastapi import Request
 
 from app.application.ai_chat_app_service import AIChatApplicationService
+from app.application.workflow.types import PlanGraph
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
 
 ISSUE_MESSAGE = "客户闭环验收客户 发货单：客户闭环测试商品A 数量24 单价3.5"
@@ -103,12 +104,42 @@ def test_stream_entry_hands_shipment_to_the_same_chat_service(
     assert _events(raw)[-1]["result"]["response"] == "已生成发货单"
 
 
-def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch):
+@pytest.mark.parametrize("message", ["确认", "取消"])
+@pytest.mark.parametrize(
+    "case", ["absent", "missing", "corrupt", "empty", "expired", "cross_session"]
+)
+def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, case):
+    _no_llm(monkeypatch)
     service = AIChatApplicationService()
     monkeypatch.setattr(service, "_hydrate_pending_workflow", lambda *_a: False)
+    if case != "absent":
+        service._pending_workflows["u-cancel"] = {
+            "plan": {}
+            if case == "corrupt"
+            else PlanGraph("empty", "fixture")
+            if case == "empty"
+            else None,
+            "runtime_context": {"session_id": "other" if case == "cross_session" else "s"},
+            "kind": "clarification" if case == "expired" else "workflow",
+            "created_at": 1.0,
+            "ttl_seconds": 30,
+        }
+    monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
+    execute = MagicMock(side_effect=AssertionError("Invalid control must not execute"))
+    monkeypatch.setattr(service, "_run_workflow_with_state_updates", execute)
     trace = MagicMock(side_effect=AssertionError("取消不得创建闲聊业务任务"))
     monkeypatch.setattr(service, "_attach_deterministic_workflow_trace", trace)
-    result = service.process_chat("u-cancel", "取消", context={"session_id": "s"}, source="normal")
+    body = chat_helpers.XcagiCompatChatBody(
+        message=message, user_id="u-cancel", context={"session_id": "s"}
+    )
+    result = _events(
+        b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
+    )[-1]["result"]
     trace.assert_not_called()
     assert result["data"]["action"] == "clarification_required"
-    assert service._pending_workflows == {}
+    execute.assert_not_called()
+    assert (
+        not service._pending_workflows
+        if case in {"absent", "expired"}
+        else "u-cancel" in service._pending_workflows
+    )

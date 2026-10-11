@@ -12,7 +12,7 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-from app.application.workflow.types import PlanGraph
+from app.application.workflow.types import PlanGraph, WorkflowNode
 from app.domain.autonomy.risk_types import RiskDecision
 
 
@@ -667,20 +667,15 @@ class TestTryHandleDynamicWorkflowExtended:
 
     def test_pro_pending_workflow_approval_required(self):
         service = _make_service()
-        mock_plan = Mock()
-        mock_plan.plan_id = "p1"
-        mock_plan.intent = "product_create"
-        mock_plan.metadata = {}
-        mock_node = Mock()
-        mock_node.node_id = "n1"
-        mock_node.tool_id = "products"
-        mock_node.action = "create"
-        mock_node.description = "create product"
-        mock_node.risk = "high"
-        mock_node.depends_on = []
-        mock_node.next = None
-        mock_node.branches = []
-        mock_plan.nodes = [mock_node]
+        mock_node = WorkflowNode(
+            "n1",
+            "products",
+            "create",
+            params={"name": "test"},
+            description="create product",
+            risk="high",
+        )
+        mock_plan = PlanGraph("p1", "product_create", nodes=[mock_node])
         service._pending_workflows["u1"] = {
             "plan": mock_plan,
             "runtime_context": {},
@@ -698,7 +693,7 @@ class TestTryHandleDynamicWorkflowExtended:
                 service.approval_service,
                 "create_approval_request",
                 return_value=approval_request,
-            ),
+            ) as create_request,
             patch.object(
                 service.approval_service,
                 "get_request_metadata",
@@ -708,6 +703,7 @@ class TestTryHandleDynamicWorkflowExtended:
             result = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result is not None
         assert "审批" in result["response"]
+        create_request.assert_called_once()
 
 
 class TestBuildWorkflowThinkingSteps:

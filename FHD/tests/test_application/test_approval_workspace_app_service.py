@@ -91,7 +91,11 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
                 "create table ai_action_audit(actor text, action text, payload text)"
             )
         with sessions() as db:
-            db.add(User(id=41, username="restore-probe", password="test"))
+            db.add(
+                User(
+                    id=41, username="restore-probe", password="test", market_user_id=41, tenant_id=1
+                )
+            )
             db.add(ApprovalFlow(id=1, flow_key="restore-probe", flow_name="Restore probe"))
             db.commit()
             db.add(
@@ -164,9 +168,10 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
             approval.get_pending_workflow.return_value = {"plan": plan, "runtime_context": context}
 
             def resume(**kwargs):
+                original_receipt = repo.get(trace["run_id"]).to_dict()
                 with patch.object(svc, "_get_db_path", return_value=str(live)):
                     restored = svc.restore_database(str(backup))
-                assert repo.get(trace["run_id"]) is None
+                assert repo.get(trace["run_id"]).to_dict() == original_receipt
                 return SimpleNamespace(
                     success=restored["success"],
                     node_results=[
