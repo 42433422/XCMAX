@@ -121,9 +121,15 @@ describe('packaged backend build identity resource handoff', () => {
 
   it('hands the same Resources to the actual migration spawn', async () => {
     await runBackendMigrationWithRollback('1.0.0.1')
-    expect(markPreparedRollbackRecoveryRequired).toHaveBeenCalledOnce()
-    expect(clearPreparedRollbackRecoveryRequired).toHaveBeenCalledOnce()
-    expect(state.lifecycle).toEqual(['intent', 'spawn', 'clear'])
+    if (process.platform === 'win32') {
+      expect(markPreparedRollbackRecoveryRequired).toHaveBeenCalledOnce()
+      expect(clearPreparedRollbackRecoveryRequired).toHaveBeenCalledOnce()
+      expect(state.lifecycle).toEqual(['intent', 'spawn', 'clear'])
+    } else {
+      expect(markPreparedRollbackRecoveryRequired).not.toHaveBeenCalled()
+      expect(clearPreparedRollbackRecoveryRequired).not.toHaveBeenCalled()
+      expect(state.lifecycle).toEqual(['spawn'])
+    }
     expect(state.spawn).toHaveBeenCalledTimes(1)
     expect(state.spawn.mock.calls[0][1]).toContain('--migrate-only')
     expect(state.spawn.mock.calls[0][2].env.XCAGI_DESKTOP_RESOURCES).toBe(resources)
