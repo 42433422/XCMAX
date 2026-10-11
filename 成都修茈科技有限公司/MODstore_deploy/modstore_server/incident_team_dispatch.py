@@ -13,6 +13,7 @@ from modstore_server.customer_issue_delivery_contract import (
     execution_succeeded,
     team_succeeded,
 )
+from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
@@ -172,6 +173,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         )
         row = {
             "employee_id": employee_id,
+            "handler_outputs": handler_output_digest(result),
             "ok": (not risk_blocked and execution_succeeded(result)),
             "role": role,
             "route": route,
