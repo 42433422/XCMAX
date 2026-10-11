@@ -1,0 +1,191 @@
+{
+ "http": 200,
+ "body": {
+  "ticket": {
+   "id": 37,
+   "user_id": 77,
+   "session_id": 61,
+   "ticket_no": "CI54d2a3df461aab10dd1451ef2667823cd7ce31c21b13ec25",
+   "title": "[验收测试] ai_issue_implement 文档示例里有 --llm-api-key 命令行参数",
+   "intent": "product_issue",
+   "issue_domain": "software",
+   "issue_domain_label": "软件",
+   "subject_type": "host",
+   "subject_id": "",
+   "status": "processing",
+   "priority": "normal",
+   "evidence": {
+    "source": "customer_feedback",
+    "source_ref": "TLA-20261011-R1",
+    "title": "[验收测试] ai_issue_implement 文档示例里有 --llm-api-key 命令行参数",
+    "description": "【XCMAX 工单闭环验收测试工单，测试租户A，非真实客户】现象：FHD/scripts/dev/ai_issue_implement.py 顶部文档字符串『CI 中（实际执行）』示例里有一行 --llm-api-key \"${XCAGI_LLM_API_KEY:-}\"，会鼓励把密钥写进命令行参数。期望：只删除这一行，其余不动（对应 GitHub 测试 issue #2234）。发生时间 2026-10-11 10:55（UTC+8），模块：发版解决问题/AI Issue Implement 文档。联系人：TEST-TICKET-LOOP-A。",
+    "issue_domain": "software",
+    "target_mod_id": "",
+    "installed_version": "1.0.0.5",
+    "acceptance_criteria": "只改 1 个文件，净删 1 行；tests/test_dev/test_ai_issue_implement.py 通过",
+    "shared_core_prerequisite": "",
+    "work_order_id": "",
+    "support_bundle_sha256": "",
+    "support_bundle_base64": "",
+    "customer_instance_id": "",
+    "product_version": "1.0.0.5",
+    "git_sha": "12aa243c1750cabb40632f541b59f841309bfb44",
+    "intake_request_sha256": "6482633956ab609aab7bfe3a10a85d4dba5bdbdf8e74a6b902a35c679c1794d5",
+    "resolution": {
+     "schema_version": 1,
+     "ticket_id": 37,
+     "owner_user_id": 77,
+     "route": "shared_core",
+     "state": "repair_failed",
+     "source_ref": "TLA-20261011-R1",
+     "original_title": "[验收测试] ai_issue_implement 文档示例里有 --llm-api-key 命令行参数",
+     "original_request": "【XCMAX 工单闭环验收测试工单，测试租户A，非真实客户】现象：FHD/scripts/dev/ai_issue_implement.py 顶部文档字符串『CI 中（实际执行）』示例里有一行 --llm-api-key \"${XCAGI_LLM_API_KEY:-}\"，会鼓励把密钥写进命令行参数。期望：只删除这一行，其余不动（对应 GitHub 测试 issue #2234）。发生时间 2026-10-11 10:55（UTC+8），模块：发版解决问题/AI Issue Implement 文档。联系人：TEST-TICKET-LOOP-A。",
+     "reported_version": "1.0.0.5",
+     "incident_event_id": 85174,
+     "repair_verified": false,
+     "team": [
+      {
+       "role": "scout",
+       "employee_id": "change-request-auditor",
+       "ok": false,
+       "status": "unknown"
+      },
+      {
+       "role": "fix",
+       "employee_id": "vibe-coding-maintainer",
+       "ok": true,
+       "status": "unknown"
+      },
+      {
+       "role": "verify",
+       "employee_id": "test-qa-runner",
+       "ok": false,
+       "status": "unknown"
+      }
+     ],
+     "updated_at": "2026-10-11T03:02:35.051244+00:00"
+    },
+    "employee_reports": [
+     {
+      "type": "incident_team",
+      "progress_sha256": "29bd31b4367604658b56159c6bbb27935ef8fa0a036eee68ad1d74a5881fc4bc",
+      "event_id": 85174,
+      "team_ok": false,
+      "progress": "排查（change-request-auditor）未完成（unknown）；修复（vibe-coding-maintainer）已完成；验证（test-qa-runner）未完成（unknown）",
+      "at": "2026-10-11T03:02:35.062928+00:00"
+     }
+    ]
+   },
+   "summary": "【XCMAX 工单闭环验收测试工单，测试租户A，非真实客户】现象：FHD/scripts/dev/ai_issue_implement.py 顶部文档字符串『CI 中（实际执行）』示例里有一行 --llm-api-key \"${XCAGI_LLM_API_KEY:-}\"，会鼓励把密钥写进命令行参数。期望：只删除这一行，其余不动（对应 GitHub 测试 issue #2234）。发生时间 2026-10-11 10:55（UTC+8），模块：发版解决问题/AI Issue Implement 文档。联系人：TEST-TICKET-LOOP-A。",
+   "decision_status": "approved",
+   "automation_level": "auto",
+   "created_at": "2026-10-11T02:53:22.360866",
+   "updated_at": "2026-10-11T03:02:35.062914",
+   "closed_at": "",
+   "lifecycle_stage": 3,
+   "lifecycle_label": "有结果",
+   "lifecycle_steps": [
+    {
+     "stage": 1,
+     "label": "已收到",
+     "state": "done"
+    },
+    {
+     "stage": 2,
+     "label": "处理中",
+     "state": "done"
+    },
+    {
+     "stage": 3,
+     "label": "有结果",
+     "state": "current"
+    },
+    {
+     "stage": 4,
+     "label": "待补充",
+     "state": "todo"
+    },
+    {
+     "stage": 5,
+     "label": "已完成",
+     "state": "todo"
+    }
+   ]
+  },
+  "decisions": [],
+  "actions": [
+   {
+    "id": 25,
+    "ticket_id": 37,
+    "decision_id": null,
+    "action_type": "employee.dispatch",
+    "target_type": "incident_team",
+    "target_id": "85174",
+    "status": "completed",
+    "request": {
+     "event_id": 85174,
+     "team_ok": false,
+     "roles": [
+      {
+       "role": "scout",
+       "employee_id": "change-request-auditor",
+       "ok": false,
+       "status": "unknown"
+      },
+      {
+       "role": "fix",
+       "employee_id": "vibe-coding-maintainer",
+       "ok": true,
+       "status": "unknown"
+      },
+      {
+       "role": "verify",
+       "employee_id": "test-qa-runner",
+       "ok": false,
+       "status": "unknown"
+      }
+     ]
+    },
+    "result": {
+     "ok": false,
+     "progress": "排查（change-request-auditor）未完成（unknown）；修复（vibe-coding-maintainer）已完成；验证（test-qa-runner）未完成（unknown）",
+     "event_id": 85174,
+     "team_ok": false
+    },
+    "error": "",
+    "created_at": "2026-10-11T03:02:35.059148",
+    "updated_at": "2026-10-11T03:02:35.062260"
+   }
+  ],
+  "audit_logs": [
+   {
+    "id": 196,
+    "ticket_id": 37,
+    "session_id": 61,
+    "actor_user_id": 77,
+    "actor_type": "ai",
+    "event_type": "issue_intake",
+    "detail": {
+     "source_ref": "TLA-20261011-R1",
+     "event_id": "ops.intake.customer_ticket:CI54d2a3df461aab10dd1451ef2667823cd7ce31c21b13ec25:6482633956ab609aab7bfe3a"
+    },
+    "created_at": "2026-10-11T02:53:22.385865"
+   },
+   {
+    "id": 197,
+    "ticket_id": 37,
+    "session_id": 61,
+    "actor_user_id": null,
+    "actor_type": "system",
+    "event_type": "employee_progress",
+    "detail": {
+     "event_id": 85174,
+     "team_ok": false,
+     "progress": "排查（change-request-auditor）未完成（unknown）；修复（vibe-coding-maintainer）已完成；验证（test-qa-runner）未完成（unknown）",
+     "action_id": 25
+    },
+    "created_at": "2026-10-11T03:02:35.064136"
+   }
+  ]
+ }
+}

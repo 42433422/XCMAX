@@ -148,6 +148,7 @@
   "/api/inventory/locations",
   "/api/inventory/locations/{location_id}",
   "/api/inventory/out",
+  "/api/inventory/setup/warehouse",
   "/api/inventory/summary",
   "/api/inventory/transactions",
   "/api/inventory/transfer",

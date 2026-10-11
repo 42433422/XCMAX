@@ -68,12 +68,16 @@ def match_product(
             if _normalize_text(p.get("name")) == name_norm:
                 return p
 
-    # 4) 名称包含
+    # 4) 名称包含：多个命中时取名称最长者，避免短名抢先绑到更具体的商品。
     if name_norm:
-        for p in db_products:
-            p_name = _normalize_text(p.get("name"))
-            if p_name and (name_norm in p_name or p_name in name_norm):
-                return p
+        contained = [
+            p
+            for p in db_products
+            if (p_name := _normalize_text(p.get("name")))
+            and (name_norm in p_name or p_name in name_norm)
+        ]
+        if contained:
+            return max(contained, key=lambda p: len(_normalize_text(p.get("name"))))
 
     return None
 

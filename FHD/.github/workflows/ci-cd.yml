@@ -329,9 +329,17 @@ jobs:
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: |
-          python -m pytest tests/ -q -m 'not coverage_ramp' \
-            --cov --cov-branch --cov-report=json:coverage-behavior.json \
-            --cov-fail-under=0
+          # 行为口径 = 全量用例去掉 coverage_ramp 标记的用例；conftest 只按文件名
+          # test_coverage_ramp_*.py 打标。没有这类文件时 -m 'not coverage_ramp' 不剔除任何用例，
+          # 与上一步是同一套测试，直接从同一份 .coverage 数据导出行为 json，省掉重复的全量 pytest。
+          # 一旦出现 ramp 文件，回退为原来的独立测量（口径不变）。
+          if find tests -name 'test_coverage_ramp_*.py' -not -path '*/__pycache__/*' | grep -q .; then
+            python -m pytest tests/ -q -m 'not coverage_ramp' \
+              --cov --cov-branch --cov-report=json:coverage-behavior.json \
+              --cov-fail-under=0
+          else
+            python -m coverage json -o coverage-behavior.json --fail-under=0
+          fi
           python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
 
   frontend-test:

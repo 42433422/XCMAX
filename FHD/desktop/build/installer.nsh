@@ -19,7 +19,7 @@
 
   DetailPrint "Registering XCAGI backup scheduled tasks..."
   !insertmacro XcagiResolvePowerShell
-  nsExec::ExecToLog '"$R9" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\backend\_internal\scripts\backup\Install-BackupTask.ps1"'
+  nsExec::ExecToLog '"$R9" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\backend\_internal\scripts\backup\Install-BackupTask.ps1" -DataDir "$APPDATA\XCAGI"'
   Pop $0
   ${If} $0 != 0
     DetailPrint "WARNING: backup task registration exited with code $0. Installation continues."

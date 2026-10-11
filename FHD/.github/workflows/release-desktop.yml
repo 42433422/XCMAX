@@ -303,10 +303,19 @@ jobs:
           printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
           ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '${official_dir}' '${staging_dir}' && chmod 0700 '${staging_dir}'"
-          scp "${SSH_OPTS[@]}" "$artifact" "$sha_file" "root@${HOST}:${staging_dir}/"
+          uploaded=0
+          for attempt in 1 2 3; do
+            if scp "${SSH_OPTS[@]}" "$artifact" "$sha_file" "root@${HOST}:${staging_dir}/"; then
+              uploaded=1
+              break
+            fi
+            echo "interim installer upload attempt ${attempt} failed"
+            sleep 10
+          done
+          test "$uploaded" = 1
           ssh "${SSH_OPTS[@]}" "root@${HOST}" "bash -s" -- \
             "$official_dir" "$staging_dir" "$filename" "$local_sha" <<'REMOTE_INTERIM'
           set -euo pipefail

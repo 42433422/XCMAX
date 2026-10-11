@@ -6,6 +6,8 @@ import json
 import re
 from typing import Any, Dict, List
 
+from modstore_server.employee_pack_blueprints_template import RUN_AUTH_GUARD_PY
+
 
 def _employee_stem(emp_id: str) -> str:
     s = re.sub(r"[^a-z0-9_]", "_", (emp_id or "").strip().lower())
@@ -43,7 +45,9 @@ def render_suite_blueprints_py(mod_id: str, mod_name: str, employees: List[Dict[
         fn = re.sub(r"[^a-z0-9_]", "_", stem)
         per_emp_routes.append(
             f"    @router.post('/employees/' + {eid_lit} + '/run')\n"
-            f"    async def emp_run_{fn}(payload: Dict[str, Any] | None = None):\n"
+            f"    async def emp_run_{fn}(\n"
+            f"        payload: Dict[str, Any] | None = None, _user=Depends(_require_run_user)\n"
+            f"    ):\n"
             f"        return await _dispatch_run(mod_id, {eid_lit}, {stem_lit}, payload)\n\n"
             f"    @router.get('/employees/' + {eid_lit} + '/status')\n"
             f"    async def emp_status_{fn}():\n"
@@ -61,9 +65,8 @@ def render_suite_blueprints_py(mod_id: str, mod_name: str, employees: List[Dict[
         "import logging\n"
         "import os\n"
         "from typing import Any, Dict, List, Optional\n\n"
-        "from fastapi import APIRouter\n\n"
-        "logger = logging.getLogger(__name__)\n\n"
-        f"MOD_ID = {mod_lit}\n"
+        "from fastapi import APIRouter, Depends, HTTPException, Request\n\n"
+        "logger = logging.getLogger(__name__)\n\n" + RUN_AUTH_GUARD_PY + f"MOD_ID = {mod_lit}\n"
         f"MOD_NAME = {name_lit}\n"
         f"EMPLOYEES: List[Dict[str, str]] = json.loads({json.dumps(employees_lit)})\n\n\n"
         "def _resolve_mod_path(mod_id: str) -> Optional[str]:\n"
