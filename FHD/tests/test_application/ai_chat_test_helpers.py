@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.application.ai_chat_app_service import AIChatApplicationService
+from app.application.workflow.types import PlanGraph, WorkflowNode
 
 
 def _make_svc() -> AIChatApplicationService:
@@ -29,8 +30,7 @@ def _make_plan(
     risk_level: str = "low",
     metadata=None,
 ):
-    """构造一个简单的 plan 对象（避免依赖真实 PlanGraph）。"""
-    return SimpleNamespace(
+    return PlanGraph(
         plan_id=plan_id,
         intent=intent,
         nodes=nodes or [],
@@ -51,7 +51,7 @@ def _make_node(
     depends_on=None,
     description: str = "",
 ):
-    return SimpleNamespace(
+    return WorkflowNode(
         node_id=node_id,
         tool_id=tool_id,
         action=action,
