@@ -277,32 +277,22 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         if target_match:
             del_target = target_match.group(1).strip()
         return {"intent": "delete_entity", "slots": {"keyword": del_target}}
-    report_keywords = "报表 销售报表 库存报表 采购报表 汇总 经营看板 数据看板 统计"
-    # M11：同一类问题 —— 「其他业务实体 + 要产物」时不得停在只读汇总查询上。
-    # 传空实体元组，此处只看「其他业务实体 + 产物」；单实体汇总（「导出报表」
-    # 「库存报表」）保持既有 reports_query 行为不变。
+    # 产物请求仍走规划器，单实体汇总保留报表查询。
     if _requires_llm_planning(text, ()):
         return {"intent": "unknown", "slots": {}}
-    if any(k in text for k in report_keywords.split()):
-        return {"intent": "reports_query", "slots": {"keyword": ""}}
-    inventory_count_keywords = ("库存盘点", "盘点", "实盘")
-    if any(k in text for k in inventory_count_keywords):
-        return {
-            "intent": "inventory_count",
-            "slots": {"product_id": "", "warehouse_id": "", "actual_quantity": ""},
-        }
-    inventory_keywords = ("库存", "库存预警", "低库存", "库存不足", "缺货", "原材料库存", "仓库")
-    if any(k in text for k in inventory_keywords):
-        return {"intent": "inventory_alert", "slots": {}}
-    print_label_keywords = ("标签", "打标签", "打印标签", "商标", "贴标")
-    if any(k in text for k in print_label_keywords):
-        from app.application.label_print_inputs import extract_label_print_slots
-
-        return {
-            "intent": "label_print",
-            "slots": extract_label_print_slots(text),
-        }
-    for keywords, intent, slots in (
+    for keywords, intent, route_slots in (
+        (
+            "报表 销售报表 库存报表 采购报表 汇总 经营看板 数据看板 统计",
+            "reports_query",
+            {"keyword": ""},
+        ),
+        (
+            "库存盘点 盘点 实盘",
+            "inventory_count",
+            {"product_id": "", "warehouse_id": "", "actual_quantity": ""},
+        ),
+        ("库存 库存预警 低库存 库存不足 缺货 原材料库存 仓库", "inventory_alert", {}),
+        ("标签 打标签 打印标签 商标 贴标", "label_print", {}),
         ("物料 原材料 材料", "materials_query", {"keyword": ""}),
         ("补货 补货建议 采购建议 建议采购 补多少", "replenishment_suggest", {}),
         ("生产工单 生产 工单 BOM 领料 完工", "mrp_production", {"order_id": "", "bom_id": ""}),
@@ -317,7 +307,11 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         ("知识库 资料库 帮助文档 使用文档 操作手册 帮助中心", "knowledge_query", {}),
     ):
         if any(keyword in text for keyword in keywords.split()):
-            return {"intent": intent, "slots": slots}
+            if intent == "label_print":
+                from app.application.label_print_inputs import extract_label_print_slots
+
+                route_slots = extract_label_print_slots(text)
+            return {"intent": intent, "slots": route_slots}
     product_subject = any(word in text for word in ("产品", "商品", "货品"))
     model_token = bool(
         _facade().re.search(

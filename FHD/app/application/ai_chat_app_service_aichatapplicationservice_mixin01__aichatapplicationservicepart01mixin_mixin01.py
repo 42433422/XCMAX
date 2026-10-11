@@ -141,7 +141,7 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
         if message.strip().lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS:
             self._handle_confirmation_flow(user_id, message, file_context)
             return _finalize(
-                self._resume_pending_dynamic_workflow(user_id, message, message, ctx)[1]
+                self._try_handle_dynamic_workflow(user_id, message, source, ctx, file_context or {})
             )
 
         from app.application.chat_business_safety import try_handle_business_chat_action
