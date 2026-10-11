@@ -36,48 +36,49 @@ class TestModManagerListMods:
         assert len(result) >= 1
         assert any(r["id"] == "test" for r in result)
 
-    def test_list_all_mods_includes_unloaded(self, tmp_path):
+    @pytest.mark.parametrize("failure", [False, True])
+    def test_list_all_mods_includes_unloaded(self, tmp_path, failure):
         mm = ModManager(mods_root=str(tmp_path))
-        mock_registry = Mock()
         meta = ModMetadata(id="test", name="Test", version="1.0", mod_path="/tmp/test")
-        mock_registry.list_mods.return_value = [meta]
         with (
+            patch.object(mm, "scan_mods", return_value=[meta]),
             patch(
-                "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+                "app.enterprise.mod_entitlements.filter_mod_rows_for_enterprise",
+                side_effect=RuntimeError("unavailable") if failure else lambda rows: rows,
             ),
-            patch.object(mm, "scan_mods", return_value=[]),
         ):
             result = mm.list_all_mods()
-        assert isinstance(result, list)
+        assert (result == []) if failure else len(result) >= 1
 
 
 # ========================= get_routes =====================================
 
 
 class TestModManagerGetRoutes:
-    def test_returns_routes(self, tmp_path):
+    @pytest.mark.parametrize("failure", [False, True])
+    def test_returns_routes(self, tmp_path, failure):
         mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(
-            id="test",
-            name="Test",
-            version="1.0",
-            mod_path="/tmp/test",
-            frontend_menu=[{"label": "Test", "path": "/test"}],
+            id="test", name="Test", version="1.0", frontend_routes="frontend/routes.js"
         )
-        mock_registry = Mock()
-        mock_registry.list_mods.return_value = [meta]
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+        with (
+            patch.object(mm, "scan_mods", return_value=[meta]),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+                side_effect=RuntimeError("unavailable") if failure else None,
+            ),
         ):
             result = mm.get_routes()
-        assert isinstance(result, list)
+        assert (result == []) if failure else len(result) == 1
 
 
 # ========================= load_all_mods ==================================
 
 
 class TestModManagerLoadAllMods:
-    def test_load_all_with_dependencies(self, tmp_path):
+    @pytest.mark.parametrize("failure", [False, True])
+    def test_load_all_with_dependencies(self, tmp_path, failure):
         mm = ModManager(mods_root=str(tmp_path))
         # dependencies is dict[str, str], not list
         meta_a = ModMetadata(id="mod_a", name="A", version="1.0", mod_path="/tmp/a", primary=True)
@@ -86,10 +87,18 @@ class TestModManagerLoadAllMods:
         )
         with (
             patch.object(mm, "scan_mods", return_value=[meta_a, meta_b]),
-            patch.object(mm, "load_mod", return_value=True),
+            patch.object(mm, "load_mod", return_value=True) as load,
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+                side_effect=RuntimeError("unavailable") if failure else None,
+            ),
         ):
             result = mm.load_all_mods()
         assert isinstance(result, list)
+        if failure:
+            load.assert_not_called()
+            assert result == []
 
     def test_load_all_empty(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))

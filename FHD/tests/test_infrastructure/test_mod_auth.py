@@ -1,17 +1,11 @@
-"""Branch-coverage tests for app.infrastructure.mods.mod_auth.
-
-Covers: ModContext (from_request, normalize, signature, permissions, can_access),
-ModContextMiddleware (_mod_context_from_path, __call__ error paths),
-get_mod_context, require_verified_mod.
-Focus on signature verification branches, invalid inputs, and error handling.
-"""
+"""Mod signatures, request scope and fail-closed authorization tests."""
 
 from __future__ import annotations
 
 import hashlib
 import hmac
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
@@ -25,9 +19,7 @@ from app.infrastructure.mods.mod_auth import (
     require_verified_mod,
 )
 
-# ---------------------------------------------------------------------------
 # ModContext.__post_init__
-# ---------------------------------------------------------------------------
 
 
 class TestModContextPostInit:
@@ -47,9 +39,7 @@ class TestModContextPostInit:
         assert ctx.metadata == {"source": "test"}
 
 
-# ---------------------------------------------------------------------------
 # ModContext._normalize_mod_id
-# ---------------------------------------------------------------------------
 
 
 class TestNormalizeModId:
@@ -92,9 +82,7 @@ class TestNormalizeModId:
         assert ModContext._normalize_mod_id(long_id) is None
 
 
-# ---------------------------------------------------------------------------
 # ModContext._generate_signature
-# ---------------------------------------------------------------------------
 
 
 class TestGenerateSignature:
@@ -111,9 +99,7 @@ class TestGenerateSignature:
         assert len(sig) == 32
 
 
-# ---------------------------------------------------------------------------
 # ModContext._load_mod_permissions
-# ---------------------------------------------------------------------------
 
 
 class TestLoadModPermissions:
@@ -129,9 +115,7 @@ class TestLoadModPermissions:
         assert "admin:*" in perms
 
 
-# ---------------------------------------------------------------------------
 # ModContext.can_access / is_verified
-# ---------------------------------------------------------------------------
 
 
 class TestCanAccess:
@@ -166,9 +150,7 @@ class TestIsVerified:
         assert ctx.is_verified() is False
 
 
-# ---------------------------------------------------------------------------
 # ModContext.from_request
-# ---------------------------------------------------------------------------
 
 
 def _make_request(headers=None, cookies=None):
@@ -253,9 +235,7 @@ class TestFromRequest:
         assert ctx.verified is True
 
 
-# ---------------------------------------------------------------------------
 # ModContextMiddleware._mod_context_from_path
-# ---------------------------------------------------------------------------
 
 
 class TestModContextFromPath:
@@ -286,9 +266,7 @@ class TestModContextFromPath:
         assert ctx.mod_id is None
 
 
-# ---------------------------------------------------------------------------
 # ModContextMiddleware.__call__
-# ---------------------------------------------------------------------------
 
 
 class TestMiddlewareCall:
@@ -323,80 +301,96 @@ class TestMiddlewareCall:
         # without a real Starlette request. Just verify no exception.
 
     @pytest.mark.asyncio
-    async def test_http_scope_with_mod_id_header(self, monkeypatch):
-        monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", "")
-
-        async def app(scope, receive, send):
-            pass
-
-        middleware = ModContextMiddleware(app)
+    @pytest.mark.parametrize(
+        "path,requires_http", [("/api/other", False), ("/api/mod/mod1/resource", True)]
+    )
+    @pytest.mark.parametrize("enterprise", [False, True])
+    async def test_authorized_signed_cookie_request(
+        self, monkeypatch, path, requires_http, enterprise
+    ):
+        monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", "test-secret")
+        app = AsyncMock()
         scope = {
             "type": "http",
             "method": "GET",
-            "path": "/api/other",
+            "path": path,
             "headers": [
                 (b"x-xcagi-active-mod-id", b"mod1"),
+                (b"x-xcagi-mod-signature", ModContext._generate_signature("mod1").encode()),
+                (b"cookie", b"session_id=A"),
             ],
         }
-        with patch("app.infrastructure.mods.mod_manager.ensure_mod_api_ready"):
-            await middleware(scope, MagicMock(), MagicMock())
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
+                return_value=enterprise,
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise", return_value=True
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.sync_entitlements_for_session", new=AsyncMock()
+            ) as sync,
+            patch(
+                "app.infrastructure.mods.mod_manager.ensure_mod_api_ready", return_value=True
+            ) as ready,
+        ):
+            await ModContextMiddleware(app)(scope, AsyncMock(), AsyncMock())
+        app.assert_awaited_once()
+        assert scope["state"]["mod_context"].verified
+        ready.assert_called_once_with("mod1", session_id="A", requires_http=requires_http)
+        assert sync.await_count == int(enterprise)
 
     @pytest.mark.asyncio
-    async def test_http_scope_mod_id_from_path(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "failure", [RuntimeError("recoverable"), ValueError("unexpected"), None]
+    )
+    async def test_mod_bootstrap_failure_stops_dispatch(self, monkeypatch, failure):
         monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", "")
-
-        async def app(scope, receive, send):
-            pass
-
-        middleware = ModContextMiddleware(app)
-        scope = {
-            "type": "http",
-            "method": "GET",
-            "path": "/api/mod/mymod/resource",
-            "headers": [],
-        }
-        with patch("app.infrastructure.mods.mod_manager.ensure_mod_api_ready"):
-            await middleware(scope, MagicMock(), MagicMock())
-
-    @pytest.mark.asyncio
-    async def test_ensure_mod_api_ready_recoverable_error(self, monkeypatch):
-        monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", "")
-
-        async def app(scope, receive, send):
-            pass
-
-        middleware = ModContextMiddleware(app)
-        scope = {
-            "type": "http",
-            "method": "GET",
-            "path": "/api/mod/mymod/resource",
-            "headers": [],
-        }
+        app, send = AsyncMock(), AsyncMock()
+        scope = {"type": "http", "method": "GET", "path": "/api/mod/mymod/resource", "headers": []}
         with patch(
             "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-            side_effect=RuntimeError("recoverable"),
+            side_effect=failure,
+            return_value=False,
         ):
-            await middleware(scope, MagicMock(), MagicMock())
+            await ModContextMiddleware(app)(scope, AsyncMock(), send)
+        app.assert_not_called()
+        assert send.call_args_list[0].args[0]["status"] == 503
 
     @pytest.mark.asyncio
-    async def test_ensure_mod_api_ready_unexpected_error(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "sid,allowed,status",
+        [("A", True, 204), ("B", False, 403), ("B", None, 503), ("", False, 403)],
+    )
+    async def test_entitlement_scope_denial_and_failure(self, monkeypatch, sid, allowed, status):
         monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", "")
-
-        async def app(scope, receive, send):
-            pass
-
-        middleware = ModContextMiddleware(app)
+        app, send = AsyncMock(), AsyncMock()
         scope = {
             "type": "http",
             "method": "GET",
-            "path": "/api/mod/mymod/resource",
-            "headers": [],
+            "path": "/api/mod/private-A/probe",
+            "headers": [(b"cookie", f"session_id={sid}".encode())],
         }
-        with patch(
-            "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-            side_effect=RuntimeError("unexpected"),
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+            ),
+            patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True),
+            patch("app.enterprise.mod_entitlements.sync_entitlements_for_session", new=AsyncMock()),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=allowed,
+                side_effect=RuntimeError("unavailable") if allowed is None else None,
+            ),
+            patch("app.infrastructure.mods.mod_manager.ensure_mod_api_ready", return_value=True),
         ):
-            await middleware(scope, MagicMock(), MagicMock())
+            await ModContextMiddleware(app)(scope, AsyncMock(), send)
+        if status == 204:
+            app.assert_awaited_once()
+        else:
+            app.assert_not_called()
+            assert send.call_args_list[0].args[0]["status"] == status
 
     @pytest.mark.asyncio
     async def test_value_error_in_mod_context_parsing(self, monkeypatch):
@@ -464,9 +458,7 @@ class TestMiddlewareCall:
             await middleware(scope, MagicMock(), MagicMock())
 
 
-# ---------------------------------------------------------------------------
 # get_mod_context / require_verified_mod
-# ---------------------------------------------------------------------------
 
 
 class TestGetModContext:

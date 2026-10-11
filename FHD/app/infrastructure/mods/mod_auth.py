@@ -21,7 +21,7 @@ from starlette.requests import Request as StarletteRequest
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +169,12 @@ class ModContextMiddleware:
         request = StarletteRequest(scope, receive)
         mod_context = ModContext()
         token = None
+
+        async def deny(status: int, error: str, message: str) -> None:
+            await JSONResponse(
+                {"success": False, "error": error, "message": message}, status_code=status
+            )(scope, receive, send)
+
         try:
             mod_context = ModContext.from_request(request)
             if not mod_context.mod_id:
@@ -177,58 +183,41 @@ class ModContextMiddleware:
                 try:
                     cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
                     sid = (request.cookies.get(cookie_name) or "").strip()
-                    if sid:
-                        from app.enterprise.mod_entitlements import (
-                            enterprise_mod_filter_active,
-                            sync_entitlements_for_session,
-                        )
+                    from app.enterprise.mod_entitlements import (
+                        enterprise_mod_filter_active,
+                        is_client_mod_id,
+                        is_mod_visible_for_enterprise,
+                        sync_entitlements_for_session,
+                    )
 
-                        if enterprise_mod_filter_active():
-                            from app.enterprise.mod_entitlements import (
-                                is_client_mod_id,
-                                is_mod_visible_for_enterprise,
+                    if enterprise_mod_filter_active():
+                        if sid:
+                            await sync_entitlements_for_session(sid)
+                        if (
+                            not sid and is_client_mod_id(mod_context.mod_id)
+                        ) or not is_mod_visible_for_enterprise(mod_context.mod_id):
+                            await deny(
+                                403,
+                                "mod_not_entitled",
+                                "请先登录企业账号后再访问定制能力"
+                                if not sid
+                                else "当前企业账号未开通该定制能力",
                             )
-
-                            if sid:
-                                await sync_entitlements_for_session(sid)
-                            elif is_client_mod_id(mod_context.mod_id):
-                                response = JSONResponse(
-                                    {
-                                        "success": False,
-                                        "error": "mod_not_entitled",
-                                        "message": "请先登录企业账号后再访问定制能力",
-                                    },
-                                    status_code=403,
-                                )
-                                await response(scope, receive, send)
-                                return
-                            if not is_mod_visible_for_enterprise(mod_context.mod_id):
-                                response = JSONResponse(
-                                    {
-                                        "success": False,
-                                        "error": "mod_not_entitled",
-                                        "message": "当前企业账号未开通该定制能力",
-                                    },
-                                    status_code=403,
-                                )
-                                await response(scope, receive, send)
-                                return
+                            return
                     from app.infrastructure.mods.mod_manager import ensure_mod_api_ready
 
-                    ensure_mod_api_ready(mod_context.mod_id, session_id=sid or None)
-                except RECOVERABLE_ERRORS as exc:
-                    logger.warning(
-                        "ensure_mod_api_ready(%s) failed: %s",
+                    if not ensure_mod_api_ready(
                         mod_context.mod_id,
-                        exc,
-                    )
+                        session_id=sid or None,
+                        requires_http=bool(_MOD_API_PATH_RE.match(str(scope.get("path") or ""))),
+                    ):
+                        raise RuntimeError("Mod 能力尚未就绪")
                 except BOUNDARY_ERRORS as exc:
-                    # 过期/伪造 session + Active-Mod 头时，权益恢复或按需 load 可能触发 DB 异常；不得拖垮宿主 API。
                     logger.warning(
-                        "Mod context bootstrap failed for %s: %s",
-                        mod_context.mod_id,
-                        exc,
+                        "Mod authorization/bootstrap failed for %s: %s", mod_context.mod_id, exc
                     )
+                    await deny(503, "mod_unavailable", "定制能力校验或加载失败，请稍后重试")
+                    return
             request.state.mod_context = mod_context
             from app.request_active_mod_ctx import set_request_active_mod_id
 
