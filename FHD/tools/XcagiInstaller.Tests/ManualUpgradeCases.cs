@@ -36,13 +36,22 @@ public static class ManualUpgradeCases
             foreach (var suffix in new[] { "-wal", "-shm", "-journal" }) File.WriteAllText(childDb + suffix, "candidate-sidecar");
         }
         else try { await Sql(childDb, "UPDATE inventory SET qty=1"); } catch { }
+        if (mode is "metadata-locked-marker" or "metadata-locked-receipt")
+        {
+            var data = Environment.GetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_DATA")!;
+            File.WriteAllText(Path.Combine(data, "products.db"), "candidate root private database");
+            File.WriteAllText(Path.Combine(data, "mods", "index.json"), "{\"installed\":[\"northwind\"]}");
+            File.WriteAllText(Path.Combine(data, "mods", "northwind", "manifest.json"), "{\"id\":\"northwind\",\"version\":\"2.4.0\"}");
+            File.WriteAllText(Path.Combine(data, "mods", "northwind", "backend", "models", "product.py"), "candidate official Mod code");
+            File.WriteAllText(Path.Combine(data, "data", "mod_dbs", "customer-reporting.db"), "candidate private Mod database");
+        }
         File.WriteAllText(Environment.GetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_READY")!, "ready");
         if (mode == "cancel") await Task.Delay(30000);
         if (mode != "cancel") while (!File.Exists(Environment.GetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_RELEASE")!)) await Task.Delay(30);
         if (mode == "crash") Environment.Exit(unchecked((int)0xC0000005));
         if (mode is "bad-db" or "truncated-db" or "bad-manifest" or "missing-snapshot" or "locked-db") return 7;
         if (mode == "missing-backend") File.Delete(Path.Combine(dir, "resources/backend/xcagi-backend.exe"));
-        return mode is "success" or "post-failure" or "missing-backend" ? 0 : 7;
+        return mode is "success" or "post-failure" or "missing-backend" or "metadata-locked-marker" or "metadata-locked-receipt" ? 0 : 7;
     }
 
     public static async Task<bool> RunAsync(string root)
@@ -50,10 +59,21 @@ public static class ManualUpgradeCases
         root = Path.Combine(root, "manual-upgrade-cases"); Directory.CreateDirectory(root);
         var results = new List<object>();
         var selectedCase = Environment.GetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_CASE");
-        foreach (var mode in new[] { "failure", "crash", "missing-backend", "success", "cancel", "bad-db", "truncated-db", "bad-manifest", "missing-snapshot", "locked-db", "large", "post-failure", "absent-db" }.Where(x => string.IsNullOrEmpty(selectedCase) || x == selectedCase))
+        foreach (var mode in new[] { "failure", "crash", "missing-backend", "success", "cancel", "bad-db", "truncated-db", "bad-manifest", "missing-snapshot", "locked-db", "large", "post-failure", "absent-db", "metadata-locked-marker", "metadata-locked-receipt" }.Where(x => string.IsNullOrEmpty(selectedCase) || x == selectedCase))
         {
             var home = Path.Combine(root, mode + " space ' path"); var app = Path.Combine(home, "installed app"); var data = Path.Combine(home, "user data"); Directory.CreateDirectory(app);
             SeedApp(app, mode == "large" ? 2824 : 5); Directory.CreateDirectory(Path.Combine(data, "data")); var db = Path.Combine(data, "data", "xcagi.db"); var hasOriginalDb = mode != "absent-db"; if (hasOriginalDb) await Sql(db, "CREATE TABLE inventory(qty INTEGER); INSERT INTO inventory VALUES(3);");
+            var metadataFault = mode is "metadata-locked-marker" or "metadata-locked-receipt";
+            if (metadataFault)
+            {
+                Directory.CreateDirectory(Path.Combine(data, "mods", "northwind", "backend", "models"));
+                Directory.CreateDirectory(Path.Combine(data, "data", "mod_dbs"));
+                File.WriteAllText(Path.Combine(data, "products.db"), "old root private database");
+                File.WriteAllText(Path.Combine(data, "mods", "index.json"), "{\"installed\":[\"northwind\"]}");
+                File.WriteAllText(Path.Combine(data, "mods", "northwind", "manifest.json"), "{\"id\":\"northwind\",\"version\":\"2.3.0\"}");
+                File.WriteAllText(Path.Combine(data, "mods", "northwind", "backend", "models", "product.py"), "old official Mod code");
+                File.WriteAllText(Path.Combine(data, "data", "mod_dbs", "customer-reporting.db"), "old private Mod database");
+            }
             var originalFiles = Hashes(app); var originalDb = hasOriginalDb ? Hash(db) : null; var ready = Path.Combine(home, "ready"); var release = Path.Combine(home, "release");
             Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_CHILD", "1"); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_MODE", mode == "large" ? "failure" : mode); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_DATA", data); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_READY", ready); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_RELEASE", release);
             using var cancel = new CancellationTokenSource();
@@ -62,6 +82,27 @@ public static class ManualUpgradeCases
             if (mode == "cancel") cancel.CancelAfter(1200);
             var backups = Directory.Exists(Path.Combine(data, "rollback")) ? Directory.GetDirectories(Path.Combine(data, "rollback"), "manual-*") : [];
             var mutated = Hashes(app); var dbMutated = Hash(db);
+            if (metadataFault)
+            {
+                var candidateState = RecoveryStateHashes(app, data);
+                var markerPath = Path.Combine(data, "rollback-marker.json"); var appliedPath = Path.Combine(data, "rollback-applied.json");
+                var previousReceipt = System.Text.Encoding.UTF8.GetBytes("{\"appliedAt\":\"2026-10-11T00:00:00.000Z\",\"reason\":\"prior successful synthetic update\"}\n");
+                File.WriteAllBytes(appliedPath, previousReceipt);
+                var receiptBeforeHash = Hash(appliedPath); var markerBeforeHash = Hash(markerPath);
+                var lockPath = mode == "metadata-locked-marker" ? markerPath : appliedPath;
+                using var heldFile = new FileStream(lockPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                File.WriteAllText(release, "go"); var installResult = await run;
+                var recoverMethod = typeof(InstallResult).GetMethod("RecoverPostInstallFailureAsync", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new InvalidOperationException("post-install recovery entry point missing");
+                var recoveryTask = (Task<string>)recoverMethod.Invoke(installResult, new object[] { "synthetic receipt finalization failure" })!;
+                var recoveryText = await recoveryTask;
+                var expectedErrorReported = recoveryText.StartsWith("synthetic receipt finalization failure ", StringComparison.Ordinal) && recoveryText.Length > "synthetic receipt finalization failure ".Length;
+                var noFalseSuccessText = !recoveryText.Contains("\u5df2\u6062\u590d\u5347\u7ea7\u524d\u7684\u7a0b\u5e8f\u4e0e\u6570\u636e", StringComparison.Ordinal);
+                var markerRetained = File.Exists(markerPath) && Hash(markerPath) == markerBeforeHash;
+                var receiptRetained = File.Exists(appliedPath) && Hash(appliedPath) == receiptBeforeHash && File.ReadAllBytes(appliedPath).SequenceEqual(previousReceipt);
+                var candidateRetained = SameFiles(candidateState, RecoveryStateHashes(app, data));
+                var item = new { mode, pass = installResult.Success && expectedErrorReported && noFalseSuccessText && markerRetained && receiptRetained && candidateRetained, installerSucceeded = installResult.Success, recoveryFailureReported = expectedErrorReported, noFalseSuccessText, markerRetained, receiptRetained, candidateRetained, candidateStateHashes = candidateState, receiptBeforeSha256 = receiptBeforeHash, markerBeforeSha256 = markerBeforeHash };
+                results.Add(item); PrintCase(item); continue;
+            }
             if (mode is "bad-db" or "truncated-db") File.WriteAllBytes(Path.Combine(backups.Single(), "database-before.db"), mode == "bad-db" ? [1,2,3] : Array.Empty<byte>());
             if (mode == "bad-manifest") File.WriteAllText(Path.Combine(backups.Single(), "snapshot-manifest.json"), "{");
             if (mode == "missing-snapshot") File.Delete(Path.Combine(backups.Single(), "app", "old-only.dll"));
@@ -108,6 +149,22 @@ public static class ManualUpgradeCases
         for (var i = 0; i < count - 5; i++) File.WriteAllText(Path.Combine(dir, "bulk-" + i.ToString("D4") + ".bin"), "payload" + i);
     }
     static Dictionary<string,string> Hashes(string dir) => Directory.GetFiles(dir, "*", SearchOption.AllDirectories).ToDictionary(p => Path.GetRelativePath(dir,p), Hash);
+    static Dictionary<string,string> RecoveryStateHashes(string app, string data)
+    {
+        var files = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in Directory.GetFiles(app, "*", SearchOption.AllDirectories)) files["app/" + Path.GetRelativePath(app, path)] = Hash(path);
+        foreach (var relativeRoot in new[] { "mods", Path.Combine("data", "mod_dbs") })
+        {
+            var directory = Path.Combine(data, relativeRoot);
+            if (Directory.Exists(directory)) foreach (var path in Directory.GetFiles(directory, "*", SearchOption.AllDirectories)) files[Path.Combine(relativeRoot, Path.GetRelativePath(directory, path))] = Hash(path);
+        }
+        foreach (var path in new[] { Path.Combine("data", "xcagi.db"), "products.db" })
+        foreach (var suffix in new[] { "", "-wal", "-shm", "-journal" })
+        {
+            var file = Path.Combine(data, path + suffix); if (File.Exists(file)) files[Path.GetRelativePath(data, file)] = Hash(file);
+        }
+        return files;
+    }
     static bool SameFiles(Dictionary<string,string> left, Dictionary<string,string> right) => left.Count == right.Count && left.All(x => right.TryGetValue(x.Key, out var hash) && hash == x.Value);
     static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
     static void PrintCase(object item) => Console.WriteLine(JsonSerializer.Serialize(new { scope = "Windows source child-process regression; not NSIS/VM acceptance", result = item }));
