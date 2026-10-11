@@ -1,5 +1,5 @@
 {
-  "lines": 2302013,
+  "lines": 2302014,
   "updated": "2026-10-11",
-  "note": "WO-6a5a4e928046: complete problem rendering and matching executor receipts with tracked regression fixture deduplication"
+  "note": "WO-6a5a4e928046: final PR delta -5 against main after minimal typed receipt return; recompute unmerged candidate baseline"
 }

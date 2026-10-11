@@ -40,7 +40,8 @@ def _backup_reply() -> dict[str, Any] | None:
             text = str(output.get("message") or json.dumps(output, ensure_ascii=False))
             reply: dict[str, Any] = {"response": text, "text": text}
             reply["pending_approval"] = output.get("pending_approval") is True
-            return _facade()._attach_last_tool_records(reply)
+            _facade()._attach_last_tool_records(reply)
+            return reply
     return None
 
 
