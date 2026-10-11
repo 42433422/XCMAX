@@ -64,8 +64,15 @@ def _actions_real(
         "cursor_delegate",
         "direct_python",
     }
+    # 事故小组工单修复且已按 Para 优先跳过规划 LLM：本地 LLM 回退同样不跑，失败交给 follow-up。
+    para_only = bool(
+        reasoning.get("skipped_cognition_reason") == "para_first"
+        and "para_delegate" in handlers
+        and isinstance(reasoning.get("input"), dict)
+        and reasoning["input"].get("_trusted_incident_team_execution")
+    )
     for handler in handlers:
-        if skip_local_after_para_ok and str(handler) in _LOCAL_FALLBACK_HANDLERS:
+        if (skip_local_after_para_ok or para_only) and str(handler) in _LOCAL_FALLBACK_HANDLERS:
             continue
         if handler == "echo":
             outputs.append({"handler": "echo", "output": reasoning.get("reasoning", "")})
