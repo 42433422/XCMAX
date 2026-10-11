@@ -1,5 +1,5 @@
 {
-  "lines": 2302016,
+  "lines": 2302011,
   "updated": "2026-10-11",
-  "note": "台账测试去重并保留真实CLI校验；净删下调"
+  "note": "WO-6a5a4e928046: final maintained delta -5 after integrating protected main release-gate fix #2287"
 }
