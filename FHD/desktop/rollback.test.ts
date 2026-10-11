@@ -29,7 +29,7 @@ const electronMocks = vi.hoisted(() => {
 })
 vi.mock('electron', () => electronMocks)
 const windowsRollbackMocks = vi.hoisted(() => ({
-  launchWindowsFullRollback: vi.fn(async () => 12345)
+  launchWindowsFullRollback: vi.fn(async (..._args: unknown[]) => 12345)
 }))
 const macosRollbackMocks = vi.hoisted(() => ({
   launchMacOSFullRollback: vi.fn(async () => 12345)
@@ -182,6 +182,32 @@ describe('rollback — consumeRollbackApplied', () => {
 
 const windowsIt = process.platform === 'win32' ? it : it.skip
 describe('rollback — Windows full app restore scheduling', () => {
+  windowsIt('passes an absent database baseline through triggerRollback to the real helper', async () => {
+    const cleanup = setupPackagedBackend()
+    try {
+      const { prepareRollback, triggerRollback } = await import('./rollback.js')
+      await prepareRollback('10.0.6')
+      const markerPath = path.join(electronMocks.__userDataDir, 'rollback-marker.json')
+      const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'))
+      const database = path.join(electronMocks.__userDataDir, 'data', 'xcagi.db')
+      Object.assign(marker, { databasePath: database, databaseBackupPath: '', databaseOriginallyAbsent: true })
+      fs.writeFileSync(markerPath, JSON.stringify(marker)); fs.mkdirSync(path.dirname(database), { recursive: true })
+      for (const suffix of ['', '-wal', '-shm', '-journal']) fs.writeFileSync(database + suffix, 'failed candidate')
+      windowsRollbackMocks.launchWindowsFullRollback.mockImplementationOnce(async (...args: unknown[]) => {
+        const options = args[0] as import('./rollback-windows.js').WindowsRollbackLaunchOptions
+        expect(options.databasePath).toBe(database); expect(options.databaseOriginallyAbsent).toBe(true)
+        const actual = await vi.importActual<typeof import('./rollback-windows.js')>('./rollback-windows.js')
+        const { execFileSync } = await import('node:child_process')
+        const script = actual.buildWindowsRollbackScript({ ...options, currentPid: 2_000_000_000, restartApp: false })
+        execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { timeout: 15000 })
+        return 12345
+      })
+      await triggerRollback('startup failed')
+      for (const suffix of ['', '-wal', '-shm', '-journal']) expect(fs.existsSync(database + suffix)).toBe(false)
+      expect(fs.existsSync(markerPath)).toBe(false)
+      expect(fs.existsSync(path.join(electronMocks.__userDataDir, 'rollback-applied.json'))).toBe(true)
+    } finally { cleanup() }
+  })
   windowsIt('launches the external helper and leaves marker consumption to it', async () => {
     const cleanup = setupPackagedBackend()
     try {

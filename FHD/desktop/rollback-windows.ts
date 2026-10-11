@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
+import fs from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
 
 export interface WindowsRollbackAppliedRecord {
   appliedAt: string
@@ -19,8 +21,23 @@ export interface WindowsRollbackLaunchOptions {
   applied: WindowsRollbackAppliedRecord
   databasePath?: string
   databaseBackupPath?: string
+  databaseOriginallyAbsent?: boolean
   restartApp?: boolean
   waitTimeoutSeconds?: number
+  expectedAppFiles?: Record<string, string>
+  expectedDatabaseSha256?: string
+  /** Internal launch handshake. Omitted by the C# installer template generator. */
+  helperStatusPath?: string
+  helperStatusToken?: string
+  helperAuthorizationPath?: string
+}
+
+interface WindowsRollbackHelperStatus {
+  status?: unknown
+  token?: unknown
+  candidateScriptSha256?: unknown
+  message?: unknown
+  processId?: unknown
 }
 
 function powershellLiteral(value: string): string {
@@ -57,13 +74,16 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
   const markerPath = resolveTargetPath(options.markerPath)
   const appliedPath = resolveTargetPath(options.appliedPath)
   const logPath = resolveTargetPath(options.logPath)
+  const helperStatusPath = options.helperStatusPath ? resolveTargetPath(options.helperStatusPath) : ''
+  const helperStatusToken = options.helperStatusToken || ''
+  const helperAuthorizationPath = options.helperAuthorizationPath ? resolveTargetPath(options.helperAuthorizationPath) : ''
   const appFileName = targetBasename(appPath)
   const waitTimeoutSeconds = Math.max(5, Math.trunc(options.waitTimeoutSeconds ?? 120))
   const appliedBase64 = Buffer.from(JSON.stringify(options.applied, null, 2), 'utf8').toString(
     'base64',
   )
   const databasePath =
-    options.databasePath && options.databaseBackupPath
+    options.databasePath && (options.databaseBackupPath || options.databaseOriginallyAbsent)
       ? resolveTargetPath(options.databasePath)
       : ''
   const databaseBackupPath =
@@ -71,6 +91,7 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
       ? resolveTargetPath(options.databaseBackupPath)
       : ''
   const restartApp = options.restartApp !== false
+  const expectedAppFiles = Buffer.from(JSON.stringify(options.expectedAppFiles || {})).toString('base64')
 
   return [
     "$ErrorActionPreference = 'Stop'",
@@ -82,15 +103,42 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     `$markerPath = ${powershellLiteral(markerPath)}`,
     `$appliedPath = ${powershellLiteral(appliedPath)}`,
     `$logPath = ${powershellLiteral(logPath)}`,
+    `$helperStatusPath = ${powershellLiteral(helperStatusPath)}`,
+    `$helperStatusToken = ${powershellLiteral(helperStatusToken)}`,
+    `$helperAuthorizationPath = ${powershellLiteral(helperAuthorizationPath)}`,
+    '$helperStatusScriptSha256 = [string]$env:XCAGI_ROLLBACK_VERIFIED_SCRIPT_SHA256',
     `$databasePath = ${powershellLiteral(databasePath)}`,
+    `$databaseOriginallyAbsent = $${options.databaseOriginallyAbsent ? 'true' : 'false'}`,
     `$databaseBackupPath = ${powershellLiteral(databaseBackupPath)}`,
+    `$expectedAppFiles = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${expectedAppFiles}')) | ConvertFrom-Json`,
+    `$expectedDatabaseSha256 = ${powershellLiteral(options.expectedDatabaseSha256 || '')}`,
     `$stagingDir = "$installDir.xcagi-rollback-staging"`,
     `$failedDir = "$installDir.xcagi-failed"`,
     `$databaseStaging = if ($databasePath) { "$databasePath.xcagi-rollback-staging" } else { "" }`,
     `$databaseFailed = if ($databasePath) { "$databasePath.xcagi-failed" } else { "" }`,
     '$appliedWritten = $appQuarantined = $databaseQuarantined = $false',
+    '$stagingCreated = $databaseStagingCreated = $false',
+    '$helperReady = $false',
+    'function File-Sha256([string]$file) {',
+    '  $stream = [IO.File]::OpenRead($file); $hash = [Security.Cryptography.SHA256]::Create()',
+    '  try { return [BitConverter]::ToString($hash.ComputeHash($stream)).Replace("-", "") } finally { $stream.Dispose(); $hash.Dispose() }',
+    '}',
+    'function Assert-AppSnapshot([string]$root) {',
+    '  $expected = @($expectedAppFiles.PSObject.Properties)',
+    '  if (-not $expected.Count) { return }',
+    '  $root = [IO.Path]::GetFullPath($root).TrimEnd("\\")',
+    '  if ((Get-Item -LiteralPath $root -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "snapshot link rejected" }',
+    '  $entries = @(Get-ChildItem -LiteralPath $root -Recurse -Force)',
+    '  if (@($entries | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw "snapshot link rejected" }',
+    '  if (@($entries | Where-Object { -not $_.PSIsContainer }).Count -ne $expected.Count) { throw "snapshot file set mismatch" }',
+    '  foreach ($entry in $expected) {',
+    '    $file = [IO.Path]::GetFullPath((Join-Path $root $entry.Name))',
+    '    if (-not $file.StartsWith($root + "\\", [StringComparison]::OrdinalIgnoreCase)) { throw "snapshot path escaped" }',
+    '    if ((File-Sha256 $file) -ne $entry.Value) { throw "snapshot file checksum mismatch" }',
+    '  }',
+    '}',
     'function Move-DatabaseFiles([string]$from, [string]$to) {',
-    '  foreach ($suffix in @("", "-wal", "-shm")) {',
+    '  foreach ($suffix in @("", "-wal", "-shm", "-journal")) {',
     '    if (Test-Path -LiteralPath "$from$suffix") { Move-Item -LiteralPath "$from$suffix" -Destination "$to$suffix" -Force }',
     '  }',
     '}',
@@ -101,15 +149,32 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '    Add-Content -LiteralPath $logPath -Value ("{0:o} {1}" -f (Get-Date), $message) -Encoding UTF8',
     '  } catch {}',
     '}',
-    'foreach ($candidate in (@($stagingDir, $failedDir, $databaseStaging, $databaseFailed) + @(if ($databaseFailed) { "$databaseFailed-wal"; "$databaseFailed-shm" }))) {',
-    '  if ($candidate -and (Test-Path -LiteralPath $candidate)) { throw "retained rollback files must be recovered first: $candidate" }',
+    'function Write-HelperStatus([string]$status, [string]$message) {',
+    '  if (-not $helperStatusPath -or -not $helperStatusToken) { return }',
+    '  $parent = Split-Path -Parent $helperStatusPath',
+    '  if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }',
+    '  $record = @{ status = $status; token = $helperStatusToken; candidateScriptSha256 = $helperStatusScriptSha256; message = $message; processId = $PID } | ConvertTo-Json -Compress',
+    '  $temporaryPath = "$helperStatusPath.$PID.tmp"',
+    '  [IO.File]::WriteAllText($temporaryPath, $record, (New-Object Text.UTF8Encoding($false)))',
+    '  [IO.File]::Move($temporaryPath, $helperStatusPath)',
     '}',
     'try {',
+    '  Write-RollbackLog "verified rollback helper started"',
+    '  foreach ($candidate in (@($stagingDir, $failedDir, $databaseStaging, $databaseFailed) + @(if ($databaseFailed) { "$databaseFailed-wal"; "$databaseFailed-shm"; "$databaseFailed-journal" }))) {',
+    '    if ($candidate -and (Test-Path -LiteralPath $candidate)) { throw "retained rollback files must be recovered first: $candidate" }',
+    '  }',
+    '  Write-HelperStatus "ready" ""',
+    '  $helperReady = $true',
     '  Write-RollbackLog "waiting for failed XCAGI process pid=$waitPid"',
     `  $deadline = (Get-Date).AddSeconds(${waitTimeoutSeconds})`,
     '  while (Get-Process -Id $waitPid -ErrorAction SilentlyContinue) {',
     '    if ((Get-Date) -ge $deadline) { throw "timed out waiting for pid=$waitPid" }',
     '    Start-Sleep -Milliseconds 250',
+    '  }',
+    '  if ($helperAuthorizationPath) {',
+    '    if (-not (Test-Path -LiteralPath $helperAuthorizationPath)) { throw "rollback launch authorization missing; helper will not modify files" }',
+    '    $authorization = Get-Content -LiteralPath $helperAuthorizationPath -Raw | ConvertFrom-Json',
+    '    if ($authorization.state -ne "authorized" -or $authorization.token -ne $helperStatusToken -or $authorization.candidateScriptSha256 -ne $helperStatusScriptSha256 -or [int]$authorization.processId -ne $PID) { throw "rollback launch authorization did not match this helper" }',
     '  }',
     '  if (-not (Test-Path -LiteralPath $backupRoot)) { throw "rollback backup missing: $backupRoot" }',
     '  if (-not (Test-Path -LiteralPath (Join-Path $backupRoot $appFileName))) {',
@@ -118,22 +183,29 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '  if ($databasePath -and $databaseBackupPath -and (-not (Test-Path -LiteralPath $databaseBackupPath))) {',
     '    throw "database rollback backup missing: $databaseBackupPath"',
     '  }',
-    '  New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null',
+    '  New-Item -ItemType Directory -Path $stagingDir | Out-Null',
+    '  $stagingCreated = $true',
+    '  Assert-AppSnapshot $backupRoot',
     '  Get-ChildItem -LiteralPath $backupRoot -Force | Copy-Item -Destination $stagingDir -Recurse -Force',
+    '  Assert-AppSnapshot $stagingDir',
     '  if (-not (Test-Path -LiteralPath (Join-Path $stagingDir $appFileName))) {',
     '    throw "staged rollback executable missing: $appFileName"',
     '  }',
     '  if ($databasePath -and $databaseBackupPath) {',
     '    $databaseParent = Split-Path -Parent $databasePath',
     '    New-Item -ItemType Directory -Path $databaseParent -Force | Out-Null',
-    '    Copy-Item -LiteralPath $databaseBackupPath -Destination $databaseStaging -Force',
+    '    if (Test-Path -LiteralPath $databaseStaging) { throw "database staging path already exists: $databaseStaging" }',
+    '    Copy-Item -LiteralPath $databaseBackupPath -Destination $databaseStaging',
+    '    $databaseStagingCreated = $true',
+    '    if ($expectedDatabaseSha256 -and (File-Sha256 $databaseStaging) -ne $expectedDatabaseSha256) { throw "database snapshot checksum mismatch" }',
     '  }',
     '  if (Test-Path -LiteralPath $installDir) { Move-Item -LiteralPath $installDir -Destination $failedDir -Force; $appQuarantined = $true }',
     '  Move-Item -LiteralPath $stagingDir -Destination $installDir -Force',
-    '  if ($databasePath -and $databaseBackupPath) {',
+    '  $stagingCreated = $false',
+    '  if ($databasePath -and ($databaseBackupPath -or $databaseOriginallyAbsent)) {',
     '    $databaseQuarantined = $true',
     '    Move-DatabaseFiles $databasePath $databaseFailed',
-    '    Move-Item -LiteralPath $databaseStaging -Destination $databasePath -Force',
+    '    if (-not $databaseOriginallyAbsent) { Move-Item -LiteralPath $databaseStaging -Destination $databasePath -Force; $databaseStagingCreated = $false }',
     '  }',
     `  $appliedJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${appliedBase64}'))`,
     '  $appliedParent = Split-Path -Parent $appliedPath',
@@ -142,7 +214,7 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '  $appliedWritten = $true',
     '  Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue',
     '  Remove-Item -LiteralPath $failedDir -Recurse -Force -ErrorAction SilentlyContinue',
-    '  if ($databaseFailed) { foreach ($suffix in @("", "-wal", "-shm")) { Remove-Item -LiteralPath "$databaseFailed$suffix" -Force -ErrorAction SilentlyContinue } }',
+    '  if ($databaseFailed) { foreach ($suffix in @("", "-wal", "-shm", "-journal")) { Remove-Item -LiteralPath "$databaseFailed$suffix" -Force -ErrorAction SilentlyContinue } }',
     '  Write-RollbackLog "full application rollback completed"',
     ...(restartApp
       ? [
@@ -155,6 +227,7 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
       : []),
     '} catch {',
     '  Write-RollbackLog ("rollback failed: " + $_.Exception.Message)',
+    '  if (-not $helperReady) { try { Write-HelperStatus "failed" $_.Exception.Message } catch {} }',
     '  Write-Error ("rollback failed: " + $_.Exception.Message) -ErrorAction Continue',
     '  if ($appliedWritten) { Remove-Item -LiteralPath $appliedPath -Force -ErrorAction SilentlyContinue }',
     '  if ($appQuarantined -and (Test-Path -LiteralPath $failedDir)) {',
@@ -164,17 +237,44 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '  if ($databaseQuarantined) {',
     '    Move-DatabaseFiles $databaseFailed $databasePath',
     '  }',
-    '  Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue',
-    '  if ($databaseStaging) { Remove-Item -LiteralPath $databaseStaging -Force -ErrorAction SilentlyContinue }',
+    '  if ($stagingCreated) { Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue }',
+    '  if ($databaseStagingCreated -and $databaseStaging) { Remove-Item -LiteralPath $databaseStaging -Force -ErrorAction SilentlyContinue }',
     '  exit 1',
     '}',
   ].join('\r\n')
 }
 
+export function buildWindowsRollbackFileLoader(scriptPath: string, sha256: string): string {
+  if (!/^[0-9a-f]{64}$/i.test(sha256)) throw new Error('Invalid rollback script checksum')
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    `$stream = [IO.File]::Open(${powershellLiteral(scriptPath)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)`,
+    '$hash = [Security.Cryptography.SHA256]::Create()',
+    'try {',
+    `  if ([BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '') -ne '${sha256}') { throw 'rollback script checksum mismatch' }`,
+    '  $stream.Position = 0',
+    `  $env:XCAGI_ROLLBACK_VERIFIED_SCRIPT_SHA256 = '${sha256}'`,
+    '  $reader = New-Object IO.StreamReader($stream, [Text.Encoding]::UTF8, $true)',
+    '  & ([ScriptBlock]::Create($reader.ReadToEnd()))',
+    '} finally { $stream.Dispose(); $hash.Dispose() }',
+  ].join('\r\n')
+}
+
 export function launchWindowsFullRollback(
   options: WindowsRollbackLaunchOptions,
+  readinessTimeoutMs = 15_000,
 ): Promise<number | undefined> {
-  const encoded = Buffer.from(buildWindowsRollbackScript(options), 'utf16le').toString('base64')
+  const directory = path.dirname(resolveTargetPath(options.logPath))
+  fs.mkdirSync(directory, { recursive: true })
+  const handshakeId = randomUUID()
+  const helperStatusPath = path.join(directory, `rollback-status-${handshakeId}.json`)
+  const helperAuthorizationPath = path.join(directory, `rollback-authorize-${handshakeId}.json`)
+  const helperStatusToken = randomUUID()
+  const finalScript = buildWindowsRollbackScript({ ...options, helperStatusPath, helperStatusToken, helperAuthorizationPath })
+  const finalScriptSha256 = createHash('sha256').update(finalScript).digest('hex')
+  const scriptPath = path.join(directory, `rollback-script-${handshakeId}.ps1`)
+  fs.writeFileSync(scriptPath, finalScript, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+  const encoded = Buffer.from(buildWindowsRollbackFileLoader(scriptPath, finalScriptSha256), 'utf16le').toString('base64')
   return new Promise((resolve, reject) => {
     const child = spawn(
       'powershell.exe',
@@ -182,8 +282,6 @@ export function launchWindowsFullRollback(
         '-NoLogo',
         '-NoProfile',
         '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
         '-EncodedCommand',
         encoded,
       ],
@@ -194,10 +292,82 @@ export function launchWindowsFullRollback(
         windowsHide: true,
       },
     )
-    child.once('error', reject)
-    child.once('spawn', () => {
-      child.unref()
-      resolve(child.pid)
-    })
+    let settled = false
+    let spawned = false
+    let pollTimer: NodeJS.Timeout | undefined
+    let timeoutTimer: NodeJS.Timeout | undefined
+    const cleanUp = () => {
+      if (pollTimer) clearInterval(pollTimer)
+      if (timeoutTimer) clearTimeout(timeoutTimer)
+      child.removeListener('error', onError)
+      child.removeListener('exit', onExit)
+      child.removeListener('close', onClose)
+      child.removeListener('spawn', onSpawn)
+    }
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      cleanUp()
+      // A readiness failure must not keep Electron alive; detach only after readiness or failure.
+      try { child.unref() } catch {}
+      if (error) reject(error)
+      else resolve(child.pid)
+    }
+    const checkStatus = (acceptReady = true) => {
+      if (!spawned || settled) return
+      let status: WindowsRollbackHelperStatus
+      try {
+        status = JSON.parse(fs.readFileSync(helperStatusPath, 'utf8')) as WindowsRollbackHelperStatus
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+        finish(new Error(`Windows rollback helper wrote an unreadable readiness record: ${(error as Error).message}`))
+        return
+      }
+      if (status.token !== helperStatusToken || status.candidateScriptSha256 !== finalScriptSha256) {
+        finish(new Error('Windows rollback helper readiness token did not match'))
+      } else if (typeof child.pid !== 'number' || status.processId !== child.pid) {
+        finish(new Error('Windows rollback helper process identity did not match'))
+      } else if (status.status === 'ready') {
+        if (!acceptReady) return
+        try {
+          const authorizationPath = `${helperAuthorizationPath}.${process.pid}.tmp`
+          fs.writeFileSync(
+            authorizationPath,
+            JSON.stringify({ state: 'authorized', token: helperStatusToken, candidateScriptSha256: finalScriptSha256, processId: child.pid }),
+            { encoding: 'utf8', mode: 0o600, flag: 'wx' },
+          )
+          fs.renameSync(authorizationPath, helperAuthorizationPath)
+          finish()
+        } catch (error) {
+          finish(new Error(`Could not authorize Windows rollback helper after readiness: ${(error as Error).message}`))
+        }
+      } else if (status.status === 'failed') {
+        finish(new Error(`Windows rollback helper failed before readiness: ${String(status.message || 'unknown preflight failure')}`))
+      } else {
+        finish(new Error(`Windows rollback helper reported an unknown readiness state: ${String(status.status)}`))
+      }
+    }
+    const onError = (error: Error) => finish(new Error(`Could not launch Windows rollback helper: ${error.message}`))
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      checkStatus(false)
+      if (!settled) finish(new Error(`Windows rollback helper exited before readiness (code ${String(code)}, signal ${String(signal)})`))
+    }
+    const onClose = (code: number | null, signal: NodeJS.Signals | null) => {
+      checkStatus(false)
+      if (!settled) finish(new Error(`Windows rollback helper closed before readiness (code ${String(code)}, signal ${String(signal)})`))
+    }
+    const onSpawn = () => {
+      spawned = true
+      checkStatus()
+      if (settled) return
+      pollTimer = setInterval(checkStatus, 25)
+      timeoutTimer = setTimeout(() => {
+        finish(new Error(`Windows rollback helper did not report readiness within ${readinessTimeoutMs} ms`))
+      }, readinessTimeoutMs)
+    }
+    child.once('error', onError)
+    child.once('exit', onExit)
+    child.once('close', onClose)
+    child.once('spawn', onSpawn)
   })
 }

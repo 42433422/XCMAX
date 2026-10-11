@@ -25,6 +25,9 @@ export interface RollbackMarker {
   appBundlePath?: string
   databaseBackupPath?: string
   databasePath?: string
+  expectedAppFiles?: Record<string, string>
+  expectedDatabaseSha256?: string
+  databaseOriginallyAbsent?: boolean
 }
 
 export interface RollbackApplied {
@@ -314,11 +317,11 @@ export async function triggerRollback(reason: string): Promise<RollbackTriggerRe
     const options = {
       currentPid: process.pid, backupRoot, appPath: (windows || macos) as string,
       markerPath: markerPath(), appliedPath: appliedPath(), logPath: helperLogPath(), applied,
-      ...(marker.databasePath && marker.databaseBackupPath
+      ...(marker.databasePath && (marker.databaseBackupPath || (windows && marker.databaseOriginallyAbsent === true))
         ? { databasePath: marker.databasePath, databaseBackupPath: marker.databaseBackupPath }
         : {}),
     }
-    if (windows) await launchWindowsFullRollback({ ...options, installDir: path.dirname(windows) })
+    if (windows) await launchWindowsFullRollback({ ...options, installDir: path.dirname(windows), expectedAppFiles: marker.expectedAppFiles, expectedDatabaseSha256: marker.expectedDatabaseSha256, databaseOriginallyAbsent: marker.databaseOriginallyAbsent })
     else await launchMacOSFullRollback(options)
     return { mode: windows ? 'windows-full' : 'macos-full', scheduled: true }
   }

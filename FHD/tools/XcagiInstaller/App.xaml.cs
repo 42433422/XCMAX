@@ -23,6 +23,7 @@ public partial class App : System.Windows.Application
         }
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        InstallResult result = default;
         try
         {
             NsisSilentInstaller.Trace("silent install start");
@@ -31,11 +32,12 @@ public partial class App : System.Windows.Application
             if (string.IsNullOrWhiteSpace(setupExe))
                 throw new InvalidOperationException("Unable to resolve embedded setup payload.");
             NsisSilentInstaller.Trace($"payload={setupExe};{DescribeFile(setupExe)}");
+            NsisSilentInstaller.ValidateRegisteredInstallDirectory(options.InstallDirectory ?? NsisSilentInstaller.DefaultInstallDirectory());
 
-            var result = await NsisSilentInstaller.RunAsync(
+            result = await NsisSilentInstaller.RunAsync(
                 setupExe,
                 options.InstallDirectory ?? NsisSilentInstaller.DefaultInstallDirectory(),
-                cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                cancellationToken: CancellationToken.None, userDataDirectory: NsisSilentInstaller.UserDataDirectory()).ConfigureAwait(false);
             if (!result.Success)
                 throw new InvalidOperationException(result.Error ?? "Silent install failed.");
             NsisSilentInstaller.Trace($"installed={result.InstallDir};app={result.AppExePath}");
@@ -44,7 +46,7 @@ public partial class App : System.Windows.Application
         }
         catch (Exception ex)
         {
-            NsisSilentInstaller.Trace("failed: " + ex);
+            NsisSilentInstaller.Trace("failed: " + (result.Success ? await result.RecoverPostInstallFailureAsync(ex.Message) : ex.ToString()));
             ShutdownOnUiThread(1);
         }
     }

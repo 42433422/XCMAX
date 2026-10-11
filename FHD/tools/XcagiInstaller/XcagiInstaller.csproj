@@ -22,6 +22,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Assets\WindowsRollback.generated.ps1" LogicalName="XCAGI.WindowsRollback" />
+    <EmbeddedResource Include="Assets\WindowsRollbackLoader.generated.ps1" LogicalName="XCAGI.WindowsRollbackLoader" />
     <Resource Include="..\..\desktop\branding\app-icon-source.png" Link="Assets\logo.png" />
     <Resource Include="Assets\installer-hero.png" Condition="Exists('Assets\installer-hero.png')" />
     <Resource Include="$(InstallerIconPath)" Link="Assets\app.ico" Condition="'$(InstallerIconPath)' != ''" />
@@ -40,4 +42,7 @@
     <EmbeddedResource Include="$(LicenseFilePath)" LogicalName="XCAGI.LicenseText" />
   </ItemGroup>
 
+  <Target Name="GenerateWindowsRollback" BeforeTargets="PrepareForBuild">
+    <Exec Command="node &quot;$(MSBuildThisFileDirectory)..\..\scripts\package\generate-windows-rollback-helper.mjs&quot;" />
+  </Target>
 </Project>

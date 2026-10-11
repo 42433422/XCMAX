@@ -145,12 +145,11 @@ public partial class MainWindow : Window
         switch (_step)
         {
             case WizardStep.Welcome:
-                NextButton.Content = "继续";
-                UpdateWelcomeButtonState();
-                break;
             case WizardStep.License:
                 NextButton.Content = "继续";
-                NextButton.IsEnabled = AgreeLicenseCheck.IsChecked == true;
+                NextButton.IsEnabled = _step == WizardStep.Welcome
+                    ? WelcomeAgreeCheck.IsChecked == true
+                    : AgreeLicenseCheck.IsChecked == true;
                 break;
             case WizardStep.Directory:
                 NextButton.Content = "安装";
@@ -160,11 +159,8 @@ public partial class MainWindow : Window
                 NextButton.IsEnabled = false;
                 BackButton.Visibility = Visibility.Collapsed;
                 break;
-            case WizardStep.Complete:
-                NextButton.Content = "好";
-                NextButton.IsEnabled = true;
-                break;
             case WizardStep.Error:
+            case WizardStep.Complete:
                 NextButton.Content = "好";
                 NextButton.IsEnabled = true;
                 break;
@@ -215,27 +211,21 @@ public partial class MainWindow : Window
     {
         switch (_step)
         {
+            case WizardStep.Welcome when WelcomeAgreeCheck.IsChecked == true:
+            case WizardStep.License when AgreeLicenseCheck.IsChecked == true:
+                _step = WizardStep.Directory;
+                ApplyStepUi();
+                break;
             case WizardStep.Welcome:
-                if (WelcomeAgreeCheck.IsChecked != true)
-                    return;
-                _step = WizardStep.Directory;
-                ApplyStepUi();
-                break;
             case WizardStep.License:
-                if (AgreeLicenseCheck.IsChecked != true)
-                    return;
-                _step = WizardStep.Directory;
-                ApplyStepUi();
-                break;
+                return;
             case WizardStep.Directory:
                 _installDir = InstallDirBox.Text.Trim();
                 WelcomePathPreview.Text = _installDir;
                 await RunInstallAsync();
                 break;
-            case WizardStep.Complete:
-                Close();
-                break;
             case WizardStep.Error:
+            case WizardStep.Complete:
                 Close();
                 break;
         }
@@ -309,11 +299,14 @@ public partial class MainWindow : Window
             UpdateInstallProgress(overall, u.Percent == 100 ? "本体安装完成，正在准备收尾…" : u.Status);
         });
 
+        try { NsisSilentInstaller.ValidateRegisteredInstallDirectory(_installDir); }
+        catch (Exception ex) { ShowError(ex.Message); return; }
         var result = await NsisSilentInstaller.RunAsync(
             _setupExePath,
             _installDir,
             installProgress,
-            _installCts.Token);
+            _installCts.Token,
+            NsisSilentInstaller.UserDataDirectory());
 
         if (!result.Success)
         {
@@ -327,7 +320,7 @@ public partial class MainWindow : Window
         var runAfterInstall = RunAfterInstallCheck.IsChecked == true;
         string extras;
         try { extras = await PostInstallTasks.RunAsync(() => ApplyPostInstallTasks(_installedAppExe, desktopShortcut, runAfterInstall)); }
-        catch (Exception ex) { ShowError(ex.Message); return; }
+        catch (Exception ex) { ShowError(await result.RecoverPostInstallFailureAsync(ex.Message)); return; }
         UpdateInstallProgress(100, "安装完成");
         CompletePathText.Text = result.InstallDir ?? "";
         CompleteExtrasText.Text = extras;
