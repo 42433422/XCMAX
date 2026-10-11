@@ -347,6 +347,24 @@ def _issue_row(row: CustomerServiceTicket) -> dict[str, Any]:
     }
 
 
+def _sync_customer_decision_work_order(
+    db: Session, ticket: CustomerServiceTicket, evidence: dict[str, Any], user: User, decision: str, key: str
+) -> None:
+    wo_id = str(evidence.get("work_order_id") or "")
+    if not wo_id:
+        return
+    result = record_customer_decision(
+        db,
+        wo_id=wo_id,
+        user=user,
+        decision=decision,
+        ticket_id=int(ticket.id),
+        idempotency_key=key,
+    )
+    if result.get("ok") is not True:
+        raise HTTPException(409, "客户决策未能同步到原 Work Order")
+
+
 @router.get("/issues/mine")
 def my_product_issues(
     db: Session = Depends(get_db), user: User = Depends(get_current_user)
@@ -386,6 +404,21 @@ def decide_product_issue(
     if prior:
         if prior.get("request_sha256") != digest:
             raise HTTPException(409, "同一操作标识不可绑定不同内容")
+        current = (
+            body.decision == "resolved"
+            and ticket.status in _CLOSED
+            and (evidence.get("resolution") or {}).get("state") == "resolved"
+        ) or (
+            body.decision == "reopen"
+            and ticket.status == "processing"
+            and (evidence.get("resolution") or {}).get("state") == "reopened"
+        )
+        if decisions[-1].get("idempotency_key") == body.idempotency_key and current:
+            _sync_customer_decision_work_order(
+                db, ticket, evidence, user, body.decision, body.idempotency_key
+            )
+            if body.decision == "reopen" and prior.get("event_id"):
+                _wake_owner_intake(ticket.id, "customer_reopen")
         return {"success": True, "replayed": True, "issue": _issue_row(ticket)}
     resolution = issue_resolution(ticket, evidence)
     closed = ticket.status in _CLOSED
@@ -446,6 +479,7 @@ def decide_product_issue(
             "request_sha256": digest,
             "user_id": int(user.id),
             "at": now.isoformat(),
+            "event_id": event_id,
         },
     ][-50:]
     ticket.evidence_json = json_dumps(evidence)
@@ -463,6 +497,9 @@ def decide_product_issue(
     if body.decision == "reopen":
         reopen = len(evidence["reopen_history"])
         event_id = enqueue_issue(db, ticket, revision=f"reopen:{reopen}")
+        evidence = json_loads(ticket.evidence_json, {})
+        evidence["customer_decisions"][-1]["event_id"] = event_id
+        ticket.evidence_json = json_dumps(evidence)
     audit(
         db,
         event_type=f"customer_issue_{body.decision}",
@@ -472,14 +509,9 @@ def decide_product_issue(
         detail={"note": note, "idempotency_key": body.idempotency_key, "event_id": event_id},
     )
     db.commit()
-    if evidence.get("work_order_id"):
-        record_customer_decision(
-            db,
-            wo_id=str(evidence["work_order_id"]),
-            user=user,
-            decision=body.decision,
-            ticket_id=int(ticket.id),
-        )
+    _sync_customer_decision_work_order(
+        db, ticket, evidence, user, body.decision, body.idempotency_key
+    )
     if event_id:
         _wake_owner_intake(ticket.id, "customer_reopen")
     db.refresh(ticket)

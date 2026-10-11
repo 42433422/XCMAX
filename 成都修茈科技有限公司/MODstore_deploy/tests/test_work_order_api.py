@@ -385,8 +385,22 @@ class TestWorkOrderApi:
         assert r.json()["reason"] == "invalid_transition"
 
 
-def test_customer_decision_is_owner_bound_and_moves_only_inside_window() -> None:
+def test_customer_decision_is_owner_bound_and_moves_only_inside_window(monkeypatch) -> None:
+    import pytest
+    from sqlalchemy import event
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.orm import Session
+
+    from modstore_server import customer_issue_api
     from modstore_server import work_order_api as api
+    from modstore_server.customer_service_tools import json_dumps, json_loads
+    from modstore_server.db.work_orders import WorkOrderEvent
+    from modstore_server.models_cs import (
+        CustomerServiceAuditLog,
+        CustomerServiceMessage,
+        CustomerServiceSession,
+        CustomerServiceTicket,
+    )
 
     with get_session_factory()() as db:
         owner, other = _user(db, tag="wo_owner"), _user(db, tag="wo_other")
@@ -418,8 +432,146 @@ def test_customer_decision_is_owner_bound_and_moves_only_inside_window() -> None
         assert decide(owner, "reopen")["status"] == "routed"
         for state in ("in_dev", "merged", "released", "verifying"):
             api.transition(api.TransitionBody(wo_id=wo_id, to_state=state), db=db, _user=owner)
-        assert decide(owner, "resolved")["to"] == "closed"
-        assert decide(owner, "reopen")["to"] == "reopened"
+        session = CustomerServiceSession(
+            user_id=owner.id, channel="fixture", status="open", title="decision replay"
+        )
+        db.add(session)
+        db.flush()
+        ticket = CustomerServiceTicket(
+            session_id=session.id,
+            user_id=owner.id,
+            ticket_no=f"CI-{uuid.uuid4().hex}",
+            title="synthetic decision replay",
+            intent="product_issue",
+            status="processing",
+            decision_status="accepted",
+            summary="synthetic fixture only",
+            evidence_json=json_dumps(
+                {"work_order_id": wo_id, "resolution": {"state": "awaiting_delivery"}}
+            ),
+        )
+        db.add(ticket)
+        db.commit()
+        original_sync = customer_issue_api.record_customer_decision
+        actual_sync = original_sync
+        sync_attempts = []
+
+        def fail_before_work_order_write(*args, **kwargs):
+            sync_attempts.append("failed")
+            raise OperationalError("isolated synchronization boundary", {}, RuntimeError("fixture"))
+
+        def sync_work_order(*args, **kwargs):
+            sync_attempts.append("retried")
+            return actual_sync(*args, **kwargs)
+
+        monkeypatch.setattr(
+            customer_issue_api, "record_customer_decision", fail_before_work_order_write
+        )
+        decision = customer_issue_api.CustomerIssueDecisionBody(
+            decision="resolved",
+            note="synthetic customer confirms issue resolved",
+            idempotency_key="decision-sync-fixture-001",
+        )
+        with pytest.raises(OperationalError):
+            customer_issue_api.decide_product_issue(ticket.id, decision, db=db, user=owner)
+        assert db.get(CustomerServiceTicket, ticket.id).status == "resolved"
+
+        monkeypatch.setattr(customer_issue_api, "record_customer_decision", sync_work_order)
+        fail_transition = True
+
+        def fail_transition_commit(session):
+            nonlocal fail_transition
+            if fail_transition and any(
+                isinstance(row, WorkOrderEvent)
+                and row.wo_id == wo_id
+                and row.event == "transition"
+                and row.to_state == "closed"
+                for row in session.new
+            ):
+                fail_transition = False
+                raise OperationalError("isolated transition commit", {}, RuntimeError("fixture"))
+
+        event.listen(Session, "before_commit", fail_transition_commit)
+        try:
+            with pytest.raises(OperationalError):
+                customer_issue_api.decide_product_issue(ticket.id, decision, db=db, user=owner)
+        finally:
+            event.remove(Session, "before_commit", fail_transition_commit)
+        db.rollback()
+        events = db.query(WorkOrderEvent).filter_by(wo_id=wo_id).all()
+        decision_gates = [
+            row for row in events
+            if row.event == "gate"
+            and json_loads(row.ref, {}).get("gate") == "customer_decision"
+            and json_loads(row.ref, {}).get("evidence", {}).get("idempotency_key")
+            == "decision-sync-fixture-001"
+        ]
+        assert len(decision_gates) == 1
+        assert not any(row.event == "transition" and row.to_state == "closed" for row in events)
+
+        replay = customer_issue_api.decide_product_issue(ticket.id, decision, db=db, user=owner)
+        assert replay["replayed"] is True and sync_attempts == ["failed", "retried", "retried"]
+        ticket = db.get(CustomerServiceTicket, ticket.id)
+        evidence = json_loads(ticket.evidence_json, {})
+        audits = db.query(CustomerServiceAuditLog).filter_by(
+            ticket_id=ticket.id, event_type="customer_issue_resolved"
+        ).all()
+        messages = [
+            row
+            for row in db.query(CustomerServiceMessage).filter_by(
+                ticket_id=ticket.id, role="user"
+            )
+            if json_loads(row.payload_json, {}).get("customer_decision") == "resolved"
+        ]
+        assert ticket.status == "resolved" and len(evidence["customer_decisions"]) == 1
+        assert len(audits) == len(messages) == 1
+        assert api._view(db, wo_id)["status"] == "closed"
+        assert customer_issue_api.decide_product_issue(
+            ticket.id, decision, db=db, user=owner
+        )["replayed"]
+        closed_events = db.query(WorkOrderEvent).filter_by(wo_id=wo_id, event="transition").all()
+        assert sum(row.to_state == "closed" for row in closed_events) == 1
+        evidence["resolution"]["state"] = "rejected"
+        ticket.status = "rejected"
+        ticket.evidence_json = json_dumps(evidence)
+        db.commit()
+        before_changed_lifecycle = len(db.query(WorkOrderEvent).filter_by(wo_id=wo_id).all())
+        assert customer_issue_api.decide_product_issue(
+            ticket.id, decision, db=db, user=owner
+        )["replayed"]
+        assert len(db.query(WorkOrderEvent).filter_by(wo_id=wo_id).all()) == before_changed_lifecycle
+
+        wakeups = []
+        monkeypatch.setattr(
+            customer_issue_api, "_wake_owner_intake", lambda ticket_id, source: wakeups.append(source)
+        )
+        fail_reopen_sync = True
+
+        def fail_reopen_once(*args, **kwargs):
+            nonlocal fail_reopen_sync
+            if fail_reopen_sync:
+                fail_reopen_sync = False
+                raise OperationalError("isolated reopen synchronization", {}, RuntimeError("fixture"))
+            return actual_sync(*args, **kwargs)
+
+        monkeypatch.setattr(customer_issue_api, "record_customer_decision", fail_reopen_once)
+        reopen = customer_issue_api.CustomerIssueDecisionBody(
+            decision="reopen",
+            note="synthetic customer reports issue remains",
+            idempotency_key="decision-sync-fixture-002",
+        )
+        with pytest.raises(OperationalError):
+            customer_issue_api.decide_product_issue(ticket.id, reopen, db=db, user=owner)
+        assert db.get(CustomerServiceTicket, ticket.id).status == "processing" and not wakeups
+        monkeypatch.setattr(customer_issue_api, "record_customer_decision", actual_sync)
+        assert customer_issue_api.decide_product_issue(ticket.id, reopen, db=db, user=owner)["replayed"]
+        assert api._view(db, wo_id)["status"] == "reopened" and wakeups == ["customer_reopen"]
+        before_stale_replay = len(db.query(WorkOrderEvent).filter_by(wo_id=wo_id).all())
+        assert customer_issue_api.decide_product_issue(ticket.id, decision, db=db, user=owner)["replayed"]
+        assert api._view(db, wo_id)["status"] == "reopened"
+        assert len(db.query(WorkOrderEvent).filter_by(wo_id=wo_id).all()) == before_stale_replay
+        assert customer_issue_api.decide_product_issue(ticket.id, reopen, db=db, user=owner)["replayed"]
+        assert api._view(db, wo_id)["status"] == "reopened"
         gates = [
             row["ref"]["gate_status"]
             for row in api._view(db, wo_id)["history"]

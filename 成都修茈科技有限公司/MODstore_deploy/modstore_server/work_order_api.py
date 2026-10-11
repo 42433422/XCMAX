@@ -256,7 +256,13 @@ def _customer_view(db: Session, wo_id: str, user: User) -> dict[str, Any] | None
 
 
 def record_customer_decision(
-    db: Session, *, wo_id: str, user: User, decision: str, ticket_id: int
+    db: Session,
+    *,
+    wo_id: str,
+    user: User,
+    decision: str,
+    ticket_id: int,
+    idempotency_key: str = "",
 ) -> dict[str, Any]:
     """The ticket owner's verdict is a gate receipt; it moves the WO only inside its window."""
     view = _customer_view(db, wo_id, user)
@@ -267,24 +273,53 @@ def record_customer_decision(
         if decision == "resolved"
         else ("reopened", {"verifying", "closed"})
     )
-    record_gate_receipt(
-        GateReceiptBody(
-            wo_id=wo_id,
-            gate="customer_decision",
-            gate_status="RESOLVED" if decision == "resolved" else "REOPENED",
-            evidence={"customer_ticket_id": ticket_id},
-            source="customer_issue_decision",
-        ),
-        db=db,
-        _user=user,
+    gate_status = "RESOLVED" if decision == "resolved" else "REOPENED"
+    gate_evidence = {
+        "customer_ticket_id": ticket_id,
+        "decision": decision,
+        "idempotency_key": idempotency_key,
+    }
+    gate_saved = idempotency_key and any(
+        row.get("event") == "gate"
+        and row.get("ref", {}).get("gate") == "customer_decision"
+        and row.get("ref", {}).get("gate_status") == gate_status
+        and row.get("ref", {}).get("evidence") == gate_evidence
+        for row in view.get("history") or []
     )
+    transition_ref = {
+        "customer_ticket_id": ticket_id,
+        "customer_decision": decision,
+        "idempotency_key": idempotency_key,
+    }
+    transition_saved = idempotency_key and any(
+        row.get("event") == "transition"
+        and row.get("to_state") == target
+        and row.get("ref") == transition_ref
+        for row in view.get("history") or []
+    )
+    if not gate_saved:
+        gate = record_gate_receipt(
+            GateReceiptBody(
+                wo_id=wo_id,
+                gate="customer_decision",
+                gate_status=gate_status,
+                evidence=gate_evidence,
+                source="customer_issue_decision",
+            ),
+            db=db,
+            _user=user,
+        )
+        if gate.get("ok") is not True:
+            return gate
+    if transition_saved:
+        return {"ok": True, "wo_id": wo_id, "reason": "decision_already_applied"}
     if view.get("status") not in window:
         return {"ok": True, "wo_id": wo_id, "status": view.get("status")}
     return transition(
         TransitionBody(
             wo_id=wo_id,
             to_state=target,
-            ref={"customer_ticket_id": ticket_id},
+            ref=transition_ref,
             note="客户本人决定",
             source="customer_issue_decision",
         ),
