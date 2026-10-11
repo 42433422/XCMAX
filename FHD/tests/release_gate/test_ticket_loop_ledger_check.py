@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import copy
 import importlib.util
 import json
 from pathlib import Path
+
+import pytest
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 LEDGER_DIR = FHD_ROOT / "docs" / "evidence" / "e2e" / "final-acceptance-1.0.0.5"
@@ -24,19 +25,15 @@ def _ledger() -> dict:
 
 def _template() -> dict:
     """已提交台账会记录真实轮次（#2279 起），用例从清空后的模板构造，避免随真实数据漂移。"""
-    ledger = copy.deepcopy(_ledger())
-    for key in ("source_sha", "installer_sha256"):
-        ledger["candidate"][key] = None
+    ledger = _ledger()
+    ledger["candidate"].update(source_sha=None, installer_sha256=None)
     for who in ("customer_a", "customer_b"):
         ledger["accounts"][who] = {"alias": None, "tenant": None}
     for ticket in ledger["tickets"].values():
         ticket["ticket_id"] = None
-        ticket["processing"] = {
-            "para_task_id": None,
-            "para_device_id": None,
-            "handler_outputs_evidence": None,
-            "handlers_attempted": [],
-        }
+        ticket["processing"] = dict.fromkeys(
+            ("para_task_id", "para_device_id", "handler_outputs_evidence")
+        ) | {"handlers_attempted": []}
     for item in ledger["items"]:
         item.update(result="UNKNOWN", observed_at=None, evidence=[])
     return ledger
@@ -48,9 +45,7 @@ def _gates() -> dict:
 
 PARA_OK = {
     "handler": "para_delegate",
-    "ok": True,
-    "accepted": True,
-    "completed": True,
+    **dict.fromkeys(("ok", "accepted", "completed"), True),
     "status": "completed",
     "source": "para_api",
     "para_result": {"id": "para-task-1"},
@@ -68,9 +63,7 @@ def _filled(attempts: list[dict], *, pass_items=(24,)) -> dict:
     ledger["tickets"]["resolved"]["processing"]["handlers_attempted"] = attempts
     for item in ledger["items"]:
         if item["no"] in pass_items:
-            item["result"] = "PASS"
-            item["observed_at"] = "2026-10-10T15:00:00Z"
-            item["evidence"] = ["runs/ticket.json"]
+            item.update(result="PASS", observed_at="2026-10-10T15:00:00Z", evidence=["runs/ticket.json"])
     return ledger
 
 
@@ -93,28 +86,16 @@ def test_ledger_declares_para_policy_for_ai_processing_items() -> None:
     assert {19, 24, 26, 48, 49} <= set(policy["applies_to_items"])
 
 
-def test_para_completed_without_fallback_passes() -> None:
-    assert _module().check_ledger(_filled([PARA_OK])) == []
-
-
-def test_local_llm_fallback_after_para_failure_fails() -> None:
-    para_failed = {**PARA_OK, "ok": False, "completed": False, "error": "device offline"}
-    errs = _module().check_ledger(_filled([para_failed, {"handler": "agent", "ok": True}]))
-    assert {"para_fallback_detected", "para_not_completed"} <= _codes(errs)
-
-
-def test_llm_md_alongside_successful_para_still_counts_as_fallback() -> None:
-    errs = _module().check_ledger(_filled([PARA_OK, {"handler": "llm_md", "ok": True}]))
-    assert _codes(errs) == {"para_fallback_detected"}
-
-
-def test_para_accepted_but_not_completed_fails() -> None:
-    accepted_only = {**PARA_OK, "completed": False, "status": "para_task_accepted"}
-    assert "para_not_completed" in _codes(_module().check_ledger(_filled([accepted_only])))
-
-
-def test_missing_processing_evidence_fails() -> None:
-    assert "para_evidence_missing" in _codes(_module().check_ledger(_filled([])))
+@pytest.mark.parametrize("attempts, expected", [
+    ([PARA_OK], set()),
+    ([{**PARA_OK, "ok": False, "completed": False, "error": "device offline"},
+      {"handler": "agent", "ok": True}], {"para_fallback_detected", "para_not_completed"}),
+    ([PARA_OK, {"handler": "llm_md", "ok": True}], {"para_fallback_detected"}),
+    ([{**PARA_OK, "completed": False, "status": "para_task_accepted"}], {"para_not_completed"}),
+    ([], {"para_evidence_missing"}),
+])
+def test_para_processing_outcomes(attempts: list[dict], expected: set[str]) -> None:
+    assert _codes(_module().check_ledger(_filled(attempts))) == expected
 
 
 def test_pass_without_evidence_or_identity_fails() -> None:
@@ -135,16 +116,14 @@ def test_pass_without_evidence_or_identity_fails() -> None:
 def test_reopen_needs_distinct_ticket_and_tenants_must_differ() -> None:
     ledger = _filled([PARA_OK], pass_items=(24, 36))
     ledger["tickets"]["reopened"]["ticket_id"] = "CS-1"
-    ledger["tickets"]["reopened"]["processing"] = copy.deepcopy(
-        ledger["tickets"]["resolved"]["processing"]
-    )
+    ledger["tickets"]["reopened"]["processing"] = ledger["tickets"]["resolved"]["processing"].copy()
     ledger["accounts"]["customer_b"]["tenant"] = "tenant-a"
     codes = _codes(_module().check_ledger(ledger))
     assert {"reopened_ticket_same_as_resolved", "accounts_same_tenant"} <= codes
 
 
 def test_gate_19_green_requires_all_items_pass() -> None:
-    gates = copy.deepcopy(_gates())
+    gates = _gates()
     for gate in gates["gates"]:
         if gate["no"] == 19:
             gate["status"] = "GREEN"

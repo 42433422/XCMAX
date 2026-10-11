@@ -1,5 +1,5 @@
 {
-  "lines": 2302039,
+  "lines": 2302018,
   "updated": "2026-10-11",
-  "note": "main 8cac2ba（基线 2302019）+ 本 PR 净增 20 行（2302019+20）：#2279 提交真实台账后 release_gate 用例改从清空模板构造（_template），修 main 上 Release gate 4 项失败，闭环路径修复非新功能"
+  "note": "棘轮下调"
 }
