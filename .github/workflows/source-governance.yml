@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Test source governance rules
-        run: python -m unittest scripts.dev.test_source_governance scripts.dev.test_change_classifier
+        run: python -m unittest scripts.dev.test_source_governance
       - name: Test unified change classifier
         run: python -m unittest scripts.dev.test_change_classifier
       - name: Check cross-stack source debt
