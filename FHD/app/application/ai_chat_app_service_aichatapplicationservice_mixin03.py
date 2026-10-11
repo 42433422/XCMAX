@@ -54,32 +54,29 @@ class _AIChatApplicationServicePart03Mixin:
             _facade().logger.exception("workflow 工具调度失败")
             return {"success": False, "message": "工作流工具调度失败"}
 
-    def _hydrate_pending_workflow(self, user_id: str) -> bool:
-        """从 DB 载入用户最近的可续跑计划并水合到内存待确认槽。
-
-        配合 ``WorkflowPlanStore`` 落库的计划，实现进程重启/换会话后仍能恢复长任务。
-        水合成 ``kind="workflow"`` 的待确认记录，进入通用确认分支并用 ``resume`` 续跑。
-        返回是否成功水合。
-        """
+    def _hydrate_pending_workflow(self, user_id: str, session_id: str) -> bool:
+        """仅恢复当前会话的待确认计划；跨会话续跑须从明确的任务入口处理。"""
         try:
             from app.application.workflow.plan_store import WorkflowPlanStore
             from app.application.workflow.types import plan_from_dict
 
-            active = WorkflowPlanStore().list_active(user_id, limit=1)
-            if not active:
+            active = WorkflowPlanStore().list_active(user_id, limit=1, session_id=session_id)
+            if not active or active[0].get("status") != "pending_awaiting":
                 return False
             plan = plan_from_dict(active[0].get("plan") or {})
             if plan is None or not plan.nodes:
                 return False
+            runtime_context = dict(active[0].get("runtime_context") or {})
+            confirmation = runtime_context.pop("pending_confirmation", {})
             self._pending_workflows[user_id] = {
                 "plan": plan,
-                "runtime_context": dict(active[0].get("runtime_context") or {}),
+                "runtime_context": runtime_context,
                 "pending_id": _facade().uuid.uuid4().hex,
                 "thinking_steps": "",
                 "kind": "workflow",
-                "agent_run_id": "",
-                "approval_required": False,
-                "approval_nodes": [],
+                "agent_run_id": str(confirmation.get("agent_run_id") or ""),
+                "approval_required": bool(confirmation.get("approval_required")),
+                "approval_nodes": confirmation.get("approval_nodes") or [],
                 "hydrated_from_db": True,
             }
             return True
@@ -106,6 +103,15 @@ class _AIChatApplicationServicePart03Mixin:
             session_id = (
                 str(rc.get("session_id") or rc.get("conversation_id") or "").strip() or None
             )
+            pending = self._pending_workflows.get(user_id or "") or {}
+            if (
+                status == "pending_awaiting"
+                and getattr(pending.get("plan"), "plan_id", None) == plan.plan_id
+            ):
+                rc["pending_confirmation"] = {
+                    key: pending.get(key)
+                    for key in ("agent_run_id", "approval_required", "approval_nodes")
+                }
             WorkflowPlanStore().save(
                 plan=plan,
                 runtime_context=rc,

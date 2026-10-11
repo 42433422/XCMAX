@@ -85,7 +85,7 @@ generic 构建首次打开会进入 **首次设置**（`/onboarding`）：
 
 1. 认识宿主 → 2. 宿主包就绪（一键装齐）→ 3. 行业定型（可跳过）→ 4. 智能对话  
 
-详见 **[guides/PRODUCT_USER_FLOW.md](guides/PRODUCT_USER_FLOW.md)**。
+详见 **[DELIVERABLE_PRODUCT.md](DELIVERABLE_PRODUCT.md)**。
 
 ## 装齐通用 Mod 包（命令行）
 
