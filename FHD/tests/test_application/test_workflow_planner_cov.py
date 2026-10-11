@@ -328,15 +328,18 @@ class TestValidateRequiredParams:
     [
         "恢复数据库，使用备份文件 xcagi.db.20261011_160815.bak。先提交手动审批，未经批准不要执行恢复。",
         "请只恢复一次数据库，使用已有备份文件xcagi.db.20261011_160815.bak。恢复只允许执行一次，不要把提交审批和执行恢复拆成两次恢复操作。使用手动审批，先创建一张真实审批申请，批准后再恢复。",
+        "请恢复数据库 xcagi.db.20261011_160815.bak，如果失败请提示原因",
+        "请恢复数据库 xcagi.db.20261011_160815.bak 如果失败请提示原因",
+        "请帮我恢复数据库 xcagi.db.20261011_160815.bak",
+        "请你恢复数据库 xcagi.db.20261011_160815.bak",
+        "现在恢复数据库 xcagi.db.20261011_160815.bak",
+        "麻烦你先恢复数据库 xcagi.db.20261011_160815.bak",
     ],
 )
 @pytest.mark.parametrize("entry", ["plan", "_fallback_plan"])
 def test_actual_restore_requests_use_one_registered_high_risk_step(message, entry):
-
     registry = {
-        "system_maintenance": {
-            "actions": {"restore_database": {"risk": "high", "required_params": ["backup_file"]}}
-        },
+        "system_maintenance": {"actions": {"restore_database": {}}},
         **_SAMPLE_REGISTRY,
     }
     planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
@@ -350,13 +353,9 @@ def test_actual_restore_requests_use_one_registered_high_risk_step(message, entr
         )
     assert len(plan.nodes) == 1 and validate_plan_graph(plan) is None
     node = plan.nodes[0]
-    assert (node.tool_id, node.action, node.params, node.risk, node.idempotent) == (
-        "system_maintenance",
-        "restore_database",
-        {"backup_file": "xcagi.db.20261011_160815.bak"},
-        "high",
-        False,
-    )
+    assert (node.tool_id, node.action) == ("system_maintenance", "restore_database")
+    assert node.params == {"backup_file": "xcagi.db.20261011_160815.bak"}
+    assert (node.risk, node.idempotent) == ("high", False)
     assert HybridRiskGate().evaluate(plan, context={}).requires_confirmation
 
 
@@ -368,6 +367,15 @@ def test_actual_restore_requests_use_one_registered_high_risk_step(message, entr
         "不恢复数据库",
         "只查看恢复数据库的方法",
         "备份数据库，不恢复",
+        "不要再恢复数据库，备份为 xcagi.db.20261011_160815.bak",
+        "恢复数据库 xcagi.db.20261011_160815.bak 失败，帮我排查原因",
+        "请排查恢复数据库 xcagi.db.20261011_160815.bak 失败的原因",
+        "恢复数据库 xcagi.db.20261011_160815.bak 应该怎么操作",
+        "请你先不要再恢复数据库，备份为 xcagi.db.20261011_160815.bak",
+        "现在恢复数据库 xcagi.db.20261011_160815.bak 可以吗",
+        "恢复数据库 test.bak 卡住了，请帮我排查",
+        "恢复数据库 test.bak 发生异常，请只排查日志",
+        "恢复数据库 test.bak 是什么意思",
     ],
 )
 def test_restore_does_not_turn_questions_negations_or_backup_into_write(message):
@@ -380,6 +388,10 @@ def test_restore_does_not_turn_questions_negations_or_backup_into_write(message)
     "message,registry",
     [
         ("恢复数据库", {"system_maintenance": {"actions": {"restore_database": {}}}}),
+        (
+            "恢复数据库，如果失败请分析 test.bak 日志",
+            {"system_maintenance": {"actions": {"restore_database": {}}}},
+        ),
         ("恢复数据库，使用xcagi.db.20261011_160815.bak", {}),
     ],
 )
@@ -390,13 +402,17 @@ def test_restore_missing_file_or_entitlement_clarifies_without_business_write(me
     assert [(n.tool_id, n.action, n.risk) for n in plan.nodes] == [("clarify", "ask", "low")]
 
 
-class TestFallbackPlan:
-    def _make_planner(self) -> Any:
+class _PlannerFixture:
+    api_key = api_url = model = ""
 
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_svc:
-            mock_svc.return_value = MagicMock()
+    def _make_planner(self):
+        ai = MagicMock(api_key=self.api_key, api_url=self.api_url, model=self.model)
+        ai.get_context.return_value = None
+        with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=ai):
             return LLMWorkflowPlanner()
 
+
+class TestFallbackPlan(_PlannerFixture):
     def test_fallback_employee_intent_with_unknown_id(self) -> None:
         planner = self._make_planner()
         result = planner._fallback_plan("pid", "请员工处理订单", _SAMPLE_REGISTRY)
@@ -478,17 +494,10 @@ class TestFallbackPlan:
         assert result.risk_level == "medium"
 
 
-class TestPlanWithLLM:
-    def _make_planner(self) -> Any:
-
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_svc:
-            ai = MagicMock()
-            ai.api_key = "test-key"
-            ai.api_url = "https://api.example.com/v1/chat/completions"
-            ai.model = "deepseek-chat"
-            ai.get_context.return_value = None
-            mock_svc.return_value = ai
-            return LLMWorkflowPlanner()
+class TestPlanWithLLM(_PlannerFixture):
+    api_key = "test-key"
+    api_url = "https://api.example.com/v1/chat/completions"
+    model = "deepseek-chat"
 
     def _mock_response(self, payload: dict[str, Any]) -> MagicMock:
         resp = MagicMock()
@@ -602,18 +611,7 @@ class TestPlanWithLLM:
         assert result.metadata.get("user_memory_rag_summary") == "用户偏好：ABC产品"
 
 
-class TestPlanMethod:
-    def _make_planner(self) -> Any:
-
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_svc:
-            ai = MagicMock()
-            ai.api_key = ""
-            ai.api_url = ""
-            ai.model = ""
-            ai.get_context.return_value = None
-            mock_svc.return_value = ai
-            return LLMWorkflowPlanner()
-
+class TestPlanMethod(_PlannerFixture):
     def test_plan_falls_back_to_rules_when_llm_unavailable(self) -> None:
         planner = self._make_planner()
 

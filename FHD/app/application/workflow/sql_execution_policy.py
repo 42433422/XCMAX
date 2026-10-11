@@ -12,11 +12,16 @@ REFUSAL_MESSAGE = "不能直接执行数据库 SQL。请使用具体的业务操
 
 
 def database_restore_plan(message: str, plan_id: str, registry: dict[str, Any]) -> PlanGraph | None:
-    if not re.search(r"(?<!不要)(?<!不)(?<!别)(?:恢复|还原)(?:一次)?数据库", message):
+    command = r"^\s*(?:(?:请|麻烦|你|帮我|现在|先|只|立即)\s*)*(?:恢复|还原)(?:一次)?数据库"
+    if not re.match(command, message):
         return None
-    if re.search(r"如何|怎样|怎么|解释|介绍|只查看", message):
+    # Conditional failure instructions do not report a past failed restore.
+    request = re.split(r"如果|若|一旦", message, maxsplit=1)[0]
+    question = r"如何|怎样|怎么|什么|解释|介绍|只查看|是否|能否|可否|可以吗|能不能|吗[？?]?$"
+    diagnostic = r"失败|报错|卡住|异常|排查|诊断"
+    if re.search(question, request) or re.search(diagnostic, request):
         return None
-    filename = re.search(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.bak\b", message)
+    filename = re.search(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.bak\b", request)
     available = "restore_database" in registry.get("system_maintenance", {}).get("actions", {})
     if not filename or not available:
         node = WorkflowNode(
