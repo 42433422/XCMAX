@@ -17,11 +17,11 @@ def database_restore_plan(message: str, plan_id: str, registry: dict[str, Any]) 
         return None
     # Conditional failure instructions do not report a past failed restore.
     request = re.split(r"如果|若|一旦", message, maxsplit=1)[0]
-    question = r"如何|怎样|怎么|解释|介绍|只查看|是否|能否|可否|可以吗|能不能|吗[？?]?$"
-    diagnostic = r"(?:恢复|还原)(?:一次)?数据库[^。；;]*(?:失败|报错)|(?:排查|诊断)(?:原因|故障)"
+    question = r"如何|怎样|怎么|什么|解释|介绍|只查看|是否|能否|可否|可以吗|能不能|吗[？?]?$"
+    diagnostic = r"失败|报错|卡住|异常|排查|诊断"
     if re.search(question, request) or re.search(diagnostic, request):
         return None
-    filename = re.search(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.bak\b", message)
+    filename = re.search(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.bak\b", request)
     available = "restore_database" in registry.get("system_maintenance", {}).get("actions", {})
     if not filename or not available:
         node = WorkflowNode(
