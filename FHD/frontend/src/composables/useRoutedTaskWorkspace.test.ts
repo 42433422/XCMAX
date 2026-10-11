@@ -1,8 +1,10 @@
 import { effectScope, nextTick, reactive, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveWorkspaceSessionId, useRoutedTaskWorkspace } from './useRoutedTaskWorkspace'
+import { resolveWorkspaceSessionId, useRoutedTaskWorkspace, useTaskApprovalFeedback } from './useRoutedTaskWorkspace'
 
-const apiMock = vi.hoisted(() => ({ markTaskRead: vi.fn() }))
+const apiMock = vi.hoisted(() => ({ markTaskRead: vi.fn(), getRun: vi.fn(), continueRun: vi.fn() }))
+const toast = vi.hoisted(() => vi.fn())
+vi.mock('./useAppToast', () => ({ showAppToast: toast }))
 vi.mock('@/api/agentRuns', () => ({ default: apiMock }))
 
 const firstTask = {
@@ -176,5 +178,41 @@ describe('useRoutedTaskWorkspace', () => {
       capabilities: {},
     })
     scope.stop()
+  })
+})
+
+describe('task approval feedback', () => {
+  it('shows task approval failure instead of silently swallowing it', async () => {
+    const syncSessionMessages = vi.fn()
+    const approveTask = vi.fn().mockRejectedValue(new Error('permission denied'))
+    const actions = useTaskApprovalFeedback({ currentSessionId: ref('original'), approveTask, syncSessionMessages })
+    await actions.approveTaskWithFeedback('task')
+    expect(toast).toHaveBeenCalledWith('permission denied', 'error', { duration: 8000 })
+  })
+
+  it('does not continue an approval after switching conversation during grant retrieval', async () => {
+    const currentSessionId = ref('original')
+    apiMock.getRun.mockImplementation(async () => {
+      currentSessionId.value = 'other'
+      return { approval: { grant: 'g' } }
+    })
+    apiMock.continueRun.mockClear()
+    const syncSessionMessages = vi.fn()
+    const actions = useTaskApprovalFeedback({ currentSessionId, approveTask: vi.fn(), syncSessionMessages })
+    await actions.approveRunFromChat('run')
+    expect(apiMock.continueRun).not.toHaveBeenCalled()
+    expect(syncSessionMessages).not.toHaveBeenCalled()
+  })
+
+  it('refreshes the owned conversation after a successful run approval', async () => {
+    apiMock.getRun.mockResolvedValue({ approval: { grant: 'fresh' } })
+    apiMock.continueRun.mockResolvedValue({ success: true })
+    const syncSessionMessages = vi.fn()
+    const actions = useTaskApprovalFeedback({ currentSessionId: ref('original'), approveTask: vi.fn(), syncSessionMessages })
+    await actions.approveRunFromChat('run')
+    expect(apiMock.continueRun).toHaveBeenCalledWith('run', {
+      approval_grant: 'fresh', runtime_context: { source: 'chat_run_trace_approval' },
+    })
+    expect(syncSessionMessages).toHaveBeenCalledOnce()
   })
 })

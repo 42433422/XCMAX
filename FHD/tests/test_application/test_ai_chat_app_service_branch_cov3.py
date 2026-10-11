@@ -37,6 +37,13 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
+from tests.test_application.ai_chat_test_helpers import (
+    _make_node,
+    _make_node_result,
+    _make_plan,
+    _make_run_result,
+    _make_svc,
+)
 
 
 def test_approval_child_preserves_exact_parent_link_without_mutating_parent():
@@ -84,111 +91,65 @@ def test_approval_child_preserves_exact_parent_link_without_mutating_parent():
     assert "web_normal_session" not in svc._pending_workflows
 
 
+@pytest.mark.parametrize("word", ["确认", "好的", "是的", "执行", "OK", "确认执行！"])
+@pytest.mark.parametrize("source", ["pro", "normal"])
+def test_confirmation_without_context_never_plans_or_creates_approval(word, source):
+    svc = _make_svc()
+    svc.workflow_engine.run = Mock()
+    with patch("app.application.workflow.plan_store.WorkflowPlanStore") as store:
+        result = svc._try_handle_dynamic_workflow("u1", word, source, {}, {})
+    assert result["data"]["action"] == "clarification_required"
+    svc.workflow_planner.plan.assert_not_called()
+    svc.workflow_engine.run.assert_not_called()
+    svc.approval_service.create_approval_request.assert_not_called()
+    store.assert_not_called()
+
+
+@pytest.mark.parametrize("session_id", ["new", ""])
+def test_confirmation_does_not_resume_another_conversation_pending_slot(session_id):
+    svc = _make_svc()
+    pending = {"plan": _make_plan(), "runtime_context": {"session_id": "old"}}
+    svc._pending_workflows["u1"] = pending
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
+        result = svc._try_handle_dynamic_workflow(
+            "u1", "确认", "pro", {"session_id": session_id}, {}
+        )
+    assert result["data"]["action"] == "clarification_required"
+    assert svc._pending_workflows["u1"] is pending
+    orchestrator.assert_not_called()
+    svc.workflow_planner.plan.assert_not_called()
+
+
+@pytest.mark.parametrize("status", ["running", "pending_awaiting"])
+def test_restart_confirmation_hydrates_only_current_session_pending_plan(status):
+    from app.application.workflow.types import PlanGraph, WorkflowNode, plan_to_dict
+
+    svc = _make_svc()
+    with patch("app.application.workflow.plan_store.WorkflowPlanStore") as store:
+        store.return_value.list_active.return_value = [
+            {
+                "plan": plan_to_dict(
+                    PlanGraph(
+                        plan_id="original",
+                        intent="sales",
+                        nodes=[
+                            WorkflowNode(node_id="sale", tool_id="sales", action="create_order")
+                        ],
+                    )
+                ),
+                "status": status,
+                "runtime_context": {"session_id": "original"},
+            }
+        ]
+        restored = svc._hydrate_pending_workflow("u1", "original")
+    store.return_value.list_active.assert_called_once_with("u1", limit=1, session_id="original")
+    assert restored is (status == "pending_awaiting")
+    assert bool(svc._pending_workflows) is restored
+
+
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_svc() -> AIChatApplicationService:
-    """构造能正常实例化的服务（模拟所有构造依赖）。"""
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
-
-
-def _make_plan(
-    *,
-    plan_id: str = "plan_test",
-    intent: str = "test_intent",
-    nodes=None,
-    todo_steps=None,
-    risk_level: str = "low",
-    metadata=None,
-):
-    return SimpleNamespace(
-        plan_id=plan_id,
-        intent=intent,
-        nodes=nodes or [],
-        todo_steps=todo_steps or [],
-        risk_level=risk_level,
-        metadata=metadata or {},
-    )
-
-
-def _make_node(
-    *,
-    node_id: str = "n1",
-    tool_id: str = "products",
-    action: str = "query",
-    params=None,
-    risk: str = "low",
-    idempotent: bool = True,
-    depends_on=None,
-    description: str = "",
-):
-    return SimpleNamespace(
-        node_id=node_id,
-        tool_id=tool_id,
-        action=action,
-        params=params or {},
-        risk=risk,
-        idempotent=idempotent,
-        depends_on=depends_on or [],
-        description=description,
-    )
-
-
-def _make_node_result(
-    *,
-    node_id: str = "n1",
-    tool_id: str = "products",
-    action: str = "query",
-    success: bool = True,
-    output=None,
-    error: str = "",
-    params=None,
-    retryable: bool = True,
-    retries: int = 0,
-    recovery_hint: str = "",
-    started_at: str = "",
-    finished_at: str = "",
-    duration_ms: int = 0,
-):
-    return SimpleNamespace(
-        node_id=node_id,
-        tool_id=tool_id,
-        action=action,
-        success=success,
-        output=output or {},
-        error=error,
-        params=params or {},
-        retryable=retryable,
-        retries=retries,
-        recovery_hint=recovery_hint,
-        started_at=started_at,
-        finished_at=finished_at,
-        duration_ms=duration_ms,
-    )
-
-
-def _make_run_result(
-    *,
-    success: bool = True,
-    message: str = "",
-    node_results=None,
-    final_context=None,
-):
-    return SimpleNamespace(
-        success=success,
-        message=message,
-        node_results=node_results or [],
-        final_context=final_context or {},
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -663,105 +624,6 @@ class TestTryHandleDynamicWorkflowEdge:
             )
         assert result["response"] == "import started"
         mock_start.assert_called_once()
-
-    def test_pending_workflow_confirm_with_agent_run_id(self):
-        svc = _make_svc()
-        plan = _make_plan()
-        svc._pending_workflows["u1"] = {
-            "plan": plan,
-            "runtime_context": {"message": "test"},
-            "agent_run_id": "run-123",
-            "thinking_steps": "thinking",
-            "approval_required": False,
-            "approval_nodes": [],
-        }
-        mock_agent_run = SimpleNamespace(
-            run_id="run-123",
-            status="completed",
-            steps=[],
-            tool_calls=[],
-            artifacts=[],
-            metadata={},
-            plan_id="plan_test",
-            intent="test",
-        )
-        with (
-            patch(
-                "app.application.agent_orchestrator.AgentOrchestrator.continue_run",
-                return_value=mock_agent_run,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._format_agent_run_response",
-                return_value={"success": True, "response": "continued"},
-            ) as mock_format,
-        ):
-            result = svc._try_handle_dynamic_workflow(
-                user_id="u1",
-                message="确认",
-                source="pro",
-                context={},
-                file_context={},
-            )
-        assert result["response"] == "continued"
-        mock_format.assert_called_once()
-        assert "u1" not in svc._pending_workflows
-
-    def test_pending_workflow_confirm_without_agent_run_id(self):
-        svc = _make_svc()
-        plan = _make_plan()
-        svc._pending_workflows["u1"] = {
-            "plan": plan,
-            "runtime_context": {"message": "test"},
-            "agent_run_id": "",
-            "thinking_steps": "thinking",
-            "approval_required": False,
-            "approval_nodes": [],
-        }
-        run_result = _make_run_result(success=True, message="ok")
-        with (
-            patch.object(svc.workflow_engine, "run", return_value=run_result),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._format_workflow_run_response",
-                return_value={"success": True, "response": "workflow done"},
-            ) as mock_format,
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._persist_plan_state"
-            ),
-            patch(
-                "app.application.workflow.checkpointer.DatabaseWorkflowCheckpointer.latest_checkpoint",
-                return_value=None,
-            ),
-        ):
-            result = svc._try_handle_dynamic_workflow(
-                user_id="u1",
-                message="确认",
-                source="pro",
-                context={},
-                file_context={},
-            )
-        assert result["response"] == "workflow done"
-        mock_format.assert_called_once()
-
-    def test_pending_workflow_cancel(self):
-        svc = _make_svc()
-        plan = _make_plan()
-        svc._pending_workflows["u1"] = {
-            "plan": plan,
-            "runtime_context": {"message": "test"},
-            "agent_run_id": "run-1",
-            "thinking_steps": "thinking",
-            "approval_required": False,
-            "approval_nodes": [],
-        }
-        result = svc._try_handle_dynamic_workflow(
-            user_id="u1",
-            message="取消",
-            source="pro",
-            context={},
-            file_context={},
-        )
-        assert result["response"] == "已取消本次工作流执行。"
-        assert "u1" not in svc._pending_workflows
 
     def test_pending_workflow_confirm_with_approval_required(self):
         svc = _make_svc()

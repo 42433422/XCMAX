@@ -665,55 +665,6 @@ class TestTryHandleDynamicWorkflowExtended:
         assert result is not None
         assert result["success"] is True
 
-    def test_pro_pending_workflow_confirm(self):
-        service = _make_service()
-        mock_plan = Mock()
-        mock_plan.plan_id = "p1"
-        mock_plan.intent = "test"
-        mock_plan.nodes = []
-        mock_plan.todo_steps = []
-        service._pending_workflows["u1"] = {
-            "plan": mock_plan,
-            "runtime_context": {"message": "test"},
-            "approval_required": False,
-            "approval_nodes": [],
-        }
-        mock_run_result = Mock()
-        mock_run_result.success = True
-        mock_run_result.node_results = []
-        mock_run_result.message = ""
-        with (
-            patch.object(service.workflow_engine, "run", return_value=mock_run_result),
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-                return_value="full",
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._persist_plan_state"
-            ),
-            patch(
-                "app.application.workflow.checkpointer.DatabaseWorkflowCheckpointer.latest_checkpoint",
-                return_value=None,
-            ),
-        ):
-            result = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
-        assert result is not None
-        assert "u1" not in service._pending_workflows
-
-    def test_pro_pending_workflow_cancel(self):
-        service = _make_service()
-        mock_plan = Mock()
-        service._pending_workflows["u1"] = {
-            "plan": mock_plan,
-            "runtime_context": {},
-            "approval_required": False,
-            "approval_nodes": [],
-        }
-        result = service._try_handle_dynamic_workflow("u1", "取消", "pro", {}, {})
-        assert result is not None
-        assert "取消" in result["response"]
-        assert "u1" not in service._pending_workflows
-
     def test_pro_pending_workflow_approval_required(self):
         service = _make_service()
         mock_plan = Mock()

@@ -10,17 +10,44 @@ def _facade():
     return importlib.import_module("app.application.ai_chat_app_service")
 
 
+CONFIRM_WORDS = {
+    "确认",
+    "是",
+    "是的",
+    "好的",
+    "好",
+    "继续",
+    "执行",
+    "确认执行",
+    "ok",
+    "yes",
+}
+CANCEL_WORDS = {"取消", "否", "不要", "停止", "no"}
+
+
 class _DynamicWorkflowPendingResumeMixin:
-    def _resume_pending_dynamic_workflow(self, user_id: str, message: str, text: str):
-        confirm_words = {"确认", "是", "好的", "继续", "执行", "ok", "yes"}
-        cancel_words = {"取消", "否", "不要", "停止", "no"}
-        _resume_msg = (message or "").strip().lower()
-        if user_id not in self._pending_workflows and (
-            _resume_msg in {w.lower() for w in confirm_words}
-            or _resume_msg in {w.lower() for w in cancel_words}
-        ):
-            self._hydrate_pending_workflow(user_id)
+    def _resume_pending_dynamic_workflow(self, user_id: str, message: str, text: str, context=None):
+        text = text.strip().lower().rstrip("。.!！")
+        context = context or {}
+        session_id = str(context.get("session_id") or context.get("conversation_id") or "")
+        control = text in CONFIRM_WORDS | CANCEL_WORDS
         pending = self._pending_workflows.get(user_id)
+        if pending:
+            runtime = pending.get("runtime_context") or {}
+            pending_session = str(runtime.get("session_id") or runtime.get("conversation_id") or "")
+            if (session_id or pending_session) and pending_session != session_id:
+                pending = None
+        if control and not pending and session_id:
+            if self._hydrate_pending_workflow(user_id, session_id):
+                pending = self._pending_workflows.get(user_id)
+        if control and not pending:
+            reply = "请说明要确认什么，或回到原任务继续处理；当前会话没有待确认的操作。"
+            return True, {
+                "success": True,
+                "message": "需要澄清",
+                "response": reply,
+                "data": {"text": reply, "action": "clarification_required", "data": {}},
+            }
         if pending:
             if pending.get("kind") == "clarification":
                 continued = self._continue_after_clarification(user_id, pending, message)
@@ -39,7 +66,7 @@ class _DynamicWorkflowPendingResumeMixin:
                         },
                     },
                 )
-            if text.lower() in confirm_words or text in confirm_words:
+            if text in CONFIRM_WORDS:
                 pending_plan = _facade().cast("PlanGraph | None", pending.get("plan"))
                 if pending_plan is None:
                     self._pending_workflows.pop(user_id, None)
@@ -185,7 +212,7 @@ class _DynamicWorkflowPendingResumeMixin:
                         state_updates=state_updates,
                     ),
                 )
-            if text.lower() in cancel_words or text in cancel_words:
+            if text in CANCEL_WORDS:
                 self._pending_workflows.pop(user_id, None)
                 return (
                     True,
