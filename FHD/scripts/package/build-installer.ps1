@@ -233,11 +233,7 @@ if ($env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '1') {
 }
 
 
-# electron-builder 26.15 packs the NSIS payload with 7-Zip 24.09. Its default
-# BCJ2 filter, and the ARM64 filter used for ARM64 PE files, are not decoded by
-# the install-time Nsis7z plugin: the installer exits 0 and leaves out the main
-# executable and native binaries. Pin the single-stream BCJ filter, which that
-# plugin can extract. electron-builder#9983.
+# Pin the NSIS payload to BCJ so Nsis7z can extract executables (electron-builder#9983).
 $env:ELECTRON_BUILDER_7Z_FILTER = 'BCJ'
 Write-Host "NSIS payload 7z filter pinned to BCJ"
 & npx @electronBuilderArgs
