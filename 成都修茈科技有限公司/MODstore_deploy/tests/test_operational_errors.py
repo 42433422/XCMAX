@@ -20,9 +20,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 def test_aiohttp_client_error_is_recoverable():
     aiohttp_client_exceptions = pytest.importorskip("aiohttp.client_exceptions")
     assert issubclass(aiohttp_client_exceptions.ClientError, RECOVERABLE_ERRORS)
-    assert issubclass(
-        aiohttp_client_exceptions.WSServerHandshakeError, RECOVERABLE_ERRORS
-    )
+    assert issubclass(aiohttp_client_exceptions.WSServerHandshakeError, RECOVERABLE_ERRORS)
 
 
 def _handshake_error():
