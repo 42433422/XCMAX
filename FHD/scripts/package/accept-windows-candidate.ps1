@@ -7,28 +7,35 @@
   [string]$OldSha256 = 'ed957f9db9940bcbc323f217c1b95bfe045b7f0d9aa2bb023aa175587ef66b56'
 )
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'product-version.ps1')
-$productVersion = Resolve-ProductVersion
-$installRoot = Join-Path $env:RUNNER_TEMP "xcagi-candidate-$Mode"
-$dataRoot = Join-Path $env:APPDATA 'XCAGI'
-$base = 'http://127.0.0.1:17500'
+. (Join-Path $PSScriptRoot 'product-version.ps1'); $productVersion = Resolve-ProductVersion
+$installRoot = Join-Path $env:RUNNER_TEMP "xcagi-candidate-$Mode"; $dataRoot = Join-Path $env:APPDATA 'XCAGI'; $base = 'http://127.0.0.1:17500'
 git merge-base --is-ancestor $CandidateSha origin/main
 if ($LASTEXITCODE -gt 1) { throw 'Unable to verify candidate mainline ancestry' }
 $evidence = [ordered]@{ mode=$Mode; candidate_sha=$CandidateSha; candidate_on_main=($LASTEXITCODE -eq 0); customer_acceptance='not_verified'; started_at=(Get-Date).ToUniversalTime().ToString('o'); checks=@(); result='running' }
-$global:LASTEXITCODE = 0
-New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
+$global:LASTEXITCODE = 0; New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
 function Check([bool]$ok, [string]$name, [string]$detail) {
   $script:evidence.checks += @{ name=$name; passed=$ok; detail=$detail }
   if (-not $ok) { throw "$name failed: $detail" }
 }
 function Digest([string]$text) {
-  $bytes = [Text.Encoding]::UTF8.GetBytes($text)
-  $hash = [Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
+  $bytes = [Text.Encoding]::UTF8.GetBytes($text); $hash = [Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
   return ([BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
 }
+function Uninstall-OldApp {
+  $unins = Get-ChildItem -LiteralPath $installRoot -Filter 'Uninstall*.exe' -File | Select-Object -First 1
+  Check ($null -ne $unins) 'old.uninstaller' 'previous uninstaller exists'
+  $copied = Join-Path $env:TEMP 'xcagi-old-uninstaller.exe'
+  Copy-Item -LiteralPath $unins.FullName -Destination $copied -Force
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $copied
+  $psi.Arguments = "/S /KEEP_APP_DATA /currentuser --updated _?=$installRoot"
+  $psi.UseShellExecute = $false
+  $proc = [System.Diagnostics.Process]::Start($psi)
+  $proc.WaitForExit()
+  Check ($proc.ExitCode -eq 0) 'old.uninstall' "exit=$($proc.ExitCode)"
+}
 function Stop-App {
-  Get-Process -Name XCAGI,xcagi-backend -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 2
+  Get-Process -Name XCAGI,xcagi-backend -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2
 }
 function Install([string]$path, [string]$label) {
   $p = Start-Process -FilePath $path -ArgumentList @('/S',"/D=$installRoot") -Wait -PassThru
@@ -90,12 +97,9 @@ function Backup-And-Version {
   Check ($info.gitSha -eq $CandidateSha -and $info.version -eq $productVersion) 'build_info' "sha=$($info.gitSha); version=$($info.version)"
   $display = @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*') | ForEach-Object { Get-ItemProperty $_ -ErrorAction SilentlyContinue } | Where-Object { $_.DisplayName -like 'XCAGI*' } | Select-Object -First 1
   Check ($display.DisplayVersion -eq $productVersion) 'installer_display_version' "display=$($display.DisplayVersion); expected=$productVersion"
-  $daily = Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction Stop
-  $weekly = Get-ScheduledTask -TaskName XcagiWeeklyBackup -ErrorAction Stop
+  $daily = Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction Stop; $weekly = Get-ScheduledTask -TaskName XcagiWeeklyBackup -ErrorAction Stop
   $script:evidence.backup_tasks = @($daily, $weekly) | ForEach-Object { @{ name=$_.TaskName; user=$_.Principal.UserId; logon=[string]$_.Principal.LogonType; run_level=[string]$_.Principal.RunLevel; actions=@($_.Actions | Select-Object Execute,Arguments,WorkingDirectory); triggers=@($_.Triggers | Select-Object StartBoundary,Enabled,DaysOfWeek,WeeksInterval) } }
-  $backupScript = Join-Path $installRoot 'resources/backend/_internal/scripts/backup/XcagiBackup.ps1'
-  $dailyScriptArg = ([string]$daily.Actions[0].Arguments).Replace('/', '\')
-  $weeklyScriptArg = ([string]$weekly.Actions[0].Arguments).Replace('/', '\')
+  $backupScript = Join-Path $installRoot 'resources/backend/_internal/scripts/backup/XcagiBackup.ps1'; $dailyScriptArg = ([string]$daily.Actions[0].Arguments).Replace('/', '\'); $weeklyScriptArg = ([string]$weekly.Actions[0].Arguments).Replace('/', '\')
   Check ($daily.Actions[0].Execute -match 'powershell.exe' -and $dailyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\')) -and $dailyScriptArg -match '-NoProfile.*-NonInteractive.*-ExecutionPolicy Bypass' -and $weekly.Actions[0].Execute -match 'powershell.exe' -and $weeklyScriptArg -match [regex]::Escape($backupScript.Replace('/', '\')) -and $weeklyScriptArg -match '-NoProfile.*-NonInteractive.*-ExecutionPolicy Bypass') 'backup_task_action' 'daily and weekly task actions use noninteractive policy flags and the packaged backup script'
   $expectedBackupData = if ($env:XCAGI_DESKTOP_USER_DATA_DIR) { $env:XCAGI_DESKTOP_USER_DATA_DIR } else { $dataRoot }
   Check ($dailyScriptArg -match [regex]::Escape("-DataDir `"$expectedBackupData`"") -and $weeklyScriptArg -match [regex]::Escape("-DataDir `"$expectedBackupData`"") -and $weeklyScriptArg -match '-Weekly') 'backup_task_data_dir' "daily and weekly tasks target $expectedBackupData"
@@ -125,18 +129,13 @@ function Backup-And-Version {
       Set-ItemProperty -Path $installRegistryPath -Name InstallPath -Value $originalInstallPath
     }
   }
-  $backupLog = Join-Path $dataRoot 'logs/backup.log'
-  $logTail = if (Test-Path $backupLog) { ((Get-Content $backupLog -Tail 8) -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>') -join ' | ' } else { 'backup.log absent' }
-  $packagedBackend = Join-Path $installRoot 'resources/backend/xcagi-backend.exe'
-  $expectedBackendLog = $packagedBackend -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>'
+  $backupLog = Join-Path $dataRoot 'logs/backup.log'; $logTail = if (Test-Path $backupLog) { ((Get-Content $backupLog -Tail 8) -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>') -join ' | ' } else { 'backup.log absent' }
+  $packagedBackend = Join-Path $installRoot 'resources/backend/xcagi-backend.exe'; $expectedBackendLog = $packagedBackend -replace [regex]::Escape($env:USERPROFILE), '<USERPROFILE>'
   Check ($logTail.Contains($expectedBackendLog)) 'backup_packaged_backend' 'scheduled task resolved the backend beside its packaged script without the registry install path'
   $backup = Get-ChildItem (Join-Path $dataRoot 'backups') -Filter 'xcagi-*.db' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   Check ($null -ne $backup -and $backup.Length -gt 0) 'backup_file' "bytes=$($backup.Length)"
-  $restoreRoot = Join-Path $env:RUNNER_TEMP "xcagi-backup-restore-$Mode"
-  Check (-not (Test-Path $restoreRoot)) 'backup_restore_isolated' 'restore destination is fresh'
-  $restoreDataDir = Join-Path $restoreRoot 'data'
-  New-Item -ItemType Directory -Force -Path $restoreDataDir | Out-Null
-  $restoredDb = Join-Path $restoreDataDir 'xcagi.db'
+  $restoreRoot = Join-Path $env:RUNNER_TEMP "xcagi-backup-restore-$Mode"; Check (-not (Test-Path $restoreRoot)) 'backup_restore_isolated' 'restore destination is fresh'
+  $restoreDataDir = Join-Path $restoreRoot 'data'; New-Item -ItemType Directory -Force -Path $restoreDataDir | Out-Null; $restoredDb = Join-Path $restoreDataDir 'xcagi.db'
   Copy-Item -LiteralPath $backup.FullName -Destination $restoredDb
   $backupSha = (Get-FileHash -LiteralPath $backup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
   $restoredSha = (Get-FileHash -LiteralPath $restoredDb -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -156,9 +155,7 @@ function Backup-And-Version {
 }
 function Run-Gui([string]$phase, [string]$directory, [string]$seed = '') {
   New-Item -ItemType Directory -Force -Path $directory | Out-Null
-  $env:XCAGI_GUI_EVIDENCE = (Resolve-Path $directory).Path
-  $env:XCAGI_GUI_PHASE = $phase
-  $env:XCAGI_GUI_SEED = $seed
+  $env:XCAGI_GUI_EVIDENCE = (Resolve-Path $directory).Path; $env:XCAGI_GUI_PHASE = $phase; $env:XCAGI_GUI_SEED = $seed
   & node (Join-Path $PSScriptRoot '../dev/record_enterprise_desktop_init.mjs')
   Check ($LASTEXITCODE -eq 0) "normal_gui_$phase" 'normal UI must save and read back actual business records'
   return (Join-Path $env:XCAGI_GUI_EVIDENCE 'gui-business.json')
@@ -166,8 +163,7 @@ function Run-Gui([string]$phase, [string]$directory, [string]$seed = '') {
 try {
   Check (-not (Test-Path $dataRoot) -and -not (Test-Path $installRoot)) 'isolated_runner' 'fresh user data and install path'
   Check (-not (Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction SilentlyContinue)) 'isolated_tasks' 'no prior daily task'
-  $candidateHash = (Get-FileHash -LiteralPath $CandidatePath -Algorithm SHA256).Hash.ToLowerInvariant()
-  $evidence.candidate_sha256 = $candidateHash
+  $candidateHash = (Get-FileHash -LiteralPath $CandidatePath -Algorithm SHA256).Hash.ToLowerInvariant(); $evidence.candidate_sha256 = $candidateHash
   if ($Mode -in @('Gui','Recovery')) {
     Install $CandidatePath 'candidate'
     Start-App 'candidate'
@@ -184,6 +180,7 @@ try {
     $oldGuiSeed = Run-Gui 'seed' (Join-Path $EvidenceDir 'old-gui')
     $oldAuth = Login 'old'
     Stop-App
+    Uninstall-OldApp
     Install $CandidatePath 'candidate'
     $newProcess = Start-App 'candidate'
     $newAuth = Login 'candidate'
