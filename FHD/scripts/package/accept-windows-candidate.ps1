@@ -9,7 +9,7 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'product-version.ps1')
 $productVersion = Resolve-ProductVersion
-$installRoot = Join-Path $env:RUNNER_TEMP "xcagi-candidate-$Mode"
+$installRoot = Join-Path $env:TEMP "xcagi-candidate-$Mode"
 $dataRoot = Join-Path $env:APPDATA 'XCAGI'
 $base = 'http://127.0.0.1:17500'
 git merge-base --is-ancestor $CandidateSha origin/main
