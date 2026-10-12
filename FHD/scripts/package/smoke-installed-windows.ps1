@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$BaseUrl = 'http://127.0.0.1:17500',
   [string]$ProductSku = 'enterprise',
   [string]$InstalledExe = '',
@@ -209,7 +209,7 @@ Invoke-Check 'mobile-pairing-issue' {
   $bodyJson = @{ deviceName = 'PackageSmoke'; platform = 'windows-smoke' } | ConvertTo-Json -Compress
   $resp = Invoke-WebRequest -Uri $uri -Method Post -Body $bodyJson -ContentType 'application/json' -UseBasicParsing -TimeoutSec 10 -SkipHttpErrorCheck
   $payload = $resp.Content | ConvertFrom-Json
-  if ($resp.StatusCode -eq 503) { if ($payload.success -ne $false -or $payload.message -notmatch '云端设备码') { throw '503 is not the relay-unavailable contract' }; return 'http=503;relay_unavailable=true' }
+  if ($resp.StatusCode -eq 503) { if ($payload.success -ne $false -or [int]$payload.code -ne 503) { throw '503 is not the relay-unavailable contract' }; return 'http=503;relay_unavailable=true' }
   if ($resp.StatusCode -ne 200) { throw "http=$($resp.StatusCode)" }
   $data = Get-EnvelopeData $payload
   $pairing = @($data.shortCode, $data.code, $data.pairingCode | Where-Object { $_ } | Select-Object -First 1)
