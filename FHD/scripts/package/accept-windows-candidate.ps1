@@ -9,7 +9,7 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'product-version.ps1')
 $productVersion = Resolve-ProductVersion
-$installRoot = Join-Path $env:TEMP "xcagi-candidate-$Mode"
+$installRoot = Join-Path $env:RUNNER_TEMP "xcagi-candidate-$Mode"
 $dataRoot = Join-Path $env:APPDATA 'XCAGI'
 $base = 'http://127.0.0.1:17500'
 git merge-base --is-ancestor $CandidateSha origin/main
@@ -83,7 +83,17 @@ function Install([string]$path, [string]$label) {
       $againProc = Start-Process -FilePath $path -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
       $again = [string]$againProc.ExitCode
     }
-    $lockNote = "$lockNote; manual_uninstall=$manual; reinstall=$again"
+    $probe = 'skip'
+    $sample = Join-Path $installRoot 'XCAGI.exe'
+    $dest = Join-Path $env:TEMP 'xcagi-rename-probe.exe'
+    if (Test-Path -LiteralPath $sample) {
+      Add-Type -Namespace Xcagi -Name Move -MemberDefinition '[DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool MoveFile(string src, string dst);' -ErrorAction SilentlyContinue
+      $forward = [Xcagi.Move]::MoveFile($sample, $dest)
+      $back = $false
+      if ($forward) { $back = [Xcagi.Move]::MoveFile($dest, $sample) }
+      $probe = "forward=$forward; back=$back; win32=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+    }
+    $lockNote = "$lockNote; temp=$env:TEMP; runner_temp=$env:RUNNER_TEMP; move=$probe; manual_uninstall=$manual; reinstall=$again"
   }
   Check ($proc.ExitCode -eq 0) "$label.install" "exit=$($proc.ExitCode); attempts=$attempt; $lockNote"
   Check (Test-Path (Join-Path $installRoot 'XCAGI.exe')) "$label.exe" "installed executable exists; build_info=$(Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw)"
