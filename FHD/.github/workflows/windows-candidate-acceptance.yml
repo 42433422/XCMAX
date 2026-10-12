@@ -12,10 +12,10 @@ on:
         description: "Exact 40-character source SHA embedded in the candidate"
         required: true
         type: string
-      modes:
-        description: "JSON array of Clean, Upgrade, Gui, Recovery, Rollback"
+      only:
+        description: "Empty runs the four install modes. Rollback runs only the failed-rollback mode."
         required: false
-        default: '["Clean","Upgrade","Gui","Recovery"]'
+        default: ""
         type: string
 
 permissions:
@@ -27,10 +27,11 @@ jobs:
     name: "${{ matrix.mode }} install on isolated Windows runner"
     runs-on: windows-latest
     timeout-minutes: 45
+    if: ${{ github.event.inputs.only == '' && matrix.mode != 'Rollback' || github.event.inputs.only == matrix.mode }}
     strategy:
       fail-fast: false
       matrix:
-        mode: ${{ fromJson(inputs.modes) }}
+        mode: [Clean, Upgrade, Gui, Recovery, Rollback]
     defaults:
       run:
         working-directory: FHD
