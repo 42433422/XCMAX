@@ -232,6 +232,10 @@ if ($env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '1') {
   )
 }
 
+
+# Pin the NSIS payload to BCJ so Nsis7z can extract executables (electron-builder#9983).
+$env:ELECTRON_BUILDER_7Z_FILTER = 'BCJ'
+Write-Host "NSIS payload 7z filter pinned to BCJ"
 & npx @electronBuilderArgs
 if ($LASTEXITCODE -ne 0) { throw "electron-builder failed with exit code $LASTEXITCODE" }
 Pop-Location
@@ -249,6 +253,10 @@ if (-not $nsisExe) {
     Select-Object -First 1
 }
 
+if ($nsisExe) {
+  & (Join-Path $PSScriptRoot 'assert-nsis-7z-filter.ps1') -PayloadPath $nsisExe.FullName
+  if ($LASTEXITCODE -ne 0) { throw "NSIS payload uses a 7z filter the installer cannot extract" }
+}
 if (-not $SkipUiInstaller) {
   if (-not $nsisExe) {
     throw "NSIS artifact not found in $outDir; cannot build single-file installer."
