@@ -71,6 +71,20 @@ function Install([string]$path, [string]$label) {
     if ($proc.ExitCode -eq 0) { break }
     Start-Sleep -Seconds 3
   } while ($attempt -lt 3)
+  if ($proc.ExitCode -ne 0 -and $label -eq 'candidate') {
+    $unins = Get-ChildItem -LiteralPath $installRoot -Filter 'Uninstall*.exe' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $manual = 'missing'
+    if ($unins) {
+      $manualProc = Start-Process -FilePath $unins.FullName -ArgumentList @('/S', '/KEEP_APP_DATA', '/currentuser', '--updated', "_?=$installRoot") -Wait -PassThru
+      $manual = [string]$manualProc.ExitCode
+    }
+    $again = 'skipped'
+    if ($manual -eq '0') {
+      $againProc = Start-Process -FilePath $path -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
+      $again = [string]$againProc.ExitCode
+    }
+    $lockNote = "$lockNote; manual_uninstall=$manual; reinstall=$again"
+  }
   Check ($proc.ExitCode -eq 0) "$label.install" "exit=$($proc.ExitCode); attempts=$attempt; $lockNote"
   Check (Test-Path (Join-Path $installRoot 'XCAGI.exe')) "$label.exe" "installed executable exists; build_info=$(Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw)"
 }
