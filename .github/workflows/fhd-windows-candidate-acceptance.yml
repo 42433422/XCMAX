@@ -36,6 +36,7 @@ jobs:
       matrix: ${{ steps.set.outputs.matrix }}
     steps:
       - id: set
+        working-directory: ${{ github.workspace }}
         env:
           ONLY: ${{ github.event.inputs.only }}
         run: |
