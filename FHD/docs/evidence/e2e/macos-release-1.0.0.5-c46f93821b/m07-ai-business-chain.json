@@ -1,0 +1,88 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "platform": "macos",
+  "release_sha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+  "product_version": "1.0.0.5",
+  "round": "M01-M10-2026-10-12",
+  "captured_at_utc": "2026-10-11T23:36:11Z",
+  "gate": "M07.ai-business-chain",
+  "steps": {
+    "cancel_branch": {
+      "api": "/api/ai/chat-unified",
+      "message": "取消",
+      "plan_id": "wp-152b2acee4794fb49c415f26cb197b22",
+      "action": "workflow_cancelled",
+      "run_id": "run_5d23f935db264ab4a0a36fa19c6af0be"
+    },
+    "ai_chat_plan": {
+      "message": "请写入一条采购订单记录：供应商10，商品1，数量1，单价10，备注M07验收",
+      "plan_id": "wp-5ca1dc98de4c4e65967d5148a280b2f7",
+      "action": "workflow_confirmation_required",
+      "blocking_nodes": [
+        "write_business_product"
+      ],
+      "approval_required": true
+    },
+    "confirm": {
+      "message": "确认",
+      "action": "approval_pending",
+      "approval_request_no": "334c50a277184c1ebebd947eabac3a08",
+      "approval_request_id": 10,
+      "agent_run_id": "run_a48facb1db394a35bdd8f1fea220db63",
+      "approval_nodes": [
+        {
+          "node_id": "write_business_product",
+          "tool_id": "business_db",
+          "action": "write",
+          "params": {
+            "entity": "products",
+            "operation": "create",
+            "payload": {
+              "name_or_model": "1",
+              "product_name": "1",
+              "price": 10.0
+            }
+          }
+        }
+      ],
+      "note": "语义计划将该消息归一为受控 products.create 写入（planner 实体归一行为），链路本身为产品真实审批执行路径"
+    },
+    "approval": {
+      "api": "POST /api/approval/requests/10/approve",
+      "status": "approved"
+    },
+    "business_execution": {
+      "run_status": "completed",
+      "result": {
+        "success": true,
+        "created": true,
+        "product_id": 6,
+        "business_verification": {
+          "verified": true,
+          "entity": "products",
+          "operation": "create",
+          "tenant_id": 1,
+          "state": "present",
+          "checked_fields": [
+            "name",
+            "price"
+          ]
+        }
+      },
+      "product_created_at": "2026-10-12T07:26:39.245923"
+    },
+    "read_back": {
+      "api": "GET /api/mod/xcagi-erp-domain-bridge/products/6",
+      "source": "mod:xcagi-erp-domain-bridge",
+      "execution_path": "products_service",
+      "record": {
+        "id": 6,
+        "name": "1",
+        "price": 10.0,
+        "unit": "个",
+        "is_active": true
+      }
+    }
+  },
+  "verdict": "PASS"
+}

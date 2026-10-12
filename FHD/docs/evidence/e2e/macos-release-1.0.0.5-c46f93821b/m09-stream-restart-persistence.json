@@ -1,0 +1,84 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "platform": "macos",
+  "release_sha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+  "product_version": "1.0.0.5",
+  "round": "M01-M10-2026-10-12",
+  "captured_at_utc": "2026-10-11T23:36:11Z",
+  "gate": "M09.stream-restart-persistence",
+  "stream_cancel": {
+    "api": "POST /api/ai/chat/stream",
+    "message": "取消",
+    "plan_id": "wp-13ea8feff58a40d3a70ad02f51fb7681",
+    "action": "workflow_cancelled"
+  },
+  "stream_confirm_chain": {
+    "plan_id": "wp-4f43c27eec8c4a6fa95ace5473969d71",
+    "action_sequence": [
+      "workflow_confirmation_required",
+      "approval_pending"
+    ],
+    "approval_request_id": 13,
+    "request_no": "5e0310a823f54667b1c4ea866c555479",
+    "status": "approved",
+    "business": {
+      "product_id": 7,
+      "name": "M09stream",
+      "price": 3.0
+    }
+  },
+  "stream_protocol": "SSE data:{type:token|done} 事件流正常",
+  "restart": {
+    "action": "osascript quit -> open -a /Applications/XCAGI.app",
+    "backend_up": true,
+    "health": "healthy",
+    "git_sha": "c46f93821bc7",
+    "version": "1.0.0.5",
+    "session_cookie_persisted": true,
+    "auth_ok": true,
+    "identity": {
+      "username": "SUNBIRD",
+      "tenant_id": 1,
+      "market_user_id": 29
+    }
+  },
+  "data_persistence": {
+    "products": [
+      [
+        7,
+        "M09stream"
+      ],
+      [
+        6,
+        "1"
+      ],
+      [
+        5,
+        "MAC验收0929产品13687"
+      ],
+      [
+        4,
+        "MAC验收0929产品84656"
+      ],
+      [
+        3,
+        "MAC验收0929产品58099"
+      ],
+      [
+        2,
+        "MAC验收0929产品35507"
+      ],
+      [
+        1,
+        "MAC验收0929产品"
+      ]
+    ],
+    "approval_requests_count": 13,
+    "latest_approval_ids": [
+      13,
+      12,
+      11
+    ]
+  },
+  "verdict": "PASS"
+}

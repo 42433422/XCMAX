@@ -1,0 +1,49 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "M05.package-verify",
+  "platform": "macos",
+  "release_sha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+  "product_version": "1.0.0.5",
+  "candidates": {
+    "arm64": {
+      "run_id": 38180244814,
+      "workflow": "fhd-release-desktop-mac-ota",
+      "conclusion": "success",
+      "artifact": "mac-acceptance-c46f93821bc751c2c32b5a208c4ba86d29af9e45-arm64",
+      "dmg": "XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+      "dmg_sha256": "91f49824865be79123f6ae7bb8967ccc7cb8a1f9603bf474ea533b0b233c0bd9",
+      "codesign_deep_strict": "PASS",
+      "signature": "Developer ID (TeamIdentifier G26WSH472M, not adhoc)",
+      "stapler_validate": "PASS",
+      "gatekeeper_spctl": "accepted (source=Notarized Developer ID)",
+      "dmg_spctl": "accepted",
+      "binary_arch": "arm64",
+      "build_info": {
+        "version": "1.0.0.5",
+        "gitSha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+        "builtAt": "2026-10-11T22:27:42.115Z"
+      }
+    },
+    "x64": {
+      "run_id": 38180248106,
+      "workflow": "fhd-release-desktop-mac-ota",
+      "conclusion": "success",
+      "artifact": "mac-acceptance-c46f93821bc751c2c32b5a208c4ba86d29af9e45-x64",
+      "dmg": "XCAGI-Enterprise-1.0.0.5-mac-x64.dmg",
+      "dmg_sha256": "d51ed43c098111fe2d638b78c1349043edb0a09f4cdb0f2317cf2cb9ac4f7404",
+      "codesign_deep_strict": "PASS",
+      "signature": "Developer ID (TeamIdentifier G26WSH472M, not adhoc)",
+      "stapler_validate": "PASS",
+      "gatekeeper_spctl": "accepted (source=Notarized Developer ID)",
+      "dmg_spctl": "accepted",
+      "binary_arch": "x86_64",
+      "build_info": {
+        "version": "1.0.0.5",
+        "gitSha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+        "builtAt": "2026-10-11T22:31:56.933Z"
+      }
+    }
+  },
+  "captured_at_utc": "2026-10-11T23:18:02Z",
+  "verdict": "PASS"
+}

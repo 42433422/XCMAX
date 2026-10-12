@@ -1,0 +1,120 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "platform": "macos",
+  "release_sha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+  "product_version": "1.0.0.5",
+  "round": "M01-M10-2026-10-12",
+  "captured_at_utc": "2026-10-11T23:36:11Z",
+  "gate": "M08.restore-audit-consistency",
+  "entry_note": "enterprise 发行默认不挂载 legacy_gap 路由（/api/database/* 404），产品真实入口为 AI 员工 system_maintenance 工具走高风险审批链（risk_actions.registry.json: restore_database risk=high, non-idempotent, 需 backup_file）",
+  "backup": {
+    "plan_id": "wp-90ddc0fd4d95427aa4e0721dd6046630",
+    "run_id": "run_ddc03746a5bd4d78b7f0a53dbfa486c7",
+    "action": "workflow_done",
+    "result": "backup_database: 成功",
+    "backup_file": "data/database_backups/xcagi.db.20261012_072814.bak"
+  },
+  "baseline_in_backup": {
+    "agent_runs": 181,
+    "agent_tasks": 181,
+    "approval_requests": 10,
+    "ai_action_audit": 29,
+    "users": 4,
+    "products": 6
+  },
+  "post_backup_delta": {
+    "chat_plan_id": "wp-d8286e392019473ab17426b97940be8c",
+    "approval_request_id": 11,
+    "status": "approved",
+    "business": {
+      "product_id": 7,
+      "name": "M08delta",
+      "price": 5.0
+    },
+    "counts_before_restore": {
+      "agent_runs": 184,
+      "agent_tasks": 184,
+      "approval_requests": 11,
+      "ai_action_audit": 32,
+      "users": 4,
+      "products": 7
+    }
+  },
+  "restore": {
+    "chat_plan_id": "wp-ebcfe56e9fd24ff6adfee2bade2a3664",
+    "approval_request_id": 12,
+    "request_no": "0c1adf98907745cea4508cd09adbe35e",
+    "params": {
+      "backup_file": "xcagi.db.20261012_072814.bak"
+    },
+    "executed_run_id": "run_8c757412d23b4dc1b22f88a25cc23cfa",
+    "step": {
+      "node_id": "restore_database",
+      "status": "completed"
+    }
+  },
+  "post_restore_verification": {
+    "business_rollback_proven": {
+      "products_after": 6,
+      "M08delta_present": false,
+      "api_read_back": "GET /api/mod/xcagi-erp-domain-bridge/products/list -> ids [6,5,4,3,2,1]",
+      "note": "业务表回滚到备份点，证明 restore 真实生效"
+    },
+    "live_audit_tables_preserved": {
+      "agent_runs": 187,
+      "agent_tasks": 187,
+      "approval_requests": 12,
+      "ai_action_audit": 35,
+      "note": "_LIVE_AUDIT_TABLES 保留：备份后的 run/task/审批/审计行（含 restore 自身的 submit/approve/execute 链）全部保留，旧版恢复清空审计即 M08 FAIL 的问题未复现",
+      "audit_chain_tail": [
+        "30 approval.submit_ai_workflow",
+        "31 approval.approve_ai_workflow",
+        "32 approval.execute_ai_workflow",
+        "33 approval.submit_ai_workflow",
+        "34 approval.approve_ai_workflow",
+        "35 approval.execute_ai_workflow"
+      ],
+      "post_backup_approvals_retained": [
+        11,
+        12
+      ]
+    },
+    "tenant_identity_consistent": {
+      "users_unchanged": true,
+      "users": [
+        {
+          "id": 1,
+          "username": "admin",
+          "tenant_id": null
+        },
+        {
+          "id": 2,
+          "username": "SUNBIRD",
+          "tenant_id": 1
+        },
+        {
+          "id": 3,
+          "username": "enterprise-cs",
+          "tenant_id": null
+        },
+        {
+          "id": 4,
+          "username": "wuxinghua1",
+          "tenant_id": 2
+        }
+      ],
+      "session_identity": {
+        "username": "SUNBIRD",
+        "tenant_id": 1,
+        "market_user_id": 29
+      },
+      "identity_check": "_check_restore_actor_identities fail-closed 校验通过（无身份不一致拒绝）"
+    },
+    "post_restore_runtime": {
+      "health": "healthy",
+      "git_sha": "c46f93821bc7",
+      "session_valid": true
+    }
+  },
+  "verdict": "PASS"
+}

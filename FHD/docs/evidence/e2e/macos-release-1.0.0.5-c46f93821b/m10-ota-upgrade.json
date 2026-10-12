@@ -1,0 +1,196 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "M10.ota-upgrade-and-recovery",
+  "platform": "macos",
+  "round": "macos-release-1.0.0.5-c46f93821b",
+  "release_sha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "ota_start": {
+    "build_info": {
+      "gitSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+      "version": "1.0.0.5",
+      "builtAt": "2026-09-21T08:46:12.138Z"
+    },
+    "source": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg (公网正式 1.0.0.5)",
+    "note": "旧安装件 3ab4874b17 包损坏（asar 缺 graceful-fs，启动即 Uncaught Exception）不能作 OTA 起点，改用公网正式 8d50fe9d04"
+  },
+  "feed": {
+    "url": "http://127.0.0.1:8765 (XCAGI_UPDATE_URL 环境变量注入)",
+    "reason": "正式 feed 晋级被 6 项 HIGH 安全旧债阻断（CVE-2026-104874 / gitleaks×2 / INC-20260905 三凭据），本轮用 exact-main 候选自建本地 feed 做 OTA 链路实测",
+    "latest_mac_yml": {
+      "buildSha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+      "path": "XCAGI-Enterprise-1.0.0.5-mac-arm64.zip",
+      "size": 528072316,
+      "releaseDate": "2026-10-11T22:52:24.026Z",
+      "signature": "ed25519 (updater 校验通过)"
+    },
+    "env_injection_issue": "launchctl setenv 注入未随 open 生效（进程 env 曾为旧端口 60410），改用直接二进制 + inline env 后生效"
+  },
+  "timeline_utc_and_local": {
+    "update_check": {
+      "local": "08:07:58",
+      "isUpdateAvailable": true,
+      "buildSha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+      "zip_size": 528072316
+    },
+    "download": {
+      "local": "08:08:24-08:08:27",
+      "event": "download_start -> update_downloaded",
+      "pending_zip_bytes": 528072316
+    },
+    "install_start": {
+      "utc": "2026-10-12T00:14:07.400Z",
+      "receipt_staged": {
+        "targetVersion": "1.0.0.5",
+        "targetBuildSha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+        "idempotencyKey": "5a912c2e87b6532e2bb8d5c0b194350a85094070fbda9109e9fe5cea59389178"
+      }
+    },
+    "prepare_quit_backend_stop": {
+      "utc_start": "2026-10-12T00:14:07.400Z",
+      "utc_done": "2026-10-12T00:14:09.409Z",
+      "result": "killed (terminateChildProcess SIGTERM 2s -> SIGKILL 正常兜底)"
+    },
+    "squirrel_staged": {
+      "utc": "2026-10-12T00:14:10.695Z",
+      "shipit_state": "~/Library/Caches/com.xcagi.desktop.enterprise.ShipIt/ShipItState.plist",
+      "update_bundle": "update.FxXIUGo/XCAGI.app (build-info gitSha=c46f93821bc7…)",
+      "launchd_job": "com.xcagi.desktop.enterprise.ShipIt"
+    },
+    "install_completed": {
+      "local": "08:32:13",
+      "shipit_log": "Installation completed successfully",
+      "trigger": "外部正常退出应用后 3 秒内完成"
+    }
+  },
+  "pre_upgrade_snapshot": {
+    "user": "SUNBIRD",
+    "products": [
+      [
+        7,
+        "M09stream"
+      ],
+      [
+        6,
+        "1"
+      ],
+      [
+        5,
+        "MAC验收0929产品13687"
+      ],
+      [
+        4,
+        "MAC验收0929产品84656"
+      ],
+      [
+        3,
+        "MAC验收0929产品58099"
+      ],
+      [
+        2,
+        "MAC验收0929产品35507"
+      ],
+      [
+        1,
+        "MAC验收0929产品"
+      ]
+    ],
+    "approvals_total": 13,
+    "approvals_ids": [
+      13,
+      12,
+      11,
+      10,
+      9,
+      8,
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1
+    ]
+  },
+  "anomalies": [
+    {
+      "id": "D1",
+      "severity": "blocker-for-auto-ota",
+      "title": "installUpdate 后应用未自动退出，ShipIt 无限等待安装",
+      "evidence": "install_start 00:14:07 / stopBackend 00:14:09 完成 / Squirrel staging 00:14:10，应用进程存活至 08:32 手动退出，共约 18 分钟；launchd com.xcagi.desktop.enterprise.ShipIt 保持 running（stderr: Detected this as an install request）",
+      "root_cause_direction": "MacUpdater.quitAndInstall() 无参版本忽略 isForceRunAfter；autoRunAppAfterInstall 未定义走 this.app.quit() 分支，该 quit 在本场景未使进程退出（旧版已含 2026-09-03/09-14 两类 ShipIt 无限等待修复仍复现）；desktop-install-update.installUpdate 在 quitAndInstall 后无超时强制退出兜底",
+      "fix_proposal": "installUpdate 内 quitAndInstall 后挂 8s 单次定时器，仍未退出则 app.exit(0) 并记录 updater event（配合回归测试）",
+      "recovery_verified": "正常退出应用后 ShipIt 3 秒内完成安装，无数据丢失",
+      "disposition": "冻结 SHA c46f93821b 本轮不合入（合入即整体失效 M05-M09 证据链），记为待修阻断项入下一轮"
+    },
+    {
+      "id": "A2",
+      "severity": "info",
+      "title": "旧安装件 3ab4874b17 包损坏（asar 缺 graceful-fs，启动崩溃），已备份隔离于 /Users/Shared/xcagi-t6-tools/macos-release-1.0.0.5-c46f93821b/XCAGI.app.old-3ab4874b17"
+    },
+    {
+      "id": "D2",
+      "severity": "low",
+      "title": "安装回执上报 401（POST /api/desktop/update-install-receipts/report 凭证无效或已过期），reported-update-installation.json 未刷新"
+    }
+  ],
+  "post_upgrade_verification": {
+    "installed_build_info": {
+      "gitSha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+      "version": "1.0.0.5",
+      "builtAt": "2026-10-11T22:27:42.115Z"
+    },
+    "codesign_verify_deep_strict": "PASS",
+    "spctl": "accepted source=Notarized Developer ID (G26WSH472M)",
+    "stapler_validate": "PASS",
+    "launch": "open -a /Applications/XCAGI.app -> /api/health healthy (version 1.0.0.5, git_sha c46f93821bc751c2c32b5a208c4ba86d29af9e45)",
+    "session": {
+      "user": "SUNBIRD",
+      "session_preserved_across_ota": true
+    },
+    "data": {
+      "products": [
+        [
+          7,
+          "M09stream"
+        ],
+        [
+          6,
+          "1"
+        ],
+        [
+          5,
+          "MAC验收0929产品13687"
+        ],
+        [
+          4,
+          "MAC验收0929产品84656"
+        ],
+        [
+          3,
+          "MAC验收0929产品58099"
+        ],
+        [
+          2,
+          "MAC验收0929产品35507"
+        ],
+        [
+          1,
+          "MAC验收0929产品"
+        ]
+      ],
+      "approvals_total": 13,
+      "identical_to_pre_upgrade": true,
+      "mods_loaded": 24
+    },
+    "business_post_ota": {
+      "create": "POST /api/mod/xcagi-erp-domain-bridge/products/add -> product_id=8 M10postOTA",
+      "reread": "GET /products/8 PASS",
+      "list_total": 8
+    }
+  },
+  "verdict": "PASS",
+  "verdict_note": "旧版→exact-main OTA 升级完成、数据/会话/Mod 全保留、业务写读复验通过、异常恢复路径验证通过；自动退出缺陷 D1 记为待修阻断项（升级本身经人工退出后完成）",
+  "captured_at_utc": "2026-10-12T00:49:29Z"
+}

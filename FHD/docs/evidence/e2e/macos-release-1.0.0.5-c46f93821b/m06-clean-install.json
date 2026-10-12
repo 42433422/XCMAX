@@ -1,0 +1,72 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "M06.clean-install",
+  "platform": "macos",
+  "release_sha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+  "product_version": "1.0.0.5",
+  "round": "M01-M10-2026-10-12",
+  "install": {
+    "source_dmg_sha256": "91f49824865be79123f6ae7bb8967ccc7cb8a1f9603bf474ea533b0b233c0bd9",
+    "method": "hdiutil attach -> ditto XCAGI.app /Applications -> xattr -dr com.apple.quarantine",
+    "old_app_backed_up": "/Users/Shared/xcagi-t6-tools/macos-release-1.0.0.5-c46f93821b/XCAGI.app.old-3ab4874b17",
+    "old_app_git_sha": "3ab4874b17974fae2b52dcabc033f07092206771",
+    "installed_build_info": {
+      "schema_version": 1,
+      "gitSha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+      "version": "1.0.0.5",
+      "releaseId": "xcagi-1.0.0.5-c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+      "builtAt": "2026-10-11T22:27:42.115Z"
+    },
+    "installed_codesign_deep_strict": "PASS"
+  },
+  "first_launch": {
+    "backend_up": true,
+    "health_status": "healthy",
+    "health_git_sha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+    "health_version": "1.0.0.5",
+    "runtime_status": "healthy",
+    "backend_port": 17500
+  },
+  "login_binding": {
+    "api": "/api/auth/me",
+    "success": true,
+    "username": "SUNBIRD",
+    "account_kind": "enterprise",
+    "tier": "enterprise",
+    "tenant_id": 1,
+    "market_user_id": 29,
+    "session_reuse_after_reinstall": true
+  },
+  "mod_loading": {
+    "mods_count": 24,
+    "mods_ids": [
+      "accessories-packaging-industry",
+      "attendance-industry",
+      "csv-full-read-employee",
+      "csv-generate-employee",
+      "excel-full-read-employee",
+      "excel-generate-employee",
+      "lan-gate-ai-employee",
+      "pdf-full-read-employee",
+      "pdf-generate-employee",
+      "ppt-full-read-employee",
+      "ppt-generate-employee",
+      "word-full-read-employee",
+      "word-generate-employee",
+      "xcagi-approval-bridge",
+      "xcagi-core-workflow-employees",
+      "xcagi-customer-service-bridge",
+      "xcagi-erp-domain-bridge",
+      "xcagi-lan-license-bridge",
+      "xcagi-model-payment-bridge",
+      "xcagi-neuro-bus-bridge",
+      "xcagi-office-employee-pack-bridge",
+      "xcagi-planner-bridge",
+      "xcagi-planner-excel-tools",
+      "xcagi-workflow-visualization-bridge"
+    ],
+    "erp_domain_bridge": true
+  },
+  "captured_at_utc": "2026-10-11T23:18:02Z",
+  "verdict": "PASS"
+}
