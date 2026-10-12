@@ -36,8 +36,8 @@
           <div class="card-header">
             <i class="fa fa-desktop card-icon" aria-hidden="true"></i>
             <h3>本地节点</h3>
-            <span class="status-badge" :class="localStatus.ok ? 'badge-ok' : 'badge-err'">
-              {{ localStatus.ok ? '正常' : '异常' }}
+            <span class="status-badge" :class="localStatus.state !== 'ready' ? 'badge-info' : localStatus.ok ? 'badge-ok' : 'badge-err'">
+              {{ observationLabel(localStatus.state) || (localStatus.ok ? '正常' : '异常') }}
             </span>
           </div>
           <dl class="card-info">
@@ -53,8 +53,8 @@
           <div class="card-header">
             <i class="fa fa-server card-icon" aria-hidden="true"></i>
             <h3>远端服务器</h3>
-            <span class="status-badge" :class="remoteStatus.reachable ? 'badge-ok' : 'badge-warn'">
-              {{ remoteStatus.reachable ? '在线' : '离线' }}
+            <span class="status-badge" :class="remoteStatus.state !== 'ready' ? 'badge-info' : remoteStatus.reachable ? 'badge-ok' : 'badge-warn'">
+              {{ observationLabel(remoteStatus.state) || (remoteStatus.reachable ? '在线' : '离线') }}
             </span>
           </div>
           <dl class="card-info">
@@ -76,8 +76,8 @@
           <div class="card-header">
             <i class="fa fa-heartbeat card-icon" aria-hidden="true"></i>
             <h3>自治健康</h3>
-            <span class="status-badge" :class="autonomyHealth.alive ? 'badge-ok' : 'badge-err'">
-              {{ autonomyHealth.alive ? '服务存活' : '不可达' }}
+            <span class="status-badge" :class="autonomyHealth.alive == null ? 'badge-info' : autonomyHealth.alive ? 'badge-ok' : 'badge-err'">
+              {{ autonomyHealthLoading ? '检测中' : autonomyHealth.alive == null ? '状态未知' : autonomyHealth.alive ? '服务存活' : '不可达' }}
             </span>
           </div>
           <dl class="card-info">
@@ -100,16 +100,16 @@
           <div class="card-header">
             <i class="fa fa-refresh card-icon" aria-hidden="true"></i>
             <h3>双向同步</h3>
-            <span class="status-badge" :class="syncStatus.healthy ? 'badge-ok' : 'badge-warn'">
-              {{ syncStatus.healthy ? '同步中' : '待同步' }}
+            <span class="status-badge" :class="syncStatus.state !== 'ready' ? 'badge-info' : syncStatus.healthy ? 'badge-ok' : 'badge-warn'">
+              {{ observationLabel(syncStatus.state) || (syncStatus.healthy ? '队列已清空' : '待同步') }}
             </span>
           </div>
           <dl class="card-info">
             <dt>本地游标</dt><dd>{{ syncStatus.localCursor ?? '—' }}</dd>
-            <dt>服务器游标</dt><dd>{{ syncStatus.remoteCursor ?? '—' }}</dd>
-            <dt>待发送</dt><dd>{{ syncStatus.outboxCount ?? 0 }} 条</dd>
-            <dt>最近同步</dt><dd>{{ syncStatus.lastSyncAt || '—' }}</dd>
-            <dt>冲突数</dt><dd>{{ syncStatus.conflictCount ?? 0 }}</dd>
+            <dt>已拉取服务器游标</dt><dd>{{ syncStatus.remoteCursor ?? '—' }}</dd>
+            <dt>待发送</dt><dd>{{ syncStatus.outboxCount ?? '—' }} 条</dd>
+            <dt>最近游标更新</dt><dd>{{ syncStatus.lastSyncAt || '—' }}</dd>
+            <dt>冲突数</dt><dd>{{ syncStatus.conflictCount ?? '—' }}</dd>
           </dl>
           <div class="card-actions">
             <button class="btn btn-primary btn-sm" :disabled="syncing || !remoteStatus.reachable" @click="triggerPush">
@@ -349,7 +349,12 @@ async function handleDeployDone() {
   await releaseStatusCard.value?.refresh?.()
 }
 
+function observationLabel(state) {
+  return { unknown: '待检测', loading: '检测中', error: '读取失败，状态未知' }[state] || ''
+}
+
 async function refreshAll() {
+  if (refreshing.value) return
   refreshing.value = true
   try {
     await Promise.all([

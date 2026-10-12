@@ -2,32 +2,25 @@ import { ref } from 'vue'
 import { api } from '@/api'
 import { appAlert } from '@/utils/appDialog'
 
-/**
- * 双向同步状态、推拉动作、冲突处理与 SSE 同步流。
- * 从 XCmaxAdminView.vue 逐字迁移，行为零变更。
- * @param {{ recentErrors: import('vue').Ref<Array> }} refs 共享的最近错误列表
- */
 export function useXcmaxSync({ recentErrors }) {
   const syncing = ref(false)
-  const syncStatus = ref({ healthy: false, localCursor: null, remoteCursor: null, outboxCount: 0, lastSyncAt: '', conflictCount: 0 })
+  const syncStatus = ref(statusSnapshot())
+  let statusRevision = 0
+  function statusSnapshot(data = {}, state = 'unknown') {
+    return { state, healthy: data.healthy, localCursor: data.local_cursor, remoteCursor: data.remote_cursor,
+      outboxCount: data.outbox_count, lastSyncAt: data.last_sync_at, conflictCount: data.conflict_count }
+  }
   const conflicts = ref([])
 
   async function loadSyncStatus() {
+    const revision = ++statusRevision
+    syncStatus.value = statusSnapshot({}, 'loading')
     try {
       const r = await api.get('/api/xcmax/sync/status')
-      if (r?.success && r?.data) {
-        const d = r.data
-        syncStatus.value = {
-          healthy: d.healthy === true,
-          localCursor: d.local_cursor ?? null,
-          remoteCursor: d.remote_cursor ?? null,
-          outboxCount: d.outbox_count ?? 0,
-          lastSyncAt: d.last_sync_at || '—',
-          conflictCount: d.conflict_count ?? 0
-        }
-      }
+      if (!r?.success || typeof r?.data?.healthy !== 'boolean' || r.data.note) throw new Error('同步状态不可用')
+      if (revision === statusRevision) syncStatus.value = statusSnapshot(r.data, 'ready')
     } catch {
-      /* not yet wired up */
+      if (revision === statusRevision) syncStatus.value = statusSnapshot({}, 'error')
     }
   }
 
@@ -97,32 +90,30 @@ export function useXcmaxSync({ recentErrors }) {
     syncStreamActive = true
     const cursorParam = syncStatus.value.localCursor ?? 0
     const url = `/api/xcmax/sync/stream?since_cursor=${cursorParam}`
-    syncEventSource = new EventSource(url)
+    const source = new EventSource(url)
+    syncEventSource = source
     syncStreamCreatedAt = Date.now()
-    syncEventSource.onmessage = (e) => {
+    source.onmessage = (e) => {
+      if (source !== syncEventSource || !syncStreamActive) return
       try {
         const data = JSON.parse(e.data)
         if (data?.type === 'connected') {
           syncStreamReconnectDelay = 3000
         }
-        if (data?.type === 'heartbeat' && data?.status) {
-          const s = data.status
-          syncStatus.value = {
-            healthy: s.healthy === true,
-            localCursor: s.local_cursor ?? syncStatus.value.localCursor,
-            remoteCursor: s.remote_cursor ?? syncStatus.value.remoteCursor,
-            outboxCount: s.outbox_count ?? 0,
-            lastSyncAt: s.last_sync_at || syncStatus.value.lastSyncAt,
-            conflictCount: s.conflict_count ?? 0,
-          }
+        if (data?.type === 'heartbeat' && typeof data?.status?.healthy === 'boolean') {
+          ++statusRevision
+          syncStatus.value = statusSnapshot(data.status, data.status.note ? 'error' : 'ready')
         }
-      } catch (_) {}
+      } catch { /* Ignore malformed events or an already closed stream. */ }
     }
-    syncEventSource.onerror = () => {
+    source.onerror = () => {
+      if (source !== syncEventSource || !syncStreamActive) return
+      ++statusRevision
+      syncStatus.value = statusSnapshot({}, 'error')
       const es = syncEventSource
       syncEventSource = null
       if (es) {
-        try { es.close() } catch (_) {}
+        try { es.close() } catch { /* Ignore malformed events or an already closed stream. */ }
       }
       if (!syncStreamActive) return
       if (syncStreamReconnectTimer != null) return
@@ -135,6 +126,8 @@ export function useXcmaxSync({ recentErrors }) {
   }
 
   function stopSyncStream() {
+    ++statusRevision
+    syncStatus.value = statusSnapshot()
     syncStreamActive = false
     if (syncStreamReconnectTimer != null) {
       clearTimeout(syncStreamReconnectTimer)
@@ -144,7 +137,7 @@ export function useXcmaxSync({ recentErrors }) {
     if (age < 2000 && syncEventSource) {
       const es = syncEventSource
       syncEventSource = null
-      setTimeout(() => { try { es.close() } catch (_) {} }, 500)
+      setTimeout(() => { try { es.close() } catch { /* Ignore malformed events or an already closed stream. */ } }, 500)
     } else {
       syncEventSource?.close()
       syncEventSource = null
