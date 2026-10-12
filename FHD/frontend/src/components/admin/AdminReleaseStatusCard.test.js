@@ -19,48 +19,47 @@ const deferred = () => {
   return { promise, resolve, reject }
 }
 let wrapper
-const field = label => wrapper.findAll('dt').find(node => node.text() === label).element.nextElementSibling.textContent.trim()
+const fields = () => Object.fromEntries(wrapper.findAll('dt').map(node => [
+  node.text(), node.element.nextElementSibling.textContent.trim(),
+]))
+const refresh = () => wrapper.vm.refresh().then(() => nextTick())
 beforeEach(() => {
   vi.resetAllMocks()
   xcmaxAdminApi.checkDeployUpdates.mockResolvedValue({ data })
   xcmaxAdminApi.listUpdateInstallReceipts.mockResolvedValue(report)
   wrapper = mount(AdminReleaseStatusCard)
 })
-afterEach(() => wrapper.unmount())
+afterEach(() => {
+  wrapper.unmount()
+  vi.restoreAllMocks()
+})
 
 it('keeps unobserved values unknown, serializes refreshes, and emits the settled status', async () => {
   const check = deferred()
   const receipts = deferred()
   xcmaxAdminApi.checkDeployUpdates.mockReturnValue(check.promise)
   xcmaxAdminApi.listUpdateInstallReceipts.mockReturnValue(receipts.promise)
-  expect(field('企业端')).toBe('未检测')
-  expect(field('安装回执')).toBe('未检测')
-  const update = vi.fn()
-  window.addEventListener('xcagi:admin-deploy-updated', update)
-  try {
-    const pending = wrapper.vm.refresh()
-    await wrapper.vm.refresh()
-    await nextTick()
-    expect(xcmaxAdminApi.checkDeployUpdates).toHaveBeenCalledTimes(1)
-    expect(field('企业端')).toBe('检测中')
-    expect(field('安装回执')).toBe('检测中')
-    expect(wrapper.find('.status-badge').classes()).toContain('badge-dim')
-    expect(wrapper.find('button').element.disabled).toBe(true)
-    check.resolve({ data })
-    await flushPromises()
-    expect(field('企业端')).toBe('不可达')
-    expect(field('安装回执')).toBe('检测中')
-    expect(xcmaxAdminApi.listUpdateInstallReceipts).toHaveBeenCalledWith('build-a')
-    receipts.resolve(report)
-    await pending
-    await nextTick()
-    expect(field('安装回执')).toBe('0 台已安装')
-    expect(wrapper.find('.status-badge').text()).toBe('最新')
-    expect(update.mock.lastCall[0].detail.text).toBe('最新')
-    expect(wrapper.find('button').element.disabled).toBe(false)
-  } finally {
-    window.removeEventListener('xcagi:admin-deploy-updated', update)
-  }
+  expect(fields()).toMatchObject({ 企业端: '未检测', 安装回执: '未检测' })
+  const update = vi.spyOn(window, 'dispatchEvent')
+  const pending = wrapper.vm.refresh()
+  await refresh()
+  expect(xcmaxAdminApi.checkDeployUpdates).toHaveBeenCalledTimes(1)
+  expect(fields()).toMatchObject({ 企业端: '检测中', 安装回执: '检测中' })
+  expect(wrapper.find('.status-badge').classes()).toContain('badge-dim')
+  expect(wrapper.find('button').element.disabled).toBe(true)
+  check.resolve({ data })
+  await flushPromises()
+  expect(fields()).toMatchObject({ 企业端: '不可达', 安装回执: '检测中' })
+  expect(xcmaxAdminApi.listUpdateInstallReceipts).toHaveBeenCalledWith('build-a')
+  receipts.resolve(report)
+  await pending
+  await nextTick()
+  expect(fields().安装回执).toBe('0 台已安装')
+  expect(wrapper.find('.status-badge').text()).toBe('最新')
+  expect(update).toHaveBeenLastCalledWith(expect.objectContaining({
+    type: 'xcagi:admin-deploy-updated', detail: expect.objectContaining({ text: '最新' }),
+  }))
+  expect(wrapper.find('button').element.disabled).toBe(false)
 })
 
 it('clears previous observations during retry and after a failed deployment check', async () => {
@@ -69,21 +68,17 @@ it('clears previous observations during retry and after a failed deployment chec
   xcmaxAdminApi.checkDeployUpdates.mockReturnValue(check.promise)
   const pending = wrapper.vm.refresh()
   await nextTick()
-  expect(field('企业端')).toBe('检测中')
-  expect(field('安装回执')).toBe('检测中')
+  expect(fields()).toMatchObject({ 企业端: '检测中', 安装回执: '检测中' })
   check.reject(new Error('network unavailable'))
   await pending
   await nextTick()
-  expect(field('企业端')).toBe('检测失败')
-  expect(field('安装回执')).toBe('未检测')
+  expect(fields()).toMatchObject({ 企业端: '检测失败', 安装回执: '未检测' })
   expect(wrapper.find('.release-hint').text()).toContain('版本检测失败：network unavailable')
   expect(wrapper.find('.status-badge').classes()).toContain('badge-error')
   expect(xcmaxAdminApi.listUpdateInstallReceipts).toHaveBeenCalledTimes(1)
   xcmaxAdminApi.checkDeployUpdates.mockResolvedValue({ data })
-  await wrapper.vm.refresh()
-  await nextTick()
-  expect(field('企业端')).toBe('不可达')
-  expect(field('安装回执')).toBe('0 台已安装')
+  await refresh()
+  expect(fields()).toMatchObject({ 企业端: '不可达', 安装回执: '0 台已安装' })
   expect(wrapper.find('.status-badge').text()).toBe('最新')
 })
 
@@ -92,41 +87,35 @@ it('reports a receipt failure without replacing it with zero or keeping old rece
     summary: { installed_devices: 2, failed_devices: 1 },
     items: [{ id: 1, status: 'failed', error: 'old receipt' }],
   })
-  await wrapper.vm.refresh()
-  await nextTick()
-  expect(field('安装回执')).toContain('2 台已安装')
+  await refresh()
+  expect(fields().安装回执).toContain('2 台已安装')
   expect(wrapper.find('.install-receipts').exists()).toBe(true)
   xcmaxAdminApi.checkDeployUpdates.mockResolvedValue({ data: { ...data, enterprise: { reachable: true } } })
   xcmaxAdminApi.listUpdateInstallReceipts.mockRejectedValue(new Error('receipt timeout'))
-  await wrapper.vm.refresh()
-  await nextTick()
-  expect(field('企业端')).toBe('在线')
-  expect(field('安装回执')).toBe('读取失败')
+  await refresh()
+  expect(fields()).toMatchObject({ 企业端: '在线', 安装回执: '读取失败' })
   expect(wrapper.find('.install-receipts').exists()).toBe(false)
   expect(wrapper.find('.release-hint').text()).toContain('安装回执读取失败：receipt timeout')
 })
 
 it('does not let success flags mask observed update-hub unreachability', async () => {
   xcmaxAdminApi.checkDeployUpdates.mockResolvedValue({ data: { ...data, update_hub: { reachable: false } } })
-  await wrapper.vm.refresh()
-  await nextTick()
+  await refresh()
   expect(wrapper.find('.status-badge').text()).toBe('未连通')
   expect(wrapper.find('.status-badge').classes()).toContain('badge-error')
 })
 
 it.each([undefined, null, 0, 'false'])('does not coerce unknown reachability %s into unreachable', async reachable => {
   xcmaxAdminApi.checkDeployUpdates.mockResolvedValue({ data: { ...data, enterprise: { reachable } } })
-  await wrapper.vm.refresh()
-  await nextTick()
-  expect(field('企业端')).toBe('未知')
+  await refresh()
+  expect(fields().企业端).toBe('未知')
 })
 
 it.each([undefined, {}, { installed_devices: 0 }, { installed_devices: -1, failed_devices: 0 }])(
   'does not treat incomplete or invalid receipt summary %j as zero', async summary => {
     xcmaxAdminApi.listUpdateInstallReceipts.mockResolvedValue({ summary, items: [] })
-    await wrapper.vm.refresh()
-    await nextTick()
-    expect(field('安装回执')).toBe('读取失败')
+    await refresh()
+    expect(fields().安装回执).toBe('读取失败')
     expect(wrapper.find('.release-hint').text()).toContain('安装回执数据不完整')
   },
 )

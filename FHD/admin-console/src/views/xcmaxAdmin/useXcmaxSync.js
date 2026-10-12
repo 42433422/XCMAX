@@ -102,7 +102,7 @@ export function useXcmaxSync({ recentErrors }) {
         }
         if (data?.type === 'heartbeat' && typeof data?.status?.healthy === 'boolean') {
           ++statusRevision
-          syncStatus.value = statusSnapshot(data.status, data.status.note ? 'error' : 'ready')
+          syncStatus.value = data.status.note ? statusSnapshot({}, 'error') : statusSnapshot(data.status, 'ready')
         }
       } catch { /* Ignore malformed events or an already closed stream. */ }
     }

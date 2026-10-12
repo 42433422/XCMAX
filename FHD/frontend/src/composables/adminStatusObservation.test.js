@@ -18,19 +18,12 @@ const snapshot = {
   conflict_count: 0,
   last_sync_at: '2026-08-03',
 }
-let streams
+const eventSource = vi.fn(function () {
+  this.close = vi.fn()
+})
 beforeEach(() => {
   vi.resetAllMocks()
-  streams = []
-  vi.stubGlobal(
-    'EventSource',
-    class {
-      constructor() {
-        streams.push(this)
-      }
-      close() {}
-    },
-  )
+  vi.stubGlobal('EventSource', eventSource)
 })
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -60,16 +53,16 @@ describe('admin status observations', () => {
   it('keeps newer SSE observations over a late HTTP failure and invalidates on disconnect', async () => {
     const sync = useXcmaxSync({ recentErrors: ref([]) })
     let reject
-    mocks.get.mockImplementation(
-      () =>
-        new Promise((_, fail) => {
-          reject = fail
-        }),
-    )
+    mocks.get.mockReturnValue(new Promise((_, fail) => {
+      reject = fail
+    }))
     const pending = sync.loadSyncStatus()
     sync.startSyncStream()
-    const source = streams[0]
-    source.onmessage({ data: JSON.stringify({ type: 'heartbeat', status: snapshot }) })
+    const source = eventSource.mock.instances[0]
+    const heartbeat = status => source.onmessage({ data: JSON.stringify({ type: 'heartbeat', status }) })
+    heartbeat({ ...snapshot, note: 'uninitialized' })
+    expect(sync.syncStatus.value).toMatchObject({ state: 'error', outboxCount: undefined })
+    heartbeat(snapshot)
     reject(new Error('late'))
     await pending
     expect(sync.syncStatus.value.state).toBe('ready')
@@ -77,19 +70,16 @@ describe('admin status observations', () => {
     expect(sync.syncStatus.value.state).toBe('error')
     expect(sync.syncStatus.value.outboxCount).toBeUndefined()
     sync.stopSyncStream()
-    source.onmessage({ data: JSON.stringify({ type: 'heartbeat', status: snapshot }) })
+    heartbeat(snapshot)
     expect(sync.syncStatus.value.state).toBe('unknown')
   })
   it('keeps initial/loading/failed remote status distinct from observed offline', async () => {
     const overview = useXcmaxOverview()
     expect(overview.remoteStatus.value.reachable).toBeNull()
     let resolve
-    mocks.get.mockImplementation(
-      () =>
-        new Promise((done) => {
-          resolve = done
-        }),
-    )
+    mocks.get.mockReturnValue(new Promise(done => {
+      resolve = done
+    }))
     const pending = overview.loadRemoteStatus()
     await overview.loadRemoteStatus()
     expect(mocks.get).toHaveBeenCalledTimes(1)

@@ -372,30 +372,18 @@ async function refreshAll() {
   }
 }
 
-async function bootstrapOverview() {
+async function activateOverview() {
   if (!overviewBootstrapped.value) {
     await refreshAll()
     overviewBootstrapped.value = true
   }
+  startSyncStream()
 }
+onMounted(activateOverview)
+onActivated(activateOverview)
 
-onMounted(async () => {
-  await bootstrapOverview()
-  startSyncStream()
-})
-
-onActivated(async () => {
-  await bootstrapOverview()
-  startSyncStream()
-})
-
-onDeactivated(() => {
-  stopSyncStream()
-})
-
-onBeforeUnmount(() => {
-  stopSyncStream()
-})
+onDeactivated(stopSyncStream)
+onBeforeUnmount(stopSyncStream)
 </script>
 
 <style scoped src="./XCmaxAdminView.css"></style>
