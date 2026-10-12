@@ -104,7 +104,7 @@ jobs:
             CandidateSha = $env:CANDIDATE_SHA
             EvidenceDir = "candidate/evidence-$env:MODE"
           }
-          if ($env:MODE -eq 'Upgrade') { $args.OldPath = (Resolve-Path candidate/old-installer.exe).Path }
+          if ($env:MODE -in @('Upgrade','Rollback')) { $args.OldPath = (Resolve-Path candidate/old-installer.exe).Path }
           scripts/package/accept-windows-candidate.ps1 @args
       - uses: actions/upload-artifact@v4
         if: always()
