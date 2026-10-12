@@ -119,12 +119,20 @@ function Login([string]$label) {
   Check ([bool]$env:XCAGI_TEST_USER -and [bool]$env:XCAGI_TEST_PASS) "$label.credentials" 'CI test credentials are configured'
   $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
   $body = @{ username=$env:XCAGI_TEST_USER; password=$env:XCAGI_TEST_PASS } | ConvertTo-Json -Compress
-  try {
-    $r = Invoke-WebRequest "$base/api/auth/login" -Method Post -Body $body -ContentType 'application/json' -WebSession $session -TimeoutSec 30
-    $http = [int]$r.StatusCode
-    $j = $r.Content | ConvertFrom-Json
-  } catch {
-    Check $false "$label.login" "http=$([int]$_.Exception.Response.StatusCode); error=$($_.Exception.GetType().Name): $($_.Exception.Message)"
+  $http = 0
+  $j = $null
+  foreach ($tryLogin in 1..3) {
+    try {
+      $r = Invoke-WebRequest "$base/api/auth/login" -Method Post -Body $body -ContentType 'application/json' -WebSession $session -TimeoutSec 30
+      $http = [int]$r.StatusCode
+      $j = $r.Content | ConvertFrom-Json
+      if ($http -eq 200) { break }
+    } catch {
+      $http = 0
+      if ($_.Exception.Response) { $http = [int]$_.Exception.Response.StatusCode }
+      if ($tryLogin -lt 3 -and $http -eq 500) { Start-Sleep -Seconds 3; continue }
+      Check $false "$label.login" "http=$http; error=$($_.Exception.GetType().Name): $($_.Exception.Message)"
+    }
   }
   Check ($http -eq 200 -and $j.success -eq $true) "$label.login" "http=$http; success=$($j.success)"
   $me = Invoke-RestMethod "$base/api/auth/me" -WebSession $session -TimeoutSec 15
