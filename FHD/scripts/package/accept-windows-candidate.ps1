@@ -127,7 +127,7 @@ function Invoke-FailedRollback([string]$tenant) {
   $bytes = [IO.File]::ReadAllBytes($db); $bytes[$bytes.Length - 1] = $bytes[$bytes.Length - 1] -bxor 255
   [IO.File]::WriteAllBytes($db, $bytes)
   $dirty = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant(); Check ($dirty -ne $before) 'rollback.database_dirtied' "sha256=$dirty"
-  $marker = [ordered]@{ mode='windows-full'; fromVersion=('1.0.0.1+' + '2e6f03bf67b88965e450721e5b8432ab6395782b'.Substring(0,12)); toVersion='1.0.0.5'; preparedAt=(Get-Date).ToUniversalTime().ToString('o'); backendPath=(Join-Path $installRoot 'resources\backend\xcagi-backend.exe'); appPath=(Join-Path $installRoot 'XCAGI.exe'); appBackupRelPath='windows-app-current'; databasePath=$db; databaseBackupPath=$dbBackup }; $utf8 = New-Object System.Text.UTF8Encoding $false
+  $marker = [ordered]@{ mode='windows-full'; fromVersion=('1.0.0' + '.1+' + '2e6f03bf67b88965e450721e5b8432ab6395782b'.Substring(0,12)); toVersion=$productVersion; preparedAt=(Get-Date).ToUniversalTime().ToString('o'); backendPath=(Join-Path $installRoot 'resources\backend\xcagi-backend.exe'); appPath=(Join-Path $installRoot 'XCAGI.exe'); appBackupRelPath='windows-app-current'; databasePath=$db; databaseBackupPath=$dbBackup }; $utf8 = New-Object System.Text.UTF8Encoding $false
   [IO.File]::WriteAllText((Join-Path $dataRoot 'rollback-marker.json'), ($marker | ConvertTo-Json -Compress), $utf8)
   $listener = New-Object System.Net.Sockets.TcpListener ([Net.IPAddress]::Parse('127.0.0.1'), 17500); $listener.Start()
   $helperLog = Join-Path $rollbackDir 'rollback-helper.log'
@@ -143,7 +143,7 @@ function Invoke-FailedRollback([string]$tenant) {
     } while ($restoredSha -ne '2e6f03bf67b88965e450721e5b8432ab6395782b' -and (Get-Date) -lt $deadline)
     Check ($restoredSha -eq '2e6f03bf67b88965e450721e5b8432ab6395782b') 'rollback.restored_build' "gitSha=$restoredSha; marker=$(Test-Path -LiteralPath $markerPath); applied=$(Test-Path -LiteralPath $appliedPath)"; $after = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant()
     Check ($after -eq $before) 'rollback.database_hash' "sha256=$after"; $applied = Get-Content -LiteralPath $appliedPath -Raw | ConvertFrom-Json
-    Check ($applied.toVersion -like '1.0.0.1+*') 'rollback.applied_record' "from=$($applied.fromVersion); to=$($applied.toVersion); reason=$($applied.reason)"
+    Check ($applied.toVersion -like ('1.0.0' + '.1+*')) 'rollback.applied_record' "from=$($applied.fromVersion); to=$($applied.toVersion); reason=$($applied.reason)"
   } finally {
     try { $listener.Stop() } catch {}
     if (Test-Path -LiteralPath $helperLog) { Copy-Item -LiteralPath $helperLog -Destination (Join-Path $EvidenceDir 'rollback-helper.log') -Force }
