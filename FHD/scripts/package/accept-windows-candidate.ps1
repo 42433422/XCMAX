@@ -26,85 +26,26 @@ function Digest([string]$text) {
   $hash = [Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
   return ([BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
 }
-function Test-InstallFileLocked {
-  param([string]$LiteralPath)
-  if (-not (Test-Path -LiteralPath $LiteralPath)) { return 'missing' }
-  try {
-    $stream = [System.IO.File]::Open($LiteralPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)
-    $stream.Dispose()
-    return 'free'
-  } catch {
-    return 'locked'
-  }
+function Uninstall-OldApp {
+  $unins = Get-ChildItem -LiteralPath $installRoot -Filter 'Uninstall*.exe' -File | Select-Object -First 1
+  Check ($null -ne $unins) 'old.uninstaller' 'previous uninstaller exists'
+  $copied = Join-Path $env:TEMP 'xcagi-old-uninstaller.exe'
+  Copy-Item -LiteralPath $unins.FullName -Destination $copied -Force
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $copied
+  $psi.Arguments = "/S /KEEP_APP_DATA /currentuser --updated _?=$installRoot"
+  $psi.UseShellExecute = $false
+  $proc = [System.Diagnostics.Process]::Start($psi)
+  $proc.WaitForExit()
+  Check ($proc.ExitCode -eq 0) 'old.uninstall' "exit=$($proc.ExitCode)"
 }
 function Stop-App {
-  try { Add-MpPreference -ExclusionPath $installRoot -ErrorAction SilentlyContinue } catch {}
-  try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue } catch {}
-  $names = @('XCAGI', 'xcagi-backend')
-  foreach ($kill in 1..3) {
-    Get-Process -Name $names -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    if (Test-Path -LiteralPath $installRoot) {
-      Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-        Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($installRoot, [System.StringComparison]::OrdinalIgnoreCase) } |
-        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-    }
-    if (-not (Get-Process -Name $names -ErrorAction SilentlyContinue)) { break }
-    Start-Sleep -Seconds 1
-  }
-  $deadline = (Get-Date).AddSeconds(40)
-  do {
-    $running = @(Get-Process -Name $names -ErrorAction SilentlyContinue)
-    $exe = Test-InstallFileLocked (Join-Path $installRoot 'XCAGI.exe')
-    $backend = Test-InstallFileLocked (Join-Path $installRoot 'resources\backend\xcagi-backend.exe')
-    if ($running.Count -eq 0 -and $exe -ne 'locked' -and $backend -ne 'locked') { return }
-    Start-Sleep -Seconds 2
-  } while ((Get-Date) -lt $deadline)
+  Get-Process -Name XCAGI,xcagi-backend -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
 }
 function Install([string]$path, [string]$label) {
-  $attempt = 0
-  $lockNote = 'exe=unknown; backend=unknown'
-  do {
-    $attempt++
-    Stop-App
-    $exe = Test-InstallFileLocked (Join-Path $installRoot 'XCAGI.exe')
-    $backend = Test-InstallFileLocked (Join-Path $installRoot 'resources\backend\xcagi-backend.exe')
-    $lockNote = "exe=$exe; backend=$backend"
-    $proc = Start-Process -FilePath $path -ArgumentList @('/S', '/currentuser', "/D=$installRoot") -Wait -PassThru
-    if ($proc.ExitCode -eq 0) { break }
-    Start-Sleep -Seconds 3
-  } while ($attempt -lt 3)
-  if ($proc.ExitCode -ne 0 -and $label -eq 'candidate') {
-    $unins = Get-ChildItem -LiteralPath $installRoot -Filter 'Uninstall*.exe' -File -ErrorAction SilentlyContinue | Select-Object -First 1
-    $manual = 'missing'
-    if ($unins) {
-      $copied = Join-Path $env:TEMP 'xcagi-old-uninstaller.exe'
-      Copy-Item -LiteralPath $unins.FullName -Destination $copied -Force
-      $psi = New-Object System.Diagnostics.ProcessStartInfo
-      $psi.FileName = $copied
-      $psi.Arguments = "/S /KEEP_APP_DATA /currentuser --updated _?=$installRoot"
-      $psi.UseShellExecute = $false
-      $manualProc = [System.Diagnostics.Process]::Start($psi)
-      $manualProc.WaitForExit()
-      $manual = [string]$manualProc.ExitCode
-    }
-    $again = 'skipped'
-    if ($manual -eq '0') {
-      $againProc = Start-Process -FilePath $path -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
-      $again = [string]$againProc.ExitCode
-    }
-    $probe = 'skip'
-    $sample = Join-Path $installRoot 'XCAGI.exe'
-    $dest = Join-Path $env:TEMP 'xcagi-rename-probe.exe'
-    if (Test-Path -LiteralPath $sample) {
-      Add-Type -Namespace Xcagi -Name Move -MemberDefinition '[DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool MoveFile(string src, string dst);' -ErrorAction SilentlyContinue
-      $forward = [Xcagi.Move]::MoveFile($sample, $dest)
-      $back = $false
-      if ($forward) { $back = [Xcagi.Move]::MoveFile($dest, $sample) }
-      $probe = "forward=$forward; back=$back; win32=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
-    }
-    $lockNote = "$lockNote; temp=$env:TEMP; runner_temp=$env:RUNNER_TEMP; move=$probe; manual_uninstall=$manual; reinstall=$again"
-  }
-  Check ($proc.ExitCode -eq 0) "$label.install" "exit=$($proc.ExitCode); attempts=$attempt; $lockNote"
+  $p = Start-Process -FilePath $path -ArgumentList @('/S',"/D=$installRoot") -Wait -PassThru
+  Check ($p.ExitCode -eq 0) "$label.install" "exit=$($p.ExitCode)"
   Check (Test-Path (Join-Path $installRoot 'XCAGI.exe')) "$label.exe" "installed executable exists; build_info=$(Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw)"
 }
 function Start-App([string]$label) {
@@ -138,20 +79,12 @@ function Login([string]$label) {
   Check ([bool]$env:XCAGI_TEST_USER -and [bool]$env:XCAGI_TEST_PASS) "$label.credentials" 'CI test credentials are configured'
   $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
   $body = @{ username=$env:XCAGI_TEST_USER; password=$env:XCAGI_TEST_PASS } | ConvertTo-Json -Compress
-  $http = 0
-  $j = $null
-  foreach ($tryLogin in 1..3) {
-    try {
-      $r = Invoke-WebRequest "$base/api/auth/login" -Method Post -Body $body -ContentType 'application/json' -WebSession $session -TimeoutSec 30
-      $http = [int]$r.StatusCode
-      $j = $r.Content | ConvertFrom-Json
-      if ($http -eq 200) { break }
-    } catch {
-      $http = 0
-      if ($_.Exception.Response) { $http = [int]$_.Exception.Response.StatusCode }
-      if ($tryLogin -lt 3 -and $http -eq 500) { Start-Sleep -Seconds 3; continue }
-      Check $false "$label.login" "http=$http; error=$($_.Exception.GetType().Name): $($_.Exception.Message)"
-    }
+  try {
+    $r = Invoke-WebRequest "$base/api/auth/login" -Method Post -Body $body -ContentType 'application/json' -WebSession $session -TimeoutSec 30
+    $http = [int]$r.StatusCode
+    $j = $r.Content | ConvertFrom-Json
+  } catch {
+    Check $false "$label.login" "http=$([int]$_.Exception.Response.StatusCode); error=$($_.Exception.GetType().Name): $($_.Exception.Message)"
   }
   Check ($http -eq 200 -and $j.success -eq $true) "$label.login" "http=$http; success=$($j.success)"
   $me = Invoke-RestMethod "$base/api/auth/me" -WebSession $session -TimeoutSec 15
@@ -264,6 +197,7 @@ try {
     $oldGuiSeed = Run-Gui 'seed' (Join-Path $EvidenceDir 'old-gui')
     $oldAuth = Login 'old'
     Stop-App
+    Uninstall-OldApp
     Install $CandidatePath 'candidate'
     $newProcess = Start-App 'candidate'
     $newAuth = Login 'candidate'
