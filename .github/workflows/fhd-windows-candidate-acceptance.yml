@@ -30,15 +30,25 @@ defaults:
     working-directory: FHD
 
 jobs:
+  select-modes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        env:
+          ONLY: ${{ github.event.inputs.only }}
+        run: |
+          if [ "$ONLY" = "Rollback" ]; then echo 'matrix=["Rollback"]' >> "$GITHUB_OUTPUT"; else echo 'matrix=["Clean","Upgrade","Gui","Recovery"]' >> "$GITHUB_OUTPUT"; fi
   isolated-install:
+    needs: select-modes
     name: "${{ matrix.mode }} install on isolated Windows runner"
     runs-on: windows-latest
     timeout-minutes: 45
-    if: ${{ github.event.inputs.only == '' && matrix.mode != 'Rollback' || github.event.inputs.only == matrix.mode }}
     strategy:
       fail-fast: false
       matrix:
-        mode: [Clean, Upgrade, Gui, Recovery, Rollback]
+        mode: ${{ fromJson(needs.select-modes.outputs.matrix) }}
     defaults:
       run:
         working-directory: FHD
