@@ -77,7 +77,14 @@ function Install([string]$path, [string]$label) {
     $unins = Get-ChildItem -LiteralPath $installRoot -Filter 'Uninstall*.exe' -File -ErrorAction SilentlyContinue | Select-Object -First 1
     $manual = 'missing'
     if ($unins) {
-      $manualProc = Start-Process -FilePath $unins.FullName -ArgumentList @('/S', '/KEEP_APP_DATA', '/currentuser', '--updated', "_?=$installRoot") -Wait -PassThru
+      $copied = Join-Path $env:TEMP 'xcagi-old-uninstaller.exe'
+      Copy-Item -LiteralPath $unins.FullName -Destination $copied -Force
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = $copied
+      $psi.Arguments = "/S /KEEP_APP_DATA /currentuser --updated _?=$installRoot"
+      $psi.UseShellExecute = $false
+      $manualProc = [System.Diagnostics.Process]::Start($psi)
+      $manualProc.WaitForExit()
       $manual = [string]$manualProc.ExitCode
     }
     $again = 'skipped'
