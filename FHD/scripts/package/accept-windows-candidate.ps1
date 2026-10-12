@@ -26,13 +26,52 @@ function Digest([string]$text) {
   $hash = [Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
   return ([BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
 }
+function Test-InstallFileLocked {
+  param([string]$LiteralPath)
+  if (-not (Test-Path -LiteralPath $LiteralPath)) { return 'missing' }
+  try {
+    $stream = [System.IO.File]::Open($LiteralPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)
+    $stream.Dispose()
+    return 'free'
+  } catch {
+    return 'locked'
+  }
+}
 function Stop-App {
-  Get-Process -Name XCAGI,xcagi-backend -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 2
+  $names = @('XCAGI', 'xcagi-backend')
+  foreach ($kill in 1..3) {
+    Get-Process -Name $names -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $installRoot) {
+      Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($installRoot, [System.StringComparison]::OrdinalIgnoreCase) } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    }
+    if (-not (Get-Process -Name $names -ErrorAction SilentlyContinue)) { break }
+    Start-Sleep -Seconds 1
+  }
+  $deadline = (Get-Date).AddSeconds(40)
+  do {
+    $running = @(Get-Process -Name $names -ErrorAction SilentlyContinue)
+    $exe = Test-InstallFileLocked (Join-Path $installRoot 'XCAGI.exe')
+    $backend = Test-InstallFileLocked (Join-Path $installRoot 'resources\backend\xcagi-backend.exe')
+    if ($running.Count -eq 0 -and $exe -ne 'locked' -and $backend -ne 'locked') { return }
+    Start-Sleep -Seconds 2
+  } while ((Get-Date) -lt $deadline)
 }
 function Install([string]$path, [string]$label) {
-  $p = Start-Process -FilePath $path -ArgumentList @('/S',"/D=$installRoot") -Wait -PassThru
-  Check ($p.ExitCode -eq 0) "$label.install" "exit=$($p.ExitCode)"
+  $attempt = 0
+  $lockNote = 'exe=unknown; backend=unknown'
+  do {
+    $attempt++
+    Stop-App
+    $exe = Test-InstallFileLocked (Join-Path $installRoot 'XCAGI.exe')
+    $backend = Test-InstallFileLocked (Join-Path $installRoot 'resources\backend\xcagi-backend.exe')
+    $lockNote = "exe=$exe; backend=$backend"
+    $proc = Start-Process -FilePath $path -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
+    if ($proc.ExitCode -eq 0) { break }
+    Start-Sleep -Seconds 3
+  } while ($attempt -lt 3)
+  Check ($proc.ExitCode -eq 0) "$label.install" "exit=$($proc.ExitCode); attempts=$attempt; $lockNote"
   Check (Test-Path (Join-Path $installRoot 'XCAGI.exe')) "$label.exe" "installed executable exists; build_info=$(Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw)"
 }
 function Start-App([string]$label) {
