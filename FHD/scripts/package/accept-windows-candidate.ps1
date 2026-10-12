@@ -69,7 +69,7 @@ function Install([string]$path, [string]$label) {
     $exe = Test-InstallFileLocked (Join-Path $installRoot 'XCAGI.exe')
     $backend = Test-InstallFileLocked (Join-Path $installRoot 'resources\backend\xcagi-backend.exe')
     $lockNote = "exe=$exe; backend=$backend"
-    $proc = Start-Process -FilePath $path -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
+    $proc = Start-Process -FilePath $path -ArgumentList @('/S', '/currentuser', "/D=$installRoot") -Wait -PassThru
     if ($proc.ExitCode -eq 0) { break }
     Start-Sleep -Seconds 3
   } while ($attempt -lt 3)
