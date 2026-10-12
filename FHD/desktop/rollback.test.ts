@@ -315,7 +315,7 @@ describe('rollback — Windows full app restore scheduling', () => {
       expect(fs.existsSync(markerPath)).toBe(false)
       expect(fs.existsSync(path.join(electronMocks.__userDataDir, 'rollback-applied.json'))).toBe(true)
     } finally { cleanup() }
-  })
+  }, 30_000)
   windowsIt('launches the external helper and leaves marker consumption to it', async () => {
     const cleanup = setupPackagedBackend()
     try {

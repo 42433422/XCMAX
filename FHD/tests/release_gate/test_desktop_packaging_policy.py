@@ -250,7 +250,7 @@ def test_desktop_update_rollback_is_fail_closed_and_windows_full_app() -> None:
     assert "mode: 'windows-full'" in rollback
     assert "launchWindowsFullRollback" in rollback
     assert "windows-app-current" in rollback
-    assert "Move-Item -LiteralPath $stagingDir -Destination $installDir" in windows
+    assert "[IO.Directory]::Move($stagingDir, $installDir)" in windows
     assert "Copy-Item -LiteralPath $databaseBackupPath" in windows
     assert "state.buildSha.slice(0, 12)" in install_update
     assert "migration backup failed; refusing to continue" in entrypoint

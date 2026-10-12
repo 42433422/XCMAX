@@ -54,7 +54,8 @@ describe('Windows full application rollback helper', () => {
     expect(script).toContain("'C:\\Users\\O''Brien\\XCAGI'")
     expect(script).toContain('FromBase64String')
     expect(script).not.toContain("window couldn't start")
-    expect(script).toContain('Move-Item -LiteralPath $stagingDir -Destination $installDir')
+    expect(script).toContain('[IO.Directory]::Move($stagingDir, $installDir)')
+    expect(script).toContain('Install-SnapshotInPlace $stagingDir $installDir')
   })
 
   windowsIt.each(['success', 'receipt-failure', 'marker-failure', 'retained-failure', 'retained-wal', 'retained-journal'])('keeps app and database consistent after %s', async (scenario) => {

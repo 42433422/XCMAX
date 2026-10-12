@@ -259,8 +259,38 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '    $databaseStagingCreated = $true',
     '    if ($expectedDatabaseSha256 -and (File-Sha256 $databaseStaging) -ne $expectedDatabaseSha256) { throw "database snapshot checksum mismatch" }',
     '  }',
-    '  if (Test-Path -LiteralPath $installDir) { Move-Item -LiteralPath $installDir -Destination $failedDir -Force; $appQuarantined = $true }',
-    '  Move-Item -LiteralPath $stagingDir -Destination $installDir -Force',
+    '  function Install-SnapshotInPlace([string]$source, [string]$dest) {',
+    '    $root = [IO.Path]::GetFullPath($source).TrimEnd("\\")',
+    '    $destRoot = [IO.Path]::GetFullPath($dest).TrimEnd("\\")',
+    '    foreach ($file in @(Get-ChildItem -LiteralPath $root -Recurse -File -Force)) {',
+    '      $rel = $file.FullName.Substring($root.Length).TrimStart("\\")',
+    '      $target = Join-Path $destRoot $rel',
+    '      $parent = Split-Path -Parent $target',
+    '      if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }',
+    '      $copyDeadline = (Get-Date).AddSeconds(180)',
+    '      while ($true) {',
+    '        try { [IO.File]::Copy($file.FullName, $target, $true); break }',
+    '        catch { if ((Get-Date) -ge $copyDeadline) { throw }; Start-Sleep -Seconds 2 }',
+    '      }',
+    '    }',
+    '    $expected = @($expectedAppFiles.PSObject.Properties.Name)',
+    '    foreach ($file in @(Get-ChildItem -LiteralPath $destRoot -Recurse -File -Force)) {',
+    '      $rel = $file.FullName.Substring($destRoot.Length).TrimStart("\\")',
+    '      if ($expected -notcontains $rel) { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction SilentlyContinue }',
+    '    }',
+    '  }',
+    '  try {',
+    '    if (Test-Path -LiteralPath $installDir) { [IO.Directory]::Move($installDir, $failedDir); $appQuarantined = $true }',
+    '    [IO.Directory]::Move($stagingDir, $installDir)',
+    '  } catch {',
+    '    Write-RollbackLog ("atomic directory swap blocked, overlaying snapshot: " + $_.Exception.Message)',
+    '    if ($appQuarantined -and (Test-Path -LiteralPath $failedDir) -and -not (Test-Path -LiteralPath $installDir)) {',
+    '      [IO.Directory]::Move($failedDir, $installDir)',
+    '      $appQuarantined = $false',
+    '    }',
+    '    Install-SnapshotInPlace $stagingDir $installDir',
+    '    [IO.Directory]::Delete($stagingDir, $true)',
+    '  }',
     '  $stagingCreated = $false',
     '  if ($databasePath -and ($databaseBackupPath -or $databaseOriginallyAbsent)) {',
     '    $databaseQuarantined = $true',
@@ -363,6 +393,13 @@ export function launchWindowsFullRollback(
   const scriptPath = path.join(directory, `rollback-script-${handshakeId}.ps1`)
   fs.writeFileSync(scriptPath, finalScript, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
   const encoded = Buffer.from(buildWindowsRollbackFileLoader(scriptPath, finalScriptSha256), 'utf16le').toString('base64')
+  const workDir = powershellLiteral(path.dirname(resolveTargetPath(options.logPath)))
+  // DETACHED_PROCESS makes powershell.exe exit 0 before -EncodedCommand runs.
+  // An attached launcher starts a hidden helper that still runs after Electron exits.
+  const launchCommand = [
+    `$helper = Start-Process -WindowStyle Hidden -PassThru -FilePath powershell.exe -WorkingDirectory ${workDir} -ArgumentList @('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand','${encoded}')`,
+    '[Console]::Out.WriteLine($helper.Id)',
+  ].join('; ')
   return new Promise((resolve, reject) => {
     const child = spawn(
       'powershell.exe',
@@ -370,18 +407,33 @@ export function launchWindowsFullRollback(
         '-NoLogo',
         '-NoProfile',
         '-NonInteractive',
-        '-EncodedCommand',
-        encoded,
+        '-Command',
+        launchCommand,
       ],
       {
         cwd: path.dirname(resolveTargetPath(options.logPath)),
-        detached: true,
-        stdio: 'ignore',
+        stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       },
     )
     let settled = false
     let spawned = false
+    let helperPid: number | undefined
+    let stdoutBuf = ''
+    let stderrBuf = ''
+    child.stdout?.setEncoding('utf8')
+    child.stderr?.setEncoding('utf8')
+    const capturePid = () => {
+      const match = stdoutBuf.match(/(\d+)/)
+      if (match) helperPid = Number(match[1])
+    }
+    child.stdout?.on('data', (chunk: string) => {
+      stdoutBuf += chunk
+      capturePid()
+    })
+    child.stderr?.on('data', (chunk: string) => {
+      stderrBuf += chunk
+    })
     let pollTimer: NodeJS.Timeout | undefined
     let timeoutTimer: NodeJS.Timeout | undefined
     const cleanUp = () => {
@@ -396,13 +448,13 @@ export function launchWindowsFullRollback(
       if (settled) return
       settled = true
       cleanUp()
-      // A readiness failure must not keep Electron alive; detach only after readiness or failure.
       try { child.unref() } catch {}
       if (error) reject(error)
-      else resolve(child.pid)
+      else resolve(helperPid)
     }
     const checkStatus = (acceptReady = true) => {
       if (!spawned || settled) return
+      capturePid()
       let status: WindowsRollbackHelperStatus
       try {
         status = JSON.parse(fs.readFileSync(helperStatusPath, 'utf8')) as WindowsRollbackHelperStatus
@@ -413,7 +465,11 @@ export function launchWindowsFullRollback(
       }
       if (status.token !== helperStatusToken || status.candidateScriptSha256 !== finalScriptSha256) {
         finish(new Error('Windows rollback helper readiness token did not match'))
-      } else if (typeof child.pid !== 'number' || status.processId !== child.pid) {
+      } else if (status.status === 'failed') {
+        finish(new Error(`Windows rollback helper failed before readiness: ${String(status.message || 'unknown preflight failure')}`))
+      } else if (typeof helperPid !== 'number') {
+        return
+      } else if (status.processId !== helperPid) {
         finish(new Error('Windows rollback helper process identity did not match'))
       } else if (status.status === 'ready') {
         if (!acceptReady) return
@@ -421,7 +477,7 @@ export function launchWindowsFullRollback(
           const authorizationPath = `${helperAuthorizationPath}.${process.pid}.tmp`
           fs.writeFileSync(
             authorizationPath,
-            JSON.stringify({ state: 'authorized', token: helperStatusToken, candidateScriptSha256: finalScriptSha256, processId: child.pid }),
+            JSON.stringify({ state: 'authorized', token: helperStatusToken, candidateScriptSha256: finalScriptSha256, processId: helperPid }),
             { encoding: 'utf8', mode: 0o600, flag: 'wx' },
           )
           fs.renameSync(authorizationPath, helperAuthorizationPath)
@@ -429,20 +485,25 @@ export function launchWindowsFullRollback(
         } catch (error) {
           finish(new Error(`Could not authorize Windows rollback helper after readiness: ${(error as Error).message}`))
         }
-      } else if (status.status === 'failed') {
-        finish(new Error(`Windows rollback helper failed before readiness: ${String(status.message || 'unknown preflight failure')}`))
       } else {
         finish(new Error(`Windows rollback helper reported an unknown readiness state: ${String(status.status)}`))
       }
     }
+    const launcherFailed = (code: number | null, signal: NodeJS.Signals | null) => {
+      capturePid()
+      if (code === 0 && typeof helperPid === 'number') return
+      checkStatus(false)
+      if (!settled) {
+        const detail = stderrBuf.trim()
+        finish(new Error(`Windows rollback helper exited before readiness (code ${String(code)}, signal ${String(signal)}${detail ? `: ${detail}` : ''})`))
+      }
+    }
     const onError = (error: Error) => finish(new Error(`Could not launch Windows rollback helper: ${error.message}`))
     const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
-      checkStatus(false)
-      if (!settled) finish(new Error(`Windows rollback helper exited before readiness (code ${String(code)}, signal ${String(signal)})`))
+      launcherFailed(code, signal)
     }
     const onClose = (code: number | null, signal: NodeJS.Signals | null) => {
-      checkStatus(false)
-      if (!settled) finish(new Error(`Windows rollback helper closed before readiness (code ${String(code)}, signal ${String(signal)})`))
+      launcherFailed(code, signal)
     }
     const onSpawn = () => {
       spawned = true

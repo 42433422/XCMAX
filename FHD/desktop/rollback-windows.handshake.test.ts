@@ -41,13 +41,24 @@ const nextOptions = (): WindowsRollbackLaunchOptions => {
   }
 }
 
-function installSpawnMock(onSpawn: (child: EventEmitter & { pid: number; unref: ReturnType<typeof vi.fn> }, args: readonly string[], options: unknown) => void) {
-  const child = Object.assign(new EventEmitter(), { pid: 45678, unref: vi.fn() })
+function installSpawnMock(onSpawn: (child: EventEmitter & { pid: number; unref: ReturnType<typeof vi.fn>; stdout: EventEmitter }, args: readonly string[], options: unknown) => void) {
+  const stdout = new EventEmitter()
+  const stderr = new EventEmitter()
+  const child = Object.assign(new EventEmitter(), {
+    pid: 45678,
+    unref: vi.fn(),
+    stdout: Object.assign(stdout, { setEncoding: vi.fn() }),
+    stderr: Object.assign(stderr, { setEncoding: vi.fn() }),
+  })
   spawnMock.mockImplementation(((_command: unknown, args: readonly string[], options: unknown) => {
     onSpawn(child, args, options)
     return child as unknown as ChildProcess
   }) as typeof spawn)
   return child
+}
+
+function publishHelperPid(child: { stdout: EventEmitter; pid: number }) {
+  child.stdout.emit('data', `${child.pid}\n`)
 }
 
 function capturedScript(directory: string) {
@@ -63,7 +74,9 @@ function capturedScript(directory: string) {
   const statusPath = readLiteral('helperStatusPath')
   const token = readLiteral('helperStatusToken')
   const args = spawnMock.mock.calls.at(-1)?.[1] as string[]
-  const loader = Buffer.from(args[4], 'base64').toString('utf16le')
+  const encoded = String(args.at(-1)).match(/-EncodedCommand','([A-Za-z0-9+/=]+)'/)?.[1]
+  expect(encoded).toBeDefined()
+  const loader = Buffer.from(encoded!, 'base64').toString('utf16le')
   const candidateScriptSha256 = loader.match(/-ne '([0-9a-f]{64})'/i)?.[1]
   expect(candidateScriptSha256).toBe(createHash('sha256').update(script).digest('hex'))
   return { script, scriptPath, statusPath, token, candidateScriptSha256: candidateScriptSha256! }
@@ -121,7 +134,10 @@ describe('Windows rollback launcher handshake', () => {
           candidateScriptSha256: record.candidateScriptSha256,
           message: '', processId: child.pid,
         })
-        queueMicrotask(() => child.emit('spawn'))
+        queueMicrotask(() => {
+          publishHelperPid(child)
+          child.emit('spawn')
+        })
       })
       await expect(launchWindowsFullRollback(nextOptions(), 500)).resolves.toBe(45678)
       expect(vi.getTimerCount()).toBe(0)
@@ -141,11 +157,12 @@ describe('Windows rollback launcher handshake', () => {
     }
   })
 
-  it('preserves detached hidden PowerShell launch contract and authorizes matching ready identity', async () => {
+  it('starts a hidden helper outside DETACHED_PROCESS and authorizes matching ready identity', async () => {
     let details: { script: string; statusPath: string; token: string; candidateScriptSha256: string } | undefined
     const child = installSpawnMock((helper, args, launchOptions) => {
       details = capturedScript((launchOptions as { cwd: string }).cwd)
       setImmediate(() => {
+        publishHelperPid(helper)
         helper.emit('spawn')
         setTimeout(() => statusRecord(details!.statusPath, {
           status: 'ready', token: details!.token,
@@ -153,12 +170,14 @@ describe('Windows rollback launcher handshake', () => {
           message: '', processId: helper.pid,
         }), 5)
       })
-      expect(args.slice(0, 4)).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand'])
+      expect(args.slice(0, 4)).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-Command'])
+      expect(String(args[4])).toContain('Start-Process -WindowStyle Hidden -PassThru')
     })
     const options = nextOptions()
     await expect(launchWindowsFullRollback(options, 500)).resolves.toBe(child.pid)
-    const launchOptions = spawnMock.mock.calls[0]?.[2] as { detached: boolean; stdio: string; windowsHide: boolean }
-    expect(launchOptions).toMatchObject({ detached: true, stdio: 'ignore', windowsHide: true })
+    const launchOptions = spawnMock.mock.calls[0]?.[2] as { detached?: boolean; stdio: string[]; windowsHide: boolean }
+    expect(launchOptions.detached).toBeUndefined()
+    expect(launchOptions).toMatchObject({ stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
     const authorizationName = fs.readdirSync(path.dirname(options.logPath)).find((name) => name.startsWith('rollback-authorize-'))
     expect(authorizationName).toBeDefined()
     const authorization = JSON.parse(fs.readFileSync(path.join(path.dirname(options.logPath), authorizationName!), 'utf8'))
@@ -175,6 +194,7 @@ describe('Windows rollback launcher handshake', () => {
     installSpawnMock((child, _args, launchOptions) => {
       const record = capturedScript((launchOptions as { cwd: string }).cwd)
       setImmediate(() => {
+        publishHelperPid(child)
         child.emit('spawn')
         setTimeout(() => statusRecord(record.statusPath, {
           status: 'ready', token: record.token,
