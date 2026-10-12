@@ -14,6 +14,11 @@ on:
         description: "Exact 40-character source SHA embedded in the candidate"
         required: true
         type: string
+      modes:
+        description: "JSON array of Clean, Upgrade, Gui, Recovery, Rollback"
+        required: false
+        default: '["Clean","Upgrade","Gui","Recovery"]'
+        type: string
 
 permissions:
   contents: read
@@ -32,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [Clean, Upgrade, Gui, Recovery]
+        mode: ${{ fromJson(inputs.modes) }}
     defaults:
       run:
         working-directory: FHD
@@ -51,17 +56,17 @@ jobs:
           github-token: ${{ github.token }}
           path: FHD/candidate
       - name: Fetch immutable old installer for upgrade
-        if: matrix.mode == 'Upgrade'
+        if: matrix.mode == 'Upgrade' || matrix.mode == 'Rollback'
         shell: pwsh
         run: |
           $url = 'https://xiu-ci.com/xcagi-v1.0.0.1/XCAGI-Enterprise-Setup-1.0.0.1-x64-macalign.exe'
           Invoke-WebRequest -Uri $url -OutFile candidate/old-installer.exe -TimeoutSec 600
       - uses: actions/setup-node@v4
-        if: matrix.mode != 'Clean'
+        if: matrix.mode != 'Clean' && matrix.mode != 'Rollback'
         with:
           node-version: '22'
       - name: Install UI automation dependencies on the test runner
-        if: matrix.mode != 'Clean'
+        if: matrix.mode != 'Clean' && matrix.mode != 'Rollback'
         shell: pwsh
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
