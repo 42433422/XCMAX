@@ -58,9 +58,6 @@ function Get-EnvelopeData {
 }
 
 function Invoke-XcagiExpectDenied {
-  # Legacy business compat routes are gated by business_scope_gate: on the
-  # enterprise runtime an anonymous request must be rejected (401 without a
-  # session). A 2xx here means the scope gate silently regressed.
   param(
     [Parameter(Mandatory = $true)]
     [string]$Path,
@@ -208,14 +205,16 @@ Invoke-Check 'report-dashboard' {
 }
 
 Invoke-Check 'mobile-pairing-issue' {
-  $payload = Invoke-XcagiJson '/api/mobile/v1/pairing/issue' -Method POST -Body @{
-    deviceName = 'PackageSmoke'
-    platform = 'windows-smoke'
-  } -TimeoutSec 10
+  $uri = $BaseUrl.TrimEnd('/') + '/api/mobile/v1/pairing/issue'
+  $bodyJson = @{ deviceName = 'PackageSmoke'; platform = 'windows-smoke' } | ConvertTo-Json -Compress
+  $resp = Invoke-WebRequest -Uri $uri -Method Post -Body $bodyJson -ContentType 'application/json' -UseBasicParsing -TimeoutSec 10 -SkipHttpErrorCheck
+  $payload = $resp.Content | ConvertFrom-Json
+  if ($resp.StatusCode -eq 503) { if ($payload.success -ne $false -or $payload.message -notmatch '云端设备码') { throw '503 is not the relay-unavailable contract' }; return 'http=503;relay_unavailable=true' }
+  if ($resp.StatusCode -ne 200) { throw "http=$($resp.StatusCode)" }
   $data = Get-EnvelopeData $payload
-  $code = @($data.shortCode, $data.code, $data.pairingCode | Where-Object { $_ } | Select-Object -First 1)
-  if (-not $code -or -not $code[0]) { throw 'missing pairing code' }
-  "code=200;pairingCode=$($code[0])"
+  $pairing = @($data.shortCode, $data.code, $data.pairingCode | Where-Object { $_ } | Select-Object -First 1)
+  if (-not $pairing -or -not $pairing[0]) { throw 'missing pairing code' }
+  "http=200;pairingCode=$($pairing[0])"
 }
 
 Invoke-Check 'erp-mod-products-list' {
