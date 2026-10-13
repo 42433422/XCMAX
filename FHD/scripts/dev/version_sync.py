@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
-"""version 域 sync 脚本：从 VERSION.md 派生版本号到所有锚点文件。
+"""Sync VERSION.md into shared ANCHORS, including declared Dart parts.
 
-与 verify_version_anchors.py 共享 ANCHORS 列表，保证"检测的锚点 = 同步的锚点"。
-
-用法:
-  python scripts/dev/version_sync.py             # dry-run：打印将改的文件，不写盘
-  python scripts/dev/version_sync.py --apply     # 真写
-  python scripts/dev/version_sync.py --version 1.0.0.0 --apply  # 工具链版本自动映射为 1.0.0
-
-退出码: 0=一致/已同步 1=有改动需写盘（dry-run） 2=配置错误 3=执行错误
+Default: read-only preview; --apply writes; --version overrides the product target.
+Exit codes: 0 synced, 1 pending preview changes, 2 configuration error, 3 I/O error.
 """
 
 from __future__ import annotations
@@ -32,12 +26,7 @@ from scripts.dev.verify_version_anchors import (  # noqa: E402
 
 
 def _replace_version_in_text(text: str, pattern: str, new_version: str) -> tuple[str, bool]:
-    """用正则把匹配到的版本号替换为 new_version，保留前后缀。
-
-    只替换第一个匹配（count=1），与 verify_version_anchors.py 的 re.search 行为一致，
-    避免 `python_version = "3.11"` 被 `version = "..."` pattern 误匹配。
-    返回 (新文本, 是否有改动)。
-    """
+    """Replace only the first anchor match, preserving surrounding text."""
     changed = False
 
     def _repl(m: re.Match[str]) -> str:
@@ -65,11 +54,7 @@ def sync(
     override_version: str | None = None,
     override_toolchain_version: str | None = None,
 ) -> int:
-    """执行同步。
-
-    apply=True 真写盘，apply=False 只打印将做的改动。
-    override_version 指定时跳过 VERSION.md 解析（慎用）。
-    """
+    """Preview or write anchors; an explicit override supersedes VERSION.md."""
     if override_version:
         try:
             product_version = override_version
@@ -107,6 +92,13 @@ def sync(
             continue
         try:
             text = full_path.read_text(encoding="utf-8")
+            if full_path.suffix == ".dart" and not re.search(pattern, text):
+                for part in re.findall(r"part\s+'([^']+)'\s*;", text):
+                    part_path = full_path.parent / part
+                    part_text = part_path.read_text(encoding="utf-8")
+                    if re.search(pattern, part_text):
+                        full_path, text = part_path, part_text
+                        break
         except OSError as e:
             errors.append(f"{rel_path}: 读取失败 {e}")
             continue

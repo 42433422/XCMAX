@@ -23,7 +23,7 @@ spec = importlib.util.spec_from_file_location(
 )
 pair = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pair)
-SHA, VERSION = "a" * 40, "1.0.0.5"
+SHA, VERSION = "a" * 40, json.loads((FHD / "config/download_release.json").read_text())["version_lock"]
 
 
 def fixture(root, key, fault=None):

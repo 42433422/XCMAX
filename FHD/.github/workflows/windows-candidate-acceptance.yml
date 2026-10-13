@@ -1,5 +1,5 @@
 name: Windows Candidate Acceptance
-run-name: "Windows candidate ${{ inputs.candidate_sha }} · clean + upgrade"
+run-name: "Windows candidate ${{ inputs.candidate_sha }} · isolated lifecycle"
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ on:
         required: true
         type: string
       only:
-        description: "Empty runs the four install modes. Rollback runs only the failed-rollback mode."
+        description: "Empty runs all five install modes. Rollback runs only the failed-rollback mode."
         required: false
         default: ""
         type: string
@@ -33,7 +33,7 @@ jobs:
         env:
           ONLY: ${{ github.event.inputs.only }}
         run: |
-          if [ "$ONLY" = "Rollback" ]; then echo 'matrix=["Rollback"]' >> "$GITHUB_OUTPUT"; else echo 'matrix=["Clean","Upgrade","Gui","Recovery"]' >> "$GITHUB_OUTPUT"; fi
+          if [ "$ONLY" = "Rollback" ]; then echo 'matrix=["Rollback"]' >> "$GITHUB_OUTPUT"; else echo 'matrix=["Clean","Upgrade","Gui","Recovery","Rollback"]' >> "$GITHUB_OUTPUT"; fi
   isolated-install:
     needs: select-modes
     name: "${{ matrix.mode }} install on isolated Windows runner"
