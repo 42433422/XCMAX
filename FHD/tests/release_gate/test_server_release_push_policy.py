@@ -294,7 +294,19 @@ def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:
     )
 
     for workflow in (source, published):
+        events = workflow.get("on", workflow.get(True))
+        dispatch_input = events["workflow_dispatch"]["inputs"]["dispatch_evolution"]
+        assert dispatch_input["type"] == "boolean"
+        assert dispatch_input["default"] is True
         job = workflow["jobs"]["dispatch-evolution-after-cvm"]
+        assert job["needs"] == ["cvm-push-release"]
+        assert job["if"].split(" && ") == [
+            "github.event_name == 'workflow_dispatch'",
+            "github.ref == 'refs/heads/main'",
+            "inputs.push_to_cvm == true",
+            "inputs.dispatch_evolution == true",
+            "needs.cvm-push-release.result == 'success'",
+        ]
         assert job["steps"][0]["working-directory"] == "."
         assert "actions/checkout" not in str(job["steps"])
 
