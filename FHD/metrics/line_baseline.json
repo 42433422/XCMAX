@@ -1,5 +1,5 @@
 {
-  "lines": 2301455,
+  "lines": 2301451,
   "updated": "2026-10-13",
-  "note": "Deduplicate equivalent version-resolution branches and parameterize identical sync tests"
+  "note": "Ratchet combined verified main deployment fix and payment security closure"
 }
