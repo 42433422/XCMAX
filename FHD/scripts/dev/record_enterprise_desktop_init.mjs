@@ -26,19 +26,18 @@ async function step(id, action) {
   evidence.cases.push(record)
   try {
     record.actual = await action()
-    record.status = 'passed'
-    await page.screenshot({ path: path.join(dir, `${id}.png`), fullPage: true })
+    await page.screenshot({ path: path.join(dir, `${id}.png`), fullPage: true, timeout: 60000 })
     return record.actual
   } catch (error) {
-    record.status = 'failed'
+    record.failure_stage = Object.hasOwn(record, 'actual') ? 'screenshot' : 'business'
     record.error = String(error.stack || error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]')
     if (page) {
-      await page.screenshot({ path: path.join(dir, `${id}-failed.png`), fullPage: true }).catch(() => {})
+      await page.screenshot({ path: path.join(dir, `${id}-failed.png`), fullPage: true, timeout: 60000 }).catch(() => {})
       record.visible_buttons = await page.locator('button:visible').evaluateAll(buttons => buttons.map(b => ({ text: b.textContent, label: b.getAttribute('aria-label'), class: b.className, disabled: b.disabled }))).catch(() => []); const text = await page.locator('body').innerText().catch(() => '')
       fs.writeFileSync(path.join(dir, `${id}-ui.txt`), text.replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'))
     }
     throw error
-  } finally { record.finished_at = new Date().toISOString() }
+  } finally { record.status = record.error ? 'failed' : 'passed'; record.finished_at = new Date().toISOString() }
 }
 async function click(name, scope = page) { await scope.getByRole('button', { name, exact: typeof name === 'string' }).first().click() }
 async function nav(key, rootId) {
@@ -115,7 +114,7 @@ async function main() {
     await expect(page.locator('#lv-username')).toBeVisible({ timeout: 60000 })
     await page.locator('#lv-username').fill(process.env.XCAGI_TEST_USER || '')
     await page.locator('#lv-password').fill(process.env.XCAGI_TEST_PASS || '')
-    const waiting = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/auth/login')
+    const waiting = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/auth/login', { timeout: 60000 })
     await page.locator('.login-form button[type=submit]').click()
     const response = await waiting
     const body = await response.json()
