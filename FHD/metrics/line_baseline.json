@@ -1,5 +1,5 @@
 {
-  "lines": 2301455,
+  "lines": 2301454,
   "updated": "2026-10-13",
-  "note": "Deduplicate equivalent version-resolution branches and parameterize identical sync tests"
+  "note": "棘轮下调"
 }
