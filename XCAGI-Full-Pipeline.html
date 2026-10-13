@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XCAGI v10.0 · 六线全自动全景（2026-06-03 v5）</title>
+  <title>XCAGI · 六线架构与编制报告</title>
   <link
     href="https://fonts.googleapis.cn/css2?family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap"
     rel="stylesheet">
@@ -23,7 +23,7 @@
   <div class="nav" role="navigation" aria-label="主导航">
     <div class="nav-inner" role="tablist" aria-label="XCAGI 概览">
       <div class="nav-logo" aria-label="XCAGI 标志">XCAGI</div>
-      <span class="nav-version" aria-label="当前版本">v10.0 · 2026-06-03</span>
+      <span class="nav-version" aria-label="架构参考">架构参考 · 非运行状态</span>
       <button class="nav-btn active" type="button" role="tab" aria-current="page" aria-selected="true" id="nav-loops"
         data-tab="loops">六线全自动</button>
       <button class="nav-btn" type="button" role="tab" aria-selected="false" id="nav-workflow"
@@ -41,37 +41,13 @@
 
     <div class="section active" id="s-loops" role="tabpanel" aria-labelledby="nav-loops">
       <div class="hero">
-        <h1>六线全自动闭环 · v10.0</h1>
+        <h1>六线架构与编制报告</h1>
         <div class="sub">运营 · 获客 O1–O10 &nbsp;|&nbsp; 伙伴生态 B1–B5 &nbsp;|&nbsp; 制作 · 网站 P-W + Mod P-M + 软件 P-S
           &nbsp;|&nbsp; 共享 · 归档清理 R1–R4</div>
-        <div class="tagline">XCAGI v10.0 · 2026-06-03 · 4,251 Python · 1,478 Vue/TS · 1,052 Docs · <span
+        <div class="tagline">静态架构参考；编制覆盖以已加载报告为准 · <span
             id="hero-line-coverage-sub">—</span></div>
 
-        <div class="stats-strip-five stats-strip-six" aria-label="六线独立自动化率">
-          <div class="stat">
-            <div class="stat-num" style="color:var(--cyan)">88%</div>
-            <div class="stat-label">O-A 获客线</div>
-          </div>
-          <div class="stat">
-            <div class="stat-num" style="color:var(--green)">75%</div>
-            <div class="stat-label">O-B 伙伴线</div>
-          </div>
-          <div class="stat">
-            <div class="stat-num" style="color:var(--orange)">96%</div>
-            <div class="stat-label">P-W 网站线</div>
-          </div>
-          <div class="stat">
-            <div class="stat-num p">90%</div>
-            <div class="stat-label">P-M Mod 线</div>
-          </div>
-          <div class="stat">
-            <div class="stat-num y">78%</div>
-            <div class="stat-label">P-S 软件线</div>
-          </div>
-          <div class="stat">
-            <div class="stat-num" style="color:var(--blue)">85%</div>
-            <div class="stat-label">S-R 归档线</div>
-          </div>
+        <div class="stats-strip-five stats-strip-six" aria-label="编制与目录报告覆盖率">
           <div class="stat">
             <div class="stat-num g" id="hero-line-coverage-pct">—</div>
             <div class="stat-label">目录六线覆盖</div>
@@ -141,11 +117,8 @@
 
         <div class="ops-live-bar" id="ops-live-bar">
           <span class="ops-live-status warn" id="ops-live-badge">v10.0 静态</span>
-          <span class="ops-live-meta" id="ops-live-meta"><strong>代码库 v10.0 静态现状</strong> · 六线 88/75/96/90/78/85% · 52 AI
-            员工 + 5 生态伙伴员工 + 6 流程 Mod · 115 二级分区全编 · 4,251py · 681 端点 · 36 Mod · 402 测试 · 20 workflows
+          <span class="ops-live-meta" id="ops-live-meta"><strong>静态架构参考；实时健康待加载</strong>
             <br /><span style="font-size:10.5px;color:var(--muted)">
-              <b>v10.0 关键变更</b> · 移除 <code>event_primary_facade</code> 双入口 · O-B 伙伴线 5 步实装（已从预留转正）· 二级分区员工覆盖
-              <b>100%</b>（115/115 零空缺）· CI 门禁 fail_under 70→75
               <br />
               <span class="ops-live-endpoints" id="ops-live-endpoints" style="display:inline-flex">
                 <span class="ep-pill skip"
@@ -1299,7 +1272,7 @@
     <div class="section" id="s-workflow" role="tabpanel" aria-labelledby="nav-workflow">
       <div class="hero emp-wf-hero">
         <h1>员工工作流程 · 双轨合拢</h1>
-        <div class="sub">无人值守 = <b>时间轨</b>（cron 日根线）+ <b>事件轨</b>（任务/状态驱动）→ 在 08:00 Vibe 双清单与审批门汇合 · 52 人编制 × 六线路径绑定
+        <div class="sub"><b>时间轨</b>（cron 日根线）+ <b>事件轨</b>（任务/状态驱动）→ 在 08:00 Vibe 双清单与审批门汇合 · 计划编制 × 六线路径绑定
         </div>
         <div class="tagline" id="emp-wf-tagline">加载 release_train 与步骤覆盖…</div>
 
