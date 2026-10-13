@@ -4,8 +4,10 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { createHash } from 'node:crypto'
 import {
   buildWindowsRollbackScript,
+  buildWindowsRollbackFileLoader,
   type WindowsRollbackLaunchOptions,
 } from './rollback-windows.js'
 
@@ -20,6 +22,18 @@ afterEach(() => {
 })
 
 describe('Windows full application rollback helper', () => {
+  windowsIt.each([false, true])('checks the private script checksum before execution (tampered=%s)', async (tampered) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "xcagi-loader-'")); cleanupRoots.push(root)
+    const scriptPath = path.join(root, 'restore.ps1'), receipt = path.join(root, 'executed.txt')
+    const script = `[IO.File]::WriteAllText('${receipt.replaceAll("'", "''")}', 'executed')`
+    const digest = createHash('sha256').update(script).digest('hex')
+    fs.writeFileSync(scriptPath, tampered ? script + '\n# changed' : script)
+    const encoded = Buffer.from(buildWindowsRollbackFileLoader(scriptPath, digest), 'utf16le').toString('base64')
+    expect(encoded.length).toBeLessThan(32767)
+    let rejected = false
+    try { await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { timeout: 10000 }) } catch { rejected = true }
+    expect(rejected).toBe(tampered); expect(fs.existsSync(receipt)).toBe(!tampered)
+  })
   it('encodes paths and the applied record without interpolating raw JSON', () => {
     const options: WindowsRollbackLaunchOptions = {
       currentPid: 42,
@@ -40,10 +54,11 @@ describe('Windows full application rollback helper', () => {
     expect(script).toContain("'C:\\Users\\O''Brien\\XCAGI'")
     expect(script).toContain('FromBase64String')
     expect(script).not.toContain("window couldn't start")
-    expect(script).toContain('Move-Item -LiteralPath $stagingDir -Destination $installDir')
+    expect(script).toContain('[IO.Directory]::Move($stagingDir, $installDir)')
+    expect(script).toContain('Install-SnapshotInPlace $stagingDir $installDir')
   })
 
-  windowsIt.each(['success', 'receipt-failure', 'marker-failure', 'retained-failure', 'retained-wal'])('keeps app and database consistent after %s', async (scenario) => {
+  windowsIt.each(['success', 'receipt-failure', 'marker-failure', 'retained-failure', 'retained-wal', 'retained-journal'])('keeps app and database consistent after %s', async (scenario) => {
     const failed = scenario !== 'success'
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-windows-rollback-'))
     cleanupRoots.push(root)
@@ -75,6 +90,7 @@ describe('Windows full application rollback helper', () => {
     const retained = path.join(`${installDir}.xcagi-failed`, 'XCAGI.exe')
     if (scenario === 'retained-failure') { fs.mkdirSync(path.dirname(retained)); fs.writeFileSync(retained, 'prior-failure') }
     if (scenario === 'retained-wal') fs.writeFileSync(`${databasePath}.xcagi-failed-wal`, 'prior-wal')
+    if (scenario === 'retained-journal') fs.writeFileSync(`${databasePath}.xcagi-failed-journal`, 'prior-journal')
 
     const options: WindowsRollbackLaunchOptions = {
       currentPid: 2_000_000_000,
@@ -96,7 +112,12 @@ describe('Windows full application rollback helper', () => {
       },
     }
     const script = buildWindowsRollbackScript(options)
-    const encoded = Buffer.from(script, 'utf16le').toString('base64')
+    const scriptPath = path.join(dataDir, 'rollback-helper-test.ps1')
+    fs.writeFileSync(scriptPath, script, 'utf8')
+    const scriptSha256 = createHash('sha256').update(script).digest('hex')
+    const loader = buildWindowsRollbackFileLoader(scriptPath, scriptSha256)
+    const encoded = Buffer.from(loader, 'utf16le').toString('base64')
+    expect(encoded.length).toBeLessThan(32767)
     let executionError = ''
     try {
       await execFileAsync(
@@ -105,8 +126,6 @@ describe('Windows full application rollback helper', () => {
           '-NoLogo',
           '-NoProfile',
           '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
           '-EncodedCommand',
           encoded,
         ],
@@ -131,5 +150,6 @@ describe('Windows full application rollback helper', () => {
     if (scenario === 'marker-failure') expect(fs.existsSync(appliedPath)).toBe(false)
     if (scenario === 'retained-failure') expect(fs.readFileSync(retained, 'utf8')).toBe('prior-failure')
     if (scenario === 'retained-wal') expect(fs.readFileSync(`${databasePath}.xcagi-failed-wal`, 'utf8')).toBe('prior-wal')
+    if (scenario === 'retained-journal') expect(fs.readFileSync(`${databasePath}.xcagi-failed-journal`, 'utf8')).toBe('prior-journal')
   }, 60_000)
 })

@@ -61,7 +61,15 @@ def test_configured_restore_approval_restores_wal_and_retains_audit(
                 "create table ai_action_audit(actor text, action text, payload text)"
             )
         with sessions() as db:
-            db.add(User(id=41, username="configured-restore", password="test"))
+            db.add(
+                User(
+                    id=41,
+                    username="configured-restore",
+                    password="test",
+                    market_user_id=41,
+                    tenant_id=1,
+                )
+            )
             db.add(
                 ApprovalFlow(id=1, flow_key="configured-restore", flow_name="Configured restore")
             )
@@ -194,14 +202,13 @@ def test_configured_restore_approval_restores_wal_and_retains_audit(
                 else ["restore authorized"]
             )
             assert all(record.approver_id == 41 for record in records)
-            assert db.execute(text("select count(*) from ai_action_audit")).scalar() == 1
+            assert db.execute(text("select count(*) from ai_action_audit")).scalar() == (
+                2 if case == "multi" else 1
+            )
         with sqlite3.connect(live) as reopened:
             assert reopened.execute("pragma integrity_check").fetchall() == [("ok",)]
     finally:
         engine.dispose()
-
-
-# ========================= _allow_x_user_id_header ======================
 
 
 class TestAllowXUserIdHeader:
@@ -218,9 +225,6 @@ class TestAllowXUserIdHeader:
         assert _allow_x_user_id_header() is False
 
 
-# ========================= _generate_request_no ==========================
-
-
 class TestGenerateRequestNo:
     def test_format(self):
         no = _generate_request_no()
@@ -230,9 +234,6 @@ class TestGenerateRequestNo:
     def test_uniqueness(self):
         nos = {_generate_request_no() for _ in range(20)}
         assert len(nos) == 20
-
-
-# ========================= _node_query_for_user ==========================
 
 
 class TestNodeQueryForUser:
@@ -270,9 +271,6 @@ class TestNodeQueryForUser:
         assert _node_query_for_user(node, 1) is False
 
 
-# ========================= _next_node ===================================
-
-
 class TestNextNode:
     def test_finds_next(self):
         nodes = [Mock(node_order=1), Mock(node_order=3), Mock(node_order=5)]
@@ -287,9 +285,6 @@ class TestNextNode:
     def test_empty_list(self):
         result = _next_node([], 0)
         assert result is None
-
-
-# ========================= _normalize_statuses ==========================
 
 
 class TestNormalizeStatuses:
@@ -324,9 +319,6 @@ class TestNormalizeStatuses:
         assert result == list(_FINAL_STATUSES)
 
 
-# ========================= _request_to_dict ==============================
-
-
 class TestRequestToDict:
     def test_without_records(self):
         mock_req = Mock()
@@ -345,9 +337,6 @@ class TestRequestToDict:
         result = _request_to_dict(mock_req, include_records=True)
         assert "records" in result
         assert len(result["records"]) == 1
-
-
-# ========================= _resolve_actor ================================
 
 
 class TestResolveActor:

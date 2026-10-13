@@ -51,6 +51,12 @@ on:
         default: ""
         type: string
 
+# CI 加速：同一 PR 的旧提交自动取消（P1-4）；push/tag/schedule/dispatch 每次
+# 独立分组且 cancel-in-progress=false —— 正式发布、主线、夜间全量永不误取消。
+concurrency:
+  group: ci-cd-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   PYTHON_VERSION: "3.11"
   REGISTRY: ghcr.io
@@ -153,22 +159,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-          fetch-depth: 0
+          # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
+          fetch-depth: 1
       - name: Classify changed paths (macOS)
         id: c
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category macos \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
       - name: Classify changed paths (Windows)
         id: w
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category windows \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
 
   backend-test:
-    needs: guard-temp-scripts
+    # P0 快速失败（2026-10-12）：SSOT 门禁 ~53s 出结论，未过不启动 27 分钟重测试。
+    # SSOT 失败时本 job 为 skipped；SSOT 本身是 required check，PR 依旧被阻断，结论不丢失。
+    needs: [guard-temp-scripts, ssot-drift-gate]
     runs-on: ubuntu-latest
     outputs:
       skip: ${{ steps.paths.outputs.skip }}
@@ -187,12 +198,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-          fetch-depth: 0
+          # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
+          fetch-depth: 1
 
       - name: Classify changed paths (unified classifier)
         id: paths
         if: github.event_name == 'pull_request'
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category backend \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
@@ -315,20 +328,6 @@ jobs:
         # 注意：暂不追加 --peak-floor —— 历史峰值与当前实测差距 > 0.5pt，启用即全红；
         # 启用条件见 scripts/dev/guard_coverage_floor.py docstring。
 
-      # Codecov policy: optional until CODECOV_TOKEN is in repo secrets
-      # (Settings → Secrets and variables → Actions). Without token this step is
-      # best-effort (continue-on-error); coverage.xml + htmlcov/ remain local SSOT.
-      - name: Upload coverage report
-        if: steps.paths.outputs.skip != 'true'
-        continue-on-error: true
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
-          flags: backend
-          name: xcagi-backend
-          fail_ci_if_error: false
-
       # 行为覆盖率诚实化（Delta A）：排除 coverage_ramp 注水 stub 后的真实行为口径。
       # 这是后端覆盖率门禁的唯一硬 gate（--behavior --require-backend），回退即阻断。
       - name: Behavior coverage gate (排除 coverage_ramp stub，硬门禁)
@@ -350,7 +349,9 @@ jobs:
           python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
 
   frontend-test:
-    needs: guard-temp-scripts
+    # P0 快速失败（2026-10-12）：SSOT 门禁 ~53s 出结论，未过不启动 27 分钟重测试。
+    # SSOT 失败时本 job 为 skipped；SSOT 本身是 required check，PR 依旧被阻断，结论不丢失。
+    needs: [guard-temp-scripts, ssot-drift-gate]
     runs-on: ubuntu-latest
     outputs:
       skip: ${{ steps.paths.outputs.skip }}
@@ -358,12 +359,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-          fetch-depth: 0
+          # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
+          fetch-depth: 1
 
       - name: Classify changed paths (unified classifier)
         id: paths
         if: github.event_name == 'pull_request'
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category frontend \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
@@ -390,11 +393,8 @@ jobs:
         working-directory: FHD/frontend
         run: npm run lint
 
-      - name: Run unit tests
-        if: steps.paths.outputs.skip != 'true'
-        working-directory: FHD/frontend
-        run: npm run test
-
+      # 2026-10-12 CI 加速：与 test:coverage 同一测试集合（run 38164763655 实测两次均
+      # 641 test files），只跑带覆盖率的一次，省 ~240s；覆盖率只升不降语义不变。
       - name: Run unit tests with coverage
         if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
