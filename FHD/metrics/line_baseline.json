@@ -1,5 +1,5 @@
 {
-  "lines": 2301454,
+  "lines": 2301451,
   "updated": "2026-10-13",
-  "note": "Remove duplicate payment test defaults while fixing release-blocking Spring dependencies and verifying both PostgreSQL versions"
+  "note": "Ratchet combined verified main deployment fix and payment security closure"
 }
