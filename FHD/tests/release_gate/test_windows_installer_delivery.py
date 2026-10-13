@@ -52,6 +52,9 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert job["runs-on"] == "windows-latest"
     assert "inputs.windows_installer_only == true" in job["if"]
     assert "inputs.windows_installer_only != true" in workflow["jobs"]["release-preflight"]["if"]
+    assert "inputs.candidate_only != true" in workflow["jobs"]["release-preflight"]["if"]
+    runs = "\n".join(step.get("run", "") for step in job["steps"])
+    assert "Candidate must bind to the selected main SHA" in runs
     text = yaml.safe_dump(job)
     assert "Partial signing configuration" in text
     assert "test-windows-signature-policy.ps1" in text
@@ -69,6 +72,14 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert all(path.startswith("FHD/delivery/") and not path.endswith("/") for path in paths)
     assert paths[-1] == "FHD/delivery/delivery-receipt.json"
     assert "sunbird-seed" not in upload["with"]["path"]
+    publish = workflow["jobs"]["publish-interim-windows-pointer"]
+    assert "inputs.candidate_only != true" in publish["if"]
+    assert "inputs.candidate_run_id != ''" in publish["if"]
+    assert "result == 'success'" not in publish["if"]
+    runs = "\n".join(step.get("run", "") for step in publish["steps"])
+    assert "for mode in Clean Upgrade Gui Recovery Rollback; do" in runs
+    acceptance = (ROOT / ".github/workflows/windows-candidate-acceptance.yml").read_text()
+    assert '["Clean","Upgrade","Gui","Recovery","Rollback"]' in acceptance
 
 
 def test_unsigned_opt_in_never_accepts_invalid_signatures():
@@ -125,3 +136,44 @@ def test_standard_installer_refuses_customer_seed_before_building():
     assert guard < setup
     assert 'throw "Customer seed embedding is retired.' in script[guard:setup]
     assert "-p:SunbirdSeedZipPath=" not in script
+
+
+def test_frozen_promotion_accepts_real_mode_results_and_rejects_failures(tmp_path):
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release-desktop.yml").read_text())
+    steps = workflow["jobs"]["publish-interim-windows-pointer"]["steps"]
+    script = next(
+        s["run"]
+        for s in steps
+        if s.get("name") == "Verify all five frozen candidate acceptance modes"
+    )
+    script = script.replace("${{ inputs.release_sha }}", "a" * 40)
+    (tmp_path / "delivery").mkdir()
+    (tmp_path / "delivery/delivery-receipt.json").write_text(json.dumps({"sha256": "b" * 64}))
+    results = {
+        "Clean": "passed",
+        "Upgrade": "passed",
+        "Gui": "gui_regression_passed",
+        "Recovery": "gui_recovery_regression_passed",
+        "Rollback": "rollback_passed",
+    }
+    for mode, result in results.items():
+        path = tmp_path / "acceptance" / f"windows-candidate-evidence-{mode}-{'a' * 40}"
+        path.mkdir(parents=True)
+        (path / "acceptance.json").write_text(
+            json.dumps(
+                {
+                    "mode": mode,
+                    "result": result,
+                    "candidate_sha": "a" * 40,
+                    "candidate_sha256": "b" * 64,
+                    "checks": [{"passed": True}],
+                }
+            )
+        )
+    command = f'export RUNNER_TEMP="{tmp_path}";\n{script}'
+    assert subprocess.run(["bash", "-eu", "-c", command], capture_output=True).returncode == 0
+    for path in (tmp_path / "acceptance").glob("*/acceptance.json"):
+        original = path.read_text()
+        path.write_text(original.replace('"passed": true', '"passed": false'))
+        assert subprocess.run(["bash", "-eu", "-c", command], capture_output=True).returncode != 0
+        path.write_text(original)
