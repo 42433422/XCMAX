@@ -195,7 +195,7 @@ describe('Windows full application rollback helper', () => {
     if (!['missing', 'log-only'].includes(scenario)) fs.writeFileSync(path.join(data, 'rollback-applied.last.json'), JSON.stringify(receipt))
     if (scenario === 'malformed-json') fs.writeFileSync(path.join(data, 'rollback-applied.last.json'), '{bad json')
     if (scenario === 'marker') fs.writeFileSync(path.join(data, 'rollback-marker.json'), '{}')
-    // Run the actual collector after the one-shot file has already disappeared, one deterministic polling iteration.
+    // Run the real collector after consumption; strip inherited PS7 module paths from the PS5.1 child environment below.
     const source = fs.readFileSync(path.resolve('../scripts/package/accept-windows-candidate.ps1'), 'utf8')
     const start = source.indexOf("    $infoPath = Join-Path $installRoot 'resources\\build-info.json'", source.indexOf('function Invoke-FailedRollback'))
     expect(start).toBeGreaterThan(0)
@@ -209,7 +209,7 @@ describe('Windows full application rollback helper', () => {
       `$before='${createHash('sha256').update('original').digest('hex')}'; $marker=${quote(JSON.stringify(marker))} | ConvertFrom-Json\n` + `try {\n${body}\n} finally {\n${capture}\n}`
     const scriptPath = path.join(root, 'check.ps1'); fs.writeFileSync(scriptPath, script)
     let error = ''
-    try { await execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-File', scriptPath], { timeout: 10000 }) } catch (caught) { error = String(caught) }
+    try { await execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-File', scriptPath], { timeout: 10000, env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'PSMODULEPATH')) }) } catch (caught) { error = String(caught) }
     if (scenario === 'consumed') {
       expect(error).toBe('')
     } else expect(error).toContain(scenario === 'wrong-build' || scenario === 'marker' ? 'rollback.restored_build' : scenario === 'dirty-db' ? 'rollback.database_hash' : 'rollback.applied_record')
