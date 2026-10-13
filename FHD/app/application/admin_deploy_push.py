@@ -76,15 +76,15 @@ def _local_git_sha(root: Path) -> str:
 def _local_version(root: Path) -> str:
     pyproject = root / "pyproject.toml"
     if not pyproject.is_file():
-        return "1.0.0.1"
+        return ""
     try:
         import re
 
         text = pyproject.read_text(encoding="utf-8")
         m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
-        return m.group(1) if m else "1.0.0.1"
+        return m.group(1) if m else ""
     except _DEPLOY_ERRORS:
-        return "1.0.0.1"
+        return ""
 
 
 def _read_local_manifest(root: Path) -> dict[str, Any] | None:
@@ -157,8 +157,6 @@ def check_deploy_updates(channel: str = CHANNEL_DEFAULT) -> dict[str, Any]:
     local_pack_sha = str((local_manifest or {}).get("git_sha") or "")
     needs_pack = local_sha not in ("local", "") and local_sha != local_pack_sha
     needs_push = bool(local_sha not in ("local", "") and hub_sha != local_sha)
-    if not hub_sha and local_sha not in ("local", ""):
-        needs_push = True
 
     ent_deploy_sha = str(enterprise.get("deploy_sha256") or "")
     enterprise_pending = bool(hub_tar_sha and hub_tar_sha != ent_deploy_sha)
@@ -186,7 +184,7 @@ def check_deploy_updates(channel: str = CHANNEL_DEFAULT) -> dict[str, Any]:
             "needs_pack": needs_pack,
             "needs_push": needs_push,
             "enterprise_pending": enterprise_pending,
-            "up_to_date": not needs_push and not needs_pack,
+            "up_to_date": local_sha not in ("local", "") and not needs_push and not needs_pack,
         },
     }
 
@@ -351,7 +349,9 @@ async def _execute_deploy_job(job: DeployJob) -> None:
                 local_sha = snap2["admin_local"]["git_sha"]
                 hub_sha = hub.get("git_sha") or ""
                 step.detail = "update 站 " + (hub_sha or "?")
-                step.status = "done" if hub_sha == local_sha or not local_sha else "error"
+                step.status = (
+                    "done" if local_sha not in ("local", "") and hub_sha == local_sha else "error"
+                )
                 step.finished_at = time.time()
                 if step.status == "error":
                     raise RuntimeError("update 站 manifest 与本地 git 不一致")

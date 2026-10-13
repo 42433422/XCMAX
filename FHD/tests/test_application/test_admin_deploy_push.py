@@ -161,13 +161,13 @@ class TestReadLocalManifest:
 class TestLocalVersion:
     def test_no_pyproject(self, tmp_path):
         result = _local_version(tmp_path)
-        assert result == "1.0.0.1"
+        assert result == ""
 
     def test_pyproject_without_version(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text("[project]\nname = 'test'\n")
         result = _local_version(tmp_path)
-        assert result == "1.0.0.1"
+        assert result == ""
 
     def test_pyproject_with_version(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
@@ -179,7 +179,7 @@ class TestLocalVersion:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text("version = ")
         result = _local_version(tmp_path)
-        assert result == "1.0.0.1"
+        assert result == ""
 
 
 # ========================= _build_steps ======================================

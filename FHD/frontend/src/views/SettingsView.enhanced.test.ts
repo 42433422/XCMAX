@@ -219,10 +219,6 @@ vi.mock('@/api', () => ({
   ApiError: class ApiError extends Error {},
 }))
 
-vi.mock('../../package.json', () => ({
-  default: { version: '1.0.0' },
-}))
-
 /* ── global stubs ── */
 const globalStubs = {
   RouterLink: { template: '<a><slot /></a>' },
@@ -630,7 +626,7 @@ describe('SettingsView.vue – computed properties', () => {
   })
 
   it.each([
-    [undefined, '1.0.0'],
+    [undefined, '—'],
     [{ getAppIdentity: async () => ({ version: '1.0.0.5' }) }, '1.0.0.5'],
     [{ getAppIdentity: async () => ({}) }, '—'],
     [{ getAppIdentity: async () => { throw new Error('IPC unavailable') } }, '—'],
