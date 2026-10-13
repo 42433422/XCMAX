@@ -80,6 +80,14 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert "for mode in Clean Upgrade Gui Recovery Rollback; do" in runs
     acceptance = (ROOT / ".github/workflows/windows-candidate-acceptance.yml").read_text()
     assert '["Clean","Upgrade","Gui","Recovery","Rollback"]' in acceptance
+    assert "matrix.mode != 'Clean' && matrix.mode != 'Rollback'" not in acceptance
+    collector = (ROOT / "scripts/package/accept-windows-candidate.ps1").read_text(encoding="utf-8-sig")
+    rollback = collector.split("  if ($Mode -eq 'Rollback') {", 1)[1].split("  if ($Mode -eq 'Upgrade')", 1)[0]
+    assert "Run-Gui 'seed' (Join-Path $EvidenceDir 'old-gui')" in rollback
+    assert "Invoke-FailedRollback $oldAuth.tenant $oldGuiSeed" in rollback
+    assert "Run-Gui 'readback' (Join-Path $EvidenceDir 'rollback-gui') $seed" in collector
+    assert "@('Gui','Upgrade','Recovery','Rollback')" in collector
+
 
 
 def test_unsigned_opt_in_never_accepts_invalid_signatures():

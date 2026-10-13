@@ -11,7 +11,8 @@ import {
   type WindowsRollbackLaunchOptions,
 } from './rollback-windows.js'
 
-const windowsIt = process.platform === 'win32' ? it : it.skip
+const powershell = process.env.XCAGI_TEST_POWERSHELL || 'powershell.exe'
+const windowsIt = process.platform === 'win32' || process.env.XCAGI_TEST_POWERSHELL ? it : it.skip
 const cleanupRoots: string[] = []
 const execFileAsync = promisify(execFile)
 
@@ -31,7 +32,7 @@ describe('Windows full application rollback helper', () => {
     const encoded = Buffer.from(buildWindowsRollbackFileLoader(scriptPath, digest), 'utf16le').toString('base64')
     expect(encoded.length).toBeLessThan(32767)
     let rejected = false
-    try { await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { timeout: 10000 }) } catch { rejected = true }
+    try { await execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { timeout: 10000 }) } catch { rejected = true }
     expect(rejected).toBe(tampered); expect(fs.existsSync(receipt)).toBe(!tampered)
   })
   it('encodes paths and the applied record without interpolating raw JSON', () => {
@@ -56,10 +57,14 @@ describe('Windows full application rollback helper', () => {
     expect(script).not.toContain("window couldn't start")
     expect(script).toContain('[IO.Directory]::Move($stagingDir, $installDir)')
     expect(script).toContain('Install-SnapshotInPlace $stagingDir $installDir')
+    expect(script).toContain('[IO.Path]::ChangeExtension($appliedPath, ".last.json")')
+    expect(script).toContain('$receiptBytes = [IO.File]::ReadAllBytes($appliedPath)')
+    expect(script.indexOf('$receiptWrites += $write')).toBeLessThan(script.indexOf('Remove-Item -LiteralPath $markerPath -Force -ErrorAction Stop'))
+    expect(script.indexOf('$rollbackCommitted = $true')).toBeLessThan(script.indexOf('Start-Process -FilePath $appPath'))
   })
 
-  windowsIt.each(['success', 'receipt-failure', 'marker-failure', 'retained-failure', 'retained-wal', 'retained-journal'])('keeps app and database consistent after %s', async (scenario) => {
-    const failed = scenario !== 'success'
+  windowsIt.each(['success', 'success-prior', 'success-generated-operation', 'receipt-failure', 'durable-failure', 'durable-failure-prior', 'marker-failure', 'marker-failure-prior', 'retained-failure', 'retained-wal', 'retained-journal'])('keeps app and database consistent after %s', async (scenario) => {
+    const failed = !scenario.startsWith('success'), prior = scenario.endsWith('-prior')
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-windows-rollback-'))
     cleanupRoots.push(root)
     const installDir = path.join(root, 'XCAGI')
@@ -67,7 +72,8 @@ describe('Windows full application rollback helper', () => {
     const dataDir = path.join(root, 'data')
     const appPath = path.join(installDir, 'XCAGI.exe')
     const markerPath = path.join(dataDir, 'rollback-marker.json')
-    const appliedPath = path.join(dataDir, 'rollback-applied.json')
+    const appliedPath = path.join(dataDir, 'rollback-applied.json'), durablePath = path.join(dataDir, 'rollback-applied.last.json')
+    const previous = JSON.stringify({ operationId: 'prior-operation', fromVersion: 'prior-new', toVersion: 'prior-old' })
     const logPath = path.join(dataDir, 'rollback-helper.log')
     const databasePath = path.join(dataDir, 'data', 'xcagi.db')
     const databaseBackupPath = path.join(dataDir, 'backups', 'pre-migration.db')
@@ -80,13 +86,15 @@ describe('Windows full application rollback helper', () => {
     fs.writeFileSync(path.join(installDir, 'build.txt'), 'new-build')
     fs.writeFileSync(path.join(backupRoot, 'XCAGI.exe'), 'old-app')
     fs.writeFileSync(path.join(backupRoot, 'build.txt'), 'old-build')
-    if (scenario === 'marker-failure') fs.mkdirSync(markerPath)
-    fs.writeFileSync(scenario === 'marker-failure' ? path.join(markerPath, 'retained') : markerPath, '{}')
+    if (scenario.startsWith('marker-failure')) fs.mkdirSync(markerPath)
+    fs.writeFileSync(scenario.startsWith('marker-failure') ? path.join(markerPath, 'retained') : markerPath, '{}')
     fs.writeFileSync(databasePath, 'new-database')
     fs.writeFileSync(`${databasePath}-wal`, 'new-wal')
     fs.writeFileSync(`${databasePath}-shm`, 'new-shm')
     fs.writeFileSync(databaseBackupPath, 'old-database')
+    if (prior) { fs.writeFileSync(appliedPath, previous); if (!scenario.startsWith('durable-failure')) fs.writeFileSync(durablePath, previous) }
     if (scenario === 'receipt-failure') fs.mkdirSync(appliedPath)
+    if (scenario.startsWith('durable-failure')) { fs.mkdirSync(durablePath); fs.writeFileSync(path.join(durablePath, 'retained'), previous) }
     const retained = path.join(`${installDir}.xcagi-failed`, 'XCAGI.exe')
     if (scenario === 'retained-failure') { fs.mkdirSync(path.dirname(retained)); fs.writeFileSync(retained, 'prior-failure') }
     if (scenario === 'retained-wal') fs.writeFileSync(`${databasePath}.xcagi-failed-wal`, 'prior-wal')
@@ -106,11 +114,12 @@ describe('Windows full application rollback helper', () => {
       waitTimeoutSeconds: 5,
       applied: {
         appliedAt: '2026-07-16T00:00:00.000Z',
-        reason: 'integration test',
+        reason: 'integration test', operationId: 'current-operation',
         fromVersion: '1.0.0.0-new',
         toVersion: '1.0.0.0-old',
       },
     }
+    if (scenario === 'success-generated-operation') delete options.applied.operationId
     const script = buildWindowsRollbackScript(options)
     const scriptPath = path.join(dataDir, 'rollback-helper-test.ps1')
     fs.writeFileSync(scriptPath, script, 'utf8')
@@ -121,7 +130,7 @@ describe('Windows full application rollback helper', () => {
     let executionError = ''
     try {
       await execFileAsync(
-        'powershell.exe',
+        powershell,
         [
           '-NoLogo',
           '-NoProfile',
@@ -146,10 +155,65 @@ describe('Windows full application rollback helper', () => {
       if (failed) expect(fs.readFileSync(`${databasePath}-${suffix}`, 'utf8')).toBe(value)
     }
     if (failed) expect(executionError).not.toBe('')
-    else expect(JSON.parse(fs.readFileSync(appliedPath, 'utf8')).reason).toBe('integration test')
-    if (scenario === 'marker-failure') expect(fs.existsSync(appliedPath)).toBe(false)
+    else {
+      const raw = fs.readFileSync(appliedPath, 'utf8'), applied = JSON.parse(raw)
+      expect(applied).toMatchObject({ reason: 'integration test', fromVersion: '1.0.0.0-new', toVersion: '1.0.0.0-old' })
+      expect(applied.operationId).toMatch(scenario === 'success-generated-operation' ? /^[0-9a-f]{32}$/ : /^current-operation$/)
+      expect(Number.isFinite(Date.parse(applied.completedAt))).toBe(true)
+      expect(fs.readFileSync(durablePath, 'utf8')).toBe(raw)
+      fs.unlinkSync(appliedPath); expect(fs.readFileSync(durablePath, 'utf8')).toBe(raw)
+    }
+    if (failed && prior) expect(fs.readFileSync(appliedPath, 'utf8')).toBe(previous)
+    if (scenario.startsWith('marker-failure')) {
+      expect(fs.existsSync(appliedPath)).toBe(prior); expect(fs.existsSync(durablePath)).toBe(prior)
+      if (prior) expect(fs.readFileSync(durablePath, 'utf8')).toBe(previous)
+    }
+    if (scenario.startsWith('durable-failure')) {
+      expect(fs.existsSync(appliedPath)).toBe(prior); expect(fs.readFileSync(path.join(durablePath, 'retained'), 'utf8')).toBe(previous)
+    }
     if (scenario === 'retained-failure') expect(fs.readFileSync(retained, 'utf8')).toBe('prior-failure')
     if (scenario === 'retained-wal') expect(fs.readFileSync(`${databasePath}.xcagi-failed-wal`, 'utf8')).toBe('prior-wal')
     if (scenario === 'retained-journal') expect(fs.readFileSync(`${databasePath}.xcagi-failed-journal`, 'utf8')).toBe('prior-journal')
   }, 60_000)
+
+  windowsIt.each(['consumed', 'missing', 'log-only', 'malformed-json', 'missing-time', 'stale-operation', 'wrong-from', 'wrong-to', 'old-time', 'future-time', 'malformed-time', 'wrong-build', 'dirty-db', 'marker'])('collector independently rejects invalid evidence: %s', async (scenario) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-receipt-collector-')); cleanupRoots.push(root)
+    const install = path.join(root, 'app'), data = path.join(root, 'data'), evidence = path.join(root, 'evidence')
+    for (const dir of [path.join(install, 'resources'), data, evidence]) fs.mkdirSync(dir, { recursive: true })
+    const old = '2e6f03bf67b88965e450721e5b8432ab6395782b', now = new Date().toISOString()
+    fs.writeFileSync(path.join(install, 'resources', 'build-info.json'), JSON.stringify({ gitSha: scenario === 'wrong-build' ? 'candidate' : old }))
+    const database = path.join(data, 'xcagi.db'); fs.writeFileSync(database, scenario === 'dirty-db' ? 'dirty' : 'original')
+    const receipt = { operationId: 'this-operation', fromVersion: '1.0.0.6', toVersion: `1.0.0.1+${old.slice(0, 12)}`, reason: 'isolated startup failure', appliedAt: now, completedAt: now }
+    if (scenario === 'stale-operation') receipt.operationId = 'previous-operation'
+    if (scenario === 'wrong-from') receipt.fromVersion = 'unrelated-candidate'
+    if (scenario === 'wrong-to') receipt.toVersion = 'unrelated-old-build'
+    if (scenario === 'old-time') receipt.appliedAt = receipt.completedAt = '2000-01-01T00:00:00Z'
+    if (scenario === 'future-time') receipt.completedAt = '2099-01-01T00:00:00Z'
+    if (scenario === 'malformed-time') receipt.completedAt = 'not-a-date'
+    if (scenario === 'missing-time') delete (receipt as Partial<typeof receipt>).completedAt
+    if (scenario === 'log-only') fs.writeFileSync(path.join(data, 'rollback-helper.log'), 'full application rollback completed')
+    if (!['missing', 'log-only'].includes(scenario)) fs.writeFileSync(path.join(data, 'rollback-applied.last.json'), JSON.stringify(receipt))
+    if (scenario === 'malformed-json') fs.writeFileSync(path.join(data, 'rollback-applied.last.json'), '{bad json')
+    if (scenario === 'marker') fs.writeFileSync(path.join(data, 'rollback-marker.json'), '{}')
+    // Run the actual collector after the one-shot file has already disappeared, one deterministic polling iteration.
+    const source = fs.readFileSync(path.resolve('../scripts/package/accept-windows-candidate.ps1'), 'utf8')
+    const start = source.indexOf("    $infoPath = Join-Path $installRoot 'resources\\build-info.json'", source.indexOf('function Invoke-FailedRollback'))
+    expect(start).toBeGreaterThan(0)
+    const body = source.slice(start, source.indexOf('\n  } finally {', start)).replace('Start-Sleep -Seconds 2', '')
+    const capture = source.split('\n').find(line => line.includes("if ($appliedPath -and (Test-Path -LiteralPath $appliedPath -PathType Leaf))"))!
+    expect(capture).toContain('Copy-Item')
+    const quote = (value: string) => `'${value.replaceAll("'", "''")}'`
+    const marker = { operationId: 'this-operation', fromVersion: `1.0.0.1+${old.slice(0, 12)}`, toVersion: '1.0.0.6', preparedAt: new Date(Date.now() - 30_000).toISOString() }
+    const script = `$ErrorActionPreference='Stop'; function Check([bool]$ok,[string]$name,[string]$detail) { if (-not $ok) { throw $name } }\n` +
+      `$installRoot=${quote(install)}; $dataRoot=${quote(data)}; $EvidenceDir=${quote(evidence)}; $db=${quote(database)}; $deadline=Get-Date\n` +
+      `$before='${createHash('sha256').update('original').digest('hex')}'; $marker=${quote(JSON.stringify(marker))} | ConvertFrom-Json\n` + `try {\n${body}\n} finally {\n${capture}\n}`
+    const scriptPath = path.join(root, 'check.ps1'); fs.writeFileSync(scriptPath, script)
+    let error = ''
+    try { await execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-File', scriptPath], { timeout: 10000 }) } catch (caught) { error = String(caught) }
+    if (scenario === 'consumed') {
+      expect(error).toBe('')
+    } else expect(error).toContain(scenario === 'wrong-build' || scenario === 'marker' ? 'rollback.restored_build' : scenario === 'dirty-db' ? 'rollback.database_hash' : 'rollback.applied_record')
+    if (!['missing', 'log-only'].includes(scenario)) expect(fs.readFileSync(path.join(evidence, 'rollback-applied.last.json'), 'utf8')).toBe(scenario === 'malformed-json' ? '{bad json' : JSON.stringify(receipt))
+  }, 15000)
+
 })

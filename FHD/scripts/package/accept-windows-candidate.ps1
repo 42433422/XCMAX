@@ -34,7 +34,7 @@ function Install([string]$path, [string]$label) {
 }
 function Start-App([string]$label) {
   $launch = @{FilePath=(Join-Path $installRoot 'XCAGI.exe'); WorkingDirectory=$installRoot; PassThru=$true; WindowStyle='Hidden'}
-  if ($Mode -in @('Gui','Upgrade','Recovery')) { $launch.ArgumentList = @('--remote-debugging-port=9222') }
+  if ($Mode -in @('Gui','Upgrade','Recovery','Rollback')) { $launch.ArgumentList = @('--remote-debugging-port=9222') }
   $p = Start-Process @launch; $deadline = (Get-Date).AddMinutes(4)
   $health = $null; $status = $null
   while ((Get-Date) -lt $deadline) {
@@ -116,7 +116,7 @@ function Run-Gui([string]$phase, [string]$directory, [string]$seed = '') {
   & node (Join-Path $PSScriptRoot '../dev/record_enterprise_desktop_init.mjs'); Check ($LASTEXITCODE -eq 0) "normal_gui_$phase" 'normal UI must save and read back actual business records'
   return (Join-Path $env:XCAGI_GUI_EVIDENCE 'gui-business.json')
 }
-function Invoke-FailedRollback([string]$tenant) {
+function Invoke-FailedRollback([string]$tenant, [string]$seed) {
   $db = Join-Path $dataRoot 'data\xcagi.db'; Check (Test-Path -LiteralPath $db) 'rollback.database' 'pre-failure database exists'
   $before = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant(); $rollbackDir = Join-Path $dataRoot 'rollback'
   $backupRoot = Join-Path $rollbackDir 'windows-app-current'; New-Item -ItemType Directory -Force -Path $backupRoot | Out-Null
@@ -124,32 +124,41 @@ function Invoke-FailedRollback([string]$tenant) {
   $global:LASTEXITCODE = 0; $dbBackup = Join-Path $rollbackDir 'pre-xcagi.db'
   Copy-Item -LiteralPath $db -Destination $dbBackup -Force; Uninstall-OldApp
   Check (Test-Path -LiteralPath (Join-Path $backupRoot 'XCAGI.exe')) 'rollback.snapshot_kept' 'old snapshot survived uninstall'; Install $CandidatePath 'candidate'
+  $candidateBuild = Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw | ConvertFrom-Json
+  Check ($candidateBuild.gitSha -eq $CandidateSha -and $candidateBuild.version -eq $productVersion) 'rollback.candidate_build' "sha=$($candidateBuild.gitSha); version=$($candidateBuild.version)"
   $bytes = [IO.File]::ReadAllBytes($db); $bytes[$bytes.Length - 1] = $bytes[$bytes.Length - 1] -bxor 255
   [IO.File]::WriteAllBytes($db, $bytes)
   $dirty = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant(); Check ($dirty -ne $before) 'rollback.database_dirtied' "sha256=$dirty"
-  $marker = [ordered]@{ mode='windows-full'; fromVersion=('1.0.0' + '.1+' + '2e6f03bf67b88965e450721e5b8432ab6395782b'.Substring(0,12)); toVersion=$productVersion; preparedAt=(Get-Date).ToUniversalTime().ToString('o'); backendPath=(Join-Path $installRoot 'resources\backend\xcagi-backend.exe'); appPath=(Join-Path $installRoot 'XCAGI.exe'); appBackupRelPath='windows-app-current'; databasePath=$db; databaseBackupPath=$dbBackup }; $utf8 = New-Object System.Text.UTF8Encoding $false
+  $marker = [ordered]@{ operationId=[Guid]::NewGuid().ToString('N'); mode='windows-full'; fromVersion=('1.0.0' + '.1+' + '2e6f03bf67b88965e450721e5b8432ab6395782b'.Substring(0,12)); toVersion=$productVersion; preparedAt=(Get-Date).ToUniversalTime().ToString('o'); backendPath=(Join-Path $installRoot 'resources\backend\xcagi-backend.exe'); appPath=(Join-Path $installRoot 'XCAGI.exe'); appBackupRelPath='windows-app-current'; databasePath=$db; databaseBackupPath=$dbBackup }; $utf8 = New-Object System.Text.UTF8Encoding $false
   [IO.File]::WriteAllText((Join-Path $dataRoot 'rollback-marker.json'), ($marker | ConvertTo-Json -Compress), $utf8)
   $listener = New-Object System.Net.Sockets.TcpListener ([Net.IPAddress]::Parse('127.0.0.1'), 17500); $listener.Start()
   $helperLog = Join-Path $rollbackDir 'rollback-helper.log'
   try {
     Start-Process -FilePath (Join-Path $installRoot 'XCAGI.exe') -WorkingDirectory $installRoot -WindowStyle Hidden | Out-Null; $deadline = (Get-Date).AddMinutes(3)
-    $infoPath = Join-Path $installRoot 'resources\build-info.json'; $appliedPath = Join-Path $dataRoot 'rollback-applied.json'
-    $markerPath = Join-Path $dataRoot 'rollback-marker.json'; $restoredSha = ''
+    $infoPath = Join-Path $installRoot 'resources\build-info.json'; $appliedPath = Join-Path $dataRoot 'rollback-applied.last.json'
+    $markerPath = Join-Path $dataRoot 'rollback-marker.json'; $restoredSha = ''; $applied = $null
     do {
       Start-Sleep -Seconds 2
-      if ((Test-Path -LiteralPath $infoPath) -and -not (Test-Path -LiteralPath $markerPath) -and (Test-Path -LiteralPath $appliedPath)) {
+      if ((Test-Path -LiteralPath $infoPath) -and -not (Test-Path -LiteralPath $markerPath)) {
         $restoredSha = (Get-Content -LiteralPath $infoPath -Raw | ConvertFrom-Json).gitSha
       }
-    } while ($restoredSha -ne '2e6f03bf67b88965e450721e5b8432ab6395782b' -and (Get-Date) -lt $deadline)
+      if (Test-Path -LiteralPath $appliedPath) {
+        try { $applied = Get-Content -LiteralPath $appliedPath -Raw | ConvertFrom-Json } catch { Check $false 'rollback.applied_record' 'persistent receipt is unreadable' }
+      }
+    } while (($restoredSha -ne '2e6f03bf67b88965e450721e5b8432ab6395782b' -or $applied.operationId -ne $marker.operationId) -and (Get-Date) -lt $deadline)
     Check ($restoredSha -eq '2e6f03bf67b88965e450721e5b8432ab6395782b') 'rollback.restored_build' "gitSha=$restoredSha; marker=$(Test-Path -LiteralPath $markerPath); applied=$(Test-Path -LiteralPath $appliedPath)"; $after = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant()
-    Check ($after -eq $before) 'rollback.database_hash' "sha256=$after"; $applied = Get-Content -LiteralPath $appliedPath -Raw | ConvertFrom-Json
-    Check ($applied.toVersion -like ('1.0.0' + '.1+*')) 'rollback.applied_record' "from=$($applied.fromVersion); to=$($applied.toVersion); reason=$($applied.reason)"
+    Check ($after -eq $before) 'rollback.database_hash' "sha256=$after"
+    $validTimes = $false
+    try { $appliedAt = [DateTimeOffset]$applied.appliedAt; $completedAt = [DateTimeOffset]$applied.completedAt; $validTimes = $true } catch {}
+    Check ($validTimes -and $applied.operationId -eq $marker.operationId -and $applied.fromVersion -eq $marker.toVersion -and $applied.toVersion -eq $marker.fromVersion -and $applied.reason -and $appliedAt -ge [DateTimeOffset]$marker.preparedAt -and $completedAt -ge $appliedAt -and $completedAt -le [DateTimeOffset]::UtcNow) 'rollback.applied_record' "operation=$($applied.operationId); from=$($applied.fromVersion); to=$($applied.toVersion); completed=$($applied.completedAt)"
   } finally {
     try { $listener.Stop() } catch {}
+    if ($appliedPath -and (Test-Path -LiteralPath $appliedPath -PathType Leaf)) { Copy-Item -LiteralPath $appliedPath -Destination (Join-Path $EvidenceDir 'rollback-applied.last.json') -Force }
     if (Test-Path -LiteralPath $helperLog) { Copy-Item -LiteralPath $helperLog -Destination (Join-Path $EvidenceDir 'rollback-helper.log') -Force }
   }
   Stop-App; Start-Sleep -Seconds 2
   Stop-App; Start-App 'old'
+  Run-Gui 'readback' (Join-Path $EvidenceDir 'rollback-gui') $seed | Out-Null
   $back = Login 'rollback'; Check ($back.tenant -eq $tenant) 'rollback.same_enterprise' "tenant_sha256=$(Digest $back.tenant)"
 }
 try {
@@ -163,9 +172,9 @@ try {
   }
   if ($Mode -eq 'Rollback') {
     Check ((Get-FileHash -LiteralPath $OldPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $OldSha256) 'old_installer_hash' "sha256=$OldSha256"; Install $OldPath 'old'
-    Start-App 'old'; $oldAuth = Login 'old'
+    Start-App 'old'; $oldGuiSeed = Run-Gui 'seed' (Join-Path $EvidenceDir 'old-gui'); $oldAuth = Login 'old'
     Stop-App
-    Invoke-FailedRollback $oldAuth.tenant
+    Invoke-FailedRollback $oldAuth.tenant $oldGuiSeed
     $evidence.result = 'rollback_passed'; return
   }
   if ($Mode -eq 'Upgrade') {
