@@ -579,6 +579,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
         "principle": "No Evidence, No Claim：总体状态由各平台实机验收记录自动汇总，目录不存放可手写的状态；缺证据的平台固定显示「待验证」。",
         "stats": stats,
         "product_version": load_product_version(),
+        "release_ready": json.loads((REPO_ROOT / "FHD/config/download_release.json").read_text())["release_ready"],
         "platform_levels": load_platform_levels(),
         "deployment_modes": catalog.get("deployment_modes", []) or [],
         "next_plan": catalog.get("next_plan", []) or [],
@@ -735,7 +736,8 @@ def windows_delivery_panel() -> str:
 def render_index(data: dict, domains_full: list[dict]) -> str:
     s = data["stats"]
     version = data.get("product_version") or ""
-    ver_html = f' <span class="capm-ver">v{esc(version)}</span>' if version else ""
+    label = "" if data.get("release_ready") is True else "（候选，尚未发布；历史证据不代表本版验收）"
+    ver_html = f' <span class="capm-ver">v{esc(version)}{label}</span>' if version else ""
     last_verified = s["last_verified_at"] or "—"
 
     cards = []
