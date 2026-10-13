@@ -1,5 +1,5 @@
 {
-  "lines": 2301455,
+  "lines": 2301448,
   "updated": "2026-10-13",
-  "note": "Deduplicate equivalent version-resolution branches and parameterize identical sync tests"
+  "note": "Deduplicate Node20 main Vitest while preserving coverage and restore nightly checkout"
 }
