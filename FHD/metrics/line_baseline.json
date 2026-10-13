@@ -1,5 +1,5 @@
 {
-  "lines": 2301470,
+  "lines": 2301466,
   "updated": "2026-10-13",
-  "note": "沿用用户已批准的管理端发布保护开关限定例外：原批准基准2301455、绝对上限2301471（最多+16）不变。2322必要输入/条件6行+日志1行+契约12行共19，2320已净减3；现合并支付主线a0ec2c02额外净减1，组合实测2301470，较原批准基准仅+15、比批准上限少1。从支付新棘轮2301451看差19仅因先行下调，不扩大获批总量。本次dispatch_evolution=false，不改变其他任务、安全扫描或审批门禁。"
+  "note": "Ratchet CI deduplication after approved release-evolution policy on main"
 }
