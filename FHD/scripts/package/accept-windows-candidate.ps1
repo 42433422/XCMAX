@@ -113,6 +113,8 @@ function Backup-And-Version {
 }
 function Run-Gui([string]$phase, [string]$directory, [string]$seed = '') {
   New-Item -ItemType Directory -Force -Path $directory | Out-Null; $env:XCAGI_GUI_EVIDENCE = (Resolve-Path $directory).Path; $env:XCAGI_GUI_PHASE = $phase; $env:XCAGI_GUI_SEED = $seed
+  $env:XCAGI_GUI_MODE = $Mode
+  $env:XCAGI_GUI_BUILD_SHA = (Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw | ConvertFrom-Json).gitSha
   & node (Join-Path $PSScriptRoot '../dev/record_enterprise_desktop_init.mjs'); Check ($LASTEXITCODE -eq 0) "normal_gui_$phase" 'normal UI must save and read back actual business records'
   return (Join-Path $env:XCAGI_GUI_EVIDENCE 'gui-business.json')
 }
