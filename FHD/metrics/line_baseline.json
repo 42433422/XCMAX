@@ -1,5 +1,5 @@
 {
-  "lines": 2301448,
+  "lines": 2301466,
   "updated": "2026-10-13",
-  "note": "Deduplicate Node20 main Vitest while preserving coverage and restore nightly checkout"
+  "note": "Ratchet CI deduplication after approved release-evolution policy on main"
 }
