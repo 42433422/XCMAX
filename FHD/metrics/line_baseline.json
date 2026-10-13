@@ -1,5 +1,5 @@
 {
-  "lines": 2301455,
+  "lines": 2301454,
   "updated": "2026-10-13",
-  "note": "Deduplicate equivalent version-resolution branches and parameterize identical sync tests"
+  "note": "Remove duplicate payment test defaults while fixing release-blocking Spring dependencies and verifying both PostgreSQL versions"
 }
