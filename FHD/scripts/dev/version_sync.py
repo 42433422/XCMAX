@@ -55,22 +55,14 @@ def sync(
     override_toolchain_version: str | None = None,
 ) -> int:
     """Preview or write anchors; an explicit override supersedes VERSION.md."""
-    if override_version:
-        try:
-            product_version = override_version
-            toolchain_version = override_toolchain_version or _derive_toolchain_version(
-                product_version
-            )
-        except ValueError as e:
-            print(f"错误：{e}", file=sys.stderr)
-            return 2
-    else:
-        try:
-            product_version = _canonical_version()
-            toolchain_version = override_toolchain_version or _toolchain_version()
-        except (FileNotFoundError, ValueError) as e:
-            print(f"错误：无法解析 VERSION.md 的 canonical version：{e}", file=sys.stderr)
-            return 2
+    try:
+        product_version = override_version or _canonical_version()
+        toolchain_version = override_toolchain_version or (
+            _derive_toolchain_version(product_version) if override_version else _toolchain_version()
+        )
+    except (FileNotFoundError, ValueError) as error:
+        print(f"错误：无法解析目标版本：{error}", file=sys.stderr)
+        return 2
 
     targets = {
         PRODUCT_VERSION: product_version,

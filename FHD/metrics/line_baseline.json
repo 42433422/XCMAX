@@ -1,5 +1,5 @@
 {
-  "lines": 2301463,
-  "updated": "2026-10-12",
-  "note": "Remove duplicate version prose and require accepted original candidates before promotion"
+  "lines": 2301455,
+  "updated": "2026-10-13",
+  "note": "Deduplicate equivalent version-resolution branches and parameterize identical sync tests"
 }
