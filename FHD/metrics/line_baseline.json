@@ -1,5 +1,5 @@
 {
-  "lines": 2301735,
-  "updated": "2026-10-13",
-  "note": "棘轮下调"
+  "lines": 2301771,
+  "updated": "2026-10-14",
+  "note": "User approved only PR #2330 +36 at 2026-10-13 19:42 UTC; main 98ea6012 baseline 2301735 -> exact reviewed tree 07013eef 2301771; tests +47, implementation -12, changelog +1. Full GitHub CI and identical official-policy Git-byte count agree; no counting rules or exclusions changed. No other PR or login/rollback +365 allowance included."
 }
