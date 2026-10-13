@@ -439,7 +439,7 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert "scripts/package/create-mac-dmg.sh" in installer
     assert "hdiutil create" in dmg_builder
     assert "notarytool submit" in dmg_builder
-    assert "stapler staple" in dmg_builder
+    assert "scripts/package/staple-macos-dmg.py" in dmg_builder
     assert installer.index('if [ -f "${MAC_SIGNING_ENV}" ]') < installer.index(
         'if [ -n "${CSC_KEYCHAIN:-}" ]'
     )
