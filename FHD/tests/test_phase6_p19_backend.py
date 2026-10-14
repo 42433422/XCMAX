@@ -43,6 +43,7 @@ from fastapi.testclient import TestClient
 
 from app.infrastructure.db import mod_database_url as mod_db_url_mod
 from app.shell import xcagi_mods_discover as discover_mod
+from tests.fixtures.backend_ci_isolation import isolated_login_host_db  # noqa: F401
 
 # ===========================================================================
 # Shared helpers / fixtures
@@ -1364,6 +1365,7 @@ class TestFinalizeEnterpriseLogin:
         assert "market_access_token" not in out
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("isolated_login_host_db")
     async def test_skip_market_sync(self):
         from app.application.enterprise_login_flow import finalize_enterprise_login
 

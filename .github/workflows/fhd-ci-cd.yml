@@ -362,10 +362,12 @@ jobs:
           test "$(git rev-parse HEAD)" = "$BACKEND_SOURCE_SHA"
           mkdir -p shard-evidence
           export BACKEND_SHARD_MANIFEST=shard-evidence/full.json
+          rc=0
           python -m pytest tests/ -v -p scripts.ci.backend_shards \
             --cov --cov-branch --cov-fail-under=0 --cov-report= \
-            --junitxml=shard-evidence/full.xml
-          cp .coverage shard-evidence/.coverage.full
+            --junitxml=shard-evidence/full.xml || rc=$?
+          if [ -f .coverage ]; then cp .coverage shard-evidence/.coverage.full; fi
+          test "$rc" -eq 0
           if find tests -name 'test_coverage_ramp_*.py' -not -path '*/__pycache__/*' | grep -q .; then
             export BACKEND_SHARD_MODE=behavior BACKEND_SHARD_MANIFEST=shard-evidence/behavior.json
             python -m pytest tests/ -q -m 'not coverage_ramp' -p scripts.ci.backend_shards \

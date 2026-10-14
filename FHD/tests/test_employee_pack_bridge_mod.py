@@ -3,8 +3,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[1]
 MOD_DIR = REPO / "mods" / "xcagi-office-employee-pack-bridge"
+
+
+@pytest.fixture(autouse=True)
+def isolated_builtin_mods(monkeypatch):
+    from app.infrastructure.mods import mod_manager as mm
+
+    monkeypatch.setenv("XCAGI_MODS_ROOT", str(REPO / "mods"))
+    monkeypatch.setattr(mm, "_mod_manager", None)
 
 
 def test_office_catalog_file():
