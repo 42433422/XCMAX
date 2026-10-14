@@ -91,16 +91,6 @@ def test_deliverable_enterprise_requires_erp(monkeypatch):
     assert any(b["code"] == "ENTERPRISE_ERP_MISSING" for b in data["blockers"])
 
 
-def test_deliverable_personal_sku_no_erp(monkeypatch):
-    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "personal")
-    monkeypatch.setenv("XCAGI_MINIMAL_EDITION", "1")
-    from app.mod_sdk.product_skus import PERSONAL_HOST_MOD_IDS
-
-    data = build_deliverable_status(list(PERSONAL_HOST_MOD_IDS))
-    assert data["deliverable"] is True
-    assert ERP_DOMAIN_BRIDGE_MOD_ID not in data["expected_mod_ids"]
-
-
 def test_complete_generic_pack_is_blocked_by_required_runtime(monkeypatch):
     from fastapi import FastAPI
 

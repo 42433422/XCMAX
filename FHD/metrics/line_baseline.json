@@ -1,5 +1,5 @@
 {
-  "lines": 2303378,
+  "lines": 2303386,
   "updated": "2026-10-14",
-  "note": "User approved +500 maintained lines for deterministic four-shard test contracts; cumulative +488. Join real Mod worker within mobile test fixture; no suppressed warnings or runtime changes."
+  "note": "Approved +500 test-only lines; cumulative +496. Explicit recipient and empty-industry contracts; deduplicate identical personal SKU test."
 }
