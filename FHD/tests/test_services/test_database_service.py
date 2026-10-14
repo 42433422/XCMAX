@@ -362,7 +362,9 @@ class TestRestoreDatabase:
         assert message in result["message"]
 
     @pytest.mark.parametrize("absolute", [False, True])
-    def test_restore_success_with_live_wal_connection(self, tmp_path, service, absolute, monkeypatch):
+    def test_restore_success_with_live_wal_connection(
+        self, tmp_path, service, absolute, monkeypatch
+    ):
         root = tmp_path / "userdata"
         db_file = root / "data" / "xcagi.db"
         db_file.parent.mkdir(parents=True)

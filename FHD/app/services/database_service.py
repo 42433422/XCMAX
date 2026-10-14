@@ -202,9 +202,7 @@ class DatabaseService(NeuroEventPublisherMixin):
                 from app.desktop_runtime.paths import clear_database_recovery_marker
 
                 if clear_database_recovery_marker(data_root):
-                    os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = (
-                        f"restored:{Path(backup_path).name}"
-                    )
+                    os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = f"restored:{Path(backup_path).name}"
 
             return {"success": True, "message": "数据库恢复成功"}
 
