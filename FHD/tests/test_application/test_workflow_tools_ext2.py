@@ -374,9 +374,9 @@ class TestGetWorkflowToolRegistryExtended:
 
         with patch("app.application.tools.workflow._workflow_tool_registry_cache", [{"old": True}]):
             invalidate_workflow_tool_registry()
-        from app.application.tools.workflow import _workflow_tool_registry_cache
+            from app.application.tools.workflow import _workflow_tool_registry_cache
 
-        assert _workflow_tool_registry_cache is None
+            assert _workflow_tool_registry_cache is None
 
 
 # ========================= execute_workflow_tool - extended ================
