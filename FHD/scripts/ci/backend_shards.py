@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sys
 import time
@@ -13,16 +14,46 @@ from pathlib import Path
 import pytest
 
 
-def partition(nodes: list[str], total: int) -> list[list[str]]:
+def profile() -> tuple[dict, str]:
+    path = os.environ.get("BACKEND_TIMINGS_FILE")
+    if not path:
+        return {}, "count-v1"
+    raw = Path(path).read_bytes()
+    data = json.loads(raw)
+    fallback = data["fallback_seconds_per_test"]
+    values = [fallback, *data["modules"].values()]
+    if (
+        data["schema"] != 1
+        or any(
+            isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0
+            for v in values
+        )
+        or fallback <= 0
+    ):
+        raise ValueError("Invalid timing profile")
+    return data, "duration-v1:" + hashlib.sha256(raw).hexdigest()
+
+
+def partition(nodes: list[str], total: int, timings: dict | None = None) -> list[list[str]]:
     if total < 1 or not nodes or len(nodes) != len(set(nodes)):
         raise ValueError("Invalid shard count or empty/duplicate collection")
     modules: dict[str, list[str]] = defaultdict(list)
     for node in nodes:
         modules[node.split("::", 1)[0]].append(node)
     groups: list[list[str]] = [[] for _ in range(total)]
-    for module in sorted(modules, key=lambda name: (-len(modules[name]), name)):
-        target = min(range(total), key=lambda index: (len(groups[index]), index))
+    weights = {
+        name: max(
+            timings["modules"].get(name, len(items) * timings["fallback_seconds_per_test"]), 1e-6
+        )
+        if timings
+        else len(items)
+        for name, items in modules.items()
+    }
+    loads = [0.0] * total
+    for module in sorted(modules, key=lambda name: (-weights[name], name)):
+        target = min(range(total), key=lambda index: (loads[index], index))
         groups[target].extend(modules[module])
+        loads[target] += weights[module]
     return groups
 
 
@@ -41,6 +72,7 @@ class ShardEvidence:
             raise pytest.UsageError("Shard index outside configured range")
         self.path = Path(os.environ["BACKEND_SHARD_MANIFEST"])
         self.data = dict(identity(), index=self.index, total=self.total, full=[], selected=[])
+        self.timings, self.data["partition_profile"] = profile()
         self.data["mode"] = os.environ.get("BACKEND_SHARD_MODE", "full")
         self.reports: dict[str, list[dict]] = defaultdict(list)
         self.collection_errors = []
@@ -52,7 +84,7 @@ class ShardEvidence:
     def pytest_collection_modifyitems(self, config, items):
         nodes = [item.nodeid for item in items]
         try:
-            selected = set(partition(nodes, self.total)[self.index - 1])
+            selected = set(partition(nodes, self.total, self.timings)[self.index - 1])
         except ValueError as exc:
             raise pytest.UsageError(str(exc)) from exc
         self.data.update(full=sorted(nodes), selected=sorted(selected))
@@ -107,6 +139,7 @@ def seal(directory: Path) -> None:
 
 
 def verify(root: Path, total: int, mode: str, expected: dict[str, str]) -> dict:
+    timings, expected_profile = profile()
     directories = sorted(root.iterdir())
     if len(directories) != total or {p.name for p in directories} != {
         f"shard-{i}" for i in range(1, total + 1)
@@ -114,11 +147,13 @@ def verify(root: Path, total: int, mode: str, expected: dict[str, str]) -> dict:
         raise ValueError("Missing or extra shard artifact")
     full = None
     skipped = None
-    indices, selected, outcomes = set(), [], Counter()
+    indices, selected, outcomes, node_outcomes = set(), [], Counter(), {}
     for directory in directories:
         data = json.loads((directory / f"{mode}.json").read_text())
         if any(data.get(key) != value for key, value in expected.items()):
             raise ValueError("Foreign SHA/run/attempt in shard evidence")
+        if data.get("partition_profile") != expected_profile:
+            raise ValueError("Foreign partition profile")
         index = data["index"]
         if index in indices or not 1 <= index <= total or data["total"] != total:
             raise ValueError("Invalid/duplicate shard identity")
@@ -126,7 +161,7 @@ def verify(root: Path, total: int, mode: str, expected: dict[str, str]) -> dict:
         if data["mode"] != mode or data["exitstatus"] != 0 or data["collection_errors"]:
             raise ValueError("Shard did not successfully finish")
         nodes = data["full"]
-        groups = partition(nodes, total)
+        groups = partition(nodes, total, timings)
         if full is not None and nodes != full:
             raise ValueError("Different full collections across shards")
         if skipped is not None and skipped != data["collection_skips"]:
@@ -138,7 +173,7 @@ def verify(root: Path, total: int, mode: str, expected: dict[str, str]) -> dict:
             raise ValueError("Missing/extra test execution")
         if any(r["outcome"] == "failed" or r["nodeid"] not in chosen for r in data["subtests"]):
             raise ValueError("Failed or foreign subtest")
-        for reports in data["reports"].values():
+        for node, reports in data["reports"].items():
             phases = {report["when"]: report["outcome"] for report in reports}
             if len(phases) != len(reports) or phases.get("teardown") != "passed":
                 raise ValueError("Duplicate or unfinished test execution")
@@ -148,6 +183,7 @@ def verify(root: Path, total: int, mode: str, expected: dict[str, str]) -> dict:
                 outcomes[phases["call"]] += 1
             else:
                 raise ValueError("Failed/invalid test phase")
+            node_outcomes[node] = phases.get("call", phases["setup"])
         for name, key in (
             (f".coverage.{mode}", "coverage_sha256"),
             (f"{mode}.xml", "junit_sha256"),
@@ -163,6 +199,10 @@ def verify(root: Path, total: int, mode: str, expected: dict[str, str]) -> dict:
         "collected": len(selected),
         "outcomes": dict(outcomes),
         "collection_skips": skipped,
+        "collection_sha256": hashlib.sha256(json.dumps(full, sort_keys=True).encode()).hexdigest(),
+        "outcomes_sha256": hashlib.sha256(
+            json.dumps(node_outcomes, sort_keys=True).encode()
+        ).hexdigest(),
     }
 
 
@@ -171,7 +211,8 @@ def main() -> None:
     if command == "seal":
         seal(Path(directory))
     elif command == "verify":
-        result = [verify(Path(directory), 2, mode, identity()) for mode in ("full", "behavior")]
+        total = int(os.environ.get("BACKEND_SHARD_TOTAL", "2"))
+        result = [verify(Path(directory), total, mode, identity()) for mode in ("full", "behavior")]
         print(json.dumps(result, indent=2))
     else:
         raise ValueError("Unknown command")
