@@ -181,7 +181,7 @@ jobs:
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
 
-  backend-test:
+  backend-quality:
     # P0 快速失败（2026-10-12）：SSOT 门禁 ~53s 出结论，未过不启动 27 分钟重测试。
     # SSOT 失败时本 job 为 skipped；SSOT 本身是 required check，PR 依旧被阻断，结论不丢失。
     needs: [guard-temp-scripts, ssot-drift-gate]
@@ -294,22 +294,6 @@ jobs:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/intent_benchmark.py --check
 
-      - name: Run tests with coverage
-        if: steps.paths.outputs.skip != 'true'
-        env:
-          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
-          INTENT_BENCHMARK_RUN: "1"
-        run: |
-          mkdir -p coverage
-          # 行 floor SSOT = pyproject.toml [tool.coverage.report] fail_under（铁律1 全量 source=[app]）。
-          # 开启 branch=true 后 coverage 自带门禁按"行+分支合并"指标拦截，故 --cov-fail-under=0，
-          # 把行/分支门禁交给 coverage_ratchet.py --check（分支/前端 floor 见
-          # metrics/coverage_ratchet_baseline.json）。禁止再硬编码窄包阈值。
-          python -m pytest tests/ -v \
-            --cov --cov-branch --cov-fail-under=0 \
-            --cov-report=xml --cov-report=json:coverage.json \
-            --cov-report=html --cov-report=term-missing
-
       - name: Coverage floor guard (下调必须有 ADR)
         if: github.event_name == 'pull_request' && steps.paths.outputs.skip != 'true'
         run: |
@@ -325,33 +309,157 @@ jobs:
         if: steps.paths.outputs.skip != 'true'
         run: python scripts/dev/test_bloat_report.py --check
 
+
+  backend-test-shard:
+    needs: backend-quality
+    if: needs.backend-quality.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      BACKEND_SHARD_INDEX: ${{ matrix.shard }}
+      BACKEND_SHARD_TOTAL: "2"
+      BACKEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
+      XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+      INTENT_BENCHMARK_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 1
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-server-api.txt
+          pip install -r deploy/requirements-dev.txt
+
+      - name: Set up the real private Mod frontend compiler
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+
+      - name: Install runtime Mod compiler dependencies
+        working-directory: FHD/frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Run complete suite in isolated module shard
+        run: |
+          test "$(git rev-parse HEAD)" = "$BACKEND_SOURCE_SHA"
+          mkdir -p shard-evidence
+          export BACKEND_SHARD_MANIFEST=shard-evidence/full.json
+          rc=0
+          python -m pytest tests/ -v -p scripts.ci.backend_shards \
+            --cov --cov-branch --cov-fail-under=0 --cov-report= \
+            --junitxml=shard-evidence/full.xml || rc=$?
+          if [ -f .coverage ]; then cp .coverage shard-evidence/.coverage.full; fi
+          test "$rc" -eq 0
+          if find tests -name 'test_coverage_ramp_*.py' -not -path '*/__pycache__/*' | grep -q .; then
+            export BACKEND_SHARD_MODE=behavior BACKEND_SHARD_MANIFEST=shard-evidence/behavior.json
+            python -m pytest tests/ -q -m 'not coverage_ramp' -p scripts.ci.backend_shards \
+              --cov --cov-branch --cov-fail-under=0 --cov-report= \
+              --junitxml=shard-evidence/behavior.xml
+            cp .coverage shard-evidence/.coverage.behavior
+          else
+            cp shard-evidence/.coverage.full shard-evidence/.coverage.behavior
+            cp shard-evidence/full.xml shard-evidence/behavior.xml
+            python -c 'import json,pathlib; p=pathlib.Path("shard-evidence"); d=json.loads((p/"full.json").read_text()); d["mode"]="behavior"; (p/"behavior.json").write_text(json.dumps(d))'
+          fi
+          python scripts/ci/backend_shards.py seal shard-evidence
+      - name: Preserve shard evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-shard-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: FHD/shard-evidence/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  backend-test:
+    # Preserve the required check and downstream skip contract. Missing shards fail closed.
+    needs: [backend-quality, backend-test-shard]
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ needs.backend-quality.outputs.skip }}
+    env:
+      BACKEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
+    steps:
+      - name: Validate prerequisites and skip semantics
+        working-directory: .
+        env:
+          QUALITY: ${{ needs.backend-quality.result }}
+          SHARDS: ${{ needs.backend-test-shard.result }}
+          SKIP: ${{ needs.backend-quality.outputs.skip }}
+        run: |
+          test "$QUALITY" = success
+          if [ "$SKIP" = true ]; then test "$SHARDS" = skipped; else test "$SHARDS" = success; fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        if: needs.backend-quality.outputs.skip != 'true'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install report dependencies
+        if: needs.backend-quality.outputs.skip != 'true'
+        run: pip install -r deploy/requirements-dev.txt
+      - uses: actions/download-artifact@v4
+        if: needs.backend-quality.outputs.skip != 'true'
+        with:
+          pattern: backend-shard-${{ github.run_attempt }}-*
+          path: FHD/shards
+      - name: Verify complete same-SHA evidence and combine coverage
+        if: needs.backend-quality.outputs.skip != 'true'
+        run: |
+          test "$(git rev-parse HEAD)" = "$BACKEND_SOURCE_SHA"
+          for n in 1 2; do mv "shards/backend-shard-${{ github.run_attempt }}-$n" "shards/shard-$n"; done
+          python scripts/ci/backend_shards.py verify shards > shard-summary.json
+          python -m coverage combine --keep shards/shard-*/.coverage.full
+          python -m coverage json -o coverage.json --fail-under=0
+          python -m coverage xml --fail-under=0
+          python -m coverage html --fail-under=0
+          cp .coverage .coverage.full-combined
+          python -m coverage combine --keep shards/shard-*/.coverage.behavior
+          python -m coverage json -o coverage-behavior.json --fail-under=0
       - name: Coverage ratchet check (行/分支只升不降)
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.backend-quality.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/coverage_ratchet.py --check --require-backend --record
-        # 注意：暂不追加 --peak-floor —— 历史峰值与当前实测差距 > 0.5pt，启用即全红；
-        # 启用条件见 scripts/dev/guard_coverage_floor.py docstring。
-
-      # 行为覆盖率诚实化（Delta A）：排除 coverage_ramp 注水 stub 后的真实行为口径。
-      # 这是后端覆盖率门禁的唯一硬 gate（--behavior --require-backend），回退即阻断。
       - name: Behavior coverage gate (排除 coverage_ramp stub，硬门禁)
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.backend-quality.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
-        run: |
-          # 行为口径 = 全量用例去掉 coverage_ramp 标记的用例；conftest 只按文件名
-          # test_coverage_ramp_*.py 打标。没有这类文件时 -m 'not coverage_ramp' 不剔除任何用例，
-          # 与上一步是同一套测试，直接从同一份 .coverage 数据导出行为 json，省掉重复的全量 pytest。
-          # 一旦出现 ramp 文件，回退为原来的独立测量（口径不变）。
-          if find tests -name 'test_coverage_ramp_*.py' -not -path '*/__pycache__/*' | grep -q .; then
-            python -m pytest tests/ -q -m 'not coverage_ramp' \
-              --cov --cov-branch --cov-report=json:coverage-behavior.json \
-              --cov-fail-under=0
-          else
-            python -m coverage json -o coverage-behavior.json --fail-under=0
-          fi
-          python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
+        run: python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
+      - uses: actions/upload-artifact@v4
+        if: always() && needs.backend-quality.outputs.skip != 'true'
+        with:
+          name: backend-combined-${{ github.run_attempt }}
+          path: |
+            FHD/shard-summary.json
+            FHD/coverage.json
+            FHD/coverage-behavior.json
+            FHD/coverage.xml
+          if-no-files-found: error
+          retention-days: 7
 
   frontend-test:
     # P0 快速失败（2026-10-12）：SSOT 门禁 ~53s 出结论，未过不启动 27 分钟重测试。

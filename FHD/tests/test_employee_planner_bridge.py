@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -72,13 +73,15 @@ def convert_file(src_path, output_path, *, template_path=None, payload=None, ctx
 def employee_mods_root(tmp_path, monkeypatch):
     mods_root = tmp_path / "mods"
     mods_root.mkdir()
+    catalog = "xcagi-office-employee-pack-bridge"
+    shutil.copytree(Path(__file__).parents[1] / "mods" / catalog, mods_root / catalog)
     monkeypatch.setenv("XCAGI_MODS_ROOT", str(mods_root))
     from app.application.tools.workflow import invalidate_workflow_tool_registry
     from app.infrastructure.mods import employee_registry as er
     from app.infrastructure.mods import mod_manager as mm
 
     er._registry.clear()
-    mm._mod_manager = None
+    monkeypatch.setattr(mm, "_mod_manager", None)
     mm._employee_pack_routes_registered.clear()
     invalidate_workflow_tool_registry()
     return mods_root

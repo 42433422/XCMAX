@@ -5,7 +5,8 @@ from fastapi.testclient import TestClient
 from app.fastapi_app import create_fastapi_app
 
 
-def test_mods_list_supports_etag_304():
+def test_mods_list_supports_etag_304(monkeypatch):
+    monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "0")
     client = TestClient(create_fastapi_app())
     first = client.get("/api/mods/")
     assert first.status_code == 200, first.text
