@@ -1,5 +1,5 @@
 {
-  "lines": 2303239,
-  "updated": "2026-10-13",
-  "note": "User approved maximum +350 maintained lines for four-shard experiment; actual +349 against main baseline2302890. Includes deterministic ETag unchanged/changed representation contract, registry and RBAC isolation; no runtime or coverage gate weakened."
+  "lines": 2303318,
+  "updated": "2026-10-14",
+  "note": "User approved maximum +500 maintained lines on 2026-10-14; deterministic tests cover random decisions, expiry, Mod resolver ownership and error contracts without runtime changes or weakened coverage gates."
 }
