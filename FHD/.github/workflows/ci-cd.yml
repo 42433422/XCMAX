@@ -310,7 +310,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     services:
       redis:
         image: redis:7-alpine
@@ -318,7 +318,8 @@ jobs:
         options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       BACKEND_SHARD_INDEX: ${{ matrix.shard }}
-      BACKEND_SHARD_TOTAL: "2"
+      BACKEND_SHARD_TOTAL: "4"
+      BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
       BACKEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
       XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
       INTENT_BENCHMARK_RUN: "1"
@@ -391,6 +392,8 @@ jobs:
     outputs:
       skip: ${{ needs.backend-quality.outputs.skip }}
     env:
+      BACKEND_SHARD_TOTAL: "4"
+      BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
       BACKEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
     steps:
       - name: Validate prerequisites and skip semantics
@@ -423,7 +426,7 @@ jobs:
         if: needs.backend-quality.outputs.skip != 'true'
         run: |
           test "$(git rev-parse HEAD)" = "$BACKEND_SOURCE_SHA"
-          for n in 1 2; do mv "shards/backend-shard-${{ github.run_attempt }}-$n" "shards/shard-$n"; done
+          for n in 1 2 3 4; do mv "shards/backend-shard-${{ github.run_attempt }}-$n" "shards/shard-$n"; done
           python scripts/ci/backend_shards.py verify shards > shard-summary.json
           python -m coverage combine --keep shards/shard-*/.coverage.full
           python -m coverage json -o coverage.json --fail-under=0

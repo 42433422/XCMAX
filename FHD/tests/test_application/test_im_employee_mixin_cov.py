@@ -1133,3 +1133,20 @@ class TestEmployeeImSummary:
         assert calls[0].kwargs["display_name"] == "L1"
         assert calls[1].kwargs["display_name"] == "T2"
         assert calls[2].kwargs["display_name"] == "e3"
+
+
+def test_customer_push_skips_sender_in_admin_recipients():
+    svc = ImApplicationService(MagicMock())
+    with (
+        patch.object(svc, "enterprise_cs_user_id", return_value=9),
+        patch.object(svc, "_display_name", return_value="Sender"),
+        patch.object(svc, "_query_admin_user_ids", return_value=[2, 3]),
+        patch("app.services.mobile_push.notify_user") as notify,
+    ):
+        svc._maybe_push_cs_message(7, 2, "hello", [9, 2])
+    notify.assert_called_once_with(
+        3,
+        "客户咨询 · Sender",
+        "hello",
+        {"type": "cs_inbox", "conversation_id": "7", "route": "admin_cs_console"},
+    )

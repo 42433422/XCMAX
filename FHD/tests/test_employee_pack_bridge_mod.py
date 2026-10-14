@@ -12,6 +12,9 @@ MOD_DIR = REPO / "mods" / "xcagi-office-employee-pack-bridge"
 @pytest.fixture(autouse=True)
 def isolated_builtin_mods(monkeypatch):
     from app.infrastructure.mods import mod_manager as mm
+    from app.infrastructure.mods.registry import ModRegistry
+
+    monkeypatch.setattr(ModRegistry, "_instance", None)
 
     monkeypatch.setenv("XCAGI_MODS_ROOT", str(REPO / "mods"))
     monkeypatch.setattr(mm, "_mod_manager", None)

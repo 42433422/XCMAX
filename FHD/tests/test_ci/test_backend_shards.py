@@ -1,4 +1,4 @@
-"""The two-shard gate must prove complete execution, not merely green jobs."""
+"""The shard gate must prove complete execution, not merely green jobs."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.ci.backend_shards import partition, seal, verify
+from scripts.ci.backend_shards import partition, profile, seal, verify
 
 ROOT = Path(__file__).resolve().parents[2]
 IDENTITY = {
@@ -21,6 +21,11 @@ IDENTITY = {
     "GITHUB_RUN_ATTEMPT": "1",
     "BACKEND_SOURCE_SHA": "a" * 40,
 }
+
+
+@pytest.fixture(autouse=True)
+def isolate_profile_environment(monkeypatch):
+    monkeypatch.delenv("BACKEND_TIMINGS_FILE", raising=False)
 
 
 def test_balancing_keeps_modules_and_exact_union():
@@ -49,18 +54,19 @@ def test_invalid_collection(nodes, total):
         partition(nodes, total)
 
 
-@pytest.fixture(scope="module")
-def artifacts(tmp_path_factory):
+@pytest.fixture(scope="module", params=[2, 4])
+def artifacts(tmp_path_factory, request):
     root = tmp_path_factory.mktemp("shards")
-    for index in (1, 2):
+    for index in range(1, request.param + 1):
         directory = root / f"shard-{index}"
         directory.mkdir()
-        nodes = ["test_a.py::test_a", "test_b.py::test_b"]
-        selected = partition(nodes, 2)[index - 1]
+        nodes = [f"test_{n}.py::test_a" for n in range(4)]
+        selected = partition(nodes, request.param)[index - 1]
         data = dict(
             IDENTITY,
             index=index,
-            total=2,
+            total=request.param,
+            partition_profile="count-v1",
             mode="full",
             full=nodes,
             selected=selected,
@@ -86,8 +92,10 @@ def artifacts(tmp_path_factory):
 
 
 def test_exact_complete_artifacts_pass(artifacts):
-    assert verify(artifacts, 2, "full", IDENTITY)["collected"] == 2
-    assert verify(artifacts, 2, "behavior", IDENTITY)["outcomes"] == {"passed": 2}
+    assert verify(artifacts, len(list(artifacts.iterdir())), "full", IDENTITY)["collected"] == 4
+    assert verify(artifacts, len(list(artifacts.iterdir())), "behavior", IDENTITY)["outcomes"] == {
+        "passed": 4
+    }
 
 
 @pytest.mark.parametrize(
@@ -109,6 +117,8 @@ def test_exact_complete_artifacts_pass(artifacts):
         "coverage",
         "junit",
         "subtest",
+        "profile",
+        "total",
     ],
 )
 def test_bad_evidence_fails_closed(artifacts, tmp_path, fault):
@@ -141,6 +151,10 @@ def test_bad_evidence_fails_closed(artifacts, tmp_path, fault):
         data["reports"] = {}
     elif fault == "unfinished":
         data["reports"][node].pop()
+    elif fault == "profile":
+        data["partition_profile"] = "duration-v1:foreign"
+    elif fault == "total":
+        data["total"] = 3
     elif fault == "subtest":
         data["subtests"] = [{"nodeid": node, "outcome": "failed"}]
     else:
@@ -149,17 +163,18 @@ def test_bad_evidence_fails_closed(artifacts, tmp_path, fault):
         )
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError):
-        verify(root, 2, "full", IDENTITY)
+        verify(root, len(list(artifacts.iterdir())), "full", IDENTITY)
 
 
-def test_real_pytest_two_shards(tmp_path):
+@pytest.mark.parametrize("total", [2, 4])
+def test_real_pytest_shards(tmp_path, total):
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
-    for name in ("a", "b"):
+    for name in ("a", "b", "c", "d"):
         (tmp_path / f"test_{name}.py").write_text(
             "import pytest\ndef test_pass(): assert True\n@pytest.mark.skip(reason='expected')\ndef test_skip(): pass\n"
         )
     all_nodes = []
-    for index in (1, 2):
+    for index in range(1, total + 1):
         manifest = tmp_path / f"manifest-{index}.json"
         env = dict(
             os.environ,
@@ -167,7 +182,7 @@ def test_real_pytest_two_shards(tmp_path):
             PYTEST_DISABLE_PLUGIN_AUTOLOAD="1",
             PYTHONPATH=str(ROOT),
             BACKEND_SHARD_INDEX=str(index),
-            BACKEND_SHARD_TOTAL="2",
+            BACKEND_SHARD_TOTAL=str(total),
             BACKEND_SHARD_MANIFEST=str(manifest),
         )
         result = subprocess.run(
@@ -180,10 +195,10 @@ def test_real_pytest_two_shards(tmp_path):
         )
         assert result.returncode == 0, result.stdout + result.stderr
         evidence = json.loads(manifest.read_text())
-        assert len(evidence["selected"]) == 2
-        assert len(evidence["reports"]) == 2
+        assert len(evidence["selected"]) == 8 // total
+        assert len(evidence["reports"]) == 8 // total
         all_nodes.extend(evidence["selected"])
-    assert len(set(all_nodes)) == len(all_nodes) == 4
+    assert len(set(all_nodes)) == len(all_nodes) == 8
 
 
 def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
@@ -194,7 +209,7 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
     assert set(quality["needs"]) == {"guard-temp-scripts", "ssot-drift-gate"}
     assert shard["needs"] == "backend-quality"
     assert shard["runs-on"] == "ubuntu-latest"
-    assert shard["strategy"] == {"fail-fast": False, "matrix": {"shard": [1, 2]}}
+    assert shard["strategy"] == {"fail-fast": False, "matrix": {"shard": [1, 2, 3, 4]}}
     assert set(gate["needs"]) == {"backend-quality", "backend-test-shard"}
     assert gate["if"] == "always()"
     assert gate["outputs"]["skip"] == "${{ needs.backend-quality.outputs.skip }}"
@@ -217,11 +232,17 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
         assert required in text
 
 
-def test_real_coverage_union_matches_serial(tmp_path):
+@pytest.mark.parametrize("total", [2, 4])
+def test_real_coverage_union_matches_serial(tmp_path, total, monkeypatch):
+    timings = tmp_path / "timings.json"
+    timings.write_text(
+        json.dumps({"schema": 1, "fallback_seconds_per_test": 1, "modules": {"test_a.py": 8}})
+    )
+    monkeypatch.setenv("BACKEND_TIMINGS_FILE", str(timings))
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
     (tmp_path / ".coveragerc").write_text("[run]\nbranch = true\nsource = demo\n")
     (tmp_path / "demo.py").write_text("def pick(n):\n    if n:\n        return 1\n    return 0\n")
-    for name, value in (("a", 1), ("b", 0)):
+    for name, value in (("a", 1), ("b", 0), ("c", 1), ("d", 0)):
         (tmp_path / f"test_{name}.py").write_text(
             f"from demo import pick\ndef test_pick(): assert pick({value}) == {value}\n"
         )
@@ -245,13 +266,13 @@ def test_real_coverage_union_matches_serial(tmp_path):
         assert result.returncode == 0, result.stdout + result.stderr
 
     run(base + ["--cov-report=json:serial.json"], env)
-    for index in (1, 2):
+    for index in range(1, total + 1):
         directory = tmp_path / "evidence" / f"shard-{index}"
         directory.mkdir(parents=True)
         shard_env = dict(
             env,
             BACKEND_SHARD_INDEX=str(index),
-            BACKEND_SHARD_TOTAL="2",
+            BACKEND_SHARD_TOTAL=str(total),
             BACKEND_SHARD_MODE="full",
             BACKEND_SHARD_MANIFEST=str(directory / "full.json"),
         )
@@ -272,7 +293,7 @@ def test_real_coverage_union_matches_serial(tmp_path):
         shutil.copy(directory / "full.xml", directory / "behavior.xml")
         shutil.copy(directory / ".coverage.full", directory / ".coverage.behavior")
         seal(directory)
-    assert verify(tmp_path / "evidence", 2, "full", IDENTITY)["collected"] == 2
+    assert verify(tmp_path / "evidence", total, "full", IDENTITY)["collected"] == 4
     run(
         [
             sys.executable,
@@ -354,3 +375,62 @@ def test_behavior_marker_is_applied_before_sharding(tmp_path):
     assert evidence["mode"] == "behavior"
     assert evidence["full"] == ["test_a.py::test_real", "test_b.py::test_real"]
     assert evidence["selected"] == ["test_a.py::test_real"]
+
+
+@pytest.mark.parametrize("total", [2, 4])
+def test_duration_balance_new_modules_and_stable_ties(total):
+    nodes = [f"test_{n}.py::test_a" for n in range(8)]
+    timings = {
+        "modules": {f"test_{n}.py": value for n, value in enumerate([8, 7, 6, 5])},
+        "fallback_seconds_per_test": 1,
+    }
+    groups = partition(nodes, total, timings)
+    assert sorted(sum(groups, [])) == nodes
+    assert partition(list(reversed(nodes)), total, timings) == groups
+    loads = [sum(timings["modules"].get(n.split("::")[0], 1) for n in g) for g in groups]
+    assert max(loads) - min(loads) <= 1
+
+
+@pytest.mark.parametrize("value", [-1, float("nan"), float("inf"), True, "bad"])
+def test_invalid_profile_fails_closed(tmp_path, monkeypatch, value):
+    path = tmp_path / "profile.json"
+    path.write_text(
+        json.dumps({"schema": 1, "fallback_seconds_per_test": 1, "modules": {"test_a.py": value}})
+    )
+    monkeypatch.setenv("BACKEND_TIMINGS_FILE", str(path))
+    with pytest.raises(ValueError):
+        profile()
+
+
+def test_weighted_real_collection_and_profile_integrity(tmp_path, monkeypatch):
+    path = tmp_path / "profile.json"
+    path.write_text(
+        json.dumps({"schema": 1, "fallback_seconds_per_test": 1, "modules": {"test_a.py": 8}})
+    )
+    monkeypatch.setenv("BACKEND_TIMINGS_FILE", str(path))
+    timings, identity = profile()
+    assert identity.startswith("duration-v1:")
+    assert partition(["test_a.py::one", "test_b.py::one"], 4, timings) == [
+        ["test_a.py::one"],
+        ["test_b.py::one"],
+        [],
+        [],
+    ]
+    path.write_text(path.read_text() + " ")
+    assert profile()[1] != identity
+
+
+def test_four_way_production_configuration():
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci-cd.yml").read_text())["jobs"]
+    shard, gate = (jobs[n] for n in ("backend-test-shard", "backend-test"))
+    assert not {"backend-four-shard", "backend-four-test", "backend-shard-comparison"} & jobs.keys()
+    assert shard["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert shard["runs-on"] == gate["runs-on"] == "ubuntu-latest"
+    assert shard["env"]["BACKEND_SHARD_TOTAL"] == gate["env"]["BACKEND_SHARD_TOTAL"] == "4"
+    assert shard["env"]["BACKEND_TIMINGS_FILE"] == gate["env"]["BACKEND_TIMINGS_FILE"]
+    assert shard["env"]["BACKEND_TIMINGS_FILE"] == "metrics/backend_test_timings.json"
+    assert "for n in 1 2 3 4;" in json.dumps(gate)
+    assert gate["if"] == "always()"
+    assert "--behavior --require-backend" in json.dumps(gate)
+    assert "--check --require-backend" in json.dumps(gate)
+    assert "backend-shard-${{" in json.dumps(shard) and "backend-shard-${{" in json.dumps(gate)
