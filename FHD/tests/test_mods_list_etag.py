@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -26,4 +24,4 @@ def test_mods_list_supports_etag_304(monkeypatch):
     changed = client.get("/api/mods/", headers={"If-None-Match": etag})
     assert changed.status_code == 200
     assert changed.headers["etag"] != etag
-    assert changed.json()["data"] == rows
+    assert changed.json() == {"success": True, "data": rows}
