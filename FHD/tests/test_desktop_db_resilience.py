@@ -22,7 +22,6 @@ from app.desktop_runtime.paths import (
 
 
 def _create_test_db(db_path: Path) -> None:
-    """创建一个有内容的测试 SQLite 库（默认 rollback journal 模式）。"""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     if db_path.exists():
         db_path.unlink()
@@ -34,15 +33,12 @@ def _create_test_db(db_path: Path) -> None:
 
 
 def _reset_desktop_env(monkeypatch) -> None:
-    """清理桌面模式相关环境变量，保证测试隔离。"""
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("XCAGI_DESKTOP_DB_RECOVERY", raising=False)
     monkeypatch.delenv("XCAGI_DESKTOP_MODE", raising=False)
 
 
 def test_backup_database_produces_consistent_online_backup(tmp_path, monkeypatch):
-    """backup_database 必须用 sqlite3.backup() API，主库有未 checkpoint 写入时
-    也能备份出一致的库（shutil.copy2 会拷到不一致状态，会丢 WAL 内容）。"""
     _reset_desktop_env(monkeypatch)
 
     dirs = ensure_desktop_dirs(tmp_path)
@@ -58,8 +54,6 @@ def test_backup_database_produces_consistent_online_backup(tmp_path, monkeypatch
         assert result is not None, "online hot backup should succeed"
         assert result.exists()
 
-        # shutil.copy2 在 rollback journal 模式下也能拷到（因为没有独立 WAL 文件），
-        # 但如果主库在 WAL 模式 + 有未 checkpoint 写入，shutil.copy2 会丢这部分。
         verify_conn = sqlite3.connect(str(result))
         rows = verify_conn.execute("SELECT customer FROM orders ORDER BY id").fetchall()
         verify_conn.close()
