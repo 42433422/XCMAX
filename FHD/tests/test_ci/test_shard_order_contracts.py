@@ -43,3 +43,11 @@ def test_runtime_issue_expiry_and_healthy_cognition(monkeypatch):
         runtime.neuro_degraded_reasons({"cognition": {"cognition": {"llm_port_available": True}}})
         == []
     )
+
+
+def test_pairing_default_listen_host(monkeypatch):
+    from app.fastapi_routes.mobile_extensions import pairing_helpers
+
+    monkeypatch.delenv("XCAGI_API_HOST", raising=False)
+    monkeypatch.delenv("FASTAPI_HOST", raising=False)
+    assert pairing_helpers._backend_listen_host() == "0.0.0.0"

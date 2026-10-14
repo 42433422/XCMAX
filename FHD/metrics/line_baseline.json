@@ -1,5 +1,5 @@
 {
-  "lines": 2303318,
+  "lines": 2303371,
   "updated": "2026-10-14",
-  "note": "User approved maximum +500 maintained lines on 2026-10-14; deterministic tests cover random decisions, expiry, Mod resolver ownership and error contracts without runtime changes or weakened coverage gates."
+  "note": "User approved +500 maintained lines for deterministic four-shard coverage contracts; cumulative +481; no runtime changes or lowered gates."
 }

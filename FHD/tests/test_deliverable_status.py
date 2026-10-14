@@ -25,12 +25,14 @@ def _isolate_sku_env(monkeypatch):
     monkeypatch.setattr("app.mod_sdk.product_skus.resolve_product_sku", lambda: None)
 
 
-def test_deliverable_generic_when_pack_complete():
+def test_deliverable_generic_when_pack_complete(monkeypatch):
+    monkeypatch.setenv("XCAGI_GENERIC_EDITION", "1")
     data = build_deliverable_status(list(GENERIC_HOST_MOD_IDS))
     assert data["edition"] in ("generic", "full", "minimal")
     assert data["generic_pack_installed"] is True
     assert data["deliverable"] is True
     assert data["blockers"] == []
+    assert data["product_flow"]["recommended_step"] == "industry_mod"
 
 
 def test_deliverable_generic_blocked_when_incomplete(monkeypatch):
@@ -97,3 +99,18 @@ def test_deliverable_personal_sku_no_erp(monkeypatch):
     data = build_deliverable_status(list(PERSONAL_HOST_MOD_IDS))
     assert data["deliverable"] is True
     assert ERP_DOMAIN_BRIDGE_MOD_ID not in data["expected_mod_ids"]
+
+
+def test_complete_generic_pack_is_blocked_by_required_runtime(monkeypatch):
+    from fastapi import FastAPI
+
+    from app.runtime_integrity import record_runtime_component
+
+    monkeypatch.setenv("XCAGI_EDITION", "generic")
+    monkeypatch.setattr("app.mod_sdk.deliverable_status.resolve_product_sku", lambda: None)
+    app = FastAPI()
+    record_runtime_component(app, "fixture", ok=False, required=True)
+    data = build_deliverable_status(list(GENERIC_HOST_MOD_IDS), app=app)
+    assert data["generic_pack_installed"] is True
+    assert data["deliverable"] is False
+    assert any(b["code"] == "RUNTIME_COMPONENT_UNAVAILABLE" for b in data["blockers"])
