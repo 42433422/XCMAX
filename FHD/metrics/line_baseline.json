@@ -1,5 +1,5 @@
 {
-  "lines": 2302886,
+  "lines": 2302897,
   "updated": "2026-10-14",
-  "note": "棘轮下调"
+  "note": "Reuse #2334 63955c3 deterministic Mods ETag regression only; measured maintained lines 2302897, net +7 versus main baseline 2302890, within approved +285; no #2334 baseline imported."
 }
