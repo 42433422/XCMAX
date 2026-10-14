@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 from sqlalchemy.engine import make_url
 
+import app.services.database_service as db_mod
 from app.services.database_service import DatabaseService
 
 
@@ -315,10 +316,7 @@ class TestRestoreDatabase:
         if case == "concurrent-write":
             monkeypatch.setattr(service, "_stage_restore", stage_then_write)
         if case == "slow-copy":
-            monkeypatch.setattr(
-                "app.services.database_service.time",
-                SimpleNamespace(monotonic=Mock(side_effect=[0, 3])),
-            )
+            monkeypatch.setattr(db_mod, "time", SimpleNamespace(monotonic=Mock(side_effect=[0, 3])))
         result = service.restore_database(str(backup))
         restored = case != "concurrent-write"
         assert result["success"] is restored
