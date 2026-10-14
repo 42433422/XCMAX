@@ -209,7 +209,7 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
     assert set(quality["needs"]) == {"guard-temp-scripts", "ssot-drift-gate"}
     assert shard["needs"] == "backend-quality"
     assert shard["runs-on"] == "ubuntu-latest"
-    assert shard["strategy"] == {"fail-fast": False, "matrix": {"shard": [1, 2]}}
+    assert shard["strategy"] == {"fail-fast": False, "matrix": {"shard": [1, 2, 3, 4]}}
     assert set(gate["needs"]) == {"backend-quality", "backend-test-shard"}
     assert gate["if"] == "always()"
     assert gate["outputs"]["skip"] == "${{ needs.backend-quality.outputs.skip }}"
@@ -420,17 +420,17 @@ def test_weighted_real_collection_and_profile_integrity(tmp_path, monkeypatch):
     assert profile()[1] != identity
 
 
-def test_four_way_experiment_independent_gates():
+def test_four_way_production_configuration():
     jobs = yaml.safe_load((ROOT / ".github/workflows/ci-cd.yml").read_text())["jobs"]
-    shard, gate, comparison = (
-        jobs[n] for n in ("backend-four-shard", "backend-four-test", "backend-shard-comparison")
-    )
+    shard, gate = (jobs[n] for n in ("backend-test-shard", "backend-test"))
+    assert not {"backend-four-shard", "backend-four-test", "backend-shard-comparison"} & jobs.keys()
     assert shard["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
     assert shard["runs-on"] == gate["runs-on"] == "ubuntu-latest"
     assert shard["env"]["BACKEND_SHARD_TOTAL"] == gate["env"]["BACKEND_SHARD_TOTAL"] == "4"
     assert shard["env"]["BACKEND_TIMINGS_FILE"] == gate["env"]["BACKEND_TIMINGS_FILE"]
-    assert gate["if"] == "always() && github.event_name == 'pull_request'"
-    assert set(comparison["needs"]) == {"backend-test", "backend-four-test"}
+    assert shard["env"]["BACKEND_TIMINGS_FILE"] == "metrics/backend_test_timings.json"
+    assert "for n in 1 2 3 4;" in json.dumps(gate)
+    assert gate["if"] == "always()"
     assert "--behavior --require-backend" in json.dumps(gate)
     assert "--check --require-backend" in json.dumps(gate)
-    assert "backend-four-${{" in json.dumps(shard) and "backend-four-${{" in json.dumps(gate)
+    assert "backend-shard-${{" in json.dumps(shard) and "backend-shard-${{" in json.dumps(gate)
