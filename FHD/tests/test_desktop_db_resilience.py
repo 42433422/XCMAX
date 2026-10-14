@@ -265,7 +265,6 @@ def test_desktop_sqlite_connection_enables_wal(tmp_path, monkeypatch):
 def test_non_desktop_mode_does_not_force_wal(tmp_path, monkeypatch):
     """非桌面模式（Web/测试）下 SQLite 不应被强制开 WAL。"""
     _reset_desktop_env(monkeypatch)
-    # 显式设为 "0" 确保 _sqlite_desktop_mode() 返回 False
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "0")
 
     from app.db import _sqlite_desktop_mode
@@ -275,7 +274,6 @@ def test_non_desktop_mode_does_not_force_wal(tmp_path, monkeypatch):
     db_path = tmp_path / "test_non_desktop.db"
     _create_test_db(db_path)
 
-    # 确保测试 db 是默认 rollback journal 模式（防止前一个测试的 WAL 残留）
     conn = sqlite3.connect(str(db_path))
     mode = conn.execute("PRAGMA journal_mode").fetchone()
     conn.close()
