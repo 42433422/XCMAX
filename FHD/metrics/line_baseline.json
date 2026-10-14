@@ -1,5 +1,5 @@
 {
-  "lines": 2303210,
+  "lines": 2303227,
   "updated": "2026-10-13",
-  "note": "User explicitly approved up to +350 maintained lines on 2026-10-14 for same-SHA two-versus-four backend shard experiment, timing partition and verification; actual +319. Remove temporary comparison before promotion; no product scope expansion."
+  "note": "User approved up to +350 maintained lines for four-shard experiment; actual +336 includes test-owned ModRegistry and RBAC host database isolation; all original assertions and coverage gates preserved."
 }
