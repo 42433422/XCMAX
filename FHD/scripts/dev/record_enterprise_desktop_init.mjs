@@ -11,6 +11,8 @@ const dir = path.resolve(process.env.XCAGI_GUI_EVIDENCE || 'candidate/evidence-G
 fs.mkdirSync(dir, { recursive: true })
 const run = `${process.env.GITHUB_RUN_ID || Date.now()}-${process.env.GITHUB_RUN_ATTEMPT || 1}`
 const phase = process.env.XCAGI_GUI_PHASE || 'business'
+const legacyRollback = phase === 'readback' && process.env.XCAGI_GUI_MODE === 'Rollback'
+  && process.env.XCAGI_GUI_BUILD_SHA === '2e6f03bf67b88965e450721e5b8432ab6395782b'
 const seed = process.env.XCAGI_GUI_SEED ? JSON.parse(fs.readFileSync(process.env.XCAGI_GUI_SEED, 'utf8')) : null
 const marker = `WIN-GUI-${run}-${phase}`
 const names = { customer: `${marker}-客户`, product: `${marker}-产品`, supplier: `${marker}-供应商`, ai: `${marker}-AI客户`, cancelled: `${marker}-取消客户` }
@@ -136,10 +138,16 @@ async function main() {
       const view = kind === 'customer' ? 'customers' : 'products'
       await nav(view, `#view-${view}`)
       const row = page.locator(`#view-${view} tbody tr`).filter({ hasText: name })
-      for (const value of kind === 'customer' ? Object.values(seed.cases.find(c => c.id === kind).actual.original_fields).filter(Boolean) : [seed.marker, '¥12.50']) await expect(row).toContainText(value)
+      for (const value of kind === 'customer' ? Object.entries(seed.cases.find(c => c.id === kind).actual.original_fields).filter(([key, value]) => value && !(legacyRollback && key === 'contact_address')).map(([, value]) => value) : [seed.marker, '¥12.50']) await expect(row).toContainText(value)
       if (kind === 'product') await expect(row.locator('td').nth(3)).toHaveText('10')
       await expect.poll(() => observedRows.get(name)?.id).toBe(seed.cases.find(c => c.id === kind).actual.id)
       if (kind === 'customer') for (const [key, value] of Object.entries(seed.cases.find(c => c.id === kind).actual.original_fields)) await expect.poll(() => observedRows.get(name)?.[key] ?? '').toBe(value)
+      if (kind === 'customer' && legacyRollback) {
+        await click('编辑', row); await expect(modal().locator('h3')).toHaveText('编辑客户')
+        await expect(field('地址').locator('input,textarea').first()).toHaveValue(seed.cases.find(c => c.id === kind).actual.original_fields.contact_address)
+        await page.screenshot({ path: path.join(dir, 'legacy-customer-address-readback.png'), fullPage: true, timeout: 60000 })
+        await click('取消', modal()); await expect(modal()).toHaveCount(0)
+      }
       records[kind] = observedRows.get(name)
     }
     return { original_run: seed.run, tenant_id: login.tenant_id, workspace_id: login.workspace_id, workspace_owner_id: workspaceOwners.at(-1), records }
