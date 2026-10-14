@@ -1,5 +1,5 @@
 {
-  "lines": 2303226,
-  "updated": "2026-10-14",
-  "note": "Preserve main #2333 net deletion baseline 2302890; user-approved four-shard maximum +350, actual +336 including isolation fixes. No assertion or coverage gates weakened."
+  "lines": 2303239,
+  "updated": "2026-10-13",
+  "note": "User approved maximum +350 maintained lines for four-shard experiment; actual +349 against main baseline2302890. Includes deterministic ETag unchanged/changed representation contract, registry and RBAC isolation; no runtime or coverage gate weakened."
 }
