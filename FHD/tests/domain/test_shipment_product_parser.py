@@ -39,15 +39,14 @@ def test_match_product_prefers_longest_contained_name() -> None:
     assert hit["model_number"] == "M13687"
 
 
-def test_prepare_parsed_products_computes_amount() -> None:
+def test_prepare_parsed_products_accepts_ai_shipment_fields() -> None:
     rows = prepare_parsed_products(
-        input_products=[
-            {"name": "锡膏 A", "model_number": "XG-100", "quantity_tins": 2, "tin_spec": 10.0}
-        ],
-        db_products=_DB,
+        input_products=[{"product_name": "QA-M4-10006", "quantity": 2, "weight_per_unit": 0.2}],
+        db_products=[dict(_DB[0], model_number="QA-M4-10006")],
     )
-    assert len(rows) == 1
     row = rows[0]
-    assert row["quantity_kg"] == 20.0
-    assert row["unit_price"] == 88.0
-    assert row["amount"] == 1760.0
+    assert row["model_number"] == "QA-M4-10006"
+    assert row["name"] == "锡膏 A"
+    assert row["quantity_kg"] == 0.4
+    assert row["tin_spec"] == 0.2
+    assert row["amount"] == 35.2

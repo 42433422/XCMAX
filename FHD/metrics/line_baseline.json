@@ -1,5 +1,5 @@
 {
-  "lines": 2303227,
-  "updated": "2026-10-13",
-  "note": "User approved up to +350 maintained lines for four-shard experiment; actual +336 includes test-owned ModRegistry and RBAC host database isolation; all original assertions and coverage gates preserved."
+  "lines": 2303226,
+  "updated": "2026-10-14",
+  "note": "Preserve main #2333 net deletion baseline 2302890; user-approved four-shard maximum +350, actual +336 including isolation fixes. No assertion or coverage gates weakened."
 }
