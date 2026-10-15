@@ -81,7 +81,7 @@ export function useSettingsAccount() {
     if (!res || typeof res !== 'object') return
     const o = res as Record<string, unknown>
     const base = o.data && typeof o.data === 'object' && !Array.isArray(o.data) ? (o.data as Record<string, unknown>) : {}
-    accountProfileStore.applyFromMeData({
+    void accountProfileStore.applyFromMeData({
       ...base,
       account_kind: o.account_kind ?? base.account_kind,
       company_brand: o.company_brand ?? base.company_brand,
@@ -89,7 +89,7 @@ export function useSettingsAccount() {
       market_is_enterprise: o.market_is_enterprise ?? base.market_is_enterprise,
       impersonating_market_user_id: o.impersonating_market_user_id ?? base.impersonating_market_user_id,
       impersonating_username: o.impersonating_username ?? base.impersonating_username,
-    })
+    }).catch(() => undefined)
   }
 
   async function hydrateUserFromSessionValidate(): Promise<boolean> {

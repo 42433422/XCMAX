@@ -21,7 +21,7 @@
         <dt>支持包 SHA256</dt><dd>{{ item.context?.support_bundle_sha256 || '—' }}</dd>
         <dt>闸门</dt><dd>{{ Object.entries(item.gates || {}).map(([k, v]) => `${k}: ${v}`).join(' · ') || '暂无收据' }}</dd>
       </dl>
-      <details><summary>工单证据、诊断、PR、CI 与时间线</summary><pre class="payload">{{ pretty(item) }}</pre></details>
+      <details><summary>工单证据、诊断、PR、CI 与时间线</summary><pre class="payload">{{ JSON.stringify(item, null, 2) }}</pre></details>
       <div v-if="ticketIdOf(item)" class="ticket-trail">
         <div class="drawer-actions">
           <button class="btn btn-secondary" :disabled="trails[item.wo_id]?.loading" @click="loadTrail(item)">{{ trails[item.wo_id]?.ticket ? '刷新客户工单' : `查看客户工单 #${ticketIdOf(item)}` }}</button>
@@ -29,6 +29,7 @@
           <span v-if="trails[item.wo_id]?.ticket" class="muted">{{ trails[item.wo_id]?.ticket?.ticket_no }} · {{ trails[item.wo_id]?.ticket?.lifecycle_label }}（{{ trails[item.wo_id]?.ticket?.status }}）</span>
         </div>
         <p v-if="trails[item.wo_id]?.error" class="banner-error">{{ trails[item.wo_id]?.error }}</p>
+        <pre v-if="trails[item.wo_id]?.ticket?.summary" class="payload" aria-label="客户问题完整正文">{{ trails[item.wo_id]?.ticket?.summary }}</pre>
         <ol class="timeline"><li v-for="(row, index) in timelineOf(item)" :key="index"><time>{{ formatTime(row.at) }}</time>{{ row.label }}</li></ol>
       </div>
       <div v-if="item.can_decide" class="drawer-actions">
@@ -135,10 +136,6 @@ async function downloadBundle(item: OwnerWorkOrder) {
 function formatTime(value: unknown) {
   const date = new Date(typeof value === 'number' ? value : String(value || ''))
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString()
-}
-
-function pretty(value: unknown) {
-  try { return JSON.stringify(value ?? {}, null, 2) } catch { return String(value ?? '') }
 }
 
 async function refresh() {

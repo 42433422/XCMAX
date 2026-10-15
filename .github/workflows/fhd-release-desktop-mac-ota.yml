@@ -9,9 +9,9 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "1.0.0.5"
+        default: "1.0.0.6"
         type: choice
-        options: ["1.0.0.5", "1.0.0.4", "1.0.0.3", "1.0.0.2", "1.0.0.1", "1.0.0.0"]
+        options: ["1.0.0.6", "1.0.0.5", "1.0.0.4", "1.0.0.3", "1.0.0.2", "1.0.0.1", "1.0.0.0"]
       candidate_only:
         description: "Build and notarize an acceptance artifact without publishing"
         required: false
@@ -163,4 +163,15 @@ jobs:
           name: ${{ format('mac-acceptance-{0}-{1}', inputs.release_sha, inputs.architecture || 'arm64') }}
           path: FHD/release/xcagi-v${{ github.event.inputs.version }}/enterprise
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 30
+
+      - name: Preserve failed staple candidate for diagnosis only
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ format('mac-staple-recovery-{0}-{1}', inputs.release_sha, inputs.architecture || 'arm64') }}
+          path: |
+            FHD/release-staple-recovery/${{ inputs.release_sha }}-${{ inputs.architecture || 'arm64' }}/XCAGI-Enterprise-${{ inputs.version }}-mac-${{ inputs.architecture || 'arm64' }}.dmg
+            FHD/release-staple-recovery/${{ inputs.release_sha }}-${{ inputs.architecture || 'arm64' }}/recovery-receipt.json
+          if-no-files-found: warn
+          retention-days: 30

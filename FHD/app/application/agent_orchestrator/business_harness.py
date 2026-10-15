@@ -11,6 +11,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from app.application.agent_orchestrator.public_step_errors import public_run_error
+
 BUSINESS_HARNESS_PROTOCOL = "xcagi.business-harness.v1"
 TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
 
@@ -115,7 +117,7 @@ def _iter_result_payloads(run: Any) -> list[dict[str, Any]]:
 def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
     status = _text(getattr(run, "status", ""), limit=32)
     if status == "failed":
-        return "业务任务执行失败，详细信息已记录"
+        return public_run_error(run) or "业务任务执行失败，详细信息已记录"
     if status == "cancelled":
         return "业务任务已取消，未继续执行"
     for payload in reversed(payloads):

@@ -126,7 +126,7 @@ PY
     return 1
   fi
   echo "[notarize] DMG accepted"
-  xcrun stapler staple "${dmg}"
+  python3 "${ROOT}/scripts/package/staple-macos-dmg.py" "${dmg}"
   xcrun stapler validate "${dmg}"
 }
 

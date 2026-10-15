@@ -10,6 +10,12 @@ def _facade():
     return importlib.import_module("app.application.ai_chat_app_service")
 
 
+from app.application.ai_chat_app_service_dynamic_workflow_pending_mixin import (
+    CANCEL_WORDS,
+    CONFIRM_WORDS,
+)
+
+
 class __AIChatApplicationServicePart02MixinPart02Mixin:
     def _try_handle_dynamic_workflow(
         self,
@@ -23,6 +29,8 @@ class __AIChatApplicationServicePart02MixinPart02Mixin:
         if not text:
             return None
         self._sweep_expired_clarifications()
+        if text.lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS:
+            return self._resume_pending_dynamic_workflow(user_id, message, text, context)[1]
         explicit_workflow_tool_intent = self._looks_like_explicit_workflow_tool_intent(text)
         smart_workflow_intent = self._looks_like_smart_workflow_intent(text, context)
         has_pending_workflow = user_id in self._pending_workflows
