@@ -12,7 +12,19 @@ def digest(path):
 
 def run(action, root, evidence):
     root, evidence = Path(root), Path(evidence)
+    if action in ('main-seed', 'main-verify', 'backup-verify'):
+        database = root if action == 'backup-verify' else root / 'data' / 'xcagi.db'
+        assert database.is_file(), 'Existing isolated application database required'
+        with sqlite3.connect(f'file:{database.as_posix()}?mode={"rw" if action == "main-seed" else "ro"}', uri=True) as db:
+            if action == 'main-seed':
+                db.execute('CREATE TABLE lifecycle_acceptance_records (id INTEGER PRIMARY KEY, value TEXT)')
+                db.execute("INSERT INTO lifecycle_acceptance_records VALUES (1, 'synthetic-lifecycle-record')")
+            assert db.execute('PRAGMA integrity_check').fetchone() == ('ok',)
+            assert db.execute('SELECT * FROM lifecycle_acceptance_records').fetchall() == [(1, 'synthetic-lifecycle-record')]
+        print(json.dumps({'action': action, 'provenance': 'synthetic isolated fixture; not customer or UI business data', 'rows': 1}))
+        return
     if action in ('app-seed', 'app-verify'):
+
         manifest = evidence / 'original-app-files.json'
         if action == 'app-seed':
             manifest.write_text(json.dumps({str(p.relative_to(root)): digest(p) for p in root.rglob('*') if p.is_file()}), encoding='utf-8')

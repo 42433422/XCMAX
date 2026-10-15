@@ -25,6 +25,9 @@ def test_nonempty_owned_state_and_real_long_path_detect_corruption(tmp_path):
     with sqlite3.connect(root / "data/xcagi.db") as db:
         db.execute("CREATE TABLE business(value TEXT)")
         db.execute("INSERT INTO business VALUES ('preserved')")
+    fixtures.run("main-seed", root, evidence)
+    fixtures.run("main-verify", root, evidence)
+    fixtures.run("backup-verify", root / "data/xcagi.db", evidence)
     fixtures.run("dirty", root, evidence)
     with pytest.raises(AssertionError, match="Owned-state mismatch"):
         fixtures.run("verify", root, evidence)

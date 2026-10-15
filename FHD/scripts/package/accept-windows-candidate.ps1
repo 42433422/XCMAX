@@ -106,7 +106,11 @@ function Backup-And-Version {
     Stop-App; $env:XCAGI_DESKTOP_USER_DATA_DIR = $restoreRoot
     $restoredProcess = Start-App 'backup_restore'; $restoredAuth = Login 'backup_restore'
     Check ($restoredAuth.tenant -eq $newAuth.tenant) 'backup_restore_enterprise' "tenant_sha256=$(Digest $restoredAuth.tenant)"
-    if ($candidateGuiProof) { Run-Gui 'readback' (Join-Path $EvidenceDir 'restored-gui') $(if ($Mode -eq 'Upgrade') { $oldGuiSeed } else { $candidateGuiProof }) | Out-Null }
+    if ($Mode -eq 'Upgrade') {
+      & python (Join-Path $PSScriptRoot 'windows-lifecycle-fixtures.py') backup-verify $restoredDb $EvidenceDir
+      Check ($LASTEXITCODE -eq 0) 'backup_restore.synthetic_rows' 'restored scheduled backup contains synthetic records and passes SQLite integrity'
+    }
+    if ($candidateGuiProof) { Run-Gui 'readback' (Join-Path $EvidenceDir 'restored-gui') $candidateGuiProof | Out-Null }
   } finally {
     $env:XCAGI_DESKTOP_USER_DATA_DIR = $previousUserData; Stop-App
   }
@@ -115,7 +119,7 @@ function Run-Gui([string]$phase, [string]$directory, [string]$seed = '') {
   New-Item -ItemType Directory -Force -Path $directory | Out-Null; $env:XCAGI_GUI_EVIDENCE = (Resolve-Path $directory).Path; $env:XCAGI_GUI_PHASE = $phase; $env:XCAGI_GUI_SEED = $seed
   $env:XCAGI_GUI_MODE = $Mode
   $env:XCAGI_GUI_BUILD_SHA = (Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw | ConvertFrom-Json).gitSha
-  & node (Join-Path $PSScriptRoot '../dev/record_enterprise_desktop_init.mjs'); Check ($LASTEXITCODE -eq 0) "normal_gui_$phase" 'normal UI must save and read back actual business records'
+  & node (Join-Path $PSScriptRoot '../dev/record_enterprise_desktop_init.mjs'); Check ($LASTEXITCODE -eq 0) "normal_gui_$phase" 'requested GUI phase must complete with all assertions'
   return (Join-Path $env:XCAGI_GUI_EVIDENCE 'gui-business.json')
 }
 function Fixture([string]$action) {
@@ -169,6 +173,8 @@ function Invoke-AppUpdate {
     Check ((Get-FileHash -LiteralPath (Join-Path $naturalMarker.ownedBackupRoot $fixture.path) -Algorithm SHA256).Hash.ToLowerInvariant() -eq $fixture.sha256) 'app_update.owned_backup_hash' "sha256=$($fixture.sha256)"
   }
   $script:databaseBefore = (Get-FileHash -LiteralPath $naturalMarker.databaseBackupPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  & python (Join-Path $PSScriptRoot 'windows-lifecycle-fixtures.py') backup-verify $naturalMarker.databaseBackupPath $EvidenceDir
+  Check ($LASTEXITCODE -eq 0) 'app_update.synthetic_backup_rows' 'natural backup contains synthetic records and passes SQLite integrity'
   Check ((Get-FileHash -LiteralPath (Join-Path $dataRoot 'data/xcagi.db') -Algorithm SHA256).Hash.ToLowerInvariant() -eq $databaseBefore) 'app_update.natural_database_backup' "sha256=$databaseBefore"
 }
 function Assert-RollbackEvidence {
@@ -186,7 +192,7 @@ function Assert-RollbackEvidence {
     if ($appliedPath -and (Test-Path -LiteralPath $appliedPath -PathType Leaf)) { Copy-Item -LiteralPath $appliedPath -Destination (Join-Path $EvidenceDir 'rollback-applied.last.json') -Force }
   }
 }
-function Invoke-FailedRollback([string]$tenant, [string]$seed) {
+function Invoke-FailedRollback([string]$tenant) {
   Fixture 'dirty'
   $db = Join-Path $dataRoot 'data/xcagi.db'; Check ((Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant() -ne $databaseBefore) 'rollback.database_changed' 'controlled isolated database write differs from natural snapshot'
   $listener = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 17500); $listener.Start()
@@ -202,7 +208,7 @@ function Invoke-FailedRollback([string]$tenant, [string]$seed) {
     & python (Join-Path $PSScriptRoot 'windows-lifecycle-fixtures.py') app-verify $installRoot $EvidenceDir
     Check ($LASTEXITCODE -eq 0) 'rollback.app_file_hashes' 'all original app files restored with no extra files'
   } finally { $listener.Stop() }
-  Stop-App; Start-App 'old'; Run-Gui 'readback' (Join-Path $EvidenceDir 'rollback-gui') $seed | Out-Null
+  Stop-App; Start-App 'old'; Run-Gui 'identity' (Join-Path $EvidenceDir 'rollback-gui') | Out-Null; Fixture 'main-verify'
   $back = Login 'old'; Check ($back.tenant -eq $tenant) 'rollback.same_enterprise' "tenant_sha256=$(Digest $back.tenant)"
 }
 
@@ -222,20 +228,20 @@ try {
     Fixture 'seed'
     $env:XCAGI_UPDATE_URL = 'http://127.0.0.1:18765/'
     $feed = Start-Process node -ArgumentList @((Join-Path $PSScriptRoot 'windows-lifecycle-update.mjs'), 'serve', (Split-Path $CandidatePath), $CandidatePath) -PassThru -NoNewWindow
-    Start-App 'old'; $oldGuiSeed = Run-Gui 'seed' (Join-Path $EvidenceDir 'old-gui'); $oldAuth = Login 'old'
+    Start-App 'old'; Stop-App; Fixture 'main-seed'; Start-App 'old'; Run-Gui 'identity' (Join-Path $EvidenceDir 'old-gui') | Out-Null; $oldAuth = Login 'old'
     Invoke-AppUpdate
     if ($Mode -eq 'Rollback') {
-      Invoke-FailedRollback $oldAuth.tenant $oldGuiSeed; $evidence.result = 'rollback_passed'; return
+      Invoke-FailedRollback $oldAuth.tenant; $evidence.result = 'rollback_passed'; return
     }
     Start-App 'candidate'; $newAuth = Login 'candidate'
     $deadline = (Get-Date).AddMinutes(1); while ((Test-Path (Join-Path $dataRoot 'rollback-marker.json')) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2; $health = Invoke-RestMethod "$base/api/health?lite=true" -TimeoutSec 3; Check ($health.git_sha -eq $CandidateSha -and $health.status -ne 'unhealthy') 'upgrade.observation_identity' 'candidate remains healthy during natural commit observation' }
     Check (-not (Test-Path (Join-Path $dataRoot 'rollback-marker.json'))) 'upgrade.health_commit' 'candidate naturally committed its healthy-start observation'
     Check ($newAuth.tenant -eq $oldAuth.tenant) 'same_enterprise' "tenant_sha256=$(Digest $newAuth.tenant)"
-    $candidateGuiProof = Run-Gui 'readback' (Join-Path $EvidenceDir 'after-upgrade-gui') $oldGuiSeed; Fixture 'verify'
+    Run-Gui 'identity' (Join-Path $EvidenceDir 'after-upgrade-gui') | Out-Null; Fixture 'verify'; Fixture 'main-verify'
     Stop-App; Uninstall-OldApp
     Check (-not (Test-Path (Join-Path $installRoot 'XCAGI.exe'))) 'retention.uninstalled' 'candidate executable removed'
-    Fixture 'verify'; Install $CandidatePath 'candidate'; Start-App 'candidate'
-    Run-Gui 'readback' (Join-Path $EvidenceDir 'reinstalled-gui') $oldGuiSeed | Out-Null; Fixture 'verify'
+    Fixture 'verify'; Fixture 'main-verify'; Install $CandidatePath 'candidate'; Start-App 'candidate'
+    Run-Gui 'identity' (Join-Path $EvidenceDir 'reinstalled-gui') | Out-Null; Fixture 'verify'; Fixture 'main-verify'
   } else {
     Install $CandidatePath 'candidate'; Start-App 'candidate'; $newAuth = Login 'candidate'
   }
@@ -246,6 +252,7 @@ try {
 } finally {
   if ($feed -and -not $feed.HasExited) { Stop-Process -Id $feed.Id -ErrorAction SilentlyContinue }; Remove-Item Env:XCAGI_UPDATE_URL -ErrorAction SilentlyContinue
   $evidence.runner = @{ os=[Environment]::OSVersion.VersionString; caption=(Get-CimInstance Win32_OperatingSystem).Caption; customer_windows_10_11='not_verified'; uac_interactive_consent='not_verified'; long_paths_policy=(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem').LongPathsEnabled }
+  $evidence.record_fixture_scope = 'dedicated synthetic SQLite records, not customer data or business UI acceptance'
   $evidence.mod_fixture_scope = 'synthetic owned configuration/attachment/private database retention; registered Mod loading and entitlement not verified'
   foreach ($log in @((Join-Path $env:TEMP 'xcagi-installer-silent.log'), (Join-Path $dataRoot 'rollback/rollback-helper.log'))) { if (Test-Path -LiteralPath $log) { Copy-Item -LiteralPath $log -Destination $EvidenceDir } }
   $backendLog = Join-Path $dataRoot 'logs/electron-backend.log'

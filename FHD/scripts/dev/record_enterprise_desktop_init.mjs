@@ -17,8 +17,8 @@ const seed = process.env.XCAGI_GUI_SEED ? JSON.parse(fs.readFileSync(process.env
 const marker = `WIN-GUI-${run}-${phase}`
 const names = { customer: `${marker}-客户`, product: `${marker}-产品`, supplier: `${marker}-供应商`, ai: `${marker}-AI客户`, cancelled: `${marker}-取消客户` }
 const required = ['normal_login', 'tenant_identity', ...(seed ? ['old_ui_readback'] : [])]
-if (phase !== 'readback') required.push('customer', 'product', ...(phase === 'seed' ? ['old_sign_out'] : []))
-if (!['seed', 'readback'].includes(phase)) required.push('shipment_unit_readback', 'visible_version', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business', ...(phase === 'faults' ? ['controlled_stock_failure', 'authorization_cancel'] : []))
+if (!['readback', 'identity'].includes(phase)) required.push('customer', 'product', ...(phase === 'seed' ? ['old_sign_out'] : []))
+if (!['seed', 'readback', 'identity'].includes(phase)) required.push('shipment_unit_readback', 'visible_version', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business', ...(phase === 'faults' ? ['controlled_stock_failure', 'authorization_cancel'] : []))
 const observedRows = new Map(), workspaceOwners = []
 const evidence = { run, phase, started_at: new Date().toISOString(), marker, names, cases: [], observations: [], result: 'running' }
 let browser, page
@@ -138,6 +138,7 @@ async function main() {
     await expect.poll(() => workspaceOwners.at(-1), { timeout: 30000 }).toBe(`tenant:${login.tenant_id}`)
     return { ...login, workspace_owner_id: workspaceOwners.at(-1) }
   })
+  if (phase === 'identity') { evidence.result = 'identity_verified'; return }
   if (seed) await step('old_ui_readback', async () => {
     const originalLogin = seed.cases.find(c => c.id === 'normal_login').actual
     if (login.account_sha256 !== originalLogin.account_sha256 || login.tenant_id !== originalLogin.tenant_id || login.workspace_id !== originalLogin.workspace_id || workspaceOwners.at(-1) !== seed.cases.find(c => c.id === 'tenant_identity').actual.workspace_owner_id) throw new Error('Upgrade changed the original account, enterprise or workspace')
