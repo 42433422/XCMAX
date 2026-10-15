@@ -18,6 +18,18 @@ def _facade() -> Any:
     return legacy_chat_adapter
 
 
+def _opening_tool_choice(
+    user_message: str, tools: list[Any], runtime_context: dict[str, Any] | None
+) -> Any:
+    from app.application.agent_orchestrator.business_harness import forced_order_tool_choice
+
+    return (
+        forced_document_tool_choice(user_message, tools, runtime_context)
+        or forced_order_tool_choice(user_message, tools)
+        or "auto"
+    )
+
+
 def _approval_wait_text() -> str:
     for record in _facade().get_last_tool_records():
         output = record.get("output") or {}
@@ -81,7 +93,7 @@ def _prepare_chat(user_message, runtime_context, system_prompt, client, model):
         r"(?:不要|勿|别|无需|不需要|禁止).{0,8}备份|(?:如何|怎么|解释|介绍|查看|列出|查询|检查|读取|打开|下载|删除|恢复).{0,12}备份|备份(?:文件)?(?:进行)?(?:删除|恢复)",
         user_message,
     )
-    tool_choice = forced_document_tool_choice(user_message, tools, runtime_context) or "auto"
+    tool_choice = _opening_tool_choice(user_message, tools, runtime_context)
     if backup_required:
         if not any(
             (tool.get("function") or {}).get("name") == "execute_erp_capability" for tool in tools

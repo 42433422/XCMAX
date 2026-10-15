@@ -95,6 +95,67 @@ def test_approval_result_projection_is_idempotency_keyed_and_readable() -> None:
     assert "审批单：APR-1" in call.kwargs["content"]
 
 
+def test_text_only_order_request_is_not_a_completed_business_result() -> None:
+    run = AgentRun(
+        user_id="2",
+        message="请开一张测试订单：客户闭环验收，产品包装盒，数量1。开单后提交审批，并生成可下载的单据文件。",
+        status="completed",
+    )
+    run.final_output = {
+        "chat_payload": {
+            "success": True,
+            "response": "没问题，帮你开这张测试订单。先创建销售订单。",
+        }
+    }
+
+    result = ensure_terminal_business_result(run)
+
+    assert run.status == "failed"
+    assert result["success"] is False
+    assert result["status"] == "failed"
+    assert result["evidence"]["completed_tool_count"] == 0
+    assert "没有工具调用" in result["summary"]
+
+
+def test_order_request_with_a_completed_tool_stays_successful() -> None:
+    run = AgentRun(user_id="2", message="请开一张测试订单", status="completed")
+    run.tool_calls = [
+        ToolCall(
+            step_id="step-1",
+            node_id="write",
+            tool_id="sales",
+            action="create_order",
+            status="completed",
+        )
+    ]
+
+    result = ensure_terminal_business_result(run)
+
+    assert result["success"] is True
+    assert result["evidence"]["completed_tool_count"] == 1
+
+
+def test_plain_chat_without_tools_stays_completed() -> None:
+    run = AgentRun(user_id="2", message="你好", status="completed")
+
+    result = ensure_terminal_business_result(run)
+
+    assert result["success"] is True
+    assert result["status"] == "completed"
+
+
+def test_explicit_order_request_forces_the_registered_erp_tool() -> None:
+    from app.application.agent_orchestrator.business_harness import forced_order_tool_choice
+
+    tools = [{"type": "function", "function": {"name": "execute_erp_capability"}}]
+    choice = forced_order_tool_choice("请开一张测试订单，客户闭环验收，数量1", tools)
+
+    assert choice == {"type": "function", "function": {"name": "execute_erp_capability"}}
+    assert forced_order_tool_choice("查询今天的订单", tools) is None
+    assert forced_order_tool_choice("不要开单", tools) is None
+    assert forced_order_tool_choice("请开一张测试订单", []) is None
+
+
 def test_conversation_message_envelope_restores_whitelisted_harness_ui() -> None:
     row = _message_to_dict(
         (
