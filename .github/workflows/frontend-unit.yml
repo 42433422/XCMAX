@@ -54,12 +54,7 @@ jobs:
 
       - name: Run Vitest unit tests
         working-directory: FHD/frontend
-        run: npm test -- --reporter=default --reporter=junit --outputFile.junit=./test-results/junit.xml
-
-      - name: Run Vitest with coverage
-        working-directory: FHD/frontend
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: npm run test:coverage -- --reporter=default
+        run: npm test -- ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '--coverage' || '' }} --reporter=default --reporter=junit --outputFile.junit=./test-results/junit.xml
 
       - name: Upload JUnit report
         if: always()
