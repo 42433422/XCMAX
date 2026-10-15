@@ -164,3 +164,14 @@ jobs:
           path: FHD/release/xcagi-v${{ github.event.inputs.version }}/enterprise
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Preserve failed staple candidate for diagnosis only
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ format('mac-staple-recovery-{0}-{1}', inputs.release_sha, inputs.architecture || 'arm64') }}
+          path: |
+            FHD/release-staple-recovery/${{ inputs.release_sha }}-${{ inputs.architecture || 'arm64' }}/XCAGI-Enterprise-${{ inputs.version }}-mac-${{ inputs.architecture || 'arm64' }}.dmg
+            FHD/release-staple-recovery/${{ inputs.release_sha }}-${{ inputs.architecture || 'arm64' }}/recovery-receipt.json
+          if-no-files-found: warn
+          retention-days: 30
