@@ -162,18 +162,11 @@ class _ModManagerPart02Mixin:
         return row
 
     def list_mods(self) -> list[dict[str, _facade().Any]]:
-        """
-        返回磁盘扫描 + 权益过滤后的 Mod 列表（与 list_all_mods 一致）。
-        勿仅用 list_loaded_mods：企业版启动时未 entitlement 的客户 Mod
-        不会进入 _loaded_mods，但登录后仍需按服务端 entitlement 在 /api/mods/ 中可见。
-        """
+        """含未加载包，登录后仍按当前账号权益展示。"""
         return self.list_all_mods()
 
     def list_all_mods(self) -> list[dict[str, _facade().Any]]:
-        """
-        始终返回磁盘扫描的全部 Mod 列表，不受已加载状态影响。
-        供 GET /api/mods/?all=1 使用，返回所有可选的标准扩展包。
-        """
+        """返回已通过账号权益过滤的已安装 Mod，包含尚未加载的包。"""
         if _facade().is_mods_disabled():
             return []
         self._refresh_mods_root_if_needed()
@@ -189,7 +182,7 @@ class _ModManagerPart02Mixin:
 
             rows = filter_mod_rows_for_enterprise(rows)
         except _facade().RECOVERABLE_ERRORS:
-            pass
+            return []
         return rows
 
     def get_routes(self) -> list[dict[str, str]]:
@@ -208,7 +201,7 @@ class _ModManagerPart02Mixin:
                 if not is_mod_visible_for_enterprise(m.id):
                     continue
             except _facade().RECOVERABLE_ERRORS:
-                pass
+                continue
             rp = (m.frontend_routes or "").strip()
             if rp:
                 out.append({"mod_id": m.id, "routes_path": rp})
@@ -231,7 +224,8 @@ class _ModManagerPart02Mixin:
                     )
                     continue
             except _facade().RECOVERABLE_ERRORS:
-                pass
+                self._record_load_failure(metadata.id, "entitlement", "权益校验失败，未加载")
+                continue
             _facade().logger.info("[ModManager] Checking dependencies for mod: %s", metadata.id)
             if metadata.dependencies:
                 deps_satisfied = _facade().validate_dependencies(metadata, loaded)

@@ -362,6 +362,39 @@ describe('useChatSessionHistory — coverage ramp', () => {
       expect(showHistory.value).toBe(false)
     })
 
+    it('keeps original local order context when approval returns only a server receipt', async () => {
+      const local = [
+        { role: 'user', content: '创建销售订单，数量2，单价9.90', time: '20:34' },
+        { role: 'ai', content: '<p>等待审批</p>', time: '20:35', approvalCard: { approval_request_ids: ['approval-1'] } },
+        { role: 'user', content: '确认创建', time: '20:36' },
+      ]
+      localStorage.setItem('xcagi_chat_messages_sale', JSON.stringify(local))
+      localStorage.setItem('xcagi_chat_session_meta_sale', JSON.stringify({ title: '创建销售订单', message_count: 3 }))
+      chatApiMock.getConversation.mockResolvedValue({ success: true, messages: [
+        { role: 'assistant', content: '等待审批', time: '20:35' },
+        { role: 'assistant', content: '审批完成，订单SO1，金额19.80', time: '20:38' },
+      ] })
+      chatApiMock.getConversations.mockResolvedValue({ success: true, sessions: [{ session_id: 'sale', message_count: 2 }] })
+      const { deps, mocks } = makeDeps()
+      const { loadSession, refreshHistorySessions, historySessions } = useChatSessionHistory(deps)
+      await loadSession('sale')
+      expect(mocks.loadMessages.mock.calls[0][0]).toEqual([
+        local[0], expect.objectContaining({ role: 'ai', time: '20:35', approvalCard: local[1].approvalCard }),
+        local[2], expect.objectContaining({ content: expect.stringContaining('订单SO1') }),
+      ])
+      await refreshHistorySessions()
+      expect(historySessions.value[0]).toMatchObject({ title: '创建销售订单', message_count: 3, is_local_only: false })
+    })
+
+    it('preserves repeated user messages while matching each server copy once', async () => {
+      const message = { role: 'user', content: '确认', time: '20:36' }
+      localStorage.setItem('xcagi_chat_messages_repeat', JSON.stringify([message, message]))
+      chatApiMock.getConversation.mockResolvedValue({ success: true, messages: [message, message] })
+      const { deps, mocks } = makeDeps()
+      await useChatSessionHistory(deps).loadSession('repeat')
+      expect(mocks.loadMessages.mock.calls[0][0]).toHaveLength(2)
+    })
+
     it('normalizes role to ai when not user/task', async () => {
       chatApiMock.getConversation.mockResolvedValue({
         success: true,

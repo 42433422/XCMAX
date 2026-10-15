@@ -16,6 +16,25 @@ def _desktop_runtime_source(*names: str) -> str:
     return "\n".join((REPO_ROOT / "desktop" / name).read_text(encoding="utf-8") for name in names)
 
 
+def test_weekly_backup_keeps_cadence_after_missed_sunday() -> None:
+    scripts = REPO_ROOT / "scripts" / "backup"
+    install = (scripts / "Install-BackupTask.ps1").read_text(encoding="utf-8")
+    backup = (scripts / "XcagiBackup.ps1").read_text(encoding="utf-8")
+    installer = (REPO_ROOT / "desktop" / "build" / "installer.nsh").read_text(encoding="utf-8")
+    custom_install = installer.split("!macro customInstall", 1)[1].split("!macroend", 1)[0]
+    assert "$task.Settings.StartWhenAvailable = $true" in install
+    assert 'if ($Cadence -eq "Weekly") { "$baseArgs -Weekly" }' in install
+    assert "$action.Arguments" in install
+    assert "XcagiDailyBackup" in install and "XcagiWeeklyBackup" in install
+    assert "$trigger.DaysOfWeek = 1" in install
+    assert '-DataDir "$APPDATA\\XCAGI"' in custom_install
+    assert "Installation continues." in custom_install
+    assert "Abort" not in custom_install
+    assert "backup scheduled task registration failed" not in installer
+    assert "[switch]$Weekly" in backup and "($Weekly -or (Get-Date).DayOfWeek" in backup
+    assert 'Write-Log "ERROR: failed to create weekly copy: $_"\n      throw' in backup
+
+
 def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     scripts = REPO_ROOT / "scripts" / "package"
     ps_backend = (scripts / "build-backend.ps1").read_text(encoding="utf-8")
@@ -30,17 +49,15 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     assert "personal   = 'minimal'" in ps_sync
     assert "enterprise = 'full'" in ps_sync
 
-    for script in (sh_windows, sh_thin):
+    assert "build-installer.ps1" in sh_windows and "-ProductSku" in sh_windows
+    for script in (sh_thin,):
         assert (
             "VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full"
         ) in script
         assert "VITE_XCAGI_PRODUCT_SKU=enterprise npm run build" not in script
-        # 桌面包不得构建 admin-console
         assert "admin-console && npm run build" not in script
         assert "(cd admin-console && npm run build)" not in script
 
-    # build-backend.sh 自 4c724dae8 起把前端构建委托给 build-frontend.sh（SSOT 单点构建），
-    # enterprise=full 的构建由 build-frontend.sh 保证，这里校验委托关系与 admin-console 禁令。
     sh_frontend = (scripts / "build-frontend.sh").read_text(encoding="utf-8")
     assert "build-frontend.sh" in sh_backend
     assert (
@@ -89,13 +106,11 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     assert "return 17500" in desktop_runtime
     assert "process.platform === 'darwin' ? 17500 : 5000" not in desktop_runtime
     assert '"return 17500"' in ps_installer
-    assert '"return 17500"' in sh_installer
+    assert "build-installer.ps1" in sh_installer
     assert '"backendHealthMs"' in ps_installer
-    assert '"backendHealthMs"' in sh_installer
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in smoke
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in acceptance
     assert "isDesktopShell" in router
-    # 网页 admin → /admin；桌面壳 admin → 拒入（管理端仅网页 SSOT）
     assert "resolveAdminConsoleHomeUrl()" in router
     assert "profile.isAdminAccount" in router
     assert "DESKTOP_ADMIN_FORBIDDEN_MESSAGE" in router
@@ -108,6 +123,8 @@ def test_windows_release_requires_sslcom_signing_and_system_authenticode() -> No
         encoding="utf-8"
     )
     build = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(encoding="utf-8")
+    assert "SkipUiInstaller" not in build
+    assert "XcagiInstaller.csproj" in build
     signer = (REPO_ROOT / "desktop" / "build" / "windows-sign.cjs").read_text(encoding="utf-8")
     post_gate = (REPO_ROOT / "scripts" / "package" / "pre-release-security.ps1").read_text(
         encoding="utf-8"
@@ -235,7 +252,7 @@ def test_desktop_update_rollback_is_fail_closed_and_windows_full_app() -> None:
     assert "mode: 'windows-full'" in rollback
     assert "launchWindowsFullRollback" in rollback
     assert "windows-app-current" in rollback
-    assert "Move-Item -LiteralPath $stagingDir -Destination $installDir" in windows
+    assert "[IO.Directory]::Move($stagingDir, $installDir)" in windows
     assert "Copy-Item -LiteralPath $databaseBackupPath" in windows
     assert "state.buildSha.slice(0, 12)" in install_update
     assert "migration backup failed; refusing to continue" in entrypoint
@@ -249,7 +266,7 @@ def test_windows_builders_pass_four_part_product_version_metadata() -> None:
 
     assert '"--config.buildVersion=$Version"' in ps_installer
     assert '"--config.extraMetadata.shortVersionWindows=$Version"' in ps_installer
-    for sh_name in ("build-windows-installer.sh", "build-windows-electron-only.sh"):
+    for sh_name in ("build-windows-electron-only.sh",):
         sh_installer = (scripts / sh_name).read_text(encoding="utf-8")
         assert '"--config.buildVersion=${VERSION}"' in sh_installer
         assert '"--config.extraMetadata.shortVersionWindows=${VERSION}"' in sh_installer
@@ -424,7 +441,7 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert "scripts/package/create-mac-dmg.sh" in installer
     assert "hdiutil create" in dmg_builder
     assert "notarytool submit" in dmg_builder
-    assert "stapler staple" in dmg_builder
+    assert "scripts/package/staple-macos-dmg.py" in dmg_builder
     assert installer.index('if [ -f "${MAC_SIGNING_ENV}" ]') < installer.index(
         'if [ -n "${CSC_KEYCHAIN:-}" ]'
     )

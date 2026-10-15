@@ -1,0 +1,27 @@
+{
+  "sha256": "f88c38184cf2ed425a17b9657f32a3f6e06484d1ca43f2257a6af5c38933fa13",
+  "sheets": {
+    "inventory": [
+      [
+        "product_id",
+        "product_name",
+        "model_number",
+        "category",
+        "total_quantity",
+        "available_quantity",
+        "reserved_quantity",
+        "warehouse_name"
+      ],
+      [
+        1,
+        "BOX",
+        "P006",
+        null,
+        20,
+        20,
+        0,
+        "W006"
+      ]
+    ]
+  }
+}

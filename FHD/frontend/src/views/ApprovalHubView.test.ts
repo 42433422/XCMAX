@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { createHash } from 'node:crypto'
 import ApprovalHubView from '../../../admin-console/src/views/ApprovalHubView.vue'
 
 const fetchOwnerWorkOrders = vi.fn()
 const decideOwnerWorkOrder = vi.fn()
+const fetchCustomerTicket = vi.fn()
 const appAlert = vi.fn().mockResolvedValue(undefined)
 const appPrompt = vi.fn().mockResolvedValue('已复核证据')
 
@@ -11,6 +13,7 @@ vi.mock('@/api/xcmaxAdmin', () => ({
   xcmaxAdminApi: {
     fetchOwnerWorkOrders: (...args: unknown[]) => fetchOwnerWorkOrders(...args),
     decideOwnerWorkOrder: (...args: unknown[]) => decideOwnerWorkOrder(...args),
+    fetchCustomerTicket: (...args: unknown[]) => fetchCustomerTicket(...args),
   },
 }))
 
@@ -97,6 +100,46 @@ describe('ApprovalHubView', () => {
     expect(decideOwnerWorkOrder).toHaveBeenCalledWith(readyOrder.wo_id, 'held', '已复核证据')
     expect(wrapper.text()).toContain('工单刷新失败：service unavailable')
 
+    wrapper.unmount()
+  })
+
+  it('builds the customer ticket timeline and downloads the bundle only after its SHA256 matches', async () => {
+    const bytes = new TextEncoder().encode('PK redacted support bundle')
+    const sha = createHash('sha256').update(bytes).digest('hex')
+    const order = {
+      ...lockedOrder,
+      history: [
+        { event: 'gate', at: '2026-10-06T10:02:00+00:00', ref: { gate: 'evidence', gate_status: 'COLLECTED', evidence: { support_bundle_sha256: sha } } },
+        { event: 'transition', from: 'candidate', to: 'routed', at: '2026-10-06T10:01:00+00:00', ref: { customer_ticket_id: 41 } },
+      ],
+    }
+    const ticket = { ticket_no: 'CI41', status: 'processing', lifecycle_label: '处理中', evidence: { support_bundle_base64: btoa(String.fromCharCode(...bytes)), support_bundle_sha256: sha } }
+    fetchOwnerWorkOrders.mockResolvedValue({ ok: true, count: 1, items: [order] })
+    fetchCustomerTicket.mockResolvedValue({ ticket, audit_logs: [{ event_type: 'customer_issue_reopen', created_at: '2026-10-06T10:05:00', detail: { note: '导出还是报错' } }] })
+    const createObjectURL = vi.fn(() => 'blob:bundle')
+    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const wrapper = mount(ApprovalHubView)
+    await flushPromises()
+
+    await wrapper.get('.ticket-trail .btn-secondary').trigger('click')
+    await flushPromises()
+    expect(fetchCustomerTicket).toHaveBeenCalledWith(41)
+    expect(wrapper.findAll('.timeline li').map((row) => row.text().replace(/^.*?(?=工单|闸门|客户)/, ''))).toEqual([
+      '工单状态 candidate → routed', '闸门 evidence：COLLECTED', '客户重新打开工单：导出还是报错',
+    ])
+    expect(wrapper.text()).toContain('CI41 · 处理中（processing）')
+    await wrapper.findAll('.ticket-trail .btn-secondary')[1].trigger('click')
+    await vi.waitFor(() => expect(createObjectURL).toHaveBeenCalledOnce())
+    expect(click).toHaveBeenCalledOnce()
+
+    fetchCustomerTicket.mockResolvedValue({ ticket: { ...ticket, evidence: { ...ticket.evidence, support_bundle_sha256: '0'.repeat(64) } }, audit_logs: [] })
+    await wrapper.get('.ticket-trail .btn-secondary').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('.ticket-trail .btn-secondary')[1].trigger('click')
+    await vi.waitFor(() => expect(wrapper.find('.ticket-trail .banner-error').text()).toContain('SHA256 校验失败'))
+    expect(createObjectURL).toHaveBeenCalledOnce()
+    click.mockRestore()
     wrapper.unmount()
   })
 })

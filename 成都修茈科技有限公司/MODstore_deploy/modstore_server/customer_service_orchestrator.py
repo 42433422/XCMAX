@@ -170,6 +170,8 @@ TICKET_LIFECYCLE_STEPS: tuple[tuple[int, str], ...] = (
 
 
 from modstore_server.customer_service_orchestrator_part05 import (
+    CLOSED_CUSTOMER_ISSUE_STATES as CLOSED_CUSTOMER_ISSUE_STATES,
+    customer_issue_payload as customer_issue_payload,
     ticket_lifecycle_stage as ticket_lifecycle_stage,
     _summarize_incident_team_rows as _summarize_incident_team_rows,
     apply_customer_ticket_incident_progress as apply_customer_ticket_incident_progress,

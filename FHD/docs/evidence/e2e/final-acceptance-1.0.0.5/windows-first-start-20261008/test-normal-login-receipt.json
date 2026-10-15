@@ -1,0 +1,17 @@
+{
+  "observed_at": "2026-10-08T01:39:23.673Z",
+  "submitted_at": "2026-10-08T01:37:04.797Z",
+  "vm_uuid": "007c0653-f822-4832-84b8-5ee859108c7d",
+  "customer_username": "TEST-WIN-LOOP-20261008",
+  "method": "normal Windows enterprise login UI; stable GUI copy and VirtualBox soft keyboard Ctrl+V",
+  "visible_result": "创建您的数字公司 onboarding; prefilled TEST-WIN-LOOP-20261008",
+  "password_screenshot": false,
+  "password_logged": false,
+  "temporary_editor_cleared": true,
+  "clipboard_restored": "disabled",
+  "draganddrop": "disabled",
+  "api_token_injection": false,
+  "guest_scancode_command": false,
+  "first_cold_start_pass": false,
+  "final_artifact_qualification": false
+}

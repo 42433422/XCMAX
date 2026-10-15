@@ -138,6 +138,27 @@ def get_active_provider(
     )
 
 
+_MARKET_ACCOUNT_FACADE = "app.fastapi_routes.market_account"
+
+
+def _initialized_market_token_reader():
+    """返回已初始化完成的 ``market_account.latest_session_market_token``；否则 None。
+
+    不导入任何模块：门面未加载或仍在（其它线程）初始化中时直接返回 None，
+    健康检查/LLMPort 只是暂不把平台模型算作可用，等导入完成后自然生效。
+    """
+    import sys
+
+    facade = sys.modules.get(_MARKET_ACCOUNT_FACADE)
+    if facade is None:
+        return None
+    spec = getattr(facade, "__spec__", None)
+    if spec is not None and getattr(spec, "_initializing", False):
+        return None
+    reader = getattr(facade, "latest_session_market_token", None)
+    return reader if callable(reader) else None
+
+
 def _register_llm_port_source() -> None:
     """把本 registry 组装进 domain 层 ``LLMPort``（infrastructure→domain 为合法方向）。
 
@@ -180,18 +201,14 @@ def _register_llm_port_source() -> None:
             # provider，使"已登录平台且配了模型"的应用启动即视为本地 LLM 可用
             # （健康检查不再误报"部分 AI 能力未就绪"）。未 boot 场景直接跳过，
             # 保持与旧行为一致。
-            import sys
-
-            if (
-                "app.fastapi_routes.market_account_part01" in sys.modules
-                or "app.fastapi_routes.market_account" in sys.modules
-            ):
+            # 只读取已经初始化完成的门面模块，绝不在这里触发导入（#2067 首启）：
+            # 后台线程正在导入 market_account 时，它已进 sys.modules 但未初始化完；
+            # 此时再导入 market_account_part01 会在模块体里反向导入门面，单线程下是
+            # 循环导入 ImportError，跨线程是 _DeadlockError，导致门面导入失败。
+            market_token_reader = _initialized_market_token_reader()
+            if market_token_reader is not None:
                 try:
-                    from app.fastapi_routes.market_account_part01 import (
-                        latest_session_market_token,
-                    )
-
-                    token = latest_session_market_token()
+                    token = market_token_reader()
                     if token:
                         from app.services.conversation.modstore_adapter import (
                             ModstorePlatformAdapter,
@@ -202,7 +219,7 @@ def _register_llm_port_source() -> None:
                         if adapter.is_configured:
                             _self.get_llm_registry().register("modstore", ModstoreProvider(adapter))
                             return _self.get_active_provider()
-                except (RECOVERABLE_ERRORS, ImportError):
+                except RECOVERABLE_ERRORS:
                     pass
             return _self.get_active_provider()
 

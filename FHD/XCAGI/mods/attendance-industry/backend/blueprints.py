@@ -11,116 +11,34 @@ from urllib.parse import unquote
 
 from fastapi import APIRouter
 
-from app.mod_sdk.errors import RECOVERABLE_ERRORS
-
 logger = logging.getLogger(__name__)
 DEFAULT_TEMPLATE_RELPATH = "424/考勤-2026-3月份考勤统计表.xlsx"
 
 
-def _load_products_personnel_roster_from_host() -> list[tuple[str, str, str]]:
-    """读取统一宿主的人员表，转换不再依赖太阳鸟私有库。"""
-    try:
-        from app.mod_sdk.host_services import Product, get_db
-    except RECOVERABLE_ERRORS:
-        return []
-    out: list[tuple[str, str, str]] = []
-    seen: set[str] = set()
-    try:
-        with get_db() as db:
-            rows = db.query(Product).filter(Product.is_active == 1).order_by(Product.id)
-            for row in rows:
-                name = str(getattr(row, "name", "") or "").strip()
-                if not name or name in seen:
-                    continue
-                seen.add(name)
-                out.append(
-                    (
-                        str(getattr(row, "unit", "") or "").strip(),
-                        str(getattr(row, "specification", "") or "").strip(),
-                        name,
-                    )
-                )
-    except RECOVERABLE_ERRORS:
-        logger.exception("读取统一人员表失败")
-        return []
-    return out
-
-
-def _load_private_roster(db_path: Path) -> list[tuple[str, str, str]]:
-    """兼容尚未迁入主库的统一考勤侧库花名册。"""
-    import sqlite3
-
-    if not db_path.exists():
-        return []
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            "SELECT unit, specification, name FROM products "
-            "WHERE name IS NOT NULL AND TRIM(name) != '' ORDER BY id"
-        ).fetchall()
-    except sqlite3.Error:
-        conn.close()
-        return []
-    seen: set[str] = set()
-    out: list[tuple[str, str, str]] = []
-    for row in rows:
-        name = str(row["name"] or "").strip()
-        if not name or name in seen:
-            continue
-        seen.add(name)
-        out.append(
-            (
-                str(row["unit"] or "").strip(),
-                str(row["specification"] or "").strip(),
-                name,
-            )
-        )
-    conn.close()
-    return out
-
-
 def _resolve_personnel_roster(db_path: Path, owner: str = "") -> list[tuple[str, str, str]]:
-    """与独立人员管理同源；已维护的空名单也不能回退复活旧人员。
-
-    ``owner`` 非空时按登录账号隔离花名册（考勤工作区转换只认自己的名单）；
-    为空（未登录）时不返回任何考勤侧库人员，避免跨账号泄露。
-    """
+    """The managed owner roster is authoritative, including an empty roster."""
     import sqlite3
+
+    from app.mod_sdk.attendance_roster import ordered_employee_rows
 
     try:
         from .owner_scope import migrate_owner_column
-    except ImportError:  # mod_manager 以顶层模块名加载 backend/*.py
+    except ImportError:
         from owner_scope import migrate_owner_column
-
-    if db_path.is_file():
-        migrate_owner_column(db_path)
-        with closing(sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True)) as conn:
-            exists = conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'attendance_employees'"
-            ).fetchone()
-            if exists:
-                if not owner:
-                    # 已建立考勤名单表但未登录：不回退到任何账号数据。
-                    return []
-                rows = conn.execute(
-                    "SELECT department, position, employee_name FROM attendance_employees "
-                    "WHERE TRIM(employee_name) <> '' AND owner_user_id = ? ORDER BY id",
-                    (owner,),
-                ).fetchall()
-                seen: set[str] = set()
-                roster: list[tuple[str, str, str]] = []
-                for department, position, employee_name in rows:
-                    name = str(employee_name or "").strip()
-                    if name and name not in seen:
-                        seen.add(name)
-                        roster.append(
-                            (str(department or "").strip(), str(position or "").strip(), name)
-                        )
-                return roster
-    if not owner:
+    if not owner or not db_path.is_file():
         return []
-    return _load_products_personnel_roster_from_host() or _load_private_roster(db_path)
+    migrate_owner_column(db_path)
+    with closing(sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True)) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='attendance_employees'"
+        ).fetchone():
+            return []
+        conn.row_factory = sqlite3.Row
+        return [
+            (r["department"], r["position"], r["employee_name"])
+            for r in ordered_employee_rows(conn, owner)
+            if str(r["employee_name"] or "").strip()
+        ]
 
 
 def _normalize_relpath(raw: str, *, field_name: str) -> str:

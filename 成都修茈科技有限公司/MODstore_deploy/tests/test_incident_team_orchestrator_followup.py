@@ -34,18 +34,9 @@ def fresh_db(tmp_path, monkeypatch):
 
 @pytest.fixture
 def admin_user(fresh_db):
-    sf = models.get_session_factory()
-    with sf() as s:
-        s.add(
-            models.User(
-                username="admin",
-                password_hash="x",
-                email="admin@example.com",
-                is_admin=True,
-            )
-        )
-        s.commit()
-    yield "admin"
+    from tests.test_customer_service_api import _make_user
+
+    return _make_user("team-admin", admin=True)
 
 
 def _make_results(handler_failed_role: str, error_text: str) -> list[Dict[str, Any]]:
@@ -298,14 +289,18 @@ def test_multiple_handler_failures_each_get_followup(monkeypatch):
 
 
 def test_dispatch_incident_team_writes_followups_to_payload(fresh_db, admin_user, monkeypatch):
-    """集成测试：dispatch_incident_team 把 follow_ups 写到 _team_claim.follow_ups。"""
-    # 准备一个 incident event
     sf = models.get_session_factory()
     with sf() as s:
         ev = models.IncidentEvent(
             event_type="on_error",
             source="unit",
-            payload_json=json.dumps({"summary": "integration test"}),
+            payload_json=json.dumps(
+                {
+                    "summary": "integration test",
+                    "support_bundle_base64": "A" * 60540,
+                    "work_order_id": "WO-regression",
+                }
+            ),
             dispatched_count=0,
         )
         s.add(ev)
@@ -313,7 +308,6 @@ def test_dispatch_incident_team_writes_followups_to_payload(fresh_db, admin_user
         s.refresh(ev)
         event_id = ev.id
 
-    # 关键：让 execute_employee_task 返回 handler_failed + transient error
     def fake_execute(employee_id, task, env=None, user_id=0, **kwargs):
         if employee_id == "verify-1":
             return {
@@ -327,7 +321,6 @@ def test_dispatch_incident_team_writes_followups_to_payload(fresh_db, admin_user
         "modstore_server.incident_team_orchestrator.execute_employee_task",
         fake_execute,
     )
-    # 让 build_incident_team 返回预定义 team
     monkeypatch.setattr(
         "modstore_server.incident_team_orchestrator.build_incident_team",
         lambda eid: {
@@ -342,12 +335,10 @@ def test_dispatch_incident_team_writes_followups_to_payload(fresh_db, admin_user
             ],
         },
     )
-    # 让 maybe_execute_recovery 直接返回 ok
     monkeypatch.setattr(
         "modstore_server.release_recovery_orchestrator.maybe_execute_recovery",
         lambda **kw: {"ok": False, "skipped": True},
     )
-    # 让 _retry_member 也失败（保持 handler_failed）
     monkeypatch.setattr(
         "modstore_server.incident_team_orchestrator._retry_member",
         lambda **kw: {"status": "handler_failed", "error": "still transient"},
@@ -363,10 +354,11 @@ def test_dispatch_incident_team_writes_followups_to_payload(fresh_db, admin_user
     assert fu["action"] == "transient_retry"
     assert fu["ok"] is False  # retry 仍失败
 
-    # 验证 _team_claim.follow_ups 落库
     with sf() as s:
         ev2 = s.get(models.IncidentEvent, event_id)
         payload = json.loads(ev2.payload_json or "{}")
+        assert payload["support_bundle_base64"] == "A" * 60540
+        assert payload["work_order_id"] == "WO-regression"
         assert "_team_claim" in payload
         assert "follow_ups" in payload["_team_claim"]
         assert len(payload["_team_claim"]["follow_ups"]) == 1
