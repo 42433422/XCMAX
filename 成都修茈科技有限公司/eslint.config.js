@@ -1,5 +1,4 @@
 // 扁平 (Flat) ESLint 9 配置：Vue 3 + TypeScript + Prettier 协作。
-// 该文件同时被 MODstore_deploy/market 通过 import 复用，避免两个工作区配置漂移。
 import js from '@eslint/js'
 import vue from 'eslint-plugin-vue'
 import vueTsConfig from '@vue/eslint-config-typescript'
