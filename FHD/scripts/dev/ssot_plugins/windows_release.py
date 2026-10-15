@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""windows-release 域 check：WINDOWS_RELEASE_SSOT.md 结构与状态值合法性。
-
-与 macos_release.py 共享同一校验核心（必填节 + Gate 状态值 + RED 证据契约），
-Windows 文档节标题不同，仅传参差异。
-
-用法: python scripts/dev/ssot_plugins/windows_release.py check
-退出码: 0=OK 1=DRIFT
-"""
+"""windows-release：共享交付证据契约，并阻断旧 NSIS 载荷冒充新版安装包。"""
 
 from __future__ import annotations
 
@@ -28,7 +21,18 @@ REQUIRED_SECTIONS = (
 
 
 def check() -> int:
-    return _check_doc(DOC, REQUIRED_SECTIONS, "windows-release")
+    status = _check_doc(DOC, REQUIRED_SECTIONS, "windows-release")
+    build = (ROOT / "scripts/package/build-installer.ps1").read_text(encoding="utf-8")
+    all_skus = (ROOT / "scripts/package/build-all-skus.ps1").read_text(encoding="utf-8")
+    if "SkipUiInstaller" in build + all_skus or "XcagiInstaller.csproj" not in build:
+        print("[windows-release] DRIFT: Windows delivery must use the WPF installer")
+        return 1
+    shim = (ROOT / "scripts/package/build-windows-installer.sh").read_text()
+    thin = (ROOT / "scripts/package/build-windows-electron-only.sh").read_text()
+    if "build-installer.ps1" not in shim or "electron-builder" in shim or 'OUT_DIR="${ROOT}/release/_windows-payload/' not in thin:
+        print("[windows-release] DRIFT: legacy payloads must not enter Windows delivery")
+        return 1
+    return status
 
 
 if __name__ == "__main__":

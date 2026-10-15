@@ -74,7 +74,6 @@ jobs:
             --report-format sarif \
             --report-path /repo/gitleaks-release.sarif --no-banner --redact
           test -s gitleaks-release.sarif && mv gitleaks-release.sarif "${RUNNER_TEMP}/security-native/gitleaks.sarif"
-
       - name: Run Trivy filesystem scan including unfixed findings
         continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0

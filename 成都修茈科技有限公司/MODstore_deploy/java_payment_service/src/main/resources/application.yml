@@ -1,6 +1,7 @@
 spring:
   application:
     name: payment-service
+  http.converters.preferred-json-mapper: jackson2
   
   # 数据库配置
   datasource:

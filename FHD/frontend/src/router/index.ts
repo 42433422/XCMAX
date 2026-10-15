@@ -131,11 +131,11 @@ router.beforeEach(async (to, _from, next) => {
     const { useAccountProfileStore } = await import('@/stores/accountProfile')
     const profile = useAccountProfileStore()
     // Settings is safe during the desktop session hint's background refresh.
-    if (!profile.loaded && !(isDesktopShell() && to.name === 'settings')) {
+    if ((!profile.loaded || profile.workspaceReady === false) && !(isDesktopShell() && to.name === 'settings')) {
       const sku = await fetchProductSku().catch(() => null)
       if (sku === null || isEnterpriseEdition(sku)) {
         await profile.refreshFromServer().catch(() => undefined)
-        if (!profile.loaded) {
+        if (!profile.loaded || profile.workspaceReady === false) {
           next({ name: 'login', query: { redirect: to.fullPath }, replace: true })
           return
         }

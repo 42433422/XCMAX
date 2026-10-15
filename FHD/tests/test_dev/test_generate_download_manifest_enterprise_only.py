@@ -264,7 +264,7 @@ def test_release_workflow_notarizes_outer_dmg_and_hard_fails_gatekeeper() -> Non
     assert "spctl assess may require stapled notarization ticket" not in workflow
 
     assert 'xcrun notarytool submit "${DMG_PATH}"' in finalize_script
-    assert 'xcrun stapler staple "${DMG_PATH}"' in finalize_script
+    assert 'python3 "${ROOT}/scripts/package/staple-macos-dmg.py" "${DMG_PATH}"' in finalize_script
     assert "buildBlockMap" in finalize_script
     assert "executeAppBuilderAsJson" not in finalize_script
     assert "generate-update-metadata.mjs" in finalize_script

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -75,41 +76,21 @@ class TestLoadLegacyShipmentDocumentGenerator:
         assert result.ShipmentDocumentGenerator is not None
         assert result.PurchaseUnitInfo is not None
 
-    def test_success_via_importlib_fallback(self, tmp_path):
-        """First import attempt fails; importlib fallback succeeds."""
-        legacy_dir = tmp_path / "AI助手"
-        legacy_dir.mkdir()
-        doc_py = legacy_dir / "shipment_document.py"
+    @pytest.mark.parametrize(
+        "cached", [None, SimpleNamespace(__file__="/wrong/shipment_document.py")]
+    )
+    def test_success_via_importlib_fallback(self, tmp_path, monkeypatch, cached):
+        doc_py = tmp_path / "shipment_document.py"
         doc_py.write_text("class ShipmentDocumentGenerator: pass\nclass PurchaseUnitInfo: pass\n")
-
-        import builtins
-
-        original_import = builtins.__import__
-
-        call_count = 0
-
-        def mock_import(name, *args, **kwargs):
-            nonlocal call_count
-            if name == "shipment_document":
-                call_count += 1
-                if call_count == 1:
-                    raise ImportError("first attempt fails")
-                return original_import(name, *args, **kwargs)
-            return original_import(name, *args, **kwargs)
-
-        with (
-            patch("app.utils.path_io.path_utils.get_resource_path", return_value=str(legacy_dir)),
-            patch("os.path.isdir", side_effect=lambda p: str(p) == str(legacy_dir)),
-            patch("os.path.exists", side_effect=lambda p: True),
-            patch("builtins.__import__", side_effect=mock_import),
-        ):
-            # The importlib fallback should kick in
-            try:
-                result = load_legacy_shipment_document_generator(caller_file=__file__)
-                assert result is not None
-            except ImportError:
-                # Acceptable if importlib also fails in the test environment
-                pass
+        monkeypatch.setattr(sys, "path", list(sys.path))
+        monkeypatch.setitem(sys.modules, "shipment_document", cached)
+        monkeypatch.setattr(
+            "app.utils.path_io.path_utils.get_resource_path", lambda *args: str(tmp_path)
+        )
+        result = load_legacy_shipment_document_generator(caller_file=__file__)
+        assert result.legacy_dir == str(tmp_path)
+        assert result.ShipmentDocumentGenerator.__name__ == "ShipmentDocumentGenerator"
+        assert result.PurchaseUnitInfo.__name__ == "PurchaseUnitInfo"
 
     def test_importlib_file_not_found(self, tmp_path):
         """importlib path raises ImportError when spec file doesn't exist."""

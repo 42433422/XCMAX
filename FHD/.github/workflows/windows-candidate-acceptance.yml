@@ -1,5 +1,5 @@
 name: Windows Candidate Acceptance
-run-name: "Windows candidate ${{ inputs.candidate_sha }} · clean + upgrade"
+run-name: "Windows candidate ${{ inputs.candidate_sha }} · isolated lifecycle"
 
 on:
   workflow_dispatch:
@@ -12,20 +12,37 @@ on:
         description: "Exact 40-character source SHA embedded in the candidate"
         required: true
         type: string
+      only:
+        description: "Empty runs all five install modes. Rollback runs only the failed-rollback mode."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
   actions: read
 
 jobs:
+  select-modes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        working-directory: ${{ github.workspace }}
+        env:
+          ONLY: ${{ github.event.inputs.only }}
+        run: |
+          if [ "$ONLY" = "Rollback" ]; then echo 'matrix=["Rollback"]' >> "$GITHUB_OUTPUT"; else echo 'matrix=["Clean","Upgrade","Gui","Recovery","Rollback"]' >> "$GITHUB_OUTPUT"; fi
   isolated-install:
+    needs: select-modes
     name: "${{ matrix.mode }} install on isolated Windows runner"
     runs-on: windows-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        mode: [Clean, Upgrade, Gui, Recovery]
+        mode: ${{ fromJson(needs.select-modes.outputs.matrix) }}
     defaults:
       run:
         working-directory: FHD
@@ -44,7 +61,7 @@ jobs:
           github-token: ${{ github.token }}
           path: FHD/candidate
       - name: Fetch immutable old installer for upgrade
-        if: matrix.mode == 'Upgrade'
+        if: matrix.mode == 'Upgrade' || matrix.mode == 'Rollback'
         shell: pwsh
         run: |
           $url = 'https://xiu-ci.com/xcagi-v1.0.0.1/XCAGI-Enterprise-Setup-1.0.0.1-x64-macalign.exe'
@@ -80,7 +97,7 @@ jobs:
             CandidateSha = $env:CANDIDATE_SHA
             EvidenceDir = "candidate/evidence-$env:MODE"
           }
-          if ($env:MODE -eq 'Upgrade') { $args.OldPath = (Resolve-Path candidate/old-installer.exe).Path }
+          if ($env:MODE -in @('Upgrade','Rollback')) { $args.OldPath = (Resolve-Path candidate/old-installer.exe).Path }
           scripts/package/accept-windows-candidate.ps1 @args
       - uses: actions/upload-artifact@v4
         if: always()
