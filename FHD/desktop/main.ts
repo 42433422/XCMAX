@@ -82,6 +82,13 @@ export function showStartupFailureNotice(message: string): void {
   writeBackendLog(`[startup] ${message}\n`)
 }
 
+/** A window-modal failure notice keeps app.quit() from finishing, so the rollback helper times out. */
+function releaseWindowsBeforeRollbackQuit(): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.destroy()
+  }
+}
+
 function bootstrap(): void {
   const gotLock = app.requestSingleInstanceLock()
   if (!gotLock) {
@@ -217,6 +224,18 @@ function bootstrap(): void {
         })
       }
 
+      if (pendingRollback?.recoveryRequired) {
+        const rollback = await triggerRollbackSafe('Windows 后端迁移失败后的持久恢复')
+        showStartupFailureNotice(
+          rollback?.scheduled
+            ? 'Windows 数据迁移失败，正在通过已验证恢复记录还原旧程序、Mod 与数据库；请等待 XCAGI 自动重启。'
+            : 'Windows 数据迁移失败，恢复尚未启动。恢复记录和快照已保留；请不要继续更新，并重启 XCAGI 重试或联系支持。',
+        )
+        releaseWindowsBeforeRollbackQuit()
+        app.quit()
+        return
+      }
+
       try {
         // 先出 Splash，再并行拉起后端，避免用户长时间无窗口反馈
         await createWindow()
@@ -235,6 +254,7 @@ function bootstrap(): void {
                   : '更新后启动失败，已恢复上一版本。请重启 XCAGI。',
             )
           }
+          releaseWindowsBeforeRollbackQuit()
           app.quit()
           return
         }
@@ -341,6 +361,7 @@ function bootstrap(): void {
         } else {
           showStartupFailureNotice(msg)
         }
+        releaseWindowsBeforeRollbackQuit()
         app.quit()
       }
     })
