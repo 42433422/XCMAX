@@ -751,8 +751,6 @@ def call_llm_review(
             "line": finding.line,
         }
     else:
-        # 曾默认回退到 https://api.example.com/v1/review：该地址与本项目无关，
-        # 会把 Bearer XCAGI_LLM_API_KEY 发给第三方主机。未配置时直接判定不可用（fail-closed）。
         print(
             "[review] XCAGI_LLM_ENDPOINT / XCAGI_LLM_BASE_URL+MODEL not configured; skip LLM review"
         )
