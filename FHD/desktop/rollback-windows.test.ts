@@ -174,14 +174,15 @@ describe('Windows full application rollback helper', () => {
     if (scenario === 'retained-journal') expect(fs.readFileSync(`${databasePath}.xcagi-failed-journal`, 'utf8')).toBe('prior-journal')
   }, 60_000)
 
-  windowsIt.each(['consumed', 'missing', 'log-only', 'malformed-json', 'missing-time', 'stale-operation', 'wrong-from', 'wrong-to', 'old-time', 'future-time', 'malformed-time', 'wrong-build', 'dirty-db', 'marker'])('collector independently rejects invalid evidence: %s', async (scenario) => {
+  windowsIt.each(['consumed', 'legacy-operation', 'missing-operation', 'missing', 'log-only', 'malformed-json', 'missing-time', 'stale-operation', 'wrong-from', 'wrong-to', 'old-time', 'future-time', 'malformed-time', 'wrong-build', 'dirty-db', 'marker'])('collector independently rejects invalid evidence: %s', async (scenario) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-receipt-collector-')); cleanupRoots.push(root)
     const install = path.join(root, 'app'), data = path.join(root, 'data'), evidence = path.join(root, 'evidence')
     for (const dir of [path.join(install, 'resources'), data, evidence]) fs.mkdirSync(dir, { recursive: true })
-    const old = '2e6f03bf67b88965e450721e5b8432ab6395782b', now = new Date().toISOString()
+    const old = '83939363ca2ccf7776c97f5c7895e29c1e5bc453', now = new Date().toISOString()
     fs.writeFileSync(path.join(install, 'resources', 'build-info.json'), JSON.stringify({ gitSha: scenario === 'wrong-build' ? 'candidate' : old }))
     const database = path.join(data, 'xcagi.db'); fs.writeFileSync(database, scenario === 'dirty-db' ? 'dirty' : 'original')
-    const receipt = { operationId: 'this-operation', fromVersion: '1.0.0.6', toVersion: `1.0.0.1+${old.slice(0, 12)}`, reason: 'isolated startup failure', appliedAt: now, completedAt: now }
+    const receipt = { operationId: 'this-operation', fromVersion: '1.0.0.6', toVersion: `1.0.0.5+${old.slice(0, 12)}`, reason: 'isolated startup failure', appliedAt: now, completedAt: now }
+    if (scenario === 'missing-operation') receipt.operationId = ''
     if (scenario === 'stale-operation') receipt.operationId = 'previous-operation'
     if (scenario === 'wrong-from') receipt.fromVersion = 'unrelated-candidate'
     if (scenario === 'wrong-to') receipt.toVersion = 'unrelated-old-build'
@@ -195,21 +196,20 @@ describe('Windows full application rollback helper', () => {
     if (scenario === 'marker') fs.writeFileSync(path.join(data, 'rollback-marker.json'), '{}')
     // Use the checksum-verified product loader, including on hosts that disable -File.
     const source = fs.readFileSync(path.resolve('../scripts/package/accept-windows-candidate.ps1'), 'utf8')
-    const start = source.indexOf("    $infoPath = Join-Path $installRoot 'resources\\build-info.json'", source.indexOf('function Invoke-FailedRollback'))
+    const start = source.indexOf('function Assert-RollbackEvidence {')
     expect(start).toBeGreaterThan(0)
-    const body = source.slice(start, source.indexOf('\n  } finally {', start)).replace('Start-Sleep -Seconds 2', '')
-    const capture = source.split('\n').find(line => line.includes("if ($appliedPath -and (Test-Path -LiteralPath $appliedPath -PathType Leaf))"))!
-    expect(capture).toContain('Copy-Item')
+    const body = source.slice(start, source.indexOf('function Invoke-FailedRollback', start))
     const quote = (value: string) => `'${value.replaceAll("'", "''")}'`
-    const marker = { operationId: 'this-operation', fromVersion: `1.0.0.1+${old.slice(0, 12)}`, toVersion: '1.0.0.6', preparedAt: new Date(Date.now() - 30_000).toISOString() }
+    const marker = { operationId: 'this-operation', fromVersion: `1.0.0.5+${old.slice(0, 12)}`, toVersion: '1.0.0.6', preparedAt: new Date(Date.now() - 30_000).toISOString() }
+    if (['legacy-operation', 'missing-operation'].includes(scenario)) delete (marker as Partial<typeof marker>).operationId
     const script = `$ErrorActionPreference='Stop'; function Check([bool]$ok,[string]$name,[string]$detail) { if (-not $ok) { throw $name } }\n` +
       `$installRoot=${quote(install)}; $dataRoot=${quote(data)}; $EvidenceDir=${quote(evidence)}; $db=${quote(database)}; $deadline=Get-Date\n` +
-      `$before='${createHash('sha256').update('original').digest('hex')}'; $marker=${quote(JSON.stringify(marker))} | ConvertFrom-Json\n` + `try {\n${body}\n} finally {\n${capture}\n}`
+      `$databaseBefore='${createHash('sha256').update('original').digest('hex')}'; $naturalMarker=${quote(JSON.stringify(marker))} | ConvertFrom-Json\n` + `${body}\nAssert-RollbackEvidence\n`
     const scriptPath = path.join(root, 'check.ps1'); fs.writeFileSync(scriptPath, script)
     const encoded = Buffer.from(buildWindowsRollbackFileLoader(scriptPath, createHash('sha256').update(script).digest('hex')), 'utf16le').toString('base64')
     let error = ''
     try { await execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { timeout: 10000, env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'PSMODULEPATH')) }) } catch (caught) { error = String(caught) }
-    if (scenario === 'consumed') {
+    if (['consumed', 'legacy-operation'].includes(scenario)) {
       expect(error).toBe('')
     } else expect(error).toContain(scenario === 'wrong-build' || scenario === 'marker' ? 'rollback.restored_build' : scenario === 'dirty-db' ? 'rollback.database_hash' : 'rollback.applied_record')
     if (!['missing', 'log-only'].includes(scenario)) expect(fs.readFileSync(path.join(evidence, 'rollback-applied.last.json'), 'utf8')).toBe(scenario === 'malformed-json' ? '{bad json' : JSON.stringify(receipt))

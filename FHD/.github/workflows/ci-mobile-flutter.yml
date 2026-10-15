@@ -15,7 +15,6 @@ on:
 concurrency:
   group: ci-mobile-flutter-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   test-and-apk:
     runs-on: ubuntu-latest
@@ -24,7 +23,7 @@ jobs:
         working-directory: mobile-flutter-poc
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"

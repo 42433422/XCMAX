@@ -235,7 +235,7 @@ jobs:
 
       - name: Set up the real private Mod frontend compiler
         if: steps.paths.outputs.skip != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -348,7 +348,7 @@ jobs:
           pip install -r deploy/requirements-dev.txt
 
       - name: Set up the real private Mod frontend compiler
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -493,7 +493,7 @@ jobs:
 
       - name: Set up Node.js
         if: steps.paths.outputs.skip != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -559,7 +559,7 @@ jobs:
           ref: ${{ inputs.release_sha || github.sha }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -772,7 +772,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Set up Node.js for immutable admin console
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -863,10 +863,9 @@ jobs:
             type=sha,prefix=sha-,enable=${{ github.event_name != 'workflow_dispatch' }}
             type=raw,value=sha-${{ env.XCAGI_RELEASE_SHA }},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=ref,event=tag,enable=${{ startsWith(github.ref, 'refs/tags/FHD/v') }}
-
       - name: Build and push xcagi-fhd-api
         id: build_fhd
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: FHD
           file: FHD/docker/Dockerfile.fhd-api
@@ -1131,7 +1130,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -1163,7 +1162,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -1184,7 +1183,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -1206,7 +1205,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
