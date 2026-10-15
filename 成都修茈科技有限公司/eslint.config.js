@@ -37,8 +37,7 @@ export const ignores = {
     'main.js',
     'app.py',
     '*.html',
-    '**/*.min.js',
-    '**/*.min.css',
+    '**/*.min.{js,css}',
   ],
 }
 
