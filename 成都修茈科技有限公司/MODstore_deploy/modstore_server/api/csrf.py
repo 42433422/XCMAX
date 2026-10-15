@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import secrets
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -80,6 +81,20 @@ def _csrf_disabled_for_tests() -> bool:
     )
 
 
+def _bearer_authenticates(authorization: str) -> bool:
+    """True only for a user access token or PAT that the auth service accepts."""
+    from modstore_server.application.auth import AuthApplicationService, AuthenticationError
+    from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+    try:
+        AuthApplicationService().current_user_from_authorization(authorization)
+    except AuthenticationError:
+        return False
+    except RECOVERABLE_ERRORS:
+        return False
+    return True
+
+
 class CSRFMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -104,8 +119,15 @@ class CSRFMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # A bearer header only skips the double-submit check when it authenticates, or
+        # when the request carries no cookies (a non-browser caller with no ambient
+        # credential to forge; the route's own auth decides). A browser request with
+        # cookies and a forged bearer still needs a matching X-CSRF-Token.
         auth_header = request.headers.get("authorization", "")
-        if auth_header.lower().startswith("bearer "):
+        if auth_header.lower().startswith("bearer ") and (
+            not request.headers.get("cookie")
+            or await run_in_threadpool(_bearer_authenticates, auth_header)
+        ):
             await self.app(scope, receive, send)
             return
 

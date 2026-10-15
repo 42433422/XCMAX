@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import importlib
+from typing import Any
 
 from modstore_server.customer_issue_delivery_contract import (
     record_team_progress,
     team_succeeded,
 )
+
+CLOSED_CUSTOMER_ISSUE_STATES = frozenset({"resolved", "closed", "done", "rejected"})
 
 
 def _facade():
@@ -19,7 +22,7 @@ def ticket_lifecycle_stage(status: str | None = None, decision_status: str | Non
     """用户侧五阶段：1已收到 → 2处理中 → 3有结果 → 4待补充 → 5已完成。"""
     s = str(status or "").strip().lower()
     d = str(decision_status or "").strip().lower()
-    if s in {"resolved", "closed", "done", "rejected"}:
+    if s in CLOSED_CUSTOMER_ISSUE_STATES:
         return 5
     if s == "waiting_user" or d == "needs_more_info":
         return 4
@@ -38,21 +41,43 @@ def _summarize_incident_team_rows(
     team_rows: list[_facade().Dict[str, _facade().Any]],
 ) -> str:
     """把 incident team / 员工执行行压缩成用户可读的一句进度。"""
+    from modstore_server.incident_team_handler_digest import redact_text
+
     bits: list[str] = []
     role_cn = {"scout": "排查", "fix": "修复", "verify": "验证"}
     for row in team_rows or []:
         if not isinstance(row, dict):
             continue
         role = role_cn.get(str(row.get("role") or "").strip(), str(row.get("role") or "执行"))
-        emp = str(row.get("employee_id") or "").strip() or "值班员工"
-        ok = bool(row.get("ok"))
-        status = str(row.get("status") or "").strip()
-        if ok:
-            bits.append(f"{role}（{emp}）已完成")
-        elif status:
-            bits.append(f"{role}（{emp}）未完成（{status}）")
-        else:
-            bits.append(f"{role}（{emp}）未完成")
+        outcome = (
+            "已完成" if row.get("ok") else "处理中" if row.get("status") == "pending" else "未完成"
+        )
+        outputs = (row.get("handler_outputs") or {}).get("outputs", [])
+        details = [
+            "；".join(
+                str(value)
+                for value in (
+                    o.get("cause"),
+                    o.get("summary") or o.get("output_summary"),
+                    o.get("change_summary"),
+                    o.get("error") or o.get("output_error"),
+                )
+                if value
+            )
+            for o in outputs
+            if isinstance(o, dict)
+        ]
+        detail = redact_text(
+            "；".join(
+                [d for d in details if d]
+                + (
+                    [row["handler_outputs"]["poll_error"]]
+                    if (row.get("handler_outputs") or {}).get("poll_error")
+                    else []
+                )
+            )
+        )
+        bits.append(f"{role}{outcome}：{detail or '尚未提供原因或处理说明'}")
     return "；".join(bits[:6]) if bits else "值班员工已接手"
 
 
@@ -90,7 +115,16 @@ def apply_customer_ticket_incident_progress(
             "event_id": int(event_id),
             "team_ok": team_ok,
             "rows": [
-                {key: row.get(key) for key in ("role", "employee_id", "ok", "status")}
+                {
+                    key: row.get(key)
+                    for key in (
+                        "role",
+                        "employee_id",
+                        "ok",
+                        "status",
+                        "handler_outputs",
+                    )
+                }
                 for row in rows
             ],
         }
@@ -107,10 +141,8 @@ def apply_customer_ticket_incident_progress(
             "team_ok": team_ok,
         }
     resolution = record_team_progress(ticket, ev, event_id=event_id, rows=rows)
-    if not team_ok:
-        resolution["state"] = "repair_failed"
-        resolution["repair_verified"] = False
     progress = _facade()._summarize_incident_team_rows(rows)
+    progress_record = {"event_id": int(event_id or 0), "team_ok": team_ok, "progress": progress}
     hint = str(summary_hint or ticket.summary or ticket.title or "").strip()[:120]
     if team_ok:
         reply = _facade().delivery_policy.success_reply(
@@ -118,6 +150,15 @@ def apply_customer_ticket_incident_progress(
         )
     else:
         reply = f"我是小C。工单「{hint or ticket.ticket_no}」已有员工处理进展：{progress}。我们会继续跟进，也可继续补充截图或具体页面。"
+    reply += "下一步：" + (
+        "等待正式版本交付后，请在原工单复验并确认。"
+        if team_ok
+        else (
+            "等待已受理任务的处理结果，请保留原工单。"
+            if resolution["state"] == "processing"
+            else "继续排查或转人工处理，请保留原工单。"
+        )
+    )
     action = _facade().build_action(
         db,
         ticket_id=int(ticket.id),
@@ -128,29 +169,16 @@ def apply_customer_ticket_incident_progress(
         request={
             "event_id": int(event_id or 0),
             "team_ok": bool(team_ok),
-            "roles": [
-                {
-                    "role": r.get("role"),
-                    "employee_id": r.get("employee_id"),
-                    "ok": bool(r.get("ok")),
-                    "status": r.get("status"),
-                }
-                for r in rows[:8]
-            ],
+            "roles": resolution["team"][:8],
         },
     )
     action.status = "completed"
-    action.result_json = _facade().json_dumps(
-        {
-            "ok": bool(team_ok),
-            "progress": progress,
-            "event_id": int(event_id or 0),
-            "team_ok": bool(team_ok),
-        }
-    )
+    action.result_json = _facade().json_dumps({"ok": team_ok, **progress_record})
     action.error = ""
     db.flush()
     _facade().delivery_policy.apply_ticket_outcome(ticket, team_ok, delivery_managed)
+    if resolution["state"] == "processing":
+        ticket.decision_status = "pending"
     reports = list(ev.get("employee_reports") or [])
     reports.append(
         {
@@ -183,11 +211,7 @@ def apply_customer_ticket_incident_progress(
                         **_facade().ticket_lifecycle_payload(ticket.status, ticket.decision_status),
                     }
                 ],
-                "employee_progress": {
-                    "event_id": int(event_id or 0),
-                    "team_ok": bool(team_ok),
-                    "progress": progress,
-                },
+                "employee_progress": progress_record,
             }
         ),
     )
@@ -324,4 +348,31 @@ def action_payload(row: _facade().Any) -> _facade().Dict[str, _facade().Any]:
         "error": row.error,
         "created_at": row.created_at.isoformat() if row.created_at else "",
         "updated_at": row.updated_at.isoformat() if row.updated_at else "",
+    }
+
+
+def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, Any]:
+    evidence = _facade().json_loads(row.evidence_json, {})
+    resolution = evidence.get("resolution") or {}
+    state = str(resolution.get("state") or "received")
+    reports = [r for r in evidence.get("employee_reports") or [] if isinstance(r, dict)]
+    closed = row.status in CLOSED_CUSTOMER_ISSUE_STATES
+    return {
+        "id": row.id,
+        "ticket_no": row.ticket_no,
+        "title": row.title,
+        "summary": row.summary,
+        "status": row.status,
+        "state": state,
+        "lifecycle_label": _facade().ticket_lifecycle_payload(row.status, row.decision_status)[
+            "lifecycle_label"
+        ],
+        "latest_result": (
+            {k: reports[-1].get(k) for k in ("team_ok", "progress", "at")} if reports else None
+        ),
+        "last_error": str(resolution.get("last_error") or ""),
+        "closed_at": row.closed_at.isoformat() if row.closed_at else "",
+        "reopen_count": len(evidence.get("reopen_history") or []),
+        "can_resolve": not closed,
+        "can_reopen": closed or state not in {"received", "reopened"},
     }

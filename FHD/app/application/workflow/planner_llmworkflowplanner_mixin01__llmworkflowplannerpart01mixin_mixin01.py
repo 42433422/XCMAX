@@ -37,6 +37,11 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
 
         profile = resolve_tool_execution_profile(context)
         registry_for_plan = _facade()._filter_tool_registry_for_profile(tool_registry, profile)
+        from app.application.workflow.sql_execution_policy import database_maintenance_plan
+
+        restore = database_maintenance_plan(message, plan_id, registry_for_plan)
+        if restore is not None:
+            return restore
         from app.application.normal_chat_dispatch import route_normal_mode_message
 
         _route = route_normal_mode_message(str(message or ""))
@@ -103,7 +108,13 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
         planned = None
         # 规划入口 SQL 拒绝主闸已由 sql_execution_policy.rejected_sql_plan（#1815）承担（L33）；
         # 此处不再重复布闸。原始 SQL 的写路径双保险见 planner_part01._extract_business_db_write_node。
-        if _facade()._onboarding_first_order_slots(message) and "business_db" in registry_for_plan:
+        from app.application.workflow.sales_quote_plan import sales_quote_node
+
+        if sales_quote_node(message, registry_for_plan, single_request=True) is not None:
+            planned = self._fallback_plan(plan_id, message, registry_for_plan)
+        elif (
+            _facade()._onboarding_first_order_slots(message) and "business_db" in registry_for_plan
+        ):
             deterministic = self._fallback_plan(plan_id, message, registry_for_plan)
             if deterministic.intent == "onboarding_first_order" and len(deterministic.nodes) == 3:
                 planned = deterministic

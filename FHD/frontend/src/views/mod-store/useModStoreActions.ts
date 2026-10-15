@@ -111,7 +111,7 @@ export function useModStoreActions(state: ModStoreState, deps: ModStoreActionsDe
         }
         await appAlert(meta.installSuccessMessage(mod, onboardNote))
       } else {
-        await appAlert(`安装失败：${data.error || data.detail}`)
+        await appAlert(`安装失败：${data.error || data.detail || data.message || '未返回失败原因，请联系发布方'}`)
       }
     } catch (error) {
       console.error('Installation failed:', error)

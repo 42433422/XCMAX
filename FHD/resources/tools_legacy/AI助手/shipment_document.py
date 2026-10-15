@@ -616,50 +616,9 @@ class ShipmentDocumentGenerator:
         return unit
 
     def _generate_order_number(self) -> str:
-        """生成订单编号 - 格式: 26-010003A (年-月-日(00)-序号)"""
-        now = datetime.now()
+        from app.infrastructure.database.shipment_order_numbers import reserve_order_number
 
-        # 格式: 26-月日序号+数量编号
-        # 例如: 26-010003A = 2026年1月第3个订单数量A
-        year = now.strftime("%y")  # 26
-        month = now.strftime("%m")  # 01
-        day = "00"  # 日固定为00
-
-        # 获取当天订单数量作为序号基数
-        sequence = self._get_daily_sequence(now)
-
-        # 根据订单数量确定数量编号
-        quantity_code = self._get_quantity_code()
-
-        return f"{year}-{month}{day}{sequence:03d}{quantity_code}"
-
-    def _get_daily_sequence(self, date: datetime) -> int:
-        """获取当天订单序号"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-
-            date_str = date.strftime("%Y-%m-%d")
-            cursor.execute(
-                """
-                SELECT COUNT(*) FROM shipment_records
-                WHERE DATE(created_at) = ?
-            """,
-                (date_str,),
-            )
-
-            count = cursor.fetchone()[0]
-            conn.close()
-
-            return count + 1
-
-        except BOUNDARY_ERRORS as e:
-            logger.error(f"获取订单序号失败: {e}")
-            return 1
-
-    def _get_quantity_code(self) -> str:
-        """获取数量编号 (A=小, B=中, C=大, D=特大)"""
-        return "A"  # 默认A，后续可根据实际数量调整
+        return reserve_order_number(output_dir=self.OUTPUT_FOLDER)["order_number"]
 
     def _prepare_products(self, parsed_data: Dict, order_number: str) -> List[Dict]:
         """准备产品数据 - 支持多产品"""

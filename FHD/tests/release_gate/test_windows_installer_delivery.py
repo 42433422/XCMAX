@@ -52,6 +52,9 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert job["runs-on"] == "windows-latest"
     assert "inputs.windows_installer_only == true" in job["if"]
     assert "inputs.windows_installer_only != true" in workflow["jobs"]["release-preflight"]["if"]
+    assert "inputs.candidate_only != true" in workflow["jobs"]["release-preflight"]["if"]
+    runs = "\n".join(step.get("run", "") for step in job["steps"])
+    assert "Candidate must bind to the selected main SHA" in runs
     text = yaml.safe_dump(job)
     assert "Partial signing configuration" in text
     assert "test-windows-signature-policy.ps1" in text
@@ -69,6 +72,22 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert all(path.startswith("FHD/delivery/") and not path.endswith("/") for path in paths)
     assert paths[-1] == "FHD/delivery/delivery-receipt.json"
     assert "sunbird-seed" not in upload["with"]["path"]
+    publish = workflow["jobs"]["publish-interim-windows-pointer"]
+    assert "inputs.candidate_only != true" in publish["if"]
+    assert "inputs.candidate_run_id != ''" in publish["if"]
+    assert "result == 'success'" not in publish["if"]
+    runs = "\n".join(step.get("run", "") for step in publish["steps"])
+    assert "for mode in Clean Upgrade Gui Recovery Rollback; do" in runs
+    acceptance = (ROOT / ".github/workflows/windows-candidate-acceptance.yml").read_text()
+    assert '["Clean","Upgrade","Gui","Recovery","Rollback"]' in acceptance
+    assert "matrix.mode != 'Clean' && matrix.mode != 'Rollback'" not in acceptance
+    collector = (ROOT / "scripts/package/accept-windows-candidate.ps1").read_text("utf-8-sig")
+    rollback = collector.partition("  if ($Mode -eq 'Rollback') {")[2]
+    rollback = rollback.partition("  if ($Mode -eq 'Upgrade')")[0]
+    assert "Run-Gui 'seed' (Join-Path $EvidenceDir 'old-gui')" in rollback
+    assert "Invoke-FailedRollback $oldAuth.tenant $oldGuiSeed" in rollback
+    assert "Run-Gui 'readback' (Join-Path $EvidenceDir 'rollback-gui') $seed" in collector
+    assert "@('Gui','Upgrade','Recovery','Rollback')" in collector
 
 
 def test_unsigned_opt_in_never_accepts_invalid_signatures():
@@ -125,3 +144,102 @@ def test_standard_installer_refuses_customer_seed_before_building():
     assert guard < setup
     assert 'throw "Customer seed embedding is retired.' in script[guard:setup]
     assert "-p:SunbirdSeedZipPath=" not in script
+
+
+def test_frozen_promotion_accepts_real_mode_results_and_rejects_failures(tmp_path):
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release-desktop.yml").read_text())
+    steps = workflow["jobs"]["publish-interim-windows-pointer"]["steps"]
+    script = next(
+        s["run"]
+        for s in steps
+        if s.get("name") == "Verify all five frozen candidate acceptance modes"
+    )
+    script = script.replace("${{ inputs.release_sha }}", "a" * 40)
+    (tmp_path / "delivery").mkdir()
+    (tmp_path / "delivery/delivery-receipt.json").write_text(json.dumps({"sha256": "b" * 64}))
+    results = {
+        "Clean": "passed",
+        "Upgrade": "passed",
+        "Gui": "gui_regression_passed",
+        "Recovery": "gui_recovery_regression_passed",
+        "Rollback": "rollback_passed",
+    }
+    for mode, result in results.items():
+        path = tmp_path / "acceptance" / f"windows-candidate-evidence-{mode}-{'a' * 40}"
+        path.mkdir(parents=True)
+        (path / "acceptance.json").write_text(
+            json.dumps(
+                {
+                    "mode": mode,
+                    "result": result,
+                    "candidate_sha": "a" * 40,
+                    "candidate_sha256": "b" * 64,
+                    "checks": [{"passed": True}],
+                }
+            )
+        )
+    command = f'export RUNNER_TEMP="{tmp_path}";\n{script}'
+    assert subprocess.run(["bash", "-eu", "-c", command], capture_output=True).returncode == 0
+    for path in (tmp_path / "acceptance").glob("*/acceptance.json"):
+        original = path.read_text()
+        path.write_text(original.replace('"passed": true', '"passed": false'))
+        assert subprocess.run(["bash", "-eu", "-c", command], capture_output=True).returncode != 0
+        path.write_text(original)
+
+
+def test_legacy_rollback_address_keeps_strict_ui_and_field_checks():
+    script = ROOT / "scripts/dev/record_enterprise_desktop_init.mjs"
+    harness = r"""
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const guard = source.split('const legacyRollback = ')[1].split('\nconst seed')[0];
+const body = source.split("if (kind === 'customer' && legacyRollback) {\n")[1]
+  .split('\n      }')[0];
+const fieldFilter = source.match(/\.filter\(\(\[key, value\]\) => ([^)]+)\)\)/)[1] + ')';
+const old = '2e6f03bf67b88965e450721e5b8432ab6395782b';
+for (const [phase, mode, sha, wanted] of [
+  ['readback', 'Rollback', old, true], ['readback', 'Upgrade', old, false],
+  ['readback', 'Recovery', old, false], ['seed', 'Rollback', old, false],
+  ['readback', 'Rollback', '37c6de2293a4724dd32d1712d240ac72e3ba8889', false],
+  ['readback', 'Rollback', '', false],
+]) {
+  const process = { env: { XCAGI_GUI_MODE: mode, XCAGI_GUI_BUILD_SHA: sha } };
+  assert.equal(vm.runInNewContext(guard, { phase, process }), wanted);
+}
+for (const legacyRollback of [true, false]) {
+  const keep = key => vm.runInNewContext(fieldFilter, { key, value: 'original', legacyRollback });
+  assert.equal(keep('contact_address'), !legacyRollback);
+  assert.equal(keep('contact_person'), true); assert.equal(keep('contact_phone'), true);
+}
+async function run(address, screenshotFails = false) {
+  const calls = [], row = {}, dialog = { locator: () => 'heading' };
+  const context = {
+    row, kind: 'customer', dir: '/evidence', path: require('node:path'),
+    seed: { cases: [{ id: 'customer', actual: { original_fields: { contact_address: 'original' } } }] },
+    click: async (name, scope) => { calls.push(name); assert.equal(scope, name === '编辑' ? row : dialog); },
+    modal: () => dialog,
+    field: label => { assert.equal(label, '地址'); return { locator: () => ({ first: () => address }) }; },
+    expect: actual => ({
+      toHaveText: async wanted => { assert.equal(actual, 'heading'); assert.equal(wanted, '编辑客户'); },
+      toHaveValue: async wanted => assert.equal(actual, wanted),
+      toHaveCount: async wanted => { assert.equal(wanted, 0); assert.equal(calls.at(-1), '取消'); },
+    }),
+    page: { screenshot: async options => {
+      calls.push('screenshot'); assert.equal(options.timeout, 60000);
+      if (screenshotFails) throw new Error('capture failed');
+    } },
+  };
+  await vm.runInNewContext('(async () => {' + body + '\n})()', context);
+  assert.deepEqual(calls, ['编辑', 'screenshot', '取消']);
+}
+(async () => {
+  await run('original');
+  await assert.rejects(run('lost-address')); await assert.rejects(run('original', true));
+})().catch(error => { console.error(error); process.exitCode = 1; });
+"""
+    subprocess.run(["node", "-e", harness, str(script)], check=True)
+    text = script.read_text()
+    assert "observedRows.get(name)?.[key] ?? ''" in text
+    collector = (ROOT / "scripts/package/accept-windows-candidate.ps1").read_text()
+    assert "$env:XCAGI_GUI_MODE = $Mode" in collector
+    assert "'resources/build-info.json') -Raw | ConvertFrom-Json).gitSha" in collector
