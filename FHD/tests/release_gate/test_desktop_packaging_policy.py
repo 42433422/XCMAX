@@ -123,6 +123,8 @@ def test_windows_release_requires_sslcom_signing_and_system_authenticode() -> No
         encoding="utf-8"
     )
     build = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(encoding="utf-8")
+    assert "SkipUiInstaller" not in build
+    assert "XcagiInstaller.csproj" in build
     signer = (REPO_ROOT / "desktop" / "build" / "windows-sign.cjs").read_text(encoding="utf-8")
     post_gate = (REPO_ROOT / "scripts" / "package" / "pre-release-security.ps1").read_text(
         encoding="utf-8"

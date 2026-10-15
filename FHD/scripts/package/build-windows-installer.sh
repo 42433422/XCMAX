@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# macOS/Linux：Docker+Wine 交叉编译 Windows NSIS 安装包（personal | enterprise）。
-# 等价于 build-installer.ps1 -SkipUiInstaller（跳过 WPF 外壳，保留 NSIS + 内嵌后端）。
+# macOS/Linux：仅显式诊断使用的 NSIS 载荷；客户安装包由 Windows build-installer.ps1 生成。
 set -euo pipefail
+[[ "${XCAGI_ALLOW_WINDOWS_NSIS_PAYLOAD:-0}" == "1" ]] || { echo 'Use build-installer.ps1 on Windows for the WPF installer; NSIS payload delivery is disabled.' >&2; exit 2; }
 
 . "$(dirname "${BASH_SOURCE[0]}")/../deploy/lib/version.sh"
 VERSION="${1:-$(product_version)}"
@@ -48,7 +48,7 @@ sku_update_url() {
 }
 
 LABEL="$(sku_label "${SKU}")"
-OUT_DIR="${ROOT}/release/xcagi-v${VERSION}/${SKU}"
+OUT_DIR="${ROOT}/release/_windows-payload/${VERSION}/${SKU}"
 mkdir -p "${OUT_DIR}"
 
 echo "========== Windows SKU (docker/wine): ${SKU} =========="
