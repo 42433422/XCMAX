@@ -1,7 +1,7 @@
 # mypy: disable-error-code="no-any-return"
 """分层债棘轮（ratchet）：只减不增地收口后端分层债。
 
-守护三条基线（v10 线内迭代 · 配合 docs/architecture/REFACTOR_DECOMPOSITION_PLAN.md §1.4）：
+守护三条后端分层基线（v10 线内迭代）：
 
 1. ``app/services/**/*.py`` 文件总数 —— 冻结 ``services/`` 层，**不得新增**文件。
    新业务代码应落 ``app/domain`` / ``app/application`` / ``app/infrastructure``。

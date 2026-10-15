@@ -1,0 +1,45 @@
+{
+  "run": "windows-customer-loop-20260915",
+  "lane": "Windows AI（连接件3 实机矩阵增量 + 连接件4/5 Windows 侧消费）",
+  "wo_id": "WO-c0ffee00dead",
+  "dedup_key": "c0ffee00deadbeef12345678abcdef99",
+  "product_version": "1.0.0.4",
+  "build_info": "xcagi-1.0.0.4-604b85e1",
+  "acceptance_root": "C:\\XCAGI-acceptance",
+  "isolated_data_root": "C:\\XCAGI-acceptance\\repro-data",
+  "scenario": "corrupt-backup",
+  "chain": [
+    {
+      "step": "01-intake",
+      "artifact": "01-intake/intake-c0ffee00dead.json",
+      "note": "一句话入口（Signal Gate fixture）"
+    },
+    {
+      "step": "02-diagnosis",
+      "artifact": "02-diagnosis/diagnosis-c0ffee00dead.json",
+      "note": "连接件2 诊断（rule 引擎）"
+    },
+    {
+      "step": "03-repro",
+      "artifacts": [
+        "03-repro/repro-c0ffee00dead.json",
+        "03-repro/evidence-c0ffee00dead.json",
+        "03-repro/win-evidence-c0ffee00dead/fault-injection-receipt.json"
+      ],
+      "note": "连接件3 Windows 升级：needs_scenario→corrupt-backup 实机注入，收据 PASS（主库未动）"
+    },
+    {
+      "step": "04-retest",
+      "artifact": "04-retest/receipt-c0ffee00dead.json",
+      "note": "连接件4 客户重测：health healthy + 1.0.0.4 → pass"
+    },
+    {
+      "step": "05-knowledge",
+      "artifact": "05-knowledge/cases.jsonl",
+      "note": "连接件5 知识回流案例（含 repro/retest 证据路径）"
+    }
+  ],
+  "production_impact": "none (relaunched after run: 5×XCAGI+1×backend, health healthy)",
+  "related_prs": ["#1944 (Mac 五连接件+e2e)", "#1947 (Windows 实机矩阵增量, merged)", "#1948 (RED/GREEN 判定修正)"],
+  "generated_at": "2026-09-15T19:37:31+08:00"
+}

@@ -1,0 +1,74 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "base-health",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "visible_content": "/api/health healthy、liveness alive；/health/details 整体 degraded（database healthy，redis unhealthy——桌面单机未部署 Redis），界面状态灯为「系统正常」。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/health",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/health（写操作自动附带 CSRF）：健康探针",
+      "expected": "健康探针：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 18ms；status=healthy version=1.0.0.5 neuro.running=True",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /health/liveness",
+      "actions": "在 App 页面内以同一登录会话调用 GET /health/liveness（写操作自动附带 CSRF）：存活探针",
+      "expected": "存活探针：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 14ms；alive",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "GET /health/details",
+      "actions": "在 App 页面内以同一登录会话调用 GET /health/details（写操作自动附带 CSRF）：就绪探针（含依赖）",
+      "expected": "就绪探针（含依赖）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 140ms；整体 degraded；database=healthy；redis=unhealthy",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
+      "input": "界面路由 /settings",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /settings，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /settings，页面可见 系统正常，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /settings；命中文本 ['系统正常']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名 | S",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "base-health",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-health/macos/result.png",
+      "sha256": "5edcc79f5e41d724ed00182cc2fde18418d9b42c45643d3bce9ab69e25ae9fa9",
+      "visual_review": "accepted",
+      "visible_result": "系统设置页（左下角「系统正常」状态）：个人主页、模型服务与余额卡片。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "base-health",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-health/macos/operation.webm",
+      "sha256": "65a0106b6a554cf18e9011217a4358db120269ba782226c94f46e64c40877e55",
+      "visual_review": "accepted",
+      "visible_result": "录屏为系统设置页，左下系统状态灯为「系统正常」。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-health/macos/run.log",
+    "sha256": "30315d70535732527bb0ae4210e46ab5b993ef48dd2c58ae5c30d7348c01e104",
+    "bytes": 1261
+  }
+}

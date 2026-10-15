@@ -1,0 +1,203 @@
+{
+  "_comment": "此文件为 Web 端（修茈市场）真机验收记录，由 accept-base-login-web.mjs 自动生成，请勿手改（DO NOT EDIT）。结构与 base-login-macos-run.json / base-login-windows-run.json 一致；仅 media[].visual_review / media[].visible_result / media[].reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "base-login",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260924-015410",
+  "generated_at": "2026-09-24 01:54:50",
+  "app_git_sha": "201d1f691855465f76dd53adc74c1d53ff4d9af4",
+  "app_version": "1.0.0.1",
+  "verified_at": "2026-09-24",
+  "reviewed_at": "2026-09-24",
+  "passed": 6,
+  "failed": 0,
+  "six_elements": {
+    "screenshot": true,
+    "video": true,
+    "log": true,
+    "product_version": true,
+    "app_sha": true,
+    "verify_time": true
+  },
+  "six_missing": [],
+  "operator_observations": [
+    "市场 Web 端登录入口：https://xiu-ci.com/market/login（页面标题「XC AGI 市场」），账号框 + 密码框 +「登录」按钮；退出路径为侧栏账号菜单 →「退出登录」→ 确认框（标题「退出登录」，文案「确定要退出当前账号吗？」，确认按钮「退出」）。",
+    "退出为本机凭据清除（token_cleared_in_storage=true）：退出后浏览器不再持有该会话凭据，重新访问受保护页面被引导回登录页（bounced_to_login_again=true）。",
+    "服务端退出接口 POST /api/auth/logout 返回 403（{\"detail\":\"CSRF token missing\"}）：该接口受 CSRF 保护，且不属于本项界面退出路径，仅如实记录。",
+    "异常观察（真实存在，如实记录、不隐藏、不作为本轮用例判定依据）：部署中的市场后端会间歇性突发地对 POST /api/auth/login 与 GET /api/auth/me 返回 500 Internal Server Error。独立测量（纯 curl、合法凭据、与浏览器无关）：10 次里 3 次 500；随后 8 次里 1 次 500；静默 5 分钟后仍 8 次里 1 次；服务端重启后曾观察到约 6 分钟全 200 的干净窗口，随后又出现约 2 分钟的坏窗口（界面登录连续 3 次被 500 挡回）。失败响应只用约 0.08 秒（成功约 0.39 秒，接近一次口令校验耗时），同一时刻不触碰账号库的 /api/market/catalog、/api/payment/plans、无凭据的 /api/auth/me 连续多次全 200，/api/health 始终 200；部署版与主线均已配置 pool_pre_ping=True。症状指向服务侧（部分 worker 的数据库访问路径）瞬时故障，重启只能短暂清除。本轮界面登录按真实用户行为重试并逐次留痕（见 WB2/WB6 的 login_attempts），复核调用同样留痕。建议在服务端 `journalctl -u modstore.service -n 200` 取 500 的 traceback 定位根因。",
+    "证据环境：真实浏览器 Edge（用户代理见 base-login-web-identity.json 的 user_agent），本次运行桌面画面由 ffmpeg 录制；站点自报身份 /api/health 见同一身份文件。"
+  ],
+  "observation_log": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/log/operator-observations.txt",
+  "app_identity": {
+    "entry_url": "https://xiu-ci.com/market/login",
+    "site_health": {
+      "ok": true,
+      "deploy_tier": "production",
+      "git_sha": "201d1f691855465f76dd53adc74c1d53ff4d9af4",
+      "release_id": "xcagi-1.0.0.1-201d1f691855465f76dd53adc74c1d53ff4d9af4",
+      "artifact_sha256": "6c11d71cb153adc10444fec73668b0eb52d08f15f0465e0c691ab22b05de3591",
+      "hostname": "VM-0-7-tencentos",
+      "tavily_configured": false,
+      "scheduler_running": false
+    },
+    "market_bundle_assets": [
+      "/market/assets/index-FALH-3aL.js",
+      "/market/assets/client-BxtVyCi4.js",
+      "/market/assets/vue-flow-BzhO9OoF.js",
+      "/market/assets/vue-vendor-Cui18K2f.js",
+      "/market/assets/preload-helper-CTAeRWoV.js",
+      "/market/assets/api-CfUuGeLY.js",
+      "/market/assets/vue-flow-_6XKS09t.css",
+      "/market/assets/index-DDLG-XyS.css"
+    ],
+    "desktop_side_build_info": {
+      "version": "1.0.0.5",
+      "releaseId": "xcagi-1.0.0.5-84a4b75445cd529a96529c938f8e88b288ab6228",
+      "gitSha": "84a4b75445cd529a96529c938f8e88b288ab6228",
+      "schema_version": 1
+    },
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/base-login-web-identity.json"
+  },
+  "visible_content": "真实浏览器（Edge，CDP 驱动真实鼠标键盘）在市场 Web 端完成：未登录被拦 → 输入企业账号登录进入工作台 → 整页刷新仍已登录 → 侧栏退出登录回到登录页 → 错误密码被拒 → 同账号与桌面端一致。",
+  "media": [
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/shot/WB1-login-required.png",
+      "sha256": "bff8d0b12b8c02f8f7e4c333c2e3650c6b09d2db44f8f8fe9fd467986da39a18",
+      "visual_review": "accepted",
+      "visible_result": "整屏截图：真实 Edge 浏览器窗口，地址栏可见 https://xiu-ci.com/market/login?redirect=/workbench/home （标签页「XC AGI 市场」）——未登录直开工作台后被引导回登录页；市场窗口左半部可见，页面中部被本机其它窗口遮挡（机器人宿主窗口与另一浏览器窗口）。",
+      "reviewed_at": "2026-09-24"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/shot/WB1b-login-page.png",
+      "sha256": "be844e8aa63d8d6c70ae74bdc4863aef51b173e54672eef8a87daf96010f9be3",
+      "visual_review": "accepted",
+      "visible_result": "页面级截图：登录页，标题「登录」，用户名框（浏览器自动填充残留值 wuxinghua1，非会话凭据）、密码框掩码，黑色「登录」按钮，底部「邮箱验证码登录 · 忘记密码 · 没有账号？注册」。",
+      "reviewed_at": "2026-09-24"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/shot/WB2a-credentials-filled.png",
+      "sha256": "6c7b381040ea245b6a72b16772ed948f802d47557ae18c46c850a67c59cd3abb",
+      "visual_review": "accepted",
+      "visible_result": "登录页：用户名框已输入 SUNBIRD，密码框为掩码（9 位），「登录」按钮；此时尚未提交。",
+      "reviewed_at": "2026-09-24"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/shot/WB2b-login-workspace.png",
+      "sha256": "612fd3d4d111e1a6c63e6a78f39271e2b1be05d51394e16997504b4d8ca02c35",
+      "visual_review": "accepted",
+      "visible_result": "已登录工作台：顶部导航「首页 / 统一工作台 / 脚本工作流 / 我的员工 / 我的素材」，主区「有什么想问的?」与示例卡片，左侧栏「聊 / 做 / 说 / AI 客服 / AI 市场 / 我的交付」，左下角账号菜单显示 S SUNBIRD。",
+      "reviewed_at": "2026-09-24"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/shot/WB3-after-reload.png",
+      "sha256": "612fd3d4d111e1a6c63e6a78f39271e2b1be05d51394e16997504b4d8ca02c35",
+      "visual_review": "accepted",
+      "visible_result": "整页刷新后的画面：与刷新前同一工作台（与 WB2b 截图逐字节相同），左下角仍为 S SUNBIRD → 会话保持。",
+      "reviewed_at": "2026-09-24"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/shot/WB4a-logout-confirm.png",
+      "sha256": "f1bad2cb34d79559042bc368469aeae2a04c8a1b668fba46bcea0ae76626a2f3",
+      "visual_review": "accepted",
+      "visible_result": "工作台上弹出确认框（半透明遮罩 + 白色弹窗，含红色「退出」按钮与「取消」按钮）；框内正文在截图中偏淡，同一时刻 DOM 记录的原文为标题「退出登录」/正文「确定要退出当前账号吗？」/确认「退出」/取消「取消」。",
+      "reviewed_at": "2026-09-24"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/shot/WB4b-login-page-after-logout.png",
+      "sha256": "be844e8aa63d8d6c70ae74bdc4863aef51b173e54672eef8a87daf96010f9be3",
+      "visual_review": "accepted",
+      "visible_result": "退出确认后回到登录页（与 WB1b 逐字节相同）：已不再是已登录工作台，页面为「登录」表单（用户名框为浏览器自动填充残留 wuxinghua1，密码框掩码）。",
+      "reviewed_at": "2026-09-24"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/shot/WB5-wrong-password.png",
+      "sha256": "e345a14e01fd55107ac796d7e00a776b4938afb7230c58fb4c2f4431c69626c8",
+      "visual_review": "accepted",
+      "visible_result": "错误密码提交后的界面：顶部红色提示条「用户名或密码错误」，用户名框仍为 SUNBIRD、密码框掩码，按钮仍为「登录」，页面停留在登录页。",
+      "reviewed_at": "2026-09-24"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/shot/WB6-same-account.png",
+      "sha256": "612fd3d4d111e1a6c63e6a78f39271e2b1be05d51394e16997504b4d8ca02c35",
+      "visual_review": "accepted",
+      "visible_result": "同一企业账号在 Web 端登录后的工作台（与 WB2b 逐字节相同），左下角 S SUNBIRD；本页与桌面端 Windows 轮记录中的同一账号（SUNBIRD / sunbird@xcagi.local）比对一致。",
+      "reviewed_at": "2026-09-24"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/web/video/base-login-web-20260924-015410.mp4",
+      "sha256": "8104bff55e0edb924317827017383bc00a16ba514b16df27327e5509cce3c342",
+      "visual_review": "accepted",
+      "visible_result": "整屏录像 39.4 秒（5fps，2560x1600，含浏览器地址栏）：t≈0 起于上一轮遗留的已登录工作台（地址栏 /market/workbench/home，左下 S SUNBIRD）→ 本轮导航到登录页并清空浏览器会话 → t≈12s 登录页（可见「邮箱验证码登录 / 忘记密码 / 没有账号？注册」）→ t≈24s 仍为登录页（错误密码提示阶段）→ 末段回到已登录工作台；整段可见地址栏 URL 随操作变化。",
+      "reviewed_at": "2026-09-24"
+    }
+  ],
+  "cases": [
+    {
+      "id": "WB1",
+      "title": "not-logged-in rejection (web)",
+      "input": "浏览器无会话（已清 cookie 与 local/session storage）时直接打开受保护页面 https://xiu-ci.com/market/workbench/home。",
+      "actions": "真实浏览器导航到工作台；并在页面上下文 fetch GET /api/auth/me。",
+      "expected": "被引导到登录页，且鉴权接口返回未登录（ok=false、请先登录）。",
+      "observed": "{\"final_url\":\"https://xiu-ci.com/market/login?redirect=/workbench/home\",\"has_login_form\":true,\"submit_text\":\"登录\",\"me\":{\"ok\":false,\"success\":false,\"error\":\"请先登录\"}}",
+      "result": "passed"
+    },
+    {
+      "id": "WB2",
+      "title": "enterprise login (real browser)",
+      "input": "企业账号 SUNBIRD 与操作员提供的密码，在真实浏览器登录页输入。",
+      "actions": "真实键盘在用户名/密码框输入后点击「登录」（服务器偶发 500 时像真实用户一样重试，逐次记录）；随后在页面上下文复核 GET /api/auth/me 与 POST /api/auth/login。",
+      "expected": "进入已登录工作台（出现账号菜单/退出入口），me 返回该账号（username=SUNBIRD）。",
+      "observed": "{\"login_attempts\":[{\"attempt\":1,\"reached_workspace\":true,\"flash_err\":\"\",\"url\":\"https://xiu-ci.com/market/workbench/home\"}],\"final_url\":\"https://xiu-ci.com/market/workbench/home\",\"title\":\"XC AGI 市场\",\"logged_in_marker\":true,\"account_visible\":true,\"me_status\":200,\"me_username\":\"SUNBIRD\",\"me_email\":\"sunbird@xcagi.local\",\"login_ok\":true,\"desktop_access\":true,\"account_tier\":\"pro\"}",
+      "result": "passed"
+    },
+    {
+      "id": "WB3",
+      "title": "session persistence (browser reload)",
+      "input": "WB2 建立的 Web 会话。",
+      "actions": "在真实浏览器执行页面重新加载（整页 reload），复读本地 token 与 me。",
+      "expected": "刷新后仍是已登录工作台；token 未变（服务端会话仍有效）；me 仍返回同一账号。",
+      "observed": "{\"url_after_reload\":\"https://xiu-ci.com/market/workbench/home\",\"logged_in_marker\":true,\"token_unchanged\":true,\"token_fp\":\"624ac36251a49db1\",\"me_status\":200,\"me_username\":\"SUNBIRD\"}",
+      "result": "passed"
+    },
+    {
+      "id": "WB4",
+      "title": "secure logout (real browser)",
+      "input": "已登录会话与退出前的 token（指纹 624ac36251a49db1）。",
+      "actions": "真实点击侧栏账号菜单（SUNBIRD）→ 点菜单项「退出登录」→ 确认框点确认按钮；再读取浏览器凭据、受保护接口返回，并再次直接访问受保护页面。",
+      "expected": "界面回到登录页；浏览器内不再持有该会话凭据；再次访问受保护页面仍被引导回登录页。",
+      "observed": "{\"menu_opened\":true,\"menu_items\":[\"Lv.1 · 新手\",\"账户设置\",\"钱包\",\"会员\",\"设置\",\"通知\",\"AI 测试\",\"官网首页\",\"退出登录\"],\"confirm_dialog\":{\"title\":\"退出登录\",\"message\":\"确定要退出当前账号吗？\",\"confirm_label\":\"退出\",\"cancel_label\":\"取消\"},\"final_url_after_confirm\":\"https://xiu-ci.com/market/login\",\"login_form\":true,\"logged_in_marker_gone\":true,\"old_token_fp\":\"624ac36251a49db1\",\"token_cleared_in_storage\":true,\"me_without_credential\":{\"ok\":false,\"success\":false,\"error\":\"请先登录\"},\"protected_route_after_logout\":\"https://xiu-ci.com/market/login?redirect=/workbench/home\",\"bounced_to_login_again\":true,\"old_token_still_accepted_by_api\":false,\"server_logout_endpoint\":{\"status\":403,\"body\":\"{\\\"detail\\\":\\\"CSRF token missing\\\"}\"}}",
+      "result": "passed"
+    },
+    {
+      "id": "WB5",
+      "title": "boundary negatives (real browser)",
+      "input": "错误密码（真实浏览器输入）与空凭据。",
+      "actions": "浏览器里用错误密码点击「登录」，截图并读取页面错误提示；随后清空两个输入框再点「登录」，检查表单是否被 HTML5 required 拦截。",
+      "expected": "错误密码被拒且页面明确显示「用户名或密码错误」、仍停留在登录页；空凭据不下发请求。",
+      "observed": "{\"error_shown_after_wrong_password\":\"用户名或密码错误\",\"credential_error_shown\":true,\"still_on_login\":true,\"empty_submit_click\":\"clicked\",\"api_wrong_password\":{\"status\":401,\"detail\":\"用户名或密码错误\"},\"empty_credentials\":{\"form_present\":true,\"user_required\":true,\"pass_required\":true,\"blocked_by_html5\":true},\"final_url_after_empty_submit\":\"https://xiu-ci.com/market/login\",\"still_on_login_after_empty\":true}",
+      "result": "passed"
+    },
+    {
+      "id": "WB6",
+      "title": "same account system as desktop",
+      "input": "同一企业账号 SUNBIRD（桌面端两轮使用的同一账号）。",
+      "actions": "Web 端登录后取 /api/auth/me 的账号身份；与桌面端 Windows 轮记录里的同一账号身份并排比对。",
+      "expected": "Web 端与桌面端识别为同一账号（同一用户名与同一邮箱），即两端共用同一套账户体系。",
+      "observed": "{\"login_attempts\":[{\"attempt\":1,\"reached_workspace\":true,\"flash_err\":\"\",\"url\":\"https://xiu-ci.com/market/workbench/home\"}],\"web\":{\"status\":200,\"username\":\"SUNBIRD\",\"user_id\":29,\"email\":\"sunbird@xcagi.local\",\"is_enterprise\":true},\"desktop_windows_round\":{\"username\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"account_kind\":\"enterprise\",\"tenant_id\":1,\"app_version\":\"1.0.0.5\",\"app_git_sha\":\"84a4b75445cd529a96529c938f8e88b288ab6228\"},\"same_username\":true,\"same_email\":true,\"account_visible_in_ui\":true}",
+      "result": "passed"
+    }
+  ]
+}

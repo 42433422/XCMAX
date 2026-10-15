@@ -1,0 +1,8 @@
+[15:24:54] feature=erp-inventory platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-inventory
+[15:25:07] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:25:10] case INV1: passed - 入库真实写-读回
+[15:25:10] case INV2: passed - 库存流水真实读回
+[15:25:11] case INV3: passed - 调拨与库存汇总
+[15:25:11] case INV4: passed - 非法分页 422 · 缺入库参数被拒（负例）
+[15:25:11] video: erp-inventory-web-20260929-152454.webm (1283258 bytes)
+[15:25:11] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-inventory/log/erp-inventory-web-20260929-152454.log

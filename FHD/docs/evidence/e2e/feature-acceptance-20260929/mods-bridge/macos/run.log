@@ -1,0 +1,7 @@
+2026-09-29T07:26:25+0800 [mods-bridge] 开始验收 mods-bridge 桥接 Mod 族（ERP / 审批 / 客服 / 总线）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:26:30+0800 [mods-bridge] M1 passed :: HTTP 200 4209ms；{"success": true, "data": {"success": true, "mod_id": "xcagi-erp-domain-bridge", "domain_count": 3, "domains": [{"domain_id": "products", "l
+2026-09-29T07:26:30+0800 [mods-bridge] M2 passed :: HTTP 200 346ms；{"success": true, "data": {"success": true, "mod_id": "xcagi-approval-bridge", "host_prefix": "/api/approval", "facade_prefix": "/api/mod/xc
+2026-09-29T07:26:30+0800 [mods-bridge] M3 passed :: HTTP 200 26ms；{"success": true, "data": {"ok": true, "mod_id": "xcagi-customer-service-bridge", "registry": {"success": true, "mod_id": "xcagi-customer-se
+2026-09-29T07:26:34+0800 [mods-bridge] M4 passed :: 导航后路径 /mod-store；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 能力库 | SUNBIRD | 副窗 | ◈ | 工作区 | 2 | 返回 AI 生态 |  | XCAGI · 能力库 |  | AI 员工市场 |  | 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至
+2026-09-29T07:26:35+0800 [mods-bridge] screenshot result.png
+2026-09-29T07:26:38+0800 [mods-bridge] video operation.webm bytes=336530

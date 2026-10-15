@@ -1,0 +1,7 @@
+[08:26:04] feature=sec-audit base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-audit
+[08:26:15] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:26:15] case A1: passed - 审计日志接口以管理会话身份应答
+[08:26:16] case A2: passed - 自治审计账本为只追加
+[08:26:16] case A3: passed - 未登录会话访问审计接口被拒
+[08:26:17] video: sec-audit-web-20260929-082604.webm (622229 bytes)
+[08:26:17] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-audit/log/sec-audit-web-20260929-082604.log

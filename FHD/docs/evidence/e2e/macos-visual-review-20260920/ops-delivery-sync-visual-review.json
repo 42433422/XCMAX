@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "ops-delivery-sync",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "5fca99a12cffff06ecf9ed8c7b5b462444524b47ff3d6895a9be00e7c877344a",
+  "visible_content": "客户私有 Mod 生产中心显示太阳鸟 PRO“运行模块未就绪”“返工中”，不是交付完成证据。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/ops-delivery-sync.png"
+}

@@ -203,7 +203,7 @@ const mockAccountProfileStore = {
   isImpersonating: false,
   refresh: vi.fn().mockResolvedValue(undefined),
   refreshFromServer: vi.fn().mockResolvedValue(undefined),
-  applyFromMeData: vi.fn(),
+  applyFromMeData: vi.fn().mockResolvedValue(undefined),
   clear: vi.fn(),
 }
 
@@ -2779,6 +2779,16 @@ describe('SettingsView – applyAccountMetaFromAuthPayload', () => {
     localStorage.clear()
     resetApiMocks()
     resetStores()
+  })
+
+  it('handles rejected optional settings hydration without an unhandled task', async () => {
+    mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: true, data: { user: { id: 1, username: 'a' } } })
+    mockAccountProfileStore.applyFromMeData.mockRejectedValueOnce(new Error('industry unavailable'))
+    const wrapper = await mountSettings()
+    await nextTick()
+    await nextTick()
+    expect(mockAccountProfileStore.applyFromMeData).toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('payload 含 data 对象时合并字段', async () => {

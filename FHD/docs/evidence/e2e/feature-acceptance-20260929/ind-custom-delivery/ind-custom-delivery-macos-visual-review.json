@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ind-custom-delivery",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "70a0fc7b5d7f6c08ec9c3068072f601b0320cecb3e6aa8efc9198bc5c9a46587",
+  "visible_content": "私有交付接口读回 taiyangniao-pro（运行时 sunbird-attendance-custom，交付模式 private_mod），私有 Mod 生产中心页可见。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-custom-delivery/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-custom-delivery/macos/result.png"
+}

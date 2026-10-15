@@ -1,4 +1,4 @@
-# 生成 git-change-inventory.txt 并按 D/M/?? 统计（候选稳定态收尾）
+﻿# 生成 git-change-inventory.txt 并按 D/M/?? 统计（候选稳定态收尾）
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $root

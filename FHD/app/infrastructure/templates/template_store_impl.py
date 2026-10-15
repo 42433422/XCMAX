@@ -10,7 +10,7 @@ from typing import Any, cast
 from sqlalchemy import text
 
 from app.application.ports.template_store import TemplateStorePort
-from app.db.session import get_db
+from app.db import session as db_session
 from app.infrastructure.templates.stored_metadata import read_stored_template_metadata
 from app.infrastructure.templates.template_discovery import (
     business_scope,
@@ -109,7 +109,21 @@ class FileSystemTemplateStore(TemplateStorePort):
                             "file_path": file_path,
                             "template_type": template_type,
                             "category": self._map_category(template_type),
-                            "business_scope": self._business_scope(template_type),
+                            "business_scope": (
+                                "orders"
+                                if norm_path
+                                == os.path.normcase(
+                                    os.path.abspath(
+                                        os.path.join(
+                                            self._base_dir,
+                                            "resources",
+                                            "templates",
+                                            "标准发货单.xlsx",
+                                        )
+                                    )
+                                )
+                                else self._business_scope(template_type)
+                            ),
                             "preview_capable": True,
                             "is_active": 1,
                             "source": "fs_scan",
@@ -180,7 +194,7 @@ class FileSystemTemplateStore(TemplateStorePort):
         ensure_templates_tenant_column()
         tenant_sql, tenant_bind = templates_tenant_where_sql()
         try:
-            with get_db() as db:
+            with db_session.get_db() as db:
                 rows = db.execute(
                     text(
                         f"""
@@ -230,11 +244,7 @@ class FileSystemTemplateStore(TemplateStorePort):
         return out
 
     def list_templates(self) -> list[dict]:
-        # DB 为主，自动发现文件模板为辅，再补 legacy（仅存在的文件）。
-        # 注意：历史上这里还会拼接 `_system_default_export_templates()` 产生的
-        # "导出默认模板" 占位条目，但它们带的都是假样例数据（M001/示例产品等），
-        # 在前端模板预览页看起来像占位；按产品要求已移除——无真实模板时由前端
-        # 的 "虚拟占位/快速创建" 流程兜底，而不再由后端塞入硬编码假数据。
+        # Real files only; bundled standard forms contain headers without customer data.
         templates = self._db_templates()
         templates.extend(self._discover_excel_templates())
         templates.extend(self._discover_word_templates())
@@ -289,7 +299,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                 db_id = None
             if db_id is not None:
                 try:
-                    with get_db() as db:
+                    with db_session.get_db() as db:
                         row = db.execute(
                             text(
                                 "SELECT original_file_path FROM templates "
@@ -356,7 +366,7 @@ class FileSystemTemplateStore(TemplateStorePort):
 
             tenant_id = templates_tenant_id_for_insert()
             tenant_sql, tenant_bind = templates_tenant_where_sql()
-            with get_db() as db:
+            with db_session.get_db() as db:
                 # 这里不强制唯一约束，只是简单插入一条记录，并将同类型旧记录标记为非激活
                 db.execute(
                     sql_text(
@@ -438,7 +448,7 @@ class FileSystemTemplateStore(TemplateStorePort):
             from app.infrastructure.tenant_scope import TenantScopeError
 
             tenant_id = templates_tenant_id_for_insert()
-            with get_db() as db:
+            with db_session.get_db() as db:
                 res = db.execute(
                     text(
                         """

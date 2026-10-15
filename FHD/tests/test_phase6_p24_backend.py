@@ -1616,25 +1616,25 @@ class TestModManagerRegisterHooks:
 
 
 class TestModManagerInstanceMethods:
-    def test_record_load_failure_truncates_message(self):
-        mm = ModManager(mods_root="/tmp/test_mods")
+    def test_record_load_failure_truncates_message(self, tmp_path):
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         long_msg = "x" * 600
         mm._record_load_failure("m1", "backend", long_msg)
         assert len(mm._recent_load_failures[0]["message"]) <= 500
 
-    def test_get_recent_load_failures_returns_copy(self):
-        mm = ModManager(mods_root="/tmp/test_mods")
+    def test_get_recent_load_failures_returns_copy(self, tmp_path):
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         mm._record_load_failure("m1", "s", "e")
         failures = mm.get_recent_load_failures()
         failures.append({"mod_id": "extra"})
         assert len(mm._recent_load_failures) == 1
 
-    def test_resolve_mod_directory_empty(self):
-        mm = ModManager(mods_root="/tmp/test_mods")
+    def test_resolve_mod_directory_empty(self, tmp_path):
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         assert mm.resolve_mod_directory("") is None
 
-    def test_invalidate_scan_cache(self):
-        mm = ModManager(mods_root="/tmp/test_mods")
+    def test_invalidate_scan_cache(self, tmp_path):
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         mm._scan_cache_fp = "fp"
         mm._scan_cache_mods = ["m1"]
         mm.invalidate_scan_cache()

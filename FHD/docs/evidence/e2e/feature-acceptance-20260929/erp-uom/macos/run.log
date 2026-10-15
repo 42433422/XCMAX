@@ -1,0 +1,6 @@
+2026-09-29T06:47:12+0800 [erp-uom] 开始验收 erp-uom 计量单位管理；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:47:12+0800 [erp-uom] M1 passed :: HTTP 200 24ms；{"success": true, "data": [{"id": 1, "unit_name": "MAC验收0929客户", "contact_person": "张三", "contact_phone": "13800000000", "address": "", "is_active": 1}, {"id": 2, "unit_name": "MAC验收0929客户35507", "con
+2026-09-29T06:47:12+0800 [erp-uom] M2 passed :: HTTP 200 14ms；{"success": true, "data": [{"id": 1, "name": "MAC验收0929客户", "symbol": "MAC验收0929客户"}, {"id": 2, "name": "MAC验收0929客户35507", "symbol": "MAC验收0929客户35507"}], "source": "mod:xcagi-erp-domain-bridge", "ex
+2026-09-29T06:47:16+0800 [erp-uom] M3 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/products；命中文本 ['单位']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 人员管理 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 饰品包装品管理 | 导入Excel | 导出价格表 | 导出Excel | + 添加产品 | 产品单位： | 请选择产品单位 | MAC验收0929客
+2026-09-29T06:47:17+0800 [erp-uom] screenshot result.png
+2026-09-29T06:47:19+0800 [erp-uom] video operation.webm bytes=312645

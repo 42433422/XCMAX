@@ -1,9 +1,10 @@
-param(
-  [string]$Version = "1.0.0.0",
-  [switch]$SkipUiInstaller
+﻿param(
+  [string]$Version = ''
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $Version = $Version.TrimStart("v", "V")
 $releaseRoot = Join-Path $Root "release\xcagi-v$Version"
@@ -30,7 +31,6 @@ foreach ($sku in @('personal', 'enterprise')) {
     '-Version', $Version,
     '-ProductSku', $sku
   )
-  if ($SkipUiInstaller) { $args += '-SkipUiInstaller' }
   & powershell @args
   if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
     throw "build-installer failed for SKU $sku (exit $LASTEXITCODE)"

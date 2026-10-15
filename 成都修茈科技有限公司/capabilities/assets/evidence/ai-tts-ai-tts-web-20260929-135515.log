@@ -1,0 +1,8 @@
+[13:55:15] feature=ai-tts platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-tts
+[13:55:28] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:55:28] case T1: passed - 真实合成中文语音并返回音频
+[13:55:28] case T2: passed - 本地语音引擎健康真实读取
+[13:55:29] case T3: passed - 未启用的兼容层如实 fail-closed
+[13:55:29] case T4: passed - 空文本的语音合成被拒（负例/边界）
+[13:55:29] video: ai-tts-web-20260929-135515.webm (960542 bytes)
+[13:55:29] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-tts/log/ai-tts-web-20260929-135515.log

@@ -64,7 +64,9 @@ netstat -ano | findstr /R /C:":5001 .*LISTENING" >nul 2>&1
 if not errorlevel 1 goto :open_browser
 
 echo [2/2] 启动前端 Vite（5001）...
-start "XCAGI Desktop Frontend" /D "%FRONTEND_DIR%" cmd /k "npm run dev"
+REM Vite 默认 dev 端口为 42423（vite.config.js）；桌面脚本固定走 5001，
+REM 与下方 netstat 探测、浏览器打开地址保持一致。
+start "XCAGI Desktop Frontend" /D "%FRONTEND_DIR%" cmd /k "set VITE_DEV_PORT=5001&& npm run dev"
 ping 127.0.0.1 -n 4 >nul
 
 :open_browser

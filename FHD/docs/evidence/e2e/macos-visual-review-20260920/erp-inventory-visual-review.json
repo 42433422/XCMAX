@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "erp-inventory",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "c4d4c42e87b2c603bba07de5e64c846aade6a3df5af2d0c4112fad4185f2d8bf",
+  "visible_content": "库存、预警表均为空，没有入库、出库、补货建议或单位换算结果。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/erp-inventory.png"
+}

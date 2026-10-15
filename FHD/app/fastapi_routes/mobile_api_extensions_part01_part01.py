@@ -49,6 +49,20 @@ def _mobile_unauthorized_response() -> _facade().JSONResponse:
     )
 
 
+def _pairing_rate_allowed(key: str, endpoint: str, limit: int, window: int) -> bool:
+    from app.utils.resilience.rate_limiter import (
+        RateLimitBackendError,
+        check_rate_limit,
+        ensure_rate_limit_backend,
+    )
+
+    try:
+        ensure_rate_limit_backend()
+        return bool(check_rate_limit(key, endpoint, limit, window)["allowed"])
+    except RateLimitBackendError:
+        return False
+
+
 def _ai_circle_user(user: _facade().Any) -> tuple[int, str, str | None]:
     uid = int(getattr(user, "id", 0) or 0)
     name = str(
@@ -111,61 +125,6 @@ def _ensure_outbox_table() -> None:
         _facade().logger.warning("mobile_notification_outbox ensure: %s", exc)
 
 
-def _resolve_mobile_relay_user(
-    user: _facade().Any, *, prefer_admin: bool = False
-) -> dict[str, _facade().Any]:
-    """Resolve the mobile user for physical QR/device-code relay binding.
-
-    A relay pairing code already proves physical access to the desktop settings
-    screen, so first-time mobile binding must not require a pre-existing mobile
-    JWT. Prefer an existing admin account; create a local relay admin only when
-    the database has no active users yet.
-    """
-    uid, _ = _facade()._mobile_user_identity(user)
-    role = str(getattr(user, "role", "") or "").strip()
-    if uid > 0 and (not prefer_admin or role in {"admin", "super_admin", "owner"}):
-        return _facade()._mobile_user_public_dict(user)
-    from app.db.models import User
-    from app.db.session import get_db
-
-    try:
-        with get_db() as db:
-            row = None
-            if prefer_admin or uid <= 0:
-                row = (
-                    db.query(User)
-                    .filter(User.is_active == True)
-                    .filter(User.role.in_(["admin", "super_admin", "owner"]))
-                    .order_by(User.id.asc())
-                    .first()
-                )
-            if row is None:
-                row = db.query(User).filter(User.is_active == True).order_by(User.id.asc()).first()
-            if row is None:
-                now = _facade().datetime.utcnow()
-                row = User(
-                    username=f"mobile_relay_{_facade().uuid.uuid4().hex[:8]}",
-                    password=_facade().uuid.uuid4().hex,
-                    display_name="移动端设备绑定",
-                    email="",
-                    role="admin",
-                    is_active=True,
-                    created_at=now,
-                    last_login=now,
-                )
-                db.add(row)
-                db.flush()
-            public = _facade()._mobile_user_public_dict(row)
-            if hasattr(db, "expunge"):
-                db.expunge(row)
-            return public
-    except _facade().RECOVERABLE_ERRORS as exc:
-        _facade().logger.warning("mobile relay admin fallback: %s", exc)
-        if prefer_admin:
-            return _facade()._relay_admin_fallback_user()
-        raise
-
-
 def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, _facade().Any] | None:
     enabled = (_facade().os.environ.get("XCAGI_RELAY_PAIRING_ENABLED") or "1").strip().lower()
     if enabled in {"0", "false", "off", "no"}:
@@ -202,13 +161,13 @@ def _cached_desktop_relay_for_account_binding() -> dict[str, _facade().Any] | No
         return None
     if not relay:
         return None
-    if relay.get("paired") is not True:
-        return None
     relay_id = str(relay.get("relay_id") or "").strip()
-    if not relay_id:
+    code = str(relay.get("pairing_code") or "").strip()
+    if not relay_id or len(code) != 6 or not code.isdigit():
         return None
     return {
         "relay_id": relay_id,
+        "pairing_code": code,
         "relay_base_url": str(relay.get("relay_base_url") or "").strip(),
         "expires_at": str(relay.get("expires_at") or "").strip(),
         "exp": int(relay.get("exp") or 0),

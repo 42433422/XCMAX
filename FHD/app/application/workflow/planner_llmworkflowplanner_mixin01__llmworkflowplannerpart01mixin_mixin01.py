@@ -21,6 +21,8 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
         tool_registry: dict[str, _facade().Any],
         context: dict[str, _facade().Any] | None = None,
     ) -> _facade().PlanGraph:
+        from app.application.workflow.sql_execution_policy import rejected_sql_plan
+
         context = dict(context or {})
         session_key = str(context.get("session_id") or context.get("conversation_id") or "").strip()
         plan_id = (
@@ -28,13 +30,23 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
             if session_key
             else f"wp-{_facade().uuid.uuid4().hex}"
         )
+        rejected = rejected_sql_plan(message, plan_id)
+        if rejected is not None:
+            return rejected
         from app.application.normal_chat_dispatch import resolve_tool_execution_profile
 
         profile = resolve_tool_execution_profile(context)
         registry_for_plan = _facade()._filter_tool_registry_for_profile(tool_registry, profile)
+        from app.application.workflow.sql_execution_policy import database_maintenance_plan
+
+        restore = database_maintenance_plan(message, plan_id, registry_for_plan)
+        if restore is not None:
+            return restore
         from app.application.normal_chat_dispatch import route_normal_mode_message
 
         _route = route_normal_mode_message(str(message or ""))
+        if _route.get("intent") == "desktop":
+            return self._fallback_plan(plan_id, message, registry_for_plan)
         if (
             "sales" in registry_for_plan
             and str(_route.get("intent") or "") == "sales_write"
@@ -94,7 +106,15 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
         planned = None
-        if _facade()._onboarding_first_order_slots(message) and "business_db" in registry_for_plan:
+        # 规划入口 SQL 拒绝主闸已由 sql_execution_policy.rejected_sql_plan（#1815）承担（L33）；
+        # 此处不再重复布闸。原始 SQL 的写路径双保险见 planner_part01._extract_business_db_write_node。
+        from app.application.workflow.sales_quote_plan import sales_quote_node
+
+        if sales_quote_node(message, registry_for_plan, single_request=True) is not None:
+            planned = self._fallback_plan(plan_id, message, registry_for_plan)
+        elif (
+            _facade()._onboarding_first_order_slots(message) and "business_db" in registry_for_plan
+        ):
             deterministic = self._fallback_plan(plan_id, message, registry_for_plan)
             if deterministic.intent == "onboarding_first_order" and len(deterministic.nodes) == 3:
                 planned = deterministic
@@ -197,7 +217,8 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
         inserted: list[_facade().WorkflowNode] = []
         for item in items:
             clarify = _facade().build_clarify_node(
-                item["question"], ambient={"target_node_id": item["node_id"]}
+                item["question"],
+                ambient={"target_node_id": item["node_id"], "clarification": item},
             )
             plan.nodes.insert(0, clarify)
             inserted.append(clarify)

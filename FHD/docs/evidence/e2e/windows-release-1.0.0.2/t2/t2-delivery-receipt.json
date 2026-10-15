@@ -1,0 +1,15 @@
+﻿{
+  "stable_auto_update": false,
+  "runner_install_smoke": "passed",
+  "size": 248410443,
+  "authenticode_status": "NotSigned",
+  "customer_machine_acceptance": "not_verified",
+  "version": "1.0.0.2",
+  "sha256": "7738e8d58ea1e219b1ce2c532816d5ad079288dbdd36c7ecc50f069fa2b0449a",
+  "warning": "未签名安装包，Windows 可能显示未知发布者或安全提示；不进入稳定自动更新。",
+  "signature_status": "unsigned",
+  "filename": "XCAGI-Enterprise-Setup-1.0.0.2-x64-unsigned.exe",
+  "git_sha": "e3bde5f33e14b12ad400e0ae8fc6587079f5594b",
+  "delivery_mode": "manual_installer"
+}
+

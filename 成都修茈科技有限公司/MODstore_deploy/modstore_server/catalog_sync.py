@@ -5,8 +5,8 @@
 ``catalog_store`` 的 ``packages.json`` 与 ``catalog_data/files/``。
 
 管理员可调用 ``POST /api/admin/catalog/sync-from-xc-packages``，将 JSON 中的每条包
-**按 pkg_id upsert** 到 ``catalog_items``（与 ``/v1/packages`` 登记一致），并可选将
-二进制复制到 ``market_files/``。``stored_filename`` 始终保留 XC ``catalog_data/files/``
+**按 pkg_id upsert** 到 ``catalog_items``（与 ``/v1/packages`` 登记一致）。
+``stored_filename`` 保留 XC ``catalog_data/files/``
 下的 basename，以便 ``employee_runtime.load_employee_pack`` 能打开 zip。
 新建 ``catalog_items`` 行默认 ``is_public=False``（不上架 AI 市场）；已存在的 ``pkg_id``
 同步时**不再改写** ``is_public``，以免覆盖管理员上架状态。
@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -26,9 +25,7 @@ from modstore_server.models import CatalogItem
 
 
 def market_catalog_files_dir() -> Path:
-    d = Path(__file__).resolve().parent / "market_files"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return xc_catalog_files_dir()
 
 
 def _commerce_price(commerce: Any) -> float:
@@ -88,9 +85,6 @@ def sync_packages_json_to_catalog_items(session, *, admin_user_id: int) -> Dict[
     inserted = 0
     skipped = 0
     errors: List[str] = []
-    xc_dir = xc_catalog_files_dir()
-    mdir = market_catalog_files_dir()
-
     for r in load_store().get("packages") or []:
         if not isinstance(r, dict):
             continue
@@ -102,17 +96,6 @@ def sync_packages_json_to_catalog_items(session, *, admin_user_id: int) -> Dict[
             session.query(CatalogItem).filter(CatalogItem.pkg_id == pkg_id).first() is not None
         )
 
-        stored = str(r.get("stored_filename") or "").strip()
-        dest_name = stored
-        if stored:
-            src = xc_dir / stored
-            if src.is_file():
-                suffix = src.suffix.lower() or ".zip"
-                dest_name = f"{pkg_id}-{version}{suffix}"
-                try:
-                    shutil.copy2(src, mdir / dest_name)
-                except OSError as e:
-                    errors.append(f"{pkg_id}@{version}: copy failed {e}")
         upsert_catalog_item_from_xc_package_dict(session, r, author_id=admin_user_id)
         if had_row:
             skipped += 1

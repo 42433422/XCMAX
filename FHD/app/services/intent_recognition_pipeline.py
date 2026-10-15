@@ -82,6 +82,8 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
         block_if_negated = best["block_if_negated"]
 
         result["primary_intent"] = intent_id
+        # 置信度纪律：透出命中意图的优先级（新增字段，向后兼容；消费方 .get 取值）
+        result["matched_priority"] = best.get("priority", 0)
 
         negated = (
             is_negation(message, action_keywords=best.get("keywords"))

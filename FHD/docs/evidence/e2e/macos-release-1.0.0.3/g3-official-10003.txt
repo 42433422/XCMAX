@@ -1,0 +1,16 @@
+== G3 macOS 安全项验证 1.0.0.3（对官方发布 DMG 原件挂载实测）==
+date: 2026-09-13T20:09:34Z
+DMG: XCAGI-Enterprise-1.0.0.3-mac-arm64.dmg
+SHA256: 288549712a63035f77a860d28a65af2f7ebc83b1f9ed9606719484576b9f3068
+
+== codesign --verify --deep --strict ==
+exit=0
+== codesign display（Team/flags）==
+CodeDirectory v=20500 size=456 flags=0x10000(runtime) hashes=3+7 location=embedded
+TeamIdentifier=G26WSH472M
+== spctl --assess --type execute ==
+exit=0
+== stapler validate（DMG 公证装订）==
+Processing: /private/tmp/xcagi-real/rel10003-artifact/XCAGI-Enterprise-1.0.0.3-mac-arm64.dmg
+The validate action worked!
+exit=0

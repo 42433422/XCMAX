@@ -1,18 +1,22 @@
-param(
-  [string]$Version = "1.0.0.1",
+﻿param(
+  [string]$Version = '',
   [switch]$SkipBackend,
   # 复用 build-frontend.sh 产出的共享 templates/vue-dist，不再重建前端（统一 Web/桌面构建源）
   [switch]$SkipFrontend,
   [Parameter(Mandatory = $true)]
   [ValidateSet('personal', 'enterprise')]
   [string]$ProductSku,
-  [switch]$SkipUiInstaller,
   [string]$SunbirdSeedZipPath = '',
   [string]$InstallerOutputSubdir = '',
   [string]$InstallerFileName = ''
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$Version = Resolve-ProductVersion -Version $Version
+if ($SunbirdSeedZipPath) {
+  throw "Customer seed embedding is retired. Use the standard main host and account-authorized Mod delivery."
+}
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $Root
 $Version = $Version.TrimStart("v", "V")
@@ -114,6 +118,7 @@ if ($buildSha -notmatch '^[0-9a-fA-F]{40}$') {
   throw "Windows installer requires an exact 40-character Git SHA, got '$buildSha'"
 }
 $buildSha = $buildSha.ToLowerInvariant()
+$env:XCAGI_BUILD_SHA = $buildSha
 $releaseId = "xcagi-$Version-$buildSha"
 $buildInfoPath = Join-Path $Root "desktop\resources\build-info.json"
 $buildInfo = @{
@@ -122,7 +127,8 @@ $buildInfo = @{
   version = $Version
   releaseId = $releaseId
 }
-$buildInfo | ConvertTo-Json -Compress | Set-Content -Path $buildInfoPath -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($buildInfoPath, (($buildInfo | ConvertTo-Json -Compress) + "`n"), $utf8NoBom)
 $backendSku = Join-Path $Root "dist\xcagi-backend\_internal\product-sku.json"
 $backendSkuDir = Split-Path $backendSku -Parent
 if (Test-Path $backendSkuDir) {
@@ -164,6 +170,18 @@ npm version $ToolchainVersion --no-git-tag-version --allow-same-version
 $ebAppId = $skuAppIds[$ProductSku]
 $ebPublishUrl = $skuUpdateUrls[$ProductSku]
 $ebArtifact = "XCAGI-$label-Setup-$Version-`${arch}.`${ext}"
+$installerNsh = Join-Path $Root "desktop\build\installer.nsh"
+$nshText = [System.IO.File]::ReadAllText($installerNsh)
+if ($nshText -notmatch '(?m)^!define XCAGI_PRODUCT_DISPLAY_VERSION "') {
+  throw "desktop/build/installer.nsh is missing XCAGI_PRODUCT_DISPLAY_VERSION"
+}
+$nshUpdated = [regex]::Replace(
+  $nshText,
+  '(?m)^!define XCAGI_PRODUCT_DISPLAY_VERSION ".*"',
+  "!define XCAGI_PRODUCT_DISPLAY_VERSION `"$Version`""
+)
+[System.IO.File]::WriteAllText($installerNsh, $nshUpdated)
+
 $electronBuilderArgs = @(
   'electron-builder',
   '--win', 'nsis', 'zip',
@@ -173,6 +191,8 @@ $electronBuilderArgs = @(
   "--config.appId=$ebAppId",
   "--config.publish.url=$ebPublishUrl",
   "--config.nsis.artifactName=$ebArtifact",
+  "--config.buildVersion=$Version",
+  "--config.extraMetadata.shortVersionWindows=$Version",
   "--config.extraMetadata.productSku=$ProductSku"
 )
 
@@ -211,6 +231,10 @@ if ($env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '1') {
   )
 }
 
+
+# Pin the NSIS payload to BCJ so Nsis7z can extract executables (electron-builder#9983).
+$env:ELECTRON_BUILDER_7Z_FILTER = 'BCJ'
+Write-Host "NSIS payload 7z filter pinned to BCJ"
 & npx @electronBuilderArgs
 if ($LASTEXITCODE -ne 0) { throw "electron-builder failed with exit code $LASTEXITCODE" }
 Pop-Location
@@ -219,24 +243,17 @@ Assert-FileExists (Join-Path $outDir "win-unpacked\resources\app.asar") "Electro
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\backend\xcagi-backend.exe") "Packaged backend executable"
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\product-sku.json") "Packaged product-sku.json"
 
-$nsisExe = Get-ChildItem $outDir -Filter "XCAGI-$label-Setup-*.exe" -File -ErrorAction SilentlyContinue |
-  Sort-Object LastWriteTime -Descending |
-  Select-Object -First 1
-if (-not $nsisExe) {
-  $nsisExe = Get-ChildItem $outDir -Filter "XCAGI-*-Setup-*.exe" -File -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-}
+$nsisExe = Get-Item -LiteralPath (Join-Path $outDir "XCAGI-$label-Setup-$Version-x64.exe")
 
-if (-not $SkipUiInstaller) {
-  if (-not $nsisExe) {
-    throw "NSIS artifact not found in $outDir; cannot build single-file installer."
-  }
-
+& (Join-Path $PSScriptRoot 'assert-nsis-7z-filter.ps1') -PayloadPath $nsisExe.FullName
+if ($LASTEXITCODE -ne 0) { throw "NSIS payload uses a 7z filter the installer cannot extract" }
+& {
   $stagingNsis = Join-Path $outDir 'nsis-payload.tmp.exe'
   Copy-Item $nsisExe.FullName $stagingNsis -Force
 
   $uiProj = Join-Path $Root "tools\XcagiInstaller\XcagiInstaller.csproj"
+  & node (Join-Path $PSScriptRoot 'generate-windows-rollback-helper.mjs')
+  if ($LASTEXITCODE -ne 0) { throw "Shared Windows rollback helper generation failed" }
   $uiOut = Join-Path $outDir "ui-build"
   New-Item -ItemType Directory -Force -Path $uiOut | Out-Null
 
@@ -249,16 +266,16 @@ if (-not $SkipUiInstaller) {
     "-p:IncludeNativeLibrariesForSelfExtract=true",
     "-p:EnableCompressionInSingleFile=true",
     "-p:Version=$Version",
+    "-p:InformationalVersion=$Version+$env:XCAGI_BUILD_SHA",
+    "-p:IncludeSourceRevisionInInformationalVersion=false",
     "-p:SetupPayloadPath=$stagingNsis",
     "-o", $uiOut
   )
   if (Test-Path $licenseSrc) {
     $publishArgs += "-p:LicenseFilePath=$licenseSrc"
   }
-  if ($SunbirdSeedZipPath -and (Test-Path $SunbirdSeedZipPath)) {
-    $publishArgs += "-p:SunbirdSeedZipPath=$SunbirdSeedZipPath"
-  }
   & dotnet @publishArgs
+  if ($LASTEXITCODE -ne 0) { throw "WPF installer publish failed with exit code $LASTEXITCODE" }
 
   $uiExe = Get-ChildItem $uiOut -Filter "XcagiInstaller.exe" | Select-Object -First 1
   if (-not $uiExe) {
@@ -269,6 +286,11 @@ if (-not $SkipUiInstaller) {
     Remove-Item $finalSetupPath -Force
   }
   Move-Item $uiExe.FullName $finalSetupPath -Force
+  if ($env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '1') {
+    & node -e "require(process.argv[1]).default({path:process.argv[2]}).catch(error=>{console.error(error.message);process.exitCode=1})" (Join-Path $Root 'desktop/build/windows-sign.cjs') $finalSetupPath
+    if ($LASTEXITCODE -ne 0) { throw "Final WPF installer signing failed with exit code $LASTEXITCODE" }
+    & (Join-Path $PSScriptRoot 'verify-windows-signature.ps1') -Path $finalSetupPath -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME
+  }
   Remove-Item $uiOut -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item $stagingNsis -Force -ErrorAction SilentlyContinue
   if ($nsisExe -and (Test-Path $nsisExe.FullName) -and $nsisExe.FullName -ne $finalSetupPath) {
@@ -286,10 +308,6 @@ if (-not $SkipUiInstaller) {
   $env:XCAGI_BUILD_SHA = $buildSha
   $env:XCAGI_PRODUCT_VERSION = $Version
   node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $finalSetupPath $ToolchainVersion win
-} elseif ($nsisExe) {
-  $env:XCAGI_BUILD_SHA = $buildSha
-  $env:XCAGI_PRODUCT_VERSION = $Version
-  node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $nsisExe.FullName $ToolchainVersion win
 }
 
 $dlProj = Join-Path $Root "tools\XcagiDownloader\XcagiDownloader.csproj"

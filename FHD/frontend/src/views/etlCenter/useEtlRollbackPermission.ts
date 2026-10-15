@@ -37,6 +37,9 @@ export function useEtlRollbackPermission() {
   }
 
   const canRollback = computed(() => permissions.value.includes('etl.rollback'))
+  const canExecutePermission = computed(() => permissions.value.includes('etl.execute'))
+  const canManageTemplate = computed(() => permissions.value.includes('etl.template.manage'))
+  const canManageTarget = computed(() => permissions.value.includes('etl.target.manage'))
   const rollbackPermissionMessage = computed(() => {
     if (canRollback.value) return ''
     if (status.value === 'loading') return '正在确认撤销权限…'
@@ -48,5 +51,5 @@ export function useEtlRollbackPermission() {
   onActivated(refresh)
   onDeactivated(reset)
   onBeforeUnmount(reset)
-  return { canRollback, rollbackPermissionMessage }
+  return { canRollback, canExecutePermission, canManageTemplate, canManageTarget, rollbackPermissionMessage }
 }

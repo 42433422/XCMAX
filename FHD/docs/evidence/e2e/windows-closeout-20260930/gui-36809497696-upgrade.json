@@ -1,0 +1,318 @@
+{
+  "run": "36809497696-1",
+  "phase": "after-upgrade",
+  "started_at": "2026-10-01T03:25:03.960Z",
+  "marker": "WIN-GUI-36809497696-1-after-upgrade",
+  "names": {
+    "customer": "WIN-GUI-36809497696-1-after-upgrade-客户",
+    "product": "WIN-GUI-36809497696-1-after-upgrade-产品",
+    "supplier": "WIN-GUI-36809497696-1-after-upgrade-供应商",
+    "ai": "WIN-GUI-36809497696-1-after-upgrade-AI客户",
+    "cancelled": "WIN-GUI-36809497696-1-after-upgrade-取消客户"
+  },
+  "cases": [
+    {
+      "id": "normal_login",
+      "started_at": "2026-10-01T03:25:04.028Z",
+      "input": {
+        "customer": "WIN-GUI-36809497696-1-after-upgrade-客户",
+        "product": "WIN-GUI-36809497696-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36809497696-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36809497696-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36809497696-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23"
+      },
+      "finished_at": "2026-10-01T03:25:14.731Z"
+    },
+    {
+      "id": "tenant_identity",
+      "started_at": "2026-10-01T03:25:14.732Z",
+      "input": {
+        "customer": "WIN-GUI-36809497696-1-after-upgrade-客户",
+        "product": "WIN-GUI-36809497696-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36809497696-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36809497696-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36809497696-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23",
+        "workspace_owner_id": "tenant:1"
+      },
+      "finished_at": "2026-10-01T03:25:14.970Z"
+    },
+    {
+      "id": "old_ui_readback",
+      "started_at": "2026-10-01T03:25:14.970Z",
+      "input": {
+        "customer": "WIN-GUI-36809497696-1-after-upgrade-客户",
+        "product": "WIN-GUI-36809497696-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36809497696-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36809497696-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36809497696-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "original_run": "36809497696-1",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "workspace_owner_id": "tenant:1",
+        "records": {
+          "customer": {
+            "id": 1,
+            "customer_name": "WIN-GUI-36809497696-1-seed-客户",
+            "contact_person": "验收员",
+            "contact_phone": "13800000001",
+            "contact_address": "WIN-GUI-36809497696-1-seed隔离验收地址",
+            "created_at": "2026-10-01T03:23:29",
+            "updated_at": "2026-10-01T03:23:29"
+          },
+          "product": {
+            "id": 1,
+            "model_number": "WIN-GUI-36809497696-1-seed",
+            "name": "WIN-GUI-36809497696-1-seed-产品",
+            "specification": "10",
+            "price": 12.5,
+            "quantity": 0,
+            "description": "",
+            "category": "",
+            "brand": "",
+            "unit": "个",
+            "is_active": true,
+            "created_at": "2026-10-01T03:23:32.003170",
+            "updated_at": "2026-10-01T03:23:32.003170"
+          }
+        }
+      },
+      "finished_at": "2026-10-01T03:25:20.939Z"
+    },
+    {
+      "id": "visible_version",
+      "started_at": "2026-10-01T03:25:20.939Z",
+      "input": {
+        "customer": "WIN-GUI-36809497696-1-after-upgrade-客户",
+        "product": "WIN-GUI-36809497696-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36809497696-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36809497696-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36809497696-1-after-upgrade-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "expected_version": "1.0.0.5",
+        "visible_version": "1.0.0.5"
+      },
+      "finished_at": "2026-10-01T03:25:21.598Z"
+    },
+    {
+      "id": "customer",
+      "started_at": "2026-10-01T03:25:21.598Z",
+      "input": {
+        "customer": "WIN-GUI-36809497696-1-after-upgrade-客户",
+        "product": "WIN-GUI-36809497696-1-after-upgrade-产品",
+        "supplier": "WIN-GUI-36809497696-1-after-upgrade-供应商",
+        "ai": "WIN-GUI-36809497696-1-after-upgrade-AI客户",
+        "cancelled": "WIN-GUI-36809497696-1-after-upgrade-取消客户"
+      },
+      "status": "failed",
+      "error": "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('#view-customers tbody tr').filter({ hasText: 'WIN-GUI-36809497696-1-after-upgrade-客户' })\nExpected substring: \"验收员\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"to.have.text\" with timeout 5000ms\n  - waiting for locator('#view-customers tbody tr').filter({ hasText: 'WIN-GUI-36809497696-1-after-upgrade-客户' })\n\n    at Proxy.<anonymous> (D:\\a\\XCMAX\\XCMAX\\FHD\\frontend\\node_modules\\playwright\\lib\\matchers\\expect.js:213:24)\n    at file:///D:/a/XCMAX/XCMAX/FHD/scripts/dev/record_enterprise_desktop_init.mjs:155:117\n    at async step (file:///D:/a/XCMAX/XCMAX/FHD/scripts/dev/record_enterprise_desktop_init.mjs:28:21)\n    at async main (file:///D:/a/XCMAX/XCMAX/FHD/scripts/dev/record_enterprise_desktop_init.mjs:149:3)\n    at async file:///D:/a/XCMAX/XCMAX/FHD/scripts/dev/record_enterprise_desktop_init.mjs:336:7",
+      "visible_buttons": [
+        {
+          "text": "智能对话",
+          "label": "智能对话",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "考勤工作区",
+          "label": "考勤工作区",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "信息",
+          "label": "信息",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "智能生态",
+          "label": "智能生态",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "知识库",
+          "label": "知识库",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "数据对接中心",
+          "label": "数据对接中心",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "员工工作台",
+          "label": "员工工作台",
+          "class": "menu-item has-children",
+          "disabled": false
+        },
+        {
+          "text": "饰品包装品管理",
+          "label": "饰品包装品管理",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "原材料仓库",
+          "label": "原材料仓库",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "库存管理",
+          "label": "库存管理",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "采购管理",
+          "label": "采购管理",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "客户管理",
+          "label": "客户管理",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "订单管理",
+          "label": "订单管理",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "出货记录",
+          "label": "出货记录",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "数据来源",
+          "label": "数据来源",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "包装标签打印",
+          "label": "包装标签打印",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "标签模板库",
+          "label": "标签模板库",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "系统设置",
+          "label": "系统设置",
+          "class": "menu-item",
+          "disabled": false
+        },
+        {
+          "text": "系统正常",
+          "label": "系统正常，打开系统设置",
+          "class": "runtime-health-button",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "label": "系统设置",
+          "class": "top-bar-settings-btn",
+          "disabled": false
+        },
+        {
+          "text": "副窗",
+          "label": null,
+          "class": "assistant-float-toggle",
+          "disabled": false
+        },
+        {
+          "text": "◈工作区",
+          "label": "打开独立工作区列表",
+          "class": "task-center-trigger",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "label": null,
+          "class": "btn btn-icon",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "label": null,
+          "class": "btn btn-icon",
+          "disabled": false
+        },
+        {
+          "text": "+ 新建客户",
+          "label": null,
+          "class": "btn btn-primary",
+          "disabled": false
+        },
+        {
+          "text": " 编辑 ",
+          "label": null,
+          "class": "btn btn-primary",
+          "disabled": false
+        },
+        {
+          "text": " 删除 ",
+          "label": null,
+          "class": "btn btn-danger",
+          "disabled": false
+        },
+        {
+          "text": "小C助理",
+          "label": "小C助理",
+          "class": "floating-chat-toggle",
+          "disabled": false
+        }
+      ],
+      "finished_at": "2026-10-01T03:25:31.602Z"
+    }
+  ],
+  "observations": [],
+  "result": "failed",
+  "failure": "expect(locator).toContainText(expected) failed\n\nLocator: locator('#view-customers tbody tr').filter({ hasText: 'WIN-GUI-36809497696-1-after-upgrade-客户' })\nExpected substring: \"验收员\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"to.have.text\" with timeout 5000ms\n  - waiting for locator('#view-customers tbody tr').filter({ hasText: 'WIN-GUI-36809497696-1-after-upgrade-客户' })\n",
+  "finished_at": "2026-10-01T03:25:31.602Z",
+  "unfinished": [
+    "customer",
+    "product",
+    "purchase",
+    "purchase_inbound",
+    "sales_order",
+    "shipping_delivery_export",
+    "stock_out",
+    "ui_readback",
+    "ai_business"
+  ],
+  "full_customer_acceptance": "not_verified"
+}

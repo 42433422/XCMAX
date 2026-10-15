@@ -1,0 +1,8 @@
+[15:15:51] feature=erp-purchase platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-purchase
+[15:16:03] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:16:05] case PU1: passed - 供应商真实写-读回
+[15:16:06] case PU2: passed - 采购订单真实写-读回（含明细与金额）
+[15:16:06] case PU3: passed - 采购汇总真实读取
+[15:16:07] case PU4: passed - 缺名称供应商 / 缺产品明细被拒（负例）
+[15:16:07] video: erp-purchase-web-20260929-151551.webm (1185992 bytes)
+[15:16:07] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-purchase/log/erp-purchase-web-20260929-151551.log

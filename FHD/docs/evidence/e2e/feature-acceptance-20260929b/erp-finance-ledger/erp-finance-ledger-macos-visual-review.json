@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-finance-ledger",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "b104312f3f7ec50e0b03ac54e786354c5c3060829100b51d56710c450c2f8219",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-finance-ledger/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-finance-ledger/macos/result.png"
+}

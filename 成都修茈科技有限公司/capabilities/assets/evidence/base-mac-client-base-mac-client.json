@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "feature": "base-mac-client",
+  "platform": "macos",
+  "result": "PARTIAL",
+  "status": "partial",
+  "verified_at": "2026-09-25T00:29:31.947Z",
+  "product_version": "1.0.0.5",
+  "git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+  "source_main_sha": "93b9ad2f68b72103816d4e0b75ff9165f60f9267",
+  "test_method": "app",
+  "target": "/",
+  "scope": "已安装 macOS 客户端启动并渲染主界面；未覆盖安装/升级/卸载。",
+  "screenshot": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-mac-client.png",
+  "video": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-mac-client.webm",
+  "log": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-mac-client.log",
+  "media": [
+    {
+      "kind": "screenshot",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-mac-client.png",
+      "sha256": "6d2f495120bcb1ef84640ba137f2401c5ab79596895f2fe057871add6f7ee56a"
+    },
+    {
+      "kind": "video",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-mac-client.webm",
+      "sha256": "595c658cf12f3cddf23153fe68e43568aeee97e560365fe37076ad3c6acb66ee"
+    },
+    {
+      "kind": "log",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-mac-client.log",
+      "sha256": "10050d42eda4f68775c86682ad24b31766830cc64d85d6970e57a39a64f423d5"
+    }
+  ],
+  "limitations": "Supplementary observation only; this record is not an acceptance PASS."
+}

@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-ppt",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "cea16e58c42e360f5db63652c5fbc7b5972a3b35651812cc15de56f3a042f62e",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。员工工作流管理。有流程可视化、进入员工空间、六部门编制图。正文写按六线六部门分组展示 52 岗 AI 员工。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-ppt/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-ppt/macos/result.png"
+}

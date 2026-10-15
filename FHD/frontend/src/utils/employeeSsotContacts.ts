@@ -1,3 +1,5 @@
+import { YUANGON_PKG_ROLE_LABELS } from '@/domain/yuangonDutyRoster'
+
 export type EmployeeSsotContactRecord = {
   employee_id: string
   display_name: string
@@ -40,6 +42,7 @@ export type EmployeeSsotPayload = {
   admin?: {
     departments?: Array<{
       id?: string
+      key?: string
       label?: string
       employees?: Array<{ id?: string; on_duty?: boolean | null }>
     }>
@@ -60,9 +63,15 @@ export type EmployeeSsotPayload = {
   }
 }
 
-function labelForEmployee(id: string, payload: EmployeeSsotPayload | null | undefined): string {
-  const labels = payload?.employee_labels || {}
-  return String(labels[id] || id).trim() || id
+/** 客户可读员工名：后端真实名优先；后端回显英文 ID 时用 SSOT label / 编制表中文名兜底。 */
+function nameForEmployee(
+  id: string,
+  row: EmployeeSsotContactRecord | null,
+  payload: EmployeeSsotPayload | null | undefined,
+): string {
+  const backendName = String(row?.display_name || '').trim()
+  if (backendName && backendName !== id) return backendName
+  return String(payload?.employee_labels?.[id] || YUANGON_PKG_ROLE_LABELS[id] || backendName || id).trim() || id
 }
 
 function descriptionForEmployee(id: string, payload: EmployeeSsotPayload | null | undefined, fallback = ''): string {
@@ -70,11 +79,40 @@ function descriptionForEmployee(id: string, payload: EmployeeSsotPayload | null 
   return String(descriptions[id] || fallback).trim()
 }
 
+/** 部门/层级英文 ID → 客户可读的中文部门名（管理端六线 label 或企业端四层 label）。 */
+function areaLabelFor(
+  id: string,
+  row: EmployeeSsotContactRecord,
+  payload: EmployeeSsotPayload | null | undefined,
+): string {
+  const raw = String(row.department || '').trim()
+  const admin = payload?.admin?.departments || []
+  for (const dept of admin) {
+    if (raw && (dept.id === raw || dept.key === raw)) {
+      return String(dept.label || dept.id || '').trim() || '编制'
+    }
+  }
+  const layers = payload?.enterprise?.layers || []
+  const layerLabel = (layerId: string): string => {
+    for (const layer of layers) {
+      if (layer.id === layerId) return String(layer.label || layer.id || '').trim() || '编制'
+    }
+    return ''
+  }
+  if (raw) {
+    const byDept = layerLabel(raw)
+    if (byDept) return byDept
+  }
+  const entLayer = String(payload?.enterprise?.employees?.[id]?.enterprise_layer || '').trim()
+  if (entLayer) return layerLabel(entLayer) || '编制'
+  return '编制'
+}
+
 function mapContactRecord(row: EmployeeSsotContactRecord, payload: EmployeeSsotPayload | null | undefined): EmployeeSsotContact | null {
   const id = String(row.employee_id || '').trim()
   if (!id) return null
-  const displayName = String(row.display_name || labelForEmployee(id, payload) || id).trim()
-  const department = String(row.department || '编制').trim() || '编制'
+  const displayName = nameForEmployee(id, row, payload)
+  const areaLabel = areaLabelFor(id, row, payload)
   const installed = Boolean(row.installed)
   const runnable = Boolean(row.runnable ?? installed)
   const source = String(row.source || (installed ? 'installed' : 'planned')).trim()
@@ -83,12 +121,12 @@ function mapContactRecord(row: EmployeeSsotContactRecord, payload: EmployeeSsotP
     id,
     display_name: displayName,
     username: id,
-    subtitle: runnable ? `${department} · 可执行` : source === 'planned' ? `${department} · 未安装` : `${department} · ${source}`,
+    subtitle: runnable ? `${areaLabel} · 可执行` : `${areaLabel} · 未安装`,
     description:
       String(row.description || '').trim() ||
-      descriptionForEmployee(id, payload, runnable ? '已安装，可联系' : '编制内但未安装 employee_pack'),
-    area: department,
-    status: runnable ? 'on_duty' : source === 'planned' ? 'planned' : source,
+      descriptionForEmployee(id, payload, runnable ? '已安装，可联系' : '编制内但未安装员工包'),
+    area: areaLabel,
+    status: runnable ? 'on_duty' : 'planned',
     api_base_path: contactRoute.replace(/\/chat\/?$/, '').replace(/\/messages\/?$/, '') || `/api/admin/employees/${id}`,
     phone_channel: source.startsWith('codex') || source === 'builtin' ? 'super' : 'admin-duty',
     is_duty_employee_entry: true,
@@ -133,10 +171,10 @@ export function dutyEmployeesFromEmployeeSsot(payload: EmployeeSsotPayload | nul
       const onDuty = emp.on_duty ?? onDutySet.has(id)
       out.push({
         id,
-        display_name: labelForEmployee(id, payload),
+        display_name: nameForEmployee(id, null, payload),
         username: id,
         subtitle: onDuty ? `${area} · 可执行` : `${area} · 未安装`,
-        description: descriptionForEmployee(id, payload, onDuty ? '已安装，可联系' : '编制内但未安装 employee_pack'),
+        description: descriptionForEmployee(id, payload, onDuty ? '已安装，可联系' : '编制内但未安装员工包'),
         area,
         status: onDuty ? 'on_duty' : 'planned',
         api_base_path: `/api/admin/employees/${id}`,

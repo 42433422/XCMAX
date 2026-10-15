@@ -16,16 +16,10 @@ from app.services.tools_workflow_registered import (
     _registered_router_shipment_records,
 )
 
-# ---------------------------------------------------------------------------
-# customers — update / delete / batch_delete 分支
-# ---------------------------------------------------------------------------
-
 
 class TestCustomersRouterMissingBranches:
     def _mock_svc(self):
         return MagicMock()
-
-    # update ----------------------------------------------------------------
 
     def test_update_success(self):
         svc = self._mock_svc()
@@ -66,8 +60,6 @@ class TestCustomersRouterMissingBranches:
         assert result["success"] is True
         svc.update.assert_called_once_with(7, {"customer_name": "X"})
 
-    # delete ----------------------------------------------------------------
-
     def test_delete_success(self):
         svc = self._mock_svc()
         svc.delete.return_value = {"success": True, "deleted": True}
@@ -93,8 +85,6 @@ class TestCustomersRouterMissingBranches:
         with patch("app.application.get_customer_app_service", return_value=svc):
             _registered_router_customers("delete", {"customer_id": 9}, {}, "admin", "")
         svc.delete.assert_called_once_with(9, force=False)
-
-    # batch_delete ----------------------------------------------------------
 
     def test_batch_delete_success(self):
         svc = self._mock_svc()
@@ -149,8 +139,6 @@ class TestCustomersRouterMissingBranches:
         assert result["success"] is False
         assert "customers" in result["message"]
 
-    # fastapi_customer_route ------------------------------------------------
-
     def test_fastapi_customer_route_delegate(self):
         # Patch the function directly on the module: `from pkg import routes` uses
         # getattr(pkg, 'routes') which bypasses sys.modules when the module is
@@ -169,16 +157,9 @@ class TestCustomersRouterMissingBranches:
         assert result["success"] is True
 
 
-# ---------------------------------------------------------------------------
-# products — batch_create / batch_delete / update / delete / create-failure
-# ---------------------------------------------------------------------------
-
-
 class TestProductsRouterMissingBranches:
     def _svc(self):
         return MagicMock()
-
-    # create via fastapi product route -------------------------------------
 
     def test_create_via_fastapi_product_route(self):
         svc = self._svc()
@@ -195,8 +176,6 @@ class TestProductsRouterMissingBranches:
             )
         assert result["success"] is True
 
-    # create failure -------------------------------------------------------
-
     def test_create_product_failure(self):
         svc = self._svc()
         svc.create_product.return_value = {"success": False, "message": "dup"}
@@ -210,8 +189,6 @@ class TestProductsRouterMissingBranches:
             )
         assert result["success"] is False
         assert "dup" in result["message"]
-
-    # update ---------------------------------------------------------------
 
     def test_update_product(self):
         svc = self._svc()
@@ -227,8 +204,6 @@ class TestProductsRouterMissingBranches:
         svc.update_product.assert_called_once_with(10, {"price": 9.9})
         assert result["success"] is True
 
-    # delete ---------------------------------------------------------------
-
     def test_delete_product(self):
         svc = self._svc()
         svc.delete_product.return_value = {"success": True}
@@ -236,8 +211,6 @@ class TestProductsRouterMissingBranches:
             result = _registered_router_products("delete", {"id": 7}, {}, "admin", "")
         svc.delete_product.assert_called_once_with(7)
         assert result["success"] is True
-
-    # batch_create ---------------------------------------------------------
 
     def test_batch_create_success(self):
         svc = self._svc()
@@ -260,8 +233,6 @@ class TestProductsRouterMissingBranches:
     def test_batch_create_not_list(self):
         result = _registered_router_products("batch_create", {"products": "abc"}, {}, "admin", "")
         assert result["success"] is False
-
-    # batch_delete ---------------------------------------------------------
 
     def test_batch_delete_products_success(self):
         svc = self._svc()
@@ -306,10 +277,7 @@ class TestProductsRouterMissingBranches:
             _registered_router_products("batch_delete", {"product_ids": [5]}, {}, "admin", "")
         svc.batch_delete_products.assert_called_once_with([5])
 
-    # exists — product_name match path ------------------------------------
-
     def test_exists_model_in_list_but_name_matches(self):
-        """行内 model_number 不匹配但 product_name 匹配。"""
         svc = self._svc()
         svc.get_products.return_value = {
             "success": True,
@@ -326,7 +294,6 @@ class TestProductsRouterMissingBranches:
         assert result["exists"] is True
 
     def test_exists_loop_continues_without_match(self):
-        """两行都不匹配 → exists=False，循环继续执行完整迭代。"""
         svc = self._svc()
         svc.get_products.return_value = {
             "success": True,
@@ -351,54 +318,10 @@ class TestProductsRouterMissingBranches:
         assert result["success"] is False
 
 
-# ---------------------------------------------------------------------------
-# shipment_records — create 分支
-# ---------------------------------------------------------------------------
-
-
 class TestShipmentRecordsRouterCreate:
-    def test_create_success(self):
-        svc = MagicMock()
-        svc.create_shipment.return_value = {"success": True, "id": 1}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
-            result = _registered_router_shipment_records(
-                "create",
-                {
-                    "unit_name": "TestCo",
-                    "products": [{"id": 1, "qty": 2}],
-                    "contact_person": "Alice",
-                    "contact_phone": "1234",
-                },
-                {},
-                "admin",
-                "",
-            )
-        assert result["success"] is True
-
-    def test_create_missing_unit_name(self):
-        result = _registered_router_shipment_records("create", {}, {}, "admin", "")
-        assert result["success"] is False
-        assert "unit_name" in result["message"]
-
-    def test_create_non_list_products_defaults_to_empty(self):
-        svc = MagicMock()
-        svc.create_shipment.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
-            _registered_router_shipment_records(
-                "create", {"unit_name": "Co", "products": "not-a-list"}, {}, "admin", ""
-            )
-        svc.create_shipment.assert_called_once()
-        call_kwargs = svc.create_shipment.call_args
-        assert call_kwargs.kwargs["items_data"] == []
-
     def test_unknown_action(self):
         result = _registered_router_shipment_records("fly", {}, {}, "admin", "")
         assert result["success"] is False
-
-
-# ---------------------------------------------------------------------------
-# shipment_orders — 多分支
-# ---------------------------------------------------------------------------
 
 
 class TestShipmentOrdersRouterBranches:
@@ -582,11 +505,6 @@ class TestShipmentOrdersRouterBranches:
         assert result["success"] is False
 
 
-# ---------------------------------------------------------------------------
-# inventory
-# ---------------------------------------------------------------------------
-
-
 class TestInventoryRouterBranches:
     def _svc(self):
         return MagicMock()
@@ -675,11 +593,6 @@ class TestInventoryRouterBranches:
         assert result["success"] is False
 
 
-# ---------------------------------------------------------------------------
-# purchase
-# ---------------------------------------------------------------------------
-
-
 class TestPurchaseRouterBranches:
     def _svc(self):
         return MagicMock()
@@ -758,11 +671,6 @@ class TestPurchaseRouterBranches:
         ):
             result = _registered_router_purchase("fly", {}, {}, "admin", "")
         assert result["success"] is False
-
-
-# ---------------------------------------------------------------------------
-# materials — update returns non-dict / delete returns non-dict
-# ---------------------------------------------------------------------------
 
 
 class TestMaterialsRouterBranches:

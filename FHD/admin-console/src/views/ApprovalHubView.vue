@@ -1,142 +1,45 @@
 <template>
-  <div class="approval-hub-view" id="view-autonomy-approval-hub">
-    <div class="page-header">
-      <div>
-        <h2>自治审批中心</h2>
-        <p>待办、执行通道与终态回执（页面可见时每 30s 自动刷新）</p>
-      </div>
+  <main class="approval-hub-view" id="view-autonomy-approval-hub">
+    <header class="page-header">
+      <div><h2>产品问题工单审批</h2><p>共享 Work Order 与完整闸门时间线；每 30 秒刷新</p></div>
       <div class="header-actions">
-        <span v-if="lastUpdatedAt" class="updated-at">更新于 {{ formatTime(lastUpdatedAt) }}</span>
-        <span class="pill">待办 {{ summary.waiting }}</span>
-        <button class="btn btn-secondary" type="button" :disabled="loading" @click="refreshAll()">
-          <i class="fa fa-refresh" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
-          {{ loading ? '刷新中…' : '立即刷新' }}
-        </button>
+        <span v-if="updatedAt" class="updated-at">更新于 {{ formatTime(updatedAt) }}</span>
+        <button class="btn btn-secondary" :disabled="loading" @click="refresh">{{ loading ? '刷新中…' : '刷新工单' }}</button>
       </div>
-    </div>
-
-    <div class="status-grid" aria-label="审批状态概览">
-      <article class="status-card">
-        <span>可在此执行</span>
-        <strong>{{ summary.actionable }}</strong>
-      </article>
-      <article class="status-card">
-        <span>正式流程 / 外部回调</span>
-        <strong>{{ externalWaiting }}</strong>
-      </article>
-      <article class="status-card">
-        <span>已执行</span>
-        <strong>{{ stateCount('executed') }}</strong>
-      </article>
-      <article class="status-card" :class="{ 'status-card-alert': openLoopIssues > 0 }">
-        <span>异常 / 未闭环</span>
-        <strong>{{ openLoopIssues }}</strong>
-      </article>
-      <article class="status-card">
-        <span>已自动归档</span>
-        <strong>{{ stateCount('superseded') }}</strong>
-      </article>
-    </div>
-
-    <p v-if="pendingError" class="banner-error">待办刷新失败，已保留上次结果：{{ pendingError }}</p>
-    <p v-if="auditError" class="banner-warning">审计日志暂时不可用：{{ auditError }}</p>
-
-    <div class="hub-grid">
-      <section class="panel">
-        <header class="panel-head">
-          <h3>待办列表</h3>
-        </header>
-        <div v-if="!pending.length" class="empty">
-          <strong>当前没有真正待处理动作</strong>
-          <span>已经完成或被新版本替代的发布动作会自动归档，不再反复出现。</span>
-        </div>
-        <ul v-else class="pending-list">
-          <li
-            v-for="item in pending"
-            :key="item.action_id"
-            class="pending-item"
-            :class="{ active: selectedId === item.action_id }"
-            @click="selectedId = item.action_id"
-          >
-            <div class="pending-title">
-              <code>{{ item.action }}</code>
-              <span class="risk" :class="`risk-${riskOf(item)}`">{{ riskOf(item) }}</span>
-            </div>
-            <div class="pending-meta">
-              <span>{{ item.source || '—' }}</span>
-              <span>{{ formatTime(item.timestamp || item.approval_requested_at) }}</span>
-            </div>
-            <div class="execution-row">
-              <span class="mode" :class="`mode-${item.execution_mode || 'unknown'}`">
-                {{ executionModeLabel(item) }}
-              </span>
-              <span>{{ item.execution_guidance || '等待执行器校验' }}</span>
-            </div>
-            <div class="pending-id">{{ item.action_id }}</div>
-          </li>
-        </ul>
-      </section>
-
-      <section class="panel">
-        <header class="panel-head">
-          <h3>审计日志流</h3>
-          <span class="muted">最近 {{ auditItems.length }} 条</span>
-        </header>
-        <div v-if="!auditItems.length" class="empty">暂无审计记录</div>
-        <ul v-else class="audit-list">
-          <li v-for="(row, idx) in auditItems" :key="auditKey(row, idx)" class="audit-item">
-            <div class="audit-top">
-              <strong>{{ row.action || row.decision || 'event' }}</strong>
-              <span class="risk" :class="`risk-${String(row.risk_level || row.decision || 'info').toLowerCase()}`">
-                {{ row.risk_level || row.decision || '—' }}
-              </span>
-            </div>
-            <div class="audit-meta">
-              <span>{{ row.actor || row.approver || row.source || 'system' }}</span>
-              <span>{{ formatTime(row.timestamp || row.created_at) }}</span>
-            </div>
-            <p v-if="row.reason" class="audit-reason">{{ row.reason }}</p>
-          </li>
-        </ul>
-      </section>
-    </div>
-
-    <aside v-if="selected" class="drawer" role="dialog" aria-label="动作详情">
-      <div class="drawer-head">
-        <h3>动作详情</h3>
-        <button type="button" class="icon-btn" @click="selectedId = ''" aria-label="关闭">×</button>
-      </div>
-      <dl class="detail-grid">
-        <dt>action_id</dt><dd class="mono">{{ selected.action_id }}</dd>
-        <dt>action</dt><dd>{{ selected.action }}</dd>
-        <dt>state</dt><dd>{{ selected.state }}</dd>
-        <dt>source</dt><dd>{{ selected.source }}</dd>
-        <dt>risk</dt><dd>{{ riskOf(selected) }}</dd>
-        <dt>decision</dt><dd>{{ selected.risk_decision?.decision || '—' }}</dd>
-        <dt>reason</dt><dd>{{ selected.risk_decision?.reason || '—' }}</dd>
-        <dt>rollback</dt><dd>{{ selected.risk_decision?.rollback_path || '—' }}</dd>
-        <dt>执行方式</dt><dd>{{ selected.execution_mode || '—' }}</dd>
+    </header>
+    <p v-if="error" class="banner-error">工单刷新失败：{{ error }}</p>
+    <section v-if="!orders.length && !error" class="panel empty">当前没有共享工单</section>
+    <section v-for="item in orders" :key="item.wo_id" class="panel work-order">
+      <header class="panel-head"><h3>{{ item.wo_id }}</h3><span class="risk">{{ item.status }}</span></header>
+      <dl class="facts">
+        <dt>客户 / 租户</dt><dd>{{ item.context?.customer_user_id || item.context?.tenant_id || '—' }}</dd>
+        <dt>客户实例</dt><dd>{{ item.context?.client_instance_id || '—' }}</dd>
+        <dt>版本 / Git SHA</dt><dd>{{ item.context?.product_version || '—' }} · {{ item.context?.git_sha || '—' }}</dd>
+        <dt>平台</dt><dd>{{ item.context?.platform || '—' }}</dd>
+        <dt>客户问题 / 实际</dt><dd>{{ item.context?.actual || item.reason || '—' }}</dd>
+        <dt>预期</dt><dd>{{ item.context?.expected || '—' }}</dd>
+        <dt>支持包 SHA256</dt><dd>{{ item.context?.support_bundle_sha256 || '—' }}</dd>
+        <dt>闸门</dt><dd>{{ Object.entries(item.gates || {}).map(([k, v]) => `${k}: ${v}`).join(' · ') || '暂无收据' }}</dd>
       </dl>
-      <p class="execution-guidance">
-        {{ selected.execution_guidance || '审批前将再次验证执行器。' }}
-      </p>
-      <pre class="payload">{{ pretty(selected.payload) }}</pre>
-      <div class="drawer-actions">
-        <button
-          class="btn btn-primary"
-          type="button"
-          :disabled="acting || selected.admin_execution_ready !== true"
-          @click="approveSelected"
-        >
-          {{ selected.admin_execution_ready === true ? '通过并立即执行' : executionModeLabel(selected) }}
-        </button>
-        <button class="btn btn-danger" type="button" :disabled="acting" @click="rejectSelected">
-          拒绝
-        </button>
+      <details><summary>工单证据、诊断、PR、CI 与时间线</summary><pre class="payload">{{ JSON.stringify(item, null, 2) }}</pre></details>
+      <div v-if="ticketIdOf(item)" class="ticket-trail">
+        <div class="drawer-actions">
+          <button class="btn btn-secondary" :disabled="trails[item.wo_id]?.loading" @click="loadTrail(item)">{{ trails[item.wo_id]?.ticket ? '刷新客户工单' : `查看客户工单 #${ticketIdOf(item)}` }}</button>
+          <button v-if="obj(trails[item.wo_id]?.ticket?.evidence).support_bundle_base64" class="btn btn-secondary" @click="downloadBundle(item)">下载支持包（先校验 SHA256）</button>
+          <span v-if="trails[item.wo_id]?.ticket" class="muted">{{ trails[item.wo_id]?.ticket?.ticket_no }} · {{ trails[item.wo_id]?.ticket?.lifecycle_label }}（{{ trails[item.wo_id]?.ticket?.status }}）</span>
+        </div>
+        <p v-if="trails[item.wo_id]?.error" class="banner-error">{{ trails[item.wo_id]?.error }}</p>
+        <pre v-if="trails[item.wo_id]?.ticket?.summary" class="payload" aria-label="客户问题完整正文">{{ trails[item.wo_id]?.ticket?.summary }}</pre>
+        <ol class="timeline"><li v-for="(row, index) in timelineOf(item)" :key="index"><time>{{ formatTime(row.at) }}</time>{{ row.label }}</li></ol>
       </div>
-    </aside>
-    <div v-if="selected" class="drawer-mask" @click="selectedId = ''" />
-  </div>
+      <div v-if="item.can_decide" class="drawer-actions">
+        <button class="btn btn-primary" :disabled="acting" @click="decide(item, 'approved')">批准</button>
+        <button class="btn btn-danger" :disabled="acting" @click="decide(item, 'rejected')">拒绝</button>
+        <button class="btn btn-secondary" :disabled="acting" @click="decide(item, 'held')">暂缓</button>
+      </div>
+      <p v-else class="muted">决策锁定：必须同一工单已有 RED、GREEN 和 OWNER_INSTANCE_VERIFIED 收据。</p>
+    </section>
+  </main>
 </template>
 
 <script lang="ts">
@@ -144,184 +47,126 @@ export default { name: 'ApprovalHubView' }
 </script>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import {
-  xcmaxAdminApi,
-  type AutonomyPendingAction,
-} from '@/api/xcmaxAdmin'
-import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { xcmaxAdminApi, type OwnerWorkOrder } from '@/api/xcmaxAdmin'
+import { appAlert, appPrompt } from '@/utils/appDialog'
 
-type AuditRow = Record<string, unknown>
-
+type Trail = { loading: boolean; error: string; ticket?: Record<string, unknown>; audits: Record<string, unknown>[] }
+const AUDIT_LABELS: Record<string, string> = {
+  ticket_created: '客服工单已创建', issue_intake: '客户工单已受理', employee_progress: 'AI 员工回写处理结果',
+  customer_issue_resolved: '客户确认已解决', customer_issue_reopen: '客户重新打开工单',
+}
+const orders = ref<OwnerWorkOrder[]>([])
+const trails = ref<Record<string, Trail>>({})
 const loading = ref(false)
 const acting = ref(false)
-const pendingError = ref('')
-const auditError = ref('')
-const pending = ref<AutonomyPendingAction[]>([])
-const auditItems = ref<AuditRow[]>([])
-const selectedId = ref('')
-const lastUpdatedAt = ref('')
-const summary = ref({
-  states: {} as Record<string, number>,
-  execution_modes: {} as Record<string, number>,
-  actionable: 0,
-  waiting: 0,
-})
-let timer: ReturnType<typeof setInterval> | null = null
-let refreshInFlight = false
+const error = ref('')
+const updatedAt = ref('')
+let timer: ReturnType<typeof setInterval> | undefined
 
-const selected = computed(() => pending.value.find((x) => x.action_id === selectedId.value) || null)
-const externalWaiting = computed(() =>
-  Number(summary.value.execution_modes.external_callback || 0)
-  + Number(summary.value.execution_modes.external_dispatch_required || 0),
-)
-const openLoopIssues = computed(() =>
-  stateCount('approved') + stateCount('execution_failed'),
-)
-
-function riskOf(item: AutonomyPendingAction) {
-  return String(item.risk_decision?.risk_level || 'unknown').toLowerCase()
+function obj(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {}
 }
 
-function auditKey(row: AuditRow, index: number): string | number {
-  return typeof row.id === 'string' || typeof row.id === 'number' ? row.id : index
+function ticketIdOf(item: OwnerWorkOrder) {
+  for (const row of item.history || []) {
+    const ref = obj(row.ref)
+    const id = Number(ref.customer_ticket_id || obj(ref.evidence).customer_ticket_id || 0)
+    if (id > 0) return id
+  }
+  return 0
+}
+
+function eventTime(value: unknown) {
+  const text = String(value || '')
+  return Date.parse(/(Z|[+-]\d\d:?\d\d)$/.test(text) ? text : `${text}Z`)
+}
+
+function timelineOf(item: OwnerWorkOrder) {
+  const rows = (item.history || []).map((row) => {
+    const ref = obj(row.ref)
+    const label = row.event === 'gate' ? `闸门 ${ref.gate}：${ref.gate_status}`
+      : row.event === 'transition' ? `工单状态 ${row.from || '—'} → ${row.to}` : '共享工单已创建'
+    return { at: eventTime(row.at), label: row.note ? `${label}（${row.note}）` : label }
+  })
+  for (const audit of trails.value[item.wo_id]?.audits || []) {
+    const note = obj(audit.detail).note
+    const label = AUDIT_LABELS[String(audit.event_type)] || String(audit.event_type)
+    rows.push({ at: eventTime(audit.created_at), label: note ? `${label}：${note}` : label })
+  }
+  return rows.sort((a, b) => (a.at || 0) - (b.at || 0))
+}
+
+async function loadTrail(item: OwnerWorkOrder) {
+  trails.value[item.wo_id] ||= { loading: false, error: '', audits: [] }
+  const trail = trails.value[item.wo_id]
+  if (trail.loading) return
+  trail.loading = true
+  trail.error = ''
+  try {
+    const result = await xcmaxAdminApi.fetchCustomerTicket(ticketIdOf(item))
+    trail.ticket = obj(result.ticket)
+    trail.audits = Array.isArray(result.audit_logs) ? result.audit_logs : []
+  } catch (cause: unknown) {
+    trail.error = cause instanceof Error ? cause.message : String(cause)
+  } finally { trail.loading = false }
+}
+
+async function downloadBundle(item: OwnerWorkOrder) {
+  const trail = trails.value[item.wo_id]
+  const evidence = obj(trail.ticket?.evidence)
+  try {
+    const bytes = Uint8Array.from(atob(String(evidence.support_bundle_base64 || '')), (char) => char.charCodeAt(0))
+    const hash = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes))
+    const digest = Array.from(hash, (byte) => byte.toString(16).padStart(2, '0')).join('')
+    const collected = (item.history || []).map((row) => obj(obj(row.ref).evidence).support_bundle_sha256).filter(Boolean)
+    if (digest !== evidence.support_bundle_sha256 || (collected.length && !collected.includes(digest))) {
+      throw new Error(`实际 ${digest}`)
+    }
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }))
+    link.download = `support-bundle-${trail.ticket?.ticket_no || ticketIdOf(item)}.zip`
+    link.click()
+    URL.revokeObjectURL(link.href)
+  } catch (cause: unknown) {
+    trail.error = `支持包 SHA256 校验失败，已阻止下载（${cause instanceof Error ? cause.message : String(cause)}）`
+  }
 }
 
 function formatTime(value: unknown) {
-  const text = String(value || '').trim()
-  if (!text) return '—'
-  const d = new Date(text)
-  if (Number.isNaN(d.getTime())) return text
-  return d.toLocaleString()
+  const date = new Date(typeof value === 'number' ? value : String(value || ''))
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString()
 }
 
-function pretty(value: unknown) {
+async function refresh() {
+  if (loading.value) return
+  loading.value = true
   try {
-    return JSON.stringify(value ?? {}, null, 2)
-  } catch {
-    return String(value ?? '')
-  }
+    const result = await xcmaxAdminApi.fetchOwnerWorkOrders()
+    orders.value = Array.isArray(result.items) ? result.items : []
+    error.value = ''
+    updatedAt.value = new Date().toISOString()
+  } catch (cause: unknown) {
+    error.value = cause instanceof Error ? cause.message : String(cause)
+  } finally { loading.value = false }
 }
 
-function stateCount(state: string) {
-  return Number(summary.value.states[state] || 0)
-}
-
-function executionModeLabel(item: AutonomyPendingAction) {
-  if (item.admin_execution_ready === true) return '可立即执行'
-  if (item.execution_mode === 'external_callback') return '外部审批处理中'
-  if (item.execution_mode === 'external_dispatch_required') return '需正式发布工作流'
-  if (item.execution_mode === 'executor_unavailable') return '执行器不可用'
-  return '等待执行通道'
-}
-
-function errorMessage(value: unknown) {
-  return value instanceof Error ? value.message : String(value)
-}
-
-async function refreshAll(options: { silent?: boolean } = {}) {
-  if (refreshInFlight) return
-  refreshInFlight = true
-  if (!options.silent) loading.value = true
-  try {
-    const [pendingResult, auditResult] = await Promise.allSettled([
-      xcmaxAdminApi.fetchPendingAutonomyActions(),
-      xcmaxAdminApi.fetchAutonomyAuditLog({ limit: 40, days: 7 }),
-    ])
-    let refreshed = false
-    if (pendingResult.status === 'fulfilled') {
-      const pendingRes = pendingResult.value
-      pending.value = Array.isArray(pendingRes?.items) ? pendingRes.items : []
-      const nextSummary = pendingRes?.summary || {}
-      summary.value = {
-        states: nextSummary.states || {},
-        execution_modes: nextSummary.execution_modes || {},
-        actionable: Number(nextSummary.actionable || 0),
-        waiting: Number(nextSummary.waiting ?? pending.value.length),
-      }
-      pendingError.value = ''
-      if (selectedId.value && !pending.value.some((x) => x.action_id === selectedId.value)) {
-        selectedId.value = ''
-      }
-      refreshed = true
-    } else {
-      pendingError.value = errorMessage(pendingResult.reason)
-    }
-    if (auditResult.status === 'fulfilled') {
-      const raw = (auditResult.value as { items?: AuditRow[] })?.items
-      auditItems.value = Array.isArray(raw) ? raw : []
-      auditError.value = ''
-      refreshed = true
-    } else {
-      auditError.value = errorMessage(auditResult.reason)
-    }
-    if (refreshed) lastUpdatedAt.value = new Date().toISOString()
-  } finally {
-    if (!options.silent) loading.value = false
-    refreshInFlight = false
-  }
-}
-
-async function approveSelected() {
-  if (!selected.value) return
-  const item = selected.value
-  if (item.admin_execution_ready !== true) {
-    await appAlert(item.execution_guidance || '当前动作不能由管理端直接执行。')
-    return
-  }
-  const confirmed = await appConfirm(
-    `确认通过并立即执行 ${item.action}？\n${item.action_id}`,
-    { title: '高风险动作确认' },
-  )
-  if (!confirmed) return
+async function decide(item: OwnerWorkOrder, decision: 'approved' | 'rejected' | 'held') {
+  if (!item.can_decide || acting.value) return
+  const note = decision === 'approved' ? '' : await appPrompt(decision === 'held' ? '暂缓说明（可选）' : '拒绝原因（可选）', '')
+  if (note === null) return
   acting.value = true
   try {
-    const result = await xcmaxAdminApi.resumeAutonomyAction(item.action_id)
-    await appAlert(`审批与执行均已完成，动作终态：${result.action?.state || 'executed'}`)
-    await refreshAll()
-  } catch (e: unknown) {
-    await appAlert(e instanceof Error ? e.message : String(e))
-  } finally {
-    acting.value = false
-  }
+    const result = await xcmaxAdminApi.decideOwnerWorkOrder(item.wo_id, decision, note)
+    await appAlert(`工单 ${item.wo_id} 已记录为 ${result.decision}，操作人 ${result.actor}`)
+    await refresh()
+  } catch (cause: unknown) {
+    await appAlert(cause instanceof Error ? cause.message : String(cause))
+  } finally { acting.value = false }
 }
 
-async function rejectSelected() {
-  if (!selected.value) return
-  const reason = await appPrompt('拒绝原因（可选）', '')
-  if (reason === null) return
-  acting.value = true
-  try {
-    await xcmaxAdminApi.rejectAutonomyAction(selected.value.action_id, reason || undefined)
-    await appAlert('已拒绝')
-    selectedId.value = ''
-    await refreshAll()
-  } catch (e: unknown) {
-    await appAlert(e instanceof Error ? e.message : String(e))
-  } finally {
-    acting.value = false
-  }
-}
-
-onMounted(async () => {
-  await refreshAll()
-  timer = setInterval(() => {
-    if (document.visibilityState === 'visible' && !acting.value) {
-      void refreshAll({ silent: true })
-    }
-  }, 30_000)
-  document.addEventListener('visibilitychange', onVisibilityChange)
-})
-
-function onVisibilityChange() {
-  if (document.visibilityState === 'visible') void refreshAll({ silent: true })
-}
-
-onBeforeUnmount(() => {
-  if (timer) clearInterval(timer)
-  timer = null
-  document.removeEventListener('visibilitychange', onVisibilityChange)
-})
+onMounted(() => { void refresh(); timer = setInterval(() => { if (document.visibilityState === 'visible') void refresh() }, 30_000) })
+onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 </script>
 
 <style scoped src="./ApprovalHubView.css"></style>

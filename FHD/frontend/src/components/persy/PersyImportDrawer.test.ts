@@ -34,6 +34,7 @@ describe('PersyImportDrawer', () => {
   })
 
   it('imports text, updates the dataset model, and closes after success', async () => {
+    const dispatch = vi.spyOn(window, 'dispatchEvent')
     const wrapper = mountDrawer()
     expose(wrapper).open('text')
     await wrapper.vm.$nextTick()
@@ -57,6 +58,8 @@ describe('PersyImportDrawer', () => {
     expect(wrapper.emitted('clearMessage')).toHaveLength(1)
     expect(wrapper.emitted('ingested')).toEqual([['已形成 2 个知识节点']])
     expect(wrapper.find('.import-drawer').exists()).toBe(false)
+    expect(dispatch.mock.calls.map(([event]) => event.type)).toEqual(['xcagi:suppress-floating-chat', 'xcagi:restore-floating-chat'])
+    dispatch.mockRestore()
   })
 
   it('validates file selection and uploads a supported document', async () => {

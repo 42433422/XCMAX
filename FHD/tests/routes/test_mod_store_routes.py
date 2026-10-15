@@ -9,7 +9,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import app.fastapi_routes.mod_store_routes as ms
@@ -578,15 +578,73 @@ class TestModStoreUninstall:
         assert data["success"] is False
 
 
+@pytest.fixture
+def update_catalog(monkeypatch):
+    """Exercise real update discovery with request-bound auth and isolated catalogs."""
+    user = object()
+    rows = [{"id": "mod1", "version": "2.0.0", "sha256": "a" * 64}]
+
+    def current_user(request):
+        if request.headers.get("x-session-id") != "catalog-session":
+            raise HTTPException(401, "login required")
+        return user
+
+    def current_owner(request, authenticated_user):
+        assert authenticated_user is user
+        return "tenant:7"
+
+    async def public_catalog():
+        for row in rows:
+            yield dict(row)
+
+    async def market_token(request):
+        assert request.headers["x-session-id"] == "catalog-session"
+        return "synthetic-caller-token"
+
+    async def private_library(token):
+        assert token == "synthetic-caller-token"
+        return []
+
+    monkeypatch.setattr("app.infrastructure.auth.dependencies.get_logged_in_user", current_user)
+    monkeypatch.setattr(
+        "app.application.tenant_workspace_prefs.resolve_workspace_owner_id", current_owner
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.mods.install_receipts.read_verified_install", lambda mid: None
+    )
+    monkeypatch.setattr(
+        "app.fastapi_routes.private_mod_delivery_context._private_delivery_market_token",
+        market_token,
+    )
+    monkeypatch.setattr(
+        "app.application.private_mod_delivery_artifacts.fetch_private_mod_library",
+        private_library,
+    )
+    monkeypatch.setattr(ms, "_installed_by_id", lambda: {"mod1": {"version": "1.0.0"}})
+    monkeypatch.setattr(ms, "iter_catalog_packages", public_catalog)
+    return rows, {"x-session-id": "catalog-session"}
+
+
 class TestModStoreUpdate:
-    def test_update_with_pkg_id(self, client: TestClient) -> None:
+    def test_update_with_pkg_id(self, client: TestClient, update_catalog) -> None:
+        rows, headers = update_catalog
         with patch(
             "app.fastapi_routes.mod_store_routes._install_from_catalog",
             new_callable=AsyncMock,
             return_value=ms.ModStoreInstallResult(success=True, message="updated"),
-        ):
-            resp = client.post("/update", json={"pkg_id": "mod1"})
+        ) as install:
+            assert client.post("/update", json={"pkg_id": "mod1"}).status_code == 401
+            unavailable = client.post(
+                "/update", json={"pkg_id": "mod1", "version": "99.0.0"}, headers=headers
+            )
+            assert unavailable.status_code == 409
+            install.assert_not_awaited()
+            resp = client.post("/update", json={"pkg_id": "mod1"}, headers=headers)
         assert resp.status_code == 200
+        assert resp.json()["success"] is True
+        install.assert_awaited_once_with(
+            "mod1", "2.0.0", activate=True, expected_sha256=rows[0]["sha256"]
+        )
 
 
 class TestModStoreValidate:
@@ -598,11 +656,20 @@ class TestModStoreValidate:
 
 
 class TestModStoreUpdates:
-    def test_empty_updates(self, client: TestClient) -> None:
-        resp = client.get("/updates")
+    def test_empty_updates(self, client: TestClient, update_catalog) -> None:
+        rows, headers = update_catalog
+        rows[0]["version"] = "1.0.0"
+        assert client.get("/updates").status_code == 401
+        resp = client.get("/updates", headers=headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["data"]["count"] == 0
+        assert data["success"] is True
+        assert data["data"] == {
+            "updates_available": [],
+            "count": 0,
+            "complete": True,
+            "source_errors": {},
+        }
 
 
 class TestModStoreDependencies:
@@ -1079,6 +1146,33 @@ class TestRequestPayload:
 
 
 class TestPrivateDeliveryRequests:
+    def test_original_ticket_rework_forwards_main_source_choice(self, client, monkeypatch):
+        from app.services import private_mod_delivery as delivery
+
+        remote = AsyncMock(return_value={"id": 34, "ticket_no": "CD-original"})
+        monkeypatch.setattr(
+            private_delivery_routes, "_private_delivery_market_token", AsyncMock(return_value="jwt")
+        )
+        monkeypatch.setattr(delivery, "custom_delivery_remote_json", remote)
+        response = client.post(
+            "/private-delivery/requests/34/decision",
+            json={
+                "action": "rework",
+                "note": "在原单使用主线模块返工",
+                "source_mode": "versioned_main",
+            },
+        )
+        assert response.status_code == 200
+        assert remote.await_args.args == (
+            "jwt",
+            "/api/customer-service/custom-deliveries/34/decision",
+        )
+        assert remote.await_args.kwargs["payload"] == {
+            "action": "rework",
+            "note": "在原单使用主线模块返工",
+            "source_mode": "versioned_main",
+        }
+
     def test_create_request_proxies_current_market_identity(
         self, client: TestClient, monkeypatch
     ) -> None:
@@ -1112,6 +1206,22 @@ class TestPrivateDeliveryRequests:
         assert response.json()["data"]["custom_delivery"]["stage"] == "production"
         assert remote.await_args.args[:2] == ("jwt", "/api/customer-service/custom-deliveries")
         assert remote.await_args.kwargs["payload"]["kind"] == "bundle"
+        assert remote.await_args.kwargs["payload"]["source_mode"] == "generated"
+
+        response = client.post(
+            "/private-delivery/requests",
+            json={
+                "kind": "module",
+                "source_mode": "versioned_main",
+                "suggested_id": "sunbird-attendance-custom",
+                "title": "太阳鸟考勤转换",
+                "requirements": "交付已入主线的考勤转换私有模块",
+                "acceptance_criteria": "客户安装后真实转换并导出结果",
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert remote.await_args.kwargs["payload"]["source_mode"] == "versioned_main"
+        assert remote.await_args.kwargs["payload"]["suggested_id"] == "sunbird-attendance-custom"
 
     def test_install_request_requires_market_login(self, client: TestClient, monkeypatch) -> None:
         monkeypatch.setattr(

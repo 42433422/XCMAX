@@ -1,0 +1,19 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "ota-prior-install",
+  "at_utc": "2026-09-21T18:17:59Z",
+  "dmg_sha256": "89592fdaff3b1731fae016ec56619c7e7b0d3514e2036705cdad132eedf63343",
+  "dmg_size": 304193412,
+  "spctl": "/private/tmp/xcagi-custchain/mnt/ota/XCAGI.app: accepted\nsource=Notarized Developer ID\norigin=Developer ID Application: jialong Li (G26WSH472M)",
+  "spctl_ok": true,
+  "codesign_ok": true,
+  "stapler": "The validate action worked!",
+  "build_info": {
+    "schema_version": 1,
+    "gitSha": "aec61e7e7224fe83c98b3a26522ee3f09f9e728d",
+    "version": "1.0.0.5",
+    "releaseId": "xcagi-1.0.0.5-aec61e7e7224fe83c98b3a26522ee3f09f9e728d",
+    "builtAt": "2026-09-21T01:37:02.215Z"
+  },
+  "verdict": "PASS"
+}

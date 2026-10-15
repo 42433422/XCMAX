@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "sec-runtime-gate",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+  "visible_content": "未提供租户隔离的旧接口 /api/customers 对企业租户返回 403（运行时门禁生效），会话校验 valid=true，桌面运行时页可见。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/sec-runtime-gate/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/sec-runtime-gate/macos/result.png"
+}

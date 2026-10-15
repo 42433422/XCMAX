@@ -11,6 +11,11 @@ from fastapi.testclient import TestClient
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
 
+@pytest.fixture(autouse=True)
+def _explicit_gateway_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XCAGI_TRUST_DATASET_ACCESS_HEADERS", "1")
+
+
 def _client() -> TestClient:
     from app.fastapi_routes.knowledge_v1 import router
 

@@ -28,24 +28,13 @@ from app.infrastructure.persistence.compat_db.writes import (
     products_pg_update_row,
 )
 
-# ---------------------------------------------------------------------------
-# Helper: patch _norm_model which is a "lost legacy symbol" that raises
-# ImportError via __getattr__, so normal patch(..., create=True) fails.
-# ---------------------------------------------------------------------------
-
 
 @contextmanager
 def _patch_norm_model(return_value="M1"):
-    """Temporarily inject _norm_model into app.application.excel_imports."""
     import app.application.excel_imports as _ei
 
-    mock_fn = MagicMock(return_value=return_value)
-    _ei._norm_model = mock_fn
-    try:
+    with patch.object(_ei, "_norm_model", return_value=return_value) as mock_fn:
         yield mock_fn
-    finally:
-        if hasattr(_ei, "_norm_model"):
-            delattr(_ei, "_norm_model")
 
 
 # ---------------------------------------------------------------------------

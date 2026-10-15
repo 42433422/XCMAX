@@ -16,7 +16,42 @@ async def compat_chat_stream_async(
     from app.application.normal_chat_dispatch import try_normal_slot_read_payload
     from app.fastapi_routes.xcagi_compat_chat_helpers import _sse_event_line
 
-    slot_payload = try_normal_slot_read_payload(body.message, request=request)
+    # 客户缺陷上报先受理；查询快路径保留待澄清工作流的续接。
+    from app.fastapi_routes.xcagi_compat_chat_stream import (
+        _apply_client_issue_outcome,
+        _classify_and_submit_client_issue_async,
+        _client_issue_reply,
+    )
+
+    issue_context, _ = _facade()._merge_runtime_context_with_message_paths(
+        body.context, body.message
+    )
+    issue_context = _facade()._runtime_context_with_authenticated_actor(request, issue_context)
+    issue_receipt = await _classify_and_submit_client_issue_async(
+        request, issue_context, body.message, ""
+    )
+    if issue_reply := _client_issue_reply(issue_receipt):
+        yield _sse_event_line({"type": "token", "text": issue_reply})
+        yield _sse_event_line(
+            {
+                "type": "done",
+                "result": _facade().attach_chat_trace_run(
+                    _apply_client_issue_outcome(
+                        _facade()._xcagi_compat_reply_payload(issue_reply), issue_receipt
+                    ),
+                    message=body.message,
+                    runtime_context=issue_context,
+                    user_id=getattr(body, "user_id", None),
+                    source=getattr(body, "source", None),
+                    channel="compat_chat_stream_issue_intake",
+                ),
+            }
+        )
+        return
+
+    slot_payload = try_normal_slot_read_payload(
+        body.message, request=request, user_id=str(body.user_id or "default")
+    )
     if isinstance(slot_payload, dict) and slot_payload.get("response"):
         runtime_context, _ = _facade()._merge_runtime_context_with_message_paths(
             body.context, body.message
@@ -29,6 +64,7 @@ async def compat_chat_stream_async(
             if slot_payload.get("agent_tool_dispatch")
             else "compat_chat_stream_slot"
         )
+        slot_intent = str((slot_payload.get("data") or {}).get("intent") or "agent_tool")
         traced = _facade().attach_chat_trace_run(
             slot_payload,
             message=body.message,
@@ -36,7 +72,13 @@ async def compat_chat_stream_async(
             user_id=getattr(body, "user_id", None),
             source=getattr(body, "source", None),
             channel=channel,
-            intent=str((slot_payload.get("data") or {}).get("intent") or "agent_tool"),
+            intent=slot_intent,
+        )
+        _facade().logger.info(
+            "chat dispatch decision: dispatch_path=compat_slot channel=%s intent=%s run_id=%s",
+            channel,
+            slot_intent,
+            str(traced.get("run_id") or ""),
         )
         response_text = str(slot_payload.get("response") or "")
         yield _sse_event_line({"type": "token", "text": response_text})
@@ -78,5 +120,9 @@ async def compat_chat_stream_async(
         except _facade().RECOVERABLE_ERRORS as e:
             _facade().logger.warning("persona_inject FAIL: %s", e, exc_info=True)
     tier = ai_tier or _facade().resolve_ai_tier(request)
+    _facade().logger.info(
+        "chat dispatch decision: dispatch_path=llm_planner channel=compat_chat_stream_llm tier=%s",
+        tier,
+    )
     async for chunk in _facade()._xcagi_planner_stream_bytes_async(request, body, ai_tier=tier):
         yield chunk

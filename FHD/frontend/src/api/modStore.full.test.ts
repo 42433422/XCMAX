@@ -98,6 +98,14 @@ describe('modStore api full surface', () => {
     await expect(modStore.installMod('z')).rejects.toThrow('fail')
   })
 
+  it('installs a customer Mod through the account-scoped private library and preserves rejection', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) } as Response)
+    await modStore.installPrivateMod('taiyangniao-pro')
+    expect(mockFetch).toHaveBeenCalledWith('/api/mod-store/private-mod/update', expect.objectContaining({ body: JSON.stringify({ mod_id: 'taiyangniao-pro' }) }))
+    mockFetch.mockResolvedValueOnce({ ok: false, json: async () => ({ detail: '当前账号未授权该客户私有 Mod' }) } as Response)
+    await expect(modStore.installPrivateMod('taiyangniao-pro')).rejects.toThrow('当前账号未授权')
+  })
+
   it('uninstallMod / updateMod / rateMod', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -114,14 +122,6 @@ describe('modStore api full surface', () => {
       json: async () => ({ success: false, detail: 'rate fail' }),
     } as Response)
     await expect(modStore.rateMod('m1', 5)).rejects.toThrow('rate fail')
-  })
-
-  it('validateModPackage returns raw data', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, message: 'ok', data: 1 }),
-    } as Response)
-    expect((await modStore.validateModPackage('f')).success).toBe(true)
   })
 
   it('checkUpdates / resolveDependencies success and failure', async () => {

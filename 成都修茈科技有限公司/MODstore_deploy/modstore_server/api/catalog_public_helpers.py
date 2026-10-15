@@ -16,7 +16,8 @@ from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
 
-from modstore_server.catalog_store import packages_path
+from modstore_server.catalog_publication_policy import stable_version
+from modstore_server.catalog_store import catalog_write_lock, load_store, packages_path
 from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
 from modstore_server.models import get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -166,15 +167,28 @@ def validated_automation_provenance(value: Any, *, package_sha256: str) -> Dict[
 def upsert_market_listing(saved: Dict[str, Any], *, public_listing: bool) -> None:
     from modstore_server.models import CatalogItem
 
-    sf = get_session_factory()
-    with sf() as db:
-        upsert_catalog_item_from_xc_package_dict(db, saved, author_id=None)
-        row = db.query(CatalogItem).filter(CatalogItem.pkg_id == str(saved.get("id"))).first()
-        if row and public_listing:
-            row.is_public = True
-            row.compliance_status = "approved"
-            row.delist_reason = ""
-        db.commit()
+    # Keep the JSON release ordering check and market pointer update serialized:
+    # replaying an old version must never downgrade the one-row market listing.
+    with catalog_write_lock():
+        if saved.get("automation_provenance"):
+            candidate = stable_version(saved.get("version"))
+            rows = load_store().get("packages") or []
+            for package in rows:
+                if (
+                    package.get("id") == saved.get("id")
+                    and package.get("automation_provenance")
+                    and stable_version(package.get("version")) > candidate
+                ):
+                    return
+        sf = get_session_factory()
+        with sf() as db:
+            upsert_catalog_item_from_xc_package_dict(db, saved, author_id=None)
+            row = db.query(CatalogItem).filter(CatalogItem.pkg_id == str(saved.get("id"))).first()
+            if row and public_listing:
+                row.is_public = True
+                row.compliance_status = "approved"
+                row.delist_reason = ""
+            db.commit()
     if public_listing:
         from modstore_server.market_catalog_api import _invalidate_market_catalog_caches
 

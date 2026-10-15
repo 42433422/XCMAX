@@ -9,6 +9,7 @@ RELEASES_DIR="${RELEASE_BASE%/}/releases"
 CURRENT_LINK="${XCMAX_CURRENT_LINK:-${RELEASE_BASE}/current}"
 CLI_LAUNCHER_PATH="${XCMAX_CLI_LAUNCHER_PATH:-/usr/local/bin/xcmax-terminal}"
 RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"
+CATALOG_DIR="${MODSTORE_CATALOG_DIR:-${RUNTIME_DIR%/}/catalog}"
 SITE_LINK="${XCMAX_SITE_LINK:-/root/成都修茈科技有限公司}"
 PUBLIC_SITE_STATE_DIR="${XCMAX_PUBLIC_SITE_STATE_DIR:-/var/lib/xcmax-public}"
 ENV_DIR="${MODSTORE_ENV_DIR:-/etc/xcmax}"
@@ -65,6 +66,39 @@ resolve_java_home() {
   fail "Java 17 runtime is required by the active payment service"
 }
 
+verify_runtime_mod_compiler() {
+  local release_root="$1"
+  local node_binary="$2"
+  "$node_binary" --input-type=module - "$release_root/FHD/frontend/package.json" <<'JS'
+import assert from 'node:assert/strict'
+import { readFileSync, realpathSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, relative, resolve, isAbsolute } from 'node:path'
+
+const frontend = dirname(process.argv[2])
+const require = createRequire(process.argv[2])
+const resolved = realpathSync(require.resolve('esbuild'))
+const inside = relative(resolve(frontend, 'node_modules'), resolved)
+assert(inside && !inside.startsWith('..') && !isAbsolute(inside), 'esbuild must belong to this release')
+const lock = JSON.parse(readFileSync(resolve(frontend, 'package-lock.json'), 'utf8'))
+const nativePackage = `@esbuild/${process.platform}-${process.arch}`
+const nativePath = realpathSync(require.resolve(`${nativePackage}/bin/esbuild`))
+const nativeInside = relative(resolve(frontend, 'node_modules'), nativePath)
+assert(nativeInside && !nativeInside.startsWith('..') && !isAbsolute(nativeInside), 'native esbuild must belong to this release')
+delete process.env.ESBUILD_BINARY_PATH
+const { buildSync, version } = require('esbuild')
+assert.equal(version, lock.packages['node_modules/esbuild'].version, 'esbuild must match the frontend lock')
+const result = buildSync({
+  stdin: { contents: 'export const answer = 21 * 2', loader: 'js' },
+  bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022',
+})
+assert.equal(result.outputFiles.length, 1)
+const compiled = await import('data:text/javascript;base64,' + Buffer.from(result.outputFiles[0].contents).toString('base64'))
+assert.equal(compiled.answer, 42, 'native compiler output must execute correctly')
+console.log(JSON.stringify({ runtime_mod_compiler: 'ready', esbuild: version, node: process.version }))
+JS
+}
+
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "XCMAX_TARGET_SHA must be a full 40-character commit SHA"
 [[ "$PRODUCT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] \
   || fail "XCMAX_PRODUCT_VERSION must be a numeric product version"
@@ -74,6 +108,7 @@ resolve_java_home() {
 [[ "$RELEASE_BASE" == /* ]] || fail "XCMAX_RELEASE_BASE must be an absolute path"
 [[ "$CLI_LAUNCHER_PATH" == /* ]] || fail "XCMAX_CLI_LAUNCHER_PATH must be an absolute path"
 [[ "$RUNTIME_DIR" == /* ]] || fail "MODSTORE_RUNTIME_DIR must be an absolute path"
+[[ "$CATALOG_DIR" == /* ]] || fail "MODSTORE_CATALOG_DIR must be an absolute path"
 [[ "$RELEASES_TO_KEEP" =~ ^[0-9]+$ ]] && (( RELEASES_TO_KEEP >= 2 )) \
   || fail "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2"
 if [[ -n "$GITHUB_REPOSITORY_SLUG" ]] \
@@ -291,6 +326,11 @@ if systemctl cat modstore-payment.service >/dev/null 2>&1; then
   PAYMENT_JAVA_BIN="${JAVA_HOME}/bin/java"
 fi
 
+RUNTIME_NODE_BIN="$(command -v node)" || fail "Node.js is required by the private Mod compiler"
+RUNTIME_NODE_BIN="$(readlink -f "$RUNTIME_NODE_BIN")"
+[[ "$RUNTIME_NODE_BIN" == /* && -x "$RUNTIME_NODE_BIN" ]] \
+  || fail "private Mod compiler requires an executable absolute Node.js path"
+
 FINAL_ROOT="${RELEASES_DIR}/${TARGET_SHA}"
 if [[ -f "$FINAL_ROOT/.xcmax-release.json" ]]; then
   EXISTING_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["git_sha"])' "$FINAL_ROOT/.xcmax-release.json")"
@@ -320,6 +360,17 @@ else
     "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app'
   rm -rf -- "$BUILD_ROOT/.runtime-build"
 
+  log "installing the locked private Mod compiler inside the release"
+  command -v npm >/dev/null 2>&1 || fail "npm is required by the private Mod compiler"
+  (
+    export PATH="$(dirname "$RUNTIME_NODE_BIN"):$PATH"
+    npm ci --prefix "$BUILD_ROOT/FHD/frontend" --include=dev --include=optional \
+      --ignore-scripts --no-audit --no-fund
+  )
+  # The real native esbuild binary must work without lifecycle downloads.
+  verify_runtime_mod_compiler "$BUILD_ROOT" "$RUNTIME_NODE_BIN" \
+    || fail "private Mod compiler is unavailable in the prepared release"
+
   if [[ -f "$DEPLOY_DIR/market/package-lock.json" ]]; then
     command -v npm >/dev/null 2>&1 || fail "npm is required to build the market"
     log "building market assets inside the release"
@@ -346,12 +397,40 @@ else
   fi
 
   TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}^{tree}")"
-  python3 - "$BUILD_ROOT/.xcmax-release.json" "$TARGET_SHA" "$TREE_SHA" "$ARTIFACT_SHA" "$PRODUCT_VERSION" "$RELEASE_ID" <<'PY'
+  SUNBIRD_TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}:FHD/mods/sunbird-attendance-custom")"
+  python3 - "$BUILD_ROOT/.xcmax-release.json" "$TARGET_SHA" "$TREE_SHA" "$ARTIFACT_SHA" "$PRODUCT_VERSION" "$RELEASE_ID" "$SUNBIRD_TREE_SHA" "$SOURCE_ROOT" <<'PY'
 import datetime
+import hashlib
 import json
+import runpy
+import subprocess
 import sys
+from pathlib import Path
 
-path, git_sha, tree_sha, artifact_sha, product_version, release_id = sys.argv[1:]
+path, git_sha, tree_sha, artifact_sha, product_version, release_id, sunbird_tree, source_root = sys.argv[1:]
+root = Path(path).parent
+source_path = "FHD/mods/sunbird-attendance-custom"
+source_files, source_hash = runpy.run_path(str(root / "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_delivery_versioned.py"))["source_fingerprints"](root / source_path)
+tree_rows = subprocess.run(
+    ["git", "-C", source_root, "ls-tree", "-r", "-z", git_sha, "--", source_path],
+    check=True, capture_output=True,
+).stdout
+git_files = {}
+for row in tree_rows.split(b"\0"):
+    if not row:
+        continue
+    metadata, path_bytes = row.split(b"\t", 1)
+    mode, kind, object_id = metadata.decode("ascii").split()
+    if mode not in {"100644", "100755"} or kind != "blob":
+        raise SystemExit("Sunbird main tree contains a non-file entry")
+    rel = path_bytes.decode("utf-8").removeprefix(source_path + "/")
+    blob = subprocess.run(
+        ["git", "-C", source_root, "cat-file", "blob", object_id],
+        check=True, capture_output=True,
+    ).stdout
+    git_files[rel] = hashlib.sha256(blob).hexdigest()
+if not git_files or git_files != source_files:
+    raise SystemExit("Sunbird release source differs from the pinned main Git tree")
 payload = {
     "artifact_sha256": artifact_sha,
     "built_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -359,6 +438,13 @@ payload = {
     "git_tree": tree_sha,
     "product_version": product_version,
     "release_id": release_id,
+    "private_mod_sources": {
+        "sunbird-attendance-custom": {
+            "git_tree": sunbird_tree,
+            "sha256": source_hash,
+            "files": source_files,
+        }
+    },
 }
 with open(path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2, sort_keys=True)
@@ -376,6 +462,8 @@ unset BUILD_JWT_SECRET
 chmod 0555 "$FINAL_ROOT"
 
 DEPLOY_DIR="$FINAL_ROOT/$MODSTORE_SUBDIR"
+verify_runtime_mod_compiler "$FINAL_ROOT" "$RUNTIME_NODE_BIN" \
+  || fail "private Mod compiler verification failed before promotion"
 EXPECTED_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact_sha256"])' "$FINAL_ROOT/.xcmax-release.json")"
 [[ "$EXPECTED_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]] || fail "release artifact SHA256 is invalid"
 
@@ -431,6 +519,10 @@ fi
 PREVIOUS_ROOT="$(readlink -f "$CURRENT_LINK")"
 [[ -d "$PREVIOUS_ROOT" ]] || fail "current release target is invalid: $PREVIOUS_ROOT"
 
+# Published package bytes and the catalog index must survive release pruning.
+case "$(canonical_path "$CATALOG_DIR")" in
+  "$(canonical_path "$RELEASES_DIR")"/*) fail "catalog directory cannot live inside immutable releases" ;;
+esac
 # Public runtime projections must survive immutable release promotion.  Seed
 # the persistent nginx root once from the previous release when available;
 # subsequent authenticated founder snapshots update this same external file.
@@ -461,10 +553,11 @@ write_service_units() {
   if [[ -f "$release_manifest" ]]; then
     release_artifact_sha="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("artifact_sha256", ""))' "$release_manifest")"
   fi
-  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nMODSTORE_CAPABILITY_PROPOSAL_REPO=%s\nXCMAX_RELEASE_SHA=%s\nXCMAX_PRODUCT_VERSION=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
+  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_CATALOG_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nMODSTORE_CAPABILITY_PROPOSAL_REPO=%s\nXCMAX_RELEASE_SHA=%s\nXCMAX_PRODUCT_VERSION=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
     "$TARGET_SHA" "$TARGET_SHA" "$CURRENT_LINK" "$release_artifact_sha" \
-    "$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" \
+    "$RUNTIME_DIR" "$CATALOG_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" \
     "$TARGET_SHA" "$PRODUCT_VERSION" > "${release_env}.tmp"
+  printf 'MODSTORE_NODE_EXECUTABLE=%s\n' "$RUNTIME_NODE_BIN" >> "${release_env}.tmp"
   chmod 644 "${release_env}.tmp"
   mv -f "${release_env}.tmp" "$release_env"
 
@@ -551,6 +644,19 @@ EnvironmentFile=-${ENV_FILE}
 EnvironmentFile=-${release_env}
 EOF
   fi
+}
+
+verify_catalog_runtime_dir() {
+  local pid=""
+  pid="$(systemctl show "$1" -p MainPID --value)"
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  python3 - "/proc/$pid/environ" "$CATALOG_DIR" <<'PY'
+import sys
+
+with open(sys.argv[1], "rb") as handle:
+    entries = handle.read().split(b"\0")
+assert ("MODSTORE_CATALOG_DIR=" + sys.argv[2]).encode() in entries
+PY
 }
 
 install_cli_launcher() {
@@ -688,8 +794,92 @@ rollback() {
   systemctl is-active --quiet modstore.service modstore-scheduler.service
 }
 
+CATALOG_SOURCE="${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}/modstore_server/catalog_data"
+ACTIVE_CATALOG_DIR="$(python3 - "$(systemctl show modstore.service -p MainPID --value)" "$CATALOG_SOURCE" "${ENV_DIR}/modstore-release.env" "$PREVIOUS_SHA" <<'PY'
+import os
+import sys
+
+pid, fallback, release_env, previous_sha = sys.argv[1:]
+value = ""
+if pid.isdigit() and int(pid) > 0:
+    try:
+        with open(f"/proc/{pid}/environ", "rb") as handle:
+            entries = handle.read().split(b"\0")
+        value = next((e.partition(b"=")[2].decode() for e in entries if e.startswith(b"MODSTORE_CATALOG_DIR=")), "")
+    except OSError:
+        pass
+if not value and previous_sha:
+    try:
+        with open(release_env, encoding="utf-8") as handle:
+            values = dict(line.rstrip("\n").split("=", 1) for line in handle if "=" in line)
+        if values.get("MODSTORE_GIT_SHA") == previous_sha:
+            value = values.get("MODSTORE_CATALOG_DIR", "")
+    except OSError:
+        pass
+print(os.path.realpath(value or fallback))
+PY
+)"
+[[ "$ACTIVE_CATALOG_DIR" == "$(canonical_path "$CATALOG_DIR")" || "$ACTIVE_CATALOG_DIR" == "$(canonical_path "$CATALOG_SOURCE")" ]] \
+  || fail "active catalog uses a different external directory: $ACTIVE_CATALOG_DIR"
+CATALOG_SERVICES_STOPPED=0
+RELEASE_SWITCHED=0
+CATALOG_STAGE=""
+recover_catalog_migration() {
+  local status=$?
+  if [[ -n "$CATALOG_STAGE" && -d "$CATALOG_STAGE" ]]; then
+    rm -rf -- "$CATALOG_STAGE" || log "could not remove incomplete catalog stage: $CATALOG_STAGE"
+    CATALOG_STAGE=""
+  fi
+  if [[ "$status" != 0 && "$CATALOG_SERVICES_STOPPED" == 1 ]]; then
+    if [[ "$RELEASE_SWITCHED" == 1 ]]; then rollback || true
+    else systemctl start modstore.service modstore-scheduler.service || true
+    fi
+  fi
+}
+trap recover_catalog_migration EXIT
+if [[ "$ACTIVE_CATALOG_DIR" != "$(canonical_path "$CATALOG_DIR")" ]]; then
+  CATALOG_SERVICES_STOPPED=1
+  systemctl stop modstore.service modstore-scheduler.service
+  [[ -f "$CATALOG_SOURCE/packages.json" ]] || fail "active catalog index is missing"
+  install -d -m 700 "$(dirname "$CATALOG_DIR")"
+  CATALOG_STAGE="$(mktemp -d "$(dirname "$CATALOG_DIR")/.catalog.XXXXXX")"
+  cp -a "$CATALOG_SOURCE/." "$CATALOG_STAGE/"
+  install -d -m 700 "$CATALOG_STAGE/files"
+  python3 - "${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}/modstore_server/market_files" "$CATALOG_STAGE/market_files" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+source, target = map(Path, sys.argv[1:])
+if source.is_dir():
+    target.mkdir(parents=True, exist_ok=True)
+    for item in source.iterdir():
+        if not item.is_file() or item.is_symlink():
+            continue
+        shutil.copy2(item, target / item.name)
+PY
+  chmod -R u+rwX "$CATALOG_STAGE"
+  if [[ -e "$CATALOG_DIR" ]]; then
+    diff -qr "$CATALOG_STAGE" "$CATALOG_DIR" >/dev/null \
+      || fail "inactive catalog differs from live snapshot; reconcile before promotion"
+    rm -rf -- "$CATALOG_STAGE"
+  else
+    mv "$CATALOG_STAGE" "$CATALOG_DIR"
+  fi
+  CATALOG_STAGE=""
+fi
+python3 - "$CATALOG_DIR/packages.json" <<'PY' || fail "persistent catalog index is invalid"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
+assert isinstance(payload, dict) and isinstance(payload.get("packages"), list)
+PY
+
 ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
 mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
+RELEASE_SWITCHED=1
 ln -s "${CURRENT_LINK}/${SITE_SUBDIR}" "${SITE_LINK}.next"
 mv -Tf "${SITE_LINK}.next" "$SITE_LINK"
 install_cli_launcher
@@ -727,7 +917,9 @@ READY=0
 for _ in $(seq 1 60); do
   if systemctl is-active --quiet modstore.service modstore-scheduler.service \
       && verify_health_identity "$HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA" \
-      && verify_health_identity "$SCHEDULER_HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA"; then
+      && verify_health_identity "$SCHEDULER_HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA" \
+      && verify_catalog_runtime_dir modstore.service \
+      && verify_catalog_runtime_dir modstore-scheduler.service; then
     READY=1
     break
   fi
@@ -762,4 +954,6 @@ if [[ -n "$PUBLIC_HEALTH_URL" ]] \
   fail "exact-SHA public health verification failed"
 fi
 log "release promoted and verified git_sha=$TARGET_SHA root=$FINAL_ROOT"
+CATALOG_SERVICES_STOPPED=0
+trap - EXIT
 prune_releases "$FINAL_ROOT" "$PREVIOUS_ROOT" "$(canonical_path "$CURRENT_LINK")"

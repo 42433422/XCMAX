@@ -1,0 +1,8 @@
+[13:51:57] feature=base-edition-pack platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-edition-pack
+[13:52:09] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:52:10] case E1: passed - 三档部署形态清单真实读取
+[13:52:10] case E2: passed - 企业版 SKU 真实读取
+[13:52:10] case E3: passed - 一键装齐宿主包真实执行（幂等成功）
+[13:52:11] case E4: passed - 无 CSRF 的宿主包安装被拒（负例/边界）
+[13:52:11] video: base-edition-pack-web-20260929-135157.webm (1058444 bytes)
+[13:52:11] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-edition-pack/log/base-edition-pack-web-20260929-135157.log

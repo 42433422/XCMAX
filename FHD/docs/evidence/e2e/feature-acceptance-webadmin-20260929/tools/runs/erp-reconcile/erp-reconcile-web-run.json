@@ -1,0 +1,309 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "erp-reconcile",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-152032",
+  "generated_at": "2026-09-29 15:20:47",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 2,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器在 Web 管理端真实运行经营对账（POST /api/operations-line/reconciliation/run）→ GET /status 读回对账状态（auto_confirm_enabled 等）→ 未提供周期起止的 /internal/payment/reconciliation-period 被 422 拒绝（负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 60361,
+        "processed": 60353,
+        "errors": 0,
+        "dropped": 8,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 10,
+            "max_cache_size": 1000,
+            "hits": 49,
+            "misses": 10,
+            "hit_rate": 0.8305084745762712,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-reconcile/erp-reconcile-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "erp-reconcile",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-reconcile/shot/00-login-form.png",
+      "sha256": "f73404e1b99ff9cc99e688f099fc084f7517b9bf397ba153ba2a905d763e05d3",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-reconcile",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-reconcile/shot/RC1-reconcile-run.png",
+      "sha256": "5b93cae9fae75c52be07d5b0ba53bfe14b0057413740d6b0b64019f887a7a03d",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染真实对账运行与状态：run 200 success、dry_run；status 含 auto_confirm_enabled/last_run。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-reconcile",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-reconcile/shot/RC2-reconcile-period.png",
+      "sha256": "5e31282f68ebfb7dec97849b74271bacce3a3698406cdc19f29b7553763f3e3c",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染对账周期接口缺参的 422 validation_error 与带参时的真实响应。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-reconcile",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-reconcile/video/erp-reconcile-web-20260929-152032.webm",
+      "sha256": "3f971b5e8109922c7ac63d27728cc443d961317b3f52562173d626d26e3a470b",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → 对账运行与状态 → 周期接口负例。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "RC1",
+      "title": "真实运行经营对账并读取状态",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/operations-line/reconciliation/run，随后 GET /api/operations-line/reconciliation/status。",
+      "expected": "运行 200、success=true；状态 200 且含 auto_confirm_enabled。",
+      "observed": "{\"run_http\": 200, \"success\": true, \"dry_run\": false, \"status_http\": 200, \"auto_confirm_enabled\": false}",
+      "result": "passed"
+    },
+    {
+      "id": "RC2",
+      "title": "对账周期接口缺参被拒（负例）",
+      "input": "已建立的管理员会话。",
+      "actions": "GET /api/internal/payment/reconciliation-period（缺 period_start/period_end）。",
+      "expected": "422 validation_error。",
+      "observed": "{\"missing_params\": {\"status\": 422, \"error_code\": \"validation_error\"}, \"with_params\": {\"status\": 503, \"message\": \"internal api not configured\"}, \"note\": \"带参时本环境返回 503 internal api not configured（内部渠道未配置的真实观察）\"}",
+      "result": "passed"
+    }
+  ]
+}

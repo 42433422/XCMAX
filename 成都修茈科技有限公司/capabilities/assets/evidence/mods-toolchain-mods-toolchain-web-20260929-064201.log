@@ -1,0 +1,8 @@
+[06:42:01] feature=mods-toolchain base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-toolchain
+[06:42:13] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:42:21] case T1: passed - Mod 前端路由注册表按工具链发现结果应答
+[06:42:26] case T2: passed - 未完成签名/安装验证的 Mod 运行时接口被拒绝
+[06:42:39] case T3: passed - 单个 Mod 元数据（工具链产物）真实读取
+[06:42:46] case T4: passed - Mod 加载状态（脚手架发现清单）真实读取
+[06:42:46] video: mods-toolchain-web-20260929-064201.webm (3208160 bytes)
+[06:42:46] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-toolchain/log/mods-toolchain-web-20260929-064201.log

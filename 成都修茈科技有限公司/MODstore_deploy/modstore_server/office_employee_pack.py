@@ -24,7 +24,7 @@ def office_pkg_ids_list() -> List[str]:
 
 def build_office_employee_bundle_zip(session: Session) -> bytes:
     """将 10 个公开市场员工包 ZIP 打入一个 office-employee-pack.zip。"""
-    from modstore_server.catalog_store import files_dir
+    from modstore_server.catalog_store import market_archive_path
 
     missing: List[str] = []
     buf = io.BytesIO()
@@ -43,8 +43,8 @@ def build_office_employee_bundle_zip(session: Session) -> bytes:
             if not item or not item.stored_filename:
                 missing.append(pkg_id)
                 continue
-            path = files_dir() / item.stored_filename
-            if not path.is_file():
+            path = market_archive_path(item.stored_filename, item.sha256)
+            if path is None:
                 missing.append(pkg_id)
                 continue
             arcname = f"{pkg_id}/{path.name}"

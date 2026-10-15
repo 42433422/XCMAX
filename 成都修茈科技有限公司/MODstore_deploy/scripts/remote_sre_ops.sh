@@ -77,7 +77,7 @@ require_compose_scheduler_running() {
   local running
   running=$(compose --profile app ps --status running --services 2>/dev/null || true)
   if ! printf '%s\n' "$running" | grep -qx 'scheduler'; then
-    die "compose: service 'scheduler' is not running (workflow_scheduler / daily digest / outbox). Run: docker compose --profile app up -d scheduler. See docs/runbooks/remote-server-operations.md (section 后台任务)"
+    die "legacy compose: service 'scheduler' is not running. Current production deploy: scripts/xcmax-immutable-release.sh; legacy guide: ../../ARCHIVE_POINTER.md"
   fi
   log "compose scheduler: running"
 }

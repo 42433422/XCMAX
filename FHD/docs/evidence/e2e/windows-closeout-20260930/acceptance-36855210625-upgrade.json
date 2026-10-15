@@ -1,0 +1,286 @@
+{
+  "mode": "Upgrade",
+  "candidate_sha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+  "candidate_on_main": true,
+  "customer_acceptance": "not_verified",
+  "started_at": "2026-10-01T11:34:01.7352393Z",
+  "checks": [
+    {
+      "passed": true,
+      "detail": "fresh user data and install path",
+      "name": "isolated_runner"
+    },
+    {
+      "passed": true,
+      "detail": "no prior daily task",
+      "name": "isolated_tasks"
+    },
+    {
+      "passed": true,
+      "detail": "sha256=ed957f9db9940bcbc323f217c1b95bfe045b7f0d9aa2bb023aa175587ef66b56",
+      "name": "old_installer_hash"
+    },
+    {
+      "passed": true,
+      "detail": "exit=0",
+      "name": "old.install"
+    },
+    {
+      "passed": true,
+      "detail": "installed executable exists; build_info={\"version\":\"1.0.0.1\",\"gitSha\":\"2e6f03bf67b88965e450721e5b8432ab6395782b\",\"schema_version\":1}\r\n",
+      "name": "old.exe"
+    },
+    {
+      "passed": true,
+      "detail": "health=healthy; blockers=0; readyForUi=True; pid=920",
+      "name": "old.first_start_ready"
+    },
+    {
+      "passed": true,
+      "detail": "installed=2e6f03bf67b88965e450721e5b8432ab6395782b; running=; legacy_health_identity_missing=True; release=",
+      "name": "old.runtime_build_identity"
+    },
+    {
+      "passed": true,
+      "detail": "pid=5768; exe=D:\\a\\_temp\\xcagi-candidate-Upgrade\\resources\\backend\\xcagi-backend.exe; actual_data=C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI; expected_data=C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI",
+      "name": "old.port_owner"
+    },
+    {
+      "passed": true,
+      "detail": "original pid=920",
+      "name": "old.no_restart"
+    },
+    {
+      "passed": true,
+      "detail": "normal UI must save and read back actual business records",
+      "name": "normal_gui_seed"
+    },
+    {
+      "passed": true,
+      "detail": "CI test credentials are configured",
+      "name": "old.credentials"
+    },
+    {
+      "passed": true,
+      "detail": "http=200; success=True",
+      "name": "old.login"
+    },
+    {
+      "passed": true,
+      "detail": "kind=enterprise; tenant_sha256=6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+      "name": "old.enterprise"
+    },
+    {
+      "passed": true,
+      "detail": "exit=0",
+      "name": "candidate.install"
+    },
+    {
+      "passed": true,
+      "detail": "installed executable exists; build_info={\"version\":\"1.0.0.5\",\"gitSha\":\"91c73f2c576799f42c6d8600871d4bd497f9669a\",\"releaseId\":\"xcagi-1.0.0.5-91c73f2c576799f42c6d8600871d4bd497f9669a\",\"schema_version\":1}\n",
+      "name": "candidate.exe"
+    },
+    {
+      "passed": true,
+      "detail": "health=healthy; blockers=0; readyForUi=True; pid=2764",
+      "name": "candidate.first_start_ready"
+    },
+    {
+      "passed": true,
+      "detail": "installed=91c73f2c576799f42c6d8600871d4bd497f9669a; running=91c73f2c576799f42c6d8600871d4bd497f9669a; legacy_health_identity_missing=False; release=xcagi-1.0.0.5-91c73f2c576799f42c6d8600871d4bd497f9669a",
+      "name": "candidate.runtime_build_identity"
+    },
+    {
+      "passed": true,
+      "detail": "pid=1656; exe=D:\\a\\_temp\\xcagi-candidate-Upgrade\\resources\\backend\\xcagi-backend.exe; actual_data=C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI; expected_data=C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI",
+      "name": "candidate.port_owner"
+    },
+    {
+      "passed": true,
+      "detail": "original pid=2764",
+      "name": "candidate.no_restart"
+    },
+    {
+      "passed": true,
+      "detail": "CI test credentials are configured",
+      "name": "candidate.credentials"
+    },
+    {
+      "passed": true,
+      "detail": "http=200; success=True",
+      "name": "candidate.login"
+    },
+    {
+      "passed": true,
+      "detail": "kind=enterprise; tenant_sha256=6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+      "name": "candidate.enterprise"
+    },
+    {
+      "passed": true,
+      "detail": "tenant_sha256=6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+      "name": "same_enterprise"
+    },
+    {
+      "passed": true,
+      "detail": "normal UI must save and read back actual business records",
+      "name": "normal_gui_after-upgrade"
+    },
+    {
+      "passed": true,
+      "detail": "sha=91c73f2c576799f42c6d8600871d4bd497f9669a; version=1.0.0.5",
+      "name": "build_info"
+    },
+    {
+      "passed": true,
+      "detail": "display=1.0.0.5; expected=1.0.0.5",
+      "name": "installer_display_version"
+    },
+    {
+      "passed": true,
+      "detail": "daily and weekly task actions use noninteractive policy flags and the packaged backup script",
+      "name": "backup_task_action"
+    },
+    {
+      "passed": true,
+      "detail": "user=runneradmin; daily=Interactive/Limited; weekly=Interactive/Limited",
+      "name": "backup_task_identity"
+    },
+    {
+      "passed": true,
+      "detail": "weekly trigger exists",
+      "name": "backup_weekly_trigger"
+    },
+    {
+      "passed": true,
+      "detail": "last_result=0; last_run=2026-10-01T11:39:28.0000000Z",
+      "name": "XcagiDailyBackup_run"
+    },
+    {
+      "passed": true,
+      "detail": "bytes=1900544; sha256=d819513ee1dd55afe0cfba5420fb58aa2b18b6543eee8e44d22be043d008be84",
+      "name": "XcagiDailyBackup_artifact"
+    },
+    {
+      "passed": true,
+      "detail": "last_result=0; last_run=2026-10-01T11:39:36.0000000Z",
+      "name": "XcagiWeeklyBackup_run"
+    },
+    {
+      "passed": true,
+      "detail": "bytes=1900544; sha256=d819513ee1dd55afe0cfba5420fb58aa2b18b6543eee8e44d22be043d008be84",
+      "name": "XcagiWeeklyBackup_artifact"
+    },
+    {
+      "passed": true,
+      "detail": "scheduled task resolved the backend beside its packaged script without the registry install path",
+      "name": "backup_packaged_backend"
+    },
+    {
+      "passed": true,
+      "detail": "bytes=1900544",
+      "name": "backup_file"
+    },
+    {
+      "passed": true,
+      "detail": "restore destination is fresh",
+      "name": "backup_restore_isolated"
+    },
+    {
+      "passed": true,
+      "detail": "sha256=d819513ee1dd55afe0cfba5420fb58aa2b18b6543eee8e44d22be043d008be84; bytes=1900544",
+      "name": "backup_restore_copy"
+    },
+    {
+      "passed": true,
+      "detail": "health=healthy; blockers=0; readyForUi=True; pid=1516",
+      "name": "backup_restore.first_start_ready"
+    },
+    {
+      "passed": true,
+      "detail": "installed=91c73f2c576799f42c6d8600871d4bd497f9669a; running=91c73f2c576799f42c6d8600871d4bd497f9669a; legacy_health_identity_missing=False; release=xcagi-1.0.0.5-91c73f2c576799f42c6d8600871d4bd497f9669a",
+      "name": "backup_restore.runtime_build_identity"
+    },
+    {
+      "passed": true,
+      "detail": "pid=5532; exe=D:\\a\\_temp\\xcagi-candidate-Upgrade\\resources\\backend\\xcagi-backend.exe; actual_data=D:\\a\\_temp\\xcagi-backup-restore-Upgrade; expected_data=D:\\a\\_temp\\xcagi-backup-restore-Upgrade",
+      "name": "backup_restore.port_owner"
+    },
+    {
+      "passed": true,
+      "detail": "original pid=1516",
+      "name": "backup_restore.no_restart"
+    },
+    {
+      "passed": true,
+      "detail": "CI test credentials are configured",
+      "name": "backup_restore.credentials"
+    },
+    {
+      "passed": true,
+      "detail": "http=200; success=True",
+      "name": "backup_restore.login"
+    },
+    {
+      "passed": true,
+      "detail": "kind=enterprise; tenant_sha256=6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+      "name": "backup_restore.enterprise"
+    },
+    {
+      "passed": true,
+      "detail": "tenant_sha256=6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+      "name": "backup_restore_enterprise"
+    },
+    {
+      "passed": true,
+      "detail": "normal UI must save and read back actual business records",
+      "name": "normal_gui_readback"
+    }
+  ],
+  "result": "passed",
+  "candidate_sha256": "f7c5eb4a006267634e758b1abe0af20b6a6cb6643cd8964a4f6f928f340b7733",
+  "backup_tasks": [
+    {
+      "actions": [
+        {
+          "Execute": "powershell.exe",
+          "Arguments": "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"D:\\a\\_temp\\xcagi-candidate-Upgrade\\resources\\backend\\_internal\\scripts\\backup\\XcagiBackup.ps1\"",
+          "WorkingDirectory": null
+        }
+      ],
+      "logon": "Interactive",
+      "run_level": "Limited",
+      "triggers": [
+        {
+          "StartBoundary": "2026-10-01T12:30:00+00:00",
+          "Enabled": true,
+          "DaysOfWeek": null,
+          "WeeksInterval": null
+        }
+      ],
+      "name": "XcagiDailyBackup",
+      "user": "runneradmin"
+    },
+    {
+      "actions": [
+        {
+          "Execute": "powershell.exe",
+          "Arguments": "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"D:\\a\\_temp\\xcagi-candidate-Upgrade\\resources\\backend\\_internal\\scripts\\backup\\XcagiBackup.ps1\"",
+          "WorkingDirectory": null
+        }
+      ],
+      "logon": "Interactive",
+      "run_level": "Limited",
+      "triggers": [
+        {
+          "StartBoundary": "2026-10-01T12:30:00+00:00",
+          "Enabled": true,
+          "DaysOfWeek": 1,
+          "WeeksInterval": 1
+        }
+      ],
+      "name": "XcagiWeeklyBackup",
+      "user": "runneradmin"
+    }
+  ],
+  "finished_at": "2026-10-01T11:40:20.1434518Z"
+}

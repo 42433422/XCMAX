@@ -1,0 +1,6 @@
+2026-09-29T13:05:14+0800 [erp-invoice] 开始验收 erp-invoice 发票与税务；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:05:14+0800 [erp-invoice] M1 failed :: 受阻：GET /api/finance/invoices/crm 返回 403「需要管理员账号登录后访问」；SUNBIRD 为普通企业账号，发票接口仅管理员可用
+2026-09-29T13:05:14+0800 [erp-invoice] M2 failed :: 受阻：GET /api/finance/invoices/tax-channel 同样 403；本机未配置企业税号与开票证书
+2026-09-29T13:05:14+0800 [erp-invoice] M3 failed :: 受阻：需企业在百望/航信等开票通道开通并配置税号与证书，本机未配置，无法真实开票
+2026-09-29T13:05:15+0800 [erp-invoice] screenshot result.png
+2026-09-29T13:05:16+0800 [erp-invoice] video operation.webm bytes=95169

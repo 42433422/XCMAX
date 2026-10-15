@@ -50,6 +50,8 @@ greeting:
     - 您好
     - 嗨
     - 嗨喽
+    - 哈喽
+    - 哈罗
     - hello
     - hi
     - 早上好
@@ -71,6 +73,8 @@ goodbye:
     - 谢谢再见
     - 好的谢谢
     - 先忙
+    - 明天再说
+    - 下班了
 
 help:
   patterns:
@@ -86,6 +90,8 @@ help:
     - 能干啥
     - 支持什么
     - 怎么操作
+    - 帮我做什么
+    - 能帮我做什么
 
 tool_intents:
   - id: shipment_generate
@@ -100,6 +106,9 @@ tool_intents:
       - 开送货单
       - 做出货单
       - 生成出货单
+      - 一张出货单
+      - 一张发货单
+      - 一张送货单
     priority: 12
     tool_key: shipment_generate
     block_if_negated: true
@@ -123,6 +132,14 @@ tool_intents:
       - 发消息给
       - 发送消息给
       - 发送给
+      - 发个消息
+      - 发条消息
+      - 微信通知
+      - 微信同步
+      - 微信发给
+      - 微信上
+      - 微信里
+      - 提醒
     priority: 10
     tool_key: wechat_send
     block_if_negated: true
@@ -140,6 +157,8 @@ tool_intents:
       - 哪个模板
       - 词条
       - 可编辑词条
+      - 发货单格式
+      - 单据格式
     priority: 9
     tool_key: shipment_template
     block_if_negated: false
@@ -156,7 +175,10 @@ tool_intents:
       - 表头提取
       - 词条提取
       - 分解表
-    priority: 9
+      - 分解excel
+      - 解析excel
+      - excel分解
+    priority: 10
     tool_key: excel_decompose
     block_if_negated: false
 
@@ -224,7 +246,7 @@ tool_intents:
       - 查看图片
       - 看图片
       - 打开图片
-    priority: 6
+    priority: 8
     tool_key: show_images
     block_if_negated: false
 
@@ -251,7 +273,9 @@ tool_intents:
       - 打标签
       - 商标打印
       - 商标
-    priority: 5
+      - 贴标
+      - 贴标签
+    priority: 8
     tool_key: print_label
     block_if_negated: true
 
@@ -263,7 +287,12 @@ tool_intents:
       - 上传文件
       - 导入文件
       - 上传 excel
-    priority: 5
+      - 传个
+      - 传上来
+      - 录进去
+      - excel里
+      - 从excel
+    priority: 8
     tool_key: upload_file
     block_if_negated: true
 
@@ -275,8 +304,129 @@ tool_intents:
       - 原材料库存
       - 库存查询
       - 材料库
+      - 原料
+      - 补货
+      - 剩多少
+      - 还剩
+      - 还有几桶
     priority: 4
     tool_key: materials
+    block_if_negated: false
+
+  - id: wechat
+    keywords:
+      - 微信联系人
+      - 联系人列表
+      - 联系人名单
+      - 微信好友
+      - 微信通讯录
+    priority: 10
+    tool_key: wechat
+    block_if_negated: false
+
+  - id: template_preview
+    keywords:
+      - 模板预览
+      - 预览模板
+      - 预览一下模板
+      - 模板效果
+      - 版式
+    priority: 10
+    tool_key: template_preview
+    block_if_negated: false
+
+  - id: template_extract
+    keywords:
+      - 提取模板
+      - 模板提取
+      - 抽取模板
+      - 导出模板
+      - 表头结构
+    priority: 11
+    tool_key: template_extract
+    block_if_negated: false
+
+  - id: printer_list
+    keywords:
+      - 打印机
+      - 打印机列表
+      - 打印机清单
+    priority: 9
+    tool_key: printer_list
+    block_if_negated: false
+
+  - id: settings
+    keywords:
+      - 系统设置
+      - 打开设置
+      - 设置页面
+      - 偏好设置
+      - 自动启动
+      - 系统版本
+    priority: 4
+    tool_key: settings
+    block_if_negated: false
+
+  - id: ai_ecosystem
+    keywords:
+      - ai生态
+      - AI生态
+      - AI 生态
+      - 人工智能生态
+      - AI能力
+      - ai能力
+    priority: 6
+    tool_key: ai_ecosystem
+    block_if_negated: false
+
+  - id: customer_export
+    keywords:
+      - 导出客户列表
+      - 导出客户
+      - 导出用户列表
+      - 导出单位
+      - 客户导出
+      - 导出表格
+      - 导出excel
+      - 导出xlsx
+      - 客户资料导出
+      - 资料导出
+      - 拉个excel
+    priority: 8
+    tool_key: customer_export
+    block_if_negated: false
+
+  - id: business_docking
+    keywords:
+      - 业务对接
+      - 系统对接
+      - 数据对接
+      - 对接一下
+    priority: 8
+    tool_key: business_docking
+    block_if_negated: false
+
+  - id: customer_edit
+    keywords:
+      - 换成
+      - 改成
+      - 改为
+      - 改一下
+      - 改下
+      - 更新为
+    priority: 7
+    tool_key: customer_edit
+    block_if_negated: false
+
+  - id: customer_supplement
+    keywords:
+      - 补个
+      - 补充
+      - 补上
+      - 补一下
+      - 录一下
+    priority: 10
+    tool_key: customer_supplement
     block_if_negated: false
 
   - id: price_list

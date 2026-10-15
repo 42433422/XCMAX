@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "mods-store",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "b01bee147584b1a976705d94eeb0b90e94988479ad829cc8eea712da68456c42",
+  "visible_content": "Mod 商店可装 26 个、市场条目 25 个，能力库页可见商品卡片。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-store/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-store/macos/result.png"
+}

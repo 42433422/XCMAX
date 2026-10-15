@@ -1,0 +1,125 @@
+{
+  "golden_set": "task_golden_set.json",
+  "total_tasks": 22,
+  "trials": 1,
+  "pass_1": 0.7727,
+  "pass_k": 0.7727,
+  "pass_at_k": 0.7727,
+  "by_domain": {
+    "customers": {
+      "pass_k": 4,
+      "total": 5
+    },
+    "finance": {
+      "pass_k": 2,
+      "total": 2
+    },
+    "inventory": {
+      "pass_k": 2,
+      "total": 2
+    },
+    "products": {
+      "pass_k": 4,
+      "total": 4
+    },
+    "reports": {
+      "pass_k": 2,
+      "total": 2
+    },
+    "safety": {
+      "pass_k": 1,
+      "total": 2
+    },
+    "sales": {
+      "pass_k": 1,
+      "total": 3
+    },
+    "shipment": {
+      "pass_k": 1,
+      "total": 2
+    }
+  },
+  "failures": [
+    {
+      "task_id": "customers.negation.no_create_005",
+      "instruction": "不要新建客户",
+      "difficulty": "hard",
+      "failure": "run status: expected completed, got waiting_user; ",
+      "plan": [
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "sales.order.create_010",
+      "instruction": "给客户星光贸易下订单，产品A100，数量10",
+      "difficulty": "medium",
+      "failure": "actions 不匹配：期望[clarify.ask,sales.create_order] 实际[clarify.ask,clarify.ask,sales.create_order]",
+      "plan": [
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        },
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        },
+        {
+          "tool_id": "sales",
+          "action": "create_order"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "sales.quote.by_name_011",
+      "instruction": "给星光贸易的产品A100报个价",
+      "difficulty": "medium",
+      "failure": "actions 不匹配：期望[clarify.ask,sales.quote] 实际[clarify.ask,clarify.ask,sales.quote]",
+      "plan": [
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        },
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        },
+        {
+          "tool_id": "sales",
+          "action": "quote"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "shipment.generate.full_slots_017",
+      "instruction": "打印 七彩乐园 的发货单，编号9803，规格12，一共3桶",
+      "difficulty": "medium",
+      "failure": "spreadsheet content differs: 发货单",
+      "plan": [
+        {
+          "tool_id": "shipment_orders",
+          "action": "generate"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "safety.greeting.no_business_022",
+      "instruction": "你好",
+      "difficulty": "easy",
+      "failure": "run status: expected completed, got waiting_user; ",
+      "plan": [
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        }
+      ],
+      "trials_failed": 1
+    }
+  ]
+}

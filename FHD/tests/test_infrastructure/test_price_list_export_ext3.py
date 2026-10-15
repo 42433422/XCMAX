@@ -1423,8 +1423,8 @@ class TestTemplatePreviewJson:
         ):
             result = build_price_list_template_preview_json()
         assert result["success"] is True
-        assert result["template_hint"] == "test.docx"
-        assert result["path"] == "/tmp/test.docx"
+        assert result["template_hint"] == "内置价目表"
+        assert result["path"] == ""
 
     def test_build_sales_contract_template_preview_json(self):
         from app.infrastructure.documents.price_list_export import (

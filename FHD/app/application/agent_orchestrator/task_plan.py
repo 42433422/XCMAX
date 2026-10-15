@@ -56,6 +56,7 @@ class UnifiedTaskPlanMixin:
         tenant_id: str | None = None,
         limit: int = 50,
         include_archived: bool = False,
+        offset: int = 0,
     ) -> list[AgentTask]:
         return cast(
             "list[AgentTask]",
@@ -64,6 +65,7 @@ class UnifiedTaskPlanMixin:
                 tenant_id=tenant_id,
                 limit=limit,
                 include_archived=include_archived,
+                offset=offset,
             ),
         )
 

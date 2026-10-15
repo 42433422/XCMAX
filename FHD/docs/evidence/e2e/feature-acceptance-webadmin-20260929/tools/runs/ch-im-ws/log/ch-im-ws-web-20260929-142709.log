@@ -1,0 +1,7 @@
+[14:27:09] feature=ch-im-ws platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-im-ws
+[14:27:21] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[14:27:21] case W1: passed - 实时通道带会话建连并完成 ping/pong
+[14:27:21] case W2: passed - 同一会话体系的 HTTP 面可用
+[14:27:23] case W3: passed - 无会话连接实时通道被关闭（负例）
+[14:27:23] video: ch-im-ws-web-20260929-142709.webm (1024977 bytes)
+[14:27:23] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-im-ws/log/ch-im-ws-web-20260929-142709.log

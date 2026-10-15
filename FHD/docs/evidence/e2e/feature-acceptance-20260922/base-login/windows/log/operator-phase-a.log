@@ -1,0 +1,20 @@
+﻿[17:04:00] install facts ingested from Z:\windows-acceptance-r2\acceptance\feature-base-login-20260924\log\install-facts.json
+[17:04:00] cdp connected
+[17:04:00] STEP first_launch_state {"url":"http://127.0.0.1:17500/login?redirect=/","title":"XCAGI 企业版 · V1 · 登录","loginForm":true,"sidebarItems":0,"uiStatusText":null,"uiTone":null,"hasUser":false,"hasOnboarding":false}
+[17:04:00] STEP first_launch_me {"http":200,"success":false,"valid":false,"account_kind":null,"tenant_id":null,"username":null}
+[17:04:00] STEP first_launch_health {"http":200,"status":"degraded","runtime_status":"healthy","blockers":[],"degradedReasons":["LLM_RUNTIME_UNAVAILABLE"],"version":"1.0.0.5"}
+[17:04:00] shot saved: Z:\windows-acceptance-r2\acceptance\feature-base-login-20260924\shot\W0-first-launch.png
+[17:04:01] [gui-login] login button -> clicked:登 录
+[17:04:11] STEP gui_login_state {"url":"http://127.0.0.1:17500/mod/xcagi-planner-bridge/chat","title":"智能对话 - XCAGI","loginForm":false,"sidebarItems":17,"uiStatusText":"系统正常","uiTone":"status-dot online","hasUser":true,"hasOnboarding":false}
+[17:04:11] STEP gui_login_me {"http":200,"success":true,"valid":false,"account_kind":"enterprise","tenant_id":1,"username":"SUNBIRD"}
+[17:04:12] shot saved: Z:\windows-acceptance-r2\acceptance\feature-base-login-20260924\shot\W2-login-workspace.png
+[17:04:15] [gui-logout] open settings -> http://127.0.0.1:17500/settings
+[17:04:18] [gui-logout] confirm dialog: {"dialog":true,"text":"确认 确定退出本机账号？ 取消 确定","buttons":["取消","确定"]}
+[17:04:18] [gui-logout] confirm -> clicked:确定
+[17:04:22] STEP gui_logout_state {"url":"http://127.0.0.1:17500/login?redirect=/","title":"XCAGI 企业版 · V1 · 登录","loginForm":true,"sidebarItems":0,"uiStatusText":null,"uiTone":null,"hasUser":false,"hasOnboarding":false}
+[17:04:22] STEP gui_logout_me {"http":200,"success":false,"valid":false,"account_kind":null,"tenant_id":null,"username":null}
+[17:04:23] shot saved: Z:\windows-acceptance-r2\acceptance\feature-base-login-20260924\shot\W4-login-page-again.png
+[17:04:24] [gui-relogin] login button -> clicked:登 录
+[17:04:33] STEP gui_relogin {"at":"17:04:33","me_success":true,"window_title":"智能对话 - XCAGI","sidebar_items":17}
+[17:04:33] facts written: Z:\windows-acceptance-r2\acceptance\feature-base-login-20260924\log\operator-phase-a.json
+[17:04:33] DONE phase a

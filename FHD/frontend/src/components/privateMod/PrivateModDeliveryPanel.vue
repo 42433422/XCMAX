@@ -1,10 +1,20 @@
 <template src="./PrivateModDeliveryPanel.template.html"></template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { apiFetch } from '@/utils/apiBase'
+import { useAccountProfileStore } from '@/stores/accountProfile'
+
+const account = useAccountProfileStore()
+let deliveryGeneration = 0
+let accountGeneration = 0
+let deliveryAbort = null
 
 const projects = ref([])
+const versionedMain = ref(false)
+const versionedMainAvailable = computed(() =>
+  projects.value.some((row) => row?.runtime_mod_id === 'sunbird-attendance-custom'),
+)
 const requests = ref([])
 const happyPath = ref(['production', 'testing', 'acceptance', 'delivered'])
 const stageFlow = ref({})
@@ -49,6 +59,7 @@ const submittingRequest = ref(false)
 const requestBusy = ref('')
 const reworkRequestId = ref(0)
 const requestReworkNotes = ref({})
+const requestMainSource = ref({})
 const requestKinds = [
   { id: 'module', label: '业务模块', summary: '生成可安装的私有 Mod 模块' },
   { id: 'employee', label: 'AI 员工', summary: '生成员工包、Skill 组和运行校验' },
@@ -106,6 +117,7 @@ function stepMessage(step) {
 }
 
 async function submitCustomRequest() {
+  const generation = accountGeneration
   const form = requestForm.value
   const title = String(form.title || '').trim()
   const requirements = String(form.requirements || '').trim()
@@ -121,15 +133,17 @@ async function submitCustomRequest() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        kind: form.kind,
+        kind: versionedMain.value ? 'module' : form.kind,
+        source_mode: versionedMain.value ? 'versioned_main' : 'generated',
         title,
         requirements,
         acceptance_criteria: acceptanceCriteria,
-        suggested_id: String(form.suggestedId || '').trim() || undefined,
+        suggested_id: versionedMain.value ? 'sunbird-attendance-custom' : String(form.suggestedId || '').trim() || undefined,
       }),
       timeoutMs: 60_000,
     })
     const body = await response.json().catch(() => ({}))
+    if (generation !== accountGeneration) return
     if (!response.ok || body?.success !== true) {
       throw new Error(responseMessage(body, `定制需求受理失败（HTTP ${response.status}）`))
     }
@@ -141,11 +155,12 @@ async function submitCustomRequest() {
       requirements: '',
       acceptanceCriteria: '',
     }
+    versionedMain.value = false
     await loadDelivery()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '定制需求受理失败'
+    if (generation === accountGeneration) error.value = cause instanceof Error ? cause.message : '定制需求受理失败'
   } finally {
-    submittingRequest.value = false
+    if (generation === accountGeneration) submittingRequest.value = false
   }
 }
 
@@ -154,6 +169,7 @@ function toggleRequestRework(item) {
 }
 
 async function decideRequest(item, action) {
+  const generation = accountGeneration
   const note = String(requestReworkNotes.value[item.id] || '').trim()
   if (action === 'rework' && note.length < 4) {
     error.value = '返工意见至少 4 个字'
@@ -165,43 +181,47 @@ async function decideRequest(item, action) {
     const response = await apiFetch(`/api/mod-store/private-delivery/requests/${item.id}/decision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, note: note || undefined }),
+      body: JSON.stringify({ action, note: note || undefined, source_mode: action === 'rework' && requestMainSource.value[item.id] ? 'versioned_main' : undefined }),
       timeoutMs: 60_000,
     })
     const body = await response.json().catch(() => ({}))
+    if (generation !== accountGeneration) return
     if (!response.ok || body?.success !== true) {
       throw new Error(responseMessage(body, `定制交付操作失败（HTTP ${response.status}）`))
     }
     reworkRequestId.value = 0
     delete requestReworkNotes.value[item.id]
+    delete requestMainSource.value[item.id]
     await loadDelivery()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '定制交付操作失败'
+    if (generation === accountGeneration) error.value = cause instanceof Error ? cause.message : '定制交付操作失败'
   } finally {
-    requestBusy.value = ''
+    if (generation === accountGeneration) requestBusy.value = ''
   }
 }
 
 async function installRequestArtifact(item, artifact) {
+  const generation = accountGeneration
   if (!artifact?.kind) return
-  requestBusy.value = `install:${item.id}:${artifact.kind}`
+  requestBusy.value = `install:${item.id}:${artifact.kind}:${artifact.id}`
   error.value = ''
   try {
     const response = await apiFetch(`/api/mod-store/private-delivery/requests/${item.id}/install`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ artifact_kind: artifact.kind }),
+      body: JSON.stringify({ artifact_kind: artifact.kind, artifact_id: artifact.id }),
       timeoutMs: 180_000,
     })
     const body = await response.json().catch(() => ({}))
+    if (generation !== accountGeneration) return
     if (!response.ok || body?.success !== true) {
       throw new Error(responseMessage(body, `定制产物安装失败（HTTP ${response.status}）`))
     }
     await loadDelivery()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '定制产物安装失败'
+    if (generation === accountGeneration) error.value = cause instanceof Error ? cause.message : '定制产物安装失败'
   } finally {
-    requestBusy.value = ''
+    if (generation === accountGeneration) requestBusy.value = ''
   }
 }
 
@@ -301,13 +321,18 @@ function nextActionLabel(project, track, current, next) {
 }
 
 async function loadDelivery() {
+  const generation = ++deliveryGeneration
+  deliveryAbort?.abort()
+  const controller = new AbortController()
+  deliveryAbort = controller
   loading.value = true
   error.value = ''
   remoteError.value = ''
   requestError.value = ''
   try {
-    const response = await apiFetch('/api/mod-store/private-delivery', { timeoutMs: 30_000 })
+    const response = await apiFetch('/api/mod-store/private-delivery', { timeoutMs: 30_000, signal: controller.signal })
     const body = await response.json().catch(() => ({}))
+    if (generation !== deliveryGeneration || controller.signal.aborted) return
     if (!response.ok || body?.success !== true) {
       throw new Error(responseMessage(body, `私有 Mod 状态读取失败（HTTP ${response.status}）`))
     }
@@ -326,9 +351,9 @@ async function loadDelivery() {
     remoteError.value = String(body?.data?.remote_error || '').trim()
     requestError.value = String(body?.data?.request_error || '').trim()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '私有 Mod 状态读取失败'
+    if (generation === deliveryGeneration && !controller.signal.aborted) error.value = cause instanceof Error ? cause.message : '私有 Mod 状态读取失败'
   } finally {
-    loading.value = false
+    if (generation === deliveryGeneration) loading.value = false
   }
 }
 
@@ -350,6 +375,7 @@ function stageLabel(project, track, stage) {
 }
 
 async function advanceNode(project, track, nodeId, status, note = '') {
+  const generation = accountGeneration
   if (!status || !nodeId) return
   const key = `${project.mod_id}:${track}:${nodeId}`
   savingStatus.value = key
@@ -368,18 +394,20 @@ async function advanceNode(project, track, nodeId, status, note = '') {
       timeoutMs: 30_000,
     })
     const body = await response.json().catch(() => ({}))
+    if (generation !== accountGeneration) return
     if (!response.ok || body?.success !== true) {
       throw new Error(responseMessage(body, `流程推进失败（HTTP ${response.status}）`))
     }
     await loadDelivery()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '流程推进失败'
+    if (generation === accountGeneration) error.value = cause instanceof Error ? cause.message : '流程推进失败'
   } finally {
-    savingStatus.value = ''
+    if (generation === accountGeneration) savingStatus.value = ''
   }
 }
 
 async function updateProject(project) {
+  const generation = accountGeneration
   if (!project?.mod_id || updating.value) return
   updating.value = project.mod_id
   error.value = ''
@@ -394,18 +422,37 @@ async function updateProject(project) {
       timeoutMs: 120_000,
     })
     const body = await response.json().catch(() => ({}))
+    if (generation !== accountGeneration) return
     if (!response.ok || body?.success !== true) {
       throw new Error(responseMessage(body, `私有 Mod 更新失败（HTTP ${response.status}）`))
     }
     await loadDelivery()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '私有 Mod 更新失败'
+    if (generation === accountGeneration) error.value = cause instanceof Error ? cause.message : '私有 Mod 更新失败'
   } finally {
-    updating.value = ''
+    if (generation === accountGeneration) updating.value = ''
   }
 }
 
 let deliveryPollTimer = null
+watch(() => [account.tenantId, account.marketUserId, account.localUserId, account.impersonatingMarketUserId], () => {
+  deliveryGeneration++
+  accountGeneration++
+  deliveryAbort?.abort()
+  projects.value = []
+  versionedMain.value = false
+  requests.value = []
+  requestForm.value = { open: false, kind: 'bundle', title: '', suggestedId: '', requirements: '', acceptanceCriteria: '' }
+  requestBusy.value = updating.value = savingStatus.value = ''
+  submittingRequest.value = false
+  loading.value = false
+  requestReworkNotes.value = {}
+  requestMainSource.value = {}
+  reworkRequestId.value = 0
+  closeReworkDialog()
+  error.value = remoteError.value = requestError.value = ''
+  if (account.marketUserId !== null) void loadDelivery()
+})
 onMounted(() => {
   loadDelivery()
   deliveryPollTimer = window.setInterval(() => {
@@ -413,6 +460,9 @@ onMounted(() => {
   }, 15_000)
 })
 onBeforeUnmount(() => {
+  deliveryGeneration++
+  accountGeneration++
+  deliveryAbort?.abort()
   if (deliveryPollTimer) window.clearInterval(deliveryPollTimer)
 })
 </script>

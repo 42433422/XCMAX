@@ -2,10 +2,13 @@ param(
   [Parameter(Mandatory = $true)]
   [ValidateSet('personal', 'enterprise')]
   [string]$ProductSku,
-  [string]$UnpackedDir = ''
+  [string]$UnpackedDir = '',
+  [string]$Version = ''
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 
 $readProfileScript = Join-Path $PSScriptRoot "read-host-profile-stage-ids.py"
@@ -27,7 +30,7 @@ foreach ($item in @($parsedIds)) {
 $erpMod = 'xcagi-erp-domain-bridge'
 
 if (-not $UnpackedDir) {
-  $ver = '1.0.0.0'
+  $ver = $Version
   if ($env:XCAGI_VERIFY_VERSION) { $ver = $env:XCAGI_VERIFY_VERSION }
   $UnpackedDir = Join-Path $Root "release\xcagi-v$ver\$ProductSku\win-unpacked\resources\backend\_internal\mods"
 }

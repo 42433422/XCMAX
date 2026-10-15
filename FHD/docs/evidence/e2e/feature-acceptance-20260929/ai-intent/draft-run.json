@@ -1,0 +1,69 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ai-intent",
+ "name": "意图识别与工具路由",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/ai/intent/test 请求体 {\"message\": \"帮我查一下库存\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/ai/intent/test（写操作自动附带 CSRF）：规则+模型意图识别：库存",
+   "expected": "规则+模型意图识别：库存：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 18ms；primary_intent=materials tool_key=materials sources=['rule_engine']",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/ai/intent/test 请求体 {\"message\": \"打印一张产品标签\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/ai/intent/test（写操作自动附带 CSRF）：意图识别：打印标签",
+   "expected": "意图识别：打印标签：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 72ms；primary_intent=print_label tool_key=print_label",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "POST /api/ai/intent/test 请求体 {\"message\": \"你好\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/ai/intent/test（写操作自动附带 CSRF）：意图识别：问候不路由到业务工具",
+   "expected": "意图识别：问候不路由到业务工具：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 68ms；is_greeting=True",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /chat-debug",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /chat-debug，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /chat-debug，页面可见 调试，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /chat-debug；命中文本 ['调试']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 对话调试 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 聊天调试工作台 |  | 测试普通版/专业版的意图和流程分支。此页只做本地模拟，不调用真实工具。 |  | 输入与模式 | 快速测试样例 | 产品查询 | 客户",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ai-intent",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-intent/macos/result.png",
+   "sha256": "b64dab46c0c90ee16a7b44df6c9cf50a27df60d53bdb9b4b77dfb936f5329725",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ai-intent",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-intent/macos/operation.webm",
+   "sha256": "5ad0e15053ace1839a8e8cb2be1876ac41b92c559114725d3ce31e0421331af3",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-intent/macos/run.log",
+  "sha256": "6841576e41fc88ae2242f2ae33b31ee5a4979a76b5234ff1dc0afc219971e698",
+  "bytes": 1320
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

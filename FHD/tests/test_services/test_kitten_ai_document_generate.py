@@ -1,7 +1,10 @@
 """测试 kitten_ai_document/generate 模块的文档生成功能。"""
 
 import json
+from io import BytesIO
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from zipfile import ZipFile
 
 import pytest
 
@@ -11,36 +14,55 @@ from app.services.kitten_ai_document.generate import (
     _strip_json_fence,
     build_docx_bytes,
     build_xlsx_bytes,
+    generate_office_file,
 )
+
+
+@pytest.mark.parametrize("account", ["account-a", "account-b"])
+def test_document_uses_scoped_authenticated_client(monkeypatch, account):
+    from app.infrastructure.llm import client as llm
+
+    fallback = object()
+    monkeypatch.setattr(llm, "get_llm_client", lambda: fallback)
+    monkeypatch.setattr("app.services.kitten_ai_document.generate.resolve_mode", lambda: "online")
+    spec = {"title": account, "sections": [{"paragraphs": ["唯一标记", "文档内容读回"]}]}
+    create = MagicMock(
+        return_value=SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(spec)))],
+        )
+    )
+    authenticated = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    with llm.llm_client_scope(authenticated, f"{account}/model"):
+        content, filename = generate_office_file("请生成文档", "docx")
+        assert llm.get_openai_compatible_client() is authenticated
+    assert filename == f"{account}.docx"
+    assert create.call_args.kwargs["model"] == f"{account}/model"
+    with ZipFile(BytesIO(content)) as archive:
+        xml = archive.read("word/document.xml").decode()
+        assert "唯一标记" in xml and "文档内容读回" in xml
+    assert llm.get_openai_compatible_client() is fallback
+
 
 # ---------------------------------------------------------------------------
 # _strip_json_fence
 # ---------------------------------------------------------------------------
 
 
-class TestStripJsonFence:
-    def test_no_fence(self):
-        assert _strip_json_fence('{"a": 1}') == '{"a": 1}'
-
-    def test_json_fence_with_language(self):
-        text = '```json\n{"a": 1}\n```'
-        assert _strip_json_fence(text) == '{"a": 1}'
-
-    def test_json_fence_without_language(self):
-        text = '```\n{"a": 1}\n```'
-        assert _strip_json_fence(text) == '{"a": 1}'
-
-    def test_whitespace_handling(self):
-        text = '  ```json\n{"a": 1}\n```  '
-        result = _strip_json_fence(text)
-        assert result == '{"a": 1}'
-
-    def test_empty_string(self):
-        assert _strip_json_fence("") == ""
-
-    def test_fence_with_custom_lang(self):
-        text = '```typescript\n{"a": 1}\n```'
-        assert _strip_json_fence(text) == '{"a": 1}'
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ('{"a": 1}', '{"a": 1}'),
+        ('```json\n{"a": 1}\n```', '{"a": 1}'),
+        ('```\n{"a": 1}\n```', '{"a": 1}'),
+        ('  ```json\n{"a": 1}\n```  ', '{"a": 1}'),
+        ("", ""),
+        ('```typescript\n{"a": 1}\n```', '{"a": 1}'),
+    ],
+)
+def test_strip_json_fence(text, expected):
+    assert _strip_json_fence(text) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -103,35 +125,16 @@ class TestExtractFirstJsonObject:
 # ---------------------------------------------------------------------------
 
 
-class TestDocumentSpecTimeout:
-    def test_default_timeout(self):
-        with patch.dict("os.environ", {}, clear=True):
-            # Remove the env var if it exists
-            import os
-
-            os.environ.pop("FHD_DOCUMENT_SPEC_TIMEOUT_SEC", None)
-            result = _document_spec_timeout_sec()
-            assert result == 180.0
-
-    def test_custom_timeout(self):
-        with patch.dict("os.environ", {"FHD_DOCUMENT_SPEC_TIMEOUT_SEC": "60"}):
-            result = _document_spec_timeout_sec()
-            assert result == 60.0
-
-    def test_minimum_clamp(self):
-        with patch.dict("os.environ", {"FHD_DOCUMENT_SPEC_TIMEOUT_SEC": "5"}):
-            result = _document_spec_timeout_sec()
-            assert result == 15.0
-
-    def test_maximum_clamp(self):
-        with patch.dict("os.environ", {"FHD_DOCUMENT_SPEC_TIMEOUT_SEC": "999"}):
-            result = _document_spec_timeout_sec()
-            assert result == 600.0
-
-    def test_invalid_value_defaults(self):
-        with patch.dict("os.environ", {"FHD_DOCUMENT_SPEC_TIMEOUT_SEC": "not_a_number"}):
-            result = _document_spec_timeout_sec()
-            assert result == 180.0
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(None, 180.0), ("60", 60.0), ("5", 15.0), ("999", 600.0), ("not_a_number", 180.0)],
+)
+def test_document_spec_timeout(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv("FHD_DOCUMENT_SPEC_TIMEOUT_SEC", raising=False)
+    else:
+        monkeypatch.setenv("FHD_DOCUMENT_SPEC_TIMEOUT_SEC", value)
+    assert _document_spec_timeout_sec() == expected
 
 
 # ---------------------------------------------------------------------------

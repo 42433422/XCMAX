@@ -54,6 +54,7 @@ WORKFLOW_RENAMES = {
     "modstore-tests.yml": "fhd-modstore-tests.yml",
     "intent-benchmark.yml": "fhd-intent-benchmark.yml",
     "slo-metrics-collect.yml": "fhd-slo-metrics-collect.yml",
+    "release-acceptance-closeout.yml": "fhd-release-acceptance-closeout.yml",
 }
 
 # These workflows use only absolute/remote commands.  Injecting the normal FHD
@@ -308,7 +309,7 @@ def _prefix_trigger_paths(content: str, out_name: str) -> str:
                 raw = match.group(3)
                 if raw.startswith(".github/workflows/"):
                     raw = f".github/workflows/{out_name}"
-                elif not raw.startswith("成都修茈科技有限公司/"):
+                elif not raw.startswith(("成都修茈科技有限公司/", "FHD/")):
                     raw = f"成都修茈科技有限公司/{raw}"
                 line = f"{match.group(1)}- {match.group(2)}{raw}{match.group(2)}"
         result.append(line)

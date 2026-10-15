@@ -30,6 +30,12 @@ _pytest_runtime_root = Path(tempfile.mkdtemp(prefix="modstore_pytest_runtime_"))
 atexit.register(shutil.rmtree, _pytest_runtime_root, True)
 os.environ.setdefault("MODSTORE_PUBLIC_OUTPUT_ROOT", str(_pytest_runtime_root / "public"))
 
+# 运行时根目录默认是共享固定路径 /tmp/modstore_runtime（para_outbox、员工工作区、
+# 沙箱等落在此处）：沙箱禁写会批量失败、并发测试互写同一目录（2026-09-05 审计 R06
+# 的「路由测试偶发失败」根因即 Para 派发路由 outbox 写该固定路径）。测试默认隔离到
+# 临时根；显式 setenv 的用例（monkeypatch.setenv）仍会覆盖此值。
+os.environ.setdefault("MODSTORE_RUNTIME_DIR", str(_pytest_runtime_root))
+
 # 未显式配置时使用临时 SQLite，避免本机 modstore.db 历史表结构缺列（如 ORM 新增列）导致测试失败。
 if not (os.environ.get("MODSTORE_DB_PATH") or "").strip():
     _pytest_db_dir = Path(tempfile.mkdtemp(prefix="modstore_pytest_"))

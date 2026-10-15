@@ -1,0 +1,9 @@
+[14:25:32] feature=mods-bridge platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-bridge
+[14:25:44] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[14:25:51] case B1: passed - ERP 域桥接状态真实读取
+[14:25:51] case B2: passed - 审批桥接状态真实读取
+[14:25:51] case B3: passed - 客服桥接状态真实读取
+[14:25:51] case B4: passed - 神经总线桥接状态真实读取
+[14:25:51] case B5: passed - 桥接包内不存在路由被拒（负例/边界）
+[14:25:51] video: mods-bridge-web-20260929-142532.webm (1462312 bytes)
+[14:25:51] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-bridge/log/mods-bridge-web-20260929-142532.log

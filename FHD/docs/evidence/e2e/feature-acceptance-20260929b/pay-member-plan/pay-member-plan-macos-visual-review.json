@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "pay-member-plan",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "a5d4ec461743dd238eda27f14ef7bc472cff802889601164ad09f57b07bfe333",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置模型服务。余额 ¥96.86，会员普通用户，修茈会员套餐 3 档。当前行业未加载。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/pay-member-plan/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/pay-member-plan/macos/result.png"
+}

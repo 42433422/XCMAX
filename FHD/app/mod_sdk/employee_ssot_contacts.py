@@ -186,7 +186,7 @@ def derive_employee_contacts(
                     source="installed" if is_installed else "planned",
                     installed=is_installed,
                     description=desc
-                    or ("已安装，可联系" if is_installed else "编制内但未安装 employee_pack"),
+                    or ("已安装，可联系" if is_installed else "编制内但未安装员工包"),
                 )
             )
 

@@ -32,69 +32,71 @@ def _assert_inventory_run(repo: InMemoryAgentRunRepository, run_id: str, action:
     }
 
 
+@pytest.mark.parametrize(
+    "action,method,path,payload,expected,result",
+    [
+        (
+            "create_storage_location",
+            "POST",
+            "/locations",
+            {"code": "A-01"},
+            ({"code": "A-01"},),
+            {"success": True, "id": 11},
+        ),
+        (
+            "update_storage_location",
+            "PUT",
+            "/locations/10",
+            {"status": "full"},
+            (10, {"status": "full"}),
+            {"success": True, "data": {"id": 10}},
+        ),
+        (
+            "create_warehouse",
+            "POST",
+            "/warehouses",
+            {"name": "主仓"},
+            ({"name": "主仓"},),
+            {"success": True, "data": {"id": 3}},
+        ),
+        (
+            "update_warehouse",
+            "PUT",
+            "/warehouses/3",
+            {"name": "副仓"},
+            (3, {"name": "副仓"}),
+            {"success": True, "data": {"id": 3}},
+        ),
+        ("delete_warehouse", "DELETE", "/warehouses/3", None, (3,), {"success": True}),
+    ],
+)
 def test_inventory_structure_mutation_routes_execute_through_agent_orchestrator(
     tmp_path,
     monkeypatch,
+    action,
+    method,
+    path,
+    payload,
+    expected,
+    result,
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
-    svc.create_storage_location.return_value = {"success": True, "id": 11}
-    svc.update_storage_location.return_value = {"success": True, "data": {"id": 10}}
-    svc.create_warehouse.return_value = {"success": True, "data": {"id": 3}}
-    svc.update_warehouse.return_value = {"success": True, "data": {"id": 3}}
-    svc.delete_warehouse.return_value = {"success": True}
+    getattr(svc, action).return_value = result
     client = _client(svc, monkeypatch)
-
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-
     with patch(
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
         return_value=repo,
     ):
-        create_location = client.post(
-            "/api/inventory/locations",
-            json={"code": "A-01"},
-            headers={"X-User-Id": "tenant-a"},
+        response = client.request(
+            method, "/api/inventory" + path, json=payload, headers={"X-User-Id": "tenant-a"}
         )
-        update_location = client.put(
-            "/api/inventory/locations/10",
-            json={"status": "full"},
-            headers={"X-User-Id": "tenant-a"},
-        )
-        create_warehouse = client.post(
-            "/api/inventory/warehouses",
-            json={"name": "主仓"},
-            headers={"X-User-Id": "tenant-a"},
-        )
-        update_warehouse = client.put(
-            "/api/inventory/warehouses/3",
-            json={"name": "副仓"},
-            headers={"X-User-Id": "tenant-a"},
-        )
-        delete_warehouse = client.delete(
-            "/api/inventory/warehouses/3",
-            headers={"X-User-Id": "tenant-a"},
-        )
-
-    assert create_location.status_code == 200
-    assert update_location.status_code == 200
-    assert create_warehouse.status_code == 200
-    assert update_warehouse.status_code == 200
-    assert delete_warehouse.status_code == 200
-
-    svc.create_storage_location.assert_called_once_with({"code": "A-01"})
-    svc.update_storage_location.assert_called_once_with(10, {"status": "full"})
-    svc.create_warehouse.assert_called_once_with({"name": "主仓"})
-    svc.update_warehouse.assert_called_once_with(3, {"name": "副仓"})
-    svc.delete_warehouse.assert_called_once_with(3)
-
-    _assert_inventory_run(repo, create_location.json()["run_id"], "create_storage_location")
-    _assert_inventory_run(repo, update_location.json()["run_id"], "update_storage_location")
-    _assert_inventory_run(repo, create_warehouse.json()["run_id"], "create_warehouse")
-    _assert_inventory_run(repo, update_warehouse.json()["run_id"], "update_warehouse")
-    _assert_inventory_run(repo, delete_warehouse.json()["run_id"], "delete_warehouse")
+    assert response.status_code == 200
+    getattr(svc, action).assert_called_once_with(*expected)
+    _assert_inventory_run(repo, response.json()["run_id"], action)
 
 
 def test_inventory_stock_mutation_routes_execute_through_agent_orchestrator(
@@ -143,7 +145,7 @@ def test_inventory_stock_mutation_routes_execute_through_agent_orchestrator(
 
     assert svc.inventory_in.call_args.kwargs["unit_price"] is None
     assert svc.inventory_in.call_args.kwargs["quantity"] == 3.0
-    assert svc.inventory_out.call_args.kwargs["unit_price"] == 5.0
+    assert "unit_price" not in svc.inventory_out.call_args.kwargs
     assert svc.inventory_transfer.call_args.kwargs["from_warehouse_id"] == 2
     assert svc.inventory_transfer.call_args.kwargs["quantity"] == 1.0
 

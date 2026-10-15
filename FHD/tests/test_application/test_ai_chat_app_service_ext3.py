@@ -16,18 +16,9 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-
-
-def _make_service():
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
-
+from tests.test_application.ai_chat_test_helpers import (
+    _make_svc as _make_service,
+)
 
 # ========================= _skip_pro_excel_deterministic_import - extended =
 
@@ -546,17 +537,25 @@ class TestResolveSheetNameForReimportExtended:
 
 
 class TestResolveExcelPathForImportExtended:
-    def test_from_excel_analysis(self):
+    def test_out_of_root_blocked(self):
+        # CodeQL #3730 加固契约：出根路径（应用数据/临时目录之外）一律返回空
         result = AIChatApplicationService._resolve_excel_path_for_import(
             {"file_path": "/path/to/file.xlsx"}, {}
         )
-        assert result == "/path/to/file.xlsx"
+        assert result == ""
 
     def test_from_preview_data_fallback(self):
+        # 出根路径同样拦截，即便来自 preview_data 回退
         result = AIChatApplicationService._resolve_excel_path_for_import(
             {"file_path": ""}, {"file_path": "/fallback/path.xlsx"}
         )
-        assert result == "/fallback/path.xlsx"
+        assert result == ""
+
+    def test_within_temp_root_passthrough(self, tmp_path):
+        # 根内路径放行
+        fp = str(tmp_path / "in.xlsx")
+        result = AIChatApplicationService._resolve_excel_path_for_import({"file_path": fp}, {})
+        assert result == fp
 
     def test_empty_both(self):
         result = AIChatApplicationService._resolve_excel_path_for_import({}, {})
@@ -1189,21 +1188,11 @@ class TestExtractExcelImportRecordsDeep:
 
 
 class TestProcessChatDeepErrors:
-    def _make_service_with_mock(self):
-        with (
-            patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-            patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-            patch("app.application.ai_chat_app_service.HybridRiskGate"),
-            patch("app.application.ai_chat_app_service.WorkflowEngine"),
-            patch("app.application.ai_chat_app_service.get_approval_service"),
-        ):
-            return AIChatApplicationService()
-
     def test_connection_error(self):
         async def raise_conn(*a, **kw):
             raise ConnectionError("refused")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_conn
         service.ai_service = mock_ai
@@ -1212,7 +1201,7 @@ class TestProcessChatDeepErrors:
             patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
             patch("app.services.get_conversation_service"),
         ):
-            result = service.process_chat("u1", "hello")
+            result = service.process_chat("u1", "随便说点什么")
         assert result["success"] is False
         assert "连接失败" in result.get("message", "") or "连接失败" in result.get("response", "")
 
@@ -1220,7 +1209,7 @@ class TestProcessChatDeepErrors:
         async def raise_timeout(*a, **kw):
             raise TimeoutError("timed out")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_timeout
         service.ai_service = mock_ai
@@ -1229,7 +1218,7 @@ class TestProcessChatDeepErrors:
             patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
             patch("app.services.get_conversation_service"),
         ):
-            result = service.process_chat("u1", "hello")
+            result = service.process_chat("u1", "随便说点什么")
         assert result["success"] is False
         assert "超时" in result.get("message", "") or "超时" in result.get("response", "")
 
@@ -1237,7 +1226,7 @@ class TestProcessChatDeepErrors:
         async def raise_api_key(*a, **kw):
             raise RuntimeError("api_key is invalid")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_api_key
         service.ai_service = mock_ai
@@ -1246,7 +1235,7 @@ class TestProcessChatDeepErrors:
             patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
             patch("app.services.get_conversation_service"),
         ):
-            result = service.process_chat("u1", "hello")
+            result = service.process_chat("u1", "随便说点什么")
         assert result["success"] is False
         assert "AI 服务暂时不可用" in result.get("message", "")
 
@@ -1254,7 +1243,7 @@ class TestProcessChatDeepErrors:
         async def raise_conn_str(*a, **kw):
             raise RuntimeError("connection refused by remote")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_conn_str
         service.ai_service = mock_ai
@@ -1263,7 +1252,7 @@ class TestProcessChatDeepErrors:
             patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
             patch("app.services.get_conversation_service"),
         ):
-            result = service.process_chat("u1", "hello")
+            result = service.process_chat("u1", "随便说点什么")
         assert result["success"] is False
         assert "AI 服务暂时不可用" in result.get("message", "")
 
@@ -1271,7 +1260,7 @@ class TestProcessChatDeepErrors:
         async def raise_generic(*a, **kw):
             raise RuntimeError("unknown internal error")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_generic
         service.ai_service = mock_ai
@@ -1280,7 +1269,7 @@ class TestProcessChatDeepErrors:
             patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
             patch("app.services.get_conversation_service"),
         ):
-            result = service.process_chat("u1", "hello")
+            result = service.process_chat("u1", "随便说点什么")
         assert result["success"] is False
         assert "暂时不可用" in result.get("message", "") or "暂时不可用" in result.get(
             "response", ""
@@ -1296,7 +1285,7 @@ class TestProcessChatDeepErrors:
         async def mock_chat(*a, **kw):
             return {"success": True, "text": "结果", "action": "followup", "data": {}}
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = mock_chat
         service.ai_service = mock_ai

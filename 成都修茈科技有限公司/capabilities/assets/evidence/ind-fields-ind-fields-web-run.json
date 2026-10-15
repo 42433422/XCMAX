@@ -1,0 +1,327 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ind-fields",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-143011",
+  "generated_at": "2026-09-29 14:30:29",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：读取行业清单（各行业字段/单位配置）→ 读取行业预置包目录（通用/饰品包装/涂料/考勤…）→ 读取行业基线（分组与起步能力）→ 以真实 404 记录查询不存在行业被拒（边界/负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 47551,
+        "processed": 47545,
+        "errors": 0,
+        "dropped": 6,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 2,
+            "max_cache_size": 1000,
+            "hits": 25,
+            "misses": 2,
+            "hit_rate": 0.9259259259259259,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-fields/ind-fields-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ind-fields",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-fields/shot/00-login-form.png",
+      "sha256": "fb0ac7635d700b66b9217242e972a9f7dd7c2b55eaa3e17ef77c72d5304e99ac",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-fields",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-fields/shot/F1-industry-fields.png",
+      "sha256": "021fdcc546294687d26f9e202faeba0986062c7960b3eed47d5da450c8a2ba8e",
+      "visual_review": "accepted",
+      "visible_result": "卡片汇总三处真实响应：GET /api/system/industries 200 返回行业清单（含考勤等，各带 config 字段/单位）；GET /api/system/industry-presets 200 返回 preset_ids=[通用,饰品包装,涂料,考勤,批发,电商,餐饮,物流,管理端]；GET /api/platform-shell/industry-baseline 200 返回 industry_id=general 与分组。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-fields",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-fields/shot/F4-industry-not-found.png",
+      "sha256": "6d15bc6ad58366211f2c890aab6336f7f4f00f00c637b8dfd6b4fbd00ae2ccbd",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/system/industry/not-a-real-industry 返回 404，error_code=http_404，message=Industry not found。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-fields",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-fields/video/ind-fields-web-20260929-143011.webm",
+      "sha256": "29119695dfc9d266bcf200f111e7434ec5c475ba998c74ef0926c6c921dd7c04",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，17.96s，ffmpeg 实测）：管理员登录 → 行业清单 → 预置包 → 行业基线 → 不存在行业 404。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "F1",
+      "title": "行业字段配置清单真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/system/industries。",
+      "expected": "HTTP 200，industries 非空且每项含 config。",
+      "observed": "{\"status\": 200, \"industry_count\": 3, \"ids\": [\"考勤\", \"涂料\", \"饰品包装\"]}",
+      "result": "passed"
+    },
+    {
+      "id": "F2",
+      "title": "行业预置包目录真实读取",
+      "input": "同上。",
+      "actions": "页面上下文 fetch GET /api/system/industry-presets。",
+      "expected": "HTTP 200，preset_ids 非空且含 presets 映射。",
+      "observed": "{\"status\": 200, \"preset_ids\": [\"通用\", \"饰品包装\", \"涂料\", \"考勤\", \"批发\", \"电商\", \"餐饮\", \"物流\", \"管理端\"]}",
+      "result": "passed"
+    },
+    {
+      "id": "F3",
+      "title": "行业基线配置真实读取",
+      "input": "同上。",
+      "actions": "页面上下文 fetch GET /api/platform-shell/industry-baseline。",
+      "expected": "HTTP 200，含 industry_id 与 groups。",
+      "observed": "{\"status\": 200, \"industry_id\": \"general\", \"group_count\": 2}",
+      "result": "passed"
+    },
+    {
+      "id": "F4",
+      "title": "查询不存在行业被拒（负例/边界）",
+      "input": "同上。",
+      "actions": "页面上下文 fetch GET /api/system/industry/not-a-real-industry。",
+      "expected": "HTTP 404。",
+      "observed": "{\"status\": 404, \"body\": {\"success\": false, \"error_code\": \"http_404\", \"message\": \"Industry not found: not-a-real-industry\", \"path\": \"/api/system/industry/not-a-real-industry\"}}",
+      "result": "passed"
+    }
+  ]
+}

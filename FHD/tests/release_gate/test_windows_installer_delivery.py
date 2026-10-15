@@ -1,9 +1,14 @@
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from scripts.dev.mods_ssot import EXPORT_ONLY_MODS, EXPORT_ROOT, SSOT_ROOT  # noqa: E402
 
 
 def test_enterprise_bundle_covers_required_host_bridges():
@@ -14,13 +19,31 @@ def test_enterprise_bundle_covers_required_host_bridges():
     assert required <= set(enterprise["sku_bundled_mod_ids"])
 
 
+def _mod_manifest_exists(mod_id: str) -> bool:
+    """双路径解析：编辑源 SSOT 优先；EXPORT_ONLY mod 落在运行时副本 SSOT。"""
+    if mod_id in EXPORT_ONLY_MODS:
+        return (EXPORT_ROOT / mod_id / "manifest.json").is_file()
+    return (SSOT_ROOT / mod_id / "manifest.json").is_file()
+
+
+def test_attendance_workspace_open_to_generic_users():
+    """考勤工作区通用开放：enterprise 捆绑 attendance-industry；suppress 只压太阳鸟 legacy。"""
+    base = json.loads((ROOT / "config/host_profiles/_base.json").read_text())
+    enterprise = json.loads((ROOT / "config/host_profiles/enterprise.json").read_text())
+    suppress = base["client_mod_policies"]["suppress_generic_shell_mod_ids"]
+    assert "attendance-industry" not in suppress
+    assert "taiyangniao-pro" in suppress
+    for field in ("package_stage_ids", "sku_bundled_mod_ids"):
+        assert "attendance-industry" in enterprise[field], field
+
+
 def test_profile_stage_lists_only_existing_modules():
     for sku in ("personal", "enterprise"):
         profile = json.loads((ROOT / f"config/host_profiles/{sku}.json").read_text())
         for field in ("package_stage_ids", "sku_bundled_mod_ids"):
             assert "wechat-contacts-ai-employee" not in profile[field]
             for mod_id in profile[field]:
-                assert (ROOT / "mods" / mod_id / "manifest.json").is_file(), mod_id
+                assert _mod_manifest_exists(mod_id), mod_id
 
 
 def test_manual_installer_is_part_of_official_workflow_without_stable_publication():
@@ -29,6 +52,9 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert job["runs-on"] == "windows-latest"
     assert "inputs.windows_installer_only == true" in job["if"]
     assert "inputs.windows_installer_only != true" in workflow["jobs"]["release-preflight"]["if"]
+    assert "inputs.candidate_only != true" in workflow["jobs"]["release-preflight"]["if"]
+    runs = "\n".join(step.get("run", "") for step in job["steps"])
+    assert "Candidate must bind to the selected main SHA" in runs
     text = yaml.safe_dump(job)
     assert "Partial signing configuration" in text
     assert "test-windows-signature-policy.ps1" in text
@@ -46,6 +72,22 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert all(path.startswith("FHD/delivery/") and not path.endswith("/") for path in paths)
     assert paths[-1] == "FHD/delivery/delivery-receipt.json"
     assert "sunbird-seed" not in upload["with"]["path"]
+    publish = workflow["jobs"]["publish-interim-windows-pointer"]
+    assert "inputs.candidate_only != true" in publish["if"]
+    assert "inputs.candidate_run_id != ''" in publish["if"]
+    assert "result == 'success'" not in publish["if"]
+    runs = "\n".join(step.get("run", "") for step in publish["steps"])
+    assert "for mode in Clean Upgrade Gui Recovery Rollback; do" in runs
+    acceptance = (ROOT / ".github/workflows/windows-candidate-acceptance.yml").read_text()
+    assert '["Clean","Upgrade","Gui","Recovery","Rollback"]' in acceptance
+    assert "matrix.mode != 'Clean' && matrix.mode != 'Rollback'" not in acceptance
+    collector = (ROOT / "scripts/package/accept-windows-candidate.ps1").read_text("utf-8-sig")
+    rollback = collector.partition("  if ($Mode -eq 'Rollback') {")[2]
+    rollback = rollback.partition("  if ($Mode -eq 'Upgrade')")[0]
+    assert "Run-Gui 'seed' (Join-Path $EvidenceDir 'old-gui')" in rollback
+    assert "Invoke-FailedRollback $oldAuth.tenant $oldGuiSeed" in rollback
+    assert "Run-Gui 'readback' (Join-Path $EvidenceDir 'rollback-gui') $seed" in collector
+    assert "@('Gui','Upgrade','Recovery','Rollback')" in collector
 
 
 def test_unsigned_opt_in_never_accepts_invalid_signatures():
@@ -70,3 +112,134 @@ def test_stable_lane_still_requires_signing():
     workflow = yaml.safe_load((ROOT / ".github/workflows/release-desktop.yml").read_text())
     assert workflow["jobs"]["windows"]["env"]["XCAGI_REQUIRE_WINDOWS_SIGNING"] == "1"
     assert "verify-public-windows-signature" in workflow["jobs"]["publish-website-pointer"]["needs"]
+
+
+def test_retired_customer_workflow_cannot_checkout_old_sources(tmp_path):
+    workflow = yaml.safe_load((ROOT / ".github/workflows/sunbird-installer.yml").read_text())
+    trigger = workflow.get("on", workflow.get(True))
+    assert not (trigger["workflow_dispatch"] or {}).get("inputs")
+    assert workflow["defaults"]["run"]["working-directory"] == "."
+    steps = [step for job in workflow["jobs"].values() for step in job["steps"]]
+    assert len(steps) == 1
+    assert all("uses" not in step for step in steps)
+    # Execute the actual sole job command: historical acknowledgements and refs
+    # cannot cause checkout, packaging or publication before this refusal.
+    result = subprocess.run(
+        ["bash", "-c", steps[0]["run"]],
+        cwd=tmp_path,
+        env={"acknowledge_retired": "retired-ok", "source_ref": "feat/enterprise-deploy-maturity"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "retired" in (result.stdout + result.stderr).lower()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_standard_installer_refuses_customer_seed_before_building():
+    script = (ROOT / "scripts/package/build-installer.ps1").read_text()
+    guard = script.index("if ($SunbirdSeedZipPath)")
+    setup = script.index("$Root = Resolve-Path")
+    assert guard < setup
+    assert 'throw "Customer seed embedding is retired.' in script[guard:setup]
+    assert "-p:SunbirdSeedZipPath=" not in script
+
+
+def test_frozen_promotion_accepts_real_mode_results_and_rejects_failures(tmp_path):
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release-desktop.yml").read_text())
+    steps = workflow["jobs"]["publish-interim-windows-pointer"]["steps"]
+    script = next(
+        s["run"]
+        for s in steps
+        if s.get("name") == "Verify all five frozen candidate acceptance modes"
+    )
+    script = script.replace("${{ inputs.release_sha }}", "a" * 40)
+    (tmp_path / "delivery").mkdir()
+    (tmp_path / "delivery/delivery-receipt.json").write_text(json.dumps({"sha256": "b" * 64}))
+    results = {
+        "Clean": "passed",
+        "Upgrade": "passed",
+        "Gui": "gui_regression_passed",
+        "Recovery": "gui_recovery_regression_passed",
+        "Rollback": "rollback_passed",
+    }
+    for mode, result in results.items():
+        path = tmp_path / "acceptance" / f"windows-candidate-evidence-{mode}-{'a' * 40}"
+        path.mkdir(parents=True)
+        (path / "acceptance.json").write_text(
+            json.dumps(
+                {
+                    "mode": mode,
+                    "result": result,
+                    "candidate_sha": "a" * 40,
+                    "candidate_sha256": "b" * 64,
+                    "checks": [{"passed": True}],
+                }
+            )
+        )
+    command = f'export RUNNER_TEMP="{tmp_path}";\n{script}'
+    assert subprocess.run(["bash", "-eu", "-c", command], capture_output=True).returncode == 0
+    for path in (tmp_path / "acceptance").glob("*/acceptance.json"):
+        original = path.read_text()
+        path.write_text(original.replace('"passed": true', '"passed": false'))
+        assert subprocess.run(["bash", "-eu", "-c", command], capture_output=True).returncode != 0
+        path.write_text(original)
+
+
+def test_legacy_rollback_address_keeps_strict_ui_and_field_checks():
+    script = ROOT / "scripts/dev/record_enterprise_desktop_init.mjs"
+    harness = r"""
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const guard = source.split('const legacyRollback = ')[1].split('\nconst seed')[0];
+const body = source.split("if (kind === 'customer' && legacyRollback) {\n")[1]
+  .split('\n      }')[0];
+const fieldFilter = source.match(/\.filter\(\(\[key, value\]\) => ([^)]+)\)\)/)[1] + ')';
+const old = '2e6f03bf67b88965e450721e5b8432ab6395782b';
+for (const [phase, mode, sha, wanted] of [
+  ['readback', 'Rollback', old, true], ['readback', 'Upgrade', old, false],
+  ['readback', 'Recovery', old, false], ['seed', 'Rollback', old, false],
+  ['readback', 'Rollback', '37c6de2293a4724dd32d1712d240ac72e3ba8889', false],
+  ['readback', 'Rollback', '', false],
+]) {
+  const process = { env: { XCAGI_GUI_MODE: mode, XCAGI_GUI_BUILD_SHA: sha } };
+  assert.equal(vm.runInNewContext(guard, { phase, process }), wanted);
+}
+for (const legacyRollback of [true, false]) {
+  const keep = key => vm.runInNewContext(fieldFilter, { key, value: 'original', legacyRollback });
+  assert.equal(keep('contact_address'), !legacyRollback);
+  assert.equal(keep('contact_person'), true); assert.equal(keep('contact_phone'), true);
+}
+async function run(address, screenshotFails = false) {
+  const calls = [], row = {}, dialog = { locator: () => 'heading' };
+  const context = {
+    row, kind: 'customer', dir: '/evidence', path: require('node:path'),
+    seed: { cases: [{ id: 'customer', actual: { original_fields: { contact_address: 'original' } } }] },
+    click: async (name, scope) => { calls.push(name); assert.equal(scope, name === '编辑' ? row : dialog); },
+    modal: () => dialog,
+    field: label => { assert.equal(label, '地址'); return { locator: () => ({ first: () => address }) }; },
+    expect: actual => ({
+      toHaveText: async wanted => { assert.equal(actual, 'heading'); assert.equal(wanted, '编辑客户'); },
+      toHaveValue: async wanted => assert.equal(actual, wanted),
+      toHaveCount: async wanted => { assert.equal(wanted, 0); assert.equal(calls.at(-1), '取消'); },
+    }),
+    page: { screenshot: async options => {
+      calls.push('screenshot'); assert.equal(options.timeout, 60000);
+      if (screenshotFails) throw new Error('capture failed');
+    } },
+  };
+  await vm.runInNewContext('(async () => {' + body + '\n})()', context);
+  assert.deepEqual(calls, ['编辑', 'screenshot', '取消']);
+}
+(async () => {
+  await run('original');
+  await assert.rejects(run('lost-address')); await assert.rejects(run('original', true));
+})().catch(error => { console.error(error); process.exitCode = 1; });
+"""
+    subprocess.run(["node", "-e", harness, str(script)], check=True)
+    text = script.read_text()
+    assert "observedRows.get(name)?.[key] ?? ''" in text
+    collector = (ROOT / "scripts/package/accept-windows-candidate.ps1").read_text()
+    assert "$env:XCAGI_GUI_MODE = $Mode" in collector
+    assert "'resources/build-info.json') -Raw | ConvertFrom-Json).gitSha" in collector

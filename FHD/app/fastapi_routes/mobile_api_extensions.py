@@ -75,7 +75,6 @@ from app.fastapi_routes.mobile_extensions.pairing_helpers import (
 from app.fastapi_routes.mobile_extensions.relay_helpers import (
     _mobile_user_identity,
     _mobile_user_public_dict,
-    _relay_admin_fallback_user,
     _relay_mobile_auth_payload,
 )
 from app.mod_sdk.assistant_ssot import dedicated_cs_label
@@ -139,6 +138,9 @@ from app.fastapi_routes.mobile_api_extensions_part01 import (
     _mobile_unauthorized_response as _mobile_unauthorized_response,
 )
 from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _pairing_rate_allowed as _pairing_rate_allowed,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
     _pairing_issue_host as _pairing_issue_host,
 )
 from app.fastapi_routes.mobile_api_extensions_part01 import (
@@ -146,9 +148,6 @@ from app.fastapi_routes.mobile_api_extensions_part01 import (
 )
 from app.fastapi_routes.mobile_api_extensions_part01 import (
     _register_desktop_relay_for_pairing as _register_desktop_relay_for_pairing,
-)
-from app.fastapi_routes.mobile_api_extensions_part01 import (
-    _resolve_mobile_relay_user as _resolve_mobile_relay_user,
 )
 from app.fastapi_routes.mobile_api_extensions_part01 import (
     _safe_mobile_sync_items as _safe_mobile_sync_items,
@@ -212,6 +211,9 @@ from app.fastapi_routes.mobile_api_extensions_part02 import (
 )
 from app.fastapi_routes.mobile_api_extensions_part02 import (
     mobile_relay_desktop_register as mobile_relay_desktop_register,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_desktop_renew as mobile_relay_desktop_renew,
 )
 from app.fastapi_routes.mobile_api_extensions_part02 import (
     mobile_relay_desktops as mobile_relay_desktops,

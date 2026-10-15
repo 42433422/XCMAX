@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "erp-master-data",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "69335b5ec6c67c648eccbd2b267a7b14dfe42c04564b821d898aa818e4aa0a87",
+  "visible_content": "产品列表仅一条 DEMO-001 演示产品；可说明列表显示，不证明客户/供应商主数据管理全链路。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/erp-master-data.png"
+}

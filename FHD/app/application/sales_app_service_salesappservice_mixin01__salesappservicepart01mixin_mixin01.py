@@ -53,19 +53,13 @@ class __SalesAppServicePart01MixinPart01Mixin:
     def quote(
         self, data: dict[str, _facade().Any], *, db: _facade().Any = None
     ) -> dict[str, _facade().Any]:
-        """创建报价单（state=quote），明细项由 items 提供。
+        """创建幂等报价；传入 db 时仅 flush/refresh，缺省时使用自有会话并提交。"""
+        from app.application.sales_quote_inputs import validated_quote_request
 
-        可选 ``idempotency_key``：同 key 重复调用不重复建单（端到端幂等，GAP-3）。
-        可选 ``db``：调用方持有的 SQLAlchemy 会话。提供时使用该精确对象并交由调用方
-        负责提交/回滚（本方法仅 flush/refresh，不 commit/rollback/close）；缺省时沿用
-        本模块 ``get_db()`` 自有会话并自行提交。
-        """
-        customer_id = data.get("customer_id")
-        items_data = data.get("items") or []
-        if not customer_id:
-            return {"success": False, "message": "缺少 customer_id"}
-        if not isinstance(items_data, list) or not items_data:
-            return {"success": False, "message": "缺少 items 明细"}
+        try:
+            items_data = validated_quote_request(data)
+        except ValueError as exc:
+            return {"success": False, "message": str(exc)}
         idempotency_key = str(data.get("idempotency_key") or "").strip() or None
         idem_marker = f"idempotency:sales_quote:{idempotency_key}" if idempotency_key else None
         owned = db is None
@@ -94,13 +88,15 @@ class __SalesAppServicePart01MixinPart01Mixin:
                         "data": existing.to_dict(),
                         "idempotent": True,
                     }
-            customer = (
-                ctx.query(_facade().Customer)
-                .filter(_facade().Customer.id == int(customer_id))
-                .first()
-            )
-            if customer is None:
-                return {"success": False, "message": f"客户不存在: customer_id={customer_id}"}
+            from app.application.sales_quote_references import resolve_quote_references
+
+            try:
+                customer, resolved_items = resolve_quote_references(ctx, data, items_data)
+            except (ValueError, TypeError) as exc:
+                return {"success": False, "message": str(exc)}
+            if customer.id is None:
+                ctx.add(customer)
+                ctx.flush()
             total_amount = _facade().Decimal("0")
             order_no = data.get("order_no") or self._generate_order_no()
             order = _facade().SalesOrder(
@@ -118,13 +114,8 @@ class __SalesAppServicePart01MixinPart01Mixin:
             )
             ctx.add(order)
             ctx.flush()
-            for item_data in items_data:
-                product_id = item_data.get("product_id")
-                product = (
-                    ctx.query(_facade().Product).filter(_facade().Product.id == product_id).first()
-                    if product_id
-                    else None
-                )
+            for item_data, product in resolved_items:
+                product_id = product.id if product is not None else None
                 quantity = _facade()._to_decimal(item_data.get("quantity", "0"))
                 unit_price = _facade()._to_decimal(item_data.get("unit_price", "0"))
                 amount = quantity * unit_price
@@ -173,11 +164,7 @@ class __SalesAppServicePart01MixinPart01Mixin:
         }
 
     def confirm(self, order_id: int, *, db: _facade().Any = None) -> dict[str, _facade().Any]:
-        """确认销售订单 → 委托 SalesLifecycleService.confirm。
-
-        可选 ``db``：调用方持有的会话，提供时构造 ``SalesLifecycleService`` 绑定该
-        精确对象且不打开 ``get_db()``，也绝不 commit/rollback/close；缺省时自开会话。
-        """
+        """委托生命周期确认；传入 db 时使用该会话且交由调用方管理事务。"""
         owned = db is None
         cm = _facade().nullcontext(db) if not owned else _facade().get_db()
         with cm as ctx:

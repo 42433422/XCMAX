@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ch-im-core",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "6009132d29f9168c506c1cbdf2d2aa37797a575b10350f2929bb6d5cbaa5e024",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。信息页，实时已连接。企业专属客服会话里有人工转接提示，右侧多条蓝色「MAC验收0929 站内消息」，标注 9/29/2026。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ch-im-core/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ch-im-core/macos/result.png"
+}

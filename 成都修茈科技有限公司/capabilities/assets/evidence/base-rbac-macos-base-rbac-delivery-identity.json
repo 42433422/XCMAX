@@ -1,0 +1,14 @@
+{
+  "feature": "base-rbac",
+  "platform": "macos",
+  "product_version": "1.0.0.5",
+  "git_sha": "9d6134d5cc37372d9e14bad83ca1fcf2ea060f56",
+  "installer": {
+    "name": "XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+    "sha256": "9dbbb533a7ea6b572b8d18c6e58dbd45ac4531097ed528ebde1a8397299917ec"
+  },
+  "source_manifest": {
+    "path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/manifest.json",
+    "sha256": "a760cc1658fedfbfde7e3db720e2789cb4ba4a95c2bbf56a5fc5f99e262e3d6d"
+  }
+}

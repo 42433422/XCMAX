@@ -6,6 +6,8 @@ from __future__ import annotations
 import importlib
 from typing import Literal
 
+from app.utils.json_safe import json_safe
+
 
 def _facade():
     return importlib.import_module("app.application.tools.workflow")
@@ -76,6 +78,7 @@ def execute_workflow_tool(
     workspace_root: str | None = None,
     *,
     db_write_token: str | None = None,
+    runtime_context: dict[str, _facade().Any] | None = None,
 ) -> str:
     if isinstance(args, str):
         try:
@@ -85,7 +88,9 @@ def execute_workflow_tool(
     if not isinstance(args, dict):
         args = {}
     if name == _facade().ERP_CAPABILITY_TOOL_NAME:
-        return _facade().execute_registered_capability(args, workspace_root=workspace_root)
+        return _facade().execute_registered_capability(
+            args, workspace_root=workspace_root, runtime_context=runtime_context
+        )
     try:
         from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
 
@@ -410,12 +415,12 @@ def execute_workflow_tool(
             )
     business_db_result = _facade().try_execute_business_db_tool(name, args)
     if business_db_result is not None:
-        return _facade().json.dumps(business_db_result, ensure_ascii=False)
+        return _facade().json.dumps(business_db_result, ensure_ascii=False, default=json_safe)
     new_tool_dispatch = _facade()._resolve_new_tool_dispatch(name)
     if new_tool_dispatch is not None:
         try:
             result = new_tool_dispatch(args)
-            return _facade().json.dumps(result, ensure_ascii=False)
+            return _facade().json.dumps(result, ensure_ascii=False, default=json_safe)
         except _facade().RECOVERABLE_ERRORS:
             return _facade().json.dumps(
                 {"success": False, "error": "tool_dispatch_failed"}, ensure_ascii=False

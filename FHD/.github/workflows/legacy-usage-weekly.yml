@@ -22,7 +22,6 @@ jobs:
           python-version: "3.11"
 
       - name: Legacy usage report (168h)
-        working-directory: FHD
         run: |
           mkdir -p metrics
           python scripts/dev/legacy_usage_report.py --since 168 --json > metrics/legacy-usage-168h.json 2>legacy-usage-168h.err || true
@@ -42,7 +41,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add FHD/metrics/legacy-usage-168h.json
+          git add metrics/legacy-usage-168h.json
           if git diff --staged --quiet; then
             echo "No legacy report changes"
             exit 0

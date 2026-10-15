@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile'
+import { buildRoleMenuProfile, canShowCoreMenuKey, tenantScopedBusinessPath } from '@/utils/roleMenuProfile'
 
 describe('roleMenuProfile', () => {
   it('keeps enterprise users on the generic host menu without an industry mod', () => {
@@ -33,5 +33,26 @@ describe('roleMenuProfile', () => {
     expect(profile.canSeeAdminMenus).toBe(true)
     expect(canShowCoreMenuKey(profile, 'products')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'orders')).toBe(true)
+  })
+
+  it('limits an invited tenant member to granted ETL navigation', () => {
+    const member = { accountKind: 'enterprise', marketIsEnterprise: true, localRole: 'tenant:3:member', permissions: [] }
+    const denied = buildRoleMenuProfile(member, true)
+    expect(canShowCoreMenuKey(denied, 'business-docking')).toBe(false)
+    expect(canShowCoreMenuKey(denied, 'products')).toBe(false)
+    expect(canShowCoreMenuKey(denied, 'chat')).toBe(false)
+    expect(canShowCoreMenuKey(buildRoleMenuProfile({ ...member, permissions: ['etl.read'] }), 'business-docking')).toBe(true)
+  })
+
+  it('keeps industry business entries visible for an enterprise founder with a tenant', () => {
+    const profile = buildRoleMenuProfile({ accountKind: 'enterprise', marketIsEnterprise: true, tenantId: 7 }, true)
+    expect(canShowCoreMenuKey(profile, 'products')).toBe(true)
+    expect(canShowCoreMenuKey(profile, 'orders')).toBe(true)
+    expect(canShowCoreMenuKey(profile, 'printer-list')).toBe(true)
+    expect(canShowCoreMenuKey(profile, 'business-docking')).toBe(true)
+    expect(canShowCoreMenuKey(profile, 'mod-store')).toBe(true)
+    expect(tenantScopedBusinessPath('orders')).toBe('/mod/xcagi-erp-domain-bridge/orders')
+    expect(tenantScopedBusinessPath('tools')).toBe('/mod/xcagi-office-employee-pack-bridge/tools')
+    expect(tenantScopedBusinessPath('chat')).toBeNull()
   })
 })

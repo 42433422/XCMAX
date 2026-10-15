@@ -55,6 +55,7 @@ class SQLAlchemyShipmentRecordStore(ShipmentRecordStorePort):
                     "doc_name": document_result.get("doc_name"),
                     "file_path": document_result.get("file_path"),
                     "order_number": document_result.get("order_number"),
+                    "date": document_result.get("date"),
                     "total_amount": document_result.get("total_amount"),
                     "total_quantity": document_result.get("total_quantity"),
                 },
@@ -79,8 +80,14 @@ class SQLAlchemyShipmentRecordStore(ShipmentRecordStorePort):
                 raw_text=raw_text or "",
                 parsed_data=parsed_data_json,
             )
+            from app.infrastructure.tenant_scope import current_tenant_id
+
+            tenant_id = current_tenant_id()
+            if isinstance(tenant_id, int):
+                record.tenant_id = tenant_id
             db.add(record)
             db.commit()
             db.refresh(record)
+            record_id = record.id
 
-        return {"success": True, "record_id": record.id}
+        return {"success": True, "record_id": record_id}

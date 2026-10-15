@@ -135,3 +135,26 @@ class TestSyncPullAiChanges:
         payload = result if isinstance(result, dict) else __import__("json").loads(result.body)
         assert payload["success"] is True
         assert payload["data"]["ai_changes"] == []
+
+
+@pytest.mark.asyncio
+async def test_circle_sync_applies_employee_profile(ext_mod, monkeypatch):
+    from app.application import ai_circle_service, employee_circle_sync
+    from app.fastapi_routes.mobile_extensions import routes_sync
+
+    posts = [{"employee_id": "fixture", "author_avatar": "old"}]
+    sync = AsyncMock()
+    monkeypatch.setattr(employee_circle_sync, "sync_modstore_reports", sync)
+    monkeypatch.setattr(ai_circle_service, "list_posts", lambda **kwargs: posts)
+    monkeypatch.setattr(ext_mod, "_mobile_sync_circle_posts", routes_sync._mobile_sync_circle_posts)
+    monkeypatch.setattr(ext_mod, "_ai_circle_user", lambda user: ("fixture", None, None))
+    monkeypatch.setattr(
+        ext_mod,
+        "_ai_circle_employee_profiles",
+        lambda: {"fixture": {"name": "Fixture employee", "avatar": "new"}},
+    )
+    result = await routes_sync._mobile_sync_circle_posts(SimpleNamespace(id="fixture"))
+    sync.assert_awaited_once()
+    assert result == [
+        {"employee_id": "fixture", "author_name": "Fixture employee", "author_avatar": "new"}
+    ]

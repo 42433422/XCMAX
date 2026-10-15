@@ -2,12 +2,12 @@
 
 > **本文件的唯一职责：说真话。** 不写愿景、不写"已完成"除非有证据。
 > 给人看，也给 AI 员工看——它们照字面信这里的每一行，所以这里只许写实测。
-> 最后更新：2026-07-24
+> 最后更新：2026-09-17
 
 ## 一句话定位
 
 被资深架构师画在**生产级图纸**上、地基三刀（SSOT / schema / 运行时真相）已通电的项目。
-结构的雄心仍略跑在业务闭环前面。**当前综合 ≈ 6.5 / 10**（地基通电后上修；无人公司业务闭环另计）。
+结构的雄心仍略跑在业务闭环前面。**成熟度不以本文自评数字表述**：能力分级计数、三线交付等级与覆盖率一律取自动生成视图 [`PRODUCT_LINES_STATUS.md`](PRODUCT_LINES_STATUS.md)；外部对标评分口径见 [`AUDIT_BENCHMARK_SSOT.md`](AUDIT_BENCHMARK_SSOT.md)。
 
 ## 客服闭环总线 SSOT（勿混）
 
@@ -23,14 +23,16 @@
 - **文档骗你往低看**：写 deps 漂移 31、k8s 漂移 51，**实测全是 0**；写"企业版无向量搜索"，其实 SQLite 暴力余弦**早已实现**。
 - **真相在中间**：很多地方**实物比文档好，但比架构差**。
 
-## 三轴打分（基于实证，非记忆）
+## 状态数字来源（禁止自评）
 
-| 维度 | 分 | 依据 |
-|---|---|---|
-| 架构设计 / 雄心 | 8 | NeuroBus 800 行带熔断/重试/死信/追踪；跨端复用 |
-| 工程治理 | 7 | SSOT gate **blocking**；双注册表互校验；neuro-bus-events 已启用 |
-| 落地 / 生产可用 | 5 | schema 旁路已封；runtime inventory 已落地；业务闭环（客服工单/Para 真修）仍有缺口 |
-| **综合** | **6.5** | 地基通电；无人公司业务层未满 |
+本文件只做**定性**陈述与问题清单，不承载任何评分或百分比。需要数字时读生成视图：
+
+| 需要什么 | 唯一来源 |
+|---|---|
+| 能力分级（已验证 / 部分验证 / 已实现待验证 / 规划中） | [`PRODUCT_LINES_STATUS.md`](PRODUCT_LINES_STATUS.md) ← 能力目录 `catalog.json` 逐项证据校验 |
+| 三线交付等级（macOS / Windows 门禁结论） | [`PRODUCT_LINES_STATUS.md`](PRODUCT_LINES_STATUS.md) ← [MACOS](MACOS_RELEASE_SSOT.md) / [WINDOWS](WINDOWS_RELEASE_SSOT.md) 发布 SSOT |
+| 覆盖率 | [`../metrics/coverage-dual-summary.json`](../metrics/coverage-dual-summary.json) |
+| 外部对标评分（18 领域，商业 90 / 开源 60 锚点） | [`AUDIT_BENCHMARK_SSOT.md`](AUDIT_BENCHMARK_SSOT.md) |
 
 ## 真东西（不是空架子）👍
 
@@ -84,3 +86,4 @@ L0 物理基底    DB schema🟢(旁路封+冻结) · 租户隔离🟢 · runtim
 - 认知 Processor 已挂生产 intent（失败 fallback unified）；域事件样板仅采购订单创建→`order.created` 持久化，未宣称全域落地
 - 认知全栈补齐（2026-07-29）：SCM lite 因果/反事实、技能契约开放世界、策略向持续学习、软约束规划、白名单自我反思已落地（见 `docs/architecture/COGNITIVE_FULL_STACK_20260729.md`）；全域业务因果与跨行业适配器仍需扩样板
 - 战略自治规划（2026-07-29）：LLM 季度目标分解 + 反思修正 + adaptive_thresholds 已接入；运维 impact-predictor 规则轨仍在，LLM advisory 需 `XCAGI_IMPACT_LLM=1` 开启
+- **Windows 交付面偏差不在此复述**：stable feed 仍广播旧构建（`73861ed7`）、未签名隔离包进 testing 通道、签名管线未配置、故障注入与 AI 任务实测结论——全部事实、门禁结论与处置选项见 [`WINDOWS_RELEASE_SSOT.md`](WINDOWS_RELEASE_SSOT.md)（§2 产物校验和 / §4 门禁状态 / §5 B1–B12 阻断项）。**本节只保留决策口径：不回滚、不改写 stable feed，等同一 SHA 的签名构建覆盖**（对应 B6 的两个可选处置，需用户授权）。

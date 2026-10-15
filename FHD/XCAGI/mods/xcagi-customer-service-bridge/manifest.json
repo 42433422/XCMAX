@@ -8,6 +8,7 @@
   "dependencies": {
     "xcagi": ">=1.0.0.0"
   },
+  "bundled_employees": ["user-customer-service-officer"],
   "backend": {
     "entry": "blueprints",
     "init": "mod_init"

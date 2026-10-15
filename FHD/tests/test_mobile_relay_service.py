@@ -4,7 +4,7 @@ import importlib.util
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
@@ -46,22 +46,95 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
         relay_base_url="https://relay.example.test/api",
         capabilities={"codex": True, "host": "192.168.1.9", "port": 42422},
     )
-    bound = service.bind_mobile_by_account(
+    wrong_code = service.bind_mobile_by_account(
         user_id=9,
         username="account-user",
         relay_id=registered["relay_id"],
+        pairing_code="000000",
+    )
+    assert wrong_code is None
+    assert (
+        service.bind_mobile_by_account(user_id=9, username="account-user", pairing_code="000000")
+        is None
+    )
+    bound = service.bind_mobile_by_account(
+        user_id=9,
+        username="account-user",
+        pairing_code=registered["pairing_code"],
     )
     assert bound is not None
     assert bound["status"] == "paired"
     assert bound["relay_id"] == registered["relay_id"]
     assert bound["local_base_url"] == "http://192.168.1.9:42422"
 
+    repeated_code = service.bind_mobile_by_account(
+        user_id=9,
+        username="account-user",
+        pairing_code=registered["pairing_code"],
+    )
+    assert repeated_code is not None
+    assert repeated_code["relay_id"] == registered["relay_id"]
+
     hijack = service.bind_mobile_by_account(
         user_id=10,
         username="other-user",
-        relay_id=registered["relay_id"],
+        pairing_code=registered["pairing_code"],
     )
     assert hijack is None
+
+    assert (
+        service.renew_desktop_pairing(relay_id=registered["relay_id"], desktop_token="wrong-token")
+        is None
+    )
+    renewed = service.renew_desktop_pairing(
+        relay_id=registered["relay_id"], desktop_token=registered["desktop_token"]
+    )
+    assert renewed is not None
+    assert renewed["relay_id"] == registered["relay_id"]
+    assert renewed["pairing_code"] != registered["pairing_code"]
+    assert (
+        service.bind_mobile_by_account(
+            user_id=9, username="account-user", pairing_code=registered["pairing_code"]
+        )
+        is None
+    )
+    assert (
+        service.bind_mobile_by_account(
+            user_id=9, username="account-user", pairing_code=renewed["pairing_code"]
+        )
+        is not None
+    )
+    assert (
+        service.bind_mobile_by_account(
+            user_id=10, username="other-user", pairing_code=renewed["pairing_code"]
+        )
+        is None
+    )
+
+    expired = service.register_desktop(label="过期设备码", device_id="expired-mac", ttl_seconds=60)
+    with monkeypatch.context() as future:
+        future.setattr(
+            "app.services.mobile_relay_pairing._utc_now", lambda: "9999-01-01T00:00:00+00:00"
+        )
+        assert (
+            service.bind_mobile_by_account(
+                user_id=9, username="account-user", pairing_code=expired["pairing_code"]
+            )
+            is None
+        )
+
+    # Expired rows retain their history but release the finite numeric code space.
+    with test_db() as db:
+        db.execute(
+            text("UPDATE mobile_relay_desktops SET expires_at = '2000-01-01' WHERE relay_id = :id"),
+            {"id": expired["relay_id"]},
+        )
+    monkeypatch.setattr(
+        "app.services.mobile_relay_pairing.secrets.randbelow",
+        lambda _limit: int(expired["pairing_code"]) - 100000,
+    )
+    recycled = service.register_desktop(label="回收设备码", device_id="new-mac")
+    assert recycled["pairing_code"] == expired["pairing_code"]
 
 
 def test_completion_push_static_helper_covers_statuses_and_body_sources(monkeypatch):

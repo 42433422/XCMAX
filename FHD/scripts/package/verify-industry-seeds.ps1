@@ -2,14 +2,17 @@ param(
   [Parameter(Mandatory = $true)]
   [ValidateSet('personal', 'enterprise')]
   [string]$ProductSku,
-  [string]$UnpackedInternalDir = ''
+  [string]$UnpackedInternalDir = '',
+  [string]$Version = ''
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 
 if (-not $UnpackedInternalDir) {
-  $ver = '1.0.0.0'
+  $ver = $Version
   if ($env:XCAGI_VERIFY_VERSION) { $ver = $env:XCAGI_VERIFY_VERSION }
   $UnpackedInternalDir = Join-Path $Root "release\xcagi-v$ver\$ProductSku\win-unpacked\resources\backend\_internal"
 }
@@ -21,7 +24,9 @@ if (-not (Test-Path $modsDir)) {
   throw "Mods dir not found: $modsDir"
 }
 
-$forbiddenInMods = @('taiyangniao-pro', 'sz-qsm-pro', 'coating-industry', 'attendance-industry')
+$forbiddenInMods = @('taiyangniao-pro', 'sz-qsm-pro', 'coating-industry')
+# attendance-industry is a universal (L1) capability since PR #1793 and ships in active mods/.
+$universalIndustryMods = @('attendance-industry')
 foreach ($mid in $forbiddenInMods) {
   $p = Join-Path $modsDir $mid
   if (Test-Path $p) {
@@ -30,7 +35,7 @@ foreach ($mid in $forbiddenInMods) {
 }
 
 Get-ChildItem $modsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-  if ($_.Name -like '*-industry') {
+  if ($_.Name -like '*-industry' -and $universalIndustryMods -notcontains $_.Name) {
     throw "Industry mod must NOT be in active mods/ seed: $($_.Name)"
   }
 }

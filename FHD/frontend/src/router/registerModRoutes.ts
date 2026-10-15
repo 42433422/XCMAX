@@ -1,6 +1,30 @@
 import type { Router, RouteRecordRaw } from 'vue-router'
+import type { RuntimeModMetadata } from '@/utils/runtimeModSdk'
 
-export type ModRouteApiEntry = { mod_id: string; routes_path: string }
+export type ModRouteApiEntry = { mod_id: string; routes_path: string; runtime?: RuntimeModMetadata }
+
+const runtimeRegistrationsByRouter = new WeakMap<Router, Map<string, { revision: string; remove: (() => void)[] }>>()
+
+function registerRuntimeRoutes(router: Router, entry: ModRouteApiEntry): boolean {
+  const metadata = entry.runtime
+  if (!metadata || metadata.mod_id !== entry.mod_id || metadata.sdk_version !== 1) return false
+  const runtimeRegistrations = runtimeRegistrationsByRouter.get(router) ?? new Map<string, { revision: string; remove: (() => void)[] }>()
+  runtimeRegistrationsByRouter.set(router, runtimeRegistrations)
+  const prefix = `/mod/${entry.mod_id}`
+  if (!Array.isArray(metadata.routes) || !metadata.routes.length || !metadata.routes.every((route) => /^\/[A-Za-z0-9/_-]+$/.test(route.path) && route.name.startsWith(`runtime-${entry.mod_id}-`) && (route.path === prefix || route.path.startsWith(prefix + '/')))) return false
+  const revision = `${metadata.owner_scope}:${metadata.package_sha256}`
+  if (runtimeRegistrations.get(entry.mod_id)?.revision === revision) return true
+  runtimeRegistrations.get(entry.mod_id)?.remove.forEach((remove) => remove())
+  const remove = metadata.routes.map((route) => router.addRoute({
+    path: route.path,
+    name: route.name,
+    component: () => import('@/views/RuntimeModView.vue'),
+    props: { modId: entry.mod_id },
+    meta: { title: route.title, mod: entry.mod_id },
+  }))
+  runtimeRegistrations.set(entry.mod_id, { revision, remove })
+  return true
+}
 
 /** 避免 main.ts 首屏失败、initialize 稍后成功时重复 addRoute */
 const registeredModIds = new Set<string>()
@@ -132,6 +156,21 @@ export async function registerAllModRoutesFromGlob(router: Router): Promise<void
   }
 }
 
+const globRegistrations = new WeakMap<Router, Promise<void>>()
+
+/** 首屏与守卫共用路由注册，避免业务页在 addRoute 前落到设置页。 */
+export function ensureGlobModRoutes(router: Router): Promise<void> {
+  let registration = globRegistrations.get(router)
+  if (!registration) {
+    registration = registerAllModRoutesFromGlob(router).catch((error) => {
+      globRegistrations.delete(router)
+      throw error
+    })
+    globRegistrations.set(router, registration)
+  }
+  return registration
+}
+
 /**
  * Registers mod Vue routes (from mods/<id>/frontend/routes.js) on the app router.
  * Must run after router is created and before navigating to mod paths.
@@ -141,7 +180,12 @@ export async function registerModRoutes(router: Router, entries: ModRouteApiEntr
 
   let shouldRefreshCurrentRoute = false
 
-  for (const { mod_id } of entries) {
+  for (const entry of entries) {
+    const { mod_id } = entry
+    if (entry.runtime && registerRuntimeRoutes(router, entry)) {
+      shouldRefreshCurrentRoute = true
+      continue
+    }
     if (!mod_id || registeredModIds.has(mod_id)) continue
     const key = findGlobKeyForMod(mod_id)
     if (!key || !modRouteLoaders[key]) {

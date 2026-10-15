@@ -1,0 +1,73 @@
+== captured_at: 2026-09-17 05:21:06+0800
+== boottime: { sec = 1789579911, usec = 488037 } Thu Sep 17 01:31:51 2026
+== build-info:
+{"schema_version":1,"gitSha":"280225ac77ce0b5f66470d2d7a11ad2844cdad67","version":"1.0.0.4","releaseId":"xcagi-1.0.0.4-280225ac77ce0b5f66470d2d7a11ad2844cdad67","builtAt":"2026-09-14T14:48:06.725Z"}
+
+== owner:
+drwxr-xr-x@ 3 a4243342  staff  96  9月 14 14:48 /Applications/XCAGI.app
+== spctl:
+/Applications/XCAGI.app: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
+== codesign-authority:
+== shipit-dir:
+total 9968
+drwxr-xr-x@   5 a4243342  staff      160  9月 17 05:18 .
+drwx------+ 160 a4243342  staff     5120  9月 17 05:21 ..
+-rw-r--r--    1 a4243342  staff  4052307  9月 17 05:18 ShipIt_stderr.log
+-rw-r--r--    1 a4243342  staff        0  9月  4 23:16 ShipIt_stdout.log
+-rw-r--r--@   1 a4243342  staff      297  9月 17 05:15 ShipItState.plist
+== shipit-state:
+{
+  "bundleIdentifier" => "com.xcagi.desktop.enterprise"
+  "launchAfterInstallation" => false
+  "targetBundleURL" => "file:///Applications/XCAGI.app/"
+  "updateBundleURL" => "file:///Users/a4243342/Library/Caches/com.xcagi.desktop.enterprise.ShipIt/update.9MWdVhS/XCAGI.app/"
+  "useUpdateBundleName" => true
+}
+== shipit-stderr-tail:
+2026-09-15 15:09:08.313 ShipIt[79511:2854188] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-09-15 15:09:08.313 ShipIt[79511:2854188] Moved bundle contents from file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.owUrcTdv/XCAGI.app to file:///Applications/XCAGI.app/
+2026-09-15 15:09:08.451 ShipIt[79511:2854188] Couldn't remove owned bundle at location file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.owUrcTdv/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: "“XCAGI.app” couldn’t be removed.", failureReason: "The file doesn’t exist.", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: "The operation couldn’t be completed. No such file or directory" }, userInfo: {
+    NSFilePath = "/var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.owUrcTdv/XCAGI.app";
+    NSURL = "file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.owUrcTdv/XCAGI.app";
+    NSUserStringVariant =     (
+        Remove
+    );
+} }
+2026-09-15 15:09:08.603 ShipIt[79511:2854256] On main thread and launching: file:///Applications/XCAGI.app/
+2026-09-15 15:09:08.603 ShipIt[79511:2854256] Bundle URL is valid
+2026-09-15 15:09:08.603 ShipIt[79511:2854256] Attempting to launch app on 11.0 or higher
+2026-09-15 15:09:08.603 ShipIt[79511:2854256] Launching new ShipIt at /Applications/XCAGI.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt with instructions to launch file:///Applications/XCAGI.app/
+2026-09-15 15:09:08.604 ShipIt[79511:2854188] Installation completed successfully
+2026-09-15 15:09:08.605 ShipIt[79511:2854256] New ShipIt pid: 97741
+2026-09-15 15:09:12.351 ShipIt[97741:2854405] Detected this as a launch request
+2026-09-15 15:09:12.399 ShipIt[97741:2854405] Successfully launched application at file:///Applications/XCAGI.app/
+2026-09-15 15:09:12.399 ShipIt[97741:2854405] ShipIt quitting
+2026-09-15 15:09:12.400 ShipIt[79511:2854256] ShipIt status 0
+2026-09-15 15:09:12.400 ShipIt[79511:2854256] New ShipIt exited
+2026-09-15 15:09:12.401 ShipIt[79511:2854256] ShipIt quitting
+2026-09-17 05:15:33.561 ShipIt[4502:566829] Detected this as an install request
+2026-09-17 05:18:29.816 ShipIt[4502:566948] Beginning installation
+2026-09-17 05:18:30.831 ShipIt[12343:638147] Detected this as an install request
+2026-09-17 05:18:30.837 ShipIt[12343:638147] Resuming installation attempt 2
+2026-09-17 05:18:32.279 ShipIt[12343:638150] Moving bundle from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.b9FzUpv7/XCAGI.app
+2026-09-17 05:18:32.280 ShipIt[12343:638150] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-09-17 05:18:32.280 ShipIt[12343:638150] Moved bundle contents from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.b9FzUpv7/XCAGI.app
+2026-09-17 05:18:32.280 ShipIt[12343:638150] Moving bundle from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.rX7Z2ET9/XCAGI.app to file:///Applications/XCAGI.app/
+2026-09-17 05:18:32.280 ShipIt[12343:638150] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-09-17 05:18:32.280 ShipIt[12343:638150] Moved bundle contents from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.rX7Z2ET9/XCAGI.app to file:///Applications/XCAGI.app/
+2026-09-17 05:18:32.462 ShipIt[12343:638150] Couldn't remove owned bundle at location file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.rX7Z2ET9/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: "“XCAGI.app” couldn’t be removed.", failureReason: "The file doesn’t exist.", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: "The operation couldn’t be completed. No such file or directory" }, userInfo: {
+    NSFilePath = "/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.rX7Z2ET9/XCAGI.app";
+    NSURL = "file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.rX7Z2ET9/XCAGI.app";
+    NSUserStringVariant =     (
+        Remove
+    );
+} }
+2026-09-17 05:18:32.675 ShipIt[12343:638150] Installation completed successfully
+2026-09-17 05:18:32.675 ShipIt[12343:638150] ShipIt quitting
+== helper-tools:
+com.docker.socket
+com.docker.vmnetd
+com.youqu.todesk.UninstallerHelper
+(no xcagi daemon)

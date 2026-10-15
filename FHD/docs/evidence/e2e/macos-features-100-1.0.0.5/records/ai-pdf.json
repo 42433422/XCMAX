@@ -1,0 +1,42 @@
+{
+  "_comment": "本文件由 macOS 真机证据采集器生成，请勿手改（DO NOT EDIT）。",
+  "feature": "ai-pdf",
+  "name": "PDF 生成与解析",
+  "domain": "ai",
+  "module": "ai-office",
+  "catalog_status": "implemented",
+  "platforms": [
+    "windows",
+    "macos",
+    "web"
+  ],
+  "method": "ui",
+  "status": "partial",
+  "status_basis": "页面在已安装 macOS 客户端真实打开并渲染；仅证明可达与可交互，未做端到端业务数据断言",
+  "source_sha": "7a1926f936a960d96be72e6f60bda283438963c9",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "9d6134d5cc37372d9e14bad83ca1fcf2ea060f56",
+  "environment": {
+    "os": "Darwin 25.3.0",
+    "arch": "arm64",
+    "macos": "26.3",
+    "hostname": "4243342deMac-mini.local",
+    "electron": "41.10.3",
+    "node": "v20.18.0",
+    "app_path": "/Applications/XCAGI.app",
+    "app_version": "1.0.0.5",
+    "app_git_sha": "9d6134d5cc37372d9e14bad83ca1fcf2ea060f56",
+    "app_built_at": "2026-09-20T09:05:36.700Z"
+  },
+  "verified_at": "2026-09-20T09:20:27.545Z",
+  "screenshot": "media/screenshots/ai-pdf.png",
+  "video": "media/videos/ai-pdf.webm",
+  "log": "logs/ai-pdf.log",
+  "command": "Playwright-Electron 打开已安装 XCAGI.app，导航至 /tools，真实渲染后截图并录像",
+  "scope": "在已安装 macOS 客户端（1.0.0.5）中真实打开该功能所属页面并交互；证明页面在 macOS 真机可加载与操作，未做端到端业务数据断言",
+  "evidence_source": "macos-client-native",
+  "passed": null,
+  "failed": null,
+  "cases": [],
+  "notes": "页面在已安装 macOS 客户端真实打开并渲染；仅证明可达与可交互，未做端到端业务数据断言"
+}

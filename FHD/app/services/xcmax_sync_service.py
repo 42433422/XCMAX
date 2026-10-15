@@ -183,6 +183,8 @@ def push_outbox(
     sent = failed = 0
     opener, cookie_jar = _direct_cookie_opener()
     csrf_token = _prime_csrf_cookie(opener, cookie_jar, base_url) if pending else ""
+    # MODstore /api/xcmax/sync/receive fails closed without the shared node secret.
+    sync_token = (os.environ.get("XCMAX_SYNC_SHARED_SECRET") or "").strip()
 
     for item in pending:
         outbox_id = item["id"]
@@ -201,6 +203,7 @@ def push_outbox(
                 headers={
                     "Content-Type": "application/json",
                     **({"X-CSRF-Token": csrf_token} if csrf_token else {}),
+                    **({"X-XCMAX-Sync-Token": sync_token} if sync_token else {}),
                 },
                 method="POST",
             )
@@ -244,7 +247,9 @@ def pull_from_remote(
 
     url = f"http://{host}:{port}/api/xcmax/sync/changes?since_cursor={cursor}&limit=200"
     try:
-        req = urllib.request.Request(url, method="GET")
+        token = (os.environ.get("XCMAX_SYNC_SHARED_SECRET") or "").strip()
+        headers = {"X-XCMAX-Sync-Token": token} if token else {}
+        req = urllib.request.Request(url, headers=headers, method="GET")
         with _open_sync_request(_DIRECT_HTTP_OPENER, req, timeout=10) as resp:
             body = json.loads(resp.read(1024 * 512).decode("utf-8", errors="replace"))
         changes = body.get("data") or []

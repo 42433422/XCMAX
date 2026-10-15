@@ -20,17 +20,17 @@ def success_reply(subject: str, progress: str, delivery_managed: bool) -> str:
             f"进展：{progress}。产物还需继续通过质量门、您的验收和桌面安装回执。"
         )
     return (
-        f"我是小C。工单「{subject}」值班员工已完成排查修复并验证通过。"
-        f"进展：{progress}。如仍复现请再补充截图。"
+        f"我是小C。工单「{subject}」值班员工已提交处理结果。"
+        f"进展：{progress}。还需确认正式发布和您的客户端运行验证，工单会继续跟进。"
     )
 
 
 def apply_ticket_outcome(ticket: Any, team_ok: bool, delivery_managed: bool) -> None:
-    """定制交付不能被员工事件提前结案；普通客服工单维持原行为。"""
+    """所有修复工单都必须等待真实交付和运行证据，不能凭员工执行结案。"""
     if not delivery_managed:
         ticket.decision_status = "approved"
-    ticket.status = "resolved" if team_ok and not delivery_managed else "processing"
-    ticket.closed_at = datetime.now(UTC) if ticket.status == "resolved" else None
+    ticket.status = "processing"
+    ticket.closed_at = None
     ticket.updated_at = datetime.now(UTC)
 
 

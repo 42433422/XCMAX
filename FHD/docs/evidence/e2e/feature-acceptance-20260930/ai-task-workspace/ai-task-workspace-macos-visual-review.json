@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-30 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-task-workspace",
+  "platform": "macos",
+  "reviewed_at": "2026-09-30",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+  "screenshot_sha256": "b2bbda76f980342d213054917db3768e0877e5b9af9636fab01ce8dc62560e88",
+  "visible_content": "独立工作区打开 MAC验收任务对话，状态为等待审批确认。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-task-workspace/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-task-workspace/macos/result.png"
+}

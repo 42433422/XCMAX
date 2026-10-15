@@ -198,7 +198,7 @@ async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Reques
         return {"success": True, "data": {"intent": intent, "document": doc}}
     if intent == "attendance":
         if not body.file_path:
-            raise HTTPException(status_code=400, detail="file_path ??")
+            raise HTTPException(status_code=400, detail="file_path 不能为空")
         from pathlib import Path
 
         from app.application.attendance_import_app_service import import_attendance_workbook
@@ -219,11 +219,11 @@ async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Reques
             "success": True,
             "data": {
                 "intent": intent,
-                "note": "??????? import_excel_to_database ?? ERP ????",
+                "note": "仅识别为 ERP 产品表；正式写入请走 import_excel_to_database 导入 ERP 数据库",
                 "file_path": body.file_path,
             },
         }
-    raise HTTPException(status_code=400, detail=f"?? intent: {intent}")
+    raise HTTPException(status_code=400, detail=f"不支持的 intent: {intent}")
 
 
 class OnboardingSeedBody(BaseModel):
@@ -240,7 +240,7 @@ async def platform_shell_onboarding_seed_demo(body: OnboardingSeedBody, request:
     if user is None:
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=401, detail="????")
+        raise HTTPException(status_code=401, detail="请先登录")
     tenant_id = getattr(user, "tenant_id", None)
     if not tenant_id:
         from app.application.session_account_meta import enrich_session_meta_with_tenant
@@ -252,7 +252,7 @@ async def platform_shell_onboarding_seed_demo(body: OnboardingSeedBody, request:
     if not tenant_id:
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=400, detail="?? tenant_id,????????")
+        raise HTTPException(status_code=400, detail="缺少 tenant_id，无法写入演示数据")
     data = seed_onboarding_demo_data(tenant_id=int(tenant_id), industry_id=body.industry_id)
     return {"success": True, "data": data}
 
@@ -268,7 +268,7 @@ async def platform_shell_permission_matrix(request: Request):
     if user is None:
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=401, detail="????")
+        raise HTTPException(status_code=401, detail="请先登录")
     sid = session_id_from_request(request)
     meta = enrich_session_meta_with_tenant(sid, user) if sid else {}
     account_kind = str(meta.get("account_kind") or getattr(user, "tier", "") or "personal")
@@ -283,12 +283,12 @@ async def platform_shell_office_sample_upload(
     request: Request,
     file: UploadFile = File(...),
 ):
-    """?? / ?????:????? workspace/uploads/tutorial."""
+    """教程 / 新手引导示例文件：保存到 workspace/uploads/tutorial。"""
     from app.infrastructure.auth.dependencies import resolve_session_user
 
     user = resolve_session_user(request)
     if user is None:
-        raise HTTPException(status_code=401, detail="????")
+        raise HTTPException(status_code=401, detail="请先登录")
     data = await _save_workspace_upload(file, subdir="tutorial")
     return {"success": True, "data": data}
 
@@ -307,12 +307,12 @@ async def platform_shell_chat_office_file_upload(
     request: Request,
     file: UploadFile = File(...),
 ):
-    """??????:?? workspace/uploads/chat,??? workspace_root ???????."""
+    """对话「解析办公文件」：保存到 workspace/uploads/chat，返回相对 workspace_root 的路径。"""
     from app.infrastructure.auth.dependencies import resolve_session_user
 
     user = resolve_session_user(request)
     if user is None:
-        raise HTTPException(status_code=401, detail="????")
+        raise HTTPException(status_code=401, detail="请先登录")
     data = await _save_workspace_upload(file, subdir="chat")
     return {"success": True, "data": data}
 
@@ -321,7 +321,7 @@ async def platform_shell_chat_office_file_upload(
 async def platform_shell_office_sample_cleanup(
     body: OfficeSampleCleanupBody | None = Body(default=None),
 ):
-    """?????????????(? uploads/tutorial ???)."""
+    """清理教程示例上传文件（仅限 uploads/tutorial 目录内）。"""
     import os
     from pathlib import Path
 

@@ -5,6 +5,9 @@ from __future__ import annotations
 
 import importlib
 
+from app.application.agent_orchestrator.clarification import pause_for_clarification
+from app.application.agent_orchestrator.param_references import refuse_unresolved_step
+
 
 def _facade():
     return importlib.import_module("app.application.agent_orchestrator.orchestrator")
@@ -349,7 +352,12 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         self._refresh_artifact_metadata(run)
         run.status = "running" if run.steps else "blocked"
         if not run.steps:
-            run.error = "planner returned no executable steps"
+            from app.application.workflow.sql_execution_policy import REFUSAL_CODE, REFUSAL_MESSAGE
+
+            refused = plan_metadata.get("refusal_code") == REFUSAL_CODE
+            run.error = REFUSAL_CODE if refused else "planner returned no executable steps"
+            if refused:
+                run.final_output = {"message": REFUSAL_MESSAGE, "refusal_code": REFUSAL_CODE}
             run.add_event("planner.blocked", "计划没有可执行节点")
 
     @staticmethod
@@ -386,6 +394,12 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         runtime_context: dict[str, _facade().Any],
         approved_step_id: str = "",
     ) -> None:
+        if not run.steps:
+            # 拒绝执行的 SQL 计划（refusal_code）需保持 blocked，交由调用方给出拒答；
+            # 其余空计划维持既有语义：无步骤可执行即视为已完成。
+            refusal = run.final_output if isinstance(run.final_output, dict) else {}
+            if run.status == "blocked" and refusal.get("refusal_code"):
+                return
         approved = str(approved_step_id or "").strip()
         completed_node_ids: set[str] = {
             step.node_id for step in run.steps if step.status == "completed"
@@ -409,6 +423,10 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
                     f"步骤 {step.node_id} 依赖未满足",
                     {"step_id": step.step_id, "depends_on": step.depends_on},
                 )
+                return
+            if refuse_unresolved_step(run, step, node_outputs):
+                return
+            if pause_for_clarification(run, step, node_outputs):
                 return
             step_is_approved = bool(approved and approved in {step.step_id, step.node_id})
             if not self._can_auto_execute(step) and (not step_is_approved):

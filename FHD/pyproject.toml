@@ -1,18 +1,17 @@
 [project]
 name = "xcagi"
-version = "1.0.0.1"
+version = "1.0.0.6"
 description = "XCAGI - 企业 AI 员工平台（桌面版 + Web 版并行交付）"
 license = "Apache-2.0"
 requires-python = ">=3.11"
 # 运行时依赖见 optional-dependencies；CI/生产安装：requirements-server-api.txt（与 server-api extra 对齐）
-# LG-W1-T1：吸收的 LangGraph 运行时根依赖，全部经 [tool.uv.sources] 重定向到本地 XCAGI vendored 包。
 dependencies = [
     "langgraph==1.2.10",
     "langgraph-checkpoint==4.1.1",
     "langgraph-checkpoint-sqlite==3.1.1",
     "langgraph-checkpoint-postgres==3.1.1",
     "langgraph-prebuilt==1.1.0",
-    "langgraph-sdk==0.4.2",
+    "langgraph-sdk==0.4.4",
 ]
 
 [project.scripts]
@@ -32,7 +31,7 @@ server-api = [
     "python-docx>=1.1.0",
     "python-pptx>=1.0.2",
     "pdfplumber>=0.11.0",
-    "pypdf>=6.15,<7",
+    "pypdf>=6.19,<7",
     "reportlab>=5,<6",
     "Pillow>=12.3.0",
     "gunicorn>=22.0.0",
@@ -41,6 +40,7 @@ server-api = [
     "httpx==0.26.0",
     "socksio>=1.0.0",
     "requests>=2.33.0",
+    "urllib3>=2.8.0",
     "python-alipay-sdk>=3.3.0",
     "edge-tts>=6.1.10",
     "faster-whisper>=1.0.0",
@@ -63,7 +63,7 @@ server-api = [
     "pydantic-settings>=2.11.0",
     "email-validator>=2.0.0",
     "passlib[bcrypt]>=1.7.4",
-    "PyJWT>=2.8.0",
+    "PyJWT>=2.15.0",
     "PyYAML>=6.0.2",
     # OpenTelemetry (NeuroBus tracer 底层)
     "opentelemetry-api>=1.24.0",
@@ -299,9 +299,14 @@ markers = [
 # Targeted third-party ignore: anyio 弃用了自家 anyio.abc.BlockingPortal 别名 shim，
 # 经 fastapi TestClient 导入链在收集期触发（filterwarnings=error 下阻断全部收集）。
 # fastapi/starlette 停用该别名后可移除。
+# pytest 9.1.1 自身收集代码（_pytest/pathlib.py find_prefixed）遗留的 scandir 迭代器在
+# gc 时发 ResourceWarning，filterwarnings=error 下变成 unraisable 异常，
+# mutmut 进程内反复跑 pytest 时在 unconfigure 期崩溃（mutation-smoke 自 6 月起 main 周跑必挂）。
+# 泄漏在 pytest 内部而非 app 代码；pytest 修复后移除本条。
 filterwarnings = [
     "error",
     'ignore:The anyio\.abc\.BlockingPortal alias is deprecated',
+    'ignore:unclosed scandir iterator:builtins.ResourceWarning',
 ]
 
 [tool.coverage.run]
@@ -357,7 +362,7 @@ show_contexts = true
 # 用法：mutmut run && python scripts/dev/mutation_kill_report.py --threshold 80
 [tool.mutmut]
 source_paths = ["app/di", "app/contexts"]
-also_copy = ["app", "resources", "tests", "conftest.py"]
+also_copy = ["app", "resources", "tests", "conftest.py", "packages"]
 pytest_add_cli_args = ["-q", "-p", "no:cacheprovider", "--no-header"]
 pytest_add_cli_args_test_selection = [
     "tests/test_di",

@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-templates",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "7141e351f9458974550bc9e442adfc8e2a8c62119da46b3095f1dd1cb1cdcbff",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。模板库预览。出货明细表、出货记录、产品目录等模板卡状态未配置，要求待上传 Excel / Word 模板，有快速创建。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-templates/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-templates/macos/result.png"
+}

@@ -1,0 +1,75 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。账号仅记录用户名。",
+  "kind": "feature-acceptance",
+  "feature": "ai-excel",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929b",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "app_version": "1.0.0.5",
+  "account": "SUNBIRD",
+  "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。工具表，标题为 AI Planner 可调用的工具。可见 excel_analysis、excel_schema_understand、excel_join_compare、excel_chart_recommend、import_excel_to_database、template_preview、generate_office_document。 各步结果均为通过。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "POST /api/excel/data/generate 请求体 {\"data\": [{\"名称\": \"MAC验收0929产品\", \"数量\": 3, \"单价\": 2.5}], \"filename\": \"mac0929-1790685084.xlsx\"}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/excel/data/generate（写操作自动附带 CSRF）：生成 Excel",
+      "expected": "生成 Excel：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 27ms；mac0929-1790685084.xlsx rows=1",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "POST /api/excel/data/extract 请求体 {\"file_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-1790685084.xlsx\"}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/excel/data/extract（写操作自动附带 CSRF）：解析刚生成的 Excel",
+      "expected": "解析刚生成的 Excel：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 39ms；{\"success\": true, \"file\": \"mac0929-1790685084.xlsx\", \"sheet\": \"Sheet1\", \"header_row\": 1, \"headers\": [{\"column\": \"A\", \"column_index\": 1, \"value\": \"名称\"}, {\"column\": \"B\", \"column_index\": 2, \"value\": \"数量\"}, {\"column\": \"C\", \"column_index\": 3, \"v",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "GET /api/mod/excel-generate-employee/employees/excel-generate-employee/status",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/excel-generate-employee/employees/excel-generate-employee/status（写操作自动附带 CSRF）：Excel 生成员工在岗",
+      "expected": "Excel 生成员工在岗：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 15ms；{\"success\": true, \"data\": {\"employee_id\": \"excel-generate-employee\", \"status\": \"ready\"}}",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
+      "input": "界面路由 /mod/xcagi-office-employee-pack-bridge/tools",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-office-employee-pack-bridge/tools，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /mod/xcagi-office-employee-pack-bridge/tools，页面可见 ，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "ai-excel",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-excel/macos/result.png",
+      "sha256": "4a72e5982f259f61beb32eeed3ba8c8619aae521ba32b33aeb4f97eb22bbb720",
+      "visual_review": "accepted",
+      "visible_result": "工具表，标题为 AI Planner 可调用的工具。可见 excel_analysis、excel_schema_understand、excel_join_compare、excel_chart_recommend、import_excel_to_database、template_preview、generate_office_document。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ai-excel",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-excel/macos/operation.webm",
+      "sha256": "4188f901072b2ba8e58d6a33e226cbe9afd4a435ac8c1effaba5acaaf7bd618e",
+      "visual_review": "accepted",
+      "visible_result": "录屏结束停在上述结果画面。工具表，标题为 AI Planner 可调用的工具。可见 excel_analysis、excel_schema_understand、excel_join_compare、excel_chart_recommend、import_excel_to_database、template_preview、generate_office_document。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-excel/macos/run.log",
+    "sha256": "b5a17d14ca8d43ac82299282ff3687c4e6a82530bd73a94c5a7ba20ba38fa2b6",
+    "bytes": 1555
+  }
+}

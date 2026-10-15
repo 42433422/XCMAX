@@ -1,0 +1,21 @@
+{
+  "checked_at": "2026-09-13T06:47:37.105675+00:00",
+  "installed_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+  "surface": "native /Applications/XCAGI.app",
+  "account": "SUNBIRD",
+  "input": "synthetic one-day attendance using one existing roster member",
+  "input_rows": 1,
+  "roster_count": 80,
+  "regular_hours": 8,
+  "monthly_formulas_link_detail": true,
+  "output_sheets": [
+    "明细",
+    "月度统计"
+  ],
+  "native_save_dialog_completed": true,
+  "download_path": "/Users/a4243342/Downloads/attendance-output-ce2d377d2f5f457796afdbf71eab4902.xlsx",
+  "download_sha256": "970d314b50d8fea0f1f173330ecb27b197b00dd55b4e254fb3752ef2b2f82153",
+  "template_upload_native_passed": true,
+  "native_picker_previous_block_resolved": true,
+  "formal_shipment_fix_still_pending": 1920
+}

@@ -1,0 +1,8 @@
+[06:44:18] feature=mods-template base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-template
+[06:44:29] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:44:40] case M1: passed - 市场行业模板目录真实读取
+[06:44:47] case M2: passed - 本机已安装行业模板（*-industry）清单真实读取
+[06:44:57] case M3: passed - 行业模板搜索结果真实读取
+[06:45:03] case M4: passed - 未经 CSRF 校验的行业种子安装被拒绝（负例）
+[06:45:03] video: mods-template-web-20260929-064418.webm (3307671 bytes)
+[06:45:03] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-template/log/mods-template-web-20260929-064418.log

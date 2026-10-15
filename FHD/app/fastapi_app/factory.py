@@ -79,7 +79,7 @@ def create_fastapi_app(
     app = FastAPI(
         title="XCAGI FastAPI",
         description="XCAGI 企业 AI 员工平台 - FastAPI 版本",
-        version="1.0.0.1",
+        version="1.0.0.6",
         docs_url="/docs" if enable_docs else None,
         redoc_url="/redoc" if enable_docs else None,
         lifespan=lifespan,
@@ -142,9 +142,10 @@ def create_fastapi_app(
     register_exception_handlers(app)
 
     try:
+        from app.infrastructure.mods.manifest import host_xcagi_version
         from app.utils.metrics import init_metrics
 
-        init_metrics("XCAGI", os.environ.get("XCAGI_VERSION", "1.0.0.1"))
+        init_metrics("XCAGI", os.environ.get("XCAGI_VERSION") or host_xcagi_version())
     except RECOVERABLE_ERRORS as e:
         logger.warning("Prometheus init_metrics skipped: %s", e)
 

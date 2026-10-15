@@ -42,6 +42,28 @@ describe('productSku', () => {
     expect(sku).toBe('generic')
   })
 
+  it('retries a runtime SKU route that is temporarily unavailable during startup', async () => {
+    const { fetchProductSku } = await loadProductSku()
+    apiFetchMock
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { sku: 'enterprise' } }) })
+
+    await expect(fetchProductSku(true)).resolves.toBe('enterprise')
+    expect(apiFetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not cache the generic fallback after the runtime SKU route remains unavailable', async () => {
+    const { fetchProductSku } = await loadProductSku()
+    apiFetchMock.mockResolvedValue({ ok: false, status: 404 })
+
+    await expect(fetchProductSku()).resolves.toBe('generic')
+    expect(apiFetchMock).toHaveBeenCalledTimes(3)
+
+    apiFetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: { sku: 'enterprise' } }) })
+    await expect(fetchProductSku()).resolves.toBe('enterprise')
+    expect(apiFetchMock).toHaveBeenCalledTimes(4)
+  })
+
   it('fetchProductSku uses VITE override in dev', async () => {
     const { fetchProductSku } = await loadProductSku()
     vi.stubEnv('DEV', true)

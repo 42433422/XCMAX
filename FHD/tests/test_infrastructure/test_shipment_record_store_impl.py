@@ -29,6 +29,56 @@ def _setup_db_with_record(record_id=99):
 
 
 class TestRecordDocumentGeneration:
+    def test_record_id_survives_real_commit_and_session_close(self, tmp_path, monkeypatch):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        from app.db.base import Base
+        from app.db.models import ShipmentRecord
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        engine = create_engine(f"sqlite:///{tmp_path / 'records.db'}")
+        Base.metadata.create_all(engine)
+        factory = sessionmaker(bind=engine, expire_on_commit=True)
+        monkeypatch.setattr("app.db.session.SessionLocal", factory)
+        try:
+            with tenant_scope(1):
+                result = self._svc().record_document_generation(
+                    unit_name="发货客户",
+                    unit_id=None,
+                    products=[
+                        {
+                            "model_number": "9803",
+                            "quantity_tins": 3,
+                            "tin_spec": 12,
+                            "unit_price": 25,
+                        }
+                    ],
+                    document_result={
+                        "order_number": "SHIP-1920",
+                        "date": "2026-08-01",
+                        "total_amount": 1800,
+                        "total_quantity": 72,
+                    },
+                )
+                with factory() as fresh:
+                    record = fresh.get(ShipmentRecord, result["record_id"])
+                    assert record is not None
+                    assert record.purchase_unit == "发货客户"
+                    assert float(record.quantity_kg) == 36
+                    assert float(record.amount) == 900
+                    from app.infrastructure.persistence.shipment_record_query_impl import (
+                        SQLAlchemyShipmentRecordQuery,
+                    )
+
+                    listed = SQLAlchemyShipmentRecordQuery().get_latest_shipments(1)[0]
+                    assert listed["order_number"] == "SHIP-1920"
+                    assert listed["date"] == "2026-08-01"
+                    assert listed["total_amount"] == 1800
+                    assert listed["total_quantity"] == 72
+        finally:
+            engine.dispose()
+
     def _svc(self):
         from app.infrastructure.persistence.shipment_record_store_impl import (
             SQLAlchemyShipmentRecordStore,

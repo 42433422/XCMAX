@@ -422,7 +422,7 @@ class TestHybridRecognizeDeep:
         assert out["intent_source"] == "deepseek"
         assert out["final_intent"] == "order"
 
-    async def test_deepseek_low_confidence_used(self) -> None:
+    async def test_deepseek_low_confidence_not_adopted(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.8)
         rule = {"primary_intent": "unk"}
         with (
@@ -440,7 +440,13 @@ class TestHybridRecognizeDeep:
             ),
         ):
             out = await h.recognize("msg")
+        # 置信度纪律：低置信不采纳，降级 unclear + 澄清标记
         assert out["intent_source"] == "deepseek_low_confidence"
+        assert out["final_intent"] is None
+        assert out["is_likely_unclear"] is True
+        assert out["low_confidence_clarify"] is True
+        assert out["deepseek_low_confidence"] is True
+        assert out["deepseek_intent"] == "order"
 
     async def test_deepseek_error_falls_to_rule(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.5)

@@ -1,0 +1,132 @@
+{
+  "schema": "windows-independent-evidence/v1",
+  "candidate_sha": "5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30",
+  "installer_sha256": "a9001626f0ad57fb7756cc66528b5f49286a60e151e6dfad5a91456d864798cf",
+  "entries": [
+    {
+      "run_id": "36841870956-110302628903",
+      "mode": "clean",
+      "job": {
+        "completed_at": "2026-10-01T09:26:00Z",
+        "conclusion": "success",
+        "id": 110302628903,
+        "name": "Clean install on isolated Windows runner",
+        "runner_id": 1000197989,
+        "runner_name": "GitHub Actions 1000197989",
+        "started_at": "2026-10-01T09:18:34Z",
+        "status": "completed"
+      },
+      "started_at": "2026-10-01T09:23:48.6750410Z",
+      "finished_at": "2026-10-01T09:25:53.2837251Z",
+      "files": [
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-clean-36841870956\\acceptance.json",
+          "sha256": "df9886a7a50b938a147e17be8a644b67062d8fc5574f328863d241f3118568c2"
+        }
+      ]
+    },
+    {
+      "run_id": "36841870956-110302629082",
+      "mode": "gui",
+      "job": {
+        "completed_at": "2026-10-01T09:23:19Z",
+        "conclusion": "success",
+        "id": 110302629082,
+        "name": "Gui install on isolated Windows runner",
+        "runner_id": 1000197990,
+        "runner_name": "GitHub Actions 1000197990",
+        "started_at": "2026-10-01T09:18:34Z",
+        "status": "completed"
+      },
+      "started_at": "2026-10-01T09:20:14.7057118Z",
+      "finished_at": "2026-10-01T09:23:13.0202320Z",
+      "files": [
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-gui-36841870956\\acceptance.json",
+          "sha256": "4052a82d16cad31f9bd0b5c0c41b193cae84e03588e97130bae7515ff9cd2a41"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-gui-36841870956\\export-content-verified.json",
+          "sha256": "35f0fc475688b749eb9fcfbaf0249809f0c00301ada037db625e44b0ac5c3fc7"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-gui-36841870956\\gui-business.json",
+          "sha256": "cbb2a1509751b207007d13441907817bf8612a8f04198786bbc38eb49cc36140"
+        }
+      ]
+    },
+    {
+      "run_id": "36841870956-110302629213",
+      "mode": "recovery",
+      "job": {
+        "completed_at": "2026-10-01T09:25:07Z",
+        "conclusion": "success",
+        "id": 110302629213,
+        "name": "Recovery install on isolated Windows runner",
+        "runner_id": 1000197992,
+        "runner_name": "GitHub Actions 1000197992",
+        "started_at": "2026-10-01T09:18:34Z",
+        "status": "completed"
+      },
+      "started_at": "2026-10-01T09:20:05.6498178Z",
+      "finished_at": "2026-10-01T09:24:59.7258486Z",
+      "files": [
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-recovery-36841870956\\acceptance.json",
+          "sha256": "741dd520fb8337ba49a49fd3020e273accaac752b5de569c571a9a25f5b6e938"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-recovery-36841870956\\gui-business.json",
+          "sha256": "acc3fc371eaf0ecca1d3ca9c9ee9b62eee6a74f220e0e8fc72ce53cf0bc01277"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-recovery-36841870956\\restored-comparison-verified.json",
+          "sha256": "95040a5084950cad62bb0b990f7a80e32ad2e3af9a2cd5788ee7078a8c3cded1"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-recovery-36841870956\\restored-gui\\gui-business.json",
+          "sha256": "7c3eb0821b690a559d1c4445b0d3fd9a7ede446001bacca814c13bf7adce16e4"
+        }
+      ]
+    },
+    {
+      "run_id": "36841870956-110302629238",
+      "mode": "upgrade",
+      "job": {
+        "completed_at": "2026-10-01T09:34:14Z",
+        "conclusion": "success",
+        "id": 110302629238,
+        "name": "Upgrade install on isolated Windows runner",
+        "runner_id": 1000197991,
+        "runner_name": "GitHub Actions 1000197991",
+        "started_at": "2026-10-01T09:18:37Z",
+        "status": "completed"
+      },
+      "started_at": "2026-10-01T09:28:22.0620235Z",
+      "finished_at": "2026-10-01T09:34:06.5015534Z",
+      "files": [
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-upgrade-36841870956\\acceptance.json",
+          "sha256": "13a0654818fc4641b93135d9eb3a8ceabd395e69a76047c188f8e89f5717c6aa"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-upgrade-36841870956\\legacy-comparison-verified.json",
+          "sha256": "9db5dcca8d30dab06404356065d3887e969156310cae39f65ac3bf45a53af3ed"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-upgrade-36841870956\\after-upgrade-gui\\gui-business.json",
+          "sha256": "2b8d5643f28c57723d741b0fbd0b5ec1597d17e464ff0e01404f6efe65e50ed4"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-upgrade-36841870956\\old-gui\\gui-business.json",
+          "sha256": "f7db7825be52a1320e3ee31cfcc411355fb657aa82d46fe84853ba29f5d39082"
+        },
+        {
+          "path": "C:\\xcagi-delivery-closeout\\evidence-5197-upgrade-36841870956\\restored-gui\\gui-business.json",
+          "sha256": "0d001b7259299429028729f68f821f062a9f390e076478085bd80d81e01b1efc"
+        }
+      ]
+    }
+  ],
+  "full_A_B_C": "not_verified"
+}

@@ -1,0 +1,61 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "base-install-guide",
+ "name": "安装部署与初始化引导",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/platform-shell/onboarding-industries",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/platform-shell/onboarding-industries（写操作自动附带 CSRF）：首次设置行业清单",
+   "expected": "首次设置行业清单：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 18ms；可选行业 ['通用', '饰品包装', '考勤', '涂料', '批发', '电商', '餐饮', '物流']",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/platform-shell/workspace-root",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/platform-shell/workspace-root（写操作自动附带 CSRF）：工作区根目录已初始化",
+   "expected": "工作区根目录已初始化：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 18ms；/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /onboarding",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /onboarding，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /onboarding，页面可见 设置，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /onboarding；命中文本 ['设置']；缺失 []；界面请求失败 []；页面摘录：XCAGI · 创建您的数字公司 | 1 | 公司 | 2 | 行业 | 3 | 配置 |  | 从认识您的公司开始 |  | 您的公司叫什么？ |  | 一个名称，开启属于您的工作空间。 |  | 公司或团队名称 |  | 使用熟悉的简称也可以。完成登录后，我们会保存您的选择。 |  | 让 XC 认识我的公司 | → | XC | SUNBIRD | 知识与数据 | AI 员工 | 日常业务 | 先进入，稍后再设置 | 信息用于配置工作空间，示例业务由您另",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "base-install-guide",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-install-guide/macos/result.png",
+   "sha256": "73c42a0d307c82912401ff006df65faba49516e093a60f67a0573f70e0348d59",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "base-install-guide",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-install-guide/macos/operation.webm",
+   "sha256": "ff4346fcd5feae82795d950faa64eaf824e93a36b1ba4d84aafdd0a55299ae91",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-install-guide/macos/run.log",
+  "sha256": "a9c5380bf10abc0e2bfd548e8b279267f733c7eeb19f4c00266f84a1b3e8b1a6",
+  "bytes": 1354
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}
