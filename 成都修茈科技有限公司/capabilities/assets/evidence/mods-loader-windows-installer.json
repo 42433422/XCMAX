@@ -1,0 +1,9 @@
+{
+  "version": "1.0.0.5",
+  "git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "installer_sha256": "95b8d6b11adc204cc7b6f5e3ae62af648f6be0ee94604ad850d5b9a978e98e99",
+  "installer_file": "XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+  "installed_app": "C:\\XCAGI-r2\\XCAGI.exe",
+  "health_version": "1.0.0.5",
+  "health_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca"
+}

@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "ind-workspace",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 ind-workspace 对应的 Windows 客户端页面 /attendance-industry",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「考勤工作区 - XCAGI」，主标题「考勤工作区」，地址 /attendance-industry。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 考勤工作区 SUNBIRD 副窗 ◈ 工作区 考勤工作区 主系统统一维护部门、人员、排班资源和考勤记录。 部门管理 人员管理 排班资源 考勤记录 考勤表转换（定制） 转换",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=355550 mp4=157955 title=考勤工作区 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-workspace/ind-workspace.log",
+    "sha256": "4ac0cc5ea9eaee4233d5b909afa133260255f14835334f5b70d1a8a8f8860ff6",
+    "bytes": 1424
+  },
+  "media": [
+    {
+      "feature": "ind-workspace",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-workspace/ind-workspace.png",
+      "sha256": "983a693553c820c8dcda43df04339563a291a0efd464ed6c112511f4f30e9b2a",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「考勤工作区 - XCAGI」，主标题「考勤工作区」，地址 /attendance-industry。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 考勤工作区 SUNBIRD 副窗 ◈ 工作区 考勤工作区 主系统统一维护部门、人员、排班资源和考勤记录。 部门管理 人员管理 排班资源 考勤记录 考勤表转换（定制） 转换",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-workspace",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-workspace/ind-workspace.mp4",
+      "sha256": "cfab5b2bdb65ed9d74cfb7b4c51911a564ffeca11b2a7cd496f08e2c28e3bbf5",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「考勤工作区 - XCAGI」，主标题「考勤工作区」，地址 /attendance-industry。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 考勤工作区 SUNBIRD 副窗 ◈ 工作区 考勤工作区 主系统统一维护部门、人员、排班资源和考勤记录。 部门管理 人员管理 排班资源 考勤记录 考勤表转换（定制） 转换",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

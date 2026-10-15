@@ -1,0 +1,10 @@
+feature=ch-im-cs
+at=2026-09-29T11:08:07.726Z
+route=/im
+landed=/im
+title=信息 - XCAGI
+heading=信息
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 信息 SUNBIRD 副窗 ◈ 工作区 信息 实时已连接 客 客户消息 · 客来来在 XCMAX 内只读查看客户会话 💬 用户客服员工 O-A 获客部 · 未安装 🧭 需求接入员 O-A 获客部 · 未安装 🔎 需求分析员工 P-M Mod 部 · 未安装 ⚙️ 流程自动化员工 P-M Mod 部 · 未安装 🧩 产物生成员工 P-M Mod 部 · 未安装 🛡️ 质检员工 P-M Mod 部 · 未安装 📈 企业使用跟踪员 O-A 获客部 · 未安装 企 企业专属客服 @enterprise-cs 选择左侧会话开始聊天 这里是同事和客服的一对一会话；找小C办事请用侧栏「智能对话」 小C助理

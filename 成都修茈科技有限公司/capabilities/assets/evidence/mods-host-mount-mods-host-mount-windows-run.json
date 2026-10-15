@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "mods-host-mount",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 mods-host-mount 对应的 Windows 客户端页面 /private-mod-delivery",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「生产员工 · 私有交付 - XCAGI」，主标题「生产员工 · 私有交付」，地址 /private-mod-delivery。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 生产员工 · 私有交付 SUNBIRD 副窗 ◈ 工作区 返回 AI 生态 生产员工 客户私有 Mod 生产中心 客户定制交付 私有 Mod 生产中心 模块轨与员工轨分开",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/mods/loading-status=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=203291 mp4=208623 title=生产员工 · 私有交付 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-host-mount/mods-host-mount.log",
+    "sha256": "8b5248273741f749ef9bc2b5de86f459e1d5d16b769fa7847e3674178f32aa30",
+    "bytes": 1525
+  },
+  "media": [
+    {
+      "feature": "mods-host-mount",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-host-mount/mods-host-mount.png",
+      "sha256": "7403c4beff50d3d7cb4fe69eaccb7dae29ed35e7ccea8e5db374ddfdc804e28e",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「生产员工 · 私有交付 - XCAGI」，主标题「生产员工 · 私有交付」，地址 /private-mod-delivery。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 生产员工 · 私有交付 SUNBIRD 副窗 ◈ 工作区 返回 AI 生态 生产员工 客户私有 Mod 生产中心 客户定制交付 私有 Mod 生产中心 模块轨与员工轨分开",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "mods-host-mount",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-host-mount/mods-host-mount.mp4",
+      "sha256": "01322b08dc98e7094998783ac73eae7195cb458b2a897fae31dc790b7fff2cdf",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「生产员工 · 私有交付 - XCAGI」，主标题「生产员工 · 私有交付」，地址 /private-mod-delivery。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 生产员工 · 私有交付 SUNBIRD 副窗 ◈ 工作区 返回 AI 生态 生产员工 客户私有 Mod 生产中心 客户定制交付 私有 Mod 生产中心 模块轨与员工轨分开",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

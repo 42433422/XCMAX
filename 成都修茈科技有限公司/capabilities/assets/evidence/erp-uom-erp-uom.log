@@ -1,0 +1,10 @@
+feature=erp-uom
+at=2026-09-29T11:22:40.306Z
+route=/mod/xcagi-erp-domain-bridge/products
+landed=/mod/xcagi-erp-domain-bridge/products
+title=人员管理 - XCAGI
+heading=人员管理
+redirected=false
+navError=
+apis=[{"api":"/api/mod/xcagi-erp-domain-bridge/products/list?page=1&per_page=5","status":200,"body":"{\"success\":true,\"data\":[{\"id\":22,\"model_number\":\"\",\"name\":\"ACC202609281748-产品B\",\"specification\":\"1kg\",\"price\":0.0,\"quantity\":0,\"description\":\"ACC202609281748 acceptance row 2\",\"category\":\"\",\"brand\":\"\",\"unit\":\"袋\",\"is_active\":true,\"created_at\":\"2026-09-28T17:52:34\",\"updated_at\":\"2026-09-28T17:52:34\"},{\"id\":21,\"model_number\":\"\",\"name\":\"ACC202609281748-产品A\",\"specification\":\"500ml\",\"price\":0.0,\"quantit"}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 人员管理 SUNBIRD 副窗 ◈ 工作区 饰品包装品管理 导入Excel 导出价格表 导出Excel + 添加产品 产品单位： 请选择产品单位 默认 Word 模板（price_list_default） 产品价格表（Word 价目，默认） 考勤统计表·明细导入人员 型号 名称 规格 价格 操作 - ACC202609281748-产品B 1kg - 编辑 删除 - ACC202609281748-产品A 500ml - 编辑 删除 ACC202609281748-产品-500ml ACC202609281748-产品 500ml - 编辑 删除 - ACC202609281627-产品B 1kg - 编辑 删除 - ACC202609281627-产品A 500ml - 编辑 删除 ACC202609281627-产品-500ml ACC202609281627-产品 500ml - 编辑 删除 - ACC202609281616-产品B 1kg - 编辑 删除 - ACC202609281616-产品A 500ml - 编辑 删除 ACC202609281616-产品-500ml ACC202609281616-产品 500ml - 编辑 删除 - ACC202609281549-产品B 1kg - 编辑 删除 - ACC202609281549-产品A 500ml - 编辑 删除 ACC202609281549-产品-500ml ACC202609281549-产品 500ml - 编辑 删除 - ACC202609281525-产品B 1kg - 编辑 删除 - ACC202609281525-产品A 500ml - 编辑 删除 ACC202609281525-产品-500ml ACC202609281525-产品 500ml - 编辑 删除 ACC202609281516-产品-500ml ACC202609281516-产品 500ml - 编辑 删除 ACC202609281232-产品-500ml ACC202609281232-产品 500ml - 编辑 删除 - ACC0928-产品B 1kg - 编辑 删除 - ACC0928-产品A 500ml - 编辑 删除 ACC202609271951-产品-500ml ACC202609271951-产品 500ml - 编辑 删除 ACC202609271723-产品-500ml ACC202609271723-产品 500ml - 编辑 删除 ACC202609271717-产品-500ml ACC2

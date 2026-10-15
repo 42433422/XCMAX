@@ -1,0 +1,10 @@
+feature=pay-lan-settings
+at=2026-09-29T11:12:19.413Z
+route=/lan-gate
+landed=/lan-gate
+title=局域网授权 - XCAGI
+heading=FHD · 局域网授权
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=FHD · 局域网授权 当前未启用局域网模式，无需授权。 进入系统 状态：未启用 本机 IP：127.0.0.1 主机管理员位

@@ -1,0 +1,10 @@
+feature=erp-excel-io
+at=2026-09-29T11:07:24.196Z
+route=/business-docking
+landed=/business-docking
+title=数据对接中心 - XCAGI
+heading=数据对接中心
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 数据对接中心 SUNBIRD 副窗 ◈ 工作区 企业版 · 通用 ETL 数据对接中心 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 支持整文件夹 单文件 100.0 MB 最多 10 万行 模板仅自己可见 1 上传文件 2 字段映射 3 核对写入 4 运行历史 上传与目标 每个任务绑定一个逻辑目标；客户及产品作为同一业务对象关联写入。 拖入文件，或选择文件 / 整个文件夹 XLSX / XLSM / CSV · PDF / JPG / PNG OCR · Word / PPT 仅知识库 选择文件 选择整个文件夹 当前写入目标 智能识别（推荐） 目标 智能识别（推荐）· 只建议目标 知识库 · 可撤销 客户及产品 · 可撤销 客户 · 可撤销 产品 · 可撤销 采购订单 · 可撤销 发货记录 · 可撤销 考勤 · 可撤销 Excel 导出 · 不可撤销 CSV 导出 · 不可撤销 Webhook · 不可撤销 先识别单据类型，再真实写入 送货单会自动选择“发货记录”；识别结果决定写入目标，解析通过后写入业务库。 上传并写入数据库 已获取 1 个旧 YAML/知识库兼容预设，可在“导入模板”中选择； 写入完成后可保存为仅自己可见的个人模板。 小C助理

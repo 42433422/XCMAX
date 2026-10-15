@@ -1,0 +1,10 @@
+feature=erp-finance-ledger
+at=2026-09-29T11:06:42.357Z
+route=/kitten-finance
+landed=/kitten-finance
+title=财务分析 - XCAGI
+heading=财务分析
+redirected=false
+navError=
+apis=[{"api":"/api/report/dashboard","status":200,"body":"{\"success\":true,\"data\":{\"product_count\":22,\"supplier_count\":10,\"monthly_sales\":{\"order_count\":0,\"total_amount\":null},\"monthly_purchases\":{\"order_count\":7,\"total_amount\":70.0},\"alerts\":{\"low_stock\":0,\"pending_orders\":7}}}"}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 财务分析 SUNBIRD 副窗 ◈ 工作区 🐱 小猫财务分析 一键查看本月经营状况 🚀 开始分析 🐱 还没有分析数据 点击上方「开始分析」按钮，一键生成财务报告 立即开始 小C助理

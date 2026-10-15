@@ -1,0 +1,10 @@
+feature=ai-knowledge
+at=2026-09-29T11:05:12.658Z
+route=/persy/knowledge
+landed=/persy/knowledge
+title=Persy 知识库 - XCAGI
+heading=知识库
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 知识库 SUNBIRD 副窗 ◈ 工作区 PERSY COGNITIVE MAP 企业知识网络 图谱 记忆 卡片 来源 关键词召回 导入 当前没有知识内容，图中显示导入资料、粘贴知识和对话记忆三个开始入口。 0 内容 0 关系 0 来源 主题 来源 知识 记忆 召回 节点 召回 PERSY 核心 Persy 等待资料进入后形成企业知识网络 知识节点 0 小C助理

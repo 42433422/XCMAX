@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "ai-excel",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 ai-excel 对应的 Windows 客户端页面 /business-docking",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「数据对接中心 - XCAGI」，主标题「数据对接中心」，地址 /business-docking。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 数据对接中心 SUNBIRD 副窗 ◈ 工作区 企业版 · 通用 ETL 数据对接中心 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=348058 mp4=221991 title=数据对接中心 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-excel/ai-excel.log",
+    "sha256": "09936a4ba995008b54ea59fe4fc0c21df271bad452f2a867085d9407c460ce17",
+    "bytes": 2186
+  },
+  "media": [
+    {
+      "feature": "ai-excel",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-excel/ai-excel.png",
+      "sha256": "5e1dddfde90844bf0e7c8bbe521bfc2985f93214730692dfdadaf79eebd89f6b",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「数据对接中心 - XCAGI」，主标题「数据对接中心」，地址 /business-docking。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 数据对接中心 SUNBIRD 副窗 ◈ 工作区 企业版 · 通用 ETL 数据对接中心 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ai-excel",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-excel/ai-excel.mp4",
+      "sha256": "907ae09cdf612a7634a9d8bcc6c5bb294352e0de1a1e48bdb464ae9e85009a47",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「数据对接中心 - XCAGI」，主标题「数据对接中心」，地址 /business-docking。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 数据对接中心 SUNBIRD 副窗 ◈ 工作区 企业版 · 通用 ETL 数据对接中心 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}
