@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.application.workflow.planner import (
+    LLMWorkflowPlanner,
     _clean_db_slot_value,
     _extract_business_db_read_keyword,
     _extract_business_db_write_node,
@@ -18,109 +19,50 @@ from app.application.workflow.planner import (
     _infer_business_db_entity,
     _looks_like_business_db_write,
 )
+from app.application.workflow.risk_gate import HybridRiskGate
 from app.application.workflow.types import PlanGraph, WorkflowNode, validate_plan_graph
 
 _SAMPLE_REGISTRY: dict[str, Any] = {
-    "products": {
-        "description": "产品查询",
+    name: {
+        "description": desc,
         "availability": "shared",
         "actions": {
-            "query": {
-                "description": "查询产品",
-                "risk": "low",
-                "idempotent": True,
+            action: {
+                "description": action_desc,
+                "risk": "low" if action in {"query", "read", "list"} else "medium",
+                "idempotent": action not in {"create", "write", "execute"},
                 "availability": "shared",
-                "required_params": ["keyword"],
-            },
-            "create": {
-                "description": "创建产品",
-                "risk": "medium",
-                "idempotent": False,
-                "availability": "shared",
-                "required_params": [],
-            },
+                "required_params": required,
+            }
+            for action, (action_desc, required) in actions.items()
         },
-    },
-    "customers": {
-        "description": "客户查询",
-        "availability": "shared",
-        "actions": {
-            "query": {
-                "description": "查询客户",
-                "risk": "low",
-                "idempotent": True,
-                "availability": "shared",
-                "required_params": [],
-            },
-            "ensure_exists": {
-                "description": "确保客户存在",
-                "risk": "medium",
-                "idempotent": True,
-                "availability": "shared",
-                "required_params": [],
-            },
-        },
-    },
-    "business_db": {
-        "description": "业务数据库",
-        "availability": "shared",
-        "actions": {
-            "read": {
-                "description": "读取",
-                "risk": "low",
-                "idempotent": True,
-                "availability": "shared",
-                "required_params": ["entity"],
-            },
-            "write": {
-                "description": "写入",
-                "risk": "medium",
-                "idempotent": False,
-                "availability": "shared",
-                "required_params": [],
-            },
-        },
-    },
-    "employee": {
-        "description": "员工执行",
-        "availability": "shared",
-        "actions": {
-            "list": {
-                "description": "列出员工",
-                "risk": "low",
-                "idempotent": True,
-                "availability": "shared",
-                "required_params": [],
-            },
-            "execute": {
-                "description": "执行员工任务",
-                "risk": "medium",
-                "idempotent": False,
-                "availability": "shared",
-                "required_params": ["employee_id"],
-            },
-        },
-    },
+    }
+    for name, (desc, actions) in {
+        "products": ("产品查询", {"query": ("查询产品", ["keyword"]), "create": ("创建产品", [])}),
+        "customers": (
+            "客户查询",
+            {"query": ("查询客户", []), "ensure_exists": ("确保客户存在", [])},
+        ),
+        "business_db": ("业务数据库", {"read": ("读取", ["entity"]), "write": ("写入", [])}),
+        "employee": (
+            "员工执行",
+            {"list": ("列出员工", []), "execute": ("执行员工任务", ["employee_id"])},
+        ),
+    }.items()
 }
 
 
 def _make_plan(nodes: list[WorkflowNode] | None = None) -> PlanGraph:
     return PlanGraph(
-        plan_id="test-plan",
-        intent="test_intent",
+        "test-plan",
+        "test_intent",
         todo_steps=["step1"],
         nodes=nodes
         or [
             WorkflowNode(
-                node_id="n1",
-                tool_id="products",
-                action="query",
-                params={"keyword": "abc"},
-                risk="low",
-                idempotent=True,
+                "n1", "products", "query", params={"keyword": "abc"}, risk="low", idempotent=True
             )
         ],
-        risk_level="low",
     )
 
 
@@ -135,7 +77,6 @@ class TestCleanDbSlotValue:
 
     def test_removes_leading_entity_prefixes(self) -> None:
         result = _clean_db_slot_value("新增ABC")
-        # The regex strips leading action words like 新增/添加/创建
         assert "新增" not in result
 
     def test_empty_string(self) -> None:
@@ -163,44 +104,37 @@ class TestExtractNamedSlot:
 
 
 class TestInferBusinessDbEntity:
-    def test_product_keywords(self) -> None:
-        assert _infer_business_db_entity("查询产品库存") == "products"
-        assert _infer_business_db_entity("查询商品") == "products"
-
-    def test_customer_keywords(self) -> None:
-        assert _infer_business_db_entity("客户ABC") == "customers"
-        assert _infer_business_db_entity("购买单位X") == "customers"
-
-    def test_material_keywords(self) -> None:
-        assert _infer_business_db_entity("原材料钢板") == "materials"
-        assert _infer_business_db_entity("物料库存") == "materials"
-
-    def test_shipment_keywords(self) -> None:
-        assert _infer_business_db_entity("出货记录") == "shipment_records"
-        assert _infer_business_db_entity("发货单") == "shipment_records"
-
-    def test_fallback_to_products(self) -> None:
-        assert _infer_business_db_entity("随机文字") == "products"
+    @pytest.mark.parametrize(
+        "messages,entity",
+        [
+            (("查询产品库存", "查询商品"), "products"),
+            (("客户ABC", "购买单位X"), "customers"),
+            (("原材料钢板", "物料库存"), "materials"),
+            (("出货记录", "发货单"), "shipment_records"),
+            (("随机文字",), "products"),
+        ],
+    )
+    def test_entity_keywords(self, messages, entity):
+        for message in messages:
+            assert _infer_business_db_entity(message) == entity
 
 
 class TestLooksLikeBusinessDbWrite:
-    def test_chinese_write_keywords(self) -> None:
-        assert _looks_like_business_db_write("新增产品到数据库", "新增产品到数据库") is True
-
-    def test_english_write_keywords(self) -> None:
-        assert _looks_like_business_db_write("add product to db", "add product to db") is True
-
-    def test_no_write_keywords(self) -> None:
-        assert _looks_like_business_db_write("查询产品", "查询产品") is False
-
-    def test_write_keyword_without_db_reference(self) -> None:
-        # Has write keyword but no db reference
-        assert _looks_like_business_db_write("新增一条消息", "新增一条消息") is False
+    @pytest.mark.parametrize(
+        "message,writes",
+        [
+            ("新增产品到数据库", True),
+            ("add product to db", True),
+            ("查询产品", False),
+            ("新增一条消息", False),
+        ],
+    )
+    def test_write_keywords(self, message, writes):
+        assert _looks_like_business_db_write(message, message) is writes
 
 
 class TestExtractBusinessDbWriteNode:
     def test_product_missing_product_name_returns_none(self) -> None:
-        # "产品" entity but no extractable name or unit
         result = _extract_business_db_write_node("产品写入数据库")
         assert result is None
 
@@ -213,86 +147,60 @@ class TestExtractBusinessDbWriteNode:
 
 
 class TestExtractBusinessDbReadKeyword:
-    def test_quoted_takes_priority(self) -> None:
-        result = _extract_business_db_read_keyword('查询"ABC123"', "products")
-        assert "ABC123" in result
-
-    def test_product_entity_slot_extraction(self) -> None:
-        result = _extract_business_db_read_keyword("查询产品ABC123", "products")
-        assert result  # non-empty
-
-    def test_customer_entity_slot_extraction(self) -> None:
-        result = _extract_business_db_read_keyword("查询客户ABC公司", "customers")
-        assert result
-
-    def test_materials_entity_slot_extraction(self) -> None:
-        result = _extract_business_db_read_keyword("查询原材料钢板", "materials")
-        assert result
-
-    def test_fallback_cleans_keywords(self) -> None:
-        # Unrecognised entity with no useful slot — should still return something
-        result = _extract_business_db_read_keyword("查询数据库里的东西", "unknown_entity")
-        assert isinstance(result, str)
-
-    def test_model_number_fallback(self) -> None:
-        result = _extract_business_db_read_keyword("查ABC99X的价格", "products")
-        assert result
+    @pytest.mark.parametrize(
+        "message,entity,kind",
+        [
+            ('查询"ABC123"', "products", "quoted"),
+            ("查询产品ABC123", "products", "present"),
+            ("查询客户ABC公司", "customers", "present"),
+            ("查询原材料钢板", "materials", "present"),
+            ("查询数据库里的东西", "unknown_entity", "string"),
+            ("查ABC99X的价格", "products", "present"),
+        ],
+    )
+    def test_keyword_cases(self, message, entity, kind):
+        result = _extract_business_db_read_keyword(message, entity)
+        if kind == "quoted":
+            assert "ABC123" in result
+        elif kind == "string":
+            assert isinstance(result, str)
+        else:
+            assert result
 
 
 class TestFilterToolRegistryForProfile:
     def _registry(self) -> dict[str, Any]:
+        def spec(availability, actions):
+            return {
+                "availability": availability,
+                "actions": {
+                    name: {"availability": scope, "risk": "low", "idempotent": True}
+                    for name, scope in actions.items()
+                },
+            }
+
         return {
-            "tool_shared": {
-                "availability": "shared",
-                "actions": {
-                    "act_shared": {"availability": "shared", "risk": "low", "idempotent": True},
-                },
-            },
-            "tool_pro_only": {
-                "availability": "pro_only",
-                "actions": {
-                    "act": {"availability": "pro_only", "risk": "low", "idempotent": True},
-                },
-            },
-            "tool_normal_only": {
-                "availability": "normal_only",
-                "actions": {
-                    "act": {"availability": "normal_only", "risk": "low", "idempotent": True},
-                },
-            },
-            "tool_mixed": {
-                "availability": "shared",
-                "actions": {
-                    "pro_act": {"availability": "pro_only", "risk": "low", "idempotent": True},
-                    "normal_act": {
-                        "availability": "normal_only",
-                        "risk": "low",
-                        "idempotent": True,
-                    },
-                    "shared_act": {"availability": "shared", "risk": "low", "idempotent": True},
-                },
-            },
+            "tool_shared": spec("shared", {"act_shared": "shared"}),
+            "tool_pro_only": spec("pro_only", {"act": "pro_only"}),
+            "tool_normal_only": spec("normal_only", {"act": "normal_only"}),
+            "tool_mixed": spec(
+                "shared",
+                {"pro_act": "pro_only", "normal_act": "normal_only", "shared_act": "shared"},
+            ),
         }
 
-    def test_normal_profile_excludes_pro_only(self) -> None:
-        filtered = _filter_tool_registry_for_profile(self._registry(), "normal")
-        assert "tool_pro_only" not in filtered
-
-    def test_normal_profile_includes_normal_only(self) -> None:
-        filtered = _filter_tool_registry_for_profile(self._registry(), "normal")
-        assert "tool_normal_only" in filtered
-
-    def test_pro_default_excludes_normal_only(self) -> None:
-        filtered = _filter_tool_registry_for_profile(self._registry(), "pro_default")
-        assert "tool_normal_only" not in filtered
-
-    def test_pro_default_includes_pro_only(self) -> None:
-        filtered = _filter_tool_registry_for_profile(self._registry(), "pro_default")
-        assert "tool_pro_only" in filtered
-
-    def test_shared_profile_keeps_all_shared(self) -> None:
-        filtered = _filter_tool_registry_for_profile(self._registry(), "other")
-        assert "tool_shared" in filtered
+    @pytest.mark.parametrize(
+        "profile,key,present",
+        [
+            ("normal", "tool_pro_only", False),
+            ("normal", "tool_normal_only", True),
+            ("pro_default", "tool_normal_only", False),
+            ("pro_default", "tool_pro_only", True),
+            ("other", "tool_shared", True),
+        ],
+    )
+    def test_profile_scope_cases(self, profile, key, present):
+        assert (key in _filter_tool_registry_for_profile(self._registry(), profile)) == present
 
     def test_mixed_tool_normal_profile_keeps_shared_and_normal_actions(self) -> None:
         filtered = _filter_tool_registry_for_profile(self._registry(), "normal")
@@ -320,127 +228,199 @@ class TestFilterToolRegistryForProfile:
 
 
 class TestValidatePlanGraph:
-    def test_valid_plan_returns_none(self) -> None:
+    def test_valid_plan_returns_none(self):
+        assert validate_plan_graph(_make_plan()) is None
+
+    @pytest.mark.parametrize(
+        "invalid",
+        [
+            "nodes",
+            "plan_id",
+            "intent",
+            "duplicate_node_ids",
+            "tool_id",
+            "action",
+            "dependency",
+            "self_dependency",
+        ],
+    )
+    def test_invalid_plan_cases(self, invalid):
         plan = _make_plan()
-        assert validate_plan_graph(plan) is None
-
-    def test_empty_nodes_fails(self) -> None:
-        plan = PlanGraph(plan_id="p", intent="i", nodes=[])
+        if invalid in {"nodes", "plan_id", "intent"}:
+            setattr(plan, invalid, [] if invalid == "nodes" else "")
+        elif invalid == "duplicate_node_ids":
+            plan.nodes.append(WorkflowNode(plan.nodes[0].node_id, "t", "b"))
+        elif invalid in {"tool_id", "action"}:
+            setattr(plan.nodes[0], invalid, "")
+        else:
+            plan.nodes[0].depends_on = [
+                plan.nodes[0].node_id if invalid == "self_dependency" else "nonexistent"
+            ]
         assert validate_plan_graph(plan) is not None
 
-    def test_missing_plan_id_fails(self) -> None:
-        plan = PlanGraph(plan_id="", intent="i", nodes=[WorkflowNode("n", "t", "a")])
-        assert validate_plan_graph(plan) is not None
+    def test_duplicate_restore_is_invalid_before_approval(self):
+        nodes = [
+            WorkflowNode(
+                "approval",
+                "system_maintenance",
+                "restore_database",
+                params={"backup_file": "xcagi.db.20261011_160815.bak", "require_approval": True},
+            ),
+            WorkflowNode(
+                "restore",
+                "system_maintenance",
+                "restore_database",
+                params={
+                    "backup_file": "xcagi.db.20261011_160815.bak",
+                    "execute_after_approval": True,
+                },
+                depends_on=["approval"],
+            ),
+        ]
+        assert "一个 restore_database" in validate_plan_graph(_make_plan(nodes))
 
-    def test_missing_intent_fails(self) -> None:
-        plan = PlanGraph(plan_id="p", intent="", nodes=[WorkflowNode("n", "t", "a")])
-        assert validate_plan_graph(plan) is not None
-
-    def test_duplicate_node_ids_fails(self) -> None:
-        nodes = [WorkflowNode("n", "t", "a"), WorkflowNode("n", "t", "b")]
-        plan = PlanGraph(plan_id="p", intent="i", nodes=nodes)
-        assert validate_plan_graph(plan) is not None
-
-    def test_missing_tool_id_fails(self) -> None:
-        plan = PlanGraph(plan_id="p", intent="i", nodes=[WorkflowNode("n", "", "a")])
-        assert validate_plan_graph(plan) is not None
-
-    def test_missing_action_fails(self) -> None:
-        plan = PlanGraph(plan_id="p", intent="i", nodes=[WorkflowNode("n", "t", "")])
-        assert validate_plan_graph(plan) is not None
-
-    def test_unresolved_dependency_fails(self) -> None:
-        node = WorkflowNode("n", "t", "a", depends_on=["nonexistent"])
-        plan = PlanGraph(plan_id="p", intent="i", nodes=[node])
-        assert validate_plan_graph(plan) is not None
-
-    def test_self_dependency_fails(self) -> None:
-        node = WorkflowNode("n", "t", "a", depends_on=["n"])
-        plan = PlanGraph(plan_id="p", intent="i", nodes=[node])
-        assert validate_plan_graph(plan) is not None
+        with pytest.raises(ValueError, match="一个 restore_database"):
+            HybridRiskGate().evaluate(_make_plan(nodes), context={})
 
 
 class TestValidateRequiredParams:
-    def test_all_params_present_returns_none(self) -> None:
-        from app.application.workflow.planner import LLMWorkflowPlanner
+    @pytest.mark.parametrize(
+        "params,registered,error",
+        [
+            ({"keyword": "abc"}, True, False),
+            ({}, True, True),
+            ({"keyword": ""}, True, True),
+            ({}, False, False),
+            ({"keyword": None}, True, True),
+        ],
+        ids=[
+            "all_params_present",
+            "missing_required_param",
+            "empty_string",
+            "unregistered_tool",
+            "none_param",
+        ],
+    )
+    def test_required_params(self, params, registered, error):
 
-        reg = {
-            "products": {
-                "actions": {
-                    "query": {"required_params": ["keyword"]},
-                }
-            }
-        }
-        node = WorkflowNode("n1", "products", "query", params={"keyword": "abc"})
-        plan = _make_plan([node])
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is None
-
-    def test_missing_required_param_returns_error(self) -> None:
-        from app.application.workflow.planner import LLMWorkflowPlanner
-
-        reg = {
-            "products": {
-                "actions": {
-                    "query": {"required_params": ["keyword"]},
-                }
-            }
-        }
-        node = WorkflowNode("n1", "products", "query", params={})
-        plan = _make_plan([node])
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is not None
-        assert "keyword" in result
-
-    def test_empty_string_param_fails(self) -> None:
-        from app.application.workflow.planner import LLMWorkflowPlanner
-
-        reg = {
-            "products": {
-                "actions": {
-                    "query": {"required_params": ["keyword"]},
-                }
-            }
-        }
-        node = WorkflowNode("n1", "products", "query", params={"keyword": ""})
-        plan = _make_plan([node])
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is not None
-
-    def test_tool_not_in_registry_skipped(self) -> None:
-        from app.application.workflow.planner import LLMWorkflowPlanner
-
-        node = WorkflowNode("n1", "unknown_tool", "query", params={})
-        plan = _make_plan([node])
-        # No entry in registry → no error
-        result = LLMWorkflowPlanner._validate_required_params(plan, {})
-        assert result is None
-
-    def test_none_param_value_fails(self) -> None:
-        from app.application.workflow.planner import LLMWorkflowPlanner
-
-        reg = {
-            "products": {
-                "actions": {
-                    "query": {"required_params": ["keyword"]},
-                }
-            }
-        }
-        node = WorkflowNode("n1", "products", "query", params={"keyword": None})
-        plan = _make_plan([node])
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is not None
+        registry = (
+            {"products": {"actions": {"query": {"required_params": ["keyword"]}}}}
+            if registered
+            else {}
+        )
+        result = LLMWorkflowPlanner._validate_required_params(
+            _make_plan(
+                [
+                    WorkflowNode(
+                        "n1", "products" if registered else "unknown_tool", "query", params=params
+                    )
+                ]
+            ),
+            registry,
+        )
+        assert (result is not None) == error
+        if params == {} and registered:
+            assert "keyword" in result
 
 
-class TestFallbackPlan:
-    def _make_planner(self) -> Any:
-        from app.application.workflow.planner import LLMWorkflowPlanner
+@pytest.mark.parametrize(
+    "message",
+    [
+        "恢复数据库，使用备份文件 xcagi.db.20261011_160815.bak。先提交手动审批，未经批准不要执行恢复。",
+        "请只恢复一次数据库，使用已有备份文件xcagi.db.20261011_160815.bak。恢复只允许执行一次，不要把提交审批和执行恢复拆成两次恢复操作。使用手动审批，先创建一张真实审批申请，批准后再恢复。",
+        "请恢复数据库 xcagi.db.20261011_160815.bak，如果失败请提示原因",
+        "请恢复数据库 xcagi.db.20261011_160815.bak 如果失败请提示原因",
+        "请帮我恢复数据库 xcagi.db.20261011_160815.bak",
+        "请你恢复数据库 xcagi.db.20261011_160815.bak",
+        "现在恢复数据库 xcagi.db.20261011_160815.bak",
+        "麻烦你先恢复数据库 xcagi.db.20261011_160815.bak",
+        "请备份数据库。执行前先给我确认，需要审批的操作提交审批。",
+        "备份数据库，不恢复",
+    ],
+)
+@pytest.mark.parametrize("entry", ["plan", "_fallback_plan"])
+def test_actual_restore_requests_use_one_registered_high_risk_step(message, entry):
+    registry = {
+        "system_maintenance": {"actions": {"restore_database": {}, "backup_database": {}}},
+        **_SAMPLE_REGISTRY,
+    }
+    planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
+    with patch.object(
+        planner,
+        "_plan_with_llm",
+        side_effect=AssertionError("Explicit restore must not become a second LLM business write"),
+    ):
+        plan = getattr(planner, entry)(
+            *(["actor", message, registry, {}] if entry == "plan" else ["p", message, registry])
+        )
+    assert len(plan.nodes) == 1 and validate_plan_graph(plan) is None
+    node = plan.nodes[0]
+    backup = message.startswith(("请备份", "备份"))
+    assert (node.tool_id, node.action) == (
+        "system_maintenance",
+        "backup_database" if backup else "restore_database",
+    )
+    assert node.params == ({} if backup else {"backup_file": "xcagi.db.20261011_160815.bak"})
+    assert (node.risk, node.idempotent) == ("medium" if backup else "high", False)
+    assert HybridRiskGate().evaluate(plan, context={}).requires_confirmation
 
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_svc:
-            mock_svc.return_value = MagicMock()
-            planner = LLMWorkflowPlanner()
-        return planner
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "如何恢复数据库",
+        "不要备份数据库",
+        "备份数据库失败，帮我排查",
+        "不要恢复数据库",
+        "不恢复数据库",
+        "只查看恢复数据库的方法",
+        "不要再恢复数据库，备份为 xcagi.db.20261011_160815.bak",
+        "恢复数据库 xcagi.db.20261011_160815.bak 失败，帮我排查原因",
+        "请排查恢复数据库 xcagi.db.20261011_160815.bak 失败的原因",
+        "恢复数据库 xcagi.db.20261011_160815.bak 应该怎么操作",
+        "请你先不要再恢复数据库，备份为 xcagi.db.20261011_160815.bak",
+        "现在恢复数据库 xcagi.db.20261011_160815.bak 可以吗",
+        "恢复数据库 test.bak 卡住了，请帮我排查",
+        "恢复数据库 test.bak 发生异常，请只排查日志",
+        "恢复数据库 test.bak 是什么意思",
+    ],
+)
+def test_restore_does_not_turn_questions_negations_or_backup_into_write(message):
+    from app.application.workflow.sql_execution_policy import database_maintenance_plan
+
+    assert database_maintenance_plan(message, "p", {}) is None
+
+
+@pytest.mark.parametrize(
+    "message,registry",
+    [
+        ("恢复数据库", {"system_maintenance": {"actions": {"restore_database": {}}}}),
+        (
+            "恢复数据库，如果失败请分析 test.bak 日志",
+            {"system_maintenance": {"actions": {"restore_database": {}}}},
+        ),
+        ("恢复数据库，使用xcagi.db.20261011_160815.bak", {}),
+        ("请备份数据库", {}),
+    ],
+)
+def test_restore_missing_file_or_entitlement_clarifies_without_business_write(message, registry):
+    from app.application.workflow.sql_execution_policy import database_maintenance_plan
+
+    plan = database_maintenance_plan(message, "p", registry)
+    assert [(n.tool_id, n.action, n.risk) for n in plan.nodes] == [("clarify", "ask", "low")]
+
+
+class _PlannerFixture:
+    api_key = api_url = model = ""
+
+    def _make_planner(self):
+        ai = MagicMock(api_key=self.api_key, api_url=self.api_url, model=self.model)
+        ai.get_context.return_value = None
+        with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=ai):
+            return LLMWorkflowPlanner()
+
+
+class TestFallbackPlan(_PlannerFixture):
     def test_fallback_employee_intent_with_unknown_id(self) -> None:
         planner = self._make_planner()
         result = planner._fallback_plan("pid", "请员工处理订单", _SAMPLE_REGISTRY)
@@ -450,7 +430,6 @@ class TestFallbackPlan:
     def test_fallback_business_db_write(self) -> None:
         planner = self._make_planner()
         result = planner._fallback_plan("pid", "新增客户ABC公司到数据库写入", _SAMPLE_REGISTRY)
-        # Should route to business_db_write or fallback query
         assert result is not None
         assert result.plan_id == "pid"
 
@@ -496,8 +475,6 @@ class TestFallbackPlan:
 
     def test_fallback_risk_level_high_when_node_is_high(self) -> None:
         planner = self._make_planner()
-        # Force a high-risk node by providing a message that triggers business_db write
-        # with a node having risk="high" (we patch _extract_business_db_write_node)
         high_node = WorkflowNode("n", "t", "a", risk="high")
         with patch(
             "app.application.workflow.planner._extract_business_db_write_node",
@@ -525,19 +502,10 @@ class TestFallbackPlan:
         assert result.risk_level == "medium"
 
 
-class TestPlanWithLLM:
-    def _make_planner(self) -> Any:
-        from app.application.workflow.planner import LLMWorkflowPlanner
-
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_svc:
-            ai = MagicMock()
-            ai.api_key = "test-key"
-            ai.api_url = "https://api.example.com/v1/chat/completions"
-            ai.model = "deepseek-chat"
-            ai.get_context.return_value = None
-            mock_svc.return_value = ai
-            planner = LLMWorkflowPlanner()
-        return planner
+class TestPlanWithLLM(_PlannerFixture):
+    api_key = "test-key"
+    api_url = "https://api.example.com/v1/chat/completions"
+    model = "deepseek-chat"
 
     def _mock_response(self, payload: dict[str, Any]) -> MagicMock:
         resp = MagicMock()
@@ -545,17 +513,20 @@ class TestPlanWithLLM:
         resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
         return resp
 
-    def test_returns_none_when_no_api_key(self) -> None:
-        from app.application.workflow.planner import LLMWorkflowPlanner
+    def _run_planner(self, planner, response, message="test", context=None):
+        with patch("app.application.workflow.planner._get_planner_http_client") as client:
+            client.return_value.post.return_value = response
+            return planner._plan_with_llm(
+                plan_id="pid",
+                user_id="u1",
+                message=message,
+                tool_registry=_SAMPLE_REGISTRY,
+                context=context or {},
+            )
 
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_svc:
-            ai = MagicMock()
-            ai.api_key = ""
-            ai.api_url = ""
-            ai.model = ""
-            ai.get_context.return_value = None
-            mock_svc.return_value = ai
-            planner = LLMWorkflowPlanner()
+    def test_returns_none_when_no_api_key(self) -> None:
+        planner = self._make_planner()
+        planner._ai_service.api_key = planner._ai_service.api_url = planner._ai_service.model = ""
 
         result = planner._plan_with_llm(
             plan_id="pid",
@@ -566,38 +537,13 @@ class TestPlanWithLLM:
         )
         assert result is None
 
-    def test_returns_none_on_http_error(self) -> None:
+    @pytest.mark.parametrize("status", [500, 200], ids=["http_error", "empty_content"])
+    def test_returns_none_for_failed_or_empty_response(self, status):
         planner = self._make_planner()
-        resp = MagicMock()
-        resp.status_code = 500
-
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
-            mock_client.return_value.post.return_value = resp
-            result = planner._plan_with_llm(
-                plan_id="pid",
-                user_id="u1",
-                message="test",
-                tool_registry=_SAMPLE_REGISTRY,
-                context={},
-            )
-        assert result is None
-
-    def test_returns_none_on_empty_content(self) -> None:
-        planner = self._make_planner()
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
-
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
-            mock_client.return_value.post.return_value = resp
-            result = planner._plan_with_llm(
-                plan_id="pid",
-                user_id="u1",
-                message="test",
-                tool_registry=_SAMPLE_REGISTRY,
-                context={},
-            )
-        assert result is None
+        response = self._mock_response({})
+        response.status_code = status
+        response.json.return_value = {"choices": [{"message": {"content": ""}}]}
+        assert self._run_planner(planner, response) is None
 
     def test_successful_parse_returns_plan_graph(self) -> None:
         planner = self._make_planner()
@@ -620,15 +566,7 @@ class TestPlanWithLLM:
         }
         resp = self._mock_response(payload)
 
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
-            mock_client.return_value.post.return_value = resp
-            result = planner._plan_with_llm(
-                plan_id="pid",
-                user_id="u1",
-                message="查询产品ABC",
-                tool_registry=_SAMPLE_REGISTRY,
-                context={},
-            )
+        result = self._run_planner(planner, resp, "查询产品ABC", {})
         assert result is not None
         assert result.intent == "query_products"
         assert len(result.nodes) == 1
@@ -639,15 +577,7 @@ class TestPlanWithLLM:
         resp.status_code = 200
         resp.json.return_value = {"choices": [{"message": {"content": "NOT JSON"}}]}
 
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
-            mock_client.return_value.post.return_value = resp
-            result = planner._plan_with_llm(
-                plan_id="pid",
-                user_id="u1",
-                message="test",
-                tool_registry=_SAMPLE_REGISTRY,
-                context={},
-            )
+        result = self._run_planner(planner, resp, "test", {})
         assert result is None
 
     def test_context_with_tool_probe_outputs_and_memory(self) -> None:
@@ -684,33 +614,12 @@ class TestPlanWithLLM:
             "memory_v2": {"summary": "已确认 active 记忆：ABC"},
         }
 
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
-            mock_client.return_value.post.return_value = resp
-            result = planner._plan_with_llm(
-                plan_id="pid",
-                user_id="u1",
-                message="查产品",
-                tool_registry=_SAMPLE_REGISTRY,
-                context=context,
-            )
+        result = self._run_planner(planner, resp, "查产品", context)
         assert result is not None
         assert result.metadata.get("user_memory_rag_summary") == "用户偏好：ABC产品"
 
 
-class TestPlanMethod:
-    def _make_planner(self) -> Any:
-        from app.application.workflow.planner import LLMWorkflowPlanner
-
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_svc:
-            ai = MagicMock()
-            ai.api_key = ""
-            ai.api_url = ""
-            ai.model = ""
-            ai.get_context.return_value = None
-            mock_svc.return_value = ai
-            planner = LLMWorkflowPlanner()
-        return planner
-
+class TestPlanMethod(_PlannerFixture):
     def test_plan_falls_back_to_rules_when_llm_unavailable(self) -> None:
         planner = self._make_planner()
 

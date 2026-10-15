@@ -9,7 +9,7 @@ import { useWorkflowEmployeeSpaceStore } from '@/stores/workflowEmployeeSpace'
 import { useModsStore } from '@/stores/mods'
 import { hydrateWorkspacePrefsFromServer } from '@/utils/workspacePrefsApi'
 import { refreshHostPackAcknowledged } from '@/constants/productFlow'
-import { updateProductReadAccountScope } from './productReadAccountScope'
+import { productReadAccountEpoch, updateProductReadAccountScope } from './productReadAccountScope'
 
 /**
  * 登录/切换租户/登出后，重载按 tenant 隔离的客户端持久化 store。
@@ -18,8 +18,9 @@ import { updateProductReadAccountScope } from './productReadAccountScope'
  * Router guards await it so retained tenant-scoped state is available before
  * deciding whether the host onboarding is really required.
  */
-export async function refreshTenantScopedClientStores(input?: TenantStorageScopeInput): Promise<void> {
+export async function refreshTenantScopedClientStores(input?: TenantStorageScopeInput, hydrate = true): Promise<void> {
   updateProductReadAccountScope(input)
+  const epoch = productReadAccountEpoch.value
   invalidateTenantStorageScopeCache()
   const scope = resolveTenantStorageScope(input)
   setTenantStorageScopeCache(scope)
@@ -28,7 +29,8 @@ export async function refreshTenantScopedClientStores(input?: TenantStorageScope
   } catch {
     /* pinia 未就绪 */
   }
-  await hydrateWorkspacePrefsFromServer(scope)
+  if (hydrate) await hydrateWorkspacePrefsFromServer(scope)
+  if (epoch !== productReadAccountEpoch.value) return
   // Workspace preferences can write tenant-scoped localStorage in this same
   // document.  The browser emits no `storage` event to its writing document,
   // so refresh the reactive sidebar acknowledgement explicitly.

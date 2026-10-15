@@ -426,8 +426,14 @@ class TestBertIntentService:
             side_effect=ImportError("no torch"),
         ):
             svc = BertIntentService(use_fallback=True, local_files_only=True)
+            svc.classifier.predict_batch = MagicMock(
+                return_value=[{"confidence": 0.1}, {"confidence": 0.9}]
+            )
             results = svc.recognize_batch(["你好", "开单"])
             assert len(results) == 2
+            assert [r["source"] for r in results] == ["bert_low_confidence", "bert"]
+            assert results[0]["fallback_recommended"] is True
+            assert "fallback_recommended" not in results[1]
 
     def test_recognize_batch_no_fallback_unavailable(self):
         with patch(

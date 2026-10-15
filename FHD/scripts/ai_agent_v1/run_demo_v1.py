@@ -2,7 +2,7 @@
 # mypy: disable-error-code="assignment"
 """AI Agent V1 — 7 场景统一入口。
 
-场景清单（与 [`../../docs/ai-agent-v1-plan.md`](../../docs/ai-agent-v1-plan.md) Phase 2 对齐）：
+历史 V1 demo 场景清单（留证目录 docs/evidence/ai-agent-v1；不作为当前安装版验收）：
 
 | # | 场景 | 风险等级 | 工具链 |
 |---|------|----------|--------|
