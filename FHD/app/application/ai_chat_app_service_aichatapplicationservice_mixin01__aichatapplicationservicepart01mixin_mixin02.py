@@ -25,7 +25,14 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
         session_id = str(context.get("session_id") or context.get("conversation_id") or "").strip()
         if not session_id:
             return
+        from app.application.task_conversation_store import durable_user_id
         from app.services import get_conversation_service
+
+        # The web_normal_* id scopes model memory, not the authenticated history owner.
+        owner_id = durable_user_id(context.get("local_user_id")) or durable_user_id(
+            context.get("actor_id")
+        )
+        history_user_id = str(owner_id) if owner_id is not None else user_id
 
         inner = response_data.get("data") if isinstance(response_data.get("data"), dict) else {}
         if not isinstance(inner, dict):
@@ -137,7 +144,7 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
         conv = get_conversation_service()
         conv.save_message(
             session_id=session_id,
-            user_id=user_id,
+            user_id=history_user_id,
             role="user",
             content=str(message)[:8000],
             intent=intent or "chat",
@@ -148,7 +155,7 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
             response_data = {}
         conv.save_message(
             session_id=session_id,
-            user_id=user_id,
+            user_id=history_user_id,
             role="assistant",
             content=reply,
             intent=intent or "assistant_reply",

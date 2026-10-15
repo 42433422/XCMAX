@@ -10,20 +10,13 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-
+from tests.test_application.ai_chat_test_helpers import (
+    _make_svc as _make_service,
+)
 
 # ---------------------------------------------------------------------------
 # Helper: create service with all heavy deps mocked
 # ---------------------------------------------------------------------------
-def _make_service():
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
 
 
 # ========================= _skip_pro_excel_deterministic_import =============

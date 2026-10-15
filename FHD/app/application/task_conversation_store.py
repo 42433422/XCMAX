@@ -54,6 +54,7 @@ def _message_row(message: AIConversation) -> dict[str, Any]:
         "role": message.role,
         "content": message.content,
         "intent": message.intent or "",
+        "metadata": message.conversation_metadata or "",
         "timestamp": message.created_at.isoformat() if message.created_at else None,
     }
 

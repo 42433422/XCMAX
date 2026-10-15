@@ -83,8 +83,7 @@
 
 **数据库**
 
-- `ALEMBIC_MIGRATION_GUIDE.md`
-- `XCAGI/ALEMBIC_MIGRATION_GUIDE.md`
+- 当前公约：[`guides/ALEMBIC_MIGRATION_GUIDE.md`](guides/ALEMBIC_MIGRATION_GUIDE.md)；XCAGI 旧链快照已仓外归档，见根 `ARCHIVE_POINTER.md`「2026-10-12 #2300」。
 
 **其他**
 
@@ -93,7 +92,7 @@
 
 **专项（子项目迁入 XCAGI）**
 
-- `docs/migration_report.md`（例：原「AI 助手」Excel 等能力并入 XCAGI 的记录）
+- 原「AI 助手」Excel 迁移快照已外置，恢复路径见仓根 `ARCHIVE_POINTER.md`。
 
 ---
 
