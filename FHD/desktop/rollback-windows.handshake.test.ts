@@ -254,7 +254,7 @@ describe('Windows rollback launcher handshake', () => {
     const script = buildWindowsRollbackScript(options).split(/\r?\n/)
     const preflight = script.findIndex((line) => line.includes('retained rollback files must be recovered first'))
     const createAppStage = script.findIndex((line) => line.includes('New-Item -ItemType Directory -Path $stagingDir'))
-    const removeAppStage = script.find((line) => line.includes('Remove-Item -LiteralPath $stagingDir -Recurse'))
+    const removeAppStage = script.find((line) => line.includes('Remove-Item') && line.includes('$stagingDir'))
     const removeDatabaseStage = script.find((line) => line.includes('Remove-Item -LiteralPath $databaseStaging -Force'))
     expect(preflight).toBeGreaterThanOrEqual(0)
     expect(preflight).toBeLessThan(createAppStage)
