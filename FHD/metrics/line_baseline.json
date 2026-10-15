@@ -1,5 +1,5 @@
 {
-  "lines": 2303338,
+  "lines": 2303363,
   "updated": "2026-10-14",
-  "note": "Owner approved isolated Windows lifecycle and shared receipt-validation regression tests: actual +306 maintained lines versus main, within +350 cap; no product runtime changes"
+  "note": "Owner approved isolated lifecycle harness: immutable original artifact, serial first-loop modes and regression tests; actual +331 maintained lines versus main, within +350 cap; no product runtime changes"
 }

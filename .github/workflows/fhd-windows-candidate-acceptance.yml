@@ -15,7 +15,7 @@ on:
         required: true
         type: string
       only:
-        description: "Empty runs all five install modes. Rollback runs only the failed-rollback mode."
+        description: "Empty runs all five modes. Lifecycle runs Clean/Upgrade/Rollback. Rollback runs only rollback."
         required: false
         default: ""
         type: string
@@ -40,7 +40,7 @@ jobs:
         env:
           ONLY: ${{ github.event.inputs.only }}
         run: |
-          if [ "$ONLY" = "Rollback" ]; then echo 'matrix=["Rollback"]' >> "$GITHUB_OUTPUT"; else echo 'matrix=["Clean","Upgrade","Gui","Recovery","Rollback"]' >> "$GITHUB_OUTPUT"; fi
+          if [ "$ONLY" = "Rollback" ]; then echo 'matrix=["Rollback"]' >> "$GITHUB_OUTPUT"; elif [ "$ONLY" = "Lifecycle" ]; then echo 'matrix=["Clean","Upgrade","Rollback"]' >> "$GITHUB_OUTPUT"; else echo 'matrix=["Clean","Upgrade","Gui","Recovery","Rollback"]' >> "$GITHUB_OUTPUT"; fi
   isolated-install:
     needs: select-modes
     name: "${{ matrix.mode }} install on isolated Windows runner"
@@ -48,6 +48,7 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      max-parallel: 1 # Same CI account: avoid cross-mode session interference.
       matrix:
         mode: ${{ fromJson(needs.select-modes.outputs.matrix) }}
     defaults:
@@ -81,12 +82,23 @@ jobs:
           run-id: ${{ inputs.candidate_run_id }}
           github-token: ${{ github.token }}
           path: FHD/candidate
-      - name: Fetch immutable old installer for upgrade
+      - name: Fetch original immutable 1.0.0.5 artifact
+        if: matrix.mode == 'Upgrade' || matrix.mode == 'Rollback'
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-windows-installer-83939363ca2ccf7776c97f5c7895e29c1e5bc453
+          run-id: 36661745977
+          github-token: ${{ github.token }}
+          path: FHD/old-candidate
+      - name: Verify original installer provenance and bytes
         if: matrix.mode == 'Upgrade' || matrix.mode == 'Rollback'
         shell: pwsh
         run: |
-          $url = 'https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe'
-          Invoke-WebRequest -Uri $url -OutFile candidate/old-installer.exe -TimeoutSec 600
+          $receipt = Get-Content old-candidate/delivery-receipt.json -Raw | ConvertFrom-Json
+          $installer = Get-Item old-candidate/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($receipt.git_sha -ne '83939363ca2ccf7776c97f5c7895e29c1e5bc453' -or $receipt.version -ne '1.0.0.5' -or $receipt.size -ne 250126772 -or $installer.Length -ne $receipt.size -or $hash -ne $receipt.sha256 -or $hash -ne '92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf') { throw 'Original 1.0.0.5 artifact provenance mismatch' }
+          Move-Item -LiteralPath $installer.FullName -Destination candidate/old-installer.exe
       - uses: actions/setup-node@v4
         if: matrix.mode != 'Clean'
         with:

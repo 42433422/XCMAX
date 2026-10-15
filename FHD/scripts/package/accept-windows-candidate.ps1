@@ -231,7 +231,7 @@ try {
     $deadline = (Get-Date).AddMinutes(1); while ((Test-Path (Join-Path $dataRoot 'rollback-marker.json')) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2; $health = Invoke-RestMethod "$base/api/health?lite=true" -TimeoutSec 3; Check ($health.git_sha -eq $CandidateSha -and $health.status -ne 'unhealthy') 'upgrade.observation_identity' 'candidate remains healthy during natural commit observation' }
     Check (-not (Test-Path (Join-Path $dataRoot 'rollback-marker.json'))) 'upgrade.health_commit' 'candidate naturally committed its healthy-start observation'
     Check ($newAuth.tenant -eq $oldAuth.tenant) 'same_enterprise' "tenant_sha256=$(Digest $newAuth.tenant)"
-    $candidateGuiProof = Run-Gui 'after-upgrade' (Join-Path $EvidenceDir 'after-upgrade-gui') $oldGuiSeed; Fixture 'verify'
+    $candidateGuiProof = Run-Gui 'readback' (Join-Path $EvidenceDir 'after-upgrade-gui') $oldGuiSeed; Fixture 'verify'
     Stop-App; Uninstall-OldApp
     Check (-not (Test-Path (Join-Path $installRoot 'XCAGI.exe'))) 'retention.uninstalled' 'candidate executable removed'
     Fixture 'verify'; Install $CandidatePath 'candidate'; Start-App 'candidate'
