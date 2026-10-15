@@ -136,6 +136,11 @@ _CLAUSE_BOUNDARY_RE = re.compile(
 
 def classify_business_chat_intent(message: str) -> BusinessChatIntent | None:
     """Keep protected actions visible even alongside policy explanations."""
+    from app.application.client_product_issue_intake import looks_like_issue_report
+
+    text = message or ""
+    if looks_like_issue_report(text) and "期望" in text and "实际" in text:
+        return None
     intent = _classify_business_clause(message)
     if intent is not None:
         return intent

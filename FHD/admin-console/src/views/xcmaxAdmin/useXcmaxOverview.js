@@ -3,16 +3,12 @@ import { api } from '@/api'
 import { appAlert } from '@/utils/appDialog'
 import { getPersonnelModApiBase } from '@/constants/personnelModApi'
 
-/**
- * 服务器后台总览卡片的本地/远端状态、模块注册表、远端员工与最近错误。
- * 从 XCmaxAdminView.vue 逐字迁移，行为零变更。
- */
 export function useXcmaxOverview() {
   const syncingEmployees = ref(false)
 
-  const localStatus = ref({ ok: false, version: '', database: '', uptime: '', address: window.location.host })
+  const localStatus = ref({ state: 'unknown', ok: null, version: '', database: '', uptime: '', address: window.location.host })
   const remoteStatus = ref({
-    reachable: false,
+    state: 'unknown', reachable: null,
     latencyMs: null,
     version: '',
     deployTime: '',
@@ -29,33 +25,40 @@ export function useXcmaxOverview() {
   }
 
   async function loadLocalStatus() {
+    if (localStatus.value.state === 'loading') return
+    localStatus.value = { state: 'loading', address: window.location.host }
     try {
       const r = await api.get('/api/health')
+      if (!r?.status && typeof r?.ok !== 'boolean') throw new Error('本地状态不可用')
       localStatus.value = {
+        state: 'ready',
         // 后端 /api/health 使用 status: "healthy"（见 fastapi_routes.__init__），与 "ok" 口径并存
         ok: r?.status === 'ok' || r?.status === 'healthy' || r?.ok === true,
         version: r?.version || r?.data?.version || '—',
-        database: r?.database || 'ok',
+        database: r?.database || '—',
         uptime: r?.uptime || '—',
         address: window.location.host
       }
     } catch {
-      localStatus.value.ok = false
+      localStatus.value = { state: 'error', address: window.location.host }
     }
   }
 
   async function loadRemoteStatus() {
+    if (remoteStatus.value.state === 'loading') return
+    remoteStatus.value = { state: 'loading' }
     const t0 = Date.now()
     try {
       const r = await api.get('/api/xcmax/admin/remote-status')
       const d = r?.data && typeof r.data === 'object' ? r.data : r
-      const reachable = d?.reachable === true
+      if (typeof d?.reachable !== 'boolean') throw new Error('远端状态不可用')
+      const reachable = d.reachable
       const serverMs = d?.latency_ms
       const host = d?.host != null && d.host !== '' ? String(d.host) : ''
       const port = d?.port != null && d.port !== '' ? String(d.port) : ''
       const address = host && port ? `${host}:${port}` : host || '—'
       remoteStatus.value = {
-        reachable,
+        state: 'ready', reachable,
         // 离线时后端 latency_ms 为 null；不要用「本接口总耗时」冒充远端延迟（会显示上万 ms）
         latencyMs:
           reachable && typeof serverMs === 'number' && !Number.isNaN(serverMs)
@@ -68,13 +71,7 @@ export function useXcmaxOverview() {
         address,
       }
     } catch {
-      remoteStatus.value = {
-        reachable: false,
-        latencyMs: null,
-        version: '—',
-        deployTime: '—',
-        address: '—',
-      }
+      remoteStatus.value = { state: 'error' }
     }
   }
 

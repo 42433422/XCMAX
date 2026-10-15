@@ -218,7 +218,10 @@ def _resume_pending_ai_workflow_after_approval(
                 success=_agent_success,
                 code=_facade().WORKFLOW_EXECUTION_SUCCESS_CODE
                 if _agent_success
-                else _facade().WORKFLOW_EXECUTION_FAILED_CODE,
+                else (
+                    _facade().closed_loop_setup_failure_code(agent_run)
+                    or _facade().WORKFLOW_EXECUTION_FAILED_CODE
+                ),
             )
             return {
                 "workflow_executed": True,
