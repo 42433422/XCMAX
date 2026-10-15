@@ -43,7 +43,7 @@ certifi==2026.4.22
     #   edge-tts
     #   httpcore
     #   httpx
-cffi==2.0.0
+cffi==2.1.1
     # via
     #   cryptography
     #   gevent
