@@ -12,7 +12,8 @@ spec.loader.exec_module(fixtures)
 
 def test_nonempty_owned_state_and_real_long_path_detect_corruption(tmp_path):
     root, evidence = tmp_path / 'data', tmp_path / 'evidence'
-    root.mkdir(); evidence.mkdir()
+    root.mkdir()
+    evidence.mkdir()
     fixtures.run('seed', root, evidence)
     fixtures.run('verify', root, evidence)
     entries = json.loads((evidence / 'owned-fixtures.json').read_text())
@@ -32,9 +33,15 @@ def test_nonempty_owned_state_and_real_long_path_detect_corruption(tmp_path):
 
 def test_original_app_manifest_rejects_changed_or_extra_files(tmp_path):
     root, evidence = tmp_path / 'app', tmp_path / 'evidence'
-    root.mkdir(); evidence.mkdir(); (root / 'app.exe').write_bytes(b'original')
-    fixtures.run('app-seed', root, evidence); fixtures.run('app-verify', root, evidence)
+    root.mkdir()
+    evidence.mkdir()
+    (root / 'app.exe').write_bytes(b'original')
+    fixtures.run('app-seed', root, evidence)
+    fixtures.run('app-verify', root, evidence)
     (root / 'extra').write_bytes(b'extra')
-    with pytest.raises(AssertionError): fixtures.run('app-verify', root, evidence)
-    (root / 'extra').unlink(); (root / 'app.exe').write_bytes(b'changed')
-    with pytest.raises(AssertionError): fixtures.run('app-verify', root, evidence)
+    with pytest.raises(AssertionError):
+        fixtures.run('app-verify', root, evidence)
+    (root / 'extra').unlink()
+    (root / 'app.exe').write_bytes(b'changed')
+    with pytest.raises(AssertionError):
+        fixtures.run('app-verify', root, evidence)
