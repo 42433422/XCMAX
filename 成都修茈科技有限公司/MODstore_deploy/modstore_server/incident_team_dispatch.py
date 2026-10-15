@@ -10,9 +10,11 @@ from typing import Any, Dict, List, Optional
 
 from modstore_server import incident_team_orchestrator as facade
 from modstore_server.customer_issue_delivery_contract import (
+    execution_pending,
     execution_succeeded,
     team_succeeded,
 )
+from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
@@ -32,6 +34,18 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
 
     if not _env_bool("MODSTORE_INCIDENT_TEAM_ENABLED", True):
         return {"claimed": False, "ok": False, "reason": "incident_team_disabled"}
+    with get_session_factory()() as session:
+        saved = session.get(IncidentEvent, int(event_id))
+        if saved is not None and isinstance(_payload(saved).get("_team_claim"), dict):
+            from modstore_server.incident_team_completion import reconcile_pending_teams
+
+            reconcile_pending_teams(event_id=int(event_id))
+            session.expire(saved)
+            return {
+                "claimed": True,
+                "ok": bool(_payload(saved)["_team_claim"].get("ok")),
+                "reason": "incident_completion_readback",
+            }
     team_plan = build_incident_team(event_id)
     team = team_plan.get("team") if isinstance(team_plan.get("team"), list) else []
     if len(team) < 2:
@@ -170,13 +184,16 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             or bool(result.get("blocked_by_risk_gate"))
             or str(result.get("reason") or "").strip().lower() == "blocked_by_risk_gate"
         )
+        succeeded = not risk_blocked and execution_succeeded(result)
+        pending = not risk_blocked and execution_pending(result)
         row = {
             "employee_id": employee_id,
-            "ok": (not risk_blocked and execution_succeeded(result)),
+            "handler_outputs": handler_output_digest(result),
+            "ok": succeeded,
             "role": role,
             "route": route,
             "result": result,
-            "status": status or ("blocked_by_risk_gate" if risk_blocked else "unknown"),
+            "status": "pending" if pending else status or ("completed" if succeeded else "failed"),
         }
         results.append(row)
         if role == "scout":
@@ -189,7 +206,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
     failed_roles = [
         str(row.get("role") or "")
         for row in results
-        if not bool(row.get("ok"))
+        if (not bool(row.get("ok")) and row.get("status") != "pending")
         or bool((row.get("result") or {}).get("handler_failed"))
         or str(row.get("status") or "").strip().lower() == "handler_failed"
     ]
@@ -212,7 +229,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
     if _env_bool(_HANDLER_FAILED_FOLLOWUP_ENV, True):
         follow_ups = _follow_up_handler_failures(
             event_id=event_id,
-            results=results,
+            results=[row for row in results if row.get("status") != "pending"],
             team_plan=team_plan,
             payload=payload,
             event_type=event_type,
@@ -288,7 +305,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                     )
                     cs_progress = {"ok": False, "error": str(exc)[:300]}
                     updated["_cs_progress"] = cs_progress
-            ev2.payload_json = json.dumps(updated, ensure_ascii=False)[:8000]
+            ev2.payload_json = json.dumps(updated, ensure_ascii=False)
             ev2.dispatched_count = int(ev2.dispatched_count or 0) + 1
             session.commit()
     return {

@@ -16,18 +16,9 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-
-
-def _make_service():
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
-
+from tests.test_application.ai_chat_test_helpers import (
+    _make_svc as _make_service,
+)
 
 # ========================= _skip_pro_excel_deterministic_import - extended =
 
@@ -1197,21 +1188,11 @@ class TestExtractExcelImportRecordsDeep:
 
 
 class TestProcessChatDeepErrors:
-    def _make_service_with_mock(self):
-        with (
-            patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-            patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-            patch("app.application.ai_chat_app_service.HybridRiskGate"),
-            patch("app.application.ai_chat_app_service.WorkflowEngine"),
-            patch("app.application.ai_chat_app_service.get_approval_service"),
-        ):
-            return AIChatApplicationService()
-
     def test_connection_error(self):
         async def raise_conn(*a, **kw):
             raise ConnectionError("refused")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_conn
         service.ai_service = mock_ai
@@ -1228,7 +1209,7 @@ class TestProcessChatDeepErrors:
         async def raise_timeout(*a, **kw):
             raise TimeoutError("timed out")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_timeout
         service.ai_service = mock_ai
@@ -1245,7 +1226,7 @@ class TestProcessChatDeepErrors:
         async def raise_api_key(*a, **kw):
             raise RuntimeError("api_key is invalid")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_api_key
         service.ai_service = mock_ai
@@ -1262,7 +1243,7 @@ class TestProcessChatDeepErrors:
         async def raise_conn_str(*a, **kw):
             raise RuntimeError("connection refused by remote")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_conn_str
         service.ai_service = mock_ai
@@ -1279,7 +1260,7 @@ class TestProcessChatDeepErrors:
         async def raise_generic(*a, **kw):
             raise RuntimeError("unknown internal error")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_generic
         service.ai_service = mock_ai
@@ -1304,7 +1285,7 @@ class TestProcessChatDeepErrors:
         async def mock_chat(*a, **kw):
             return {"success": True, "text": "结果", "action": "followup", "data": {}}
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = mock_chat
         service.ai_service = mock_ai

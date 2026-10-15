@@ -6,11 +6,13 @@ from typing import Any
 
 from app.domain.autonomy.autonomy_guard import RiskDecision, evaluate_risk, get_autonomy_guard
 
-from .types import PlanGraph
+from .types import PlanGraph, database_restore_error
 
 
 class HybridRiskGate:
     def evaluate(self, plan: PlanGraph, context: dict[str, object]) -> RiskDecision:
+        if error := database_restore_error(plan):
+            raise ValueError(error)
         node_decisions: list[tuple[str, RiskDecision]] = []
         runtime_context: dict[str, Any] = dict(context or {})
         for node in plan.nodes:

@@ -59,6 +59,22 @@ it('never hands an Intel Mac the Apple Silicon image', async () => {
   expect((await open(files(['arm64', 'x64']), '?macArch=x64'))['macOS · Intel']).toBe(`${root}/enterprise/XCAGI-Enterprise-1.0.0.5-mac-x64.dmg`)
 })
 
+it('accepts immutable Mac URLs only for the current official build and architecture', async () => {
+  const current = manifest(['arm64', 'x64'])
+  for (const row of current.channels.official_download.enterprise.mac) row.url = `${root}/builds/${sha}/enterprise/${row.filename}`
+  const files = { '/download-release.json': pointer(true), [`${root}/manifest.json`]: current }
+  const links = await open(files)
+  expect(links['macOS · Apple Silicon']).toBe(current.channels.official_download.enterprise.mac[0].url)
+  expect(links['macOS · Intel']).toBe(current.channels.official_download.enterprise.mac[1].url)
+  const row = current.channels.official_download.enterprise.mac[1]
+  for (const url of [row.url.replace(sha, 'c'.repeat(40)), row.url.replace('https://xiu-ci.com', 'https://example.com'), row.url.replace('mac-x64.dmg', 'mac-arm64.dmg')]) {
+    row.url = url
+    expect((await open(files))['macOS · Intel']).toBeNull()
+  }
+  current.channels.official_download.enterprise.win.url = `${root}/builds/${sha}/enterprise/${current.channels.official_download.enterprise.win.filename}`
+  expect((await open(files))['Windows 64 位']).toBeNull()
+})
+
 it('lists the Windows interim installer only at the path the release workflow publishes', async () => {
   const files = { '/download-release.json': pointer(false) }
   const valid = await open({ ...files, '/download-windows-hotfix.json': interim() })

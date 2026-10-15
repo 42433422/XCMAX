@@ -1,6 +1,7 @@
 # mypy: disable-error-code="attr-defined"
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from unittest.mock import ANY
 
@@ -45,6 +46,8 @@ def store(monkeypatch) -> TaskConversationStore:
         "app.application.task_conversation_store.get_db",
         isolated_db,
     )
+    monkeypatch.setattr("app.services.conversation_service.get_db", isolated_db)
+    monkeypatch.setattr("app.services.conversation_service.notify_user", lambda **kwargs: None)
     return TaskConversationStore()
 
 
@@ -114,3 +117,61 @@ def test_clear_removes_only_current_users_sessions(store: TaskConversationStore)
     assert store.clear_sessions(user_id=41) == 1
     assert store.get_conversation(session_id="owner-a", user_id=41)["messages"] == []
     assert store.get_conversation(session_id="owner-b", user_id=42)["messages"][0]["content"] == "B"
+
+
+@pytest.mark.parametrize("actor_context", [{"local_user_id": 41, "actor_id": 42}, {"actor_id": 41}])
+def test_normal_chat_and_terminal_feedback_reopen_under_authenticated_owner(
+    store: TaskConversationStore, monkeypatch, actor_context
+) -> None:
+    from types import SimpleNamespace
+
+    from starlette.requests import Request
+
+    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.legacy.routes.conversation.compat_extra import conversations_get
+    from app.services.conversation_service import ConversationService
+
+    conversation = ConversationService()
+    monkeypatch.setattr("app.services.get_conversation_service", lambda: conversation)
+    service = object.__new__(AIChatApplicationService)
+    service._persist_chat_turn(
+        "web_normal_approval-session",
+        "创建订单",
+        {"session_id": "approval-session", **actor_context},
+        {"success": True, "response": "等待审批"},
+    )
+    conversation.save_message(
+        session_id="approval-session",
+        user_id="41",
+        role="assistant",
+        content="审批已完成，销售订单已创建。",
+        intent="business_harness_result",
+        metadata='{"ui":{"businessResult":{"status":"completed"}}}',
+        idempotency_key="terminal-run-1",
+    )
+    reopened = TaskConversationStore().get_conversation(session_id="approval-session", user_id=41)
+    assert [message["content"] for message in reopened["messages"]] == [
+        "创建订单",
+        "等待审批",
+        "审批已完成，销售订单已创建。",
+    ]
+    assert reopened["session"]["message_count"] == 3
+    assert (
+        json.loads(reopened["messages"][-1]["metadata"])["ui"]["businessResult"]["status"]
+        == "completed"
+    )
+    assert store.get_conversation(session_id="approval-session", user_id=42)["messages"] == []
+    request = Request({"type": "http", "headers": []})
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda _: SimpleNamespace(id=41),
+    )
+    assert (
+        conversations_get(request, "approval-session", user_id="42", mod_id="")["messages"]
+        == reopened["messages"]
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda _: SimpleNamespace(id=42),
+    )
+    assert conversations_get(request, "approval-session", user_id="41", mod_id="")["messages"] == []

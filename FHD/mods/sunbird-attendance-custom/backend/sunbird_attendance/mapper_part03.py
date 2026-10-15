@@ -1,5 +1,3 @@
-"""Implementation extracted from the public facade module."""
-
 from __future__ import annotations
 
 import importlib
@@ -30,13 +28,9 @@ def _snapshot_block_cell_styles(
 def _apply_style_bundle(cell, bundle: _facade().BlockCellStyle | None) -> None:
     if not bundle:
         return
-    font, border, alignment = bundle
-    if font is not None:
-        cell.font = font
-    if border is not None:
-        cell.border = border
-    if alignment is not None:
-        cell.alignment = alignment
+    for attribute, value in zip(("font", "border", "alignment"), bundle):
+        if value is not None:
+            setattr(cell, attribute, value)
 
 
 def _force_arabic_number_format(cell, value: object | None = None) -> None:
@@ -70,27 +64,12 @@ def _paste_one_person_block(
         if c >= _facade().DETAIL_TEMPLATE_SUMMARY_BEGIN_COL:
             continue
         tgt = ws.cell(block_top + dr - 1, c)
-        tgt.value = v
+        tgt.value = None if c >= 5 else v
         if proto_styles:
-            st = proto_styles.get((dr, c))
-            if st:
-                _facade()._apply_style_bundle(tgt, st)
-    for dr in range(_facade().DETAIL_PERSON_BLOCK_ROWS):
-        for c in range(5, _facade().DETAIL_TEMPLATE_SUMMARY_BEGIN_COL):
-            tgt = ws.cell(block_top + dr, c)
-            tgt.value = None
-            if proto_styles:
-                st = proto_styles.get((dr + 1, c))
-                if st:
-                    _facade()._apply_style_bundle(tgt, st)
-    ws.cell(block_top, 1).value = department
-    ws.cell(block_top, 2).value = nature
-    ws.cell(block_top, 3).value = name
-    if proto_styles:
-        for lbl_r, lbl_c in ((1, 1), (1, 2), (1, 3)):
-            st = proto_styles.get((lbl_r, lbl_c))
-            if st:
-                _facade()._apply_style_bundle(ws.cell(block_top + lbl_r - 1, lbl_c), st)
+            _facade()._apply_style_bundle(tgt, proto_styles.get((dr, c)))
+    for col, value in enumerate((department, nature, name), 1):
+        cell = ws.cell(block_top, col, value)
+        cell.data_type = "s"
     for min_c, r1, max_c, r2 in rel_merges:
         ref = f"{_facade().get_column_letter(min_c)}{block_top + r1 - 1}:{_facade().get_column_letter(max_c)}{block_top + r2 - 1}"
         try:
@@ -112,13 +91,7 @@ def rebuild_detail_sheet_person_blocks(
     header_rows: int = _facade().DETAIL_HEADER_ROWS,
     prototype_block_top: int = 4,
 ) -> None:
-    """按数据人员名单重排「明细」：保留前 ``header_rows`` 行与首块版式（含合并），每人仍占 6 行；打卡区清空待写。
-
-    明细右侧整条「侧表」（约 BP—CG：序号、姓名、BR..CC 累计、CD、夜班 CE—CG）在版式快照里只复制到第
-    ``DETAIL_TEMPLATE_SUMMARY_BEGIN_COL-1`` 列；≥70 的侧栏公式会在删除正文行前单独快照首块 CE—CG，
-    并在粘贴回第一数据行后写回，供 ``_refresh_detail_side_summary_formulas`` 按首格模板套用到每人，
-    避免重排后侧栏只剩 BR..CC、夜班区整段空白或断续。
-    """
+    """Rebuild whole six-row blocks; preserve prototype merges and night formulas."""
     if not people:
         return
     if ws.max_row < prototype_block_top + _facade().DETAIL_PERSON_BLOCK_ROWS - 1:
@@ -129,6 +102,9 @@ def rebuild_detail_sheet_person_blocks(
     proto_vals, rel_merges = _facade()._snapshot_first_person_block(ws, prototype_block_top)
     proto_styles = _facade()._snapshot_block_cell_styles(ws, prototype_block_top)
     last = ws.max_row
+    for merged in list(ws.merged_cells.ranges):
+        if merged.max_row > header_rows:
+            ws.unmerge_cells(str(merged))
     if last > header_rows:
         ws.delete_rows(header_rows + 1, last - header_rows)
     for i, (dept, nature, name) in enumerate(people):
@@ -157,10 +133,7 @@ def find_template_base_rows(ws) -> dict[str, int]:
 def find_template_side_summary_rows(
     ws, header_rows: int = _facade().DETAIL_HEADER_ROWS
 ) -> dict[str, int]:
-    """侧表每人一行连续汇总所在行；姓名 → 行号。
-
-    「月度统计」引用 ``明细!BR``、``明细!CE`` 等时使用本映射；``find_template_base_rows`` 仍为考勤块首行。
-    """
+    """Map each identity to its consecutive side-summary row."""
     block_rows = _facade().iter_detail_sheet_block_base_rows(ws, header_rows)
     if not block_rows:
         return {}
@@ -246,10 +219,7 @@ def _detail_calendar_anchor_col(ws, header_rows: int = _facade().DETAIL_HEADER_R
 
 
 def _first_attendance_symbol_col(ws, sample_row: int) -> int:
-    """日×2 考勤写入起始列：优先用表头「1 日」列，避免首格为空时误把第 2 日当作起点（会侵占 BP 侧栏）。
-
-    否则在块首行从左向右找第一个考勤符号列；再回退 5。
-    """
+    """日×2 考勤写入起始列：优先用表头「1 日」列，避免首格为空时误把第 2 日当作起点（会侵占 BP 侧栏）。"""
     anchor = _facade()._detail_calendar_anchor_col(ws, _facade().DETAIL_HEADER_ROWS)
     if anchor is not None:
         return int(anchor)

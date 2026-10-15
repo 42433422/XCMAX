@@ -171,69 +171,6 @@ def health() -> _facade().HealthResponse:
     return _facade().HealthResponse(ok=True, **health_payload())
 
 
-@_facade().api_router.get("/api/config", tags=["config"])
-def get_config():
-    cfg = _facade()._cfg()
-    lib = _facade().resolved_library(cfg)
-    xc = _facade().resolved_xcagi(cfg)
-    st = _facade()._load_state()
-    return {
-        "library_root": str(lib),
-        "xcagi_root": str(xc) if xc else "",
-        "library_exists": lib.is_dir(),
-        "xcagi_ok": bool(xc and (xc / "mods").is_dir()),
-        "saved_library_root": cfg.library_root,
-        "saved_xcagi_root": cfg.xcagi_root,
-        "saved_xcagi_backend_url": cfg.xcagi_backend_url,
-        "xcagi_backend_url": _facade().resolved_xcagi_backend_url(cfg),
-        "state": {
-            "last_sandbox_mods_root": st.get("last_sandbox_mods_root") or "",
-            "last_sandbox_mod_id": st.get("last_sandbox_mod_id") or "",
-            "focus_mod_id": st.get("focus_mod_id") or "",
-        },
-    }
-
-
-@_facade().api_router.post("/api/export/fhd-shell-mods", tags=["config"])
-def api_export_fhd_shell_mods(
-    body: _facade().ExportFhdShellDTO = _facade().Body(default_factory=_facade().ExportFhdShellDTO),
-):
-    fhd = _facade()._fhd_repo_root()
-    if not fhd.is_dir():
-        raise _facade().HTTPException(
-            500, "无法定位 FHD 仓库根目录（预期 MODstore 位于 FHD/MODstore）"
-        )
-    target = (fhd / "backend" / "shell" / "fhd_shell_mods.json").resolve()
-    raw = body.output_path or ""
-    raw = raw.strip()
-    allowed_names = {
-        "",
-        "backend/shell/fhd_shell_mods.json",
-        target.as_posix(),
-    }
-    if raw.replace("\\", "/") not in allowed_names:
-        raise _facade().HTTPException(400, "output_path 必须是固定壳层清单路径")
-    lib = _facade()._lib()
-    n = _facade().write_fhd_shell_mods_json(lib, target, output_root=fhd)
-    return {"ok": True, "path": str(target), "count": n}
-
-
-@_facade().api_router.put("/api/config", tags=["config"])
-def put_config(body: _facade().ConfigDTO):
-    lr = (body.library_root or "").strip()
-    xr = (body.xcagi_root or "").strip()
-    url = (body.xcagi_backend_url or "").strip()
-    cfg = _facade().RepoConfig(
-        library_root=str(_facade().Path(lr).expanduser().resolve()) if lr else "",
-        xcagi_root=str(_facade().Path(xr).expanduser().resolve()) if xr else "",
-        xcagi_backend_url=url,
-    )
-    _facade().save_config(cfg)
-    if cfg.library_root:
-        _facade().Path(cfg.library_root).mkdir(parents=True, exist_ok=True)
-    return _facade().get_config()
-
-
 @_facade().api_router.get("/api/mods", tags=["mods"])
 def api_list_mods(
     user: _facade().Optional[_facade().User] = _facade().Depends(_facade()._get_optional_user),

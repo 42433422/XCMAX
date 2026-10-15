@@ -230,6 +230,22 @@ describe('main — resolveDesktopBackendBindHost', () => {
 })
 
 describe('main — isPortAvailable', () => {
+  it.skipIf(process.platform !== 'win32')('checks every configured local IPv4 address before declaring the wildcard backend port free', async () => {
+    const { isPortAvailable } = await import('./main.js')
+    const net = await import('node:net')
+    const server = net.createServer()
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.2', resolve))
+    try {
+      expect(await isPortAvailable((server.address() as { port: number }).port, '0.0.0.0')).toBe(false)
+    } finally { await new Promise<void>(resolve => server.close(() => resolve())) }
+  })
+  it('keeps the Windows shell probe on loopback without changing backend LAN binding', async () => {
+    const { isPortAvailable, DESKTOP_BACKEND_BIND_HOST } = await import('./main.js')
+    const net = await import('node:net')
+    const listen = vi.spyOn(net.Server.prototype, 'listen')
+    expect(await isPortAvailable(0)).toBe(true)
+    expect(listen.mock.calls[0][1]).toBe(process.platform === 'win32' ? '127.0.0.1' : DESKTOP_BACKEND_BIND_HOST)
+  })
   it('returns true for a free port', async () => {
     const { isPortAvailable } = await import('./main.js')
     // 用一个几乎不可能被占用的端口
