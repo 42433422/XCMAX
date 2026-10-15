@@ -16,7 +16,7 @@ pypdf==6.19.0
 reportlab==5.0.1
 Pillow==12.3.0
 gunicorn==23.0.0
-gevent==25.4.2
+gevent==26.8.0
 python-dotenv==1.2.3
 httpx==0.28.1
 requests==2.34.2
