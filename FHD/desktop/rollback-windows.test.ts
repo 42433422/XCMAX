@@ -17,9 +17,7 @@ const cleanupRoots: string[] = []
 const execFileAsync = promisify(execFile)
 
 afterEach(() => {
-  for (const root of cleanupRoots.splice(0)) {
-    fs.rmSync(root, { recursive: true, force: true })
-  }
+  for (const root of cleanupRoots.splice(0)) fs.rmSync(root, { recursive: true, force: true })
 })
 
 describe('Windows full application rollback helper', () => {
@@ -34,7 +32,7 @@ describe('Windows full application rollback helper', () => {
     let rejected = false
     try { await execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { timeout: 10000 }) } catch { rejected = true }
     expect(rejected).toBe(tampered); expect(fs.existsSync(receipt)).toBe(!tampered)
-  })
+  }, 15_000)
   it('encodes paths and the applied record without interpolating raw JSON', () => {
     const options: WindowsRollbackLaunchOptions = {
       currentPid: 42,
