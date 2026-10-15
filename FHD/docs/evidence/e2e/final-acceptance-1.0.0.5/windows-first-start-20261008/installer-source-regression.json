@@ -1,0 +1,153 @@
+{
+  "original": {
+    "scope": "Real isolated child-process regression, not installed-product VM acceptance",
+    "root": "Own isolated host fixture directories retained outside repository",
+    "results": [
+      {
+        "mode": "success",
+        "pass": true,
+        "Success": true,
+        "preserved": true,
+        "completionHonest": true,
+        "elapsedMs": 971
+      },
+      {
+        "mode": "failure",
+        "pass": false,
+        "Success": true,
+        "preserved": true,
+        "completionHonest": false,
+        "elapsedMs": 487
+      },
+      {
+        "mode": "crash",
+        "pass": false,
+        "Success": true,
+        "preserved": true,
+        "completionHonest": false,
+        "elapsedMs": 445
+      },
+      {
+        "mode": "crash-missing",
+        "pass": false,
+        "Success": false,
+        "preserved": false,
+        "completionHonest": false,
+        "elapsedMs": 1527
+      },
+      {
+        "mode": "missing",
+        "pass": false,
+        "Success": false,
+        "preserved": true,
+        "completionHonest": false,
+        "elapsedMs": 906
+      },
+      {
+        "mode": "slow",
+        "pass": false,
+        "Success": true,
+        "preserved": true,
+        "completionHonest": true,
+        "elapsedMs": 5714
+      },
+      {
+        "mode": "cancel",
+        "pass": true,
+        "Success": false,
+        "preserved": true,
+        "completionHonest": true,
+        "elapsedMs": 1415
+      }
+    ]
+  },
+  "fixed": {
+    "scope": "Real isolated child-process regression, not installed-product VM acceptance",
+    "root": "Own isolated host fixture directories retained outside repository",
+    "results": [
+      {
+        "mode": "success",
+        "pass": true,
+        "Success": true,
+        "preserved": true,
+        "completionHonest": true,
+        "elapsedMs": 622
+      },
+      {
+        "mode": "failure",
+        "pass": true,
+        "Success": false,
+        "preserved": true,
+        "completionHonest": true,
+        "elapsedMs": 473
+      },
+      {
+        "mode": "crash",
+        "pass": true,
+        "Success": false,
+        "preserved": true,
+        "completionHonest": true,
+        "elapsedMs": 642
+      },
+      {
+        "mode": "crash-missing",
+        "pass": true,
+        "Success": false,
+        "preserved": true,
+        "completionHonest": true,
+        "elapsedMs": 449
+      },
+      {
+        "mode": "missing",
+        "pass": true,
+        "Success": false,
+        "preserved": true,
+        "completionHonest": true,
+        "elapsedMs": 448
+      },
+      {
+        "mode": "slow",
+        "pass": true,
+        "Success": true,
+        "preserved": true,
+        "completionHonest": true,
+        "elapsedMs": 7424
+      },
+      {
+        "mode": "cancel",
+        "pass": true,
+        "Success": false,
+        "preserved": true,
+        "completionHonest": true,
+        "elapsedMs": 1280
+      }
+    ]
+  },
+  "actual_wpf_parser": [
+    {
+      "mode": "/S",
+      "pass": true,
+      "enabled": true,
+      "directory": "C:/fixture path"
+    },
+    {
+      "mode": "/silent",
+      "pass": true,
+      "enabled": true,
+      "directory": "C:/fixture path"
+    },
+    {
+      "mode": "--silent",
+      "pass": true,
+      "enabled": true,
+      "directory": "C:/fixture path"
+    },
+    {
+      "mode": "",
+      "pass": true,
+      "enabled": false,
+      "directory": null
+    }
+  ],
+  "scope": "Actual host source regression; not packaged customer Windows VM or real certificate validation"
+}
