@@ -40,6 +40,11 @@ on:
 env:
   PYTHON_VERSION: "3.11"
 
+# CI 提速：同一 PR 新推送取消旧运行；push/schedule/dispatch 按 run_id 独占，不取消。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 
 defaults:
   run:
