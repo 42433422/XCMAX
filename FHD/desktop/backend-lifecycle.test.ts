@@ -1,6 +1,18 @@
 import { EventEmitter } from 'node:events'
-import { describe, expect, it } from 'vitest'
-import { terminateChildProcess, type StoppableChildProcess } from './backend-lifecycle'
+import { describe, expect, it, vi } from 'vitest'
+import { relayBackendOutput, terminateChildProcess, type StoppableChildProcess } from './backend-lifecycle'
+
+it.each(['stdout', 'stderr'] as const)('packaged %s survives a closed parent pipe', channel => {
+  const pipe = vi.spyOn(process[channel], 'write').mockImplementation(() => { throw new Error('EPIPE') })
+  const log = vi.fn()
+  try {
+    relayBackendOutput(channel, Buffer.from('backup receipt\n'), true, log, 'migrate')
+    expect(log).toHaveBeenCalledWith(`[${channel}] backup receipt\n`)
+    expect(pipe).not.toHaveBeenCalled()
+  } finally {
+    pipe.mockRestore()
+  }
+})
 
 class FakeChild extends EventEmitter implements StoppableChildProcess {
   exitCode: number | null = null

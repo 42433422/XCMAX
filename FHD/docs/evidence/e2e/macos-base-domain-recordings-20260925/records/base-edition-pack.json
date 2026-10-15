@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "feature": "base-edition-pack",
+  "platform": "macos",
+  "result": "PARTIAL",
+  "status": "partial",
+  "verified_at": "2026-09-25T00:29:37.466Z",
+  "product_version": "1.0.0.5",
+  "git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+  "source_main_sha": "93b9ad2f68b72103816d4e0b75ff9165f60f9267",
+  "test_method": "ui",
+  "target": "/settings",
+  "scope": "设置页面打开并渲染；未切换/保存部署形态或验证安装包裁剪。",
+  "screenshot": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-edition-pack.png",
+  "video": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-edition-pack.webm",
+  "log": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-edition-pack.log",
+  "media": [
+    {
+      "kind": "screenshot",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-edition-pack.png",
+      "sha256": "0589bbbf74f8ed6ece5b298b1368084e8bcdfd2b8cf33dd193c8c1a422fca9c6"
+    },
+    {
+      "kind": "video",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-edition-pack.webm",
+      "sha256": "2714cfc587a769be365fce734f51677a953423c0dd5e96e0b600bb0fe01be1a6"
+    },
+    {
+      "kind": "log",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-edition-pack.log",
+      "sha256": "8f044eba07cc438502dbf508a46971903a7628b8c879f1696addaee81f36cf14"
+    }
+  ],
+  "limitations": "Supplementary observation only; this record is not an acceptance PASS."
+}

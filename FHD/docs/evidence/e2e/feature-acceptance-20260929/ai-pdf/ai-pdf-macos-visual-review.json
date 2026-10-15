@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-pdf",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "35b22f032260b557fd7335343166debb972b8dbb8767db72d23981871496bdd8",
+  "visible_content": "PDF 生成员工就绪并生成 .pdf(output_path/pdf_output_path)；回读解析文本含原文「太阳鸟」「包装盒」；边界：缺 file_path 返回 ok=false 并提示。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-pdf/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-pdf/macos/result.png"
+}

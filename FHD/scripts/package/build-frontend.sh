@@ -47,5 +47,17 @@ esac
 }
 HASH="$(grep -oE 'index-[A-Za-z0-9_-]+\.js' "$VUE_DIST/index.html" | head -1 || echo 'unknown')"
 echo "[ok] templates/vue-dist ready (${HASH}) -> 桌面端 PyInstaller 内嵌 + Web 端推送共用"
+
+# B9 防回归（2026-09-11 确诊：旧通道构建的 enterprise vue-dist 渲染层完全缺失
+# `mods/<id>/frontend/views/` glob 键 → findModViewLoader 全部未命中 → Mod 业务页空壳）。
+# full edition 的 dist 必须保留这些键；minimal/generic 按设计可无 Mod 视图，不做此校验。
+if [[ "${EDITION}" == "full" ]]; then
+  MODKEY_HIT="$(grep -rloE 'mods/[A-Za-z0-9_-]+/frontend/views/' "$VUE_DIST" 2>/dev/null | head -1 || true)"
+  [[ -n "$MODKEY_HIT" ]] || {
+    echo "[err] vue-dist 缺 mods/<id>/frontend/views/ glob 键（B9 防回归）：渲染层将回退「未安装」空壳" >&2
+    exit 1
+  }
+  echo "[ok] modViews glob 键在册（B9 防回归 PASS）"
+fi
 mkdir -p "$ROOT/build"
 printf '{"sku":"%s","edition":"%s","index":"%s"}\n' "${SKU}" "${EDITION}" "${HASH}" > "$ROOT/build/vue-dist-identity.json"

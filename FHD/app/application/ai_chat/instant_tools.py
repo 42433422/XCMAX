@@ -115,10 +115,13 @@ class AIChatInstantToolsMixin:
         parsed_params: dict[str, Any],
         ai_result: dict[str, Any],
         result_data: dict[str, Any],
+        original_message: str = "",
     ) -> dict[str, Any]:
         """执行普通模式工具"""
         if tool_key == "shipment_generate":
-            return self._execute_shipment_generate(response_data, parsed_params, ai_result)
+            return self._execute_shipment_generate(
+                response_data, parsed_params, ai_result, original_message
+            )
         elif tool_key == "shipments":
             return self._execute_shipments_query(response_data)
         else:
@@ -379,13 +382,21 @@ class AIChatInstantToolsMixin:
         response_data: dict[str, Any],
         parsed_params: dict[str, Any],
         ai_result: dict[str, Any],
+        original_message: str = "",
     ) -> dict[str, Any]:
         """执行发货单生成"""
         try:
             from app.application.facades.tools_facade import _parse_order_text
             from app.bootstrap import get_shipment_app_service
 
-            order_text = parsed_params.get("order_text") or ai_result.get("text", "")
+            # #2067：优先使用用户原始消息，绝不把助手自己的回复（如「已识别订单，
+            # 正在生成发货单…」）当作订单文本来解析，否则会抽出垃圾客户名。
+            order_text = (
+                original_message
+                or parsed_params.get("order_text")
+                or parsed_params.get("raw_text")
+                or ""
+            )
             parsed = _parse_order_text(order_text)
 
             if parsed.get("success"):

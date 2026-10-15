@@ -52,7 +52,7 @@ export const MENU_DEFAULT_NAMES: Record<string, string> = {
   'employee-workflow': '员工工作台',
   'workflow-employee-space': '员工空间',
   'workflow-visualization': '流程可视化',
-  purchase: '耗材申领',
+  purchase: '采购管理',
   'label-editor': '模板编辑器',
   'batch-analyze': '批量分析',
   'chat-debug': '对话调试',

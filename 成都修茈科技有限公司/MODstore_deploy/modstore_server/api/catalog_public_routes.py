@@ -21,14 +21,9 @@ from fastapi import (
 from pydantic import BaseModel, Field
 
 from modstore_server.api.catalog_public_helpers import authorize_upload as _authorize_upload
-from modstore_server.api.catalog_public_helpers import catalog_cache_scope as _catalog_cache_scope
 from modstore_server.api.catalog_public_helpers import (
     invalidate_catalog_list_caches as _invalidate_catalog_list_caches,
 )
-from modstore_server.api.catalog_public_helpers import (
-    is_customer_delivery_seed as _is_customer_delivery_seed,
-)
-from modstore_server.api.catalog_public_helpers import params_hash as _params_hash
 from modstore_server.api.catalog_public_helpers import require_upload as _require_upload
 from modstore_server.api.catalog_public_helpers import (
     try_index_catalog_item as _try_index_catalog_item,
@@ -39,13 +34,24 @@ from modstore_server.api.catalog_public_helpers import (
 from modstore_server.api.catalog_public_helpers import (
     validated_automation_provenance as _validated_automation_provenance,
 )
+from modstore_server.catalog_public_index import (
+    _public_pkg_ids_from_db,
+    package_row_eligible_for_public_index,
+)
+from modstore_server.catalog_publication_policy import (
+    is_private_package,
+    require_public_manifest,
+)
 from modstore_server.catalog_store import (
+    PackageConflictError,
     append_package,
     get_package,
     list_packages,
     list_versions,
-    packages_path,
+    load_store,
     promote_draft_to_stable,
+    read_package_manifest_from_zip,
+    sha256_file,
 )
 from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
 from modstore_server.duty_roster import is_planned_duty_employee_pack
@@ -70,45 +76,50 @@ def api_list_packages(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
-    from modstore_server import cache
-
-    ck = (
-        f"catalog:v1:{_catalog_cache_scope()}:packages:list:"
-        f"{_params_hash(artifact, q, limit, offset)}"
-    )
-    cached = cache.get_json(ck)
-    if cached is not None:
-        return cached
-    rows, total = list_packages(artifact=artifact, q=q, limit=limit, offset=offset)
-    rows = [r for r in rows if not _is_customer_delivery_seed(r)]
-    if artifact and str(artifact).strip().lower() == "customer_delivery_seed":
-        total = 0
-    result = {"packages": rows, "total": total, "limit": limit, "offset": offset}
-    cache.set_json(ck, result, ttl_seconds=300)
-    return result
+    public_ids = _public_pkg_ids_from_db()
+    rows = [
+        r
+        for r in load_store().get("packages") or []
+        if package_row_eligible_for_public_index(r, public_pkg_ids=public_ids)
+    ]
+    if artifact:
+        rows = [r for r in rows if str(r.get("artifact") or "mod") == artifact]
+    if q:
+        needle = q.lower()
+        rows = [
+            r
+            for r in rows
+            if any(needle in str(r.get(key) or "").lower() for key in ("name", "id", "description"))
+        ]
+    return {
+        "packages": rows[offset : offset + limit],
+        "total": len(rows),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/packages/{pkg_id}/{version}", summary="包详情")
 def api_get_package(pkg_id: str, version: str):
-    from modstore_server import cache
-
-    ck = f"catalog:v1:{_catalog_cache_scope()}:pkg:{pkg_id}:{version}"
-    cached = cache.get_json(ck)
-    if cached is not None:
-        return cached
     r = get_package(pkg_id, version)
-    if not r or _is_customer_delivery_seed(r):
+    if not r or not package_row_eligible_for_public_index(
+        r, public_pkg_ids=_public_pkg_ids_from_db()
+    ):
         raise HTTPException(404, "未找到该版本")
-    cache.set_json(ck, r, ttl_seconds=600)
     return r
 
 
-@router.get("/packages/by-id/{pkg_id}/versions", summary="同 id 下所有版本（含 draft/stable）")
+@router.get("/packages/by-id/{pkg_id}/versions", summary="同 id 下已公开版本")
 def api_package_versions(pkg_id: str):
     pid = (pkg_id or "").strip()
     if not pid:
         raise HTTPException(400, "pkg_id 无效")
-    versions = [r for r in list_versions(pid) if not _is_customer_delivery_seed(r)]
+    public_ids = _public_pkg_ids_from_db()
+    versions = [
+        r
+        for r in list_versions(pid)
+        if package_row_eligible_for_public_index(r, public_pkg_ids=public_ids)
+    ]
     return {"pkg_id": pid, "versions": versions}
 
 
@@ -144,37 +155,25 @@ def api_promote_package(
 
 @router.get("/index.json", summary="轻量全量索引")
 def api_index_json():
-    from modstore_server import cache
-
-    p = packages_path()
-    # Key includes file mtime so a new upload naturally produces a new cache key;
-    # old key expires in 60 s, effectively rate-limiting filesystem reads.
-    mtime = int(p.stat().st_mtime) if p.is_file() else 0
-    ck = f"catalog:v1:{_catalog_cache_scope()}:index:{mtime}"
-    cached = cache.get_json(ck)
-    if cached is not None:
-        return cached
     from modstore_server.catalog_public_index import build_public_index_packages
 
-    result = {"packages": build_public_index_packages()}
-    cache.set_json(ck, result, ttl_seconds=60)
-    return result
+    return {"packages": build_public_index_packages()}
 
 
 @router.get("/packages/{pkg_id}/{version}/download", summary="下载已上传包文件")
 def api_download(pkg_id: str, version: str):
-    from modstore_server.catalog_store import files_dir
+    from modstore_server.catalog_store import catalog_archive_available, files_dir
 
     r = get_package(pkg_id, version)
     if not r:
         raise HTTPException(404, "未找到")
-    if _is_customer_delivery_seed(r):
-        raise HTTPException(404, "客户交付种子包需授权下载")
+    if not package_row_eligible_for_public_index(r, public_pkg_ids=_public_pkg_ids_from_db()):
+        raise HTTPException(404, "该版本尚未公开发布")
     name = r.get("stored_filename")
     if not name:
         raise HTTPException(404, "该记录无本地文件")
     path = files_dir() / str(name)
-    if not path.is_file():
+    if not catalog_archive_available(name, r.get("sha256")):
         raise HTTPException(404, "文件缺失")
     from fastapi.responses import FileResponse
 
@@ -199,12 +198,15 @@ async def api_upload_package(
     if not (str(meta.get("id") or "").strip() and str(meta.get("version") or "").strip()):
         raise HTTPException(400, "metadata 须含 id 与 version")
     rec: Dict[str, Any] = dict(meta)
-    requested_public_listing = rec.pop("public_listing", False)
-    if not isinstance(requested_public_listing, bool):
+    public_listing = rec.get("public_listing", False)
+    if not isinstance(public_listing, bool):
         raise HTTPException(400, "public_listing 必须为 boolean")
-    public_listing = requested_public_listing
+    if not public_listing:
+        rec.pop("public_listing", None)
     if public_listing and auth_mode != "auto_publish":
         raise HTTPException(403, "公开上架必须使用自动发布专用凭证")
+    if is_private_package(rec):
+        raise HTTPException(403, "客户私包须走已绑定 owner 的工单生产中心，禁止通用 Catalog 上传")
     artifact = str(rec.get("artifact") or "").strip().lower()
     pkg_id = str(rec.get("id") or "").strip()
     version = str(rec.get("version") or "").strip()
@@ -254,6 +256,39 @@ async def api_upload_package(
     from modstore_server.package_sandbox_audit import run_package_audit_async
 
     existing = get_package(str(rec.get("id")), str(rec.get("version")))
+    if existing and public_listing and is_private_package(existing):
+        raise HTTPException(403, "已有客户/内部包不能通过通用重试改为公开")
+    if existing and str(existing.get("sha256") or "") != raw_sha256:
+        raise HTTPException(409, "已发布 version 不可覆盖；源码变更须提升 manifest.version")
+    # Inspect the actual archive as well as caller metadata: public metadata must
+    # not disguise a private/customer manifest, including idempotent retries.
+    with tempfile.TemporaryDirectory() as td:
+        manifest_path = Path(td) / "upload.zip"
+        manifest_path.write_bytes(raw_bytes)
+        manifest = read_package_manifest_from_zip(manifest_path)
+    if not manifest:
+        raise HTTPException(400, "包内缺少有效 manifest.json")
+    if is_private_package(manifest):
+        raise HTTPException(403, "客户私包须走已绑定 owner 的工单生产中心")
+    if not public_listing:
+        rec["public_listing"] = False
+    if public_listing:
+        try:
+            require_public_manifest(manifest)
+        except ValueError as exc:
+            raise HTTPException(403, str(exc)) from exc
+    if str(manifest.get("id") or "") != pkg_id or str(manifest.get("version") or "") != version:
+        raise HTTPException(400, "metadata 与包内 manifest id/version 不一致")
+    if public_listing:
+        from modstore_server.customer_delivery_package import verify_delivery_package
+        from modstore_server.operational_errors import BOUNDARY_ERRORS
+
+        try:
+            verified = verify_delivery_package(raw_bytes)
+        except BOUNDARY_ERRORS as exc:
+            raise HTTPException(400, "公开发布包必须通过宿主受信 Ed25519 验签") from exc
+        if verified.get("manifest") != manifest or verified.get("package_sha256") != raw_sha256:
+            raise HTTPException(400, "受信签名包身份与发布 metadata 不一致")
     existing_review = existing.get("review") if isinstance(existing, dict) else None
     if (
         existing
@@ -261,9 +296,6 @@ async def api_upload_package(
         and isinstance(existing_review, dict)
         and bool((existing_review.get("summary") or {}).get("pass"))
     ):
-        if automation_provenance is not None:
-            existing["automation_provenance"] = automation_provenance
-            existing = append_package(existing, None)
         _upsert_market_listing(existing, public_listing=public_listing)
         _invalidate_catalog_list_caches(existing.get("id"), existing.get("version"))
         semantic_indexed = await _try_index_catalog_item(existing)
@@ -292,7 +324,7 @@ async def api_upload_package(
         rec["automation_provenance"] = automation_provenance
 
     with tempfile.TemporaryDirectory() as td:
-        tmp = Path(td) / (file.filename or "upload.bin")
+        tmp = Path(td) / Path(file.filename or "upload.bin").name
         tmp.write_bytes(raw_bytes)
         if str(rec.get("artifact") or "").strip().lower() == "employee_pack":
             from modstore_server.catalog_store import package_manifest_alignment_errors
@@ -303,7 +335,14 @@ async def api_upload_package(
                     400,
                     "员工包 metadata 与包内 manifest 不一致: " + "; ".join(align_errs),
                 )
-        saved = append_package(rec, tmp)
+        if public_listing and sha256_file(tmp) != raw_sha256:
+            raise HTTPException(400, "审核后的包摘要与来源证明不一致；修正源码后重新打包")
+        try:
+            saved = append_package(rec, tmp)
+        except PackageConflictError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     _upsert_market_listing(saved, public_listing=public_listing)
 

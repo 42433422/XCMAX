@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-intent",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "441ade82855436d1475f41dce78955f4c1a6d67ffed8905e75609351d83b14e9",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。聊天调试工作台。模式普通版高亮、专业版未选。输入示例「给成都客户生成并打印今天发货单」。意图测试包为空，写着暂无测试句子。页眉说明此页只做本地模拟，不调用真实工具。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-intent/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-intent/macos/result.png"
+}

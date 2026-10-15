@@ -6,7 +6,31 @@ import {
   parseDesktopDeepLink,
   isBenignDesktopLoadAbort,
   isTrustedDesktopOrigin,
+  safeDownloadFilename,
 } from './desktop-navigation'
+
+describe('safeDownloadFilename', () => {
+  it('保留业务文件名（含中文与扩展名）', () => {
+    expect(safeDownloadFilename('发货单_26-09-00001A_20260921_014637.xlsx'))
+      .toBe('发货单_26-09-00001A_20260921_014637.xlsx')
+  })
+
+  it('剥离路径分隔符，只保留最后一段', () => {
+    expect(safeDownloadFilename('../../etc/passwd')).toBe('passwd')
+    expect(safeDownloadFilename('C:\\Windows\\evil.exe')).toBe('evil.exe')
+  })
+
+  it('替换文件名保留字符并去掉前导点', () => {
+    expect(safeDownloadFilename('a:b*c?.xlsx')).toBe('a_b_c_.xlsx')
+    expect(safeDownloadFilename('..hidden')).toBe('hidden')
+  })
+
+  it('空值回退为 download', () => {
+    expect(safeDownloadFilename('')).toBe('download')
+    expect(safeDownloadFilename(undefined)).toBe('download')
+    expect(safeDownloadFilename('   ')).toBe('download')
+  })
+})
 
 describe('findDeepLinkArg', () => {
   it('从 argv 中提取 xcagi:// 深链', () => {
@@ -60,6 +84,30 @@ describe('既有权重行为回归', () => {
 })
 
 describe('browser handoff navigation contract', () => {
+  it.each([
+    '/api/ai/kitten/document/pickup/test-report-token',
+    '/api/ai/analyze/export/test-report-id',
+    '/api/shipment/download/test-report.pdf',
+  ])('downloads local business files without creating an empty child: %s', path => {
+    const url = `http://127.0.0.1:17504${path}`
+    const download = vi.fn()
+    const external = vi.fn()
+    expect(handleDesktopWindowOpen(url, 17504, external, vi.fn(), download)).toBe('deny')
+    expect(download).toHaveBeenCalledExactlyOnceWith(url)
+    expect(external).not.toHaveBeenCalled()
+  })
+
+  it('preserves local pages and never downloads from another origin', () => {
+    const download = vi.fn()
+    for (const url of [
+      'http://127.0.0.1:17503/api/ai/kitten/document/pickup/token',
+      'https://evil.example/api/ai/kitten/document/pickup/token',
+      'http://127.0.0.1.evil.example:17504/api/ai/kitten/document/pickup/token',
+    ]) expect(handleDesktopWindowOpen(url, 17504, vi.fn(), vi.fn(), download)).toBe('deny')
+    expect(handleDesktopWindowOpen('http://localhost:17504/orders', 17504, vi.fn(), vi.fn(), download)).toBe('allow')
+    expect(download).not.toHaveBeenCalled()
+  })
+
   it('delegates a trusted code URL to the system browser and denies an Electron child', () => {
     const url = 'https://xiu-ci.com/wallet?recharge=30#xcagi_code=' + 'a'.repeat(43)
     const open = vi.fn().mockResolvedValue(undefined)

@@ -1,0 +1,12 @@
+# G7 修复的分支级验证（PR #1895，合并前）
+
+- 分支：fix/g7-template-upload-default-mount（a4c5af2bc 默认挂载 upload/analyze/progress + 0362c9052 PG 方言自增 id 修复）
+- 命令：`cd FHD && .venv/bin/python -m pytest tests/test_routes/test_template_create_default_app.py -x -q`
+- 结果：**6 passed in 4.22s**（Python 3.12.13, pytest-9.1.1），覆盖：
+  - test_default_factory_registers_only_template_create_mutation
+  - test_default_factory_registers_template_upload_and_analyze（默认 app 工厂挂载断言）
+  - test_upload_rejects_anonymous_without_ingest（匿名拒绝且无写入）
+  - test_create_rejects_anonymous_or_missing_tenant_without_writes
+  - test_label_create_readback_uses_authenticated_owner_and_tenant
+- CI：backend-test 通过（run 34682034527，46m9s），container-scan / release-verify 均 success
+- 说明：本证据为**分支级**，不替代打包候选包实测；G7 转 GREEN 仍需合并后重建候选包 + 带 CSRF 的 HTTP 实测 upload 非 405 + T2 登录后全链出单

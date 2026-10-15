@@ -1,0 +1,8 @@
+[15:21:58] feature=erp-excel-io platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-excel-io
+[15:22:11] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:22:12] case EX1: passed - Excel 模板清单真实读取
+[15:22:13] case EX2: passed - 真实生成 Excel 数据文件
+[15:22:13] case EX3: passed - 产品库真实导出二进制
+[15:22:13] case EX4: passed - 缺 data 参数 400 · 旧导入接口 403（负例）
+[15:22:14] video: erp-excel-io-web-20260929-152158.webm (1162474 bytes)
+[15:22:14] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-excel-io/log/erp-excel-io-web-20260929-152158.log

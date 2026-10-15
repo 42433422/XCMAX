@@ -23,6 +23,9 @@ vi.mock('@/utils/refreshTenantScopedClientStores', () => ({
   refreshTenantScopedClientStores: vi.fn().mockResolvedValue(undefined),
 }))
 
+const { loadIndustry } = vi.hoisted(() => ({ loadIndustry: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('@/stores/industry', () => ({ useIndustryStore: () => ({ loadFromServer: loadIndustry }) }))
+
 vi.mock('@/utils/tenantStorageScopeRuntime', () => ({
   setRuntimeTenantStorageScopeInput: vi.fn(),
 }))
@@ -48,58 +51,46 @@ describe('useAccountProfileStore', () => {
     expect(store.loaded).toBe(false)
   })
 
-  it('isAdminAccount is true when admin kind and admin flag', () => {
+  it.each<[string, 'admin' | 'enterprise', boolean, boolean]>([
+    ['admin kind + admin flag', 'admin', true, true],
+    ['enterprise kind + admin flag', 'enterprise', true, false],
+  ])('isAdminAccount with %s', (_label, kind, flag, expected) => {
     const store = useAccountProfileStore()
-    store.accountKind = 'admin'
-    store.marketIsAdmin = true
-    expect(store.isAdminAccount).toBe(true)
+    store.accountKind = kind
+    store.marketIsAdmin = flag
+    expect(store.isAdminAccount).toBe(expected)
   })
 
-  it('isAdminAccount is false when not admin kind', () => {
+  it.each<[number | null, boolean]>([
+    [5, true],
+    [null, false],
+  ])('isImpersonating with %s', (value, expected) => {
     const store = useAccountProfileStore()
-    store.accountKind = 'enterprise'
-    store.marketIsAdmin = true
-    expect(store.isAdminAccount).toBe(false)
+    store.impersonatingMarketUserId = value
+    expect(store.isImpersonating).toBe(expected)
   })
 
-  it('isImpersonating is true when impersonatingMarketUserId is set', () => {
+  it.each<[string, string]>([
+    ['  Test Brand  ', 'Test Brand'],
+    ['   ', ''],
+  ])('displayBrand for %j', (raw, expected) => {
     const store = useAccountProfileStore()
-    store.impersonatingMarketUserId = 5
-    expect(store.isImpersonating).toBe(true)
+    store.companyBrand = raw
+    expect(store.displayBrand).toBe(expected)
   })
 
-  it('isImpersonating is false when impersonatingMarketUserId is null', () => {
+  it.each<[string, null | undefined]>([
+    ['null', null],
+    ['undefined', undefined],
+  ])('applyFromMeData does nothing with %s', async (_label, value) => {
     const store = useAccountProfileStore()
-    expect(store.isImpersonating).toBe(false)
-  })
-
-  it('displayBrand returns trimmed company brand', () => {
-    const store = useAccountProfileStore()
-    store.companyBrand = '  Test Brand  '
-    expect(store.displayBrand).toBe('Test Brand')
-  })
-
-  it('displayBrand returns empty string when brand is empty', () => {
-    const store = useAccountProfileStore()
-    store.companyBrand = '   '
-    expect(store.displayBrand).toBe('')
-  })
-
-  it('applyFromMeData does nothing with null', () => {
-    const store = useAccountProfileStore()
-    store.applyFromMeData(null)
+    await store.applyFromMeData(value)
     expect(store.loaded).toBe(false)
   })
 
-  it('applyFromMeData does nothing with undefined', () => {
+  it('applyFromMeData applies session fields', async () => {
     const store = useAccountProfileStore()
-    store.applyFromMeData(undefined)
-    expect(store.loaded).toBe(false)
-  })
-
-  it('applyFromMeData applies session fields', () => {
-    const store = useAccountProfileStore()
-    store.applyFromMeData({
+    await store.applyFromMeData({
       account_kind: 'personal',
       company_brand: 'TestCo',
       market_is_admin: true,
@@ -119,43 +110,31 @@ describe('useAccountProfileStore', () => {
     expect(store.loaded).toBe(true)
   })
 
-  it('applyFromLoginPayload extracts data from nested data field', () => {
+  it.each<[string, Record<string, unknown>, string, string]>([
+    ['nested data field', { data: { account_kind: 'admin', company_brand: 'AdminCo' } }, 'admin', 'AdminCo'],
+    ['raw payload', { account_kind: 'enterprise', company_brand: 'DirectCo' }, 'enterprise', 'DirectCo'],
+  ])('applyFromLoginPayload reads %s and keeps the known account scope', async (_label, payload, kind, brand) => {
     const store = useAccountProfileStore()
-    store.applyFromLoginPayload({
-      data: {
-        account_kind: 'admin',
-        company_brand: 'AdminCo',
-        market_is_admin: true,
-        market_is_enterprise: true,
-        tenant_id: 1,
-        tenant_name: 'AdminTenant',
-        market_user_id: 2,
-        local_user_id: 3,
-      },
-    })
-    expect(store.accountKind).toBe('admin')
-    expect(store.companyBrand).toBe('AdminCo')
+    await store.applyFromMeData({ tenant_id: 10, permissions: ['tenant.manage_roles'], tenant_name: 'T10' })
+    await store.applyFromLoginPayload(payload)
+    expect(store.accountKind).toBe(kind)
+    expect(store.companyBrand).toBe(brand)
+    // 登录响应不含 tenant/权限键：缺失键必须保留已知状态，否则设置页的权限入口会被清掉
+    expect(store.tenantId).toBe(10)
+    expect(store.permissions).toEqual(['tenant.manage_roles'])
   })
 
-  it('applyFromLoginPayload uses raw when data is not object', () => {
+  it('applyFromMeData clears the account scope when the payload says so explicitly', async () => {
     const store = useAccountProfileStore()
-    store.applyFromLoginPayload({
-      account_kind: 'enterprise',
-      company_brand: 'DirectCo',
-      market_is_admin: false,
-      market_is_enterprise: true,
-      tenant_id: 5,
-      tenant_name: 'DirectTenant',
-      market_user_id: 6,
-      local_user_id: 7,
-    })
-    expect(store.accountKind).toBe('enterprise')
-    expect(store.companyBrand).toBe('DirectCo')
+    await store.applyFromMeData({ tenant_id: 10, permissions: ['tenant.manage_roles'] })
+    await store.applyFromMeData({ tenant_id: null, permissions: [] })
+    expect(store.tenantId).toBeNull()
+    expect(store.permissions).toEqual([])
   })
 
-  it('applyFromMeData reads local_user_id from nested user object', () => {
+  it('applyFromMeData reads local_user_id from nested user object', async () => {
     const store = useAccountProfileStore()
-    store.applyFromMeData({
+    await store.applyFromMeData({
       account_kind: 'enterprise',
       company_brand: '',
       market_is_admin: false,
@@ -168,9 +147,9 @@ describe('useAccountProfileStore', () => {
     expect(store.localUserId).toBe(99)
   })
 
-  it('applyFromMeData sets impersonating fields', () => {
+  it('applyFromMeData sets impersonating fields', async () => {
     const store = useAccountProfileStore()
-    store.applyFromMeData({
+    await store.applyFromMeData({
       account_kind: 'enterprise',
       company_brand: '',
       market_is_admin: false,
@@ -185,9 +164,9 @@ describe('useAccountProfileStore', () => {
     expect(store.impersonatingUsername).toBe('admin_user')
   })
 
-  it('clear resets all state', () => {
+  it('clear resets all state', async () => {
     const store = useAccountProfileStore()
-    store.applyFromMeData({
+    await store.applyFromMeData({
       account_kind: 'admin',
       company_brand: 'Test',
       market_is_admin: true,
@@ -204,13 +183,18 @@ describe('useAccountProfileStore', () => {
     expect(store.loaded).toBe(false)
   })
 
-  it('refreshFromServer clears on failure', async () => {
+  it.each<[string, Error, boolean]>([
+    ['server rejects the session (401)', Object.assign(new Error('Unauthorized'), { status: 401 }), false],
+    ['transient network failure', new Error('Network error'), true],
+    ['superseded refresh (abort)', Object.assign(new Error('signal is aborted without reason'), { name: 'AbortError' }), true],
+  ])('refreshFromServer on %s keeps loaded=%s', async (_label, error, keeps) => {
     const { authApi } = await import('@/api/auth')
-    vi.mocked(authApi.getCurrentUser).mockRejectedValueOnce(new Error('Network error'))
+    vi.mocked(authApi.getCurrentUser).mockRejectedValueOnce(error)
     const store = useAccountProfileStore()
     store.loaded = true
     await store.refreshFromServer()
-    expect(store.loaded).toBe(false)
+    // 会话明确失效才清空；瞬时失败保留最近资料，否则依赖权限的入口（如「角色与权限」）会消失
+    expect(store.loaded).toBe(keeps)
   })
 
   it('waits for tenant preference hydration before refresh resolves', async () => {
@@ -239,4 +223,28 @@ describe('useAccountProfileStore', () => {
     await refresh
     expect(resolved).toBe(true)
   })
+  it.each(['me', 'industry'].flatMap(phase => [401, 403, 'success'].map(outcome => ({ phase, outcome }))))('ignores old background $phase $outcome after a newer login', async ({ phase, outcome }) => {
+    const store = useAccountProfileStore()
+    await store.applyFromMeData({ tenant_id: 10, permissions: ['old.read'] })
+    const { authApi } = await import('@/api/auth')
+    let finish!: (value: unknown) => void
+    let fail!: (error: unknown) => void
+    const pending = () => new Promise<any>((resolve, reject) => { finish = resolve; fail = reject })
+    if (phase === 'me') vi.mocked(authApi.getCurrentUser).mockImplementationOnce(pending)
+    else {
+      vi.mocked(authApi.getCurrentUser).mockResolvedValueOnce({ success: true, data: { tenant_id: 10 } } as any)
+      loadIndustry.mockImplementationOnce(pending)
+    }
+    const refreshing = store.refreshFromServer()
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    await store.applyFromLoginPayload({ tenant_id: 20, company_brand: 'new-account', permissions: ['new.read'] })
+    if (outcome === 'success') finish({ success: true, data: { tenant_id: 10, permissions: ['old.read'] } })
+    else fail(Object.assign(new Error('old session rejected'), { status: outcome }))
+    await refreshing
+    expect(store.tenantId).toBe(20)
+    expect(store.companyBrand).toBe('new-account')
+    expect(store.permissions).toEqual(['new.read'])
+    expect(store.workspaceReady).toBe(true)
+  })
+
 })

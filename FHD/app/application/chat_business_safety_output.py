@@ -37,17 +37,16 @@ _EXPORT_COLUMNS = (
 )
 
 
-def _create_attendance_export(rows: list[dict[str, Any]], meta: dict[str, Any]) -> tuple[Path, str]:
+def _create_attendance_export(
+    rows: list[dict[str, Any]], meta: dict[str, Any], actor: BusinessActorIdentity
+) -> tuple[Path, str]:
     import openpyxl
 
     _ = meta
-    from app.infrastructure.workspace import (
-        allocate_generated_workspace_file,
-        workspace_root,
-    )
+    from app.mod_sdk.attendance_artifacts import allocate_file, owner_for_user_id
 
-    output = allocate_generated_workspace_file("attendance-export")
-    relpath = output.relative_to(workspace_root()).as_posix()
+    output = allocate_file(owner_for_user_id(actor.local_user_id, actor.workspace_scope), "export")
+    relpath = output.name
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -90,7 +89,7 @@ def _handle_attendance_export(
             details=meta,
         )
     try:
-        output, relpath = _create_attendance_export(rows, meta)
+        output, relpath = _create_attendance_export(rows, meta, actor)
     except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - converted to a truthful receipt
         return _not_executed(
             intent,
@@ -173,7 +172,7 @@ def _handle_attendance_print(
             details={"printer_count": count},
         )
     try:
-        output, relpath = _create_attendance_export(rows, meta)
+        output, relpath = _create_attendance_export(rows, meta, actor)
         result = service.print_document(str(output))
     except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         return _not_executed(

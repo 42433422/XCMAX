@@ -1,0 +1,6 @@
+2026-09-29T06:53:13+0800 [ind-modstore-pay] 开始验收 ind-modstore-pay 市场支付桥接 Mod；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:53:14+0800 [ind-modstore-pay] M1 passed :: HTTP 200 16ms；{"alipay_configured": false, "sdk_installed": true, "sdk_import_error": null, "app_id_set": false, "private_key_source": "missing", "public_key_source": "missing", "notify_url": null, "notify_url_path
+2026-09-29T06:53:14+0800 [ind-modstore-pay] M2 passed :: HTTP 200 20ms；['体验档', '标准档', '专业档', '30 天全功能体验', '企业启航版', '企业成长版', '集团协同版', '企业旗舰版']
+2026-09-29T06:53:17+0800 [ind-modstore-pay] M3 passed :: 导航后路径 /mod/xcagi-model-payment-bridge/model-payment；命中文本 ['模型']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 模型服务 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 模型服务 |  | 余额与充值走修茈市场；本页汇总展示，支付在 钱包 / 套餐 完成。 |  | 打开修茈钱包 | 会员套餐 | 刷新 | 账户余额 | ¥ | 账户余
+2026-09-29T06:53:18+0800 [ind-modstore-pay] screenshot result.png
+2026-09-29T06:53:23+0800 [ind-modstore-pay] video operation.webm bytes=350581

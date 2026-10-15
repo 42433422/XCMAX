@@ -3,16 +3,43 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from app.db.models import PurchaseOrder, Supplier
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+DATE_FIELDS = frozenset({"order_date", "delivery_date", "inbound_date"})
+
+
+def as_date(value: Any, default: date | None = None) -> date | None:
+    """SQLite 日期列只接受 date 对象：收敛前端 ISO 字符串与空值。"""
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value or "").strip()[:10])
+    except ValueError:
+        return default
+
+
+def items_without_product(items: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """明细 product_id 为非空外键：缺失时返回业务错误，而不是在 flush 时抛完整性异常。"""
+    missing = [str(i) for i, item in enumerate(items, 1) if not (item or {}).get("product_id")]
+    if missing:
+        return {"success": False, "message": f"第 {'、'.join(missing)} 行明细未选择产品"}
+    return None
+
+
+def page_result(data: list[Any], total: int, page: int, per_page: int) -> dict[str, Any]:
+    return {"success": True, "data": data, "total": total, "page": page, "per_page": per_page}
 
 
 def _get_db():
@@ -64,11 +91,15 @@ class PurchaseSupplierMixin:
             return {"success": True, "data": self._model_to_dict(supplier)}
 
     def create_supplier(self, data: dict[str, Any]) -> dict[str, Any]:
+        name = str(data.get("name") or "").strip()
+        if not name:
+            return {"success": False, "message": "供应商名称不能为空"}
+        code = str(data.get("code") or "").strip() or f"SUP{datetime.now():%Y%m%d%H%M%S%f}"
         with _get_db() as db:
             try:
                 supplier = Supplier(
-                    code=data.get("code"),
-                    name=data.get("name"),
+                    code=code,
+                    name=name,
                     contact_person=data.get("contact_person"),
                     contact_phone=data.get("contact_phone"),
                     contact_email=data.get("contact_email"),
@@ -85,6 +116,9 @@ class PurchaseSupplierMixin:
                 db.commit()
                 db.refresh(supplier)
                 return {"success": True, "data": self._model_to_dict(supplier)}
+            except IntegrityError:
+                db.rollback()
+                return {"success": False, "message": f"供应商编码已存在：{code}"}
             except RECOVERABLE_ERRORS as exc:
                 db.rollback()
                 logger.error("创建供应商失败: %s", exc)
@@ -103,6 +137,9 @@ class PurchaseSupplierMixin:
                 db.commit()
                 db.refresh(supplier)
                 return {"success": True, "data": self._model_to_dict(supplier)}
+            except IntegrityError:
+                db.rollback()
+                return {"success": False, "message": "供应商编码或名称不能为空且编码不能重复"}
             except RECOVERABLE_ERRORS as exc:
                 db.rollback()
                 logger.error("更新供应商失败: %s", exc)

@@ -1,0 +1,70 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "mods-bridge",
+ "name": "桥接 Mod 族（ERP / 审批 / 客服 / 总线）",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/mod/xcagi-erp-domain-bridge/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/status（写操作自动附带 CSRF）：xcagi-erp-domain-bridge 桥接状态",
+   "expected": "xcagi-erp-domain-bridge 桥接状态：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 83ms；{\"success\": true, \"data\": {\"success\": true, \"mod_id\": \"xcagi-erp-domain-bridge\", \"domain_count\": 3, \"domains\": [{\"domain_id\": \"products\", \"l",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/mod/xcagi-approval-bridge/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-approval-bridge/status（写操作自动附带 CSRF）：xcagi-approval-bridge 桥接状态",
+   "expected": "xcagi-approval-bridge 桥接状态：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 13ms；{\"success\": true, \"data\": {\"success\": true, \"mod_id\": \"xcagi-approval-bridge\", \"host_prefix\": \"/api/approval\", \"facade_prefix\": \"/api/mod/xc",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/mod/xcagi-customer-service-bridge/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-customer-service-bridge/status（写操作自动附带 CSRF）：xcagi-customer-service-bridge 桥接状态",
+   "expected": "xcagi-customer-service-bridge 桥接状态：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 11ms；{\"success\": true, \"data\": {\"ok\": true, \"mod_id\": \"xcagi-customer-service-bridge\", \"registry\": {\"success\": true, \"mod_id\": \"xcagi-customer-se",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /mod-store",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod-store，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod-store，页面可见 ，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod-store；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 能力库 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 返回 AI 生态 |  | XCAGI · 能力库 |  | AI 员工市场 |  | 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "mods-bridge",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/mods-bridge/macos/result.png",
+   "sha256": "2d7c50935e9444d8428c5c8ddcb47c0d1bfa02d9d74c04e61517daf6f2183f59",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "mods-bridge",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/mods-bridge/macos/operation.webm",
+   "sha256": "ac7dcb181177d291f873a948d289786cab0e311ecb74fc18f7e1b7426a498c3b",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/mods-bridge/macos/run.log",
+  "sha256": "8ac036260a5f823c0cba00bd3963e44639a53672e3b7ef54aa16e46ae1e08eed",
+  "bytes": 1619
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

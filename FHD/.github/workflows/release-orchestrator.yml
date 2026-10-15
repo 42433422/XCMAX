@@ -4,11 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       product_version:
-        description: "Visible product version (the existing 1.0.0.1 tag is not moved)"
         required: true
-        default: "1.0.0.1"
+        default: "1.0.0.6"
         type: choice
-        options: ["1.0.0.1"]
+        options: ["1.0.0.6"]
       release_sha:
         description: "Full 40-character commit to freeze after required CI/security gates pass"
         required: true
@@ -26,6 +25,7 @@ permissions:
   contents: write
   actions: write
   checks: read
+  statuses: read
   security-events: read
 
 concurrency:
@@ -55,6 +55,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_PROTECTION_TOKEN: ${{ secrets.RELEASE_PROTECTION_TOKEN }}
         run: |
           set -euo pipefail
           printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
@@ -63,7 +64,7 @@ jobs:
             echo "::error::release_sha is not the current origin/main SHA."
             exit 1
           }
-          protection="$(gh api "repos/${GH_REPO}/branches/main/protection/required_status_checks")"
+          protection="$(GH_TOKEN="${RELEASE_PROTECTION_TOKEN:?RELEASE_PROTECTION_TOKEN secret missing (needs a PAT with admin read on branch protection)}" gh api "repos/${GH_REPO}/branches/main/protection/required_status_checks")"
           mapfile -t required < <(
             jq -r '(.contexts[]?), (.checks[]?.context)' <<<"$protection" | sort -u
           )
@@ -264,7 +265,7 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-1.0.0.1}"
+          version="${raw:-1.0.0.5}"
           if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
             echo "::error::Invalid product_version: $version"
             exit 1

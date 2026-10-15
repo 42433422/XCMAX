@@ -161,11 +161,13 @@ vi.mock('@/constants/industryDefaults', () => ({
   DEFAULT_INDUSTRY_ID: 'generic',
 }))
 
-vi.mock('@/constants/industryPresets', () => ({
+vi.mock('@/constants/industryPresets', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/constants/industryPresets')>()),
   getIndustryPreset: (id: string) => ({ name: id === 'generic' ? '通用' : id }),
 }))
 
-vi.mock('@/utils/coreNavLabel', () => ({
+vi.mock('@/utils/coreNavLabel', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/coreNavLabel')>()),
   resolveCoreNavLabel: () => null,
   INDUSTRY_MENU_LABELS: {},
 }))

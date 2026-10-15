@@ -1,5 +1,5 @@
-import { mount, flushPromises } from '@vue/test-utils'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import App from './App.vue'
@@ -43,6 +43,8 @@ vi.mock('./composables/useDangerConfirm', () => ({
 }))
 
 import { api } from './api'
+
+enableAutoUnmount(afterEach)
 
 const Stub = { template: '<div class="stub-view" />' }
 
@@ -160,7 +162,7 @@ describe('App shell', () => {
     await flushPromises()
 
     const { useAuthStore } = await import('./stores/auth')
-    useAuthStore().setAdminDigestUnlock(new Date(Date.now() + 60_000).toISOString())
+    useAuthStore(pinia).setAdminDigestUnlock(new Date(Date.now() + 60_000).toISOString())
     await flushPromises()
 
     const adminTab = wrapper.findAll('button.mode-tab').find((w) => w.text() === '管理端')
@@ -194,7 +196,7 @@ describe('App shell', () => {
     await flushPromises()
 
     const { useWorkbenchSidebarStore } = await import('./stores/workbenchSidebar')
-    const wbSidebar = useWorkbenchSidebarStore()
+    const wbSidebar = useWorkbenchSidebarStore(pinia)
     wbSidebar.setConversations([
       {
         id: 'c1',
@@ -287,8 +289,6 @@ describe('App shell', () => {
     await vm.doLogout()
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('login')
-
-    wrapper.unmount()
   })
 
   it('covers mobile shell controls, client switching, and conversation deletion boundaries', async () => {
@@ -319,8 +319,9 @@ describe('App shell', () => {
 
     const { useAuthStore } = await import('./stores/auth')
     const { useWorkbenchSidebarStore } = await import('./stores/workbenchSidebar')
-    const authStore = useAuthStore()
-    const wbSidebar = useWorkbenchSidebarStore()
+    setActivePinia(createPinia()) // Another mounted app may refresh during an awaited step.
+    const authStore = useAuthStore(pinia)
+    const wbSidebar = useWorkbenchSidebarStore(pinia)
     authStore.setAdminDigestUnlock(new Date(Date.now() + 60_000).toISOString())
     wbSidebar.setConversations([
       {
@@ -381,8 +382,6 @@ describe('App shell', () => {
     vi.mocked(confirmDanger).mockResolvedValueOnce(true)
     await wrapper.get('.wb-sidebar-conv-delete').trigger('click')
     expect(wbSidebar.conversations.some((c) => c.id === 'c1')).toBe(false)
-
-    wrapper.unmount()
   })
 
   it('covers android embedded shell, ai-test route state, and idle refresh scheduling', async () => {
@@ -433,7 +432,6 @@ describe('App shell', () => {
       requestIdleCallback: originalRequestIdleCallback,
       cancelIdleCallback: originalCancelIdleCallback,
     })
-    wrapper.unmount()
   })
 
   it('covers async error branches and off-home workbench shell actions', async () => {
@@ -504,7 +502,5 @@ describe('App shell', () => {
     await vm.doLogout()
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('workbench-home')
-
-    wrapper.unmount()
   })
 })

@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 
 from sqlalchemy import event, false, or_
@@ -27,27 +26,7 @@ from app.infrastructure.tenant_scope import (
     tenant_legacy_null_visible,
 )
 
-logger = logging.getLogger(__name__)
-
 _INSTALLED = False
-
-
-def _strict_criteria(cls):
-    return cls.tenant_id == _STRICT_TID
-
-
-def _null_tolerant_criteria(cls):
-    return or_(cls.tenant_id == _NT_TID, cls.tenant_id.is_(None))
-
-
-def _deny_criteria(cls):
-    return false()
-
-
-# with_loader_criteria 的 lambda 通过闭包变量追踪绑定参数；用模块级变量承载当前 tid，
-# 每次查询前更新（同一线程/任务内串行执行，配合 ContextVar 隔离）。
-_STRICT_TID: int | None = None
-_NT_TID: int | None = None
 
 
 def install_tenant_filter() -> None:
@@ -71,15 +50,12 @@ def install_tenant_filter() -> None:
         if execute_state.execution_options.get("skip_tenant_filter"):
             return
         tid = current_tenant_id()
-        global _STRICT_TID, _NT_TID
         if tid is None:
-            criteria = _deny_criteria
+            criteria = lambda cls: false()
         elif tenant_legacy_null_visible():
-            _NT_TID = tid
-            criteria = _null_tolerant_criteria
+            criteria = lambda cls: or_(cls.tenant_id == tid, cls.tenant_id.is_(None))
         else:
-            _STRICT_TID = tid
-            criteria = _strict_criteria
+            criteria = lambda cls: cls.tenant_id == tid
         execute_state.statement = execute_state.statement.options(
             with_loader_criteria(TenantScopedMixin, criteria, include_aliases=True)
         )

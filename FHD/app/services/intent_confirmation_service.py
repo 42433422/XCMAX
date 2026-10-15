@@ -279,6 +279,15 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
                 # 只有技能路由器确认的开放世界缺口才进入进化队列。槽位仅记录字段名，
                 # 避免联系人、电话等业务值进入后续远端 issue。
                 slot_names = sorted(str(key) for key in slots if str(key).strip())
+                # 连接件（故障证据包）：桌面端随信号落一份脱敏诊断包引用；
+                # 非桌面模式返回 None，采集永不阻塞信号主线。
+                evidence_ref: dict | None = None
+                try:
+                    from app.desktop_runtime.support_bundle import build_evidence_ref
+
+                    evidence_ref = build_evidence_ref()
+                except RECOVERABLE_ERRORS:  # noqa: BLE001
+                    logger.debug("evidence bundle build failed", exc_info=True)
                 try:
                     record_capability_proposal(
                         raw_input=raw_input,
@@ -301,6 +310,7 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
                                 )
                             },
                         },
+                        evidence_ref=evidence_ref,
                     )
                 except RECOVERABLE_ERRORS:  # noqa: BLE001
                     logger.debug("capability_proposal record failed", exc_info=True)

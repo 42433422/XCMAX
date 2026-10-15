@@ -264,7 +264,7 @@ def test_process_chat_api_key_error(chat_svc: AIChatApplicationService) -> None:
         raise RuntimeError("invalid api_key")
 
     chat_svc.ai_service.chat = _fail
-    out = chat_svc.process_chat("u1", "hi")
+    out = chat_svc.process_chat("u1", "随便说点什么")
     assert "AI 服务暂时不可用" in out["message"]
 
 

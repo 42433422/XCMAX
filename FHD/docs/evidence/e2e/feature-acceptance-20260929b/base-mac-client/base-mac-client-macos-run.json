@@ -1,0 +1,67 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。账号仅记录用户名。",
+  "kind": "feature-acceptance",
+  "feature": "base-mac-client",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929b",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "app_version": "1.0.0.5",
+  "account": "SUNBIRD",
+  "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。 各步结果均为通过。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/desktop/status",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/desktop/status（写操作自动附带 CSRF）：桌面运行态",
+      "expected": "桌面运行态：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 63ms；desktopMode=True readyForUi=True storage=local_sqlite",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/health",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/health（写操作自动附带 CSRF）：客户端构建身份",
+      "expected": "客户端构建身份：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 15ms；version=1.0.0.5 git_sha=027c8ec59443f1be9d7934e77282348e7483f883 installed=027c8ec59443f1be9d7934e77282348e7483f883",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "界面路由 /desktop-runtime",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /desktop-runtime，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /desktop-runtime，页面可见 桌面，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /desktop-runtime；命中文本 ['桌面']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 桌面运行时 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 桌面运行时 |  | 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 |  | 刷新状态检查桌面更新 | 运行状态 | 桌面",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "base-mac-client",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/base-mac-client/macos/result.png",
+      "sha256": "4be91959f7381ee1e18d04080068524ef470e7025ec0e842db11c4b3b3001512",
+      "visual_review": "accepted",
+      "visible_result": "桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "base-mac-client",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/base-mac-client/macos/operation.webm",
+      "sha256": "3045879aa6ea0b2f65efc73bfc474b13c5824bd26f0c7479c692b15dd0017ebd",
+      "visual_review": "accepted",
+      "visible_result": "录屏结束停在上述结果画面。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/base-mac-client/macos/run.log",
+    "sha256": "c2beeda8486b81bd705d1f8524cbd8061eae30f5eaac9559132f0c5e3b9253e6",
+    "bytes": 1346
+  }
+}

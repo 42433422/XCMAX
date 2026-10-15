@@ -1,0 +1,152 @@
+11:09:13Z main=[71300,] backend=[71309,] shipit_lines=14817
+    shipit: 2026-09-17 05:18:32.675 ShipIt[12343:638150] ShipIt quitting
+    event : {"ts":"2026-09-18T11:08:33.688Z","type":"update_downloaded","data":{"version":"1.0.0"}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => false  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Librar
+11:09:15Z main=[71300,] backend=[71309,] shipit_lines=14817
+    shipit: 2026-09-17 05:18:32.675 ShipIt[12343:638150] ShipIt quitting
+    event : {"ts":"2026-09-18T11:08:33.688Z","type":"update_downloaded","data":{"version":"1.0.0"}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => false  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Librar
+11:09:17Z main=[71300,90611,] backend=[71309,90621,] shipit_lines=14817
+    shipit: 2026-09-17 05:18:32.675 ShipIt[12343:638150] ShipIt quitting
+    event : {"ts":"2026-09-18T11:08:33.688Z","type":"update_downloaded","data":{"version":"1.0.0"}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => false  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Librar
+11:09:19Z main=[71300,90611,] backend=[71309,90621,] shipit_lines=14817
+    shipit: 2026-09-17 05:18:32.675 ShipIt[12343:638150] ShipIt quitting
+    event : {"ts":"2026-09-18T11:08:33.688Z","type":"update_downloaded","data":{"version":"1.0.0"}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => false  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Librar
+11:09:21Z main=[71300,90611,] backend=[71309,90621,] shipit_lines=14817
+    shipit: 2026-09-17 05:18:32.675 ShipIt[12343:638150] ShipIt quitting
+    event : {"ts":"2026-09-18T11:08:33.688Z","type":"update_downloaded","data":{"version":"1.0.0"}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => false  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Librar
+11:09:23Z main=[71300,90611,] backend=[71309,90621,] shipit_lines=14817
+    shipit: 2026-09-17 05:18:32.675 ShipIt[12343:638150] ShipIt quitting
+    event : {"ts":"2026-09-18T11:08:33.688Z","type":"update_downloaded","data":{"version":"1.0.0"}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => false  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Librar
+11:09:25Z main=[71300,90611,] backend=[71309,90621,] shipit_lines=14817
+    shipit: 2026-09-17 05:18:32.675 ShipIt[12343:638150] ShipIt quitting
+    event : {"ts":"2026-09-18T11:08:33.688Z","type":"update_downloaded","data":{"version":"1.0.0"}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => false  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Librar
+11:09:28Z main=[71300,90611,] backend=[71309,] shipit_lines=14817
+    shipit: 2026-09-17 05:18:32.675 ShipIt[12343:638150] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => false  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Librar
+11:09:30Z main=[90611,] backend=[] shipit_lines=14817
+    shipit: 2026-09-17 05:18:32.675 ShipIt[12343:638150] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:32Z main=[90611,] backend=[] shipit_lines=14838
+    shipit: 2026-09-18 19:09:32.179 ShipIt[90842:4163890] New ShipIt pid: 90873
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:34Z main=[90611,90904,] backend=[] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:36Z main=[90611,90904,] backend=[] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:38Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:40Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:42Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:44Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:46Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:48Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:50Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:52Z main=[90611,90904,91223,91224,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:54Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:56Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:09:58Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:01Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:03Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:05Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:07Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:09Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:11Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:13Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:15Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:17Z main=[90611,90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:19Z main=[90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:21Z main=[90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:23Z main=[90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:25Z main=[90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:27Z main=[90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library
+11:10:30Z main=[90904,] backend=[90976,] shipit_lines=14844
+    shipit: 2026-09-18 19:09:33.864 ShipIt[90842:4163890] ShipIt quitting
+    event : {"ts":"2026-09-18T11:09:26.125Z","type":"install_start","data":{}}
+    state : {  "bundleIdentifier" => "com.xcagi.desktop.enterprise"  "launchAfterInstallation" => true  "targetBundleURL" => "file:///Applications/XCAGI.app/"  "updateBundleURL" => "file:///Users/a4243342/Library

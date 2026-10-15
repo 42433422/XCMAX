@@ -1,0 +1,3 @@
+url: https://xiu-ci.com/releases/testing/enterprise/XCAGI-Enterprise-Setup-1.0.0.2-x64-unsigned.exe
+size: 248408269
+sha256: 4a8d9b14b933a9e07da4cfc80da11b4fb0d4a6a8cc8aad1cc287219eb4b96016

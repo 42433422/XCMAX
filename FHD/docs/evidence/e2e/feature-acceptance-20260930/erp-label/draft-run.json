@@ -1,0 +1,54 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-label",
+ "name": "标签打印",
+ "platform": "macos",
+ "status": "failed",
+ "verdict": "FAIL",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 1,
+ "failed": 1,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/print/label-jobs/products",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/print/label-jobs/products（写操作自动附带 CSRF）：读取当前单位可选标签产品",
+   "expected": "读取当前单位可选标签产品：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 40ms；产品 4 个",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "物理标签打印出纸",
+   "actions": "尝试执行：物理标签打印出纸",
+   "expected": "物理标签打印出纸 成功",
+   "observed": "受阻：需要连接并选择实体标签打印机，本机未连接打印机",
+   "result": "failed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-label",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-label/macos/result.png",
+   "sha256": "12b9fcee6bf69f88ae736ec9511730cc2a14f1a8b1982c8b2a11bbf9a53779fd",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-label",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-label/macos/operation.webm",
+   "sha256": "26795bc90d4b9316b69eb288f158edd5d5602898b9133f7115d1d614854758a4",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-label/macos/run.log",
+  "sha256": "53679f499ab56da235ea56a2d49fc6c28948752556f8a116e053d7aefd80a207",
+  "bytes": 568
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

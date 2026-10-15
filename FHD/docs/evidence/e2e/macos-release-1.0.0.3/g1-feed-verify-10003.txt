@@ -1,0 +1,13 @@
+1.0.0.3 线上产物核验（2026-09-14 02:5x CST / 2026-09-13T18:5xZ）
+- 公网 feed: https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml?release-sha=4bfb23365c5e9d2c0e05c5d142fa9183aea9e740
+- productVersion: 1.0.0.3 / buildSha: 4bfb23365c5e9d2c0e05c5d142fa9183aea9e740
+- ed25519 验签: VALID（公钥 FHD/desktop/desktop-config.ts ED25519_PUBLIC_KEY_PEM，canonical body=去 signature 行 rstrip，同 updater.ts）
+- CVM 双路径 SHA256（官方 /var/www/xcagi-v1.0.0.3/enterprise + stable /var/www/update/releases/stable/enterprise）一致：
+  DMG  288549712a63035f77a860d28a65af2f7ebc83b1f9ed9606719484576b9f3068 (305,748,094 B)
+  ZIP  c2f7c69825194ca5450a25db1b6348d4940a1897637fb799b76901a540adb2f4 (264,518,917 B)
+  DMG.blockmap c43d5fef63ed6732cf27d333697261321a7e8253c9ab4db4748f5521457b94b0
+  ZIP.blockmap 56aeab07b15df0f0711e4e9e28f0e383de6f8eed4eb6cf9d570e09d6fc4357c7
+  latest-mac.yml a34887f73f6d1b61134b46306c3b5ec0c2b9bb96bfb58f8baf2cfc50c34cc6f8
+- 公网 HTTP 200: DMG content-length=305748094 ✓ / ZIP content-length=264518917 ✓
+- 公网 https://xiu-ci.com/xcagi-v1.0.0.3/manifest.json -> 404（step16 元数据发布失败遗留漂移，修复 PR #1929 合并后恢复模式补发）
+- release run 34773838698: checkout 4bfb2336 构建+Developer ID 签名+公证+staple success；step5 扫描对门禁 PASS（A=34770821357 + C=34773371996 锚定 4bfb2336）；step13 recovery artifact 上传；step14 CVM 双路径上传；step15 公网 feed 身份核验；step16 失败（notes 缺"太阳鸟"关键词）

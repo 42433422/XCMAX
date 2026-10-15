@@ -48,12 +48,66 @@ def _onboarding_first_order_slots(message: str) -> tuple[str, str] | None:
     return (customer, product) if customer and product else None
 
 
+# 意图层 tool_key → 工作流工具 id 映射：仅收录查询语义明确、且注册表中存在对应工具的条目。
+# 与 config/risk_actions.registry.json 的 tools 键对齐；未收录的 tool_key 走 clarify，不再静默兜底。
+_INTENT_TOOL_KEY_TO_WORKFLOW: dict[str, tuple[str, str]] = {
+    "products": ("products", "query"),
+    "customers": ("customers", "query"),
+    "materials": ("materials", "query"),
+    "shipment_records": ("shipment_records", "query"),
+}
+
+
+def _route_by_intent_service(message: str, tool_registry: dict[str, _facade().Any]):
+    """调用共享规则意图服务，命中带 tool_key 的明确意图时返回 (tool_id, action)。
+
+    识别失败/异常一律返回 None（fail-safe 交给 clarify，绝不回退 products.query）。
+    """
+    try:
+        # 延迟 import：intent_service 依赖链较重，且避免模块级 application↔services 环。
+        from app.services.intent_service import recognize_intents
+
+        result = recognize_intents(message)
+    except _facade().RECOVERABLE_ERRORS:
+        return None
+    if not isinstance(result, dict):
+        return None
+    # 否定式指令（如「不要新建客户」）不得路由到任何查询/写工具。
+    if result.get("is_negated") or result.get("is_negation_intent"):
+        return None
+    tool_key = str(result.get("tool_key") or "").strip()
+    if not tool_key:
+        return None
+    mapped = _INTENT_TOOL_KEY_TO_WORKFLOW.get(tool_key)
+    if mapped is None:
+        return None
+    tool_id, action = mapped
+    if tool_id not in tool_registry:
+        return None
+    return tool_id, action
+
+
 class _LLMWorkflowPlannerPart02Mixin:
     def _fallback_plan(
         self, plan_id: str, message: str, tool_registry: dict[str, _facade().Any]
     ) -> _facade().PlanGraph:
         from app.application.normal_chat_dispatch import route_normal_mode_message
+        from app.application.workflow.sql_execution_policy import (
+            database_maintenance_plan,
+            rejected_sql_plan,
+        )
 
+        rejected = rejected_sql_plan(message, plan_id)
+        if rejected is not None:
+            return rejected
+        restore = database_maintenance_plan(message, plan_id, tool_registry)
+        if restore is not None:
+            return restore
+        route = route_normal_mode_message(message)
+        if route.get("intent") == "desktop":
+            from app.application.workflow.planner_part03 import desktop_action_plan
+
+            return desktop_action_plan(plan_id, route, tool_registry)
         lower = (message or "").lower()
         nodes: list[_facade().WorkflowNode] = []
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]
@@ -92,6 +146,7 @@ class _LLMWorkflowPlannerPart02Mixin:
                             "entity": "shipment_records",
                             "operation": "create",
                             "payload": {
+                                "product_source_node": "find_onboarding_product",
                                 "unit_name": customer,
                                 "products": [
                                     {
@@ -154,6 +209,27 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if not nodes:
+            from app.application.workflow.shipment_plan import shipment_document_node
+
+            shipment_node = shipment_document_node(message, tool_registry)
+            if shipment_node is not None:
+                nodes.append(shipment_node)
+                intent = "shipment_generate"
+        if not nodes:
+            from app.application.workflow.inventory_write_plan import stock_in_node
+
+            inventory_node = stock_in_node(message, tool_registry)
+            if inventory_node is not None:
+                nodes.append(inventory_node)
+                intent = "inventory_stock_in"
+        if not nodes:
+            from app.application.workflow.sales_quote_plan import sales_quote_node
+
+            quote_node = sales_quote_node(message, tool_registry)
+            if quote_node is not None:
+                nodes.append(quote_node)
+                intent = f"sales_{quote_node.action}"
         if (
             not nodes
             and _facade()._looks_like_business_db_write(message, lower)
@@ -164,6 +240,13 @@ class _LLMWorkflowPlannerPart02Mixin:
                 intent = "business_db_write"
                 todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
                 nodes.append(node)
+        if not nodes:
+            from app.application.workflow.finance_write_plan import finance_transaction_node
+
+            finance_node = finance_transaction_node(message, tool_registry)
+            if finance_node is not None:
+                nodes.append(finance_node)
+                intent = "finance_write"
         route = route_normal_mode_message(message)
         if (
             not nodes
@@ -205,6 +288,57 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if (
+            not nodes
+            and "products" in tool_registry
+            and any(word in message for word in ("新增产品", "添加产品"))
+        ):
+            parsed = _facade()._extract_business_db_write_node(message)
+            payload = parsed.params.get("payload", {}) if parsed is not None else {}
+            if payload.get("model_number") and not any(
+                word in message for word in ("客户", "购买单位")
+            ):
+                params = {
+                    "name_or_model": payload["model_number"],
+                    "model_number": payload["model_number"],
+                }
+                for key in ("price", "specification", "unit"):
+                    if key in payload:
+                        params[key] = payload[key]
+                nodes.append(
+                    _facade().WorkflowNode(
+                        node_id="create_product",
+                        tool_id="products",
+                        action="create",
+                        params=params,
+                        risk="medium",
+                        idempotent=False,
+                        description="新增产品资料",
+                    )
+                )
+                intent = "product_create"
+        if (
+            not nodes
+            and "products" in tool_registry
+            and not any(word in message for word in ("客户", "购买单位"))
+            and _facade().re.fullmatch(
+                r"(?:(?:请|帮我|请帮我)\s*(?:新增|添加)\s*(?:一个|一款|一种)?"
+                r"|(?:新增|添加)\s*(?:一个|一款|一种))\s*产品[。！!]?",
+                message.strip(),
+            )
+        ):
+            nodes.append(
+                _facade().WorkflowNode(
+                    node_id="create_product",
+                    tool_id="products",
+                    action="create",
+                    params={},
+                    risk="medium",
+                    idempotent=False,
+                    description="新增产品资料",
+                )
+            )
+            intent = "product_create"
         if not nodes and (
             ("添加" in message or "新增" in message or "create" in lower) and "产品" in message
         ):
@@ -290,28 +424,61 @@ class _LLMWorkflowPlannerPart02Mixin:
             )
             nodes.append(purchase_node)
         if not nodes:
-            if "products" in tool_registry:
+            from app.application.workflow.read_query_plan import customer_read_node
+
+            read_node = customer_read_node(message, route, tool_registry)
+            if read_node is not None:
+                nodes.append(read_node)
+                intent = "customers_query"
+        if not nodes:
+            from app.application.workflow.read_query_plan import report_read_node, sales_export_node
+
+            read_node = sales_export_node(message, tool_registry) or report_read_node(
+                message, tool_registry
+            )
+            if read_node is not None:
+                nodes.append(read_node)
+                intent = f"{read_node.tool_id}_query"
+        if not nodes:
+            # 两级兜底（审计根因 2）：先走共享规则意图服务按 tool_key 路由到正确业务域；
+            # 未命中/异常一律 clarify.ask，绝不静默 products.query。
+            # #1815 的 customer/sales/report 读取路由保留在前（确定性规则优先），此处为其后的通用兜底。
+            routed = _route_by_intent_service(message, tool_registry)
+            if routed is not None:
+                tool_id, action = routed
+                intent = f"intent_route_{tool_id}"
+                todo = ["规则意图服务识别业务域", f"执行 {tool_id} 查询", "输出查询结果"]
                 nodes.append(
                     _facade().WorkflowNode(
-                        node_id="query_products",
-                        tool_id="products",
-                        action="query",
+                        node_id=f"query_{tool_id}",
+                        tool_id=tool_id,
+                        action=action,
                         params={"keyword": message},
                         risk="low",
-                        description="查询相关产品",
+                        description=f"按规则意图路由到 {tool_id} 查询",
                         idempotent=True,
                     )
                 )
-            elif "customers" in tool_registry:
+            else:
+                intent = "clarify_ask"
+                todo = ["向用户澄清业务目标", "获得明确意图后重新规划"]
                 nodes.append(
                     _facade().WorkflowNode(
-                        node_id="query_customers",
-                        tool_id="customers",
-                        action="query",
-                        params={"keyword": message},
+                        node_id="clarify_intent",
+                        tool_id="clarify",
+                        action="ask",
+                        params={
+                            "question": (
+                                f"无法将「{message}」解析为可执行的业务操作，"
+                                "请提供完整的业务对象和参数（如客户、产品、数量等）。"
+                            ),
+                            "answer_key": "confirmed",
+                            "target_node_id": "",
+                            "original_message": str(message or ""),
+                        },
                         risk="low",
-                        description="查询相关客户",
                         idempotent=True,
+                        description="反问澄清：未命中业务意图，不再默认查询产品",
                     )
                 )
         risk = "low"

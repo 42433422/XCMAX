@@ -1,0 +1,70 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-sales-order",
+ "name": "销售订单管理",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/mod/xcagi-erp-domain-bridge/orders/next_number",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/orders/next_number（写操作自动附带 CSRF）：读取下一个订单号（门面）",
+   "expected": "读取下一个订单号（门面）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 107ms；{\"order_number\": \"26-09-00002A\", \"sequence\": 2, \"year_month\": \"26-09\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/mod/xcagi-erp-domain-bridge/orders",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/orders（写操作自动附带 CSRF）：读回订单列表（门面）",
+   "expected": "读回订单列表（门面）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 112ms；订单门面 3 条",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/mod/xcagi-erp-domain-bridge/products/list",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/products/list?page=abc（写操作自动附带 CSRF）：边界：非法分页参数被拒",
+   "expected": "非法 page 返回 422",
+   "observed": "HTTP 422 164ms；{\"success\": false, \"error_code\": \"validation_error\", \"message\": \"请求参数验证失败\", \"errors\": [{\"field\": \"query.page\", \"message\"",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /mod/xcagi-erp-domain-bridge/orders/create",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/orders/create，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-erp-domain-bridge/orders/create，页面可见 新建发货单，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/orders/create；命中文本 ['新建发货单']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 新建业务单据 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 新建发货单 | 返回列表 | 选择发货单模板 | 发货单模板 | -- 请选择模板 -- | 暂无可用发货单模板：请点下方「模板编辑」上传贵司出货单",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-sales-order",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-sales-order/macos/result.png",
+   "sha256": "c1021b9e9f9b99dbe64278fe7cc297b47f994a937961aeca9b553b81b420efff",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-sales-order",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-sales-order/macos/operation.webm",
+   "sha256": "1b93f1392b5c301d8099c8eb4885b7135e8d9cb09ad4221422c5c6ead72b4afb",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-sales-order/macos/run.log",
+  "sha256": "6bfbec1381ce0eab38a382fca6c8287c539251b640d28c4fd02fd2dfb206e412",
+  "bytes": 1508
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

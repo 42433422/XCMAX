@@ -1,0 +1,7 @@
+2026-09-29T07:15:19+0800 [erp-contract] 开始验收 erp-contract 合同单据；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:15:20+0800 [erp-contract] M1 passed :: HTTP 200 18ms；['销售合同默认模板']
+2026-09-29T07:15:20+0800 [erp-contract] M2 passed :: HTTP 200 33ms；{"success": true, "data": {"market_user_id": 29, "stage": "idle", "username": "SUNBIRD", "erp_customer_name": "", "contract_lifecycle": {"status": "draft", "esign_task": {}}, "sign_url": "", "party_a_
+2026-09-29T07:15:20+0800 [erp-contract] M3 passed :: HTTP 200 20ms；{"success": true, "data": {"party_a": "", "party_b": "", "total_amount_number": "", "products": [{"name": "定制软件服务", "quantity": 1, "unit_price": 0}], "raw_text": "给太阳鸟做合同：产品A 10个 单价5元"}}
+2026-09-29T07:15:23+0800 [erp-contract] M4 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/template-preview；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 模板库 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 模板预览 |  | 展示导出用 Excel 与 Word 模板：可按业务分组管理，也可选「自定义」自由新建任意模板；Word 若有「适用业务」
+2026-09-29T07:15:25+0800 [erp-contract] screenshot result.png
+2026-09-29T07:15:44+0800 [erp-contract] video operation.webm bytes=418015

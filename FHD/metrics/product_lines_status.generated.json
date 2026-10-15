@@ -1,0 +1,337 @@
+{
+  "schema": "xcagi.product_lines_status/v1",
+  "generated_at": "2026-10-13 02:30 UTC",
+  "generator": "FHD/scripts/dev/product_lines_status.py",
+  "config": "FHD/config/product_lines.yaml",
+  "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
+  "version": {
+    "product": "1.0.0.6",
+    "toolchain": "1.0.0",
+    "source": "FHD/VERSION.md"
+  },
+  "release": {
+    "train": {
+      "epoch": "1.0.0.0",
+      "product_version": "1.0.0.6",
+      "current": "1.0.0.6",
+      "day_index": 2,
+      "last_bump_at": "2026-08-18T00:04:28.127731+00:00"
+    },
+    "download": {
+      "version_lock": "1.0.0.6",
+      "download_version": "1.0.0.6",
+      "marketing_version": "1.0.0.6",
+      "android_version": "1.0.0.0",
+      "release_ready": false,
+      "channel_release_ready": null,
+      "active_skus": [
+        "enterprise"
+      ],
+      "frozen_skus": [
+        "personal"
+      ],
+      "artifacts": {
+        "enterprise": {
+          "win": "XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+          "mac_arm64": "XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+          "mac_x64": "XCAGI-Enterprise-1.0.0.6-mac-x64.dmg",
+          "android": "XCAGI-Enterprise-Android-1.0.0.0.apk"
+        }
+      },
+      "channels": {
+        "desktop": "stable",
+        "android": "stable"
+      }
+    }
+  },
+  "platform_levels": {
+    "Windows 桌面": "签约级",
+    "macOS 桌面": "签约级",
+    "Web / 后端": "签约级",
+    "Android": "实验骨架·非签约级"
+  },
+  "coverage": {
+    "source": "FHD/metrics/coverage-dual-summary.json",
+    "committed_head": {
+      "captured_at": "2026-07-25T11:34:00Z",
+      "commit": "92505cab6",
+      "status": "green_above_floor",
+      "backend_line_pct": 88.19,
+      "backend_branch_pct": 81.5,
+      "backend_statements": 115046,
+      "frontend_line_pct": 93.21,
+      "frontend_branch_pct": 82.45,
+      "frontend_function_pct": 91.39,
+      "frontend_statements_pct": 93.21,
+      "note": "2026-07-25 PR#616 CI 实测；ETL/模板解析吸收后下调 floor 至 line 88 / branch 81。"
+    },
+    "ratchet_floors": {
+      "backend_line": 78,
+      "backend_branch": 69,
+      "branch_floor": 69,
+      "frontend_lines": 92,
+      "frontend_branches": 81,
+      "frontend_functions": 90,
+      "frontend_statements": 92,
+      "source": "pyproject.toml fail_under + metrics/coverage_ratchet_baseline.json"
+    },
+    "quality_gate": {
+      "status": "passed",
+      "reason": "2026-09-01（D2-5）coverage_ramp stub 82 个清零迁出后，总口径与真实行为口径合一：floor 自行为口径 line 78 / branch 69 起步，只升不降（ADR-0005）",
+      "backend_line_floor": 78,
+      "backend_branch_floor": 69,
+      "head_backend_line_delta": 10.19,
+      "head_backend_branch_delta": 12.5,
+      "wip_backend_line_delta": 10.19,
+      "wip_backend_branch_delta": 12.5,
+      "frontend_lines_delta": 1.21,
+      "frontend_branches_delta": 1.45,
+      "frontend_functions_delta": 1.39,
+      "frontend_statements_delta": 1.21
+    }
+  },
+  "capability_totals": {
+    "total": 158,
+    "by_status": {
+      "verified": 55,
+      "partial": 95,
+      "implemented": 4,
+      "planned": 4
+    },
+    "cancelled_count": 0,
+    "domains": 10,
+    "modules": 28,
+    "verified_total": 55,
+    "last_verified_at": "2026-09-30",
+    "platform_counts": {
+      "windows": 99,
+      "macos": 100,
+      "web": 128,
+      "android": 8,
+      "ios": 1
+    },
+    "platform_coverage": {
+      "windows": {
+        "applicable": 99,
+        "verified": 1,
+        "partial": 0,
+        "pending": 98,
+        "last_verified_at": "2026-09-24"
+      },
+      "macos": {
+        "applicable": 100,
+        "verified": 82,
+        "partial": 14,
+        "pending": 4,
+        "last_verified_at": "2026-09-30"
+      },
+      "web": {
+        "applicable": 128,
+        "verified": 124,
+        "partial": 0,
+        "pending": 4,
+        "last_verified_at": "2026-09-29"
+      },
+      "android": {
+        "applicable": 8,
+        "verified": 0,
+        "partial": 0,
+        "pending": 8,
+        "last_verified_at": null
+      },
+      "ios": {
+        "applicable": 1,
+        "verified": 0,
+        "partial": 0,
+        "pending": 1,
+        "last_verified_at": null
+      }
+    },
+    "completion": 78
+  },
+  "capability_warnings": [],
+  "capability_domains_unassigned": [],
+  "lines": [
+    {
+      "id": "desktop-erp",
+      "name": "企业桌面 ERP + AI",
+      "priority": "P0",
+      "role": "主交付",
+      "paths": [
+        "FHD/"
+      ],
+      "paths_ok": true,
+      "entry": "FHD/docs/START_HERE.md",
+      "entry_ok": true,
+      "workflows": [
+        ".github/workflows/fhd-ci-cd.yml",
+        ".github/workflows/fhd-release-desktop.yml",
+        ".github/workflows/fhd-release-desktop-mac-ota.yml"
+      ],
+      "capability": {
+        "domains": [
+          "base",
+          "ai",
+          "erp",
+          "desktop",
+          "sec",
+          "ops"
+        ],
+        "total": 102,
+        "by_status": {
+          "verified": 41,
+          "partial": 58,
+          "implemented": 1,
+          "planned": 2
+        },
+        "verified": 41
+      },
+      "releases": {
+        "macos": {
+          "source": "FHD/docs/MACOS_RELEASE_SSOT.md",
+          "section": "6. Release Gate 状态（最终候选待构建；历史 EDF 证据仅作工程组件结果）",
+          "gates": {
+            "G1": "YELLOW",
+            "G2": "YELLOW",
+            "G3": "YELLOW",
+            "G4": "YELLOW",
+            "G5": "UNKNOWN",
+            "G6": "YELLOW",
+            "G7": "UNKNOWN",
+            "G8": "UNKNOWN",
+            "G9": "YELLOW",
+            "G10": "YELLOW",
+            "G11": "UNKNOWN",
+            "G12": "UNKNOWN",
+            "G13": "YELLOW"
+          },
+          "summary": {
+            "GREEN": 0,
+            "YELLOW": 8,
+            "RED": 0,
+            "UNKNOWN": 5,
+            "total": 13
+          }
+        },
+        "windows": {
+          "source": "FHD/docs/WINDOWS_RELEASE_SSOT.md",
+          "section": "4. Release Gate 状态",
+          "gates": {
+            "G1": "YELLOW",
+            "G2": "YELLOW",
+            "G3": "YELLOW",
+            "G4": "RED",
+            "G5": "YELLOW",
+            "G6": "RED",
+            "G7": "RED",
+            "G8": "YELLOW",
+            "G9": "YELLOW",
+            "G10": "UNKNOWN",
+            "G11": "UNKNOWN",
+            "G12": "UNKNOWN",
+            "G13": "UNKNOWN"
+          },
+          "summary": {
+            "GREEN": 0,
+            "YELLOW": 6,
+            "RED": 3,
+            "UNKNOWN": 4,
+            "total": 13
+          }
+        }
+      }
+    },
+    {
+      "id": "ai-store",
+      "name": "AI 员工商店",
+      "priority": "P1",
+      "role": "商业化线",
+      "paths": [
+        "成都修茈科技有限公司/"
+      ],
+      "paths_ok": true,
+      "entry": "成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md",
+      "entry_ok": true,
+      "workflows": [
+        ".github/workflows/modstore-ci-backend-python.yml",
+        ".github/workflows/market-ci.yml",
+        ".github/workflows/corp-marketing-site.yml"
+      ],
+      "capability": {
+        "domains": [
+          "mods",
+          "pay",
+          "industry"
+        ],
+        "total": 39,
+        "by_status": {
+          "partial": 24,
+          "verified": 14,
+          "planned": 1
+        },
+        "verified": 14
+      },
+      "releases": {
+        "web": {
+          "source": "成都修茈科技有限公司/release/VERSION"
+        }
+      }
+    },
+    {
+      "id": "mobile-app",
+      "name": "移动 AI 协同 App",
+      "priority": "P2",
+      "role": "配套线",
+      "paths": [
+        "FHD/mobile-flutter-poc/"
+      ],
+      "paths_ok": true,
+      "entry": "FHD/mobile-flutter-poc/README.md",
+      "entry_ok": true,
+      "workflows": [
+        ".github/workflows/fhd-ci-mobile-flutter.yml",
+        ".github/workflows/fhd-release-android.yml"
+      ],
+      "capability": {
+        "domains": [
+          "channel"
+        ],
+        "total": 17,
+        "by_status": {
+          "partial": 13,
+          "implemented": 3,
+          "planned": 1
+        },
+        "verified": 0
+      },
+      "releases": {
+        "android": {
+          "source": "FHD/config/download_release.json"
+        }
+      }
+    }
+  ],
+  "drift": [
+    {
+      "id": "release-not-closed",
+      "level": "info",
+      "source": "download_release.release_ready=false",
+      "detail": "1.0.0.6 发布面未闭环：下载/更新指针未推进到产品版本"
+    },
+    {
+      "id": "declared-mirror",
+      "level": "info",
+      "source": "成都修茈科技有限公司/FHD/config/release_train.json",
+      "detail": "已声明镜像且版本身份字段与 canonical 一致（epoch, product_version, current）；MODstore 独立运行时的运行时 SSOT 路径，由日更对齐脚本从 canonical 覆写； 保留是有意决定，day_index / last_bump_at 为各自运行时状态，不参与身份比对"
+    }
+  ],
+  "drift_summary": {
+    "error": 0,
+    "info": 2
+  },
+  "script_hardcode_census": {
+    "files": 0,
+    "occurrences": 0,
+    "stale": 0
+  }
+}

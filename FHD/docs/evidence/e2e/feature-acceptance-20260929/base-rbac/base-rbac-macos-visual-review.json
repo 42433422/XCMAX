@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-rbac",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "0169747ae76f7fb24c948bea91bc853acfaaf1b77a2765ab499a7355dc031059",
+  "visible_content": "权限点列表可读；同会话新建角色 201 并在角色列表读回，角色与权限页可见新角色。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-rbac/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-rbac/macos/result.png"
+}

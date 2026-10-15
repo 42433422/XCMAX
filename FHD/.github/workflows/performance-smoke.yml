@@ -1,8 +1,9 @@
 name: Performance Smoke Test
 
 on:
-  pull_request:
-    branches: [main, develop, master]
+  # 日常 PR 不跑 Performance（见 docs/CI_SSOT.md 四级验证）；仅 Nightly + 手动。
+  schedule:
+    - cron: "0 17 * * *"   # 每日 17:00 UTC = 北京 01:00
   workflow_dispatch:
 
 concurrency:

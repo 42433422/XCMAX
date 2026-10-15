@@ -40,6 +40,18 @@
       <strong>业务结果</strong>
       <p>{{ resultSummary }}</p>
     </div>
+    <div v-if="downloadableArtifacts.length" class="agent-artifact-downloads">
+      <button
+        v-for="artifact in downloadableArtifacts"
+        :key="artifact.artifact_id"
+        class="btn btn-primary btn-sm"
+        :disabled="Boolean(downloadingId)"
+        @click="downloadArtifact(artifact)"
+      >
+        {{ downloadingId === artifact.artifact_id ? '正在下载…' : `下载 ${artifact.name || '报表文件'}` }}
+      </button>
+      <p v-if="downloadError" role="alert">{{ downloadError }}</p>
+    </div>
     <details v-if="hasResultEvidence" class="agent-result-evidence">
       <summary>技术明细（高级）</summary>
       <pre v-if="finalOutputText">{{ finalOutputText }}</pre>
@@ -50,6 +62,7 @@
         </li>
       </ul>
     </details>
+    <AgentClarificationForm v-if="clarification && runId" :run-id="runId" :question="clarification" />
     <div class="task-actions">
       <button class="btn btn-primary btn-sm" @click="$emit('open')">
         {{ $t('chat.openTask') }}
@@ -72,8 +85,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import AgentClarificationForm, { type ClarificationQuestion } from './AgentClarificationForm.vue'
+import { activeRunIdOfTask } from '@/utils/agentTaskWorkspaceModel'
 import type { AgentArtifact, AgentRunStep, AgentToolCall } from '@/api/agentRuns'
+import agentRunsApi from '@/api/agentRuns'
+import { downloadBlob } from '@/utils'
 import type { TaskItem } from '@/composables/useChatPersistence'
 
 type AgentTaskPayload = {
@@ -101,10 +118,38 @@ type AgentTaskPayload = {
 const props = defineProps<{ task: TaskItem }>()
 defineEmits<{ open: []; approve: []; retry: []; pause: []; resume: []; cancel: [] }>()
 
+const runId = computed(() => activeRunIdOfTask(props.task))
+const clarification = computed(() => {
+  if (!steps.value.some((step) => step.tool_id === 'clarify' && step.status === 'waiting_user')) return null
+  return payload.value.finalOutput?.clarification as ClarificationQuestion | undefined
+})
 const payload = computed(() => (props.task.payload ?? {}) as AgentTaskPayload)
 const steps = computed(() => (Array.isArray(payload.value.steps) ? payload.value.steps : []))
 const toolCalls = computed(() => (Array.isArray(payload.value.toolCalls) ? payload.value.toolCalls : []))
 const artifacts = computed(() => (Array.isArray(payload.value.artifacts) ? payload.value.artifacts : []))
+const downloadingId = ref('')
+const downloadError = ref('')
+const downloadableArtifacts = computed(() =>
+  artifacts.value.filter(
+    (artifact) =>
+      runId.value &&
+      artifact.artifact_type === 'file' &&
+      artifact.uri === `/api/agent/runs/${encodeURIComponent(runId.value)}/artifacts/${encodeURIComponent(artifact.artifact_id)}`,
+  ),
+)
+async function downloadArtifact(artifact: AgentArtifact): Promise<void> {
+  if (downloadingId.value || !downloadableArtifacts.value.includes(artifact)) return
+  downloadingId.value = artifact.artifact_id
+  downloadError.value = ''
+  try {
+    const response = await agentRunsApi.downloadArtifact(runId.value, artifact.artifact_id)
+    downloadBlob(await response.blob(), artifact.name || '报表.xlsx')
+  } catch {
+    downloadError.value = '下载失败，请重试；如果文件已失效，请重新导出。'
+  } finally {
+    downloadingId.value = ''
+  }
+}
 const resultSummary = computed(() => {
   const output = payload.value.finalOutput
   if (!output || typeof output !== 'object') return ''
@@ -155,6 +200,7 @@ const finalOutputText = computed(() => {
 })
 const hasResultEvidence = computed(() => Boolean(finalOutputText.value || artifacts.value.length))
 function can(action: string): boolean {
+  if (action === 'approve' && clarification.value) return false
   if (payload.value.capabilities && action in payload.value.capabilities) {
     return Boolean(payload.value.capabilities[action])
   }

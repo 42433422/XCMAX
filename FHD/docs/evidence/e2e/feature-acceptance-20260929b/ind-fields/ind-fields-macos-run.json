@@ -1,0 +1,67 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。账号仅记录用户名。",
+  "kind": "feature-acceptance",
+  "feature": "ind-fields",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929b",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "app_version": "1.0.0.5",
+  "account": "SUNBIRD",
+  "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。 各步结果均为通过。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/platform-shell/industry-baseline",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/platform-shell/industry-baseline（写操作自动附带 CSRF）：行业基线字段",
+      "expected": "行业基线字段：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 12ms；{\"schema_version\": 1, \"industry_id\": \"general\", \"summary\": \"保持干净页面：对话与智能生态即可起步，其它能力按需再补。\", \"industry_package\": null, \"groups\": [{\"id\": \"core\", \"title\": \"侧栏对话底座\", \"hint\": \"干净起步：侧栏挂上智能对话与智能生态入口（宿主桥接，非员工",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/system/industry",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/system/industry（写操作自动附带 CSRF）：行业配置",
+      "expected": "行业配置：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 35ms；config keys ['units', 'quantity_fields', 'product_fields', 'order_types', 'print_config', 'subsystems']",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "界面路由 /mod/xcagi-erp-domain-bridge/products",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/products，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /mod/xcagi-erp-domain-bridge/products，页面可见 ，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/products；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 业务对象 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 饰品包装品管理 | 导入Excel | 导出价格表 | 导出Excel | + 添加产品 | 产品单位： | 请选择产品单位 | MAC验收0929客户 | MAC",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "ind-fields",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ind-fields/macos/result.png",
+      "sha256": "a26a9b7b7686badaeadef2f96da011d2ff6dcfa3be099b8b99ed62d2f8f53fc4",
+      "visual_review": "accepted",
+      "visible_result": "饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-fields",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ind-fields/macos/operation.webm",
+      "sha256": "318bf12a2640f89711fb2f44c515d1ef2df289111d332bb56dc87cafe0fd4144",
+      "visual_review": "accepted",
+      "visible_result": "录屏结束停在上述结果画面。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ind-fields/macos/run.log",
+    "sha256": "6954e3b19fb05582ba924853d48a4c6407e2063dcf69d506a134402c452c1c3b",
+    "bytes": 1557
+  }
+}

@@ -15,7 +15,8 @@
     "xcagi-office-employee-pack-bridge",
     "xcagi-customer-service-bridge",
     "xcagi-planner-excel-tools",
-    "lan-gate-ai-employee"
+    "lan-gate-ai-employee",
+    "attendance-industry"
   ],
   "sku_bundled_mod_ids": [
     "xcagi-planner-bridge",
@@ -29,6 +30,7 @@
     "xcagi-office-employee-pack-bridge",
     "xcagi-customer-service-bridge",
     "xcagi-planner-excel-tools",
-    "lan-gate-ai-employee"
+    "lan-gate-ai-employee",
+    "attendance-industry"
   ]
 }

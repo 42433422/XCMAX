@@ -9,6 +9,8 @@ name: gitleaks
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -23,14 +25,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Scan PR commit range for new secrets
+      - name: Scan new secrets (PR range / push increment)
         run: |
           set -euo pipefail
           VERSION=8.18.4
           curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           chmod +x /tmp/gitleaks
-          BASE='${{ github.event.pull_request.base.sha }}'
-          HEAD='${{ github.event.pull_request.head.sha }}'
+          if [ '${{ github.event_name }}' = 'pull_request' ]; then
+            BASE='${{ github.event.pull_request.base.sha }}'
+            HEAD='${{ github.event.pull_request.head.sha }}'
+          else
+            # push main：merge commit 必须携带 required 上下文 "gitleaks"（orchestrator preflight 按 HEAD 查）。
+            BASE='${{ github.event.before }}'
+            HEAD='${{ github.sha }}'
+            case "$BASE" in
+              ''|0000000000000000000000000000000000000000) BASE="${HEAD}~1" ;;
+            esac
+          fi
           echo "Scanning commit range ${BASE}..${HEAD}"
           /tmp/gitleaks detect --source . --config .github/gitleaks-config.toml --log-opts "${BASE}..${HEAD}" --redact --no-banner --exit-code 1

@@ -1,0 +1,9 @@
+[07:43:34] feature=ops-self-heal base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-self-heal
+[07:43:46] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:43:52] case S1: passed - 自治运维总览（健康+待办+审计）真实读取
+[07:43:56] case S2: passed - 自治运行指标（veto 率窗口）真实读取
+[07:44:07] case S3: passed - 只增自治审计账本真实读取
+[07:44:11] case S4: passed - 操作端点缺机器令牌被拒（负例）
+[07:44:14] case S5: passed - 无会话访问自治总览被拒（负例）
+[07:44:15] video: ops-self-heal-web-20260929-074334.webm (2740327 bytes)
+[07:44:15] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-self-heal/log/ops-self-heal-web-20260929-074334.log

@@ -1,0 +1,32 @@
+{
+  "db_counts_post_ota": {
+    "sessions": 27,
+    "users": 3,
+    "products": 12
+  },
+  "db_counts_pre_chain": {
+    "sessions": 27,
+    "users": 3,
+    "products": 10
+  },
+  "retained_or_grown": {
+    "sessions": true,
+    "users": true,
+    "products": true
+  },
+  "new_product_added": true,
+  "product_names_desc": [
+    "SUNBIRD-t9-post-ota-045248",
+    "SUNBIRD-t9-195902",
+    "SUNBIRD-t3-073556",
+    "SUNBIRD-loop-round2-post-050624",
+    "SUNBIRD-loop-round2-042330",
+    "SUNBIRD-loop-round2-041106",
+    "SUNBIRD-loop-round1-post-000403",
+    "SUNBIRD-loop-round1-234556",
+    "SUNBIRD-loop-round1-231539",
+    "SUNBIRD-loop-round1-230044",
+    "SUNBIRD-probe-baseline",
+    "SUNBIRD-loop-dryrun-191500"
+  ]
+}

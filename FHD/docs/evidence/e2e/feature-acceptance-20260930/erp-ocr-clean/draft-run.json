@@ -1,0 +1,70 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-ocr-clean",
+ "name": "识别结果清洗与入库",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/ocr/recognize-and-extract 表单文件 ['image']",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize-and-extract（写操作自动附带 CSRF）：识别并抽取结构化字段",
+   "expected": "识别并抽取结构化字段：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 7435ms；{\"purchase_unit\": null, \"contact_person\": null, \"contact_phone\": null, \"purchase_date\": null, \"order_number\": null, \"total_amount\": null, \"products\": [], \"raw_text\": \"发货单 NO.20260929\\n客户：太阳鸟\\n产品：包装盒 数量：24\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/ocr/recognize-and-extract 表单文件 ['note']",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize-and-extract（写操作自动附带 CSRF）：边界：未提供图像文件时被拒",
+   "expected": "缺少 image 返回 400",
+   "observed": "HTTP 400 83ms；{\"success\": false, \"message\": \"请提供图像文件或文件路径\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/etl/capabilities",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/etl/capabilities（写操作自动附带 CSRF）：清洗入库能力清单（ETL 目标与变换）",
+   "expected": "清洗入库能力清单（ETL 目标与变换）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 22ms；transforms=['cast', 'concat', 'date', 'default', 'formula', 'lookup'] targets=['knowledge', 'customer_products', 'customers', 'products', 'purchase_orders', 'shipment_records', 'attendance', 'export_xlsx', 'export_csv', 'webhook']",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /business-docking",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /business-docking，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /business-docking，页面可见 数据对接中心，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | ",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-ocr-clean",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-ocr-clean/macos/result.png",
+   "sha256": "48773f785ea52f522e00e78fcca86f60867596b0b5193b408cc7035708d5ea1e",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-ocr-clean",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-ocr-clean/macos/operation.webm",
+   "sha256": "ecc0ef32f6402e4fdbe289bbb41c891be2bfd0318a5bfa7eb77fb95a86de9d0f",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-ocr-clean/macos/run.log",
+  "sha256": "ba1ce0100017ac11bb518fc6c7a8a78ae6a2c3cfdd82cc3c425f071a42f1b00f",
+  "bytes": 1788
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

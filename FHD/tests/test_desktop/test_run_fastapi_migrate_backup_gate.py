@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -71,3 +72,24 @@ def test_migrate_only_emits_machine_readable_backup_path(
 
     assert f"XCAGI_MIGRATION_BACKUP={backup}" in capsys.readouterr().out
     upgrade.assert_called_once_with(str(data_dir))
+
+
+@pytest.mark.parametrize("kind", ["valid", "corrupt", "missing", "empty"])
+def test_backup_verification_is_read_only_without_bootstrap(monkeypatch, tmp_path, kind):
+    backup = tmp_path / "backup space.db"
+    if kind == "valid":
+        with sqlite3.connect(backup) as db:
+            db.execute("CREATE TABLE evidence (id INTEGER)")
+    elif kind != "missing":
+        backup.write_bytes(bytes(2048) if kind == "corrupt" else b"")
+    before = backup.read_bytes() if backup.exists() else None
+    bootstrap = Mock(side_effect=AssertionError("verification must not bootstrap"))
+    monkeypatch.setattr(run_fastapi, "_apply_desktop_bootstrap", bootstrap)
+    if kind == "valid":
+        run_fastapi.main(["--verify-backup", str(backup)])
+    else:
+        with pytest.raises(SystemExit) as error:
+            run_fastapi.main(["--verify-backup", str(backup)])
+        assert error.value.code == 1
+    assert (backup.read_bytes() if backup.exists() else None) == before
+    bootstrap.assert_not_called()

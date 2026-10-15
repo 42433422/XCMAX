@@ -1,0 +1,6 @@
+2026-09-29T13:05:23+0800 [erp-print-agent] 开始验收 erp-print-agent 打印代理与套打通道；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:05:23+0800 [erp-print-agent] M1 failed :: 受阻：打印代理接口未开租户隔离：GET /api/print/printers 与 /api/print/document-printer 均返回 403；本机未安装实体打印机
+2026-09-29T13:05:23+0800 [erp-print-agent] M2 failed :: 受阻：GET /api/print/printer-selection 返回 403；无可用打印设备
+2026-09-29T13:05:23+0800 [erp-print-agent] M3 failed :: 受阻：需要本机安装实体打印机，本机未连接打印机
+2026-09-29T13:05:24+0800 [erp-print-agent] screenshot result.png
+2026-09-29T13:05:24+0800 [erp-print-agent] video operation.webm bytes=95169

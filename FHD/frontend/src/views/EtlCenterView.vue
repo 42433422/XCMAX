@@ -37,7 +37,7 @@ const router = useRouter()
 
 const state = createEtlCenterState()
 const derived = createEtlCenterDerived({ state })
-const { canRollback, rollbackPermissionMessage } = useEtlRollbackPermission()
+const { canRollback, canExecutePermission, canManageTemplate, canManageTarget, rollbackPermissionMessage } = useEtlRollbackPermission()
 const runsApi = createEtlCenterRuns({
   state,
   route,

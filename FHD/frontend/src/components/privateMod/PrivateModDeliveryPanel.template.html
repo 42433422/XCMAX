@@ -23,7 +23,7 @@
       <div>
         <span class="private-mod-track__kicker">定制入口</span>
         <h4>说明你要的模块或员工</h4>
-        <p>提交后生产员工会自动制作和测试；质量门通过后由你验收，安装成功才算交付。</p>
+        <p>提交后生产员工会自动制作和测试；验收后自动安装，运行与业务验证通过才算交付。</p>
       </div>
       <button type="button" class="private-mod-intake__toggle" @click="requestForm.open = !requestForm.open">
         {{ requestForm.open ? '收起' : '发起定制' }}
@@ -48,6 +48,10 @@
           <input v-model="requestForm.suggestedId" maxlength="64" placeholder="sales-contract-review" />
         </label>
       </div>
+      <label v-if="versionedMainAvailable">
+        <input v-model="versionedMain" type="checkbox" />
+        使用已入主线的太阳鸟考勤转换私有 Mod（模块交付，不重新生成源码）
+      </label>
       <label>
         <span>需求说明</span>
         <textarea
@@ -107,6 +111,11 @@
       <div v-else-if="customOf(item).gate_message" class="private-mod-request__gate" :data-ok="customOf(item).gate_ok">
         {{ customOf(item).gate_message }}
       </div>
+      <div v-for="artifact in customOf(item).artifacts" :key="`source:${item.id}:${artifact.id}`" class="private-mod-request__meta">
+        <small v-if="artifact.source_mode === 'versioned_main'">
+          主线 {{ artifact.source_git_sha }} · 源树 {{ artifact.source_git_tree }} · 源 SHA256 {{ artifact.source_sha256 }} · 签包 SHA256 {{ artifact.package_sha256 }}
+        </small>
+      </div>
 
       <div v-if="customOf(item).stage === 'acceptance'" class="private-mod-request__actions">
         <button type="button" class="private-mod-center__update" :disabled="!!requestBusy" @click="decideRequest(item, 'accept')">
@@ -122,6 +131,9 @@
         </button>
       </div>
       <div v-if="customOf(item).stage === 'rework' || reworkRequestId === item.id" class="private-mod-request__rework">
+        <label v-if="versionedMainAvailable && customOf(item).kind === 'module' && customOf(item).suggested_id === 'sunbird-attendance-custom'">
+          <input v-model="requestMainSource[item.id]" type="checkbox" />使用已入主线的太阳鸟考勤转换 Mod 在本工单返工
+        </label>
         <textarea
           v-model="requestReworkNotes[item.id]"
           rows="3"
@@ -138,7 +150,7 @@
         </button>
       </div>
       <div v-if="customOf(item).stage === 'delivering'" class="private-mod-request__delivery">
-        <div>验收已通过。安装成功后将自动回写交付回执并结案。</div>
+        <div>验收已通过。安装后会自动验证运行与业务结果，通过后结案。</div>
         <button
           v-for="artifact in customOf(item).artifacts"
           :key="`${item.id}:${artifact.kind}:${artifact.id}`"
@@ -147,10 +159,10 @@
           :disabled="!!requestBusy"
           @click="installRequestArtifact(item, artifact)"
         >
-          {{ requestBusy === `install:${item.id}:${artifact.kind}` ? '安装中…' : `安装${artifact.kind === 'employee' ? ' AI 员工' : '私有 Mod'}` }}
+          {{ requestBusy === `install:${item.id}:${artifact.kind}:${artifact.id}` ? '安装中…' : `安装${artifact.kind === 'employee' || artifact.source_artifact_kind === 'employee' ? ' AI 员工' : '私有 Mod'} · ${artifact.name || artifact.id}` }}
         </button>
       </div>
-      <div v-if="customOf(item).stage === 'delivered'" class="private-mod-request__delivered">产物已安装，交付回执已写入。</div>
+      <div v-if="customOf(item).stage === 'delivered'" class="private-mod-request__delivered">运行与业务验证已通过，交付回执已写入。</div>
     </article>
   </section>
 

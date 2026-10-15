@@ -86,6 +86,14 @@ def _append_artifacts_to_run(
             continue
         existing.add(signature)
         run.artifacts.append(artifact)
+        _facade().logger.info(
+            "agent artifact recorded: run_id=%s artifact_id=%s artifact_type=%s name=%s uri=%s",
+            run.run_id,
+            artifact.artifact_id,
+            artifact.artifact_type,
+            artifact.name,
+            artifact.uri,
+        )
         run.add_event(
             "artifact.attached",
             f"Artifact 已附加: {artifact.artifact_type}",
@@ -181,6 +189,14 @@ def _append_legacy_tool_records_to_run(
         )
         run.steps.append(step)
         run.tool_calls.append(call)
+        _facade().logger.info(
+            "agent tool call: run_id=%s tool_id=%s action=%s status=%s duration_ms=%s",
+            run.run_id,
+            step.tool_id,
+            step.action,
+            call.status,
+            call.duration_ms,
+        )
         node_outputs[step.node_id] = output
         total_cost += call.cost_units
         run.add_event(

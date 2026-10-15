@@ -57,7 +57,7 @@ async def voice_unified_ws(
         return
 
     try:
-        from modstore_server.auth_service import decode_access_token
+        from modstore_server.auth_service import decode_access_token, get_user_by_id
 
         payload = decode_access_token(token)
         sub = payload.get("sub") if payload else None
@@ -66,6 +66,10 @@ async def voice_unified_ws(
             await ws.close()
             return
         user_id = int(sub)
+        if not get_user_by_id(user_id):
+            await _send_json(ws, {"type": "error", "message": "认证无效"})
+            await ws.close()
+            return
     except RECOVERABLE_ERRORS:
         await _send_json(ws, {"type": "error", "message": "认证失败"})
         await ws.close()
@@ -157,10 +161,11 @@ async def voice_unified_ws(
                 cancel = asyncio.Event()
             db = get_session_factory()()
             try:
-                user = db.query(User).filter(User.id == user_id).first()
+                user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
                 if not user:
                     await _send_json(ws, {"type": "error", "message": "用户不存在"})
-                    return
+                    await ws.close(code=1008)
+                    raise WebSocketDisconnect(code=1008)
                 await _run_billed_s2s_turn(
                     ws,
                     user=user,
@@ -184,6 +189,9 @@ async def voice_unified_ws(
             while True:
                 msg = await ws.receive()
                 if msg.get("type") == "websocket.disconnect":
+                    break
+                if not get_user_by_id(user_id):
+                    await ws.close(code=1008)
                     break
                 if "bytes" in msg and msg["bytes"]:
                     await ensure_funasr_session()
@@ -243,6 +251,9 @@ async def voice_unified_ws(
     async def funasr_to_client() -> None:
         try:
             async for raw in funasr_ws:
+                if not get_user_by_id(user_id):
+                    await ws.close(code=1008)
+                    break
                 if isinstance(raw, bytes):
                     continue
                 try:

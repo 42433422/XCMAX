@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.shell.taiyangniao_attendance.parser import parse_attendance_workbook
+from app.mod_sdk.attendance import parse_attendance_workbook
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:

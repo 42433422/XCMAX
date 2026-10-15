@@ -1,0 +1,10 @@
+[13:55:01] feature=ai-excel platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-excel
+[13:55:13] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:55:14] case X1: passed - 真实生成 Excel 并返回落盘路径
+[13:55:14] case X2: passed - 真实下载 xlsx 二进制
+[13:55:15] case X3: passed - Excel 解析服务健康真实读取
+[13:55:15] case X4: passed - Excel 解析日志真实读取
+[13:55:15] case X5: passed - 缺 data 的 Excel 生成被拒（负例/边界）
+[13:55:15] case X6: passed - 缺 file_path 的 Excel 解析被拒（负例/边界）
+[13:55:15] video: ai-excel-web-20260929-135501.webm (1071380 bytes)
+[13:55:15] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-excel/log/ai-excel-web-20260929-135501.log

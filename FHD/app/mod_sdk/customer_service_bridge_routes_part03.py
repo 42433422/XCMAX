@@ -12,33 +12,18 @@ def _register_routes_part03(router, mod_id, facade):
         from app.mod_sdk.host_services import (
             PIPELINE_STAGES,
             analyze_customer_pipeline,
-            build_starred_group_feed,
-            get_bindings_for_user,
         )
 
         uid = int(body.market_user_id)
-        has_binding = body.has_binding or bool(get_bindings_for_user(uid))
-        feed = build_starred_group_feed(limit=20, market_user_id=uid)
-        texts = [
-            str(x.get("content") or x.get("message") or "")
-            for x in feed
-            if x.get("content") or x.get("message")
-        ]
-        preview = texts[0] if texts else ""
         doc = analyze_customer_pipeline(
             uid,
             username=body.username,
-            message_texts=texts,
-            has_binding=has_binding,
+            message_texts=[],
+            has_binding=body.has_binding,
             intake_sent=body.intake_sent,
         )
-        if preview:
-            doc["last_message_preview"] = preview[:500]
-            from app.mod_sdk.host_services import save_pipeline
-
-            doc = save_pipeline(doc)
         connected_welcome = None
-        if str(doc.get("stage")) == "connected" and has_binding:
+        if str(doc.get("stage")) == "connected" and body.has_binding:
             from app.mod_sdk.host_services import maybe_send_connected_welcome
 
             connected_welcome = maybe_send_connected_welcome(uid, username=body.username)
@@ -51,7 +36,7 @@ def _register_routes_part03(router, mod_id, facade):
             "data": {
                 "pipeline": doc,
                 "stages": PIPELINE_STAGES,
-                "message_count": len(texts),
+                "message_count": 0,
                 "connected_welcome": connected_welcome,
             },
         }
@@ -157,16 +142,12 @@ def _register_routes_part03(router, mod_id, facade):
 
     @router.post("/user-cs/wechat/send")
     async def user_cs_wechat_send(body: facade.WechatSendBody):
-        from app.mod_sdk.host_services import get_bindings_for_user, get_desktop_automation_service
+        from app.mod_sdk.host_services import get_desktop_automation_service
 
         uid = int(body.market_user_id)
         contact = body.contact_name.strip()
-        bindings = get_bindings_for_user(uid)
-        if not contact and bindings:
-            first = bindings[0]
-            contact = str(first.get("contact_name") or first.get("remark") or "").strip()
         if not contact:
-            return {"success": False, "error": "请先保存群聊绑定，或确认群名称"}
+            return {"success": False, "error": "请确认群名称"}
         svc = get_desktop_automation_service()
         result = svc.send_wechat_message(contact, body.message.strip())
         sent = bool(result.get("success")) and bool(
@@ -224,67 +205,3 @@ def _register_routes_part03(router, mod_id, facade):
             force=body.force,
         )
         return {"success": bool(out.get("sent")), "data": out}
-
-    @router.get("/user-cs/wechat/llm-status")
-    def user_cs_wechat_llm_status(request: facade.Request):
-        from app.mod_sdk.host_services import probe_passive_llm_ready, session_id_from_request
-
-        return {
-            "success": True,
-            "data": probe_passive_llm_ready(
-                session_id=session_id_from_request(request), request=request
-            ),
-        }
-
-    @router.post("/user-cs/wechat/passive-poll")
-    async def user_cs_passive_poll(request: facade.Request, body: facade.PassivePollBody):
-        """被动探测：快照复制解密 → 读绑定群新消息 → 可选自动回复。"""
-        from app.mod_sdk.host_services import passive_poll_once, session_id_from_request
-
-        out = passive_poll_once(
-            market_user_id=int(body.market_user_id),
-            username=body.username,
-            dry_run=body.dry_run,
-            auto_reply=body.auto_reply,
-            max_replies=body.max_replies,
-            use_llm=body.use_llm,
-            skip_sync=body.skip_sync,
-            refresh_count_new=body.refresh_count_new,
-            refresh_latest_label=body.refresh_latest_label,
-            catch_up_latest=body.catch_up_latest,
-            session_id=session_id_from_request(request),
-            request=request,
-        )
-        return {"success": bool(out.get("success")), "data": out}
-
-    @router.get("/user-cs/wechat/passive-loop")
-    def user_cs_passive_loop_get(market_user_id: int, username: str = ""):
-        from app.mod_sdk.host_services import get_passive_poll_config
-
-        return {"success": True, "data": get_passive_poll_config(market_user_id, username=username)}
-
-    def _user_cs_passive_loop_save(body: facade.PassiveLoopConfigBody) -> dict:
-        from app.mod_sdk.host_services import save_passive_poll_config
-
-        data = save_passive_poll_config(
-            int(body.market_user_id),
-            username=body.username,
-            poll_enabled=body.poll_enabled,
-            poll_interval_sec=body.poll_interval_sec,
-        )
-        return {"success": True, "data": data}
-
-    @router.post("/user-cs/wechat/passive-loop", operation_id="mod_user_cs_passive_loop_post")
-    def user_cs_passive_loop_post(body: facade.PassiveLoopConfigBody):
-        return _user_cs_passive_loop_save(body)
-
-    @router.put("/user-cs/wechat/passive-loop", operation_id="mod_user_cs_passive_loop_put")
-    def user_cs_passive_loop_put(body: facade.PassiveLoopConfigBody):
-        return _user_cs_passive_loop_save(body)
-
-    @router.post("/user-cs/wechat/passive-reset-watch")
-    def user_cs_passive_reset_watch(body: facade.PassiveLoopConfigBody):
-        from app.mod_sdk.host_services import reset_passive_watch
-
-        state = reset_passive_watch(int(body.market_user_id), username=body.username)
-        return {"success": True, "data": state}

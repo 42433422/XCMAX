@@ -2374,6 +2374,8 @@ class TestModsRoutesBranches:
         mock_mod.version = "1.0.0"
         mock_mod.author = "author"
         mock_mod.description = "desc"
+        mock_mod.scope = "global"
+        mock_mod.frontend_runtime = {}
         mock_mod.frontend_menu = []
         mock_mod.frontend_menu_overrides = {}
         mock_mod.comms_exports = []
@@ -2498,7 +2500,9 @@ class TestModsRoutesBranches:
         """list_routes 成功。"""
         app = _build_mods_app()
         mock_mm = MagicMock()
-        mock_mm.get_routes.return_value = [{"path": "/api/x"}]
+        route = {"mod_id": "m1", "routes_path": "frontend/routes.js"}
+        mock_mm.get_routes.return_value = [route]
+        mock_mm.list_all_mods.return_value = [{"id": "m1", "scope": "global"}]
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
             return_value=mock_mm,
@@ -2508,4 +2512,4 @@ class TestModsRoutesBranches:
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
-        assert len(body["data"]) == 1
+        assert body["data"] == [route]

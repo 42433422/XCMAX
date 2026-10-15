@@ -172,6 +172,7 @@ describe('useChatPersistence', () => {
 
     it('returns null for non-product queries', () => {
       expect(extractLikelyProductQueryKeyword('出货单')).toBeNull()
+      expect(extractLikelyProductQueryKeyword('查询当前企业已经安装的 AI 员工、扩展模块和可用工具，返回真实清单；这是只读查询，不执行写入操作。')).toBeNull()
       expect(extractLikelyProductQueryKeyword('打印标签')).toBeNull()
     })
 

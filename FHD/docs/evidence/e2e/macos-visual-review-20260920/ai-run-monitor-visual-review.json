@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "ai-run-monitor",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "4068a67b49220b0faa56b4804534eda749a89a66f53b3ded926d96e75728854b",
+  "visible_content": "智能生态入口四张卡片，没有工作流编辑、发布或运行记录。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/ai-run-monitor.png"
+}

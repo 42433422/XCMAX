@@ -1,0 +1,9 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "ota-observation",
+  "at_utc": "2026-09-21T18:20:03Z",
+  "rollback_marker_present": false,
+  "rollback_applied_present": false,
+  "note": "更新后首次启动进入观察期；后端+业务路由+主界面就绪后提交并删除 marker。观察期内不得重启，否则应用按设计回滚 backend。",
+  "verdict": "PASS"
+}

@@ -19,6 +19,7 @@ export function useLoginViewActions(
     username,
     accountKind,
     password,
+    invitationCode,
     loading,
     errorMessage,
     altLoginHint,
@@ -142,7 +143,9 @@ export function useLoginViewActions(
       const result =
         loginMode.value === 'phone'
           ? await authApi.loginWithPhoneCode(phone.value.trim(), smsCode.value.trim(), accountKind.value)
-          : await authApi.login(username.value.trim(), password.value, accountKind.value)
+          : invitationCode.value.trim()
+            ? await authApi.login(username.value.trim(), password.value, accountKind.value, invitationCode.value.trim())
+            : await authApi.login(username.value.trim(), password.value, accountKind.value)
       const raw = result as unknown as Record<string, unknown>
       const ok = raw?.success === true || (raw?.data as Record<string, unknown> | undefined)?.success === true
       if (!ok) {

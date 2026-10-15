@@ -74,7 +74,7 @@ SPECIAL_INPUT_SCHEMAS_PART_1: dict[tuple[str, str], dict[str, Any]] = {
     },
     ("products", "create"): {
         "type": "object",
-        "required": ["name_or_model", "unit_name"],
+        "required": ["name_or_model"],
         "properties": {
             "name_or_model": {"type": "string"},
             "unit_name": {"type": "string"},
@@ -216,8 +216,14 @@ SPECIAL_INPUT_SCHEMAS_PART_1: dict[tuple[str, str], dict[str, Any]] = {
     },
     ("inventory", "stock_in"): {
         "type": "object",
-        "required": ["product_id", "warehouse_id", "quantity"],
+        "required": ["quantity"],
+        "allOf": [
+            {"anyOf": [{"required": ["product_id"]}, {"required": ["model_number"]}]},
+            {"anyOf": [{"required": ["warehouse_id"]}, {"required": ["warehouse_name"]}]},
+        ],
         "properties": {
+            "model_number": {"type": "string", "title": "产品型号"},
+            "warehouse_name": {"type": "string", "title": "入库仓库名称"},
             "product_id": {},
             "warehouse_id": {},
             "quantity": {"type": "number"},

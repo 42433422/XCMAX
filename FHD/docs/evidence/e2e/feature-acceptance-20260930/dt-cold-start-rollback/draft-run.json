@@ -1,0 +1,54 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "dt-cold-start-rollback",
+ "name": "冷启动与回滚",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 2,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/desktop/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/desktop/status（写操作自动附带 CSRF）：冷启动完成",
+   "expected": "冷启动完成：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 66ms；readyForUi=True degraded=False",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "界面路由 /",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /，页面可见 智能对话，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /；命中文本 ['智能对话']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 12 次任务 · 预计节约人工费用 ¥49 |  | 你好，我是饰品包装助手。 - 查产",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "dt-cold-start-rollback",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/dt-cold-start-rollback/macos/result.png",
+   "sha256": "649a60c3ab1ffba87949b593f981c985ed7ad5be3753115bd0c65c4157420263",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "dt-cold-start-rollback",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/dt-cold-start-rollback/macos/operation.webm",
+   "sha256": "334b27d45ad85c6d19478930cc57f861996f964bbe74a59c0bc9d9216cbb8a81",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/dt-cold-start-rollback/macos/run.log",
+  "sha256": "15d692b7e0aa922fd2a1764e4a2f8ad5687ea0656761dbcbe2b2b4bc156e98de",
+  "bytes": 1149
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

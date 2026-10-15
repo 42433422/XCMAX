@@ -111,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { knowledgeBaseApi } from '@/api/knowledgeBase'
 import { errorText, fileSizeText } from '@/composables/persyKnowledgeFormatters'
 
@@ -137,6 +137,11 @@ const datasetIdModel = computed({
 })
 
 const importOpen = ref(false)
+watch(importOpen, (open, _, onCleanup) => {
+  if (!open) return
+  window.dispatchEvent(new Event('xcagi:suppress-floating-chat'))
+  onCleanup(() => window.dispatchEvent(new Event('xcagi:restore-floating-chat')))
+}, { flush: 'sync' })
 const importMode = ref<ImportMode>('file')
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)

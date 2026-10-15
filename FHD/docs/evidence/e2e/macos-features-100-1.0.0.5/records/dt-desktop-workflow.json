@@ -1,0 +1,41 @@
+{
+  "_comment": "本文件由 macOS 真机证据采集器生成，请勿手改（DO NOT EDIT）。",
+  "feature": "dt-desktop-workflow",
+  "name": "桌面工作流（占位）",
+  "domain": "desktop",
+  "module": "dt-automation",
+  "catalog_status": "planned",
+  "platforms": [
+    "windows",
+    "macos"
+  ],
+  "method": "planned",
+  "status": "planned",
+  "status_basis": "目录状态为「规划中」，尚无实现，无法进行真机验证",
+  "source_sha": "7a1926f936a960d96be72e6f60bda283438963c9",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "9d6134d5cc37372d9e14bad83ca1fcf2ea060f56",
+  "environment": {
+    "os": "Darwin 25.3.0",
+    "arch": "arm64",
+    "macos": "26.3",
+    "hostname": "4243342deMac-mini.local",
+    "electron": "41.10.3",
+    "node": "v20.18.0",
+    "app_path": "/Applications/XCAGI.app",
+    "app_version": "1.0.0.5",
+    "app_git_sha": "9d6134d5cc37372d9e14bad83ca1fcf2ea060f56",
+    "app_built_at": "2026-09-20T09:05:36.700Z"
+  },
+  "verified_at": "2026-09-20T09:40:46.401Z",
+  "screenshot": null,
+  "video": null,
+  "log": "logs/dt-desktop-workflow.log",
+  "command": null,
+  "scope": null,
+  "evidence_source": null,
+  "passed": null,
+  "failed": null,
+  "cases": [],
+  "notes": "目录状态为「规划中」，尚无实现，无法进行真机验证"
+}

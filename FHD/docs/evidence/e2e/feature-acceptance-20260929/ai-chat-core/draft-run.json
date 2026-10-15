@@ -1,0 +1,61 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ai-chat-core",
+ "name": "多轮智能对话（流式）",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/ai/test",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/ai/test（写操作自动附带 CSRF）：AI 对话服务自检",
+   "expected": "AI 对话服务自检：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 4202ms；AI 聊天服务运行正常",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "界面操作：在智能对话输入框键入「[071059] 你好，请用一句话介绍你能帮我做什么」并点击发送（多轮对话首轮）",
+   "actions": "在智能对话输入框键入「[071059] 你好，请用一句话介绍你能帮我做什么」并点击发送（多轮对话首轮）",
+   "expected": "对话区出现用户消息与 AI 回复，回复包含 ['考勤', '产品', '订单', '帮', '可以', '您'] 之一",
+   "observed": "已发送「[071059] 你好，请用一句话介绍你能帮我做什么」，回复片段： | 07:11 |  | 帮你管产品、客户、订单和库存，数据查询、Excel导入导出、生成文档这些杂活也都能搞定， |  | 07:11 | 任务 | 对话 | ",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面操作：在智能对话输入框键入「[071059] 刚才你说的第一项能力再展开一句」并点击发送（上下文续问）",
+   "actions": "在智能对话输入框键入「[071059] 刚才你说的第一项能力再展开一句」并点击发送（上下文续问）",
+   "expected": "对话区出现用户消息与 AI 回复，回复包含 ['考勤', '产品', '订单', '可以', '您', '帮', '刚才', '上次'] 之一",
+   "observed": "已发送「[071059] 刚才你说的第一项能力再展开一句」，回复片段： | 07:11 |  | 产品管理就是把你所有产品的信息——比如名称、型号、规格、价格、计量 |  | 07:11 | 任务 | 对话 | ",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ai-chat-core",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-chat-core/macos/result.png",
+   "sha256": "c411e5f9b36bd67c9c9c12f89155da2b61cb7c9935f05f3a0291029ab76a147e",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ai-chat-core",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-chat-core/macos/operation.webm",
+   "sha256": "d23d1767edbdf7e3223b909badbad26f156d94285769f4f3c595c7eaaed5f1ae",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-chat-core/macos/run.log",
+  "sha256": "fc2297a26d0f3c6cd9e288eab41f2c595e7b8f083931792e1046347a54814ff4",
+  "bytes": 1068
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

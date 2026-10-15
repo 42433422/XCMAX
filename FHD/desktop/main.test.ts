@@ -33,7 +33,7 @@ const electronMocks = vi.hoisted(() => {
     setBadgeCount: vi.fn(),
     isQuitting: false as boolean
   }
-  const BrowserWindow = vi.fn(() => ({
+  const BrowserWindow = vi.fn(function () { return ({
     loadURL: vi.fn(),
     on: vi.fn(),
     once: vi.fn(),
@@ -42,15 +42,19 @@ const electronMocks = vi.hoisted(() => {
     focus: vi.fn(),
     restore: vi.fn(),
     isMinimized: vi.fn(() => false),
+    isDestroyed: vi.fn(() => false),
     getBounds: vi.fn(() => ({ x: 0, y: 0, width: 1280, height: 800 })),
     setBounds: vi.fn(),
     flashFrame: vi.fn(),
     close: vi.fn(),
     destroy: vi.fn()
-  }))
-  ;(BrowserWindow as unknown as { getAllWindows: () => unknown[] }).getAllWindows = vi.fn(() => [])
+  }) })
+  // 模态提示必须挂到窗口上；macOS 上无窗口的 showMessageBox 会同步阻塞主进程事件循环。
+  const dialogParentWindow = { isDestroyed: vi.fn(() => false) }
+  ;(BrowserWindow as unknown as { getAllWindows: () => unknown[] }).getAllWindows =
+    vi.fn(() => [dialogParentWindow])
   const Menu = { buildFromTemplate: vi.fn(() => ({})), setApplicationMenu: vi.fn() }
-  const Tray = vi.fn(() => ({ setToolTip: vi.fn(), setContextMenu: vi.fn() }))
+  const Tray = vi.fn(function () { return ({ setToolTip: vi.fn(), setContextMenu: vi.fn() }) })
   const Notification = vi.fn(() => ({ show: vi.fn() }))
   ;(Notification as unknown as { isSupported: () => boolean }).isSupported = vi.fn(() => true)
   const dialog = {
@@ -112,6 +116,20 @@ const updaterMocks = vi.hoisted(() => ({
 
 vi.mock('electron', () => electronMocks)
 vi.mock('electron-updater', () => ({ autoUpdater: updaterMocks.autoUpdater }))
+
+async function withPackagedResources(files: Record<string, string | Buffer>, verify: () => Promise<void>) {
+  const resources = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-test-resources-'))
+  const previous = process.resourcesPath
+  Object.assign(process, { resourcesPath: resources }); electronMocks.app.isPackaged = true
+  try {
+    for (const [name, content] of Object.entries(files)) { const target = path.join(resources, name); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, content) }
+    await verify()
+  } finally {
+    Object.assign(process, { resourcesPath: previous }); electronMocks.app.isPackaged = false
+    if (path.dirname(resources) !== path.resolve(os.tmpdir()) || !path.basename(resources).startsWith('xcagi-test-resources-')) throw new Error('Unexpected temporary resource path')
+    fs.rmSync(resources, { recursive: true, force: true })
+  }
+}
 
 describe('main — resolveDefaultDesktopPort', () => {
   beforeEach(() => {
@@ -212,6 +230,22 @@ describe('main — resolveDesktopBackendBindHost', () => {
 })
 
 describe('main — isPortAvailable', () => {
+  it.skipIf(process.platform !== 'win32')('checks every configured local IPv4 address before declaring the wildcard backend port free', async () => {
+    const { isPortAvailable } = await import('./main.js')
+    const net = await import('node:net')
+    const server = net.createServer()
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.2', resolve))
+    try {
+      expect(await isPortAvailable((server.address() as { port: number }).port, '0.0.0.0')).toBe(false)
+    } finally { await new Promise<void>(resolve => server.close(() => resolve())) }
+  })
+  it('keeps the Windows shell probe on loopback without changing backend LAN binding', async () => {
+    const { isPortAvailable, DESKTOP_BACKEND_BIND_HOST } = await import('./main.js')
+    const net = await import('node:net')
+    const listen = vi.spyOn(net.Server.prototype, 'listen')
+    expect(await isPortAvailable(0)).toBe(true)
+    expect(listen.mock.calls[0][1]).toBe(process.platform === 'win32' ? '127.0.0.1' : DESKTOP_BACKEND_BIND_HOST)
+  })
   it('returns true for a free port', async () => {
     const { isPortAvailable } = await import('./main.js')
     // 用一个几乎不可能被占用的端口
@@ -361,6 +395,7 @@ describe('main — desktopInitialUrl', () => {
 describe('main — readPackagedProductSku', () => {
   beforeEach(() => {
     delete process.env.XCAGI_PRODUCT_SKU
+    delete process.env.XCAGI_MARKET_BASE_URL
     electronMocks.app.isPackaged = false
   })
 
@@ -394,43 +429,17 @@ describe('main — readPackagedProductSku', () => {
   })
 
   it('returns null when packaged but product-sku.json missing (graceful fallback)', async () => {
-    // 模拟 packaged 模式，但 resourcesPath 下没有 product-sku.json
-    electronMocks.app.isPackaged = true
-    const tmpResources = path.join(os.tmpdir(), `xcagi-test-resources-${Date.now()}`)
-    fs.mkdirSync(tmpResources, { recursive: true })
-    const savedResourcesPath = (process as { resourcesPath?: string }).resourcesPath
-    ;(process as { resourcesPath?: string }).resourcesPath = tmpResources
-    try {
+    await withPackagedResources({}, async () => {
       const { readPackagedProductSku } = await import('./main.js')
       expect(readPackagedProductSku()).toBeNull()
-    } finally {
-      if (savedResourcesPath === undefined) {
-        delete (process as { resourcesPath?: string }).resourcesPath
-      } else {
-        (process as { resourcesPath?: string }).resourcesPath = savedResourcesPath
-      }
-      electronMocks.app.isPackaged = false
-    }
+    })
   })
 
-  it('returns SKU from product-sku.json when packaged', async () => {
-    electronMocks.app.isPackaged = true
-    const tmpResources = path.join(os.tmpdir(), `xcagi-test-resources-${Date.now()}-${Math.random().toString(36).slice(2)}`)
-    fs.mkdirSync(tmpResources, { recursive: true })
-    fs.writeFileSync(path.join(tmpResources, 'product-sku.json'), JSON.stringify({ sku: 'enterprise' }))
-    const savedResourcesPath = (process as { resourcesPath?: string }).resourcesPath
-    ;(process as { resourcesPath?: string }).resourcesPath = tmpResources
-    try {
-      const { readPackagedProductSku } = await import('./main.js')
-      expect(readPackagedProductSku()).toBe('enterprise')
-    } finally {
-      if (savedResourcesPath === undefined) {
-        delete (process as { resourcesPath?: string }).resourcesPath
-      } else {
-        (process as { resourcesPath?: string }).resourcesPath = savedResourcesPath
-      }
-      electronMocks.app.isPackaged = false
-    }
+  it('uses official API root for packaged enterprise SKU', async () => {
+    await withPackagedResources({ 'product-sku.json': JSON.stringify({ sku: 'enterprise' }) }, async () => {
+      const { backendEditionEnv } = await import('./main.js')
+      expect(backendEditionEnv().XCAGI_MARKET_BASE_URL).toBe('https://xiu-ci.com')
+    })
   })
 })
 
@@ -599,6 +608,21 @@ describe('main — trusted external account URLs', () => {
 })
 
 describe('main — readPackagedAppVersion', () => {
+  it.each<[Record<string, string | Buffer>, string]>([
+    [{ 'build-info.json': '{"version":"1.0.0.5"}', 'backend/version.txt': '1.0.0.4', 'product-sku.json': '{"sku":"enterprise","schema_version":1}' }, '1.0.0.5'],
+    [{ 'backend/_internal/version.txt': '1.0.0.1' }, '1.0.0.1'],
+    [{ 'backend/version.txt': '1.0.0.2' }, '1.0.0.2'],
+    [{ 'product-sku.json': '{"sku":"enterprise","schema_version":1}' }, '10.0.0'],
+    [{ 'build-info.json': '{"version":5}', 'backend/_internal/version.txt': Buffer.from('\uFEFF1.0.0.5', 'utf16le') }, '1.0.0.5'],
+    [{ 'build-info.json': '{', 'backend/version.txt': 'unknown' }, '10.0.0'],
+    [{ 'build-info.json': '{"version":""}', 'backend/version.txt': '1.0.0' }, '10.0.0'],
+  ])('reads packaged product identity %j as %s', async (files, expected) => {
+    await withPackagedResources(files, async () => {
+      const { readPackagedAppVersion } = await import('./desktop-config.js')
+      expect(readPackagedAppVersion()).toBe(expected)
+    })
+  })
+
   it('returns "dev" in unpackaged mode', async () => {
     electronMocks.app.isPackaged = false
     const { readPackagedAppVersion } = await import('./main.js')
@@ -699,26 +723,66 @@ describe('main — backend spawn failure', () => {
   it('shows the failure and exits instead of leaving a zombie shell', async () => {
     const { __test_only } = await import('./main.js')
     electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.dialog.showMessageBox.mockClear()
     electronMocks.app.quit.mockClear()
     electronMocks.app.isQuitting = false
 
     __test_only.handleBackendSpawnError(new Error('ENOENT'))
 
-    expect(electronMocks.dialog.showErrorBox).toHaveBeenCalledTimes(1)
+    // M17 回归：失败提示必须走**异步** showMessageBox；同步 showErrorBox 会阻塞主进程事件循环
+    expect(electronMocks.dialog.showMessageBox).toHaveBeenCalledTimes(1)
+    expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
     expect(electronMocks.app.quit).toHaveBeenCalledTimes(1)
   })
 
   it('does not display another error while the app is already quitting', async () => {
     const { __test_only } = await import('./main.js')
     electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.dialog.showMessageBox.mockClear()
     electronMocks.app.quit.mockClear()
     electronMocks.app.isQuitting = true
 
     __test_only.handleBackendSpawnError(new Error('late error'))
 
+    expect(electronMocks.dialog.showMessageBox).not.toHaveBeenCalled()
     expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
     expect(electronMocks.app.quit).not.toHaveBeenCalled()
     electronMocks.app.isQuitting = false
+  })
+})
+
+describe('main — startup failure notice stays non-blocking', () => {
+  it('attaches the OTA rollback notice to a window instead of a modal alert', async () => {
+    const { showStartupFailureNotice } = await import('./main.js')
+    const { desktopRuntime } = await import('./runtime-state.js')
+    electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.dialog.showMessageBox.mockClear()
+    const win = { isDestroyed: vi.fn(() => false) }
+    desktopRuntime.mainWindow = win as never
+
+    showStartupFailureNotice('更新后启动失败，正在恢复上一版本；XCAGI 将自动重启。')
+
+    // 2026-10-03 实机回归：同步 showErrorBox 与「无窗口的 showMessageBox」在 macOS 上都走
+    // NSAlert.runModal 阻塞主进程，app.quit() 永不执行，回滚 helper 120s 超时放弃，
+    // 更新失败后的自动回滚无法完成。必须把提示挂到窗口上（window-modal sheet）。
+    expect(electronMocks.dialog.showMessageBox).toHaveBeenCalledTimes(1)
+    const calls = electronMocks.dialog.showMessageBox.mock.calls as unknown as unknown[][]
+    expect(calls[0]?.[0]).toBe(win)
+    expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
+    desktopRuntime.mainWindow = null
+  })
+
+  it('falls back to a log line (never a modal) when no window exists', async () => {
+    const { showStartupFailureNotice } = await import('./main.js')
+    const { desktopRuntime } = await import('./runtime-state.js')
+    electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.dialog.showMessageBox.mockClear()
+    desktopRuntime.mainWindow = null
+
+    showStartupFailureNotice('更新后启动失败，正在恢复上一版本；XCAGI 将自动重启。')
+
+    expect(electronMocks.dialog.showMessageBox).not.toHaveBeenCalled()
+    expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
   })
 })
 

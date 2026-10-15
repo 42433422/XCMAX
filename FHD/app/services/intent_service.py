@@ -104,7 +104,7 @@ _load_intent_runtime_rules()
 
 def _make_intent_cache_key(message: Any) -> str:
     normalized = _normalize(message if isinstance(message, str) else str(message or ""))
-    return hashlib.md5(normalized.lower().encode()).hexdigest()
+    return hashlib.md5(normalized.lower().encode(), usedforsecurity=False).hexdigest()
 
 
 def _normalize(msg: str | None) -> str:
@@ -131,11 +131,14 @@ def _reflex_basic_intents(message: str) -> dict[str, bool]:
     msg_lower = (message or "").strip().lower()
     result = {
         "is_greeting": (rr.reflex_type == ReflexType.GREETING and rr.triggered)
-        or any(w in msg_lower for w in ("你好", "您好", "hello", "hi", "嗨")),
+        or any(w in msg_lower for w in ("你好", "您好", "hello", "hi", "嗨", "哈喽", "哈罗")),
         "is_goodbye": (rr.reflex_type == ReflexType.EMERGENCY_STOP and rr.triggered)
-        or any(w in msg_lower for w in ("再见", "拜拜", "bye", "先这样")),
+        or any(w in msg_lower for w in ("再见", "拜拜", "bye", "先这样", "明天再说", "下班了")),
         "is_help": (rr.reflex_type == ReflexType.HELP and rr.triggered)
-        or any(w in msg_lower for w in ("你能做什么", "怎么用", "帮助", "help")),
+        or any(
+            w in msg_lower
+            for w in ("你能做什么", "怎么用", "帮助", "help", "帮我做什么", "能帮我做什么")
+        ),
         "is_confirmation": (rr.reflex_type == ReflexType.CONFIRMATION and rr.triggered)
         or any(w in msg_lower for w in ("好的", "可以", "确认", "是的", "ok", "yes")),
         "is_negation_intent": rr.reflex_type == ReflexType.DENIAL and rr.triggered,
@@ -168,7 +171,7 @@ def is_greeting(message: str) -> bool:
     if rr.reflex_type == ReflexType.GREETING and rr.triggered:
         return True
     msg_lower = (message or "").lower()
-    return any(w in msg_lower for w in ("你好", "您好", "hello", "hi", "嗨"))
+    return any(w in msg_lower for w in ("你好", "您好", "hello", "hi", "嗨", "哈喽", "哈罗"))
 
 
 def is_goodbye(message: str) -> bool:
@@ -177,7 +180,7 @@ def is_goodbye(message: str) -> bool:
     if rr.reflex_type == ReflexType.EMERGENCY_STOP and rr.triggered:
         return True
     msg_lower = message.lower()
-    return any(w in msg_lower for w in ("再见", "拜拜", "bye", "先这样"))
+    return any(w in msg_lower for w in ("再见", "拜拜", "bye", "先这样", "明天再说", "下班了"))
 
 
 def is_help_request(message: str) -> bool:
@@ -186,7 +189,10 @@ def is_help_request(message: str) -> bool:
     if rr.reflex_type == ReflexType.HELP and rr.triggered:
         return True
     msg_lower = message.lower()
-    return any(w in msg_lower for w in ("你能做什么", "怎么用", "帮助", "help"))
+    return any(
+        w in msg_lower
+        for w in ("你能做什么", "怎么用", "帮助", "help", "帮我做什么", "能帮我做什么")
+    )
 
 
 def is_confirmation(message: str) -> bool:
@@ -207,6 +213,16 @@ def is_negation_intent(message: str) -> bool:
     if any(w in msg_lower for w in ("算了", "取消", "不用了")):
         return True
     return is_negation(message)
+
+
+# 具有真实副作用的写入类工具（生成单据/发送消息/打印/导入）。
+# 拒绝类护栏（coordinator）据此在否定语境下拦截执行，查询类不拦。
+WRITE_TOOL_INTENTS = frozenset({"shipment_generate", "wechat_send", "print_label", "upload_file"})
+
+
+def is_write_intent(tool_key: str | None) -> bool:
+    """判断工具是否为写入类（有真实副作用）"""
+    return bool(tool_key) and tool_key in WRITE_TOOL_INTENTS
 
 
 QUICK_COMMAND_MAP = {

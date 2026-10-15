@@ -1,0 +1,38 @@
+{
+  "recorded_at": "2026-09-14T22:35:00+08:00",
+  "main_head": "280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+  "main_head_subject": "fix(test): 故障注入损坏留证判定改为场景前基线增量（修 -Scenario all 误报） (#1938)",
+  "pr_1938": {
+    "state": "merged (squash)",
+    "url": "https://github.com/42433422/XCMAX/pull/1938",
+    "note": "fault-injection corrupt-evidence 判定改为场景前基线增量，消除 corrupt-main 遗留对 dual-process/migration-mutex 的误报"
+  },
+  "pr_1939": {
+    "state": "closed, superseded by #1938 (unmerged)",
+    "url": "https://github.com/42433422/XCMAX/pull/1939"
+  },
+  "main_cicd_run": {
+    "id": 34850858959,
+    "url": "https://github.com/42433422/XCMAX/actions/runs/34850858959",
+    "note": "in_progress at record time; phaseB2 gates Release Desktop dispatch on it"
+  },
+  "fault_injection_ci": {
+    "run_id": 34851567425,
+    "url": "https://github.com/42433422/XCMAX/actions/runs/34851567425",
+    "conclusion": "success",
+    "receipt": "fault-ci/fault-injection-receipt.json",
+    "scenarios": {
+      "dual-process": "PASS — 单实例锁生效：第二实例 1s 退出（ExitCode=0），主实例 degraded",
+      "migration-mutex": "PASS — 竞态双启动收敛：degraded；XCAGI 进程 5 个、后端 1 个、监听 6496",
+      "disk-full(人工)": "SKIP — 实体机人工场景",
+      "power-cut(人工)": "SKIP — 实体机人工场景"
+    },
+    "summary": {"pass": 2, "fail": 0, "skip": 2}
+  },
+  "ota_expected": {
+    "version": "1.0.0.3",
+    "buildSha": "280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+    "expected_sha_file": "C:/Users/97088/AppData/Local/Temp/t9-expected-sha.txt",
+    "feed_base_url": "https://xiu-ci.com/releases/testing/enterprise"
+  }
+}

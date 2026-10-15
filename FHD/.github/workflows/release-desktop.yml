@@ -1,5 +1,5 @@
 name: Release Desktop
-run-name: Release Desktop ${{ inputs.release_sha }}
+run-name: "Release Desktop ${{ inputs.release_sha }}${{ inputs.windows_installer_only && ' · Windows 安装包交付（稳定 OTA 保持关闭）' || (inputs.verify_only && ' · 校验模式（不推进对外发布指针）' || '') }}"
 
 on:
   workflow_dispatch:
@@ -7,9 +7,13 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "1.0.0.1"
+        default: "1.0.0.6"
         type: choice
         options:
+          - "1.0.0.6"
+          - "1.0.0.5"
+          - "1.0.0.4"
+          - "1.0.0.2"
           - "1.0.0.1"
       verify_only:
         description: "Verify already-published public artifacts without rebuilding or uploading"
@@ -21,6 +25,19 @@ on:
         required: false
         default: false
         type: boolean
+      candidate_only:
+        description: "Keep the Windows installer as a private acceptance candidate; do not publish the download pointer"
+        required: false
+        default: false
+        type: boolean
+      candidate_run_id:
+        description: "Existing frozen installer run ID; publish its exact artifact without rebuilding"
+        required: false
+        type: string
+      acceptance_run_id:
+        description: "Successful Clean/Upgrade/Gui/Recovery/Rollback run ID for the frozen installer"
+        required: false
+        type: string
       frontend_run_id:
         description: "Run ID of the orchestrator's build-frontend job producing the shared xcagi-vue-dist artifact"
         required: false
@@ -55,7 +72,7 @@ env:
 
 jobs:
   windows-installer-delivery:
-    if: ${{ inputs.windows_installer_only == true && inputs.verify_only != true }}
+    if: ${{ inputs.windows_installer_only == true && inputs.verify_only != true && inputs.candidate_run_id == '' }}
     runs-on: windows-latest
     timeout-minutes: 90
     env:
@@ -77,6 +94,9 @@ jobs:
         run: |
           if ($env:XCAGI_BUILD_SHA -notmatch '^[0-9a-fA-F]{40}$') { throw 'Full release SHA required' }
           if ((git rev-parse HEAD).Trim() -ne $env:XCAGI_BUILD_SHA) { throw 'Checkout SHA mismatch' }
+          if ('${{ github.ref }}' -ne 'refs/heads/main' -or '${{ github.sha }}' -ne $env:XCAGI_BUILD_SHA) { throw 'Candidate must bind to the selected main SHA' }
+          . scripts/package/product-version.ps1
+          if ((Resolve-ProductVersion) -ne '${{ inputs.version }}') { throw 'Product version mismatch' }
           $names = @('ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET', 'XCAGI_WINDOWS_PUBLISHER_NAME')
           $present = @($names | Where-Object { [Environment]::GetEnvironmentVariable($_) })
           if ($present.Count -ne 0 -and $present.Count -ne $names.Count) {
@@ -112,8 +132,10 @@ jobs:
         env:
           DELIVERY_VERSION: ${{ inputs.version }}
         run: |
+          dotnet run --project tools/XcagiInstaller.Tests/XcagiInstaller.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer process regression failed' }
           scripts/package/test-windows-signature-policy.ps1
-          scripts/package/build-installer.ps1 -Version $env:DELIVERY_VERSION -ProductSku enterprise -SkipUiInstaller
+          scripts/package/build-installer.ps1 -Version $env:DELIVERY_VERSION -ProductSku enterprise
       - name: Verify resources, install, start, and uninstall
         shell: pwsh
         env:
@@ -154,9 +176,197 @@ jobs:
             FHD/delivery/delivery-receipt.json
           if-no-files-found: error
           retention-days: 30
+      - name: State that the stable release pointer was not advanced
+        if: always()
+        shell: pwsh
+        run: |
+          $n = "本次走 Windows 安装包交付通道（windows_installer_only=true）：稳定发布链全部跳过，Windows stable OTA 未推进；临时下载指针由后续作业独立发布。"
+          Write-Host "::warning::$n"; "### 未执行正式发布链`n$n" | Add-Content $env:GITHUB_STEP_SUMMARY
+
+  publish-interim-windows-pointer:
+    # 仅晋级已通过五模式验收的原候选；不重建、不写稳定更新元数据。
+    # 未签名包须有业主风险接受；签名包须由前置 Windows 验收证明签名有效。
+    needs: [windows-installer-delivery]
+    if: >-
+      always() &&
+      inputs.windows_installer_only == true &&
+      inputs.verify_only != true &&
+      inputs.candidate_only != true &&
+      needs.windows-installer-delivery.result == 'skipped' && inputs.candidate_run_id != '' && inputs.acceptance_run_id != ''
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    env:
+      DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+      DELIVERY_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcagi-windows-installer-${{ inputs.release_sha }}
+          path: ${{ runner.temp }}/delivery
+          run-id: ${{ inputs.candidate_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.candidate_run_id != '' }}
+        with:
+          pattern: windows-candidate-evidence-*-${{ inputs.release_sha }}
+          path: ${{ runner.temp }}/acceptance
+          run-id: ${{ inputs.acceptance_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify all five frozen candidate acceptance modes
+        if: ${{ inputs.candidate_run_id != '' }}
+        run: |
+          set -euo pipefail
+          receipt="${RUNNER_TEMP}/delivery/delivery-receipt.json"
+          for mode in Clean Upgrade Gui Recovery Rollback; do
+            evidence="${RUNNER_TEMP}/acceptance/windows-candidate-evidence-${mode}-${{ inputs.release_sha }}/acceptance.json"
+            test -f "$evidence"
+            jq -e --arg mode "$mode" --arg sha "${{ inputs.release_sha }}" \
+              --arg hash "$(jq -r .sha256 "$receipt")" '
+              .mode == $mode and .result == ({Clean:"passed", Upgrade:"passed", Gui:"gui_regression_passed", Recovery:"gui_recovery_regression_passed", Rollback:"rollback_passed"}[$mode]) and .candidate_sha == $sha
+              and .candidate_sha256 == $hash and (.checks | length) > 0
+              and all(.checks[]; .passed == true)' "$evidence" >/dev/null
+          done
+      - name: Assert truthful Windows delivery receipt
+        run: |
+          set -euo pipefail
+          receipt="${RUNNER_TEMP}/delivery/delivery-receipt.json"
+          test -f "$receipt"
+          jq -e --arg v "$DELIVERY_VERSION" --arg sha "${{ inputs.release_sha }}" '
+            .version == $v
+            and ((.git_sha | ascii_downcase) == ($sha | ascii_downcase))
+            and .delivery_mode == "manual_installer"
+            and .runner_install_smoke == "passed"
+            and .stable_auto_update == false
+            and ((.signature_status == "signed" and .authenticode_status == "Valid")
+              or (.signature_status == "unsigned" and .authenticode_status == "NotSigned"))
+          ' "$receipt" >/dev/null
+          echo "Truthful installer receipt verified; customer_machine_acceptance stays not_verified."
+      - name: Generate bounded interim download pointer
+        run: |
+          set -euo pipefail
+          version="${DELIVERY_VERSION}"
+          receipt="${RUNNER_TEMP}/delivery/delivery-receipt.json"
+          signature_status="$(jq -r '.signature_status' "$receipt")"
+          filename="$(jq -r '.filename' "$receipt")"
+          artifact="${RUNNER_TEMP}/delivery/${filename}"
+          test -f "${artifact}"
+          test -f "${artifact}.sha256"
+          artifact_sha="$(sha256sum "${artifact}" | cut -d' ' -f1)"
+          receipt_sha="$(jq -er '.sha256' "$receipt")"
+          sidecar_sha="$(cut -d' ' -f1 "${artifact}.sha256")"
+          test "$artifact_sha" = "$receipt_sha" && test "$artifact_sha" = "$sidecar_sha"
+          release_sha="${{ inputs.release_sha }}"
+          args=(
+            --version "$version"
+            --git-sha "${{ inputs.release_sha }}"
+            --artifact "$artifact"
+            --artifact-url "https://xiu-ci.com/xcagi-v${version}/enterprise/${release_sha,,}/${artifact_sha}/${filename}"
+            --release-metadata-source FHD/config/download_release.json
+            --signature-status "$signature_status"
+            --output "${RUNNER_TEMP}/download-windows-hotfix.json"
+          )
+          if [ "$signature_status" = unsigned ]; then
+            args+=(--risk-acceptance FHD/config/windows_signing_acceptance.json)
+          fi
+          python3 FHD/scripts/package/generate-windows-hotfix-pointer.py \
+            "${args[@]}"
+          jq -e --arg signature "$signature_status" '
+            .download_allowed == true
+            and .channel == "enterprise-interim"
+            and .signature_status == $signature
+            and .stable_auto_update == false
+            and (if $signature == "unsigned" then .risk_acceptance.expires_at != null else .risk_acceptance == null end)
+          ' "${RUNNER_TEMP}/download-windows-hotfix.json" >/dev/null
+      - name: Publish installer and pointer to the public download page
+        run: |
+          set -euo pipefail
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            echo "::error::Publishing the Windows interim download requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY."
+            exit 1
+          fi
+          version="${DELIVERY_VERSION}"
+          filename="$(jq -r '.filename' "${RUNNER_TEMP}/delivery/delivery-receipt.json")"
+          artifact="${RUNNER_TEMP}/delivery/${filename}"
+          sha_file="${artifact}.sha256"
+          pointer="${RUNNER_TEMP}/download-windows-hotfix.json"
+          local_sha="$(sha256sum "${artifact}" | awk '{print $1}')"
+          release_sha="${{ inputs.release_sha }}"
+          url="https://xiu-ci.com/xcagi-v${version}/enterprise/${release_sha,,}/${local_sha}/${filename}"
+          official_dir="/var/www/xcagi-v${version}/enterprise/${release_sha,,}/${local_sha}"
+          staging_dir="/var/www/.xcagi-interim-staging/${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          pointer_target="/var/www/update/releases/stable/enterprise/download-windows-hotfix.json"
+
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '${official_dir}' '${staging_dir}' && chmod 0700 '${staging_dir}'"
+          uploaded=0
+          for attempt in 1 2 3; do
+            if scp "${SSH_OPTS[@]}" "$artifact" "$sha_file" "root@${HOST}:${staging_dir}/"; then
+              uploaded=1
+              break
+            fi
+            echo "interim installer upload attempt ${attempt} failed"
+            sleep 10
+          done
+          test "$uploaded" = 1
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "bash -s" -- \
+            "$official_dir" "$staging_dir" "$filename" "$local_sha" <<'REMOTE_INTERIM'
+          set -euo pipefail
+          official_dir="$1"; staging_dir="$2"; filename="$3"; expected_sha="$4"
+          test "$(stat -c %d "$official_dir")" = "$(stat -c %d "$staging_dir")"
+          staged_sha="$(sha256sum "$staging_dir/$filename" | cut -d' ' -f1)"
+          sidecar_sha="$(cut -d' ' -f1 "$staging_dir/$filename.sha256")"
+          test "$staged_sha" = "$expected_sha"
+          test "$sidecar_sha" = "$expected_sha"
+          if [ -e "$official_dir/$filename" ]; then
+            test ! -L "$official_dir/$filename"
+            existing_sha="$(sha256sum "$official_dir/$filename" | cut -d' ' -f1)"
+            test "$existing_sha" = "$expected_sha"
+          else
+            mv -n "$staging_dir/$filename" "$official_dir/$filename"
+          fi
+          mv -f "$staging_dir/$filename.sha256" "$official_dir/$filename.sha256"
+          chmod 0644 "$official_dir/$filename" "$official_dir/$filename.sha256"
+          rm -f -- "$staging_dir/$filename"
+          rmdir "$staging_dir"
+          REMOTE_INTERIM
+
+          # 公开可下载性用真实 HTTP + 远端 SHA256 双验证，不接受“上传即成功”的假设。
+          curl --http1.1 -fsSI --max-time 60 "$url" >/dev/null
+          public_sha="$(curl --http1.1 -fsSL --max-time 900 "$url" | sha256sum | cut -d' ' -f1)"
+          if [ "$public_sha" != "$local_sha" ]; then
+            echo "::error::Public installer SHA256 mismatch: public=$public_sha local=$local_sha"
+            exit 1
+          fi
+          remote_sha="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+            "sha256sum '${official_dir}/${filename}' | cut -d' ' -f1")"
+          if [ "$remote_sha" != "$local_sha" ]; then
+            echo "::error::Published installer SHA256 mismatch: remote=$remote_sha local=$local_sha"
+            exit 1
+          fi
+
+          pointer_tmp="${pointer_target}.tmp.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          scp "${SSH_OPTS[@]}" "$pointer" "root@${HOST}:${pointer_tmp}"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+            "chmod 0644 '${pointer_tmp}' && mv -f '${pointer_tmp}' '${pointer_target}'"
+
+          curl --http1.1 -fsS --max-time 60 "https://xiu-ci.com/download-windows-hotfix.json" \
+            | jq -e --arg sha "$local_sha" --arg url "$url" \
+                '.download_allowed == true and .artifact.sha256 == $sha and .artifact.url == $url' >/dev/null
+          echo "Windows interim download is publicly available; the Windows stable update feed was not touched."
 
   release-preflight:
-    if: ${{ inputs.verify_only != true && inputs.windows_installer_only != true }}
+    if: ${{ inputs.verify_only != true && inputs.windows_installer_only != true && inputs.candidate_only != true }}
     runs-on: ubuntu-latest
     # Security evidence lives at repository root; do not inherit FHD working directory.
     defaults:
@@ -300,7 +510,9 @@ jobs:
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller -SkipFrontend
+          dotnet run --project tools/XcagiInstaller.Tests/XcagiInstaller.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer process regression failed' }
+          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipFrontend
       - name: Verify Windows enterprise installer
         shell: pwsh
         run: |
@@ -461,57 +673,9 @@ jobs:
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
-          sku="enterprise"
-          dmg="$(find "release/xcagi-v${v}/${sku}" -name '*.dmg' -print -quit)"
+          dmg="$(find "release/xcagi-v${v}/enterprise" -name '*.dmg' -print -quit)"
           test -n "${dmg}"
-          echo "Verifying ${dmg}"
-          codesign -dv --verbose=4 "${dmg}" 2>&1 | tee /tmp/codesign.txt
-          if grep -q 'Signature=adhoc' /tmp/codesign.txt; then
-            echo "::error::DMG is still adhoc-signed"
-            exit 1
-          fi
-          codesign --verify --verbose=2 "${dmg}"
-          xcrun stapler validate "${dmg}"
-          spctl -a -vv -t open --context context:primary-signature "${dmg}"
-          mount_dir="$(mktemp -d)"
-          cleanup_mount() {
-            hdiutil detach "${mount_dir}" -quiet || true
-            rmdir "${mount_dir}" 2>/dev/null || true
-          }
-          trap cleanup_mount EXIT
-          hdiutil attach -nobrowse -readonly -quiet -mountpoint "${mount_dir}" "${dmg}"
-          app="$(find "${mount_dir}" -maxdepth 2 -name 'XCAGI.app' -print -quit)"
-          test -n "${app}"
-          codesign --verify --deep --strict --verbose=2 "${app}"
-          build_info="${app}/Contents/Resources/build-info.json"
-          test -f "${build_info}"
-          BUILD_INFO_PATH="${build_info}" \
-            EXPECTED_BUILD_SHA="${XCAGI_BUILD_SHA}" \
-            EXPECTED_PRODUCT_VERSION="${v}" \
-            python3 <<'PY'
-          import json
-          import os
-
-          path = os.environ["BUILD_INFO_PATH"]
-          expected_sha = os.environ["EXPECTED_BUILD_SHA"]
-          expected_version = os.environ["EXPECTED_PRODUCT_VERSION"]
-          with open(path, encoding="utf-8") as handle:
-              data = json.load(handle)
-          assert data.get("gitSha") == expected_sha, (
-              f"packaged gitSha mismatch: {data.get('gitSha')!r} != {expected_sha!r}"
-          )
-          assert data.get("version") == expected_version, (
-              f"packaged version mismatch: {data.get('version')!r} != {expected_version!r}"
-          )
-          print(f"Verified packaged identity: {expected_version} @ {expected_sha}")
-          PY
-          backend="${app}/Contents/Resources/backend/xcagi-backend"
-          test -x "${backend}"
-          "${backend}" --verify-frozen-critical-runtime
-          xcrun stapler validate "${app}"
-          spctl -a -vv -t exec "${app}"
-          cleanup_mount
-          trap - EXIT
+          bash scripts/package/verify-macos-release-dmg.sh "${dmg}" "${v}" "${XCAGI_BUILD_SHA}"
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-macos-enterprise
@@ -590,6 +754,8 @@ jobs:
           done
       - name: Generate manifest.json + download-release.json
         working-directory: FHD
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           raw="${{ github.event.inputs.version || github.ref_name }}"
@@ -601,6 +767,15 @@ jobs:
           immutable_base="https://xiu-ci.com/releases/builds/${version}/${XCAGI_BUILD_SHA,,}"
           android_version="$(jq -er '.android_version' config/download_release.json)"
           android_git_sha="$(jq -er '.android_git_sha' config/download_release.json)"
+          # 主线闭环：把本发布关闭的工单（issue）写进 manifest，
+          # 供市场端验收判定结果回写到原工单。
+          prev_feed_sha="$(jq -er '.git_sha // empty' config/download_release.json || true)"
+          linked_issues=""
+          if [ -n "${prev_feed_sha:-}" ]; then
+            linked_issues="$(python scripts/dev/extract_release_linked_issues.py \
+              --from "$prev_feed_sha" --to "${XCAGI_BUILD_SHA}" \
+              --repo "${GITHUB_REPOSITORY}" --format csv || true)"
+          fi
           python scripts/package/generate-download-manifest.py \
             --version "$version" \
             --release-dir release \
@@ -609,6 +784,7 @@ jobs:
             --release-id "$release_id" \
             --build-workflow-run-id "${GITHUB_RUN_ID}" \
             --frontend-workflow-run-id "${{ inputs.frontend_run_id }}" \
+            --linked-issues "$linked_issues" \
             --auto-update-base "$immutable_base" \
             --official-download-base "$immutable_base" \
             --android-version "$android_version" \
@@ -623,6 +799,20 @@ jobs:
           path: |
             ${{ runner.temp }}/manifest.json
             ${{ runner.temp }}/download-release.json
+      - name: Progress linked work orders to released (mainline merged/released)
+        # 主线闭环：本次发布合并的工单沿状态机真实推进 merged → released，
+        # 让验收回执在 verifying 窗口判定关闭/重开。失败不阻断发布。
+        continue-on-error: true
+        env:
+          XCAGI_MARKET_BASE_URL: ${{ vars.XCAGI_MARKET_BASE_URL }}
+          MARKET_ADMIN_TOKEN: ${{ secrets.MARKET_ADMIN_TOKEN }}
+        run: |
+          if [ -z "${MARKET_ADMIN_TOKEN:-}" ]; then
+            echo "::warning::SKIP work-order progress: MARKET_ADMIN_TOKEN not configured"
+            exit 0
+          fi
+          python scripts/dev/record_release_work_order_states.py \
+            --release-config "${RUNNER_TEMP}/download-release.json" --apply || true
       - name: Publish unified Windows + macOS release to CVM
         timeout-minutes: 45
         working-directory: .
@@ -1150,11 +1340,29 @@ jobs:
           curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
             "https://xiu-ci.com/download/releases?release-run=${GITHUB_RUN_ID}" \
             -o "$tmpdir/download-releases.html"
+          # 官网对外只认发布清单：两张页面都必须从 /download-release.json 读取当前版本，
+          # 且不得残留写死的版本兜底值——写死的值会在每次发版后过期，让官网自相矛盾。
           grep -Fq "fetch('/download-release.json'" "$tmpdir/download.html"
           grep -Fq 'id="version"' "$tmpdir/download.html"
-          grep -Fq "fetch('/download-release.json'" "$tmpdir/download-releases.html"
+          grep -Fq "fetchJson('/download-release.json')" "$tmpdir/download-releases.html"
           grep -Fq 'id="release-list"' "$tmpdir/download-releases.html"
-          echo "Download center and changelog verified for ${version} @ ${expected_sha}."
+          if grep -Eq "DEFAULT_VERSION *= *['\"][0-9]" "$tmpdir/download.html"; then
+            echo "::error::线上下载页仍写死版本兜底值，未同步到「以发布清单为准」的官网版本"; exit 1
+          fi
+          if grep -Eq 'id="summary-version">[v0-9]' "$tmpdir/download-releases.html"; then
+            echo "::error::线上更新日志页仍写死当前版本，未同步到「以发布清单为准」的官网版本"; exit 1
+          fi
+          # 发版即官网同步：能力中心必须同时在线（#1952 整目录漏发导致线上 404 的回归守卫）。
+          # 断言只落在实际发布的三个面上（corp-site-deploy 只发 capabilities/ 与 data/capabilities/）。
+          curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
+            "https://xiu-ci.com/capabilities/catalog.html?release-run=${GITHUB_RUN_ID}" \
+            -o "$tmpdir/cap-catalog.html"
+          grep -Fq '能力目录' "$tmpdir/cap-catalog.html"
+          for surface in "/capabilities/" "/data/capabilities/catalog.json"; do
+            curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
+              "https://xiu-ci.com${surface}?release-run=${GITHUB_RUN_ID}" -o /dev/null
+          done
+          echo "Download center, changelog and capability center verified for ${version} @ ${expected_sha}."
 
   rollback-stable-pointers:
     name: Restore previous stable pointers on failed acceptance

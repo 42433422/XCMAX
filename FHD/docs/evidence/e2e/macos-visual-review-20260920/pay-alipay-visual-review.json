@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "pay-alipay",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "b2ed8747ae63c7780877d233cbed2eb165f690eb39175dbbcd738f8705440a7f",
+  "visible_content": "模型服务与余额汇总，没有支付宝订单、支付回调或到账记录。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/pay-alipay.png"
+}

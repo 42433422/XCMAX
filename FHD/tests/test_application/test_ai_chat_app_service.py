@@ -52,7 +52,7 @@ class TestAIChatApplicationService:
             from app.application.ai_chat_app_service import AIChatApplicationService
 
             service = AIChatApplicationService()
-            result = service.process_chat(user_id="test_user", message="你好")
+            result = service.process_chat(user_id="test_user", message="随便说点什么")
 
             assert result["success"] is True
             assert result["response"] == "你好，有什么可以帮助你的？"

@@ -1,0 +1,326 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "erp-ocr",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-152250",
+  "generated_at": "2026-09-29 15:23:13",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器在 Web 管理端读取 OCR 服务健康（active_backend=macos_vision）→ 页面内用 canvas 绘制含「INVOICE NO 12345678 / TOTAL CNY 100.00」的真实文档图并以 multipart 上传 POST /api/ocr/recognize → 读回真实识别文本；并含未提供图像的 400（负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 64002,
+        "processed": 63994,
+        "errors": 0,
+        "dropped": 8,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 11,
+            "max_cache_size": 1000,
+            "hits": 53,
+            "misses": 11,
+            "hit_rate": 0.828125,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr/erp-ocr-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "erp-ocr",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr/shot/00-login-form.png",
+      "sha256": "2a4b05752f70c29de1df106bc8b1da34db13a67893eb69ec0d26a5522581f7a0",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-ocr",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr/shot/OC1-ocr-health.png",
+      "sha256": "b1f861f5ff38859a2eb26c617e5f810efda46093e7d5e5b72c2306cec1ba2c44",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染 OCR 服务健康真实 JSON：message「OCR服务运行正常」、active_backend=macos_vision。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-ocr",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr/shot/OC2-ocr-recognize.png",
+      "sha256": "fc02d3855bca352b59163dbf114b0223a340e32b354565fee3f780a68283435c",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染真实上传与识别结果：200、识别文本含 INVOICE NO 12345678 / TOTAL CNY 100.00、file_path 与 run_id。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-ocr",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr/shot/OC3-ocr-negative.png",
+      "sha256": "8716c26dce1d75c00b915d6e48f13a80c1406f87556089d4360c244df51bfbe2",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染未提供图像的 400「请上传图片文件或文件路径」拒绝。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-ocr",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr/video/erp-ocr-web-20260929-152250.webm",
+      "sha256": "3cd15ecc791ff754590dfc367d4e83731044d7e53bc901fd373a2ea2a6fa623b",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → OCR 健康 → 真实文档图上传识别 → 负例。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "OC1",
+      "title": "OCR 服务健康真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "GET /api/ocr/test。",
+      "expected": "200、success=true，返回 active_backend（macos_vision）。",
+      "observed": "{\"status\": 200, \"active_backend\": \"macos_vision\", \"message\": \"OCR服务运行正常\"}",
+      "result": "passed"
+    },
+    {
+      "id": "OC2",
+      "title": "真实上传文档图并识别（写-读回）",
+      "input": "已建立的管理员会话；页面内 canvas 绘制的真实文档图。",
+      "actions": "multipart POST /api/ocr/recognize（image 文件）。",
+      "expected": "200、success=true，识别文本包含 12345678 与 100.00。",
+      "observed": "{\"status\": 200, \"recognized_text\": \"INVOICE NO 12345678\\nTOTAL CNY 100.00\", \"has_no\": true, \"has_total\": true, \"file_path\": \"/Users/Shared/xcmax-webadmin-vc/uploads/ocr/vc-ocr.png\"}",
+      "result": "passed"
+    },
+    {
+      "id": "OC3",
+      "title": "未提供图像被拒（负例）",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/ocr/recognize（无文件）。",
+      "expected": "400「请提供图像文件或文件路径」。",
+      "observed": "{\"status\": 400, \"message\": \"请提供图像文件或文件路径\"}",
+      "result": "passed"
+    }
+  ]
+}

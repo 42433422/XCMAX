@@ -1,0 +1,62 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ind-modstore-pay",
+ "name": "市场支付桥接 Mod",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/mod/xcagi-model-payment-bridge/model-payment/diagnostics",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-model-payment-bridge/model-payment/diagnostics（写操作自动附带 CSRF）：市场支付桥诊断",
+   "expected": "市场支付桥诊断：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 144ms；{\"alipay_configured\": false, \"sdk_installed\": true, \"sdk_import_error\": null, \"app_id_set\": false, \"private_key_source\": \"missing\", \"public_key_source\": \"missing\", \"notify_url\": null, \"notify_url_path",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/mod/xcagi-model-payment-bridge/model-payment/plans",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-model-payment-bridge/model-payment/plans（写操作自动附带 CSRF）：套餐",
+   "expected": "套餐：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 32ms；['体验档', '标准档', '专业档', '30 天全功能体验', '企业启航版', '企业成长版', '集团协同版', '企业旗舰版']",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /mod/xcagi-model-payment-bridge/model-payment",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-model-payment-bridge/model-payment，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-model-payment-bridge/model-payment，页面可见 模型，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-model-payment-bridge/model-payment；命中文本 ['模型']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 模型服务 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 模型服务 |  | 余额与充值走修茈市场；本页汇总展示，支付在 钱包 / 套餐 完成。 |  | 打开修茈钱包 | 会员套餐 | 刷新 | 账户余额 | ¥ | 账户余",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ind-modstore-pay",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ind-modstore-pay/macos/result.png",
+   "sha256": "14dee5faaa067b591f29b365d93f271d7e7d5a1e7d9d0cf973da351719065c6a",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ind-modstore-pay",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ind-modstore-pay/macos/operation.webm",
+   "sha256": "d80cba3211f3e8f2b343a48725416fd87ef3cb817bf6b42711205e55b53adee0",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ind-modstore-pay/macos/run.log",
+  "sha256": "36f09a2c4d2f2d3849a2f733c6fdb095aadd4b28c2b519953b4df1f8fdd76e3b",
+  "bytes": 1555
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

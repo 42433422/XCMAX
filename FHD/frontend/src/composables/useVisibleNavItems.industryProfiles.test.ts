@@ -55,6 +55,14 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs())
 
 describe('industry menus with real Mod and role filtering', () => {
+  it('keeps procurement next to inventory in the approved jewelry packaging profile', () => {
+    state.industry = '饰品包装'
+    approvedListing(GENERIC_HOST_MOD_IDS)
+    markHostPackAcknowledged()
+    const entries = useVisibleNavItems().visibleNavItems.value
+    expect(entries.find(entry => entry.key === 'purchase')).toMatchObject({ name: '采购管理', routeName: 'purchase' })
+    expect(entries.filter(entry => entry.key === 'purchase' || entry.key === 'mod-erp-purchase')).toHaveLength(1)
+  })
   it.each(Object.keys(INDUSTRY_NAVIGATION_PROFILES))('%s keeps the prepared profile and real bridge menus consistent', (industry) => {
     state.industry = industry
     approvedListing(GENERIC_HOST_MOD_IDS)

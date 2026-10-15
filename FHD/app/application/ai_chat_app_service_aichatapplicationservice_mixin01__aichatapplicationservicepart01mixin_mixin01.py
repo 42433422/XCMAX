@@ -41,9 +41,7 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
 
     @staticmethod
     def _is_pure_casual_chat(text: str) -> bool:
-        """纯闲聊判定：无任何业务/工具/实体语义，交给 legacy 单次 LLM。
-        全局多步编排仅在槽位路由未命中时回落 legacy 聊天。
-        """
+        """无业务槽位时回落普通聊天。"""
         from app.application.normal_chat_dispatch import route_normal_mode_message
 
         return route_normal_mode_message(str(text or "")).get("intent") == "unknown"
@@ -81,19 +79,6 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
         source: str | None = None,
         file_context: dict[str, _facade().Any] | None = None,
     ) -> dict[str, _facade().Any]:
-        """
-        处理聊天请求
-
-        Args:
-            user_id: 用户 ID
-            message: 用户消息
-            context: 额外上下文
-            source: 来源标识（pro 表示专业模式）
-            file_context: 文件上下文（用于确认流程）
-
-        Returns:
-            处理结果字典
-        """
         if not message:
             return {"success": False, "message": "消息内容不能为空"}
         try:
@@ -108,6 +93,7 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
 
         ctx = ensure_business_harness_context(context, message=message)
         ctx = self._inject_excel_vector_context(message=message, context=ctx)
+        ctx = self._inject_wechat_contact_context(message=message, context=ctx)
         chat_run = None
         chat_run_context: dict[str, _facade().Any] = {}
 
@@ -147,6 +133,17 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
                 _facade().logger.warning("跨会话记忆写入失败（已返回对话结果）: %s", memory_err)
             return resp
 
+        from app.application.ai_chat_app_service_dynamic_workflow_pending_mixin import (
+            CANCEL_WORDS,
+            CONFIRM_WORDS,
+        )
+
+        if message.strip().lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS:
+            self._handle_confirmation_flow(user_id, message, file_context)
+            return _finalize(
+                self._try_handle_dynamic_workflow(user_id, message, source, ctx, file_context or {})
+            )
+
         from app.application.chat_business_safety import try_handle_business_chat_action
 
         business_payload = try_handle_business_chat_action(
@@ -176,9 +173,11 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
                 "response": reply_text,
                 "data": {
                     "text": reply_text,
-                    "action": "deterministic_reply",
+                    "action": str(deterministic_reply.get("action") or "deterministic_reply"),
                     "data": {
-                        "intent": "deterministic_chat_reply",
+                        "intent": str(
+                            deterministic_reply.get("trace_intent") or "deterministic_chat_reply"
+                        ),
                         "thinking_steps": deterministic_reply.get("thinking_steps"),
                     },
                 },
@@ -191,7 +190,9 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
                     source=source,
                     context=ctx,
                     file_context=file_context or {},
-                    intent="deterministic_chat_reply",
+                    intent=str(
+                        deterministic_reply.get("trace_intent") or "deterministic_chat_reply"
+                    ),
                 )
             )
         self._handle_confirmation_flow(user_id, message, file_context)

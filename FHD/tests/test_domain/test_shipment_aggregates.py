@@ -1,31 +1,13 @@
-"""
-发货单领域聚合测试
-"""
-
 from datetime import datetime
 
 import pytest
 
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
+from app.infrastructure.mappers.shipment_mapper import shipment_to_db
 from app.legacy.domain.legacy_vo import ContactInfo, Money, OrderNumber, Quantity
 
 
 class TestShipmentItem:
-    """ShipmentItem 实体测试"""
-
-    def test_create_shipment_item_success(self):
-        item = ShipmentItem(
-            product_name="产品A",
-            model_number="9803",
-            quantity=Quantity.from_tins_and_spec(3, 20.0),
-            unit_price=Money(100.0),
-            amount=Money(600.0),
-        )
-        assert item.product_name == "产品A"
-        assert item.model_number == "9803"
-        assert item.quantity.tins == 3
-        assert item.quantity.kg == 60.0
-
     def test_create_shipment_item_empty_name_raises_error(self):
         with pytest.raises(ValueError, match="产品名称不能为空"):
             ShipmentItem(product_name="")
@@ -39,25 +21,8 @@ class TestShipmentItem:
         amount = item.calculate_amount()
         assert amount.amount == 60.0
 
-    def test_shipment_item_to_dict(self):
-        item = ShipmentItem(
-            id=1,
-            product_name="产品A",
-            model_number="9803",
-            quantity=Quantity.from_tins_and_spec(3, 20.0),
-            unit_price=Money(100.0),
-            amount=Money(600.0),
-        )
-        d = item.to_dict()
-        assert d["product_name"] == "产品A"
-        assert d["model_number"] == "9803"
-        assert d["quantity_tins"] == 3
-        assert d["quantity_kg"] == 60.0
-        assert d["spec_per_tin"] == 20.0
-        assert d["unit_price"] == 100.0
-        assert d["amount"] == 600.0
-
-    def test_shipment_item_from_dict(self):
+    @pytest.mark.parametrize("amount", [600.0, None])
+    def test_shipment_item_roundtrip(self, amount):
         data = {
             "id": 1,
             "product_name": "产品A",
@@ -65,17 +30,28 @@ class TestShipmentItem:
             "quantity_tins": 3,
             "tin_spec": 20.0,
             "unit_price": 100.0,
-            "amount": 600.0,
         }
+        if amount is not None:
+            data["amount"] = amount
         item = ShipmentItem.from_dict(data)
         assert item.product_name == "产品A"
+        assert item.model_number == "9803"
         assert item.quantity.tins == 3
+        assert item.quantity.kg == 60.0
         assert item.unit_price.amount == 100.0
+        assert item.to_dict() == {
+            "id": 1,
+            "product_name": "产品A",
+            "model_number": "9803",
+            "quantity_tins": 3,
+            "quantity_kg": 60.0,
+            "spec_per_tin": 20.0,
+            "unit_price": 100.0,
+            "amount": 600.0 if amount is not None else 6000.0,
+        }
 
 
 class TestShipment:
-    """Shipment 聚合根测试"""
-
     def test_create_shipment(self):
         shipment = Shipment.create(unit_name="测试单位")
         assert shipment.purchase_unit_name == "测试单位"
@@ -102,6 +78,9 @@ class TestShipment:
         shipment.add_item(item)
         assert len(shipment.items) == 1
         assert shipment.total_quantity.tins == 3
+        record = shipment_to_db(shipment)
+        assert record["tin_spec"] == 20.0
+        assert record["quantity_kg"] == 60.0
 
     def test_add_multiple_items_recalculates_totals(self):
         shipment = Shipment.create(unit_name="测试单位")
@@ -122,6 +101,7 @@ class TestShipment:
         assert len(shipment.items) == 2
         assert shipment.total_quantity.tins == 5
         assert shipment.total_amount.amount == 1000.0
+        assert shipment_to_db(shipment)["tin_spec"] == 20.0
 
     def test_remove_item(self):
         shipment = Shipment.create(unit_name="测试单位")

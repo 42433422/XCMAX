@@ -222,6 +222,17 @@ export function normalizeModSidebarNavKey(key: string): string {
   return k.replace(/^mod-mod-/, 'mod-');
 }
 
+/**
+ * 通用叠加能力 Mod：与任意行业共存常驻侧栏。
+ * 太阳鸟为专属交付（考勤即 taiyangniao-pro 本身），不存在跨行业通用叠加，
+ * 故此处恒为空，保持侧栏行为与引入该机制前完全一致。
+ */
+export const UNIVERSAL_OVERLAY_MOD_IDS: readonly string[] = []
+
+export function isUniversalOverlayModId(modId: string): boolean {
+  return UNIVERSAL_OVERLAY_MOD_IDS.includes(String(modId || '').trim())
+}
+
 /** 账号定制 Mod（侧栏菜单应在企业端展示） */
 export const ACCOUNT_CUSTOM_MOD_IDS = ['taiyangniao-pro', 'sz-qsm-pro'] as const
 

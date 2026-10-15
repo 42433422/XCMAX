@@ -1,0 +1,5 @@
+2026-09-29T06:49:51+0800 [ch-im-super] 开始验收 ch-im-super 超级员工与 AI 群聊；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:49:51+0800 [ch-im-super] M1 passed :: HTTP 200 44ms；{"success": true, "source": "qclaw", "permissions": {"normal_routes": ["/api/ai/unified_chat", "/api/tools/execute", "/api/products/*", "/api/customers/*", "/api/materials/*"], "pro_routes": ["/api/ai
+2026-09-29T06:49:54+0800 [ch-im-super] M2 passed :: 导航后路径 /im；命中文本 ['信息']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 信息 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 信息 | 实时已连接 | 客 | 客户消息 · 客来来在 XCMAX 内只读查看客户会话 | 💬 | 用户客服员工 | O-A 获客部 · 未安装 | 🧭
+2026-09-29T06:49:55+0800 [ch-im-super] screenshot result.png
+2026-09-29T06:49:57+0800 [ch-im-super] video operation.webm bytes=241067

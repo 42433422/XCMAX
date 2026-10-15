@@ -4,8 +4,10 @@ import LegacyFloatPanels from '@/components/shell/LegacyFloatPanels.vue'
 import AppGlobalProviders from '@/components/shell/AppGlobalProviders.vue'
 import VirtualCursorOverlay from '@/components/aiopen/VirtualCursorOverlay.vue'
 import { useAppBoot } from '@/composables/useAppBoot'
+import { usePrivateDeliverySync } from '@/composables/usePrivateDeliverySync'
 
 const { hideChrome, appReady, isAdminConsoleSpa } = useAppBoot()
+usePrivateDeliverySync()
 </script>
 
 <template>

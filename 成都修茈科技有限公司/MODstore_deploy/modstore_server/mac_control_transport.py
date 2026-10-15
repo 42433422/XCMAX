@@ -1,0 +1,167 @@
+"""Authenticated Para adapter. No guest login, automatic merge or workspace reuse."""
+
+from __future__ import annotations
+
+import os
+from datetime import UTC, datetime
+from urllib.parse import quote
+
+import httpx
+
+
+class ParaUnavailable(RuntimeError):
+    pass
+
+
+def stale_window() -> int:
+    try:
+        return max(15, min(3600, int(os.environ.get("MODSTORE_MAC_CONTROL_STALE_SECONDS", "90"))))
+    except ValueError:
+        return 90
+
+
+class ParaClient:
+    def __init__(self):
+        self.base = os.environ.get("MODSTORE_PARA_API_BASE", "").rstrip("/")
+        token = os.environ.get("MODSTORE_PARA_CONTROL_TOKEN", "")
+        if not self.base or not token:
+            raise ParaUnavailable("service_identity_not_configured")
+        self.client = httpx.Client(
+            base_url=self.base,
+            timeout=10,
+            trust_env=False,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    def close(self):
+        self.client.close()
+
+    def request(self, method: str, path: str, body: dict | None = None) -> dict:
+        try:
+            path = "/api/control/" + path.removeprefix("/api/")
+            response = self.client.request(method, path, json=body)
+            response.raise_for_status()
+            result = response.json()
+            if not isinstance(result, dict):
+                raise ParaUnavailable("invalid_para_response")
+            return result
+        except (httpx.HTTPError, ValueError) as exc:
+            # Never persist exception bodies, URLs, headers, or raw executor logs.
+            raise ParaUnavailable(type(exc).__name__) from None
+
+    def devices(self) -> list[dict]:
+        rows = self.request("GET", "/api/devices").get("devices")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ParaUnavailable("invalid_devices_response")
+        return rows
+
+    def tasks(self) -> list[dict]:
+        rows = self.request("GET", "/api/tasks").get("tasks")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ParaUnavailable("invalid_tasks_response")
+        return rows
+
+    def task(self, task_id: str) -> dict:
+        task = self.request("GET", "/api/tasks/" + quote(task_id, safe="")).get("task", {})
+        if not isinstance(task, dict) or not task.get("id") or not task.get("status"):
+            raise ParaUnavailable("task_status_missing")
+        return task
+
+    def submit(self, body: dict) -> dict:
+        task = self.request("POST", "/api/tasks", body).get("task")
+        if not isinstance(task, dict):
+            raise ParaUnavailable("invalid_submit_response")
+        return task
+
+
+def age_seconds(value: str, now: float) -> float:
+    try:
+        date = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return max(0, now - date.replace(tzinfo=date.tzinfo or UTC).timestamp())
+    except (ValueError, TypeError, AttributeError):
+        return float("inf")
+
+
+def device_view(raw: dict, now: float) -> dict:
+    caps = raw.get("capabilities") or {}
+    stale = age_seconds(raw.get("lastSeen", ""), now) > stale_window()
+    tools = [
+        {k: t.get(k) for k in ("toolName", "status", "currentTask")}
+        for t in raw.get("tools", [])
+        if isinstance(t, dict)
+    ]
+    return {
+        "id": raw.get("id"),
+        "name": raw.get("name"),
+        "status": (
+            "offline"
+            if raw.get("status") == "offline"
+            else "stale" if stale else raw.get("status", "unknown")
+        ),
+        "last_seen": raw.get("lastSeen"),
+        "tools": tools,
+        "platform": caps.get("platform", "unknown"),
+        "server_bridge": caps.get("server_bridge") is True,
+        "preflight": caps.get("tool_preflight", {}),
+        "source": "para:/api/devices",
+        "observed_at": now,
+    }
+
+
+def choose_device(devices: list[dict], request: dict, now: float) -> tuple[dict | None, str]:
+    preferred = os.environ.get("MODSTORE_PARA_DEVICE_ID", "")
+    target = request.get("target", "mac")
+    tool = request.get("tool", "codex")
+    reason = "waiting_for_device_or_verified_tool"
+    for raw in devices:
+        caps = raw.get("capabilities") or {}
+        if target == "mac" and raw.get("id") != preferred:
+            continue
+        if target == "windows" and caps.get("platform") != "windows":
+            continue
+        if caps.get("control_reports") is not True:
+            reason = "waiting_for_control_report_protocol"
+            continue
+        if request.get("source_sha") and caps.get("supports_exact_commit") is not True:
+            reason = "waiting_for_exact_commit_executor"
+            continue
+        if caps.get("server_bridge") or raw.get("status") != "online":
+            continue
+        if age_seconds(raw.get("lastSeen", ""), now) > stale_window():
+            continue
+        tools = raw.get("tools", [])
+        if any(t.get("status") == "running" for t in tools):
+            continue
+        if not any(t.get("toolName") == tool and t.get("status") == "idle" for t in tools):
+            continue
+        probe = (caps.get("tool_preflight") or {}).get(tool, {})
+        if not (probe.get("ok") is True and age_seconds(probe.get("checked_at", ""), now) <= 90):
+            continue
+        return raw, ""
+    return None, reason
+
+
+def execution_view(raw: dict) -> dict:
+    return {
+        "id": raw.get("id"),
+        "status": raw.get("status", "unknown"),
+        "source": "para:/api/tasks",
+        "merge_commit_sha": raw.get("merge_commit_sha"),
+        "reports": raw.get("reports", []),
+        "subtasks": [
+            {
+                k: s.get(k)
+                for k in (
+                    "id",
+                    "device_id",
+                    "device_name",
+                    "tool_name",
+                    "status",
+                    "branch_name",
+                    "progress",
+                )
+            }
+            for s in raw.get("subTasks", [])
+            if isinstance(s, dict)
+        ],
+    }

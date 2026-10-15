@@ -1,0 +1,8 @@
+[14:42:38] post-reboot verification starting (boot at 09/15/2026 11:12:56)
+[14:43:08] XCAGI already running (auto-launch enabled)
+[14:47:08] health: NOT-REACHABLE in 240s
+[14:47:09] build-info: version=1.0.0.4 gitSha=604b85e1ee82631418002708def18800d7c7f338
+[14:47:09] processes: XCAGI#30980 | XCAGI#33168 | XCAGI#33616 | XCAGI#33768 | XCAGI#34080 | xcagi-backend#32912
+[14:47:12] db counts: {"sessions": 27, "users": 3, "products": 12, "last_products": ["SUNBIRD-t9-post-ota-045248", "SUNBIRD-t9-195902", "SUNBIRD-t3-073556", "SUNBIRD-loop-round2-post-050624", "SUNBIRD-loop-round2-042330"]}
+[14:47:22] screenshot saved
+[14:47:23] post-reboot verification DONE

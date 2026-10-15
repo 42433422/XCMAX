@@ -1,0 +1,360 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "erp-approval",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-152329",
+  "generated_at": "2026-09-29 15:23:46",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 5,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器在 Web 管理端走通审批真实写-读回：POST /api/approval/flows 新建流程 → GET /flows 读回 → POST /api/approval/requests 发起审批 → POST /requests/{id}/approve 审批通过 → GET /requests/{id} 读回 status=approved → GET /users 与 /tool-rules；并含缺字段被 400（负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 64990,
+        "processed": 64978,
+        "errors": 0,
+        "dropped": 12,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 11,
+            "max_cache_size": 1000,
+            "hits": 53,
+            "misses": 11,
+            "hit_rate": 0.828125,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-approval/erp-approval-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "erp-approval",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-approval/shot/00-login-form.png",
+      "sha256": "2dc633d929e0c6c0d4dc6f29358b8325da009bdf57dee7efd871de562d894d2f",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-approval",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-approval/shot/AP1-approval-flow.png",
+      "sha256": "c749e03fc87bc00d95343c74020a07e3ac1dd56984594237e3a375b1ddb30510",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染审批流程写-读回真实 JSON：create 200、flow_id/flow_key、节点，列表命中。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-approval",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-approval/shot/AP2-approval-request.png",
+      "sha256": "d5e513728e03052ec2e2a66d32fcffd2e72ea08bfa358ab31cb604b83b52e44c",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染审批请求发起与读回真实 JSON：request_no、status=pending。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-approval",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-approval/shot/AP3-approval-approve.png",
+      "sha256": "e234dfb8c018b194943e43f0114a64debc650845785ef763b79c9397a8aa0029",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染审批通过真实 JSON：approve 200、status=approved、approved_at，读回一致。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-approval",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-approval/shot/AP4-approval-negative.png",
+      "sha256": "2af39b56fc993495852b8846dccc923838d8cfd69cc0cff48f33a0b3059ffe0f",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染缺 flow_name/flow_key 与缺 title 的 400 拒绝响应。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-approval",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-approval/shot/AP5-approval-users-rules.png",
+      "sha256": "6ccff500d78f15757051af1986697d1bf71f720bd0f7613b9d603d070189064c",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染审批人列表与工具规则真实 JSON（enabled、规则数）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-approval",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-approval/video/erp-approval-web-20260929-152329.webm",
+      "sha256": "df929aa695c899b5e4d6f6b563d03baa16a385ae026b8165331b27b8690a059f",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → 审批流程写读回 → 请求发起 → 审批通过 → 用户/规则 → 负例。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "AP1",
+      "title": "审批流程真实写-读回",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/approval/flows，随后 GET /api/approval/flows。",
+      "expected": "创建 200 返回 id 与节点；列表中命中本轮 flow_key。",
+      "observed": "{\"create_http\": 200, \"flow_id\": 3, \"flow_key\": \"vc-flow-152342\", \"created_key_in_list\": true}",
+      "result": "passed"
+    },
+    {
+      "id": "AP2",
+      "title": "审批请求真实发起与读回",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/approval/requests，随后 GET /requests/{id} 读回。",
+      "expected": "发起 200、success=true，读回同 title 且 status=pending。",
+      "observed": "{\"create_http\": 200, \"request_id\": 3, \"request_no\": \"APR20260929-9E1F31\", \"readback_status\": \"pending\"}",
+      "result": "passed"
+    },
+    {
+      "id": "AP3",
+      "title": "审批通过并读回 approved",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /requests/{id}/approve，随后 GET /requests/{id} 读回。",
+      "expected": "审批 200、success=true、status=approved；读回 status=approved。",
+      "observed": "{\"approve_http\": 200, \"status_field\": \"approved\", \"readback_status\": \"approved\"}",
+      "result": "passed"
+    },
+    {
+      "id": "AP4",
+      "title": "缺 flow_name/flow_key 与缺 title 被拒（负例）",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/approval/flows（空 body）；POST /api/approval/requests（缺 title）。",
+      "expected": "两者均 400，含明确缺失字段提示。",
+      "observed": "{\"empty_flow\": {\"status\": 400, \"message\": \"flow_name / flow_key 为必填项\"}, \"missing_title\": {\"status\": 400, \"message\": \"flow_key 与 title 为必填项\"}}",
+      "result": "passed"
+    },
+    {
+      "id": "AP5",
+      "title": "审批人与工具规则读取",
+      "input": "已建立的管理员会话。",
+      "actions": "GET /api/approval/users 与 /tool-rules。",
+      "expected": "用户列表非空；工具规则 enabled=true 且规则数≥1。",
+      "observed": "{\"users_http\": 200, \"user_count\": 5, \"rules_http\": 200, \"rules_enabled\": true}",
+      "result": "passed"
+    }
+  ]
+}

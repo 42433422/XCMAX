@@ -88,6 +88,21 @@ class TestCombinedOptimization:
         assert identity(3) == 6
 
 
+def test_combined_policy_replacement_remains_lazy(monkeypatch):
+    from app.utils import decorators
+
+    decorate = decorators.combined_optimization(retry_times=2)
+    calls = []
+
+    def replacement_retry(**options):
+        calls.append(options)
+        return lambda fn: lambda: ("replacement", fn())
+
+    monkeypatch.setattr(decorators, "retry", replacement_retry)
+    assert decorate(lambda: "value")() == ("replacement", "value")
+    assert calls == [{"max_retries": 2}]
+
+
 class TestOptimizedServiceMixin:
     def test_init_optimizers(self):
         class Svc(OptimizedServiceMixin):

@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "pay-alipay",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "bc2878efeb1ea43d6c1e33461367d80890fac40e5fdcf9357e1ee57b10fff322",
+  "visible_content": "支付宝接入诊断(sdk 已安装)、伪造回调验签被拒(400 fail)、未配置商户时下单 demo_pending 并给出配置提示、套餐清单可读；边界：商户参数未配置。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-alipay/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-alipay/macos/result.png"
+}

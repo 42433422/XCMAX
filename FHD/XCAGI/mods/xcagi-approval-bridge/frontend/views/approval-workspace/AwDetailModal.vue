@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import Modal from '@/components/Modal.vue'
+import { computed } from 'vue'
 import type { ApprovalWorkspaceCtx } from './assemble'
+import { salesApprovalPreview } from './awHelpers'
 
-// 拆分自 ApprovalWorkspaceView.vue 模板（原第 158–281 行）；模板逐字迁移，行为不变。
 const props = defineProps<{ tm: ApprovalWorkspaceCtx }>()
 
 const {
   showDetails, closeDetails, selectedRequest, canApprove, approve, reject,
   getBusinessLabel, getStatusLabel, getActionIcon, formatTime, getWorkflowExecutionStatusLabel,
 } = props.tm
+const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
 </script>
 
 <template>
@@ -29,11 +31,11 @@ const {
             </div>
             <div class="detail-item">
               <label>审批标题：</label>
-              <span>{{ selectedRequest.title }}</span>
+              <span>{{ salesPreview?.operation ?? selectedRequest.title }}</span>
             </div>
             <div class="detail-item">
               <label>业务类型：</label>
-              <span>{{ getBusinessLabel(selectedRequest.business_type) }}</span>
+              <span>{{ salesPreview ? '销售业务' : getBusinessLabel(selectedRequest.business_type) }}</span>
             </div>
             <div class="detail-item">
               <label>当前状态：</label>
@@ -41,11 +43,26 @@ const {
                 {{ getStatusLabel(selectedRequest.status) }}
               </span>
             </div>
-            <div class="detail-item full-width">
+            <div v-if="!salesPreview" class="detail-item full-width">
               <label>申请描述：</label>
               <p>{{ selectedRequest.description }}</p>
             </div>
           </div>
+        </div>
+
+        <div v-if="salesPreview" class="detail-section">
+          <h4>{{ salesPreview.operation }}参数</h4>
+          <p>客户：{{ salesPreview.customer }}</p>
+          <table>
+            <thead><tr><th>商品</th><th>型号</th><th>数量</th><th>单价</th></tr></thead>
+            <tbody><tr v-for="(item, index) in salesPreview.items" :key="index">
+              <td>{{ item.product_name || item.product_id || '未填写' }}</td>
+              <td>{{ item.model_number || '未填写' }}</td>
+              <td>{{ item.quantity ?? '未填写' }}</td><td>{{ item.unit_price ?? '未填写' }}</td>
+            </tr></tbody>
+          </table>
+          <p data-testid="sales-approval-total">总金额（参数合计）：{{ salesPreview.amount ?? '金额待确认' }} {{ salesPreview.amount ? salesPreview.currency : '' }}</p>
+          <details><summary>原始参数</summary><pre>{{ selectedRequest.description }}</pre></details>
         </div>
 
         <div class="detail-section">
@@ -65,7 +82,7 @@ const {
                   <span class="time">{{ formatTime(record.created_at) }}</span>
                 </div>
                 <div class="timeline-body">
-                  <div class="approver">审批人：{{ record.approver_name || '系统' }}</div>
+                  <div class="approver">审批人：{{ record.approver_name || record.approver_id || '系统' }}</div>
                   <div class="opinion">{{ record.opinion }}</div>
                 </div>
               </div>

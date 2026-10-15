@@ -370,7 +370,36 @@ class TestHybridRecognize:
         )
         with patch("app.services.intent_service.recognize_intents", return_value=dict(rule)):
             out = await h.recognize("模糊消息")
+        # 置信度纪律：低置信不采纳 LLM 结果，标记 unclear + 澄清
         assert out["intent_source"] == "deepseek_low_confidence"
+        assert out["final_intent"] is None
+        assert out["is_likely_unclear"] is True
+        assert out["low_confidence_clarify"] is True
+        assert out["deepseek_low_confidence"] is True
+        # LLM 原始结果仍透出便于观测
+        assert out["deepseek_intent"] == "products"
+
+    async def test_deepseek_low_confidence_keeps_observability_fields(self):
+        h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.8)
+        rule = {"primary_intent": "unk", "tool_key": None}
+        h.deepseek_recognizer = MagicMock()
+        h.deepseek_recognizer.recognize = AsyncMock(
+            return_value={"intent": "products", "confidence": 0.2, "slots": {"keyword": "x"}}
+        )
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
+        ):
+            out = await h.recognize("随便说点什么")
+        # 不采纳但仍透出 LLM 观测字段
+        assert out["intent_source"] == "deepseek_low_confidence"
+        assert out["intent_confidence"] == 0.2
+        assert out["deepseek_slots"] == {"keyword": "x"}
+        assert out["tool_key"] is None
+        assert "deepseek" in out["sources_used"]
 
     async def test_deepseek_error_falls_back_to_rule(self):
         h = HybridIntentWithDeepSeek(use_deepseek=True)

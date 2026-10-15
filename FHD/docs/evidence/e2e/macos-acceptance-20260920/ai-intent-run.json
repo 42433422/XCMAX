@@ -1,0 +1,47 @@
+{
+  "_comment": "Auto-generated snapshot of real Mac UI acceptance; DO NOT EDIT historical outcomes.",
+  "kind": "feature-acceptance",
+  "feature": "ai-intent",
+  "status": "failed",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-20",
+  "reviewed_at": "2026-09-20",
+  "passed": 0,
+  "failed": 2,
+  "visible_content": "实机新复测：产品 DEMO-001 在管理页面存在（单价 99、库存 10），但只读限定语误入写入路由，直接查询又把字段说明当成检索词，两项均失败。",
+  "media": [
+    {
+      "feature": "ai-intent",
+      "path": "FHD/docs/evidence/e2e/macos-acceptance-20260920/03-product-exists.png",
+      "sha256": "9ad982968dc3d6f652dff255cb0ea3a470e87acb83d67af7d880adfca30e56c8",
+      "visual_review": "accepted",
+      "visible_result": "产品管理页面中 DEMO-001 确实存在，单价 99，库存 10。",
+      "reviewed_at": "2026-09-20"
+    },
+    {
+      "feature": "ai-intent",
+      "path": "FHD/docs/evidence/e2e/macos-acceptance-20260920/05-query-failure-visible.png",
+      "sha256": "c376f24ec312129e1c377fa7a93aef99ebb222ec55f85aa535fd48efe4b78745",
+      "visual_review": "accepted",
+      "visible_result": "两个只读查询输入和失败响应同时可见：写入目标未找到、查询关键词错误地包含字段说明。",
+      "reviewed_at": "2026-09-20"
+    }
+  ],
+  "cases": [
+    {
+      "input": "只查询，不新增、修改或删除任何业务数据。请查产品编码 DEMO-001，列出产品名称、单价和当前库存，并说明查询是否成功。",
+      "actions": "在已安装 XCAGI 新建对话，粘贴完整中文请求并发送；在产品管理页面交叉核对。",
+      "expected": "执行只读查询并返回 DEMO-001，不进入写入目标解析。",
+      "observed": "返回当前租户内未找到目标记录，未执行写入；源代码定位到写入目标解析。",
+      "result": "failed"
+    },
+    {
+      "input": "查询产品 DEMO-001 的名称、单价和库存。",
+      "actions": "在同一实际客户端对话发送直接查询，并滚动到输入和结果同时可见的位置。",
+      "expected": "检索 DEMO-001 并展示名称、单价及库存。",
+      "observed": "检索词成为 DEMO-001 的名称、单价和库存，返回未找到；产品管理页却有该产品。",
+      "result": "failed"
+    }
+  ]
+}

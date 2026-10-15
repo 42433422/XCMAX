@@ -440,6 +440,9 @@ describe('useChatPersistence — coverage ramp', () => {
 
     it('extracts keyword from 查询 pattern', () => {
       expect(extractLikelyProductQueryKeyword('查询XCD-100')).toBe('XCD-100')
+      expect(extractLikelyProductQueryKeyword('查询产品 DEMO-001 的名称、单价和库存。')).toBe('DEMO-001')
+      expect(extractLikelyProductQueryKeyword('查询产品 DEMO-001 的价格')).toBe('DEMO-001')
+      expect(extractLikelyProductQueryKeyword('查询产品 DEMO-001 的价格历史')).toBe('DEMO-001 的价格历史')
     })
 
     it('strips quotes from extracted keyword (「」)', () => {

@@ -215,9 +215,7 @@ def enrich_session_meta_with_tenant(session_id: str, user: Any) -> dict[str, Any
     if account_kind == "admin":
         return meta
 
-    tid = meta.get("tenant_id")
-    if tid is None and user is not None:
-        tid = getattr(user, "tenant_id", None)
+    tid = getattr(user, "tenant_id", None) if user is not None else meta.get("tenant_id")
 
     company_brand = str(meta.get("company_brand") or "").strip()
     username = str(getattr(user, "username", None) or "").strip() if user is not None else ""

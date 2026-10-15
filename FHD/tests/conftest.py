@@ -89,7 +89,7 @@ class _AutoCreatingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
     def get_event_loop(self):
         try:
             loop = super().get_event_loop()
-        except RuntimeError:
+        except (RuntimeError, DeprecationWarning):
             loop = self.new_event_loop()
             self.set_event_loop(loop)
         _legacy_sync_test_loops.add(loop)

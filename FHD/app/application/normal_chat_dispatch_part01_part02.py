@@ -198,17 +198,22 @@ def _request_tenant_id(request: _facade().Any | None) -> int | None:
 
 
 def try_normal_slot_read_payload(
-    message: str, *, request: _facade().Any | None = None
+    message: str, *, request: _facade().Any | None = None, user_id: str | None = None
 ) -> dict[str, _facade().Any] | None:
-    """普通版只读业务：命中则走确定性 Agent 工具（无 LLM 也可 tool-call）。
-
-    客户类问题调用 customers.query 并写入 legacy_tool_records，避免 LLM 编造或误提关键词。
-    StreamingResponse 迭代时显式恢复 request + tenant，避免 ContextVar 重置后租户读空。
-    """
+    """只读业务走确定性工具；待澄清会话先续接原工作流。"""
     text = str(message or "").strip()
     if not text:
         return None
+    if user_id is not None:
+        from app.application import get_ai_chat_app_service
+
+        if user_id in get_ai_chat_app_service()._pending_workflows:
+            return None
     if _facade().looks_like_explicit_workflow_tool_intent(text):
+        _facade().logger.info(
+            "chat dispatch decision: dispatch_path=normal_slot "
+            "intent=workflow_tool_intent matched=False"
+        )
         return None
     req_token = None
     if request is not None:
@@ -224,7 +229,9 @@ def try_normal_slot_read_payload(
         with tenant_scope(_facade()._request_tenant_id(request)):
             rr = _facade().route_normal_mode_message(text)
             intent = str(rr.get("intent") or "").strip()
-            if intent == "customers_query":
+            if intent == "clarify":
+                payload = _facade().build_clarify_response_dict(rr)
+            elif intent == "customers_query":
                 payload = _facade().build_customers_query_response_dict(rr, request=request)
             elif intent == "product_query":
                 payload = _facade().build_product_query_response_dict(rr)
@@ -255,6 +262,10 @@ def try_normal_slot_read_payload(
             elif intent == "replenishment_suggest":
                 payload = _facade().build_replenishment_suggest_response_dict(rr)
             else:
+                _facade().logger.info(
+                    "chat dispatch decision: dispatch_path=normal_slot intent=%s matched=False",
+                    intent or "unmatched",
+                )
                 return None
     finally:
         if req_token is not None:
@@ -268,4 +279,9 @@ def try_normal_slot_read_payload(
         return None
     if payload.get("success") is False and (not payload.get("response")):
         return None
+    _facade().logger.info(
+        "chat dispatch decision: dispatch_path=normal_slot intent=%s matched=True channel=%s",
+        intent,
+        "agent_tool" if payload.get("agent_tool_dispatch") else "slot",
+    )
     return payload

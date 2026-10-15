@@ -4,6 +4,10 @@
 from __future__ import annotations
 
 import importlib
+from threading import RLock
+
+_MOD_IMPORT_LOCK = RLock()
+_MOD_IMPORT_ERRORS = (BaseException,)  # Initialization boundary: clean cache and propagate.
 
 
 def _facade():
@@ -18,9 +22,6 @@ def is_mods_disabled() -> bool:
 
 def _default_mods_root() -> str:
     """Resolve the MOD root across source and packaged layouts."""
-    _facade().logger.debug(
-        "[_default_mods_root] Resolving mods root, CWD: %s", _facade().os.getcwd()
-    )
     env = (
         _facade().os.environ.get("XCAGI_MODS_ROOT")
         or _facade().os.environ.get("XCAGI_MODS_DIR")
@@ -154,10 +155,7 @@ def _trusted_relative_file(parent: str, relative_path: str) -> str | None:
 
 
 def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
-    """
-    从指定 Mod 的 backend/<stem>.py 按文件路径加载为唯一模块名，避免多个 Mod 都叫 blueprints/services 时 sys.modules 冲突。
-    stem 不含 .py；允许 ``employees/name`` 这类 backend 内相对模块路径。
-    """
+    """Load a fully initialized, path-isolated Mod backend module, including nested stems."""
     backend_path = _facade()._trusted_child_path(mod_path, "backend", directory=True)
     path = _facade()._trusted_relative_file(backend_path, f"{stem}.py") if backend_path else None
     if path is None:
@@ -165,20 +163,24 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)
     import hashlib
 
-    path_digest = hashlib.sha256(
-        _facade().os.path.normpath(_facade().os.path.abspath(mod_path)).encode()
-    ).hexdigest()[:16]
+    normalized_path = _facade().os.path.normpath(_facade().os.path.abspath(mod_path))
+    path_digest = hashlib.sha256(normalized_path.encode()).hexdigest()[:16]
     spec_name = f"_xcagi_mod_{safe}_{path_digest}_{stem}"
-    existing = _facade().sys.modules.get(spec_name)
-    if existing is not None:
-        return existing
-    spec = _facade().importlib.util.spec_from_file_location(spec_name, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load spec for {path}")
-    module = _facade().importlib.util.module_from_spec(spec)
-    _facade().sys.modules[spec_name] = module
-    spec.loader.exec_module(module)
-    return module
+    with _MOD_IMPORT_LOCK:
+        existing = _facade().sys.modules.get(spec_name)
+        if existing is not None:
+            return existing
+        spec = _facade().importlib.util.spec_from_file_location(spec_name, path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load spec for {path}")
+        module = _facade().importlib.util.module_from_spec(spec)
+        _facade().sys.modules[spec_name] = module
+        try:
+            spec.loader.exec_module(module)
+        except _MOD_IMPORT_ERRORS:
+            _facade().sys.modules.pop(spec_name, None)
+            raise
+        return module
 
 
 def _register_mod_hooks(mod_id: str, metadata: _facade().ModMetadata) -> None:
