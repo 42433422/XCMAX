@@ -4,10 +4,10 @@
   [Parameter(Mandatory=$true)][string]$CandidateSha,
   [Parameter(Mandatory=$true)][string]$EvidenceDir,
   [string]$OldPath = '',
-  [string]$OldSha256 = 'ed957f9db9940bcbc323f217c1b95bfe045b7f0d9aa2bb023aa175587ef66b56'
+  [string]$OldSha256 = '92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf'
 )
 $ErrorActionPreference = 'Stop'; . (Join-Path $PSScriptRoot 'product-version.ps1'); $productVersion = Resolve-ProductVersion
-$installRoot = Join-Path $env:RUNNER_TEMP "xcagi-candidate-$Mode"; $dataRoot = Join-Path $env:APPDATA 'XCAGI'; $base = 'http://127.0.0.1:17500'; git merge-base --is-ancestor $CandidateSha origin/main
+$installRoot = Join-Path $env:RUNNER_TEMP "xcagi-candidate-$Mode"; $dataRoot = Join-Path $env:APPDATA 'XCAGI'; if ($Mode -in @('Upgrade','Rollback')) { $installRoot = Join-Path $env:LOCALAPPDATA 'Programs\XCAGI' }; $base = 'http://127.0.0.1:17500'; git merge-base --is-ancestor $CandidateSha origin/main
 if ($LASTEXITCODE -gt 1) { throw 'Unable to verify candidate mainline ancestry' }
 $evidence = [ordered]@{ mode=$Mode; candidate_sha=$CandidateSha; candidate_on_main=($LASTEXITCODE -eq 0); customer_acceptance='not_verified'; started_at=(Get-Date).ToUniversalTime().ToString('o'); checks=@(); result='running' }; $global:LASTEXITCODE = 0; New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
 function Check([bool]$ok, [string]$name, [string]$detail) {
@@ -21,7 +21,7 @@ function Uninstall-OldApp {
   $unins = Get-ChildItem -LiteralPath $installRoot -Filter 'Uninstall*.exe' -File | Select-Object -First 1; Check ($null -ne $unins) 'old.uninstaller' 'previous uninstaller exists'
   $copied = Join-Path $env:TEMP 'xcagi-old-uninstaller.exe'; Copy-Item -LiteralPath $unins.FullName -Destination $copied -Force
   $psi = New-Object System.Diagnostics.ProcessStartInfo; $psi.FileName = $copied
-  $psi.Arguments = "/S /KEEP_APP_DATA /currentuser --updated _?=$installRoot"; $psi.UseShellExecute = $false
+  $psi.Arguments = "/S /KEEP_APP_DATA /currentuser _?=$installRoot"; $psi.UseShellExecute = $false
   $proc = [System.Diagnostics.Process]::Start($psi); $proc.WaitForExit()
   Check ($proc.ExitCode -eq 0) 'old.uninstall' "exit=$($proc.ExitCode)"
 }
@@ -47,7 +47,7 @@ function Start-App([string]$label) {
     Start-Sleep -Seconds 2
   }
   Check ($health.status -ne 'unhealthy' -and @($health.runtime.blockers).Count -eq 0 -and $status.readyForUi -eq $true) "$label.first_start_ready" "health=$($health.status); blockers=$(@($health.runtime.blockers).Count); readyForUi=$($status.readyForUi); pid=$($p.Id)"; $installed = Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw | ConvertFrom-Json
-  Check (($label -eq 'old' -and $installed.gitSha -eq '2e6f03bf67b88965e450721e5b8432ab6395782b' -and (-not $health.git_sha -or $health.git_sha -eq $installed.gitSha)) -or ($label -ne 'old' -and $installed.gitSha -eq $CandidateSha -and $health.git_sha -eq $CandidateSha)) "$label.runtime_build_identity" "installed=$($installed.gitSha); running=$($health.git_sha); legacy_health_identity_missing=$(-not $health.git_sha); release=$($health.release_id)"; $listener = Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction Stop | Select-Object -First 1
+  Check (($label -eq 'old' -and $installed.gitSha -eq '83939363ca2ccf7776c97f5c7895e29c1e5bc453' -and (-not $health.git_sha -or $health.git_sha -eq $installed.gitSha)) -or ($label -ne 'old' -and $installed.gitSha -eq $CandidateSha -and $health.git_sha -eq $CandidateSha)) "$label.runtime_build_identity" "installed=$($installed.gitSha); running=$($health.git_sha); legacy_health_identity_missing=$(-not $health.git_sha); release=$($health.release_id)"; $listener = Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction Stop | Select-Object -First 1
   $backend = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)"; $dataArgument = [regex]::Match($backend.CommandLine, '--data-dir\s+(?:"([^"]+)"|(\S+))'); $actualDataRoot = if ($dataArgument.Groups[1].Success) { $dataArgument.Groups[1].Value } else { $dataArgument.Groups[2].Value }
   $expectedDataRoot = if ($env:XCAGI_DESKTOP_USER_DATA_DIR) { $env:XCAGI_DESKTOP_USER_DATA_DIR } else { $dataRoot }; Check (($backend.ExecutablePath -match ('^' + [regex]::Escape($installRoot + [IO.Path]::DirectorySeparatorChar))) -and $dataArgument.Success -and $actualDataRoot -eq $expectedDataRoot) "$label.port_owner" "pid=$($backend.ProcessId); exe=$($backend.ExecutablePath); actual_data=$actualDataRoot; expected_data=$expectedDataRoot"
   $p.Refresh(); Check (-not $p.HasExited) "$label.no_restart" "original pid=$($p.Id)"
@@ -118,51 +118,82 @@ function Run-Gui([string]$phase, [string]$directory, [string]$seed = '') {
   & node (Join-Path $PSScriptRoot '../dev/record_enterprise_desktop_init.mjs'); Check ($LASTEXITCODE -eq 0) "normal_gui_$phase" 'normal UI must save and read back actual business records'
   return (Join-Path $env:XCAGI_GUI_EVIDENCE 'gui-business.json')
 }
+function Fixture([string]$action) {
+  & python (Join-Path $PSScriptRoot 'windows-lifecycle-fixtures.py') $action $dataRoot $EvidenceDir
+  Check ($LASTEXITCODE -eq 0) "owned_state.$action" 'synthetic configuration, attachment, private SQLite rows and an actual 261-character path'
+}
+function Invoke-AppUpdate {
+  & node (Join-Path $PSScriptRoot 'windows-lifecycle-update.mjs') install $EvidenceDir
+  Check ($LASTEXITCODE -eq 0) 'app_update.download_and_handoff' 'original packaged app checked signature, downloaded candidate and invoked its own install IPC'
+  Add-Type -AssemblyName UIAutomationClient; Add-Type -AssemblyName UIAutomationTypes
+  $scope = [System.Windows.Automation.TreeScope]::Descendants
+  $deadline = (Get-Date).AddMinutes(5); $window = $null
+  do {
+    foreach ($w in [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)) {
+      try {
+        $proc = Get-Process -Id $w.Current.ProcessId -ErrorAction Stop
+        if ($proc.Path -and (Get-FileHash -LiteralPath $proc.Path -Algorithm SHA256).Hash.ToLowerInvariant() -eq $candidateHash) { $window = $w; break }
+      } catch {}
+    }
+    if (-not $window) { Start-Sleep -Seconds 2 }
+  } while (-not $window -and (Get-Date) -lt $deadline)
+  Check ($null -ne $window) 'app_update.installer_identity' 'updater launched the exact verified candidate executable'
+  function Control([string]$id) { return $window.FindFirst($scope, [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $id)) }
+  $deadline = (Get-Date).AddMinutes(1); do { $welcome = Control 'WelcomeAgreeCheck'; if (-not $welcome -or $welcome.Current.IsOffscreen) { Start-Sleep -Milliseconds 500 } } while ((-not $welcome -or $welcome.Current.IsOffscreen) -and (Get-Date) -lt $deadline)
+  Check ($welcome -and -not $welcome.Current.IsOffscreen) 'app_update.installer_ready' 'verified candidate installer welcome page is visible'
+  $agree = (Control 'WelcomeAgreeCheck').GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+  if ($agree.Current.ToggleState -eq 'Off') { $agree.Toggle() }
+  (Control 'NextButton').GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke(); Start-Sleep -Seconds 1
+  $target = (Control 'InstallDirBox').GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
+  Check ($target -eq $installRoot) 'app_update.install_target' "target=$target"
+  $run = (Control 'RunAfterInstallCheck').GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+  if ($run.Current.ToggleState -eq 'On') { $run.Toggle() }
+  (Control 'NextButton').GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $deadline = (Get-Date).AddMinutes(15)
+  do {
+    Start-Sleep -Seconds 2; $errorText = Control 'ErrorMessageText'; $complete = Control 'CompletePathText'
+    if ($errorText -and -not $errorText.Current.IsOffscreen) { throw "App updater installer failed: $($errorText.Current.Name)" }
+  } while ((-not $complete -or $complete.Current.IsOffscreen) -and (Get-Date) -lt $deadline)
+  Check ($complete -and -not $complete.Current.IsOffscreen) 'app_update.install_completed' 'real updater-launched installer finished without manual uninstall'
+  (Control 'NextButton').GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $markerPath = Join-Path $dataRoot 'rollback-marker.json'
+  Check (Test-Path -LiteralPath $markerPath) 'app_update.natural_marker' 'application/installer produced rollback marker; harness never writes rollback state'
+  $script:naturalMarker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+  Copy-Item -LiteralPath $markerPath -Destination (Join-Path $EvidenceDir 'natural-rollback-marker.json')
+  Check ($naturalMarker.fromVersion -match '^1\.0\.0\.5\+' -and $naturalMarker.toVersion -match ('^' + [regex]::Escape($productVersion) + '\+') -and $naturalMarker.mode -eq 'windows-full') 'app_update.snapshot_identity' "from=$($naturalMarker.fromVersion); to=$($naturalMarker.toVersion)"
+  foreach ($fixture in (Get-Content (Join-Path $EvidenceDir 'owned-fixtures.json') -Raw | ConvertFrom-Json)) {
+    $entry = $naturalMarker.expectedOwnedFiles.PSObject.Properties[$fixture.path]
+    Check ($entry -and $entry.Value -eq $fixture.sha256) 'app_update.owned_manifest' "path=$($fixture.path); length=$($fixture.absolute_length)"
+    Check ((Get-FileHash -LiteralPath (Join-Path $naturalMarker.ownedBackupRoot $fixture.path) -Algorithm SHA256).Hash.ToLowerInvariant() -eq $fixture.sha256) 'app_update.owned_backup_hash' "sha256=$($fixture.sha256)"
+  }
+  $script:databaseBefore = (Get-FileHash -LiteralPath $naturalMarker.databaseBackupPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  Check ((Get-FileHash -LiteralPath (Join-Path $dataRoot 'data/xcagi.db') -Algorithm SHA256).Hash.ToLowerInvariant() -eq $databaseBefore) 'app_update.natural_database_backup' "sha256=$databaseBefore"
+}
 function Invoke-FailedRollback([string]$tenant, [string]$seed) {
-  $db = Join-Path $dataRoot 'data\xcagi.db'; Check (Test-Path -LiteralPath $db) 'rollback.database' 'pre-failure database exists'
-  $before = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant(); $rollbackDir = Join-Path $dataRoot 'rollback'
-  $backupRoot = Join-Path $rollbackDir 'windows-app-current'; New-Item -ItemType Directory -Force -Path $backupRoot | Out-Null
-  & robocopy $installRoot $backupRoot /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null; Check ($LASTEXITCODE -lt 8) 'rollback.snapshot' "robocopy=$LASTEXITCODE"
-  $global:LASTEXITCODE = 0; $dbBackup = Join-Path $rollbackDir 'pre-xcagi.db'
-  Copy-Item -LiteralPath $db -Destination $dbBackup -Force; Uninstall-OldApp
-  Check (Test-Path -LiteralPath (Join-Path $backupRoot 'XCAGI.exe')) 'rollback.snapshot_kept' 'old snapshot survived uninstall'; Install $CandidatePath 'candidate'
-  $candidateBuild = Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw | ConvertFrom-Json
-  Check ($candidateBuild.gitSha -eq $CandidateSha -and $candidateBuild.version -eq $productVersion) 'rollback.candidate_build' "sha=$($candidateBuild.gitSha); version=$($candidateBuild.version)"
-  $bytes = [IO.File]::ReadAllBytes($db); $bytes[$bytes.Length - 1] = $bytes[$bytes.Length - 1] -bxor 255
-  [IO.File]::WriteAllBytes($db, $bytes)
-  $dirty = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant(); Check ($dirty -ne $before) 'rollback.database_dirtied' "sha256=$dirty"
-  $marker = [ordered]@{ operationId=[Guid]::NewGuid().ToString('N'); mode='windows-full'; fromVersion=('1.0.0' + '.1+' + '2e6f03bf67b88965e450721e5b8432ab6395782b'.Substring(0,12)); toVersion=$productVersion; preparedAt=(Get-Date).ToUniversalTime().ToString('o'); backendPath=(Join-Path $installRoot 'resources\backend\xcagi-backend.exe'); appPath=(Join-Path $installRoot 'XCAGI.exe'); appBackupRelPath='windows-app-current'; databasePath=$db; databaseBackupPath=$dbBackup }; $utf8 = New-Object System.Text.UTF8Encoding $false
-  [IO.File]::WriteAllText((Join-Path $dataRoot 'rollback-marker.json'), ($marker | ConvertTo-Json -Compress), $utf8)
-  $listener = New-Object System.Net.Sockets.TcpListener ([Net.IPAddress]::Parse('127.0.0.1'), 17500); $listener.Start()
-  $helperLog = Join-Path $rollbackDir 'rollback-helper.log'
+  Fixture 'dirty'
+  $db = Join-Path $dataRoot 'data/xcagi.db'; Check ((Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant() -ne $databaseBefore) 'rollback.database_changed' 'controlled isolated database write differs from natural snapshot'
+  $listener = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 17500); $listener.Start()
   try {
-    Start-Process -FilePath (Join-Path $installRoot 'XCAGI.exe') -WorkingDirectory $installRoot -WindowStyle Hidden | Out-Null; $deadline = (Get-Date).AddMinutes(3)
-    $infoPath = Join-Path $installRoot 'resources\build-info.json'; $appliedPath = Join-Path $dataRoot 'rollback-applied.last.json'
-    $markerPath = Join-Path $dataRoot 'rollback-marker.json'; $restoredSha = ''; $applied = $null
+    Start-Process -FilePath (Join-Path $installRoot 'XCAGI.exe') -WorkingDirectory $installRoot | Out-Null
+    $deadline = (Get-Date).AddMinutes(5); $appliedPath = Join-Path $dataRoot 'rollback-applied.last.json'; $applied = $null
     do {
       Start-Sleep -Seconds 2
-      if ((Test-Path -LiteralPath $infoPath) -and -not (Test-Path -LiteralPath $markerPath)) {
-        $restoredSha = (Get-Content -LiteralPath $infoPath -Raw | ConvertFrom-Json).gitSha
-      }
-      if (Test-Path -LiteralPath $appliedPath) {
-        try { $applied = Get-Content -LiteralPath $appliedPath -Raw | ConvertFrom-Json } catch { Check $false 'rollback.applied_record' 'persistent receipt is unreadable' }
-      }
-    } while (($restoredSha -ne '2e6f03bf67b88965e450721e5b8432ab6395782b' -or $applied.operationId -ne $marker.operationId) -and (Get-Date) -lt $deadline)
-    Check ($restoredSha -eq '2e6f03bf67b88965e450721e5b8432ab6395782b') 'rollback.restored_build' "gitSha=$restoredSha; marker=$(Test-Path -LiteralPath $markerPath); applied=$(Test-Path -LiteralPath $appliedPath)"; $after = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant()
-    Check ($after -eq $before) 'rollback.database_hash' "sha256=$after"
-    $validTimes = $false
-    try { $appliedAt = [DateTimeOffset]$applied.appliedAt; $completedAt = [DateTimeOffset]$applied.completedAt; $validTimes = $true } catch {}
-    Check ($validTimes -and $applied.operationId -eq $marker.operationId -and $applied.fromVersion -eq $marker.toVersion -and $applied.toVersion -eq $marker.fromVersion -and $applied.reason -and $appliedAt -ge [DateTimeOffset]$marker.preparedAt -and $completedAt -ge $appliedAt -and $completedAt -le [DateTimeOffset]::UtcNow) 'rollback.applied_record' "operation=$($applied.operationId); from=$($applied.fromVersion); to=$($applied.toVersion); completed=$($applied.completedAt)"
-  } finally {
-    try { $listener.Stop() } catch {}
-    if ($appliedPath -and (Test-Path -LiteralPath $appliedPath -PathType Leaf)) { Copy-Item -LiteralPath $appliedPath -Destination (Join-Path $EvidenceDir 'rollback-applied.last.json') -Force }
-    if (Test-Path -LiteralPath $helperLog) { Copy-Item -LiteralPath $helperLog -Destination (Join-Path $EvidenceDir 'rollback-helper.log') -Force }
-  }
-  Stop-App; Start-Sleep -Seconds 2
-  Stop-App; Start-App 'old'
-  Run-Gui 'readback' (Join-Path $EvidenceDir 'rollback-gui') $seed | Out-Null
-  $back = Login 'rollback'; Check ($back.tenant -eq $tenant) 'rollback.same_enterprise' "tenant_sha256=$(Digest $back.tenant)"
+      if (Test-Path -LiteralPath $appliedPath) { try { $applied = Get-Content -LiteralPath $appliedPath -Raw | ConvertFrom-Json } catch {} }
+    } while (($applied.fromVersion -ne $naturalMarker.toVersion -or $applied.toVersion -ne $naturalMarker.fromVersion -or -not $applied.completedAt) -and (Get-Date) -lt $deadline)
+    Check ($applied.operationId -and (-not $naturalMarker.operationId -or $applied.operationId -eq $naturalMarker.operationId) -and $applied.reason -and $applied.completedAt) 'rollback.automatic_receipt' "operation=$($applied.operationId); reason=$($applied.reason); completed=$($applied.completedAt)"
+    Copy-Item -LiteralPath $appliedPath -Destination (Join-Path $EvidenceDir 'rollback-applied.last.json')
+    Check ((Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant() -eq $databaseBefore) 'rollback.database_hash' "sha256=$databaseBefore"
+    Fixture 'verify'
+    & python (Join-Path $PSScriptRoot 'windows-lifecycle-fixtures.py') app-verify $installRoot $EvidenceDir
+    Check ($LASTEXITCODE -eq 0) 'rollback.app_file_hashes' 'all original app files restored with no extra files'
+    Check (-not (Test-Path (Join-Path $dataRoot 'rollback-marker.json'))) 'rollback.marker_consumed' 'natural pending marker consumed after completed restoration'
+    $appliedAt = [DateTimeOffset]$applied.appliedAt; $completedAt = [DateTimeOffset]$applied.completedAt
+    Check ($applied.fromVersion -eq $naturalMarker.toVersion -and $applied.toVersion -eq $naturalMarker.fromVersion -and $appliedAt -ge [DateTimeOffset]$naturalMarker.preparedAt -and $completedAt -ge $appliedAt -and $completedAt -le [DateTimeOffset]::UtcNow) 'rollback.receipt_identity' 'receipt identity and timestamps match the app-generated operation'
+  } finally { $listener.Stop() }
+  Stop-App; Start-App 'old'; Run-Gui 'readback' (Join-Path $EvidenceDir 'rollback-gui') $seed | Out-Null
+  $back = Login 'old'; Check ($back.tenant -eq $tenant) 'rollback.same_enterprise' "tenant_sha256=$(Digest $back.tenant)"
 }
+
 try {
   Check (-not (Test-Path $dataRoot) -and -not (Test-Path $installRoot)) 'isolated_runner' 'fresh user data and install path'; Check (-not (Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction SilentlyContinue)) 'isolated_tasks' 'no prior daily task'
   $candidateHash = (Get-FileHash -LiteralPath $CandidatePath -Algorithm SHA256).Hash.ToLowerInvariant(); $evidence.candidate_sha256 = $candidateHash
@@ -172,29 +203,39 @@ try {
     if ($Mode -eq 'Recovery') { $newAuth = Login 'candidate'; Backup-And-Version }
     $evidence.result = if ($Mode -eq 'Recovery') { 'gui_recovery_regression_passed' } else { 'gui_regression_passed' }; return
   }
-  if ($Mode -eq 'Rollback') {
+  if ($Mode -in @('Upgrade','Rollback')) {
     Check ((Get-FileHash -LiteralPath $OldPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $OldSha256) 'old_installer_hash' "sha256=$OldSha256"; Install $OldPath 'old'
+    & python (Join-Path $PSScriptRoot 'windows-lifecycle-fixtures.py') app-seed $installRoot $EvidenceDir
+    Check ($LASTEXITCODE -eq 0) 'old.app_file_hashes' 'full original installed app manifest recorded'
+    Fixture 'seed'
+    $env:XCAGI_UPDATE_URL = 'http://127.0.0.1:18765/'
+    $feed = Start-Process node -ArgumentList @((Join-Path $PSScriptRoot 'windows-lifecycle-update.mjs'), 'serve', (Split-Path $CandidatePath), $CandidatePath) -PassThru -NoNewWindow
     Start-App 'old'; $oldGuiSeed = Run-Gui 'seed' (Join-Path $EvidenceDir 'old-gui'); $oldAuth = Login 'old'
-    Stop-App
-    Invoke-FailedRollback $oldAuth.tenant $oldGuiSeed
-    $evidence.result = 'rollback_passed'; return
-  }
-  if ($Mode -eq 'Upgrade') {
-    Check ((Get-FileHash -LiteralPath $OldPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $OldSha256) 'old_installer_hash' "sha256=$OldSha256"; Install $OldPath 'old'
-    $oldProcess = Start-App 'old'; $oldGuiSeed = Run-Gui 'seed' (Join-Path $EvidenceDir 'old-gui')
-    $oldAuth = Login 'old'; Stop-App
-    Uninstall-OldApp; Install $CandidatePath 'candidate'
-    $newProcess = Start-App 'candidate'; $newAuth = Login 'candidate'
-    Check ($newAuth.tenant -eq $oldAuth.tenant) 'same_enterprise' "tenant_sha256=$(Digest $newAuth.tenant)"; $candidateGuiProof = Run-Gui 'after-upgrade' (Join-Path $EvidenceDir 'after-upgrade-gui') $oldGuiSeed
+    Invoke-AppUpdate
+    if ($Mode -eq 'Rollback') {
+      Invoke-FailedRollback $oldAuth.tenant $oldGuiSeed; $evidence.result = 'rollback_passed'; return
+    }
+    Start-App 'candidate'; $newAuth = Login 'candidate'
+    $deadline = (Get-Date).AddMinutes(1); while ((Test-Path (Join-Path $dataRoot 'rollback-marker.json')) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2; $health = Invoke-RestMethod "$base/api/health?lite=true" -TimeoutSec 3; Check ($health.git_sha -eq $CandidateSha -and $health.status -ne 'unhealthy') 'upgrade.observation_identity' 'candidate remains healthy during natural commit observation' }
+    Check (-not (Test-Path (Join-Path $dataRoot 'rollback-marker.json'))) 'upgrade.health_commit' 'candidate naturally committed its healthy-start observation'
+    Check ($newAuth.tenant -eq $oldAuth.tenant) 'same_enterprise' "tenant_sha256=$(Digest $newAuth.tenant)"
+    $candidateGuiProof = Run-Gui 'after-upgrade' (Join-Path $EvidenceDir 'after-upgrade-gui') $oldGuiSeed; Fixture 'verify'
+    Stop-App; Uninstall-OldApp
+    Check (-not (Test-Path (Join-Path $installRoot 'XCAGI.exe'))) 'retention.uninstalled' 'candidate executable removed'
+    Fixture 'verify'; Install $CandidatePath 'candidate'; Start-App 'candidate'
+    Run-Gui 'readback' (Join-Path $EvidenceDir 'reinstalled-gui') $oldGuiSeed | Out-Null; Fixture 'verify'
   } else {
-    Install $CandidatePath 'candidate'; $newProcess = Start-App 'candidate'
-    $newAuth = Login 'candidate'
+    Install $CandidatePath 'candidate'; Start-App 'candidate'; $newAuth = Login 'candidate'
   }
   Backup-And-Version; $evidence.result = 'passed'
 } catch {
   $evidence.result = 'failed'; $evidence.failure = $_.Exception.Message
   throw
 } finally {
+  if ($feed -and -not $feed.HasExited) { Stop-Process -Id $feed.Id -ErrorAction SilentlyContinue }; Remove-Item Env:XCAGI_UPDATE_URL -ErrorAction SilentlyContinue
+  $evidence.runner = @{ os=[Environment]::OSVersion.VersionString; caption=(Get-CimInstance Win32_OperatingSystem).Caption; customer_windows_10_11='not_verified'; uac_interactive_consent='not_verified'; long_paths_policy=(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem').LongPathsEnabled }
+  $evidence.mod_fixture_scope = 'synthetic owned configuration/attachment/private database retention; registered Mod loading and entitlement not verified'
+  foreach ($log in @((Join-Path $env:TEMP 'xcagi-installer-silent.log'), (Join-Path $dataRoot 'rollback/rollback-helper.log'))) { if (Test-Path -LiteralPath $log) { Copy-Item -LiteralPath $log -Destination $EvidenceDir } }
   $backendLog = Join-Path $dataRoot 'logs/electron-backend.log'
   if (Test-Path $backendLog) { Get-Content -LiteralPath $backendLog | Where-Object { $_ -notmatch '(?i)token|password|secret|authorization|cookie|username|[a-z0-9_-]{40,}' -and (-not $env:XCAGI_TEST_USER -or -not $_.Contains($env:XCAGI_TEST_USER)) -and (-not $env:XCAGI_TEST_PASS -or -not $_.Contains($env:XCAGI_TEST_PASS)) } | Set-Content (Join-Path $EvidenceDir 'backend-redacted.log') -Encoding utf8 }
   $evidence.finished_at = (Get-Date).ToUniversalTime().ToString('o'); $evidence | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $EvidenceDir 'acceptance.json') -Encoding utf8
