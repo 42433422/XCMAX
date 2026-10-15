@@ -70,7 +70,7 @@ export class Session {
     try { this.ws.close(); } catch {}
   }
 
-  async eval(expression, awaitPromise = true) {
+  async evaluate(expression, awaitPromise = true) {
     const r = await this.send('Runtime.evaluate', {
       expression,
       returnByValue: true,
@@ -92,7 +92,7 @@ export class Session {
 
   // Real mouse click at the element centre (dispatches trusted-ish input events).
   async clickSelector(selector) {
-    const box = await this.eval(`(() => {
+    const box = await this.evaluate(`(() => {
       const el = document.querySelector(${JSON.stringify(selector)});
       if (!el) return null;
       el.scrollIntoView({block:'center', inline:'center'});
@@ -109,7 +109,7 @@ export class Session {
   }
 
   async clickText(text, { tag = '*' } = {}) {
-    const sel = await this.eval(`(() => {
+    const sel = await this.evaluate(`(() => {
       const wanted = ${JSON.stringify(text)};
       const nodes = [...document.querySelectorAll(${JSON.stringify(tag)})];
       const hit = nodes.find((el) => (el.innerText || el.textContent || '').trim() === wanted)
@@ -128,7 +128,7 @@ export class Session {
 
   // Click a button/element by visible text scoped inside a container selector.
   async clickTextIn(scope, text) {
-    const ok = await this.eval(`(() => {
+    const ok = await this.evaluate(`(() => {
       const root = document.querySelector(${JSON.stringify(scope)});
       if (!root) return 'no-scope';
       const wanted = ${JSON.stringify(text)};
@@ -148,7 +148,7 @@ export class Session {
   }
 
   async typeInto(selector, value) {
-    const ok = await this.eval(`(() => {
+    const ok = await this.evaluate(`(() => {
       const el = document.querySelector(${JSON.stringify(selector)});
       if (!el) return false;
       el.focus();
@@ -164,7 +164,7 @@ export class Session {
 
   // Select an <option> by value (default) or by visible text.
   async selectOption(selector, value, byText = false) {
-    const ok = await this.eval(`(() => {
+    const ok = await this.evaluate(`(() => {
       const el = document.querySelector(${JSON.stringify(selector)});
       if (!el || el.tagName !== 'SELECT') return 'not-a-select';
       const opts = [...el.options];
@@ -183,7 +183,7 @@ export class Session {
 
   // Find any <select> that has an option matching the given text and select it.
   async selectAnywhereByText(text) {
-    const r = await this.eval(`(() => {
+    const r = await this.evaluate(`(() => {
       const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
         return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
       const wanted = ${JSON.stringify(text)};
@@ -219,7 +219,7 @@ export class Session {
   async waitForSelector(selector, timeoutMs = 30000) {
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
-      const found = await this.eval(`!!document.querySelector(${JSON.stringify(selector)})`, false);
+      const found = await this.evaluate(`!!document.querySelector(${JSON.stringify(selector)})`, false);
       if (found) return true;
       await new Promise((r) => setTimeout(r, 500));
     }
@@ -229,7 +229,7 @@ export class Session {
   async waitForText(text, timeoutMs = 30000) {
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
-      const found = await this.eval(
+      const found = await this.evaluate(
         `(document.body?.innerText || '').includes(${JSON.stringify(text)})`, false);
       if (found) return true;
       await new Promise((r) => setTimeout(r, 500));
@@ -243,7 +243,7 @@ export class Session {
 
   // Click a left sidebar nav entry (nav.sidebar-menu button.menu-item) by exact text.
   async clickSidebar(text) {
-    const ok = await this.eval(`(() => {
+    const ok = await this.evaluate(`(() => {
       const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
         return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
       const items = [...document.querySelectorAll('nav.sidebar-menu button.menu-item')].filter(vis);
@@ -264,7 +264,7 @@ export class Session {
 
   // Close any visible modal (取消 / × / 关闭), preferring the top-most overlay.
   async dismissModals() {
-    return await this.eval(`(() => {
+    return await this.evaluate(`(() => {
       const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
         return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
       const overlays = [...document.querySelectorAll('.modal-overlay, .modal.active, [role=dialog]')].filter(vis);
@@ -282,7 +282,7 @@ export class Session {
 
   // Click an acknowledgement button (确定 / 知道了) on an alert-style modal.
   async ackModal() {
-    return await this.eval(`(() => {
+    return await this.evaluate(`(() => {
       const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
         return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
       const overlays = [...document.querySelectorAll('.modal-overlay, .modal.active, [role=dialog]')].filter(vis);
@@ -299,7 +299,7 @@ export class Session {
   // Click the primary action of a confirmation dialog (.confirm-dialog-footer).
   async confirmDialog(text) {
     const wanted = text || '删除';
-    return await this.eval(`(() => {
+    return await this.evaluate(`(() => {
       const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
         return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
       const footer = [...document.querySelectorAll('.confirm-dialog-footer')].filter(vis).pop();
@@ -332,7 +332,7 @@ export class Session {
     return false;
   }
 
-  async url() { return await this.eval('location.href', false); }
-  async title() { return await this.eval('document.title', false); }
-  async text() { return await this.eval('document.body ? document.body.innerText : ""', false); }
+  async url() { return await this.evaluate('location.href', false); }
+  async title() { return await this.evaluate('document.title', false); }
+  async text() { return await this.evaluate('document.body ? document.body.innerText : ""', false); }
 }

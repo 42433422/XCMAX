@@ -58,7 +58,7 @@ while (Date.now() < end) {
   const t = new Date().toTimeString().slice(0, 8);
   let row;
   try {
-    row = { t, ...(await s.eval(probe)) };
+    row = { t, ...(await s.evaluate(probe)) };
   } catch (e) {
     row = { t, error: String(e).slice(0, 200) };
     try { s.close(); } catch {}

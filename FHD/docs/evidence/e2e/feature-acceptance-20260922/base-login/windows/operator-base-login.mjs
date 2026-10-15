@@ -82,7 +82,7 @@ async function connect(maxMs = 180000) {
 async function waitFor(s, expr, timeoutMs, tag) {
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
-    const v = await s.eval(expr);
+    const v = await s.evaluate(expr);
     if (v) return v;
     await sleep(1000);
   }
@@ -107,10 +107,10 @@ const stateExpr = `(() => {
   };
 })()`;
 
-async function state(s) { return await s.eval(stateExpr); }
+async function state(s) { return await s.evaluate(stateExpr); }
 
 async function pageMe(s) {
-  return await s.eval(`(async () => {
+  return await s.evaluate(`(async () => {
     const r = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
     const d = await r.json();
     return { http: r.status, success: d.success === true, valid: d.valid === true,
@@ -120,7 +120,7 @@ async function pageMe(s) {
 }
 
 async function pageHealth(s) {
-  return await s.eval(`(async () => {
+  return await s.evaluate(`(async () => {
     const r = await fetch('/api/health', { credentials: 'include', cache: 'no-store' });
     const d = await r.json();
     return { http: r.status, status: d.status, runtime_status: d.runtime && d.runtime.status,
@@ -130,7 +130,7 @@ async function pageHealth(s) {
 }
 
 async function dismissDialogs(s, tag) {
-  const d = await s.eval(`(() => {
+  const d = await s.evaluate(`(() => {
     const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
       return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
     const btns = [...document.querySelectorAll('button.app-dialog-host-btn, .modal-overlay button, [role=dialog] button')].filter(vis);
@@ -152,7 +152,7 @@ async function clickMenu(s, text, timeoutMs = 60000) {
   const end = Date.now() + timeoutMs;
   let last = '';
   while (Date.now() < end) {
-    const ok = await s.eval(`(() => {
+    const ok = await s.evaluate(`(() => {
       const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
         return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
       const items = [...document.querySelectorAll('button.menu-item, nav button, aside button')].filter(vis);
@@ -176,7 +176,7 @@ async function clickAny(s, text, { exact = true, timeoutMs = 60000 } = {}) {
   const end = Date.now() + timeoutMs;
   let last = '';
   while (Date.now() < end) {
-    const ok = await s.eval(`(() => {
+    const ok = await s.evaluate(`(() => {
       const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
         return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
       const nodes = [...document.querySelectorAll('button, a, div, span, li')].filter(vis);
@@ -206,7 +206,7 @@ async function ensureWorkspace(s, tag) {
   if (st.hasOnboarding) {
     await dismissDialogs(s, tag);
     log(`[${tag}] first-run wizard detected; clicking its "enter first, configure later" action`);
-    const r = await s.eval(`(() => {
+    const r = await s.evaluate(`(() => {
       const vis = (el) => { const r = el.getBoundingClientRect(); return r.width>0&&r.height>0; };
       const btns = [...document.querySelectorAll('button')].filter(vis);
       const hit = btns.find(b => (b.innerText||'').includes('先进入'))
@@ -230,7 +230,7 @@ async function doLogin(s, tag) {
   await sleep(400);
   await s.typeInto('input[name=password]', PASS);
   await sleep(700);
-  const clicked = await s.eval(`(() => {
+  const clicked = await s.evaluate(`(() => {
     const vis = (el) => { const r = el.getBoundingClientRect(); return r.width>0&&r.height>0; };
     const btns = [...document.querySelectorAll('button')].filter(vis);
     const hit = btns.find(b => (b.innerText||'').replace(/\\s+/g,'') === '登录');
@@ -267,7 +267,7 @@ async function doLogout(s, tag) {
   await openSettings(s, tag);
   await clickAny(s, '退出登录');
   await sleep(2500);
-  const dlg = await s.eval(`(() => {
+  const dlg = await s.evaluate(`(() => {
     const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
       return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
     const ovs = [...document.querySelectorAll('.modal-overlay, .modal.active, [role=dialog]')].filter(vis);
@@ -278,7 +278,7 @@ async function doLogout(s, tag) {
   })()`);
   log(`[${tag}] confirm dialog:`, JSON.stringify(dlg));
   if (dlg.dialog) {
-    const r = await s.eval(`(() => {
+    const r = await s.evaluate(`(() => {
       const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
         return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
       const ovs = [...document.querySelectorAll('.modal-overlay, .modal.active, [role=dialog]')].filter(vis);
