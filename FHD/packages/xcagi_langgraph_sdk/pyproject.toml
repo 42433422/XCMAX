@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-sdk"
-version = "0.4.2"
+version = "0.4.4"
 description = "SDK for interacting with LangGraph API. XCAGI vendored fork (LG-W0-11)."
 authors = []
 requires-python = ">=3.10"

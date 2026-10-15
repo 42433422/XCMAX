@@ -107,10 +107,18 @@ build_one_sku() {
   fi
 
   printf '{"sku":"%s","schema_version":1}\n' "${sku}" > desktop/resources/product-sku.json
-  local build_sha
+  local build_sha recovery_dir
   build_sha="$("${PYTHON:-python3}" scripts/package/generate-desktop-build-info.py --version "${VERSION}")"
   export XCAGI_BUILD_SHA="${build_sha}"
   "${PYTHON:-python3}" scripts/package/generate-desktop-resources.py
+  recovery_dir="desktop/resources/legacy-macos-recovery/${sku}-$(uname -m | sed 's/x86_64/x64/')"
+  "${PYTHON:-python3}" scripts/package/prepare-macos-legacy-recovery.py --sku "${sku}" --arch "$(uname -m | sed 's/x86_64/x64/')" --out "${recovery_dir}"
+  "${PYTHON:-python3}" - "${builder_config}" "${recovery_dir#desktop/}" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1])
+p.write_text(p.read_text().replace('publish:\n', f'  - from: {sys.argv[2]}\n    to: legacy-macos-recovery\npublish:\n', 1))
+PY
 
   (cd desktop && [ -d node_modules ] || npm install)
   # Finder/provenance xattrs can survive npm's Electron extraction and make
