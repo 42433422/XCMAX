@@ -1,9 +1,7 @@
 # CI SSOT: generated from FHD/.github/workflows/mod-auto-publish.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Mod Auto Publish
-
-# Standard main host plus independently versioned, explicitly public Mods.
-# Private customer artifacts use the owner-bound production-center channel.
+# Public Mods use the main host; private releases use the owner-bound production center.
 on:
   pull_request:
     branches: [main]
@@ -16,6 +14,7 @@ on:
       source_sha:
         description: "Exact 40-character commit in main history with successful required checks"
         required: true
+      publish_release: {description: "Publish only with separate release authorization", type: boolean, default: false, required: true}
       mod_id:
         description: "One Mod id; blank discovers changes at source_sha"
         required: false
@@ -26,7 +25,6 @@ permissions:
   checks: read
   statuses: read
 
-# A pending release for a different Mod must never be cancelled by this workflow.
 defaults:
   run:
     working-directory: .
@@ -53,7 +51,7 @@ jobs:
       - name: Resolve exact main sources, version bumps and successful checks
         id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_PROTECTION_TOKEN }}
           REQUESTED_MOD_ID: ${{ inputs.mod_id }}
         run: |
           set -euo pipefail
@@ -73,7 +71,7 @@ jobs:
 
   package-and-publish:
     needs: prepare
-    if: needs.prepare.outputs.count != '0'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && needs.prepare.outputs.count != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
