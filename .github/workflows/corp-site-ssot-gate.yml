@@ -40,7 +40,7 @@ on:
       - '.github/workflows/corp-site-ssot-gate.yml'
 
 concurrency:
-  group: corp-site-ssot-gate
+  group: corp-site-ssot-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
