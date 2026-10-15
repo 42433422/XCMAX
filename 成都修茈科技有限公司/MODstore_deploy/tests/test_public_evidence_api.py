@@ -47,9 +47,7 @@ def _enable_cos(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XCMAX_EVIDENCE_COS_SECRET_KEY", "secret-test-only")
 
 
-def _mock_cos(
-    monkeypatch: pytest.MonkeyPatch, handler=None, version="v1"
-) -> list[httpx.Request]:
+def _mock_cos(monkeypatch: pytest.MonkeyPatch, handler=None, version="v1") -> list[httpx.Request]:
     seen: list[httpx.Request] = []
 
     def wrapped(request: httpx.Request) -> httpx.Response:
@@ -103,16 +101,8 @@ def test_unregistered_or_unsafe_names_are_rejected(
     _enable_cos(monkeypatch)
     seen = _mock_cos(monkeypatch, lambda r: httpx.Response(200))
     client = _client()
-    assert (
-        client.get(
-            "/api/public/evidence/missing.png", follow_redirects=False
-        ).status_code
-        == 404
-    )
-    assert (
-        client.get("/api/public/evidence/evil.png", follow_redirects=False).status_code
-        == 404
-    )
+    assert client.get("/api/public/evidence/missing.png", follow_redirects=False).status_code == 404
+    assert client.get("/api/public/evidence/evil.png", follow_redirects=False).status_code == 404
     assert client.get("/api/public/evidence/verify/evil.png").status_code == 404
     assert seen == []
 
@@ -130,9 +120,7 @@ def test_matching_object_redirects_to_short_lived_presigned_url(
     assert loc.scheme == "https" and loc.netloc == HOST and loc.path == "/" + KEY
     assert "q-signature=" in loc.query and "q-ak=AKIDtestonly" in loc.query
     assert "secret-test-only" not in resp.headers["location"]
-    start, end = [
-        int(x) for x in loc.query.split("q-sign-time=")[1].split("&")[0].split(";")
-    ]
+    start, end = [int(x) for x in loc.query.split("q-sign-time=")[1].split("&")[0].split(";")]
     assert end - start == 960  # 60 秒时钟偏差 + 900 秒有效期
     assert seen[0].method == "HEAD" and seen[0].headers["authorization"].startswith(
         "q-sign-algorithm=sha1"
@@ -146,9 +134,7 @@ def test_matching_object_redirects_to_short_lived_presigned_url(
 @pytest.mark.parametrize(
     "response",
     [
-        httpx.Response(
-            200, headers={"x-cos-meta-sha256": "b" * 64, "content-length": "1234"}
-        ),
+        httpx.Response(200, headers={"x-cos-meta-sha256": "b" * 64, "content-length": "1234"}),
         httpx.Response(200, headers={"content-length": "1234"}),
         httpx.Response(200, headers={"x-cos-meta-sha256": SHA, "content-length": "99"}),
         httpx.Response(404),
@@ -166,9 +152,7 @@ def test_hash_mismatch_or_missing_object_serves_local_copy(
     assert verdict["match"] is False and verdict["reason"]
 
 
-def test_unreachable_cos_serves_local_copy(
-    index: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_unreachable_cos_serves_local_copy(index: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _enable_cos(monkeypatch)
 
     def boom(request: httpx.Request) -> httpx.Response:
@@ -190,9 +174,7 @@ def test_verify_reports_index_and_object_metadata(
     assert body["cos_size"] == 1234 and body["cos_version_id"] == "v9"
 
 
-def test_status_never_exposes_credentials(
-    index: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_never_exposes_credentials(index: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _enable_cos(monkeypatch)
     resp = _client().get("/api/public/evidence/_status")
     text = resp.text
@@ -202,12 +184,7 @@ def test_status_never_exposes_credentials(
 
 def test_committed_index_only_allows_evidence_media() -> None:
     """仓库内构建产物：每个条目都落在证据前缀下且为截图 / 录像。"""
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "data"
-        / "capabilities"
-        / "evidence-index.json"
-    )
+    path = Path(__file__).resolve().parents[2] / "data" / "capabilities" / "evidence-index.json"
     assets = json.loads(path.read_text(encoding="utf-8"))["assets"]
     assert assets
     for name, entry in assets.items():
@@ -215,9 +192,7 @@ def test_committed_index_only_allows_evidence_media() -> None:
         assert (
             entry["key"]
             .lower()
-            .endswith(
-                (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov")
-            )
+            .endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov"))
         )
 
 
