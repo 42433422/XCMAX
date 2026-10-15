@@ -56,16 +56,7 @@ def _parse_order_text(order_text: str) -> dict:
         )
 
         text = text.replace("的规格", "规格")
-        slot_text = (
-            strip_bill_keywords(original_text)
-            .replace("。", " ")
-            .replace("，", " ")
-            .replace(",", " ")
-            .replace("、", " ")
-            .replace("：", " ")
-            .replace(":", " ")
-            .replace("的规格", "规格")
-        )
+        slot_text = text
 
         # 倒装写法「20L规格」「28的规格」：数字（可带 L/升）在「规格」前，统一改写成
         # 「规格+数字」正序，避免数字被当成编号、「规格」二字残留进单位名。
