@@ -64,10 +64,6 @@ function targetBasename(value: string): string {
   return path.basename(value)
 }
 
-/**
- * Restore the previous app and pre-migration DB after the failed process exits.
- * On failure, preserve SQLite sidecars and compensate both swaps before exiting.
- */
 export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions): string {
   const currentPid = Math.trunc(options.currentPid)
   if (!Number.isSafeInteger(currentPid) || currentPid <= 0) {
@@ -139,9 +135,22 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '$ownedPromotedFiles = @()',
     '$ownedOriginalDirectories = @()',
     '$helperReady = $false',
+    'function Native-Path([string]$file) { if ($file.StartsWith("\\\\?\\")) { return $file }; if ($file.StartsWith("\\\\")) { return "\\\\?\\UNC\\" + $file.Substring(2) }; return "\\\\?\\" + $file }',
     'function File-Sha256([string]$file) {',
-    '  $stream = [IO.File]::OpenRead($file); $hash = [Security.Cryptography.SHA256]::Create()',
+    '  $stream = [IO.File]::OpenRead((Native-Path $file)); $hash = [Security.Cryptography.SHA256]::Create()',
     '  try { return [BitConverter]::ToString($hash.ComputeHash($stream)).Replace("-", "") } finally { $stream.Dispose(); $hash.Dispose() }',
+    '}',
+    'function Copy-AppTree([string]$source, [string]$dest) {',
+    '  foreach ($file in @(Get-ChildItem -LiteralPath $source -Recurse -Force)) {',
+    '    $target = $dest + $file.FullName.Substring($source.Length)',
+    '    if ($file.PSIsContainer) { [IO.Directory]::CreateDirectory((Native-Path $target)) | Out-Null; continue }',
+    '    [IO.Directory]::CreateDirectory((Native-Path (Split-Path -Parent $target))) | Out-Null',
+    '    $copyDeadline = (Get-Date).AddSeconds(180)',
+    '    while ($true) {',
+    '      try { [IO.File]::Copy((Native-Path $file.FullName), (Native-Path $target), $true); break }',
+    '      catch { if ((Get-Date) -ge $copyDeadline) { throw }; Start-Sleep -Seconds 2 }',
+    '    }',
+    '  }',
     '}',
     'function Assert-AppSnapshot([string]$root) {',
     '  $expected = @($expectedAppFiles.PSObject.Properties)',
@@ -246,7 +255,7 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '  New-Item -ItemType Directory -Path $stagingDir | Out-Null',
     '  $stagingCreated = $true',
     '  Assert-AppSnapshot $backupRoot',
-    '  Get-ChildItem -LiteralPath $backupRoot -Force | Copy-Item -Destination $stagingDir -Recurse -Force',
+    '  Copy-AppTree $backupRoot $stagingDir',
     '  Assert-AppSnapshot $stagingDir',
     '  if (-not (Test-Path -LiteralPath (Join-Path $stagingDir $appFileName))) {',
     '    throw "staged rollback executable missing: $appFileName"',
@@ -262,17 +271,7 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '  function Install-SnapshotInPlace([string]$source, [string]$dest) {',
     '    $root = [IO.Path]::GetFullPath($source).TrimEnd("\\")',
     '    $destRoot = [IO.Path]::GetFullPath($dest).TrimEnd("\\")',
-    '    foreach ($file in @(Get-ChildItem -LiteralPath $root -Recurse -File -Force)) {',
-    '      $rel = $file.FullName.Substring($root.Length).TrimStart("\\")',
-    '      $target = Join-Path $destRoot $rel',
-    '      $parent = Split-Path -Parent $target',
-    '      if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }',
-    '      $copyDeadline = (Get-Date).AddSeconds(180)',
-    '      while ($true) {',
-    '        try { [IO.File]::Copy($file.FullName, $target, $true); break }',
-    '        catch { if ((Get-Date) -ge $copyDeadline) { throw }; Start-Sleep -Seconds 2 }',
-    '      }',
-    '    }',
+    '    Copy-AppTree $root $destRoot',
     '    $expected = @($expectedAppFiles.PSObject.Properties.Name)',
     '    if ($expected.Count) {',
     '      foreach ($file in @(Get-ChildItem -LiteralPath $destRoot -Recurse -File -Force)) {',
