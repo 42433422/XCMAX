@@ -9,18 +9,16 @@ function setup(recoveryRecordIsDirectory = false) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-macos-rollback-'))
   const app = path.join(root, "Customer's XCAGI.app")
   const backup = path.join(root, 'previous.app')
-  const data = path.join(root, 'data')
+  const data = path.join(root, "data #?%'")
   const marker = path.join(root, 'rollback-marker.json')
   const applied = path.join(root, 'rollback-applied.json')
   const db = path.join(data, 'xcagi.db')
   const dbBackup = path.join(data, 'pre-migration.db')
-  for (const dir of [path.join(app, 'Contents'), path.join(backup, 'Contents'), data]) {
-    fs.mkdirSync(dir, { recursive: true })
-  }
+  for (const dir of [path.join(app, 'Contents'), path.join(backup, 'Contents'), data]) fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(path.join(app, 'Contents', 'version'), 'new')
   fs.writeFileSync(path.join(backup, 'Contents', 'version'), 'old')
   fs.writeFileSync(db, 'migrated')
-  execFileSync('python3', ['-c', "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('CREATE TABLE records(value TEXT)'); c.execute(\"INSERT INTO records VALUES ('pre-migration')\"); c.commit(); c.close()", dbBackup])
+  execFileSync('python3', ['-c', "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('PRAGMA journal_mode=WAL'); c.execute('CREATE TABLE records(value TEXT)'); c.execute(\"INSERT INTO records VALUES ('pre-migration')\"); c.commit(); c.close()", dbBackup])
   fs.writeFileSync(marker, '{}')
   if (recoveryRecordIsDirectory) fs.mkdirSync(applied)
   return { root, app, marker, applied, db, options: {
@@ -36,7 +34,7 @@ function setup(recoveryRecordIsDirectory = false) {
 const scriptForTestHost = (script: string) => process.platform === 'darwin' ? script : script.replace('ditto "$backup" "$staging"', 'cp -a "$backup" "$staging"').replace('/usr/bin/base64 -D', 'base64 -d')
 
 describe('macOS full rollback helper', () => {
-  it('restores the previous app and database after exit, including paths with quotes', () => {
+  it('restores a standalone WAL snapshot after exit, including URI characters and quotes', () => {
     const f = setup()
     const bin = path.join(f.root, 'bin')
     const opened = path.join(f.root, 'opened')

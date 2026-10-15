@@ -92,11 +92,17 @@ class _LLMWorkflowPlannerPart02Mixin:
         self, plan_id: str, message: str, tool_registry: dict[str, _facade().Any]
     ) -> _facade().PlanGraph:
         from app.application.normal_chat_dispatch import route_normal_mode_message
-        from app.application.workflow.sql_execution_policy import rejected_sql_plan
+        from app.application.workflow.sql_execution_policy import (
+            database_maintenance_plan,
+            rejected_sql_plan,
+        )
 
         rejected = rejected_sql_plan(message, plan_id)
         if rejected is not None:
             return rejected
+        restore = database_maintenance_plan(message, plan_id, tool_registry)
+        if restore is not None:
+            return restore
         route = route_normal_mode_message(message)
         if route.get("intent") == "desktop":
             from app.application.workflow.planner_part03 import desktop_action_plan

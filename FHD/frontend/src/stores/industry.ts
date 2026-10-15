@@ -5,6 +5,7 @@ import { useModsStore } from '@/stores/mods'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { asRecord, asArray, asString } from '@/utils/typeGuards'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 interface Industry {
   id: number | string
@@ -23,6 +24,8 @@ export const useIndustryStore = defineStore('industry', () => {
   const error = ref<string | null>(null)
   // Phase 2 会通过 templatePreviewApi.getTermRules 填充；Phase 1 先留空。
   const termRules = ref<Record<string, unknown>>({})
+  let readVersion = 0
+  let verifiedEpoch = -1
   let initInFlight: Promise<void> | null = null
 
   const currentIndustryName = computed(() => {
@@ -84,73 +87,68 @@ export const useIndustryStore = defineStore('industry', () => {
     }
   }
 
+  function applyCurrentIndustry(value: Industry | null) {
+    currentIndustry.value = value
+    currentConfig.value = value
+  }
+
+  function fallbackIndustry(): Industry | null {
+    const ind = activeModIndustryConfig()
+    const id = String(ind?.id || '').trim()
+    return ind && id ? { id, name: String(ind.name || id), code: id,
+      description: typeof ind.description === 'string' ? ind.description : '', config: ind, ...ind } : null
+  }
+
   async function loadCurrentIndustry() {
     loading.value = true
     error.value = null
-
     try {
       const response = await systemApi.getCurrentIndustry()
-      if (response.success && response.data) {
-        currentIndustry.value = response.data as Industry
-        currentConfig.value = response.data
-      } else {
-        // server 没给当前行业时，用当前 active mod 的 manifest.industry 兜底，
-        // 让 primaryUnit / intent_keywords 至少能跟着 mod 选择走。
-        const modInd = activeModIndustryConfig()
-        if (modInd) {
-          const id = String(modInd.id || '').trim()
-          if (id) {
-            const fallback: Industry = {
-              id,
-              name: String(modInd.name || id),
-              code: id,
-              description: typeof modInd.description === 'string' ? modInd.description : '',
-              config: modInd,
-              ...modInd,
-            }
-            currentIndustry.value = fallback
-            currentConfig.value = fallback
-          }
-        }
+      if (response.success && response.data) applyCurrentIndustry(response.data as Industry)
+      else {
+        const fallback = fallbackIndustry()
+        if (fallback) applyCurrentIndustry(fallback)
       }
     } catch (err) {
       error.value = err instanceof Error ? err.message : '加载当前行业失败'
       console.error('Failed to load current industry:', err)
-      const modInd = activeModIndustryConfig()
-      if (modInd) {
-        const id = String(modInd.id || '').trim()
-        if (id) {
-          const fallback: Industry = {
-            id,
-            name: String(modInd.name || id),
-            code: id,
-            description: typeof modInd.description === 'string' ? modInd.description : '',
-            config: modInd,
-            ...modInd,
-          }
-          currentIndustry.value = fallback
-          currentConfig.value = fallback
-        }
-      }
+      const fallback = fallbackIndustry()
+      if (fallback) applyCurrentIndustry(fallback)
     } finally {
       loading.value = false
     }
   }
 
-  /**
-   * 只读从 server 加载行业 SSOT：同时拉取行业列表与当前行业。
-   * Phase 1 不再写入 server（switchIndustry 已删除）；Phase 2 会扩展 termRules。
-   */
-  async function loadFromServer(): Promise<void> {
+  /** Login requires verified server data; ordinary display refresh retains its existing fallback. */
+  async function loadFromServer(required = false): Promise<void> {
+    if (!required) return void await Promise.all([loadIndustries(), loadCurrentIndustry()])
+    const epoch = productReadAccountEpoch.value
+    const version = ++readVersion
+    const currentRequest = () => epoch === productReadAccountEpoch.value && version === readVersion
     loading.value = true
     error.value = null
+    if (verifiedEpoch !== epoch) {
+      applyCurrentIndustry(null)
+      industries.value = []
+    }
     try {
-      await Promise.all([loadIndustries(), loadCurrentIndustry()])
+      const [list, selected] = await Promise.allSettled([systemApi.getIndustries(), systemApi.getCurrentIndustry()])
+      if (!currentRequest()) throw new Error('登录工作空间已改变，请重试')
+      if (selected.status === 'rejected') throw selected.reason
+      const current = selected.value
+      if (current.success !== true || !String(asRecord(current.data).id || '').trim()) {
+        throw new Error('工作空间行业资料未就绪，请重新登录')
+      }
+      // The list is optional display data; it never grants account permissions.
+      industries.value = list.status === 'fulfilled' && list.value.success
+        ? asArray<Industry>(asRecord(list.value.data).industries) : []
+      applyCurrentIndustry(current.data as Industry)
+      verifiedEpoch = epoch
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '从服务器加载行业失败'
-      console.error('Failed to load industry from server:', err)
+      if (currentRequest()) error.value = err instanceof Error ? err.message : '从服务器加载行业失败'
+      throw err
     } finally {
-      loading.value = false
+      if (currentRequest()) loading.value = false
     }
   }
 

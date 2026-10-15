@@ -1,0 +1,76 @@
+{
+ "id": 37,
+ "user_id": 77,
+ "ticket_no": "CI54d2a3df461aab10dd1451ef2667823cd7ce31c21b13ec25",
+ "status": "processing",
+ "decision_status": "approved",
+ "closed_at": "None",
+ "updated_at": "2026-10-11 03:02:35.062914",
+ "evidence_keys": [
+  "acceptance_criteria",
+  "customer_instance_id",
+  "description",
+  "employee_reports",
+  "git_sha",
+  "installed_version",
+  "intake_request_sha256",
+  "issue_domain",
+  "product_version",
+  "resolution",
+  "shared_core_prerequisite",
+  "source",
+  "source_ref",
+  "support_bundle_sha256",
+  "target_mod_id",
+  "title",
+  "work_order_id"
+ ],
+ "resolution": {
+  "schema_version": 1,
+  "ticket_id": 37,
+  "owner_user_id": 77,
+  "route": "shared_core",
+  "state": "repair_failed",
+  "source_ref": "TLA-20261011-R1",
+  "original_title": "[验收测试] ai_issue_implement 文档示例里有 --llm-api-key 命令行参数",
+  "original_request": "【XCMAX 工单闭环验收测试工单，测试租户A，非真实客户】现象：FHD/scripts/dev/ai_issue_implement.py 顶部文档字符串『CI 中（实际执行）』示例里有一行 --llm-api-key \"${XCAGI_LLM_API_KEY:-}\"，会鼓励把密钥写进命令行参数。期望：只删除这一行，其余不动（对应 GitHub 测试 issue #2234）。发生时间 2026-10-11 10:55（UTC+8），模块：发版解决问题/AI Issue Implement 文档。联系人：TEST-TICKET-LOOP-A。",
+  "reported_version": "1.0.0.5",
+  "incident_event_id": 85174,
+  "repair_verified": false,
+  "team": [
+   {
+    "role": "scout",
+    "employee_id": "change-request-auditor",
+    "ok": false,
+    "status": "unknown"
+   },
+   {
+    "role": "fix",
+    "employee_id": "vibe-coding-maintainer",
+    "ok": true,
+    "status": "unknown"
+   },
+   {
+    "role": "verify",
+    "employee_id": "test-qa-runner",
+    "ok": false,
+    "status": "unknown"
+   }
+  ],
+  "updated_at": "2026-10-11T03:02:35.051244+00:00"
+ },
+ "_cs_progress": null,
+ "employee_reports": [
+  {
+   "type": "incident_team",
+   "progress_sha256": "29bd31b4367604658b56159c6bbb27935ef8fa0a036eee68ad1d74a5881fc4bc",
+   "event_id": 85174,
+   "team_ok": false,
+   "progress": "排查（change-request-auditor）未完成（unknown）；修复（vibe-coding-maintainer）已完成；验证（test-qa-runner）未完成（unknown）",
+   "at": "2026-10-11T03:02:35.062928+00:00"
+  }
+ ],
+ "reopen_history": null,
+ "customer_decisions": null,
+ "outbox": []
+}

@@ -16,17 +16,9 @@
   },
   "jest": {
     "testEnvironment": "jsdom",
-    "moduleFileExtensions": [
-      "js",
-      "json"
-    ],
-    "testMatch": [
-      "**/tests/**/*.test.js"
-    ],
-    "collectCoverageFrom": [
-      "static/js/**/*.js",
-      "!static/js/**/*.test.js"
-    ]
+    "moduleFileExtensions": ["js", "json"],
+    "testMatch": ["**/tests/**/*.test.js"],
+    "collectCoverageFrom": ["static/js/**/*.js", "!static/js/**/*.test.js"]
   },
   "overrides": {
     "@babel/core": "7.29.6",
@@ -35,5 +27,8 @@
     "brace-expansion@^1.0.0": "1.1.21",
     "js-yaml": "4.3.2",
     "sharp": "0.35.5"
+  },
+  "engines": {
+    "node": "^22.18.0 || >=24.11.0"
   }
 }

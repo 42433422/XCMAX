@@ -12,15 +12,13 @@
 | [QUICK_START.md](QUICK_START.md) | 快速启动 |
 | [MIGRATION_REGISTRY.md](MIGRATION_REGISTRY.md) | 迁移与入口统一登记 |
 | [TECH_STACK.md](TECH_STACK.md) | 技术栈摘要 |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | 部署相关 |
+| [SSOT_INDEX.md](SSOT_INDEX.md) | 发布与部署入口 |
 | [reports/capacity-planning.md](reports/capacity-planning.md) | 容量规划、k6 `scripts/loadtest` 基线与目标 SLO；MODstore 全链路数字见姊妹仓 `MODstore_deploy/docs/perf-benchmark-public.md` |
 | [reports/FHD_DEPTH_ASSESSMENT_REVISED_2026-05-03.md](reports/FHD_DEPTH_ASSESSMENT_REVISED_2026-05-03.md) | FHD/XCAGI 深度评估（修订版，与源码核实对齐） |
 | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 覆盖率 `fail_under` 分阶段目标与补测清单 |
 | [guides/RATE_LIMITING.md](guides/RATE_LIMITING.md) | 全站 / 路由级 / Redis 限流并存策略 |
 | [guides/DEPENDENCY_LOCKS.md](guides/DEPENDENCY_LOCKS.md) | uv / Poetry 依赖锁定与 CI 安装说明 |
 | [DELIVERABLE_PRODUCT.md](DELIVERABLE_PRODUCT.md) | **可交付产品**：交付物清单、验收 API、发版自检命令 |
-| [DELIVERABLE_PRODUCT.md](DELIVERABLE_PRODUCT.md) | **可交付产品**：交付物清单、验收 API、发版自检 |
-| [guides/PRODUCT_USER_FLOW.md](guides/PRODUCT_USER_FLOW.md) | **产品用户流程**：安装→首启→宿主就绪→行业 MOD→日常使用（实施必读） |
 | [security/LOCAL_DATA_POLICY.md](security/LOCAL_DATA_POLICY.md) | **客户交付**：版本与安装包对齐、升级/回滚、日志与诊断包、SLA 话术模板 |
 
 ## 子项目入口

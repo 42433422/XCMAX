@@ -9,34 +9,14 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import types
-import uuid
 from pathlib import Path
 
 import pytest
 
+from tests.test_customer_service_api import _make_user
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EMPLOYEE_ROOT = REPO_ROOT / "FHD" / "mods" / "_employees"
-
-
-def _make_user(username: str, *, admin: bool = False):
-    from modstore_server.models import User, get_session_factory
-
-    username = f"{username}_{uuid.uuid4().hex[:8]}"
-    sf = get_session_factory()
-    with sf() as session:
-        user = User(
-            username=username,
-            email=f"{username}@pytest.local",
-            password_hash="x",
-            is_admin=admin,
-        )
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-        return types.SimpleNamespace(
-            id=user.id, username=user.username, email=user.email, is_admin=user.is_admin
-        )
 
 
 def _load_intake():

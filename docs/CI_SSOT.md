@@ -221,7 +221,7 @@ PR Fast CI
 
 - **产品版本锚点**：产品 `1.0.0.1`，工具链 `1.0.0`（见 `FHD/VERSION.md`）。
 - **Git tag（发版触发）**：`FHD/v1.0.0.1`；制品身份同时记录 `git_sha` + `sha256`。
-- **串联（单一编排入口）**：`FHD/v*` tag 仅触发两个 workflow —— `fhd-ci-cd.yml`（测试+镜像+CVM）与 `fhd-release-orchestrator.yml`。后者先跑 `verify-version-anchors`，再 **dispatch** 客户端 `fhd-release-desktop/web/android.yml`（**仅 Android**；服务器由 `fhd-ci-cd` 的 `cvm-push-release` 负责）。这些被编排的 workflow **已移除自身 `FHD/v*` tag 触发**，避免 tag 推送时双重运行。详见 [FHD/docs/deploy/RELEASE_CHECKLIST.md](FHD/docs/deploy/RELEASE_CHECKLIST.md)。
+- **串联（单一编排入口）**：`FHD/v*` tag 仅触发两个 workflow —— `fhd-ci-cd.yml`（测试+镜像+CVM）与 `fhd-release-orchestrator.yml`。后者先跑 `verify-version-anchors`，再 **dispatch** 客户端 `fhd-release-desktop/web/android.yml`（**仅 Android**；服务器由 `fhd-ci-cd` 的 `cvm-push-release` 负责）。这些被编排的 workflow **已移除自身 `FHD/v*` tag 触发**，避免 tag 推送时双重运行。桌面验收见 [双端平级 SSOT](../FHD/docs/desktop_platform_parity_ssot.md)，服务端按已登记的部署链执行。
 
 ## 多环境 channel（stable / staging）
 

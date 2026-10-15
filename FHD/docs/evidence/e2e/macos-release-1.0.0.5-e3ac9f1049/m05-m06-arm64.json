@@ -1,0 +1,37 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M05.package-verify+M06.sign-notarize",
+ "platform": "macos",
+ "round": "M04-M16-2026-10-12",
+ "product_version": "1.0.0.5",
+ "release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "architecture": "arm64",
+ "build_run_id": 38231964156,
+ "workflow": "fhd-release-desktop-mac-ota",
+ "build_conclusion": "success",
+ "artifact": "mac-acceptance-e3ac9f1049cb3f25c73dd41c184f6787bb24f897-arm64",
+ "dmg": "XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+ "dmg_sha256": "b1edf7cbaebc00336f52d1009315a9be04a0955e6529e0fab4c2383a1525be9e",
+ "zip_sha256": "d6b4ae1a5beba107fa796e16b57a0b731141a2faa2873cd65b72b2f7b736c292",
+ "build_info": {
+  "schema_version": 1,
+  "gitSha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+  "version": "1.0.0.5",
+  "releaseId": "xcagi-1.0.0.5-e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+  "builtAt": "2026-10-12T09:51:04.060Z"
+ },
+ "latest_mac_yml": {
+  "buildSha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+  "releaseDate": "2026-10-12T10:16:24.937Z",
+  "signature": "ed25519 present"
+ },
+ "codesign_deep_strict": "PASS",
+ "signature": "Developer ID Application: jialong Li (G26WSH472M), TeamIdentifier G26WSH472M, not adhoc",
+ "stapler_validate": "PASS",
+ "gatekeeper_app": "accepted (source=Notarized Developer ID)",
+ "gatekeeper_dmg": "accepted (source=Notarized Developer ID)",
+ "binary_arch": "arm64",
+ "build_run_note": "同 SHA 另有并行 arm64 构建 run 38233029145（非本轮派发，产物未采用），本轮交付采用 run 38231964156",
+ "captured_at_utc": "2026-10-12T10:31:13Z",
+ "verdict": "PASS"
+}
