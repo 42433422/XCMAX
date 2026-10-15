@@ -52,7 +52,7 @@ function cleanRollbackState() {
   const rollbackDir = path.join(userData, 'rollback')
   try { fs.rmSync(rollbackDir, { recursive: true, force: true }) } catch {}
   try { fs.unlinkSync(path.join(userData, 'rollback-marker.json')) } catch {}
-  try { fs.unlinkSync(path.join(userData, 'rollback-applied.json')) } catch {}
+  for (const file of ['rollback-applied.json', 'rollback-applied.last.json']) { try { fs.unlinkSync(path.join(userData, file)) } catch {} }
 }
 beforeEach(() => {
   cleanRollbackState()
@@ -247,9 +247,12 @@ describe('rollback — consumeRollbackApplied', () => {
         toVersion: 'old'
       })
     )
+    const durablePath = path.join(electronMocks.__userDataDir, 'rollback-applied.last.json'), receipt = fs.readFileSync(appliedPath)
+    fs.writeFileSync(durablePath, receipt)
     const { consumeRollbackApplied } = await import('./rollback.js')
     expect(consumeRollbackApplied()?.reason).toBe('test')
     expect(consumeRollbackApplied()).toBeNull()
+    expect(fs.readFileSync(durablePath)).toEqual(receipt)
   })
 })
 
@@ -324,6 +327,7 @@ describe('rollback — Windows full app restore scheduling', () => {
       const result = await triggerRollback('window failed')
       expect(result).toEqual({ mode: 'windows-full', scheduled: true })
       expect(windowsRollbackMocks.launchWindowsFullRollback).toHaveBeenCalledOnce()
+      expect(windowsRollbackMocks.launchWindowsFullRollback).toHaveBeenLastCalledWith(expect.objectContaining({ applied: expect.objectContaining({ operationId: checkPendingRollback()?.operationId }) }))
       expect(checkPendingRollback()).not.toBeNull()
     } finally {
       cleanup()
@@ -597,6 +601,9 @@ describe('rollback — triggerRollback defensive paths', () => {
 
       const { prepareRollback, triggerRollback, checkRollbackApplied } = await import('./rollback.js')
       await prepareRollback('10.4.0')
+      const prepared = JSON.parse(fs.readFileSync(path.join(electronMocks.__userDataDir, 'rollback-marker.json'), 'utf8'))
+      if (process.platform === 'win32') expect(prepared.operationId).toMatch(/^[0-9a-f-]{36}$/)
+      else expect(prepared.operationId).toBeUndefined()
       fs.writeFileSync(path.join(backendDir, exeName), 'broken')
       fs.rmSync(path.join(backendDir, '_internal'), { recursive: true, force: true })
 
@@ -611,6 +618,7 @@ describe('rollback — triggerRollback defensive paths', () => {
         expect(fs.readFileSync(path.join(backendDir, exeName), 'utf8')).toBe('fake-backend')
         expect(fs.readFileSync(path.join(backendDir, '_internal', 'data.txt'), 'utf8')).toBe('original')
         const applied = checkRollbackApplied()
+        expect(applied?.operationId).toBe(prepared.operationId)
         expect(applied?.fromVersion).toBe('10.4.0')
         expect(applied?.toVersion).toBe('10.0.0')
       }

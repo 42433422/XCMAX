@@ -192,6 +192,18 @@ class DatabaseService(NeuroEventPublisherMixin):
 
             logger.info("数据库恢复成功：从 %s 恢复到 %s", backup_path, db_path)
 
+            data_root = os.environ.get("XCAGI_DATA_DIR")
+            if (
+                os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower()
+                in {"1", "true", "yes", "on"}
+                and data_root
+                and Path(db_path).resolve() == Path(data_root).resolve() / "data" / "xcagi.db"
+            ):
+                from app.desktop_runtime.paths import clear_database_recovery_marker
+
+                if clear_database_recovery_marker(data_root):
+                    os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = f"restored:{Path(backup_path).name}"
+
             return {"success": True, "message": "数据库恢复成功"}
 
         except _RestoreAuditReferenceError as error:

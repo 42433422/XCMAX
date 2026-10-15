@@ -44,6 +44,7 @@ public static class ManualUpgradeCases
             File.WriteAllText(Path.Combine(data, "mods", "northwind", "manifest.json"), "{\"id\":\"northwind\",\"version\":\"2.4.0\"}");
             File.WriteAllText(Path.Combine(data, "mods", "northwind", "backend", "models", "product.py"), "candidate official Mod code");
             File.WriteAllText(Path.Combine(data, "data", "mod_dbs", "customer-reporting.db"), "candidate private Mod database");
+            File.WriteAllText(Path.Combine(data, "mods", new string('x', 100), new string('y', 100), "retained.txt"), "candidate deep Mod code");
         }
         File.WriteAllText(Environment.GetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_READY")!, "ready");
         if (mode == "cancel") await Task.Delay(30000);
@@ -59,7 +60,7 @@ public static class ManualUpgradeCases
         root = Path.Combine(root, "manual-upgrade-cases"); Directory.CreateDirectory(root);
         var results = new List<object>();
         var selectedCase = Environment.GetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_CASE");
-        foreach (var mode in new[] { "failure", "crash", "missing-backend", "success", "cancel", "bad-db", "truncated-db", "bad-manifest", "missing-snapshot", "locked-db", "large", "post-failure", "absent-db", "metadata-locked-marker", "metadata-locked-receipt" }.Where(x => string.IsNullOrEmpty(selectedCase) || x == selectedCase))
+        foreach (var mode in new[] { "failure", "crash", "missing-backend", "success", "cancel", "bad-db", "truncated-db", "bad-manifest", "missing-snapshot", "locked-db", "large", "post-failure", "absent-db", "metadata-locked-marker", "metadata-locked-receipt", "long-path", "desktop-handoff", "foreign-handoff" }.Where(x => string.IsNullOrEmpty(selectedCase) || x == selectedCase))
         {
             var home = Path.Combine(root, mode + " space ' path"); var app = Path.Combine(home, "installed app"); var data = Path.Combine(home, "user data"); Directory.CreateDirectory(app);
             SeedApp(app, mode == "large" ? 2824 : 5); Directory.CreateDirectory(Path.Combine(data, "data")); var db = Path.Combine(data, "data", "xcagi.db"); var hasOriginalDb = mode != "absent-db"; if (hasOriginalDb) await Sql(db, "CREATE TABLE inventory(qty INTEGER); INSERT INTO inventory VALUES(3);");
@@ -74,10 +75,16 @@ public static class ManualUpgradeCases
                 File.WriteAllText(Path.Combine(data, "mods", "northwind", "backend", "models", "product.py"), "old official Mod code");
                 File.WriteAllText(Path.Combine(data, "data", "mod_dbs", "customer-reporting.db"), "old private Mod database");
             }
+            var deepOwned = Path.Combine(data, "mods", new string('x', 100), new string('y', 100), "retained.txt");
+            if (mode == "long-path" || metadataFault) { Directory.CreateDirectory(Path.GetDirectoryName(deepOwned)!); File.WriteAllText(deepOwned, "long path retained"); }
+            if (mode == "long-path") { var deep = Path.Combine(app, new string('x', 100), new string('y', 100), "retained.txt"); Directory.CreateDirectory(Path.GetDirectoryName(deep)!); File.WriteAllText(deep, "long path retained"); }
+            var markerPathBefore = Path.Combine(data, "rollback-marker.json");
+            if (mode is "desktop-handoff" or "foreign-handoff") File.WriteAllText(markerPathBefore, JsonSerializer.Serialize(new { mode = "windows-full", fromVersion = "1.0.0+" + new string('1', 12), toVersion = typeof(NsisSilentInstaller).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion, preparedAt = DateTimeOffset.UtcNow, appPath = Path.Combine(mode == "foreign-handoff" ? home : app, "XCAGI.exe"), databasePath = db }));
             var originalFiles = Hashes(app); var originalDb = hasOriginalDb ? Hash(db) : null; var ready = Path.Combine(home, "ready"); var release = Path.Combine(home, "release");
-            Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_CHILD", "1"); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_MODE", mode == "large" ? "failure" : mode); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_DATA", data); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_READY", ready); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_RELEASE", release);
+            Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_CHILD", "1"); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_MODE", mode is "large" or "long-path" or "desktop-handoff" ? "failure" : mode); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_DATA", data); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_READY", ready); Environment.SetEnvironmentVariable("XCMAX_MANUAL_UPGRADE_RELEASE", release);
             using var cancel = new CancellationTokenSource();
-            var progress = new List<InstallProgressUpdate>(); var run = NsisSilentInstaller.RunAsync(Environment.ProcessPath!, app, new Inline(progress.Add), cancel.Token, data);
+            var progress = new List<InstallProgressUpdate>(); var run = NsisSilentInstaller.RunAsync(Environment.ProcessPath!, app, new Inline(progress.Add), cancel.Token, data, updaterHandoff: mode is "desktop-handoff" or "foreign-handoff");
+            if (mode == "foreign-handoff") { var rejected = await run; var rejectedPass = !rejected.Success && SameFiles(Hashes(app), originalFiles) && Hash(db) == originalDb && File.Exists(markerPathBefore); var item = new { mode, pass = rejectedPass, rejected.Error }; results.Add(item); PrintCase(item); continue; }
             await WaitFor(ready, 20000);
             if (mode == "cancel") cancel.CancelAfter(1200);
             var backups = Directory.Exists(Path.Combine(data, "rollback")) ? Directory.GetDirectories(Path.Combine(data, "rollback"), "manual-*") : [];
@@ -127,7 +134,7 @@ public static class ManualUpgradeCases
                 }
             }
             var databaseRestored = hasOriginalDb ? Hash(db) == originalDb && await Qty(db) == 3 : !File.Exists(db) && !new[] { "-wal", "-shm", "-journal" }.Any(suffix => File.Exists(db + suffix));
-            var restored = SameFiles(Hashes(app), originalFiles) && databaseRestored;
+            var restored = SameFiles(Hashes(app), originalFiles) && databaseRestored && (mode != "long-path" || File.Exists(deepOwned) && File.ReadAllText(deepOwned) == "long path retained");
             var rejectHeld = mode is "bad-db" or "truncated-db" or "bad-manifest" or "missing-snapshot";
             var candidateHeld = mode == "absent-db"
                 ? SameFiles(Hashes(app), mutated) && Hash(db) == dbMutated && new[] { "-wal", "-shm", "-journal" }.All(suffix => File.Exists(db + suffix))

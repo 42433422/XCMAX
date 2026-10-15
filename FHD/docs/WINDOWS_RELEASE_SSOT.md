@@ -24,4 +24,5 @@ GREEN须本最终包实测通过；YELLOW为有限证据或过渡方案，RED为
 ## 6. 实机验收任务
 最终同包独立A首装完整业务、B受支持旧版原ID同账号读回并新增、C故障取消与正式调度备份隔离恢复；每轮独立时间、输入、结果及原始证据，逐项记入[windows-a/b/c.run.json](evidence/e2e/final-acceptance-1.0.0.5/)，未完成项保持未闭环。
 ## 8. 发版复用 Runbook
+Windows 对外交付唯一安装器为 `tools/XcagiInstaller` 新版 WPF 单文件包；`build-installer.ps1` 和双 SKU 入口均不得跳过外壳。NSIS 仅作内嵌载荷；跨平台诊断载荷不得交付。`windows-release` 域阻断旁路漂移，打包后须实际加载包内更新器依赖。
 验收全过后才按既有授权发布临时下载指针，重新从客户入口完整下载核对哈希、版本、运行构建、说明及原始证据；候选验收通过但未发布须报告「候选验收通过，发布未完成」。最终INTERIM_CLOSED仅表示未签名过渡交付闭环，stable OTA仍关闭。

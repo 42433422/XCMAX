@@ -37,7 +37,7 @@ public partial class App : System.Windows.Application
             result = await NsisSilentInstaller.RunAsync(
                 setupExe,
                 options.InstallDirectory ?? NsisSilentInstaller.DefaultInstallDirectory(),
-                cancellationToken: CancellationToken.None, userDataDirectory: NsisSilentInstaller.UserDataDirectory()).ConfigureAwait(false);
+                cancellationToken: CancellationToken.None, userDataDirectory: NsisSilentInstaller.UserDataDirectory(), updaterHandoff: e.Args.Contains("--updated")).ConfigureAwait(false);
             if (!result.Success)
                 throw new InvalidOperationException(result.Error ?? "Silent install failed.");
             NsisSilentInstaller.Trace($"installed={result.InstallDir};app={result.AppExePath}");
