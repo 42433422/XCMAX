@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+import yaml
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -23,7 +24,10 @@ spec = importlib.util.spec_from_file_location(
 )
 pair = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pair)
-SHA, VERSION = "a" * 40, "1.0.0.5"
+SHA, VERSION = (
+    "a" * 40,
+    json.loads((FHD / "config/download_release.json").read_text())["version_lock"],
+)
 
 
 def fixture(root, key, fault=None):
@@ -431,3 +435,137 @@ def test_merge_keeps_shared_roots_and_all_other_platform_records(case):
             merged["channels"][name]["enterprise"]["mac"]
             == new["channels"][name]["enterprise"]["mac"]
         )
+
+
+@pytest.mark.parametrize(
+    "codes,message,calls,delays,expected",
+    [
+        ([0], "", 1, [], 0),
+        ([None], "", 1, [], 124),
+        ([68, 0], "NSURLErrorDomain Code=-1005", 2, [15], 0),
+        ([68, 68, 0], "NSURLErrorDomain Code=-1005", 3, [15, 30], 0),
+        ([68, 68, 68], "NSURLErrorDomain Code=-1005", 3, [15, 30], 68),
+        ([68], "signature rejected", 1, [], 68),
+        ([65], "NSURLErrorDomain Code=-1005", 1, [], 65),
+        ([68], "NSURLErrorDomain Code=-1202 certificate rejected", 1, [], 68),
+    ],
+)
+def test_staple_retry_is_bounded_and_failure_artifact_is_unpublishable(
+    tmp_path, monkeypatch, codes, message, calls, delays, expected
+):
+    module_spec = importlib.util.spec_from_file_location(
+        "staple", FHD / "scripts/package/staple-macos-dmg.py"
+    )
+    staple = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(staple)
+    monkeypatch.setattr(staple, "ROOT", tmp_path)
+    monkeypatch.setenv("XCAGI_BUILD_SHA", SHA)
+    directory = tmp_path / "release" / "xcagi-v1.0.0.6" / "enterprise"
+    directory.mkdir(parents=True)
+    dmg = directory / "XCAGI-Enterprise-1.0.0.6-mac-x64.dmg"
+    dmg.write_bytes(b"actual failed candidate bytes")
+    (directory / "AuthKey.p8").write_text("must never be archived")
+    monkeypatch.setattr(staple.sys, "argv", ["staple", str(dmg)])
+    invoked, slept = [], []
+
+    def run(command, **kwargs):
+        invoked.append(command)
+        assert command == ["xcrun", "stapler", "staple", str(dmg)]
+        assert kwargs["timeout"] == 120
+        if codes[len(invoked) - 1] is None:
+            raise subprocess.TimeoutExpired(command, 120)
+        return subprocess.CompletedProcess(command, codes[len(invoked) - 1], "", message)
+
+    monkeypatch.setattr(staple.subprocess, "run", run)
+    monkeypatch.setattr(staple.time, "sleep", slept.append)
+    recovery = tmp_path / "release-staple-recovery" / f"{SHA}-x64"
+    if expected:
+        recovery.mkdir(parents=True)
+        (recovery / "AuthKey.p8").write_text("existing neighbor must not be uploaded")
+    assert staple.main() == expected
+    assert len(invoked) == calls and slept == delays
+    if expected:
+        assert {p.name for p in recovery.iterdir()} == {
+            dmg.name,
+            "recovery-receipt.json",
+            "AuthKey.p8",
+        }
+        assert (recovery / dmg.name).read_bytes() == dmg.read_bytes()
+        receipt = json.loads((recovery / "recovery-receipt.json").read_text())
+        assert receipt["publishable"] is False and receipt["status"] == "staple_failed_unverified"
+        assert receipt["source_sha"] == SHA and receipt["stapler_exit_code"] == expected
+        assert receipt["sha256"] == hashlib.sha256(dmg.read_bytes()).hexdigest()
+    else:
+        assert not recovery.exists()
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    [
+        "outside",
+        "symlink",
+        "parent_symlink",
+        "ancestor_symlink",
+        "recovery_symlink",
+        "wrong_name",
+        "bad_sha",
+    ],
+)
+def test_staple_recovery_does_not_copy_unrelated_paths(tmp_path, monkeypatch, unsafe):
+    module_spec = importlib.util.spec_from_file_location(
+        "staple", FHD / "scripts/package/staple-macos-dmg.py"
+    )
+    staple = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(staple)
+    monkeypatch.setattr(staple, "ROOT", tmp_path)
+    monkeypatch.setenv("XCAGI_BUILD_SHA", "../escape" if unsafe == "bad_sha" else SHA)
+    directory = tmp_path / "release" / "xcagi-v1.0.0.6" / "enterprise"
+    directory.mkdir(parents=True)
+    dmg = directory / "XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg"
+    if unsafe == "outside":
+        dmg = tmp_path / dmg.name
+    if unsafe == "wrong_name":
+        dmg = directory / "AuthKey.p8"
+    dmg.write_bytes(b"must not be copied")
+    if unsafe == "symlink":
+        target = tmp_path / "secret"
+        dmg.rename(target)
+        dmg.symlink_to(target)
+    if unsafe in {"parent_symlink", "ancestor_symlink"}:
+        target = tmp_path / "outside-dir"
+        link = directory.parent if unsafe == "ancestor_symlink" else directory
+        link.rename(target)
+        link.symlink_to(target, target_is_directory=True)
+    if unsafe == "recovery_symlink":
+        (tmp_path / "release-staple-recovery").symlink_to(directory, target_is_directory=True)
+    monkeypatch.setattr(staple.sys, "argv", ["staple", str(dmg)])
+    monkeypatch.setattr(
+        staple.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess([], 65, "", "bad"),
+    )
+    assert staple.main() == 65
+    recovery = tmp_path / "release-staple-recovery"
+    assert not recovery.exists() or (
+        unsafe == "recovery_symlink" and not (directory / f"{SHA}-arm64").exists()
+    )
+
+
+def test_staple_recovery_keeps_macos_hard_gates_and_separate_artifact():
+    for name, variable in [("create-mac-dmg.sh", "dmg"), ("finalize-macos-dmg.sh", "DMG_PATH")]:
+        script = (FHD / "scripts/package" / name).read_text()
+        assert 'python3 "${ROOT}/scripts/package/staple-macos-dmg.py"' in script
+        assert f'xcrun stapler validate "${{{variable}}}"' in script
+    finalize = (FHD / "scripts/package/finalize-macos-dmg.sh").read_text()
+    assert 'spctl -a -vv -t open --context context:primary-signature "${DMG_PATH}"' in finalize
+    workflow = (FHD / ".github/workflows/release-desktop-mac-ota.yml").read_text()
+    assert "if: ${{ failure() }}" in workflow
+    assert "mac-staple-recovery-{0}-{1}" in workflow
+    upload = yaml.safe_load(workflow)["jobs"]["macos-ota"]["steps"][-1]["with"]
+    paths = upload["path"].splitlines()
+    prefix = "FHD/release-staple-recovery/${{ inputs.release_sha }}-${{ inputs.architecture || 'arm64' }}/"
+    assert paths == [
+        prefix
+        + "XCAGI-Enterprise-${{ inputs.version }}-mac-${{ inputs.architecture || 'arm64' }}.dmg",
+        prefix + "recovery-receipt.json",
+    ]

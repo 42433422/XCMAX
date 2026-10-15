@@ -83,8 +83,7 @@
 
 **数据库**
 
-- `ALEMBIC_MIGRATION_GUIDE.md`
-- `XCAGI/ALEMBIC_MIGRATION_GUIDE.md`
+- 当前公约：[`guides/ALEMBIC_MIGRATION_GUIDE.md`](guides/ALEMBIC_MIGRATION_GUIDE.md)；XCAGI 旧链快照已仓外归档，见根 `ARCHIVE_POINTER.md`「2026-10-12 #2300」。
 
 **其他**
 

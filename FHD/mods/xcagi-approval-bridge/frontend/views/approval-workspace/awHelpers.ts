@@ -5,12 +5,18 @@ import type { ApprovalRequest, ApprovalWorkflowExecution } from '@/api/approval'
 export const FINAL_STATUSES = ['approved', 'rejected', 'withdrawn', 'cancelled'] as const
 
 /** Display persisted sales terms without changing the approved tool payload. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+
 export function salesApprovalPreview(request?: ApprovalRequest | null) {
   const data = request?.business_data
   if (request?.business_type !== 'workflow_tool' || data?.tool_id !== 'sales'
-    || !['create_order', 'quote'].includes(data.action || '') || !data.params) return null
+    || !['create_order', 'quote', 'execute_closed_loop'].includes(data.action || '') || !data.params) return null
   const params = data.params
-  const items = Array.isArray(params.items) ? params.items.map(item =>
+  const payload = isRecord(params.payload) ? params.payload : null
+  const order = payload && isRecord(payload.order) ? payload.order : null
+  const termSource = order ?? params
+  const items = Array.isArray(termSource.items) ? termSource.items.map(item =>
     item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : {}) : []
   const decimal = (value: unknown) => {
     if (typeof value !== 'number' && typeof value !== 'string') return null
@@ -32,10 +38,14 @@ export function salesApprovalPreview(request?: ApprovalRequest | null) {
     const digits = sum.toString().padStart(scale + 1, '0')
     amount = `${scale ? digits.slice(0, -scale) : digits}.${(scale ? digits.slice(-scale) : '').padEnd(2, '0')}`
   }
+  const customerName = termSource.customer_name
+  const currency = termSource.currency
+  const operation = data.action === 'quote' ? '创建销售报价'
+    : data.action === 'execute_closed_loop' ? '销售闭环' : '创建销售订单'
   return {
-    operation: data.action === 'quote' ? '创建销售报价' : '创建销售订单',
-    customer: typeof params.customer_name === 'string' && params.customer_name.trim() ? params.customer_name : '未填写', items, amount,
-    currency: params.currency === undefined ? 'CNY' : typeof params.currency === 'string' ? params.currency : '币种待确认',
+    operation,
+    customer: typeof customerName === 'string' && customerName.trim() ? customerName : '未填写', items, amount,
+    currency: currency === undefined ? 'CNY' : typeof currency === 'string' ? currency : '币种待确认',
   }
 }
 

@@ -50,6 +50,8 @@ IRRELEVANT = {
         "prefixes": [
             "docs/", "FHD/docs/", "FHD/frontend/", "FHD/admin-console/",
             "成都修茈科技有限公司/", "FHD/mobile-flutter-poc/",
+            "FHD/desktop/", "FHD/desktop-shell/", "FHD/tools/",
+            "FHD/package/", "FHD/scripts/package/",
         ],
         "suffixes": [".md"],
     },
@@ -57,6 +59,8 @@ IRRELEVANT = {
         "prefixes": [
             "docs/", "FHD/docs/", "FHD/app/", "FHD/tests/", "FHD/alembic/",
             "FHD/config/", "成都修茈科技有限公司/", "FHD/mobile-flutter-poc/",
+            "FHD/desktop/", "FHD/desktop-shell/", "FHD/tools/",
+            "FHD/package/", "FHD/scripts/package/",
         ],
         "suffixes": [".md"],
     },
@@ -83,6 +87,7 @@ RELEVANT = {
         "prefixes": [
             "FHD/desktop/", "FHD/desktop-shell/", "FHD/package/",
             "FHD/scripts/package/", "FHD/scripts/deploy/", "FHD/scripts/autonomy/",
+            "FHD/tools/",
         ],
         "suffixes": [".entitlements", ".plist"],
         "exact": [

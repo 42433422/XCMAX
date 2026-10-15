@@ -1,5 +1,5 @@
 {
-  "lines": 2298170,
-  "updated": "2026-10-10",
-  "note": "Windows backup tasks must follow the active customer data directory, and the interim installer upload retries a stalled copy. These 46 lines are that fix."
+  "lines": 2303032,
+  "updated": "2026-10-15",
+  "note": "棘轮下调"
 }
