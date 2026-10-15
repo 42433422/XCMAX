@@ -25,7 +25,6 @@ CI 中（实际执行）:
         --issue-number "$ISSUE_NUMBER" \\
         --repo "$GITHUB_REPOSITORY" \\
         --token "$GITHUB_TOKEN" \\
-        --llm-api-key "${XCAGI_LLM_API_KEY:-}" \\
         --apply
 
 退出码:

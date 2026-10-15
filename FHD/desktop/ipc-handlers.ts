@@ -163,8 +163,8 @@ export function registerDesktopIpcHandlers(): void {
 
   // 剪贴板原生读写（P2 高频微交互）。
   handleTrusted('xcagi:clipboard-read-text', () => clipboard.readText())
-  handleTrusted('xcagi:clipboard-write-text', (_event, text: string) => {
-    clipboard.writeText(String(text ?? ''))
+  handleTrusted('xcagi:clipboard-write-text', async (_event, text: string) => {
+    await clipboard.writeText(String(text ?? ''))
     return { ok: true }
   })
   // 原生打开本地路径（文件/目录），供拖拽文件、导出等场景系统级打开。

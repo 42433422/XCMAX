@@ -2,15 +2,14 @@
 """XCAGI vendored langgraph-sdk 来源与许可证锁定验证脚本 (LG-W0-11).
 
 本脚本为「git tag -> SHA」来源校验（与 xcagi_langgraph_checkpoint 的 LG-W0-03 同型）：
-锁定的是上游 langgraph 仓库 tag 1.2.10 @ commit 41341457342327166d72fc11952ab28fb61ec0bf
-（见同目录 PROVENANCE.json）。
+锁定的上游 tag 与 commit 见同目录 PROVENANCE.json（当前 sdk==0.4.4 @ d5f4b2aa960940effc8430165ab3604038e817af）。
 
 职责:
   1. 校验本目录下所有 vendored 文件 (langgraph_sdk 包 + LICENSE) 的 SHA-256 与 MANIFEST.sha256 一致。
   2. 校验 LICENSE 为 MIT (含关键字检查)。
-  3. 校验 vendored 副本与上游「tag 1.2.10 解析出的 commit」的 libs/sdk-py/langgraph_sdk + LICENSE
-     字节级一致（原样吸收）。在线模式取回远端 tag 1.2.10，rev-parse 其指向的 commit，要求恰好等于
-     锁定 SHA 41341457342327166d72fc11952ab28fb61ec0bf，再对该 commit 做 git archive 与本地比对。
+  3. 校验 vendored 副本与上游锁定 tag 解析出的 commit 的 libs/sdk-py/langgraph_sdk + LICENSE
+     字节级一致。在线模式取回远端 tag，rev-parse 其指向的 commit，要求恰好等于 PROVENANCE 锁定 SHA，
+     再对该 commit 做 git archive 与本地比对；PROVENANCE 记录的本地修改文件会报不一致。
      跳过本地产物（__pycache__/pyc/.venv/build/dist/*.egg-info/.pytest_cache 等）。
 
 可移植性: 上游源码在 with tempfile.TemporaryDirectory() 作用域内临时浅克隆（取回 tag 而非固定 SHA 或
@@ -204,7 +203,7 @@ def _clone_tag_at_sha(prov: dict, workdir: Path) -> tuple[bool, Path, str]:
 
 
 def verify_upstream(prov: dict) -> bool:
-    """取回远端 tag 1.2.10，校验其 commit 等于锁定 SHA，并字节级比对 libs/sdk-py + LICENSE。"""
+    """取回 PROVENANCE 锁定的远端 tag，校验其 commit 等于锁定 SHA，并字节级比对 libs/sdk-py + LICENSE。"""
     sha = prov["upstream_commit_sha"]
     tag = prov.get("upstream_tag", "1.2.10")
     with tempfile.TemporaryDirectory() as tmpdir:

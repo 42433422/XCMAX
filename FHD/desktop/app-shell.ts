@@ -1,5 +1,6 @@
 import {
   BrowserWindow,
+  ClipboardItem,
   Menu,
   Tray,
   app,
@@ -129,9 +130,10 @@ export async function captureFullScreenScreenshot(): Promise<{
     const source = sources.find(s => s.display_id === String(primary.id)) || sources[0]
     if (!source || source.thumbnail.isEmpty()) return { ok: false, error: 'no screenshot source' }
     const image = source.thumbnail
-    clipboard.writeImage(image)
+    const png = image.toPNG()
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(png)], { type: 'image/png' }) })])
     const outPath = path.join(screenshotOutputDir(), `screenshot-${Date.now()}.png`)
-    fs.writeFileSync(outPath, image.toPNG())
+    fs.writeFileSync(outPath, png)
     return { ok: true, path: outPath }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }

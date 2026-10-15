@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from unittest.mock import MagicMock, patch
 
@@ -172,29 +171,41 @@ def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts(
 
 
 @pytest.mark.parametrize(
-    "message",
+    "message,pending,use_app,source",
     [
-        "新增产品到数据库 产品:CHATCRUD-STREAM",
-        "请给 Mac验收客户-7F1B17CE 出货，必须人工审批后才能执行。",
-        "2桶，客户名称仍为用户需提供，必须人工审批后执行。",
+        ("新增产品到数据库 产品:CHATCRUD-STREAM", False, True, "normal"),
+        (
+            "请给 Mac验收客户-7F1B17CE 出货，必须人工审批后才能执行。",
+            False,
+            True,
+            "normal",
+        ),
+        ("2桶，客户名称仍为用户需提供，必须人工审批后执行。", False, True, "normal"),
+        ("确认", False, True, "normal"),
+        (" 好的！ ", False, True, "normal"),
+        ("是的", False, True, "normal"),
+        ("执行", False, True, "normal"),
+        ("取消", False, True, "normal"),
+        (" NO. ", False, True, "normal"),
+        ("确认", True, True, "normal"),
+        ("下一步", True, True, "normal"),
+        ("你好，帮我写首诗", False, False, "pro"),
     ],
 )
-def test_stream_business_db_write_uses_stateful_approval_mainline(message):
-    request = MagicMock()
-    request.headers = {}
-    request.cookies = {}
+def test_stream_controls_and_business_writes_use_stateful_mainline(
+    message, pending, use_app, source
+):
     service = MagicMock()
-    service._pending_workflows = {}
+    service._pending_workflows = (
+        {"web_pro_session": {"agent_run_id": "original"}} if pending else {}
+    )
     service.process_chat.return_value = {
         "success": True,
-        "response": "请确认写入预览",
-        "data": {"action": "workflow_confirmation_required"},
+        "response": "已处理",
+        "data": {"action": "clarification_required"},
     }
-    body = ch.XcagiCompatChatBody(
-        message=message,
-        user_id="web_pro_session",
-        source="normal",
-    )
+    request = MagicMock(headers={}, cookies={})
+    body = ch.XcagiCompatChatBody(message=message, user_id="web_pro_session", source=source)
     if "出货" in message or "人工审批" in message:
         assert not AIChatApplicationService._is_pure_casual_chat(message)
     with (
@@ -202,15 +213,45 @@ def test_stream_business_db_write_uses_stateful_approval_mainline(message):
         patch.object(
             ch,
             "_runtime_context_with_authenticated_actor",
-            side_effect=lambda _request, context: {**dict(context or {}), "local_user_id": 17},
+            side_effect=lambda _r, c: {**dict(c or {}), "local_user_id": 17},
         ),
-        patch.object(ch, "runtime_context_with_tier", side_effect=lambda context, _tier: context),
+        patch.object(ch, "runtime_context_with_tier", side_effect=lambda c, _t: c),
+        patch(
+            "app.fastapi_routes.xcagi_compat_chat_stream._classify_and_submit_client_issue",
+            return_value=None,
+        ),
+        patch.object(
+            ch, "create_modstore_openai_client_from_request", return_value=MagicMock()
+        ) as client,
+        patch.object(
+            ch, "start_legacy_chat_run", return_value=MagicMock(run_id="legacy")
+        ) as legacy,
+        patch.object(
+            ch,
+            "finalize_legacy_chat_run",
+            side_effect=lambda _id, payload, **_kwargs: payload,
+        ),
+        patch.object(
+            ch,
+            "_xcagi_guarded_planner_stream_events",
+            return_value=iter([{"type": "token", "text": "你好"}]),
+        ) as planner,
     ):
-        chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-
-    assert len(chunks) == 2
-    service.process_chat.assert_called_once()
-    assert service.process_chat.call_args.kwargs["context"]["local_user_id"] == 17
+        events = _sse_payloads(
+            list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+        )
+    assert any(event.get("type") == "done" for event in events)
+    if use_app:
+        assert len(events) == 2
+        service.process_chat.assert_called_once()
+        assert service.process_chat.call_args.kwargs["context"]["local_user_id"] == 17
+        legacy.assert_not_called()
+        planner.assert_not_called()
+        client.assert_not_called()
+    else:
+        service.process_chat.assert_not_called()
+        legacy.assert_called_once()
+        planner.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -336,40 +377,6 @@ def test_executable_sse_request_uses_real_plan_and_waits_for_approval(
     assert node["tool_id"] == tool_id
     assert node["action"] == action
     assert node["params"] == params
-
-
-def test_casual_chat_not_diverted_to_app_service():
-    """非销售/闲聊回归：活跃 compat SSE 仅在精确闭环写意图时直达应用服务；
-    闲聊仍走 legacy 路径，绝不把普通消息广泛分流到 ``process_chat``。"""
-    service = MagicMock()
-    service._pending_workflows = {}
-    service.process_chat.side_effect = AssertionError("闲聊不得分流到应用服务")
-    request = MagicMock()
-    request.headers = {}
-    request.cookies = {}
-    body = ch.XcagiCompatChatBody(message="你好，帮我写首诗", user_id="web_casual", source="pro")
-
-    casual_done = {"type": "done", "result": {"success": True, "data": {"action": "casual"}}}
-    with (
-        patch("app.application.get_ai_chat_app_service", return_value=service),
-        patch.object(
-            ch,
-            "create_modstore_openai_client_from_request",
-            return_value=MagicMock(),
-        ),
-        patch.object(
-            ch,
-            "_xcagi_guarded_planner_stream_events",
-            return_value=iter([{"type": "token", "text": "你好"}, casual_done]),
-        ),
-        patch.object(ch, "runtime_context_with_tier", side_effect=lambda c, _t: c),
-    ):
-        chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-
-    events = _sse_payloads(chunks)
-    service.process_chat.assert_not_called()
-    # 闲聊走 legacy 路径：产出 token + done，未被打包到应用服务。
-    assert any(e.get("type") == "done" for e in events)
 
 
 # XcagiCompatChatBody
@@ -857,65 +864,42 @@ class TestLooksLikeVectorRequest:
         assert ch._looks_like_vector_request("") is False
 
 
-# ---------------------------------------------------------------------------
-# _xcagi_chat_timeout_seconds
-# ---------------------------------------------------------------------------
-
-
-class TestXcagiChatTimeoutSeconds:
-    def test_default(self, monkeypatch):
-        monkeypatch.delenv("XCAGI_CHAT_TIMEOUT_SEC", raising=False)
-        assert ch._xcagi_chat_timeout_seconds() == 120.0
-
-    def test_custom(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_CHAT_TIMEOUT_SEC", "60")
-        assert ch._xcagi_chat_timeout_seconds() == 60.0
-
-    def test_clamped_min(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_CHAT_TIMEOUT_SEC", "1")
-        assert ch._xcagi_chat_timeout_seconds() == 5.0
-
-    def test_clamped_max(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_CHAT_TIMEOUT_SEC", "9999")
-        assert ch._xcagi_chat_timeout_seconds() == 600.0
-
-    def test_invalid(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_CHAT_TIMEOUT_SEC", "bad")
-        assert ch._xcagi_chat_timeout_seconds() == 120.0
-
-
-# ---------------------------------------------------------------------------
-# _xcagi_stream_first_token_timeout_seconds
-# ---------------------------------------------------------------------------
-
-
-class TestXcagiStreamFirstTokenTimeoutSeconds:
-    def test_default(self, monkeypatch):
-        monkeypatch.delenv("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", raising=False)
-        assert ch._xcagi_stream_first_token_timeout_seconds() == 20.0
-
-    def test_custom(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", "30")
-        assert ch._xcagi_stream_first_token_timeout_seconds() == 30.0
-
-    def test_invalid(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", "bad")
-        assert ch._xcagi_stream_first_token_timeout_seconds() == 20.0
-
-
-# ---------------------------------------------------------------------------
-# _xcagi_stream_idle_notice_seconds
-# ---------------------------------------------------------------------------
-
-
-class TestXcagiStreamIdleNoticeSeconds:
-    def test_default(self, monkeypatch):
-        monkeypatch.delenv("XCAGI_CHAT_STREAM_IDLE_NOTICE_SEC", raising=False)
-        assert ch._xcagi_stream_idle_notice_seconds() == 12.0
-
-    def test_custom(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_CHAT_STREAM_IDLE_NOTICE_SEC", "20")
-        assert ch._xcagi_stream_idle_notice_seconds() == 20.0
+@pytest.mark.parametrize(
+    "helper,key,value,expected",
+    [
+        (ch._xcagi_chat_timeout_seconds, "XCAGI_CHAT_TIMEOUT_SEC", None, 120.0),
+        (ch._xcagi_chat_timeout_seconds, "XCAGI_CHAT_TIMEOUT_SEC", "60", 60.0),
+        (ch._xcagi_chat_timeout_seconds, "XCAGI_CHAT_TIMEOUT_SEC", "1", 5.0),
+        (ch._xcagi_chat_timeout_seconds, "XCAGI_CHAT_TIMEOUT_SEC", "9999", 600.0),
+        (ch._xcagi_chat_timeout_seconds, "XCAGI_CHAT_TIMEOUT_SEC", "bad", 120.0),
+        (
+            ch._xcagi_stream_first_token_timeout_seconds,
+            "XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC",
+            None,
+            20.0,
+        ),
+        (
+            ch._xcagi_stream_first_token_timeout_seconds,
+            "XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC",
+            "30",
+            30.0,
+        ),
+        (
+            ch._xcagi_stream_first_token_timeout_seconds,
+            "XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC",
+            "bad",
+            20.0,
+        ),
+        (ch._xcagi_stream_idle_notice_seconds, "XCAGI_CHAT_STREAM_IDLE_NOTICE_SEC", None, 12.0),
+        (ch._xcagi_stream_idle_notice_seconds, "XCAGI_CHAT_STREAM_IDLE_NOTICE_SEC", "20", 20.0),
+    ],
+)
+def test_chat_stream_timeout_configuration(monkeypatch, helper, key, value, expected):
+    if value is None:
+        monkeypatch.delenv(key, raising=False)
+    else:
+        monkeypatch.setenv(key, value)
+    assert helper() == expected
 
 
 # ---------------------------------------------------------------------------

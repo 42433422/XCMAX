@@ -15,10 +15,7 @@ export function desktopWindowOpenAction(rawUrl: string, expectedPort: number): '
   return isTrustedDesktopOrigin(rawUrl, expectedPort) ? 'allow' : 'deny'
 }
 
-/**
- * 下载文件名来自 Content-Disposition 或 URL，可能带路径分隔符与保留字符。
- * 归一化为单层文件名，避免写穿下载目录。
- */
+/** 将 Content-Disposition/URL 文件名归一化为下载目录内的单层文件名。 */
 export function safeDownloadFilename(raw: string | undefined): string {
   const base = String(raw || '').split(/[\\/]/).pop() || ''
   const cleaned = base.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/^\.+/, '').trim()
@@ -41,7 +38,13 @@ export function handleDesktopWindowOpen(
   expectedPort: number,
   openExternal: (url: string) => Promise<unknown>,
   warn: (message: string) => void,
+  download?: (url: string) => void,
 ): 'allow' | 'deny' {
+  if (download && isTrustedDesktopOrigin(rawUrl, expectedPort)
+    && /^\/api\/(?:ai\/kitten\/document\/pickup\/[^/]+|ai\/analyze\/export\/[^/]+|shipment\/download\/.+)$/.test(new URL(rawUrl).pathname)) {
+    download(rawUrl)
+    return 'deny'
+  }
   if (isTrustedDesktopExternalUrl(rawUrl)) {
     void openExternal(rawUrl).catch(() => {
       // Shell errors can echo the entire URL, including a one-use login code.
