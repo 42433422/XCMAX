@@ -27,13 +27,13 @@
   },
   "dependencies": {
     "pinia": "^3.0.4",
-    "vue": "^3.4.21",
+    "vue": "^3.5.42",
     "vue-router": "^4.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.59.1",
-    "@types/node": "^20.12.7",
+    "@types/node": "^22.19.17",
     "@vitejs/plugin-vue": "^5.2.4",
     "@vitest/coverage-v8": "^5.0.3",
     "@vue/eslint-config-prettier": "^10.1.0",
@@ -47,17 +47,20 @@
     "typescript": "^5.6.3",
     "vite": "^6.4.3",
     "vitest": "^5.0.3",
-    "vue-tsc": "^2.2.0"
+    "vue-tsc": "^2.2.0",
+    "fast-glob": "file:../FHD/frontend/compat-resource-glob"
   },
   "overrides": {
-    "brace-expansion@^1.0.0": "1.1.18",
-    "brace-expansion@^2.0.0": "2.1.4",
-    "brace-expansion@>=5.0.0": "5.0.9",
+    "brace-expansion@^1.0.0": "1.1.21",
+    "brace-expansion@^2.0.0": "2.1.7",
+    "brace-expansion@>=5.0.0": "5.0.12",
     "esbuild": "0.28.1",
     "glob": "10.5.0",
     "js-yaml": "4.3.2",
     "nanoid": "3.3.18",
     "postcss": "8.5.25",
-    "ws": "8.21.0"
+    "ws": "8.21.0",
+    "source-map-js": "1.2.2",
+    "fast-glob": "$fast-glob"
   }
 }

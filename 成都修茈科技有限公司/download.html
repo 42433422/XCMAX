@@ -798,7 +798,9 @@
             : sku[platform]
           if (!entry || !/^[a-f0-9]{64}$/i.test(entry.sha256 || '')) return null
           var expectArch = platform === 'mac' ? macArch : 'x64'
-          return platform === 'android' || (entry.filename === fileName(platform, macArch) && entry.url === officialUrl(entry.filename) &&
+          var validUrl = entry.url === officialUrl(entry.filename) || (platform === 'mac' && /^[a-f0-9]{40}$/.test(state.gitSha) &&
+            entry.url === RELEASE_ROOT + '/xcagi-v' + state.version + '/builds/' + state.gitSha + '/enterprise/' + entry.filename)
+          return platform === 'android' || (entry.filename === fileName(platform, macArch) && validUrl &&
             (!entry.arch || entry.arch === expectArch)) ? entry : null
         }
 

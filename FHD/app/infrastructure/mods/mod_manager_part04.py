@@ -211,11 +211,10 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
     return False
 
 
-def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
-    """
-    访问 /api/mod/{mod_id}/... 前确保 Mod 已 load 且 HTTP 路由已挂载。
-    修复企业版登录后 reload 未传 app、太阳鸟等客户 Mod 仅出现在列表但未 load 导致 404。
-    """
+def ensure_mod_api_ready(
+    mod_id: str, session_id: str | None = None, *, requires_http: bool = True
+) -> bool:
+    """校验并加载 Mod；直接访问 Mod API 时还需挂载 HTTP 路由。"""
     mid = (mod_id or "").strip()
     if not mid or _facade().is_mods_disabled():
         return False
@@ -295,7 +294,7 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
                 return False
             _facade()._MOD_API_FAILURE_RETRY_AT.pop(mid, None)
             _facade().clear_mod_missing_locally(mid)
-    if mid in mm._http_routes_registered:
+    if not requires_http or mid in mm._http_routes_registered:
         return True
     try:
         from app.fastapi_app import get_fastapi_app

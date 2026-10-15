@@ -102,7 +102,7 @@ vi.mock('pinia', async (importOriginal) => {
 })
 
 vi.mock('@/stores/accountProfile', () => ({
-  useAccountProfileStore: () => ({}),
+  useAccountProfileStore: () => ({ marketUserId: null }),
 }))
 
 const authMocks = vi.hoisted(() => ({

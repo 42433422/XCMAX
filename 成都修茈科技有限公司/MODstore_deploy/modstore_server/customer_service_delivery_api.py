@@ -168,6 +168,7 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         **ticket_payload(ticket),
         "custom_delivery": {
             "kind": str(evidence.get("kind") or ""),
+            "suggested_id": str(evidence.get("suggested_id") or ""),
             "requirements": str(evidence.get("requirements") or ""),
             "acceptance_criteria": str(evidence.get("acceptance_criteria") or ""),
             "stage": stage,
@@ -242,6 +243,15 @@ async def decide_custom_delivery(
     if ticket.intent != "custom_delivery":
         raise HTTPException(404, "定制交付工单不存在")
     evidence = _custom_delivery_evidence(ticket)
+    if body.source_mode:
+        from modstore_server.customer_delivery_versioned import select_main_rework_source
+
+        try:
+            select_main_rework_source(evidence, int(user.id), body.action)
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
     payload = await _custom_delivery_payload(ticket)
     custom = payload.get("custom_delivery") or {}
     if body.action == "accept":

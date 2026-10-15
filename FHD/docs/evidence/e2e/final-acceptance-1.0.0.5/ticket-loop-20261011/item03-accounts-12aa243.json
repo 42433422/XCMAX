@@ -1,0 +1,24 @@
+{
+ "observed_at": "2026-10-11T11:26:23.010455+08:00",
+ "server_git_sha": "12aa243c1750cabb40632f541b59f841309bfb44",
+ "A": {
+  "http": 200,
+  "id": 77,
+  "username": "TEST-TICKET-LOOP-A",
+  "is_admin": false,
+  "is_enterprise": true,
+  "desktop_access": true,
+  "account_state": "active",
+  "activation_source": "legacy_enterprise_grant"
+ },
+ "B": {
+  "http": 200,
+  "id": 78,
+  "username": "TEST-TICKET-LOOP-B",
+  "is_admin": false,
+  "is_enterprise": true,
+  "desktop_access": true,
+  "account_state": "active",
+  "activation_source": "legacy_enterprise_grant"
+ }
+}
