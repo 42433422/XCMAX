@@ -92,9 +92,8 @@ jobs:
           python -m pytest tests/ -v --cov=modman --cov=modstore_server \
             --cov-report=term-missing --cov-report=xml \
             --cov-fail-under=${MODSTORE_PY_COVERAGE_FLOOR}
-
       - name: Upload coverage report
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml
           flags: backend
