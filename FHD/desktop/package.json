@@ -1,43 +1,14 @@
 {
+  "name": "xcagi-desktop",
+  "version": "1.0.0",
+  "private": true,
   "author": "XCAGI",
-  "dependencies": {
-    "electron-updater": "^6.8.9"
-  },
   "description": "XCAGI desktop shell for Windows and macOS",
-  "devDependencies": {
-    "@electron/notarize": "3.1.1",
-    "@noble/hashes": "^2.4.0",
-    "@playwright/test": "^1.63.0",
-    "@types/node": "26.6.3",
-    "@vitest/coverage-v8": "^4.1.11",
-    "electron": "44.5.1",
-    "electron-builder": "26.15.3",
-    "typescript": "6.0.3",
-    "vitest": "^4.1.11"
-  },
+  "main": "dist/main.js",
+  "type": "commonjs",
   "engines": {
     "node": ">=22.12.0"
   },
-  "main": "dist/main.js",
-  "name": "xcagi-desktop",
-  "overrides": {
-    "@noble/hashes@<2": "1.8.0",
-    "brace-expansion@^1.0.0": "1.1.21",
-    "brace-expansion@^2.0.0": "2.1.7",
-    "brace-expansion@>=5.0.0": "5.0.12",
-    "builder-util-runtime": "9.7.0",
-    "fast-uri": "3.1.8",
-    "form-data": "4.0.6",
-    "js-yaml": "4.3.2",
-    "nanoid": "3.3.18",
-    "tar": "7.5.21",
-    "postcss": "8.5.25",
-    "tmp": "0.2.7",
-    "undici": "6.29.0",
-    "@xmldom/xmldom": "0.8.15",
-    "source-map-js": "1.2.2"
-  },
-  "private": true,
   "scripts": {
     "dev": "npm run build && electron .",
     "build": "node scripts/inject-version.cjs && tsc -p tsconfig.json && cp resources/splash.html dist/splash.html",
@@ -53,6 +24,35 @@
     "security:scan": "bash scripts/security-scan.sh",
     "security:scan:medium": "bash scripts/security-scan.sh --gate-severity medium"
   },
-  "type": "commonjs",
-  "version": "1.0.0"
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "@electron/notarize": "3.1.1",
+    "@noble/hashes": "^2.4.0",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "26.6.3",
+    "@vitest/coverage-v8": "^4.1.11",
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "brace-expansion@^1.0.0": "1.1.21",
+    "brace-expansion@^2.0.0": "2.1.7",
+    "brace-expansion@>=5.0.0": "5.0.12",
+    "builder-util-runtime": "9.7.0",
+    "fast-uri": "3.1.8",
+    "form-data": "4.0.6",
+    "js-yaml": "4.3.2",
+    "nanoid": "3.3.18",
+    "tar": "7.5.21",
+    "postcss": "8.5.25",
+    "tmp": "0.2.7",
+    "undici": "6.29.0",
+    "@xmldom/xmldom": "0.8.15",
+    "source-map-js": "1.2.2",
+    "@noble/hashes@<2": "1.8.0"
+  }
 }
