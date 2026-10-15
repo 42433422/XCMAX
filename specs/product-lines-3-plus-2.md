@@ -84,7 +84,7 @@ XCMAX 当前按 **三条主线 + 个人版冻结** 推进：
 
 ## 3. 稳定版节奏
 
-对外稳定产品版本以 `FHD/VERSION.md` 为唯一数字来源（本文件不复述版本号）。npm/Electron、Flutter pub 和 Apple 市场版本按工具链约束映射为三段版本；差异通过阶段名、channel、git tag、`git_sha`、`sha256`、构建号和制品 manifest 标识。历史 10.0.0 记录只作为历史证据保留，不再作为新制品版本。
+Windows 与 Mac 每版同一 main 冻结 SHA、版本和发布组合，先原包实机验收再授权公开，分别记录各包哈希；规则见 `FHD/VERSION.md`。对外稳定产品版本以 `FHD/VERSION.md` 为唯一数字来源（本文件不复述版本号）。npm/Electron、Flutter pub 和 Apple 市场版本按工具链约束映射为三段版本；差异通过阶段名、channel、git tag、`git_sha`、`sha256`、构建号和制品 manifest 标识。历史 10.0.0 记录只作为历史证据保留，不再作为新制品版本。
 
 | 1.0 阶段 | 目标 | 验收边界 |
 |----------|------|----------|

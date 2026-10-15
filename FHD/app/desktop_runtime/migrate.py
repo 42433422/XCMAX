@@ -62,6 +62,10 @@ def backup_database(
     db = dirs["data"] / "xcagi.db"
     if not db.exists():
         return None
+    if version in {"", "unknown", "startup"}:
+        from app.build_identity import build_identity
+
+        version = build_identity().get("product_version") or version or "unknown"
     stamp = utc_now_naive().strftime("%Y%m%d%H%M%S")
     target = dirs["backups"] / f"xcagi-{version}-{stamp}.db"
     target.parent.mkdir(parents=True, exist_ok=True)

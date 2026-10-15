@@ -316,7 +316,7 @@ describe('useStartupSplash - coverage ramp', () => {
 
     it('initStartupAudio 调用 tryPlayStartupAudio（play 被调用）', () => {
       const playMock = vi.fn(() => Promise.resolve())
-      globalThis.Audio = vi.fn().mockImplementation(() => ({
+      globalThis.Audio = vi.fn().mockImplementation(function () { return ({
         preload: '',
         volume: 1,
         currentTime: 0,
@@ -325,7 +325,7 @@ describe('useStartupSplash - coverage ramp', () => {
         pause: vi.fn(),
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
-      })) as unknown as typeof Audio
+      }) }) as unknown as typeof Audio
 
       splash.initStartupAudio(() => '/audio/startup.mp3')
 
@@ -334,7 +334,7 @@ describe('useStartupSplash - coverage ramp', () => {
 
     it('initStartupAudio 设置 preload=metadata 和 volume=0.9', () => {
       let captured: { preload: string; volume: number } | null = null
-      globalThis.Audio = vi.fn().mockImplementation(() => {
+      globalThis.Audio = vi.fn().mockImplementation(function () {
         const obj = {
           preload: '',
           volume: 1,
@@ -358,7 +358,7 @@ describe('useStartupSplash - coverage ramp', () => {
 
     it('Audio error 事件将 startupAudio 置空（后续 teardown 不崩溃）', () => {
       const errorListeners: Array<(e: Event) => void> = []
-      globalThis.Audio = vi.fn().mockImplementation(() => ({
+      globalThis.Audio = vi.fn().mockImplementation(function () { return ({
         preload: '',
         volume: 1,
         currentTime: 0,
@@ -369,7 +369,7 @@ describe('useStartupSplash - coverage ramp', () => {
           if (event === 'error') errorListeners.push(listener)
         }),
         removeEventListener: vi.fn(),
-      })) as unknown as typeof Audio
+      }) }) as unknown as typeof Audio
 
       splash.initStartupAudio(() => '/audio/startup.mp3')
 
@@ -381,7 +381,7 @@ describe('useStartupSplash - coverage ramp', () => {
     })
 
     it('tryPlayStartupAudio 在 play 失败时不抛异常', () => {
-      globalThis.Audio = vi.fn().mockImplementation(() => ({
+      globalThis.Audio = vi.fn().mockImplementation(function () { return ({
         preload: '',
         volume: 1,
         currentTime: 0,
@@ -390,7 +390,7 @@ describe('useStartupSplash - coverage ramp', () => {
         pause: vi.fn(),
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
-      })) as unknown as typeof Audio
+      }) }) as unknown as typeof Audio
 
       // 不应抛异常
       expect(() => splash.initStartupAudio(() => '/audio/startup.mp3')).not.toThrow()
@@ -408,7 +408,7 @@ describe('useStartupSplash - coverage ramp', () => {
 
     it('pointerdown 事件触发音频 fallback 播放', () => {
       const playMock = vi.fn(() => Promise.resolve())
-      globalThis.Audio = vi.fn().mockImplementation(() => ({
+      globalThis.Audio = vi.fn().mockImplementation(function () { return ({
         preload: '',
         volume: 1,
         currentTime: 0,
@@ -417,7 +417,7 @@ describe('useStartupSplash - coverage ramp', () => {
         pause: vi.fn(),
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
-      })) as unknown as typeof Audio
+      }) }) as unknown as typeof Audio
 
       splash.initStartupAudio(() => '/audio/startup.mp3')
       // initStartupAudio 内部已调用 tryPlayStartupAudio（play 第 1 次）
@@ -432,7 +432,7 @@ describe('useStartupSplash - coverage ramp', () => {
 
     it('keydown 事件触发音频 fallback 播放', () => {
       const playMock = vi.fn(() => Promise.resolve())
-      globalThis.Audio = vi.fn().mockImplementation(() => ({
+      globalThis.Audio = vi.fn().mockImplementation(function () { return ({
         preload: '',
         volume: 1,
         currentTime: 0,
@@ -441,7 +441,7 @@ describe('useStartupSplash - coverage ramp', () => {
         pause: vi.fn(),
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
-      })) as unknown as typeof Audio
+      }) }) as unknown as typeof Audio
 
       splash.initStartupAudio(() => '/audio/startup.mp3')
       playMock.mockClear()
@@ -453,7 +453,7 @@ describe('useStartupSplash - coverage ramp', () => {
 
     it('fallback 已播放后不再触发（startupAudioFallbackPlayed 守卫）', () => {
       const playMock = vi.fn(() => Promise.resolve())
-      globalThis.Audio = vi.fn().mockImplementation(() => ({
+      globalThis.Audio = vi.fn().mockImplementation(function () { return ({
         preload: '',
         volume: 1,
         currentTime: 0,
@@ -462,7 +462,7 @@ describe('useStartupSplash - coverage ramp', () => {
         pause: vi.fn(),
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
-      })) as unknown as typeof Audio
+      }) }) as unknown as typeof Audio
 
       splash.initStartupAudio(() => '/audio/startup.mp3')
       playMock.mockClear()
@@ -498,7 +498,7 @@ describe('useStartupSplash - coverage ramp', () => {
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
       }
-      globalThis.Audio = vi.fn().mockImplementation(() => audioObj) as unknown as typeof Audio
+      globalThis.Audio = vi.fn().mockImplementation(function () { return audioObj }) as unknown as typeof Audio
 
       splash.initStartupAudio(() => '/audio/startup.mp3')
 

@@ -36,8 +36,6 @@ from app.infrastructure.llm.client import (
     resolve_chat_model,
 )
 
-# 流式 SSE 里展示给用户的中文说明（避免裸 snake_case +「...]」像截断 bug）
-# generate_office_document 的展示文案由 _tool_stream_call_label 按 output_format 细分
 _PLANNER_TOOL_STREAM_LABELS: dict[str, str] = {
     "generate_office_document": "生成可下载文档（Word 或 Excel）",
     "import_excel_to_database": "导入 Excel 到数据库",
@@ -331,12 +329,7 @@ def append_tool_messages(
     execute_tool=None,
     db_write_token: str | None = None,
 ) -> dict[str, Any] | None:
-    """执行工具调用并添加消息;如果需要令牌则返回令牌请求信息。
-
-    同一轮次多个独立工具默认线程并行执行以缩短总耗时;含可能首轮即
-    requires_token 的写入类工具时保持串行,避免破坏「未到令牌则不应执行
-    后续工具」的语义。
-    """
+    """执行工具并记录消息；独立调用并行，令牌敏感调用串行且遇授权请求立即返回。"""
     if not tool_calls:
         return None
 
@@ -373,6 +366,7 @@ def append_tool_messages(
                     dedup_state.add(key)
             if is_dup:
                 payload = {
+                    "success": False,
                     "error": "duplicate_tool_call",
                     "hint": "same tool+arguments already executed",
                 }
@@ -406,6 +400,7 @@ def append_tool_messages(
         for i, (_tc, name, raw_eff, key) in enumerate(parsed):
             if key in dedup_state:
                 payloads[i] = {
+                    "success": False,
                     "error": "duplicate_tool_call",
                     "hint": "same tool+arguments already executed",
                 }

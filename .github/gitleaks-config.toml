@@ -47,6 +47,11 @@ paths = [
     '''capabilities/assets/evidence/erp-approval-run\.log''',
 ]
 
+regexes = [
+    # MODstore 客服测试桩函数名 "_visible_ticket_or_404"：api 变量 + 长标识符触发 generic-api-key 误报，非凭据
+    '''_visible_ticket_or_404''',
+]
+
 # 项目特定的密钥模式（XCMAX 自定义）
 [[rules]]
 id = "xcmag-cursor-admin-token"

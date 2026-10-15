@@ -1,0 +1,76 @@
+{
+    "guest_time":  "2026-10-05T21:11:42.5590174+08:00",
+    "processes":  [
+                      {
+                          "ProcessId":  9968,
+                          "Name":  "XCAGI.exe",
+                          "ExecutablePath":  "C:\\Users\\xcagi-test\\AppData\\Local\\Programs\\XCAGI\\XCAGI.exe"
+                      },
+                      {
+                          "ProcessId":  2936,
+                          "Name":  "XCAGI.exe",
+                          "ExecutablePath":  "C:\\Users\\xcagi-test\\AppData\\Local\\Programs\\XCAGI\\XCAGI.exe"
+                      },
+                      {
+                          "ProcessId":  10168,
+                          "Name":  "XCAGI.exe",
+                          "ExecutablePath":  "C:\\Users\\xcagi-test\\AppData\\Local\\Programs\\XCAGI\\XCAGI.exe"
+                      },
+                      {
+                          "ProcessId":  5288,
+                          "Name":  "XCAGI.exe",
+                          "ExecutablePath":  "C:\\Users\\xcagi-test\\AppData\\Local\\Programs\\XCAGI\\XCAGI.exe"
+                      },
+                      {
+                          "ProcessId":  9588,
+                          "Name":  "xcagi-backend.exe",
+                          "ExecutablePath":  "C:\\Users\\xcagi-test\\AppData\\Local\\Programs\\XCAGI\\resources\\backend\\xcagi-backend.exe"
+                      },
+                      {
+                          "ProcessId":  5644,
+                          "Name":  "XCAGI.exe",
+                          "ExecutablePath":  "C:\\Users\\xcagi-test\\AppData\\Local\\Programs\\XCAGI\\XCAGI.exe"
+                      }
+                  ],
+    "port17500":  [
+                      {
+                          "LocalAddress":  "0.0.0.0",
+                          "LocalPort":  17500,
+                          "OwningProcess":  9588
+                      }
+                  ],
+    "health":  {
+                   "success":  true,
+                   "data":  {
+                                "status":  "ok",
+                                "timestamp":  "2026-10-05T21:11:42.453897",
+                                "build":  {
+                                              "admin_console_sha256":  "",
+                                              "admin_console_git_sha":  "",
+                                              "artifact_sha256":  "",
+                                              "built_at":  "",
+                                              "git_sha":  "be136e33638a062f1b791eda85ee9249914d362c",
+                                              "image_digest":  "",
+                                              "product_version":  "1.0.0.5",
+                                              "release_id":  "xcagi-1.0.0.5-be136e33638a062f1b791eda85ee9249914d362c"
+                                          }
+                            },
+                   "build":  {
+                                 "admin_console_sha256":  "",
+                                 "admin_console_git_sha":  "",
+                                 "artifact_sha256":  "",
+                                 "built_at":  "",
+                                 "git_sha":  "be136e33638a062f1b791eda85ee9249914d362c",
+                                 "image_digest":  "",
+                                 "product_version":  "1.0.0.5",
+                                 "release_id":  "xcagi-1.0.0.5-be136e33638a062f1b791eda85ee9249914d362c"
+                             }
+               },
+    "health_error":  null,
+    "build_info":  {
+                       "releaseId":  "xcagi-1.0.0.5-be136e33638a062f1b791eda85ee9249914d362c",
+                       "schema_version":  1,
+                       "version":  "1.0.0.5",
+                       "gitSha":  "be136e33638a062f1b791eda85ee9249914d362c"
+                   }
+}

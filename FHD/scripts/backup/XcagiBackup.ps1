@@ -1,15 +1,13 @@
 ﻿# Windows 计划任务入口：调用打包后端的 SQLite 在线备份及 integrity_check。
-# -DataDir 指定数据目录；-ExternalDir 同时写入外部位置。
-# 日志：%APPDATA%/XCAGI/logs/backup.log；保留策略由后端统一执行。
 [CmdletBinding()]
 param(
   [string]$DataDir = "",
-  [string]$ExternalDir = ""
+  [string]$ExternalDir = "",
+  [switch]$Weekly
 )
 
 $ErrorActionPreference = 'Stop'
 
-# --- 路径与日志 ---
 $AppData = $env:APPDATA
 if (-not $AppData) { $AppData = $env:LOCALAPPDATA }
 if (-not $AppData) { $AppData = Join-Path $env:USERPROFILE "AppData\Roaming" }
@@ -25,7 +23,6 @@ function Write-Log([string]$msg) {
   Write-Host $line
 }
 
-# --- 定位 xcagi-backend.exe ---
 function Find-BackendExe {
   # Resolve the executable shipped beside this script, including custom NSIS /D paths.
   $packagedBackendDir = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
@@ -35,7 +32,6 @@ function Find-BackendExe {
   return $null
 }
 
-# --- 清理老旧备份（与 backup_scheduler.py 策略一致）---
 function Cleanup-OldBackups([string]$BackupsDir) {
   if (-not (Test-Path $BackupsDir)) { return }
   $now = Get-Date
@@ -56,7 +52,6 @@ function Cleanup-OldBackups([string]$BackupsDir) {
   }
 }
 
-# --- 同步到外部目录（USB 盘）---
 function Sync-ToExternal([string]$BackupFile) {
   if (-not $ExternalDir) { return }
   if (-not (Test-Path $BackupFile)) { return }
@@ -73,7 +68,6 @@ function Sync-ToExternal([string]$BackupFile) {
   }
 }
 
-# --- 主流程 ---
 Write-Log "=== XcagiBackup start ==="
 
 $BackendExe = Find-BackendExe
@@ -82,7 +76,6 @@ if (-not $BackendExe) {
   exit 1
 }
 
-# 构造 CLI 参数
 $cliArgs = @("--desktop", "--migrate-only", "--backup")
 if ($DataDir) {
   $cliArgs += @("--data-dir", $DataDir)
@@ -101,19 +94,17 @@ try {
   exit 1
 }
 
-# 定位数据目录（用于清理和外部同步）
 $EffectiveDataDir = if ($DataDir) { $DataDir } else { Join-Path $AppData "XCAGI" }
 $BackupsDir = Join-Path $EffectiveDataDir "backups"
 
-# 找到本次产生的最新备份文件
 $latest = Get-ChildItem -Path $BackupsDir -Filter "xcagi-*.db" -File -ErrorAction SilentlyContinue |
   Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($latest) {
   Write-Log "latest backup: $($latest.Name) ($($latest.Length) bytes)"
   Sync-ToExternal $latest.FullName
 
-  # 周日额外创建 weekly 副本（与应用内 backup_scheduler 策略一致）
-  if ((Get-Date).DayOfWeek -eq 'Sunday' -and $latest.Name -match '^(xcagi-.+?)-(\d{14})\.db$') {
+  # Explicit cadence also preserves weekly retention after a missed Sunday trigger.
+  if (($Weekly -or (Get-Date).DayOfWeek -eq 'Sunday') -and $latest.Name -match '^(xcagi-.+?)-(\d{14})\.db$') {
     $weeklyName = "$($Matches[1])-weekly-$($Matches[2]).db"
     $weeklyPath = Join-Path $BackupsDir $weeklyName
     try {
@@ -121,12 +112,12 @@ if ($latest) {
       Write-Log "weekly backup created: $weeklyName"
       Sync-ToExternal $weeklyPath
     } catch {
-      Write-Log "WARN: failed to create weekly copy: $_"
+      Write-Log "ERROR: failed to create weekly copy: $_"
+      throw
     }
   }
 }
 
-# 清理老旧备份
 Cleanup-OldBackups $BackupsDir
 
 Write-Log "=== XcagiBackup done ==="

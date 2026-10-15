@@ -19,8 +19,14 @@ def _facade():
 def _client_issue_reply(receipt: dict | None) -> str:
     if not receipt:
         return ""
+    shots = receipt.get("screenshots") or {}
+    attachment = "本次诊断附件保存尚未确认，请在原工单继续补报。"
+    if receipt.get("support_bundle_saved") is True and receipt.get("support_bundle_sha256"):
+        attachment = f"支持包 SHA256：{receipt['support_bundle_sha256']}。"
+        if shots:
+            attachment += f"支持包已附截图 {shots.get('included')}/{shots.get('selected')} 张。"
     replies: dict[str, str] = {
-        "ROUTED": f"已向 Owner 提交产品问题，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。支持包 SHA256：{receipt.get('support_bundle_sha256')}。",
+        "ROUTED": f"产品问题已登记，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。{attachment}",
         "NEEDS_MORE_EVIDENCE": (
             "这看起来是产品缺陷上报，但还缺少必要信息，暂未自动建单。"
             "请按「期望：… 实际：…」补充后重发，我会立即建单并把工单号回给你。"
@@ -30,6 +36,12 @@ def _client_issue_reply(receipt: dict | None) -> str:
         "not_confirmed": "目前无法以足够把握确认是产品缺陷，因此没有自动建单。",
     }
     return replies.get(str(receipt.get("state") or ""), "")
+
+
+def _apply_client_issue_outcome(payload: dict, receipt: dict | None) -> dict:
+    if receipt and receipt.get("state") == "OWNER_ROUTE_UNAVAILABLE":
+        payload.update(success=False, message=_client_issue_reply(receipt))
+    return payload
 
 
 async def _classify_and_submit_client_issue_async(
@@ -73,6 +85,7 @@ async def _classify_and_submit_client_issue_async(
             tenant_id=runtime_context.get("tenant_id"),
             customer_message=message,
             triage=triage,
+            attachments=runtime_context.get("multimodal_attachments"),
         )
     except _facade().RECOVERABLE_ERRORS:
         _facade().logger.warning("client product issue intake failed", exc_info=True)
@@ -105,6 +118,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     runtime_context = _facade()._runtime_context_with_authenticated_actor(request, runtime_context)
     runtime_context = _facade().runtime_context_with_tier(runtime_context, ai_tier)
     from app.application import get_ai_chat_app_service
+    from app.application.ai_chat_app_service_dynamic_workflow_pending_mixin import (
+        CANCEL_WORDS,
+        CONFIRM_WORDS,
+    )
     from app.application.normal_chat_dispatch import route_normal_mode_message
     from app.application.workflow.planner import _looks_like_business_db_write
 
@@ -118,8 +135,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         and isinstance(_sales_route.get("payload"), dict)
         and bool(_sales_route.get("payload"))
     )
+    message_text = str(body.message or "")
     controlled_entity_named = any(
-        token in str(body.message or "")
+        token in message_text
         for token in ("客户", "购买单位", "产品", "商品", "原材料", "物料", "出货", "发货")
     )
     from app.infrastructure.tenant_scope import tenant_scope
@@ -128,11 +146,12 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     authenticated_tenant_id = (
         int(authenticated_tenant_id) if authenticated_tenant_id is not None else None
     )
-    if issue_reply := _client_issue_reply(
-        _classify_and_submit_client_issue(request, runtime_context, body.message, "")
-    ):
+    issue_receipt = _classify_and_submit_client_issue(request, runtime_context, body.message, "")
+    if issue_reply := _client_issue_reply(issue_receipt):
         payload = _facade().attach_chat_trace_run(
-            _facade()._xcagi_compat_reply_payload(issue_reply),
+            _apply_client_issue_outcome(
+                _facade()._xcagi_compat_reply_payload(issue_reply), issue_receipt
+            ),
             message=body.message,
             runtime_context=runtime_context,
             user_id=body.user_id,
@@ -144,13 +163,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         return
     if (
         has_pending_workflow
+        or message_text.strip().lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS
         or sales_closed_loop_route
-        or _sales_route.get("intent") in {"desktop", "workflow"}
+        # #2067：开单与 /api/ai/chat 同一套规则识别（process_chat），不交给 LLM 规划器。
+        or _sales_route.get("intent") in {"desktop", "workflow", "shipment"}
         or (
             controlled_entity_named
-            and _looks_like_business_db_write(
-                str(body.message or ""), str(body.message or "").lower()
-            )
+            and _looks_like_business_db_write(message_text, message_text.lower())
         )
     ):
         with tenant_scope(authenticated_tenant_id):
@@ -217,7 +236,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     llm_client = _facade().create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []
     pre_run = None
-    planner_runtime_context = dict(runtime_context or {})
+    planner_runtime_context = {**(runtime_context or {}), "message": body.message}
     try:
         pre_run = _facade().start_legacy_chat_run(
             message=body.message,
@@ -228,20 +247,44 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         )
         planner_runtime_context["run_id"] = pre_run.run_id
         planner_runtime_context["agent_run_id"] = pre_run.run_id
+        yield _facade()._sse_event_line(
+            {
+                "type": "tool_progress",
+                "phase": "started",
+                "label": "正在处理任务",
+                "run_id": pre_run.run_id,
+            }
+        )
     except _facade().RECOVERABLE_ERRORS:
         _facade().logger.debug("legacy stream planner AgentRun pre-create skipped", exc_info=True)
+
+    def finalize(payload):
+        return _facade().finalize_legacy_chat_run(
+            pre_run.run_id,
+            payload,
+            message=body.message,
+            runtime_context=planner_runtime_context,
+            user_id=body.user_id,
+            source=body.source,
+            channel="compat_chat_stream",
+        )
+
     try:
         halted_for_write_token = False
+        planner_result = {}
         for ev in _facade()._xcagi_guarded_planner_stream_events(
             body,
             runtime_context=planner_runtime_context,
             workspace_root=workspace_root,
             client=llm_client,
         ):
+            if isinstance(ev.get("result"), dict):
+                planner_result.update(ev["result"])
             et = ev.get("type")
             if et == "error":
                 if pre_run is not None:
                     payload = {
+                        **planner_result,
                         "success": False,
                         "message": str(ev.get("message") or "流式 planner 执行失败"),
                         "response": str(ev.get("message") or "流式 planner 执行失败"),
@@ -250,15 +293,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                             "status_code": ev.get("status_code"),
                         },
                     }
-                    _facade().finalize_legacy_chat_run(
-                        pre_run.run_id,
-                        payload,
-                        message=body.message,
-                        runtime_context=planner_runtime_context,
-                        user_id=body.user_id,
-                        source=body.source,
-                        channel="compat_chat_stream",
-                    )
+                    finalize(payload)
                 yield _facade()._sse_event_line(
                     _facade()._sse_payload_with_run_id(ev, getattr(pre_run, "run_id", None))
                 )
@@ -271,6 +306,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             elif et == "requires_token":
                 if pre_run is not None:
                     payload = {
+                        **planner_result,
                         "success": True,
                         "requires_token": True,
                         "token_name": ev.get("token_name"),
@@ -283,15 +319,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                             "token_description": ev.get("token_description"),
                         },
                     }
-                    _facade().finalize_legacy_chat_run(
-                        pre_run.run_id,
-                        payload,
-                        message=body.message,
-                        runtime_context=planner_runtime_context,
-                        user_id=body.user_id,
-                        source=body.source,
-                        channel="compat_chat_stream",
-                    )
+                    finalize(payload)
                 yield _facade()._sse_event_line(
                     _facade()._sse_payload_with_run_id(ev, getattr(pre_run, "run_id", None))
                 )
@@ -308,29 +336,20 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             msg = "模型服务已完成请求，但没有返回可显示的正文。若附带图片，请确认当前账号已启用视觉模型，或上传文字更清晰的截图。"
             if pre_run is not None:
                 payload = {
+                    **planner_result,
                     "success": False,
                     "message": msg,
                     "response": msg,
                     "data": {"error": msg},
                 }
-                _facade().finalize_legacy_chat_run(
-                    pre_run.run_id,
-                    payload,
-                    message=body.message,
-                    runtime_context=planner_runtime_context,
-                    user_id=body.user_id,
-                    source=body.source,
-                    channel="compat_chat_stream",
-                )
+                finalize(payload)
             yield _facade()._sse_event_line(
                 _facade()._sse_payload_with_run_id(
                     {"type": "error", "message": msg}, getattr(pre_run, "run_id", None)
                 )
             )
             return
-        # 终态回复必须使用**清洗后**的正文：merged 仍含 planner 内部标记
-        # （如 `[正在调用工具: execute_erp_capability]`），直接作为 response 会让
-        # 内部标记进入用户可见正文，并被 business_result.summary 原样带出。
+        # Normalize the worker's tool results together with the visible reply.
         from app.application.planner_display_markers import strip_planner_stream_markers
 
         visible_text, marker_lines = strip_planner_stream_markers(merged)
@@ -348,21 +367,12 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
         if not thinking:
             thinking = marker_lines
-        if thinking:
-            done_reply: str | dict = {"response": visible_text, "thinking_steps": thinking}
-        else:
-            done_reply = visible_text
+        done_reply = {"response": visible_text, "thinking_steps": thinking, **planner_result}
         payload = _facade()._xcagi_compat_reply_payload(done_reply)
+        payload.update(planner_result)
+        _apply_client_issue_outcome(payload, issue_receipt)
         if pre_run is not None:
-            payload = _facade().finalize_legacy_chat_run(
-                pre_run.run_id,
-                payload,
-                message=body.message,
-                runtime_context=planner_runtime_context,
-                user_id=body.user_id,
-                source=body.source,
-                channel="compat_chat_stream",
-            )
+            payload = finalize(payload)
         else:
             payload = _facade().attach_chat_trace_run(
                 payload,
@@ -383,15 +393,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 "response": message,
                 "data": {"error": message, "status_code": exc.status_code},
             }
-            _facade().finalize_legacy_chat_run(
-                pre_run.run_id,
-                payload,
-                message=body.message,
-                runtime_context=planner_runtime_context,
-                user_id=body.user_id,
-                source=body.source,
-                channel="compat_chat_stream",
-            )
+            finalize(payload)
         yield _facade()._sse_event_line(
             _facade()._sse_payload_with_run_id(
                 {"type": "error", "message": message, "status_code": exc.status_code},

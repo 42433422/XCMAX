@@ -1,5 +1,7 @@
 import { computed, watch, type Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
+import { APPROVAL_GRANT_REJECTED_MESSAGE, approveRunWithFreshGrant } from '@/api/agentRunApproval'
+import { showAppToast } from './useAppToast'
 import type { AgentTaskSummary } from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
 import { taskNeedsApproval, taskProgressPercent, taskStatusLabel, taskUnreadCount } from '@/utils/taskWorkspacePresentation'
@@ -92,5 +94,31 @@ export function useRoutedTaskWorkspace(options: RoutedTaskWorkspaceOptions) {
     workspaceMode,
     workspaceHeader,
     workspaceTaskId,
+  }
+}
+
+export function useTaskApprovalFeedback(options: {
+  currentSessionId: Ref<string>
+  approveTask: (taskId: string) => Promise<unknown>
+  syncSessionMessages: () => Promise<unknown>
+}) {
+  async function withFeedback(action: () => Promise<unknown>): Promise<void> {
+    try { await action() } catch (reason) {
+      showAppToast(reason instanceof Error && reason.message ? reason.message : APPROVAL_GRANT_REJECTED_MESSAGE, 'error', { duration: 8000 })
+    }
+  }
+  return {
+    approveTaskWithFeedback: (taskId: string) => withFeedback(() => options.approveTask(taskId)),
+    approveRunFromChat: (runId: string) => {
+      const session = options.currentSessionId.value
+      const isCurrent = () => session === options.currentSessionId.value
+      return withFeedback(async () => {
+        try {
+          await approveRunWithFreshGrant(runId, { runtimeContext: { source: 'chat_run_trace_approval' }, isCurrent })
+        } finally {
+          if (isCurrent()) await options.syncSessionMessages()
+        }
+      })
+    },
   }
 }

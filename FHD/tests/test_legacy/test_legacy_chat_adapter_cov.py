@@ -592,7 +592,7 @@ class TestChatStreamSseEvents:
             return_value=iter(["hello"]),
         ):
             events = list(chat_stream_sse_events("hi"))
-        assert events[-1] == {"type": "done"}
+        assert events[-1]["type"] == "done"
 
     def test_requires_token_yields_token_events(self):
         from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events

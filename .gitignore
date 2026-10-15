@@ -221,3 +221,5 @@ FHD/admin-console/.vite-bak/
 
 # 本地审计报告工作区（222MB+，永不入库；锚定根目录，避免误伤 FHD/docs/reports/）
 /reports/
+/FHD/tools/XcagiInstaller/Assets/WindowsRollback.generated.ps1
+/FHD/tools/XcagiInstaller/Assets/WindowsRollbackLoader.generated.ps1
