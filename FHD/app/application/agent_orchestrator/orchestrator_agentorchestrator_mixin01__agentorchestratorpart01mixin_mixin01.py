@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib
 
 from app.application.agent_orchestrator.clarification import pause_for_clarification
+from app.application.agent_orchestrator.param_references import refuse_unresolved_step
 
 
 def _facade():
@@ -422,6 +423,8 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
                     f"步骤 {step.node_id} 依赖未满足",
                     {"step_id": step.step_id, "depends_on": step.depends_on},
                 )
+                return
+            if refuse_unresolved_step(run, step, node_outputs):
                 return
             if pause_for_clarification(run, step, node_outputs):
                 return

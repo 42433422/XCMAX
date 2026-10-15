@@ -1,24 +1,7 @@
-/**
- * useChatViewHost coverage ramp 测试
- *
- * 目标：覆盖 useChatViewHost.ts 的 onMounted/onBeforeUnmount 生命周期、
- * 事件监听、viewport 媒体查询等场景。
- * 遵循铁律3：happy path + 空值/None + 边界值 + 异常路径。
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h, ref, nextTick } from 'vue'
+import { defineComponent, h, ref, nextTick, KeepAlive } from 'vue'
 import { mount } from '@vue/test-utils'
 import { useChatViewHost, type UseChatViewHostDeps } from './useChatViewHost'
-
-vi.mock('@/utils/hostBusinessPageRedirect', () => ({
-  resolveHostBusinessPageRedirect: vi.fn(() => null),
-}))
-
-vi.mock('@/utils/typeGuards', () => ({
-  asRecord: vi.fn((v) => v || {}),
-}))
-
-// ── helpers ──────────────────────────────────────────────────────────
 
 function makeDeps(overrides: Partial<UseChatViewHostDeps> = {}): UseChatViewHostDeps {
   return {
@@ -55,8 +38,6 @@ function mountWithHost(deps: UseChatViewHostDeps) {
   return { wrapper, api: api! }
 }
 
-// ── 测试套件 ─────────────────────────────────────────────────────────
-
 describe('useChatViewHost – coverage ramp', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -65,22 +46,11 @@ describe('useChatViewHost – coverage ramp', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
-    // 清理 window 上挂载的全局函数
     const w = window as unknown as Record<string, unknown>
     delete w.__VUE_CHAT_SEND__
     delete w.__VUE_CHAT_FILL__
     w.__VUE_HANDLE_AUTO_ACTION__ = false
   })
-
-  // ── 基础：返回 toolbar handlers ─────────────────────────────────
-
-  it('返回 onAutoRefreshToolbarChange', () => {
-    const { wrapper, api } = mountWithHost(makeDeps())
-    expect(typeof api.onAutoRefreshToolbarChange).toBe('function')
-    wrapper.unmount()
-  })
-
-  // ── onMounted：modsStore.initialize 调用 ────────────────────────
 
   it('onMounted 时调用 modsStore.initialize', async () => {
     const deps = makeDeps()
@@ -108,13 +78,22 @@ describe('useChatViewHost – coverage ramp', () => {
     wrapper.unmount()
   })
 
-  // ── onMounted：syncSessionMessages 调用 ─────────────────────────
-
-  it('onMounted 时调用 syncSessionMessages', async () => {
+  it('returning from approval refreshes a cached chat without sending or remounting', async () => {
     const deps = makeDeps()
-    const { wrapper } = mountWithHost(deps)
+    const shown = ref(true)
+    const Chat = defineComponent({ setup() { useChatViewHost(deps); return () => h('div', 'chat') } })
+    const wrapper = mount(defineComponent({ setup() {
+      return () => h(KeepAlive, () => shown.value ? h(Chat) : h('div', 'approval'))
+    } }))
     await nextTick()
-    expect(deps.syncSessionMessages).toHaveBeenCalled()
+    expect(deps.syncSessionMessages).toHaveBeenCalledTimes(1)
+    shown.value = false
+    await nextTick()
+    shown.value = true
+    await nextTick()
+    expect(deps.syncSessionMessages).toHaveBeenCalledTimes(2)
+    expect(deps.modsStore.initialize).toHaveBeenCalledTimes(1)
+    expect(deps.sendMessage).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -124,8 +103,6 @@ describe('useChatViewHost – coverage ramp', () => {
     })
     expect(() => mountWithHost(deps)).not.toThrow()
   })
-
-  // ── onMounted：batchCalculateHeights 延时调用 ───────────────────
 
   it('onMounted 后延时调用 batchCalculateHeights', async () => {
     vi.useFakeTimers()
@@ -137,8 +114,6 @@ describe('useChatViewHost – coverage ramp', () => {
     vi.useRealTimers()
     wrapper.unmount()
   })
-
-  // ── onMounted：window.handleAutoAction 注入 ─────────────────────
 
   it('onMounted 注入 window.__VUE_CHAT_SEND__ 和 handleAutoAction', async () => {
     const deps = makeDeps()
@@ -208,12 +183,9 @@ describe('useChatViewHost – coverage ramp', () => {
     const { wrapper } = mountWithHost(deps)
     await nextTick()
     ;(window as any).handleAutoAction(null)
-    // asRecord mock 会把 null 转成 {}
     expect(deps.chatHandleAutoAction).toHaveBeenCalledWith({}, undefined)
     wrapper.unmount()
   })
-
-  // ── onMounted：legacyAutoActionHandler 恢复 ─────────────────────
 
   it('卸载时恢复 legacy handleAutoAction', async () => {
     const legacyFn = vi.fn()
@@ -225,8 +197,6 @@ describe('useChatViewHost – coverage ramp', () => {
     wrapper.unmount()
     expect((window as any).handleAutoAction).toBe(legacyFn)
   })
-
-  // ── onMounted：事件监听注册 ─────────────────────────────────────
 
   it('onMounted 不再注册 xcagi:switch-view（统一由 AppShellBridge 处理）', async () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
@@ -247,8 +217,6 @@ describe('useChatViewHost – coverage ramp', () => {
     wrapper.unmount()
     addSpy.mockRestore()
   })
-
-  // ── xcagi:assistant-push 事件处理 ───────────────────────────────
 
   it('xcagi:assistant-push 事件更新 latestAssistantPush', async () => {
     const deps = makeDeps()
@@ -275,20 +243,16 @@ describe('useChatViewHost – coverage ramp', () => {
     wrapper.unmount()
   })
 
-  // ── onMounted：matchMedia viewport 监听 ─────────────────────────
-
   it('onMounted 时设置 isTaskPaneResizable 基于 matchMedia', async () => {
     const deps = makeDeps()
     const { wrapper } = mountWithHost(deps)
     await nextTick()
 
-    // matchMedia stub 返回 matches: false → isTaskPaneResizable = true
     expect(deps.isTaskPaneResizable.value).toBe(true)
     wrapper.unmount()
   })
 
   it('matchMedia matches=true 时 isTaskPaneResizable=false 并调用 stopTaskPaneResize', async () => {
-    // 覆盖 matchMedia stub
     const origMatchMedia = window.matchMedia
     window.matchMedia = ((query: string) => ({
       matches: true, // 视口 <= 1023px
@@ -321,7 +285,6 @@ describe('useChatViewHost – coverage ramp', () => {
       onchange: null,
       addListener: addListenerSpy,
       removeListener: () => {},
-      // 不提供 addEventListener
       dispatchEvent: () => false,
     })) as any
 
@@ -333,8 +296,6 @@ describe('useChatViewHost – coverage ramp', () => {
     window.matchMedia = origMatchMedia
     wrapper.unmount()
   })
-
-  // ── onBeforeUnmount：清理 ───────────────────────────────────────
 
   it('onBeforeUnmount 删除 window 全局函数', async () => {
     const deps = makeDeps()
@@ -375,8 +336,6 @@ describe('useChatViewHost – coverage ramp', () => {
     expect(deps.stopMessageTts).toHaveBeenCalled()
     expect(deps.cleanupVoiceInput).toHaveBeenCalled()
   })
-
-  // ── 边界：modsFromStore 为空 ────────────────────────────────────
 
   it('modsFromStore 为空时仍能正常挂载', async () => {
     const deps = makeDeps({

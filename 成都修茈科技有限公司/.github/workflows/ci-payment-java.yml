@@ -37,11 +37,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
           cache: maven
 
       - name: Maven verify
-        run: mvn -B verify
+        run: docker info > /dev/null && mvn -B verify && mvn -B -Dpayment.test.postgres.image=postgres:10.23-alpine verify

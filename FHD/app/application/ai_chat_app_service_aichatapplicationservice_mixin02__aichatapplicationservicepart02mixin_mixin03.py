@@ -41,7 +41,12 @@ class __AIChatApplicationServicePart02MixinPart03Mixin(_DynamicWorkflowPendingRe
         # its whole instruction as a single shipment would discard the reads
         # and the user's explicit confirmation boundary before planning.
         has_onboarding_plan = _onboarding_first_order_slots(text) is not None
-        if profile == "normal" and not explicit_workflow_tool_intent and not has_onboarding_plan:
+        if (
+            profile == "normal"
+            and not explicit_workflow_tool_intent
+            and not has_onboarding_plan
+            and user_id not in self._pending_workflows
+        ):
             rr = route_normal_mode_message(text)
             if rr.get("intent") == "product_query":
                 pq = build_product_query_response_dict(rr)
@@ -143,15 +148,18 @@ class __AIChatApplicationServicePart02MixinPart03Mixin(_DynamicWorkflowPendingRe
             )
             if (
                 target
-                and shipment_call_payload(target.tool_id, target.action, target.params) is not None
+                and (
+                    shipment_call_payload(target.tool_id, target.action, target.params) is not None
+                    or (target.tool_id == "sales" and target.action == "create_order")
+                )
                 and text.lower() not in {"取消", "否", "不要", "停止", "no"}
             ):
                 message = text = (
-                    f"{message}\n原始出货请求：{pending.get('runtime_context', {}).get('message', '')}"
+                    f"{message}\n原始业务请求：{pending.get('runtime_context', {}).get('message', '')}"
                 )
                 self._pending_workflows.pop(user_id, None)
         pending_handled, pending_result = self._resume_pending_dynamic_workflow(
-            user_id, message, text
+            user_id, message, text, context
         )
         if pending_handled:
             return pending_result

@@ -224,7 +224,7 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
 
 def host_xcagi_version() -> str:
     """宿主产品版本（版本锚点，由 scripts/dev/version_sync.py 按 VERSION.md 同步）。"""
-    current_version = "1.0.0.5"
+    current_version = "1.0.0.6"
     return current_version
 
 

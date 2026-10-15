@@ -454,7 +454,7 @@
           <button v-if="canExecutePermission" type="button" :disabled="busy || !runRows.length" @click="bulkOverride('skip')">本页全部跳过</button>
           <button v-if="canExecutePermission" type="button" :disabled="busy || !bulkNewRows.length" @click="bulkOverride('new')">本页可新增行设为新增</button>
         </div>
-        <a v-if="currentRun.summary.error" :href="etlApi.errorExportUrl(currentRun.id)" target="_blank" rel="noopener">导出错误行</a>
+        <a v-if="currentRun.summary.error" :href="etlApi.errorExportUrl(currentRun.id)">导出错误行</a>
       </div>
       <div class="etl-table-wrap">
         <table class="etl-table">
@@ -564,8 +564,6 @@
           <a
             v-if="['export_xlsx', 'export_csv'].includes(currentRun.target_type) && currentRun.status === 'completed'"
             :href="etlApi.exportUrl(currentRun.id)"
-            target="_blank"
-            rel="noopener"
             class="etl-secondary"
             >下载导出</a
           >

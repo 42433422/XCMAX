@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
+from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.workflow.clarification_node import (
     build_clarify_node,
-    entry_is_expired,
     insert_clarify_node,
     make_pending_entry,
     needs_clarification,
@@ -32,18 +34,18 @@ def _customers_registry() -> dict:
     }
 
 
+_CUSTOMER_CANDIDATES = [
+    {"id": "cust_1", "name": "北京智造科技"},
+    {"id": "cust_2", "name": "北京智造科技"},
+]
+
+
 def _ambiguous_delete_plan() -> PlanGraph:
-    """删除客户：存在多个同名候选，id 未解析。"""
     delete_node = WorkflowNode(
         node_id="delete_customer",
         tool_id="customers",
         action="delete",
-        params={
-            "_candidates": [
-                {"id": "cust_1", "name": "北京智造科技"},
-                {"id": "cust_2", "name": "北京智造科技"},
-            ]
-        },
+        params={"_candidates": [dict(candidate) for candidate in _CUSTOMER_CANDIDATES]},
         risk="high",
         idempotent=False,
         description="删除客户",
@@ -193,23 +195,27 @@ class TestBuildClarifyNode:
 
 
 class TestClarificationTTL:
-    def test_expired_clarification_is_swept(self):
-        pending = {
-            "u1": make_pending_entry(
-                plan=_ambiguous_delete_plan(),
-                runtime_context={},
-                thinking_steps="s",
-                clarification={},
-                clarify_node_id="clarify_1",
-                target_node_id="delete_customer",
-                now=1000.0,
-            )
-        }
-        assert entry_is_expired(pending["u1"], now=1000.0 + 60) is False
-        assert entry_is_expired(pending["u1"], now=1000.0 + 2000) is True
-        expired = sweep_expired(pending, now=1000.0 + 2000)
-        assert expired == ["u1"]
-        assert "u1" not in pending  # 自动取消，不堆积
+    def test_expired_clarification_is_swept(self, monkeypatch):
+        service = AIChatApplicationService()
+        service._pending_workflows["u1"] = make_pending_entry(
+            plan=_ambiguous_delete_plan(),
+            runtime_context={"session_id": "s"},
+            thinking_steps="s",
+            clarification={"candidates": [{"id": 7, "name": "好的测试商品"}]},
+            clarify_node_id="clarify_1",
+            target_node_id="delete_customer",
+            now=1000.0,
+        )
+        runner = MagicMock(return_value=(None, {}))
+        monkeypatch.setattr(service, "_hydrate_pending_workflow", lambda *_a: False)
+        monkeypatch.setattr(service, "_run_workflow_with_state_updates", runner)
+        monkeypatch.setattr(
+            service, "_format_workflow_run_response", lambda *_a, **_k: {"success": True}
+        )
+        result = service.process_chat("u1", "好的", context={"session_id": "s"}, source="normal")
+        runner.assert_not_called()
+        assert result["data"]["action"] == "clarification_required"
+        assert "u1" not in service._pending_workflows
 
     def test_non_clarification_pending_is_not_swept(self):
         pending = {"u1": {"kind": "confirmation", "created_at": 1.0, "ttl_seconds": 30}}
@@ -218,10 +224,7 @@ class TestClarificationTTL:
 
 
 class TestResolveConfirmedTarget:
-    CANDIDATES = [
-        {"id": "cust_1", "name": "北京智造科技"},
-        {"id": "cust_2", "name": "北京智造科技"},
-    ]
+    CANDIDATES = _CUSTOMER_CANDIDATES
 
     def test_resolve_by_index(self):
         assert resolve_confirmed_target("1", self.CANDIDATES) == {"id": "cust_1"}

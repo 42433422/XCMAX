@@ -349,6 +349,44 @@ class TestBuildSupportBundleZip:
         # No log files included
         assert not any(n.startswith("logs/") for n in zf.namelist())
 
+    def test_bundle_keeps_customer_screenshots_within_intake_limit(self, tmp_path, monkeypatch):
+        import random
+
+        from PIL import Image
+
+        from app.desktop_runtime import support_bundle
+
+        dirs = self._setup_dirs(tmp_path)
+        monkeypatch.setattr(support_bundle, "is_desktop_mode", lambda: True)
+        monkeypatch.setattr(support_bundle, "ensure_desktop_dirs", lambda *_: dirs)
+        monkeypatch.setattr(support_bundle, "export_config", lambda *_: {})
+        rng = random.Random(7)
+        for name in ("xcagi.log", "xcagi.log.1", "xcagi.log.2"):
+            body = "".join(f"{i:06d} step {rng.getrandbits(256):064x}\n" for i in range(4000))
+            (dirs["logs"] / name).write_text(f"FIRST-LINE\n{body}LAST-LINE\n")
+        screen = io.BytesIO()
+        Image.linear_gradient("L").resize((2880, 1800)).convert("RGB").save(screen, format="PNG")
+        shots = [screen.getvalue(), b"not an image"]
+
+        blob = support_bundle.build_support_bundle_zip(screenshots=shots)
+        zf = zipfile.ZipFile(io.BytesIO(blob))
+        manifest = json.loads(zf.read("manifest.json"))
+        assert len(blob) <= support_bundle.SUPPORT_BUNDLE_MAX_BYTES
+        assert manifest["screenshots"] == {"selected": 2, "included": 1}
+        assert manifest["logTailBytes"] < 250_000
+        log = zf.read("logs/xcagi.log").decode()
+        assert log.endswith("LAST-LINE\n") and "FIRST-LINE" not in log
+        with Image.open(zf.open("screenshots/1.jpg")) as image:
+            assert image.format == "JPEG" and max(image.size) <= 1600
+        assert "截图" in zf.read("README.txt").decode()
+        ref = support_bundle.build_evidence_ref(screenshots=shots)
+        assert ref is not None and ref["screenshots"] == {"selected": 2, "included": 1}
+
+        monkeypatch.setattr(support_bundle, "_SCREENSHOT_BUDGET", 0)
+        zf = zipfile.ZipFile(io.BytesIO(support_bundle.build_support_bundle_zip(screenshots=shots)))
+        assert json.loads(zf.read("manifest.json"))["screenshots"]["included"] == 0
+        assert not any(n.startswith("screenshots/") for n in zf.namelist())
+
     def test_evidence_ref_not_desktop_mode_returns_none(self, tmp_path):
         from app.desktop_runtime.support_bundle import build_evidence_ref
 

@@ -81,12 +81,7 @@ export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
   EMPLOYEE_WORKFLOW_MENU_ITEM,
 ]
 
-/**
- * 引导第三步「补基础线」完成后，平台壳模式注入主导航的行业业务核心项。
- * label 由行业 preset（INDUSTRY_MENU_LABELS）与账号定制 Mod 的 menu_overrides 覆盖：
- * 考勤 → 人员管理/部门管理…；涂料 → 产品管理/客户管理…；通用 → 业务对象/组织管理…
- * key 与宿主 router name 一致，去重时占用对应宿主槽位（抑制 erp-domain-bridge 的同名 mod 入口）。
- */
+/** 行业核心槽位使用行业/Mod 标签，并抑制同名 bridge 菜单；权限由角色规则过滤。 */
 export const INDUSTRY_DELIVERY_CORE_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'products', name: '业务对象', iconClass: 'fa-cubes' },
   { key: 'customers', name: '组织管理', iconClass: 'fa-users' },

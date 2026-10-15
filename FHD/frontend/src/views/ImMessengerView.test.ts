@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import ImMessengerView from './ImMessengerView.vue'
+import SharedIssueAcceptancePanel from '@/components/SharedIssueAcceptancePanel.vue'
 
 vi.mock('@/components/im/KellaiCustomerInbox.vue', () => ({
   default: { template: '<section class="kellai-inbox-stub">客来来客户会话（只读）</section>' },
@@ -107,7 +108,7 @@ vi.mock('pinia', async (importOriginal) => {
   }
 })
 vi.mock('@/stores/accountProfile', () => ({
-  useAccountProfileStore: () => ({}),
+  useAccountProfileStore: () => ({ marketUserId: null }),
 }))
 vi.mock('@/api/auth', () => ({
   authApi: {
@@ -184,6 +185,7 @@ describe('ImMessengerView.vue', () => {
     })
     await flushPromises()
     expect(wrapper.find('.im-messenger').exists()).toBe(true)
+    expect(wrapper.findComponent(SharedIssueAcceptancePanel).exists()).toBe(true)
     expect(wrapper.text()).not.toContain('固定联系人')
     expect(wrapper.text()).toContain('企业专属客服')
     expect(wrapper.text()).not.toContain('还没有会话')

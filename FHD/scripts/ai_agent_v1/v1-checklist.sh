@@ -6,7 +6,6 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 EVIDENCE="${ROOT}/docs/evidence/ai-agent-v1"
-PLAN="${ROOT}/docs/ai-agent-v1-plan.md"
 RUN_DEMO="${ROOT}/scripts/ai_agent_v1/run_demo_create_order.py"
 RUN_V1="${ROOT}/scripts/ai_agent_v1/run_demo_v1.py"
 
@@ -20,7 +19,7 @@ mode="${1:---check-only}"
 
 check_paths() {
   local ok=0
-  for f in "$PLAN" "${EVIDENCE}/README.md"; do
+  for f in "${EVIDENCE}/README.md"; do
     if [[ -f "$f" ]]; then
       echo "OK  $f"
     else
@@ -103,7 +102,6 @@ case "$mode" in
     fi
     ;;
   --paths)
-    echo "PLAN=$PLAN"
     echo "EVIDENCE=$EVIDENCE"
     echo "RUN_DEMO=$RUN_DEMO"
     echo "RUN_V1=$RUN_V1"

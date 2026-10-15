@@ -17,7 +17,6 @@ concurrency:
   group: ci-mobile-flutter-${{ github.ref }}
   cancel-in-progress: true
 
-
 defaults:
   run:
     working-directory: FHD
