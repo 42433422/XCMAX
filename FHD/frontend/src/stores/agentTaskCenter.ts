@@ -2,6 +2,7 @@ import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import agentRunsApi from '@/api/agentRuns'
+import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import type { AgentRun, AgentTaskRuntime, AgentTaskSummary } from '@/api/agentRuns'
 import { buildFullApiUrl } from '@/api/core'
 
@@ -135,13 +136,8 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     if (requestedScopeVersion !== scopeVersion) return
     const runId = activeRunOf(task)?.run_id || task.active_run_id
     if (!runId) throw new Error('工作区当前没有可控制的运行')
-    if (action === 'approve') {
-      const snapshot = await agentRunsApi.getRun(runId)
-      if (requestedScopeVersion !== scopeVersion) return
-      const grant = snapshot.approval?.grant
-      if (!grant) throw new Error('任务当前没有可用的审批凭证')
-      await agentRunsApi.continueRun(runId, { approval_grant: grant })
-    } else if (action === 'pause') await agentRunsApi.pauseRun(runId)
+    if (action === 'approve') await approveRunWithFreshGrant(runId, { isCurrent: () => requestedScopeVersion === scopeVersion })
+    else if (action === 'pause') await agentRunsApi.pauseRun(runId)
     else if (action === 'cancel') await agentRunsApi.cancelRun(runId)
     else if (action === 'resume') await agentRunsApi.resumeRun(runId)
     else await agentRunsApi.retryRun(runId)
@@ -152,6 +148,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     if (!id || actionPending.value) return
     const requestedScopeVersion = scopeVersion
     actionPending.value = action
+    error.value = ''
     try {
       const response = await agentRunsApi.getTask(id)
       if (requestedScopeVersion !== scopeVersion) return

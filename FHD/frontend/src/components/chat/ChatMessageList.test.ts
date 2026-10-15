@@ -107,6 +107,28 @@ describe('ChatMessageList', () => {
     expect(wrapper.find('.message-html').exists()).toBe(false)
   })
 
+  it('keeps an in-chat confirm entry for a run waiting on a later step (#2289)', async () => {
+    const trace = { run_id: 'run_wait_2', intent: 'stock_out', status: 'waiting' as const, terminal: false, phases: [] }
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        messages: [{ role: 'ai' as const, content: '等待确认', time: '12:00', agentRunTrace: trace }],
+        isLoading: false,
+        isStreamingReply: false,
+        loadingProgressText: '',
+        messageHeights: new Map<number, number>(),
+        latestAiMessageIndex: 0,
+        playingMsgIdx: -1,
+        isMessageCollapsed: () => false,
+        getCollapsedPreview: () => '',
+        canSpeakMessage: () => false,
+      },
+    })
+    await wrapper.get('[data-testid="chat-run-approve"]').trigger('click')
+    expect(wrapper.emitted('approve-run')).toEqual([['run_wait_2']])
+    await wrapper.setProps({ messages: [{ role: 'ai' as const, content: '完成', time: '12:01', agentRunTrace: { ...trace, status: 'success' as const, terminal: true } }] })
+    expect(wrapper.find('[data-testid="chat-run-approve"]').exists()).toBe(false)
+  })
+
   it('projects a legacy approval card into the same visual orchestration trace', () => {
     const wrapper = mount(ChatMessageList, {
       props: {

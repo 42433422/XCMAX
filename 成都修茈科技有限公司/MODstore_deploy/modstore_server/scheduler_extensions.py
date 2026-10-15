@@ -19,17 +19,16 @@ def register_extensions(
     *,
     track_job: Callable[[str, Callable[[], Any]], Any],
 ) -> None:
-    try:
-        from modstore_server.capability_proposal_relay import (
-            register_capability_proposal_relay_job,
-        )
+    from importlib import import_module
 
-        register_capability_proposal_relay_job(scheduler, track_job=track_job)
-    except RECOVERABLE_ERRORS:
-        logger.exception("register capability proposal relay failed")
-    try:
-        from modstore_server.cs_webhook_outbox import register_retry_job
-
-        register_retry_job(scheduler, track_job=track_job)
-    except RECOVERABLE_ERRORS:
-        logger.exception("register cs webhook outbox retry failed")
+    for module, register in (
+        ("capability_proposal_relay", "register_capability_proposal_relay_job"),
+        ("cs_webhook_outbox", "register_retry_job"),
+        ("incident_team_completion", "register_completion_job"),
+    ):
+        try:
+            getattr(import_module(f"modstore_server.{module}"), register)(
+                scheduler, track_job=track_job
+            )
+        except RECOVERABLE_ERRORS:
+            logger.exception("register %s failed", module)

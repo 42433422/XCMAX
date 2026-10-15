@@ -4,6 +4,8 @@ import json
 import stat
 import time
 
+import pytest
+
 
 def test_relay_poll_backoff_is_bounded_and_resets():
     from app.services import mobile_relay_desktop_client as relay
@@ -523,7 +525,8 @@ def test_execute_task_freechat_strips_mode_but_still_forces_cli(monkeypatch):
     assert "mode" not in ctx
 
 
-def test_gc_removes_stale_keeps_fresh(monkeypatch, tmp_path):
+@pytest.mark.parametrize("root_name", ["xcagi-wt-stale-1", "xcmax_product_scratch/stale-1"])
+def test_gc_removes_stale_keeps_fresh(monkeypatch, tmp_path, root_name):
     """工作区 GC：超期残留清掉、近期(活跃)保留。"""
     import time as _t
 
@@ -531,9 +534,9 @@ def test_gc_removes_stale_keeps_fresh(monkeypatch, tmp_path):
 
     monkeypatch.setattr(relay.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setenv("XCAGI_RELAY_WORKSPACE_GC_MAX_AGE_SEC", "100")
-    stale = tmp_path / "xcagi-wt-stale-1"
+    stale = tmp_path / root_name
     fresh = tmp_path / "xcagi-wt-fresh-2"
-    stale.mkdir()
+    stale.mkdir(parents=True)
     fresh.mkdir()
     old = _t.time() - 9999
     import os as _os

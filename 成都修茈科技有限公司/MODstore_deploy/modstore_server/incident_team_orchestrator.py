@@ -11,6 +11,7 @@ from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any, Dict, List, Optional
 
 from modstore_server.employee_executor import execute_employee_task
+from modstore_server.incident_bus import _incident_payload as _payload  # noqa: F401
 from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch_incident_team
 from modstore_server.llm_failure_classifier import (
     FAILURE_KIND_PROMPT,
@@ -18,7 +19,8 @@ from modstore_server.llm_failure_classifier import (
     FAILURE_KIND_TRANSIENT,
     classify_failure_kind,
 )
-from modstore_server.models import IncidentEvent, User
+from modstore_server.models import IncidentEvent as IncidentEvent
+from modstore_server.models import User
 from modstore_server.models import get_session_factory as get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -45,14 +47,6 @@ def _env_bool(name: str, default: bool) -> bool:
     if raw is None:
         return default
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _payload(row: IncidentEvent) -> Dict[str, Any]:
-    try:
-        data = json.loads(row.payload_json or "{}")
-        return data if isinstance(data, dict) else {}
-    except json.JSONDecodeError:
-        return {}
 
 
 def _role_timeout_seconds() -> int:

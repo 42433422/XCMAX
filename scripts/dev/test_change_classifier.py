@@ -130,5 +130,51 @@ class CliContractTests(unittest.TestCase):
         self.assertIn("skip=false", lines)
 
 
+# —— CI 加速专项 2026-10-12 清单回归测试（计划 Task 6，TDD）——
+
+
+class BackendScope(unittest.TestCase):
+    def test_desktop_and_installer_changes_skip_backend_suite(self):
+        # Windows/桌面专项 PR（PR #2300 形态）不再触发 27 分钟后端全量。
+        changed = [
+            "FHD/desktop/main.ts",
+            "FHD/desktop/backend-process.ts",
+            "FHD/tools/XcagiInstaller/MainWindow.cs",
+            "FHD/scripts/package/build-installer.ps1",
+            "FHD/docs/MIGRATION_REGISTRY.md",
+        ]
+        self.assertFalse(decide("backend", changed))
+
+    def test_app_code_change_still_runs_backend(self):
+        self.assertTrue(decide("backend", ["FHD/app/fastapi_routes/app.py"]))
+
+    def test_requirements_and_pyproject_still_run_backend(self):
+        self.assertTrue(decide("backend", ["FHD/requirements-server-api.txt"]))
+
+    def test_unknown_path_fails_open(self):
+        # 无法归类 → 扩大范围，绝不漏测（分类器铁律）。
+        self.assertTrue(decide("backend", ["some/new/dir/file.bin"]))
+
+    def test_empty_diff_fails_open(self):
+        self.assertTrue(decide("backend", []))
+
+
+class FrontendScope(unittest.TestCase):
+    def test_desktop_changes_skip_frontend_suite(self):
+        self.assertFalse(decide("frontend", ["FHD/desktop/updater.ts"]))
+
+    def test_frontend_source_change_runs_frontend(self):
+        self.assertTrue(decide("frontend", ["FHD/frontend/src/App.vue"]))
+
+
+class MacosScope(unittest.TestCase):
+    def test_installer_cs_change_triggers_desktop_windows_checks(self):
+        # 补漏测：纯安装器改动此前不跑 desktop/windows 专项检查。
+        self.assertTrue(decide("macos", ["FHD/tools/XcagiInstaller/App.xaml.cs"]))
+
+    def test_pure_doc_change_stays_off(self):
+        self.assertFalse(decide("macos", ["FHD/docs/some-guide.md"]))
+
+
 if __name__ == "__main__":
     unittest.main()

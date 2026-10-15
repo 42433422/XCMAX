@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from app.application import agent_task_context
+from app.application.agent_orchestrator.public_step_errors import public_step_error
 
 logger = logging.getLogger(__name__)
 _PUBLIC_WORKFLOW_FAILURE = "工作流执行失败，详细信息已记录"
@@ -89,7 +90,8 @@ class AIChatWorkflowResponseMixin:
                     )
                 )
             else:
-                lines.append(f"- {step.node_id}: {step.status}（{_PUBLIC_WORKFLOW_FAILURE}）")
+                reason = public_step_error(step) or _PUBLIC_WORKFLOW_FAILURE
+                lines.append(f"- {step.node_id}: {step.status}（{reason}）")
 
         success = agent_run.status == "completed"
         cost_units_total = int((agent_run.metadata or {}).get("cost_units_total") or 0)
@@ -148,7 +150,7 @@ class AIChatWorkflowResponseMixin:
                             "message": (
                                 self._workflow_output_message(step.output)
                                 if step.status == "completed"
-                                else _PUBLIC_WORKFLOW_FAILURE
+                                else public_step_error(step) or _PUBLIC_WORKFLOW_FAILURE
                             ),
                             "output_preview": (
                                 self._workflow_output_preview(step.output)
