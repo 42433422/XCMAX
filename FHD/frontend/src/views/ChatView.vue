@@ -26,6 +26,7 @@
         @shipment-download-click="handleShipmentDownloadClick"
         @approval-confirm="confirmWorkflowFromCard"
         @approval-cancel="cancelWorkflowFromCard"
+        @approve-run="approveRunFromChat"
       />
       <div v-if="isTaskPaneResizable" class="chat-pane-handle-slot">
         <PaneResizeHandle
@@ -73,7 +74,7 @@
         @retry-task="retryTask"
         @pause-task="pauseTask"
         @resume-task="resumeTask"
-        @approve-task="approveTask"
+        @approve-task="approveTaskWithFeedback"
         @cancel-task-by-id="cancelTaskById"
         @copy-assistant-push="copyAssistantPushContent"
         @open-assistant-float="openAssistantFloatFromTaskPanel"
@@ -203,6 +204,7 @@ import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
+import { showAppToast } from '@/composables/useAppToast'
 import { getIndustryPreset, getIndustryQuickButtons } from '@/constants/industryPresets'
 import { useRouter } from 'vue-router'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
@@ -223,7 +225,7 @@ import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
-import { resolveWorkspaceSessionId, useRoutedTaskWorkspace } from '@/composables/useRoutedTaskWorkspace'
+import { resolveWorkspaceSessionId, useRoutedTaskWorkspace, useTaskApprovalFeedback } from '@/composables/useRoutedTaskWorkspace'
 
 const props = withDefaults(
   defineProps<{
@@ -295,7 +297,6 @@ const {
   refetchTaskOrderNumber,
   setCustomOrderNumber,
   cancelTask,
-  showTaskConfirm,
   onExcelAnalyzeFileChange,
   bindExcelSheetToChat,
   bindAllExcelSheetsToChat,
@@ -340,9 +341,14 @@ const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList
     markTaskRead: taskCenterStore.markTaskRead,
   })
 
-function controlWorkspaceTask(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): void {
-  void taskCenterStore.controlTask(workspaceTaskId.value, action)
+async function controlWorkspaceTask(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): Promise<void> {
+  await taskCenterStore.controlTask(workspaceTaskId.value, action)
+  if (taskCenterStore.error) showAppToast(taskCenterStore.error, 'error', { duration: 8000 })
 }
+
+const { approveTaskWithFeedback, approveRunFromChat } = useTaskApprovalFeedback({
+  currentSessionId, approveTask, syncSessionMessages,
+})
 
 const messageInput = ref('')
 

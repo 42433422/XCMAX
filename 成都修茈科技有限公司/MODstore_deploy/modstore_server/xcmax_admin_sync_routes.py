@@ -11,13 +11,19 @@ import os
 import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
+from modstore_server.api.service_auth import (
+    require_admin_user,
+    require_sync_peer,
+    require_sync_peer_or_admin,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("modstore_server.xcmax_admin_api")
 router = APIRouter(prefix="/api/xcmax", tags=["xcmax-admin"])
+_PEER_OR_ADMIN = [Depends(require_sync_peer_or_admin)]
 _SYNC_UNAVAILABLE = "同步服务暂时不可用，请稍后重试"
 
 
@@ -40,7 +46,7 @@ def _inbox_conflict_count(conn: sqlite3.Connection) -> int:
     return int(row["c"] or 0)
 
 
-@router.get("/sync/status", response_model=None)
+@router.get("/sync/status", response_model=None, dependencies=_PEER_OR_ADMIN)
 async def sync_status() -> dict[str, Any]:
     _facade()._ensure_schema()
     try:
@@ -79,7 +85,7 @@ async def sync_status() -> dict[str, Any]:
         }
 
 
-@router.get("/sync/changes", response_model=None)
+@router.get("/sync/changes", response_model=None, dependencies=_PEER_OR_ADMIN)
 async def sync_changes(
     since_cursor: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000)
 ) -> dict[str, Any]:
@@ -116,7 +122,7 @@ async def sync_changes(
         return {"success": True, "data": [], "count": 0, "note": _SYNC_UNAVAILABLE}
 
 
-@router.post("/sync/receive", response_model=None)
+@router.post("/sync/receive", response_model=None, dependencies=[Depends(require_sync_peer)])
 async def sync_receive(body: dict | list = Body(default=None)) -> dict[str, Any]:
     """接收来自本地节点的变更。
 
@@ -183,7 +189,7 @@ async def sync_receive(body: dict | list = Body(default=None)) -> dict[str, Any]
         )
 
 
-@router.post("/sync/push", response_model=None)
+@router.post("/sync/push", response_model=None, dependencies=_PEER_OR_ADMIN)
 async def sync_push() -> dict[str, Any]:
     """服务器端通常不需要主动 push，但保留接口以便 UI 调用一致。"""
     _facade()._ensure_schema()
@@ -198,7 +204,7 @@ async def sync_push() -> dict[str, Any]:
     }
 
 
-@router.post("/sync/pull", response_model=None)
+@router.post("/sync/pull", response_model=None, dependencies=_PEER_OR_ADMIN)
 async def sync_pull() -> dict[str, Any]:
     """占位：服务器端无远端可拉，返回空摘要。"""
     _facade()._ensure_schema()
@@ -208,7 +214,7 @@ async def sync_pull() -> dict[str, Any]:
     }
 
 
-@router.get("/sync/conflicts", response_model=None)
+@router.get("/sync/conflicts", response_model=None, dependencies=_PEER_OR_ADMIN)
 async def list_conflicts(limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]:
     _facade()._ensure_schema()
     try:
@@ -240,7 +246,11 @@ async def list_conflicts(limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]
         return {"success": True, "data": [], "count": 0, "note": _SYNC_UNAVAILABLE}
 
 
-@router.post("/sync/conflicts/{inbox_id}/resolve", response_model=None)
+@router.post(
+    "/sync/conflicts/{inbox_id}/resolve",
+    response_model=None,
+    dependencies=[Depends(require_admin_user)],
+)
 async def resolve_conflict(
     inbox_id: int, body: dict = Body(default_factory=dict)
 ) -> dict[str, Any]:
@@ -316,7 +326,7 @@ async def _sse_generator(request: Request, since_cursor: int):
         await asyncio.sleep(SYNC_POLL_INTERVAL_S)
 
 
-@router.get("/sync/stream", response_model=None)
+@router.get("/sync/stream", response_model=None, dependencies=_PEER_OR_ADMIN)
 async def sync_stream(request: Request, since_cursor: int = Query(0, ge=0)):
     return StreamingResponse(
         _facade()._sse_generator(request, since_cursor),

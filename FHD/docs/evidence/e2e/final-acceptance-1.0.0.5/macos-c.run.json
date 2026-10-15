@@ -1,0 +1,317 @@
+{
+  "run_id": "MAC-C-<SHA8>-<YYYYMMDD>-001",
+  "scope": "macOS C 轮：故障取消、自动备份、隔离恢复（清单 P–R 段）",
+  "result_values": ["PASS", "FAIL", "UNKNOWN"],
+  "gate_values": ["GREEN", "YELLOW", "RED", "UNKNOWN"],
+  "created_at": null,
+  "final_acceptance": true,
+  "release_frozen": false,
+  "published": false,
+  "stable_ota": false,
+  "candidate": {
+    "source_sha": null,
+    "version": "1.0.0.5",
+    "build_run_id": null,
+    "installer_name": null,
+    "installer_sha256": null,
+    "installer_size": null,
+    "signature": null,
+    "build_info": {
+      "version": null,
+      "gitSha": null,
+      "releaseId": null
+    },
+    "running_backend": {
+      "version": null,
+      "gitSha": null,
+      "releaseId": null
+    },
+    "platform": "macos"
+  },
+  "machine": {
+    "os": null,
+    "arch": null,
+    "clean": null,
+    "previous_version": null
+  },
+  "account": {
+    "alias": null,
+    "tenant": null,
+    "enterprise": null
+  },
+  "gates": {
+    "G13": {
+      "status": "UNKNOWN",
+      "items": [141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162]
+    }
+  },
+  "gate_notes": {
+    "G13": "备份必须由正式计划任务自然触发（不能手动点击代替），记录产物路径、大小、时间和版本；恢复在隔离数据上进行，并在应用界面读回客户、商品、单据和 Mod 配置。"
+  },
+  "items": [
+    {
+      "no": 141,
+      "section": "P",
+      "item": "备份功能实际存在",
+      "gate": "G13",
+      "final_gates": [4, 15],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 142,
+      "section": "P",
+      "item": "计划任务真正注册",
+      "gate": "G13",
+      "final_gates": [4, 15],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 143,
+      "section": "P",
+      "item": "自动备份能够执行",
+      "gate": "G13",
+      "final_gates": [4, 15],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 144,
+      "section": "P",
+      "item": "生成真实备份文件",
+      "gate": "G13",
+      "final_gates": [4, 15],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 145,
+      "section": "P",
+      "item": "备份文件大小合理",
+      "gate": "G13",
+      "final_gates": [4, 15],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 146,
+      "section": "P",
+      "item": "记录备份时间",
+      "gate": "G13",
+      "final_gates": [4, 15],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 147,
+      "section": "P",
+      "item": "记录备份版本",
+      "gate": "G13",
+      "final_gates": [4, 15],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 148,
+      "section": "Q",
+      "item": "制造一个测试故障或使用独立测试数据。",
+      "gate": "G13",
+      "final_gates": [4, 16],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 149,
+      "section": "Q",
+      "item": "从备份恢复。",
+      "gate": "G13",
+      "final_gates": [4, 16],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 150,
+      "section": "Q",
+      "item": "软件重新启动。",
+      "gate": "G13",
+      "final_gates": [4, 16],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 151,
+      "section": "Q",
+      "item": "用户数据恢复。",
+      "gate": "G13",
+      "final_gates": [4, 16],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 152,
+      "section": "Q",
+      "item": "客户恢复。",
+      "gate": "G13",
+      "final_gates": [4, 16],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 153,
+      "section": "Q",
+      "item": "商品恢复。",
+      "gate": "G13",
+      "final_gates": [4, 16],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 154,
+      "section": "Q",
+      "item": "单据恢复。",
+      "gate": "G13",
+      "final_gates": [4, 16],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 155,
+      "section": "Q",
+      "item": "Mod 配置恢复。",
+      "gate": "G13",
+      "final_gates": [4, 16],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 156,
+      "section": "Q",
+      "item": "软件继续可用。",
+      "gate": "G13",
+      "final_gates": [4, 16],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 157,
+      "section": "R",
+      "item": "网络断开后恢复。",
+      "gate": "G13",
+      "final_gates": [4],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 158,
+      "section": "R",
+      "item": "API临时不可用后恢复。",
+      "gate": "G13",
+      "final_gates": [4],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 159,
+      "section": "R",
+      "item": "AI模型调用失败后有明确提示。",
+      "gate": "G13",
+      "final_gates": [4],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 160,
+      "section": "R",
+      "item": "工具失败后不会伪装成功。",
+      "gate": "G13",
+      "final_gates": [4],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 161,
+      "section": "R",
+      "item": "软件强制退出再开不会破坏数据库。",
+      "gate": "G13",
+      "final_gates": [4],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    },
+    {
+      "no": 162,
+      "section": "R",
+      "item": "同一业务不会因为重试重复执行。",
+      "gate": "G13",
+      "final_gates": [4],
+      "owner": "field",
+      "result": "UNKNOWN",
+      "observed_at": null,
+      "evidence": [],
+      "note": ""
+    }
+  ]
+}

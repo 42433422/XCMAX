@@ -61,7 +61,9 @@ def record_worker_repair(db: Any, ticket: Any, event_id: int, rows: list[dict[st
     if not team_succeeded(rows):
         return
     fix = next((row for row in rows if row.get("role") == "fix"), {})
-    reference = _change_request_reference(fix.get("result"))
+    reference = _change_request_reference(fix.get("result")) or _change_request_reference(
+        fix.get("handler_outputs")
+    )
     if not reference:
         return
     cr = db.get(EmployeeChangeRequest, reference)
@@ -167,6 +169,7 @@ def bind_shared_release(db: Any, ticket: Any, host_sha: str) -> dict[str, Any] |
             action_type="issue.repair.result",
             status="completed",
         )
+        .filter(CustomerServiceAction.id > int(resolution.get("reopen_after_action_id") or 0))
         .order_by(CustomerServiceAction.id.desc())
         .all()
     )

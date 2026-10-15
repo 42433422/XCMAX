@@ -46,7 +46,12 @@ def record_dispatch_failure(payload: dict[str, Any], error: str) -> None:
 
 
 def enqueue_issue(
-    db: Session, ticket: CustomerServiceTicket, *, revision: str = "", private_factory: bool = False
+    db: Session,
+    ticket: CustomerServiceTicket,
+    *,
+    revision: str = "",
+    private_factory: bool = False,
+    support_report: dict[str, Any] | None = None,
 ) -> str:
     evidence = json_loads(ticket.evidence_json, {})
     if not isinstance(evidence, dict):
@@ -68,6 +73,9 @@ def enqueue_issue(
         scope = "website"
     elif domain in {"desktop", "android", "fhd", "modstore"}:
         scope = domain
+    summary = str(ticket.summary or "")
+    if resolution.get("state") == "reopened" and resolution.get("reopen_note"):
+        summary = f"客户重开说明：{resolution['reopen_note']}\n原问题：{summary}"
     payload = {
         "ticket_id": int(ticket.id),
         "ticket_no": ticket.ticket_no,
@@ -75,7 +83,7 @@ def enqueue_issue(
         "tenant_id": int(ticket.user_id),
         "session_id": int(ticket.session_id),
         "title": ticket.title,
-        "summary": str(ticket.summary or "")[:1500],
+        "summary": summary[:1500],
         "intent": ticket.intent,
         "issue_domain": evidence.get("issue_domain", "platform"),
         "source": "customer_ticket",
@@ -97,6 +105,8 @@ def enqueue_issue(
         "product_version": evidence.get("product_version", ""),
         "git_sha": evidence.get("git_sha", ""),
     }
+    if support_report:
+        payload.update(support_report)
     if ticket.intent == "custom_delivery":
         payload["delivery_managed_by"] = "custom_delivery"
     if private_factory:
@@ -112,7 +122,7 @@ def enqueue_issue(
 
 
 def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
-    """Outbox consumer; a retry can never create a second incident for the same input."""
+    """Consume original lineage; intact incidents and private runs stay idempotent."""
     from modstore_server.duty_workforce_contracts import (
         enrich_customer_ticket_publish_payload,
     )
@@ -145,18 +155,34 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def dispatch_pending_issue_events(ticket_id: int) -> None:
-    """Wake the existing durable outbox for this ticket; the worker retries failures."""
-    for record in db_outbox.fetch_pending(limit=100):
+    """Retry original intake while retaining dispatched outbox evidence."""
+    with db_outbox.get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, ticket_id)
+        if ticket is None or ticket.status in {"resolved", "closed"}:
+            return
+        prefix, owner_id = f"{ticket.ticket_no}:", int(ticket.user_id)
+    for record in db_outbox.fetch_pending(
+        limit=100, aggregate_prefix=prefix, include_dispatched=True
+    ):
         if (
             record.event_name != INTAKE_EVENT
             or int(record.payload.get("ticket_id") or 0) != ticket_id
+            or int(record.payload.get("user_id") or 0) != owner_id
+            or (
+                record.status == "dispatched"
+                and record.payload.get("intake_source") != "customer_feedback"
+            )
         ):
             continue
         try:
             result = dispatch_issue_event(record.to_envelope())
         except BOUNDARY_ERRORS as exc:
+            if record.status == "dispatched":
+                raise
             db_outbox.mark_failed(record.id, str(exc)[:500], terminal=False)
         else:
+            if record.status == "dispatched":
+                continue
             if result.get("ok"):
                 db_outbox.mark_dispatched(record.id)
             else:
