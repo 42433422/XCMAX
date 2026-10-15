@@ -1,0 +1,76 @@
+{
+ "id": 38,
+ "user_id": 77,
+ "ticket_no": "CIc5eb4b108e9092ec90c0c0bfb45e1f22ae2802c9b978281d",
+ "status": "processing",
+ "decision_status": "approved",
+ "closed_at": "None",
+ "updated_at": "2026-10-11 03:30:49.351097",
+ "evidence_keys": [
+  "acceptance_criteria",
+  "customer_instance_id",
+  "description",
+  "employee_reports",
+  "git_sha",
+  "installed_version",
+  "intake_request_sha256",
+  "issue_domain",
+  "product_version",
+  "resolution",
+  "shared_core_prerequisite",
+  "source",
+  "source_ref",
+  "support_bundle_sha256",
+  "target_mod_id",
+  "title",
+  "work_order_id"
+ ],
+ "resolution": {
+  "schema_version": 1,
+  "ticket_id": 38,
+  "owner_user_id": 77,
+  "route": "shared_core",
+  "state": "repair_failed",
+  "source_ref": "TLA-20261011-R2",
+  "original_title": "[验收测试-重开] 桌面端看不到工单处理进度说明",
+  "original_request": "【XCMAX 工单闭环验收测试工单（重开验证），测试租户A，非真实客户】现象：提交问题后，不清楚在哪里看 AI 处理进度和结果，也不知道『已解决/重新打开』按钮在哪。期望：给出操作方法说明即可，不需要改代码。发生时间 2026-10-11 11:20（UTC+8），模块：问题/工单入口。联系人：TEST-TICKET-LOOP-A。",
+  "reported_version": "1.0.0.5",
+  "incident_event_id": 85176,
+  "repair_verified": false,
+  "team": [
+   {
+    "role": "scout",
+    "employee_id": "change-request-auditor",
+    "ok": false,
+    "status": "unknown"
+   },
+   {
+    "role": "fix",
+    "employee_id": "vibe-coding-maintainer",
+    "ok": false,
+    "status": "unknown"
+   },
+   {
+    "role": "verify",
+    "employee_id": "test-qa-runner",
+    "ok": false,
+    "status": "unknown"
+   }
+  ],
+  "updated_at": "2026-10-11T03:30:49.345961+00:00"
+ },
+ "_cs_progress": null,
+ "employee_reports": [
+  {
+   "type": "incident_team",
+   "progress_sha256": "42c2dd1104104500818dbc39d367c13e3b8b89e8c217794178427e1d3a28c565",
+   "event_id": 85176,
+   "team_ok": false,
+   "progress": "排查（change-request-auditor）未完成（unknown）；修复（vibe-coding-maintainer）未完成（unknown）；验证（test-qa-runner）未完成（unknown）",
+   "at": "2026-10-11T03:30:49.351105+00:00"
+  }
+ ],
+ "reopen_history": null,
+ "customer_decisions": null,
+ "outbox": []
+}

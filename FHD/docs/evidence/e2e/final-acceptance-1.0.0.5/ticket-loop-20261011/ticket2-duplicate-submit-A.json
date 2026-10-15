@@ -1,0 +1,1 @@
+{"observed_at": "2026-10-11T11:17:31.961798+08:00", "resubmits": [{"http": 200, "ticket_id": 38, "ticket_no": "CIc5eb4b108e9092ec90c0c0bfb45e1f22ae2802c9b978281d", "replayed": true}, {"http": 200, "ticket_id": 38, "ticket_no": "CIc5eb4b108e9092ec90c0c0bfb45e1f22ae2802c9b978281d", "replayed": true}], "mine_ids": [38, 37]}

@@ -49,7 +49,7 @@ xcrun notarytool submit "${DMG_PATH}" \
   --issuer "${APP_STORE_CONNECT_API_ISSUER_ID}" \
   --wait \
   --timeout 30m
-xcrun stapler staple "${DMG_PATH}"
+python3 "${ROOT}/scripts/package/staple-macos-dmg.py" "${DMG_PATH}"
 xcrun stapler validate "${DMG_PATH}"
 spctl -a -vv -t open --context context:primary-signature "${DMG_PATH}"
 

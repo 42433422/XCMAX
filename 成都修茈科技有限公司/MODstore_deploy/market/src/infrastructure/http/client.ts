@@ -106,11 +106,10 @@ function readCsrfTokenFromCookie(): string | null {
   return null
 }
 
-/** 与后端 CSRFMiddleware 对齐：无 Bearer 的变更请求需带与 Cookie 一致的 X-CSRF-Token。 */
+/** 与后端 CSRFMiddleware 对齐：变更请求一律带与 Cookie 一致的 X-CSRF-Token（过期 Bearer 不再豁免）。 */
 function attachCsrfHeader(headers: Headers, method: string): void {
   const m = method.toUpperCase()
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return
-  if (headers.has('Authorization')) return
   if (headers.has('X-CSRF-Token')) return
   const tok = readCsrfTokenFromCookie()
   if (tok) headers.set('X-CSRF-Token', tok)

@@ -25,4 +25,30 @@ describe('sales approval totals in production JavaScript', () => {
     })
     expect(JSON.parse(output).amount).toBe(amount)
   })
+
+  it('reads execute_closed_loop terms from payload.order', () => {
+    const request = {
+      business_type: 'workflow_tool',
+      business_data: {
+        tool_id: 'sales',
+        action: 'execute_closed_loop',
+        params: {
+          payload: {
+            order: {
+              customer_name: 'MAC验收0929客户',
+              currency: 'CNY',
+              items: [{ product_name: 'MAC验收0929产品13687', quantity: 2, unit_price: 12.5 }],
+            },
+          },
+        },
+      },
+    }
+    const output = execFileSync(process.execPath, ['--input-type=module', '-e', compiledPreview, JSON.stringify(request)], {
+      encoding: 'utf8',
+    })
+    const preview = JSON.parse(output)
+    expect(preview.customer).toBe('MAC验收0929客户')
+    expect(preview.amount).toBe('25.00')
+    expect(preview.operation).toBe('销售闭环')
+  })
 })
