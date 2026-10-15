@@ -107,5 +107,31 @@ powershell -ExecutionPolicy Bypass -File .\accept-base-login.ps1 -WithVideo `
 回传后由 Mac 侧在目录里登记（`evidence.runs` / `evidence.videos` / `evidence.screenshots` /
 `evidence.platform_assets.windows`），本功能才算 Windows 侧验收成立；在此基础上才推进下一个功能。
 方法：整目录带回收即可——把 `shot\`、`video\`、`log\` 原样拷进
-`.../base-login/windows/` 下同名子目录，记录与身份文件放在该目录根部（脚本已按 `-RepoRelDir`
+`.../base-login/windows/` 下同名子目录，记录与身份文件放在该目录根（脚本已按 `-RepoRelDir`
 写好 `media[].path`，路径自然对齐）。
+
+## 5. 2026-09-24 复验轮（同一目录，记录被本轮取代）
+
+本轮按「当前正在交付的安装包」重新做了一轮完整验收，覆盖此前的 6 个用例并补齐三个新用例：
+
+| 用例 | 覆盖 |
+|------|------|
+| W0 安装 + 首次启动 | 官网下载指针（`download-windows-hotfix.json`）与实装安装包 sha256、`resources/build-info.json` 三方一致；内嵌后端存在；全新空数据目录下首启停在登录页、无会话 |
+| W4b 退出后重启不恢复 | 真实 GUI 退出登录 → 关闭应用 → 重启 → 仍停在登录页，退出前捕获的 session cookie 已被拒绝 |
+| W7 前后端状态一致 | 已登录工作台稳态：`/api/health` 全绿且侧栏状态文字「系统正常」与载荷一致；重启后的冷启动预热窗口（neuro/本地 LLM 未就绪）与登出态载荷如实记录，不隐藏 |
+
+执行方式（本轮脚本、操作员与采样日志都在 `log/` 里）：
+
+1. 覆盖安装官网当前交付包（同版本；安装包先复制到本地磁盘，网络盘会触发 Windows 的
+   “打开文件-安全警告”对话框挡住静默安装），安装事实见 `log/install-facts.json`；
+2. 全新空数据目录 + `XCAGI_DESKTOP_USER_DATA_DIR` 隔离启动，`log/install-facts.json` 与
+   `base-login-windows-identity.json` 的 `backend_cmdline` 可核对 `--data-dir` 确实指向隔离目录；
+3. `operator-base-login.mjs --phase a`（首启/登录/登出/再登录 + 截图 + 录像 A）→
+   `accept-base-login.ps1 -WithVideo ... -OperatorJson ... -OperatorJsonPost ...` →
+   `operator-base-login.mjs --phase c`（登出/重启/断言/稳态采样）。
+
+新增工具（与本目录其余脚本同一接口）：`operator-base-login.mjs`（真实 GUI 驱动 + 事实 JSON）、
+`cdp.mjs`（CDP 客户端）、`health-sampler.ps1` / `ui-sampler.mjs`（后端与前端状态时间线）、
+`record-until-marker.ps1`（按标记文件开关的整屏录像，`-b:v 600k`）。
+录像与后端/前端时间线文件较大（`log/health-timeline.jsonl`、`log/ui-timeline.jsonl` 约 240 KB），
+均为本轮原始抓取，未做裁剪。
