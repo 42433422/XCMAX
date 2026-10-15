@@ -1,5 +1,5 @@
 {
-  "lines": 2303059,
+  "lines": 2303030,
   "updated": "2026-10-16",
-  "note": "Reconcile existing PR2254 cancellation scope onto current main: preserve all protected checks, existing main CI concurrency and isolated deployment/manual runs; original reviewed growth was38, current scoped growth27 after removing duplicate CI group and repeated publisher comments. No unrelated feature deletion."
+  "note": "棘轮下调"
 }

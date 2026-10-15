@@ -1,12 +1,6 @@
 # CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root.py
-# 变异测试 — PR gate（作用域 app/di + app/contexts，阈值 kill rate ≥ 80%）
-# 2026-07-21：收紧 source_paths 并补测后加回 pull_request gate。
-# 2026-08-05：mutation-smoke 是 required status check。此前 pull_request 用 paths 过滤，
-#   未命中路径的 PR 不会创建该 check → 永久 BLOCKED。改为 pull_request 无条件触发，
-#   用步骤级路径检测决定是否真正跑 mutmut；未命中时快速成功以满足 required check。
-# 2026-09-09：修复手动触发（workflow_dispatch）漏跑——Detect 步骤此前只在 PR/push 时运行，
-#   dispatch 时不产出 run_mutation，后续 mutmut 步骤条件（schedule 或 run_mutation=true）
-#   全不满足，整条流水线静默跳过绿灯。现 dispatch 强制跑（手动触发即明确要求执行）。
+# Required mutation gate: always create the PR check; dispatch runs the full scope.
+
 name: mutation-smoke
 
 on:
@@ -19,8 +13,6 @@ on:
 
 permissions:
   contents: read
-
-# CI 提速：同一 PR 新推送取消旧运行；push/schedule/dispatch 按 run_id 独占，不取消。
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
