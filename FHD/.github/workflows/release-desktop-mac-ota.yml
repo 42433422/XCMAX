@@ -79,12 +79,11 @@ jobs:
             exit 1
           fi
           echo "macOS OTA preflight passed."
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"

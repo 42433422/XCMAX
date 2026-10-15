@@ -37,7 +37,7 @@ jobs:
       }}
     steps:
       - name: SSH — git pull + venv pip + restart + health
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}

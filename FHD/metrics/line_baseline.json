@@ -1,5 +1,5 @@
 {
-  "lines": 2303032,
+  "lines": 2303367,
   "updated": "2026-10-15",
-  "note": "棘轮下调"
+  "note": "Retain only the existing approved #2341 Windows lifecycle allowance (+354 maintained lines). Exact main d4dcd013 is 2303016 (prior hosted2303020 minus four maintained lines in #2263); #1772 adds1 and Actions remove4 distinct blank lines. Combined2303367; no additional allowance, counter or gate changes."
 }
