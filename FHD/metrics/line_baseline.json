@@ -1,5 +1,5 @@
 {
-  "lines": 2304365,
-  "updated": "2026-10-16",
-  "note": "13 related delivery/privacy sources; actual main growth +1333; generated evidence index correctly declares DO NOT EDIT under existing banner policy (before classification 2304990, after 2304365, assets unchanged617). Existing COS/admin/chat exceptions retained; no counter/path exclusion changes."
+  "lines": 2304656,
+  "updated": "2026-10-15",
+  "note": "User-approved bounded PR2160 contribution: current main05e4e52f 2303367 +1289 =2304656 maintained lines. This1289 includes the prior #2330 allowance36, not an additional charge. Main already includes the approved Windows #2341 allowance354; it is not counted again. Exact merged source count verified with unchanged counter/path/banner rules; no new deployment or acceptance claim."
 }

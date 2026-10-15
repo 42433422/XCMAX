@@ -39,7 +39,7 @@ jobs:
       }}
     steps:
       - name: SSH — git pull + npm ci + build market
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
