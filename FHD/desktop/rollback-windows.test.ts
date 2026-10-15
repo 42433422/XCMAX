@@ -63,10 +63,11 @@ describe('Windows full application rollback helper', () => {
     expect(script.indexOf('$rollbackCommitted = $true')).toBeLessThan(script.indexOf('Start-Process -FilePath $appPath'))
   })
 
-  windowsIt.each(['success', 'success-long-path', 'success-prior', 'success-generated-operation', 'receipt-failure', 'durable-failure', 'durable-failure-prior', 'marker-failure', 'marker-failure-prior', 'retained-failure', 'retained-wal', 'retained-journal'])('keeps app and database consistent after %s', async (scenario) => {
+  windowsIt.each(['success', 'success-long-path', 'success-short-root', 'success-prior', 'success-generated-operation', 'receipt-failure', 'durable-failure', 'durable-failure-prior', 'marker-failure', 'marker-failure-prior', 'retained-failure', 'retained-wal', 'retained-journal'])('keeps app and database consistent after %s', async (scenario) => {
     const failed = !scenario.startsWith('success'), prior = scenario.endsWith('-prior')
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-windows-rollback-'))
+    let root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-windows-rollback-'))
     cleanupRoots.push(root)
+    if (scenario === 'success-short-root') root = (await execFileAsync('cmd.exe', ['/d', '/s', '/c', `for %I in ("${root}") do @echo %~sI`], { windowsVerbatimArguments: true })).stdout.trim()
     const installDir = path.join(root, 'XCAGI')
     const backupRoot = path.join(root, 'rollback', 'windows-app-current')
     const dataDir = path.join(root, 'data')
@@ -213,5 +214,4 @@ describe('Windows full application rollback helper', () => {
     } else expect(error).toContain(scenario === 'wrong-build' || scenario === 'marker' ? 'rollback.restored_build' : scenario === 'dirty-db' ? 'rollback.database_hash' : 'rollback.applied_record')
     if (!['missing', 'log-only'].includes(scenario)) expect(fs.readFileSync(path.join(evidence, 'rollback-applied.last.json'), 'utf8')).toBe(scenario === 'malformed-json' ? '{bad json' : JSON.stringify(receipt))
   }, 15000)
-
 })
