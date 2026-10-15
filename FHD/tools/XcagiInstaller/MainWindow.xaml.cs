@@ -307,7 +307,6 @@ public partial class MainWindow : Window
             installProgress,
             _installCts.Token,
             NsisSilentInstaller.UserDataDirectory(), updaterHandoff: Environment.GetCommandLineArgs().Contains("--updated"));
-
         if (!result.Success)
         {
             ShowError(result.Error ?? "安装失败");
