@@ -42,11 +42,10 @@ export default [
       '@typescript-eslint': tsPlugin,
     },
     rules: {
-      ...vuePlugin.configs['vue3-essential'].rules,
+      ...vuePlugin.configs.essential.rules,
       ...tsPlugin.configs.recommended.rules,
 
       'vue/multi-word-component-names': 'off',
-      'vue/no-v-html': 'off',
       'vue/valid-v-for': 'error',
       'vue/no-mutating-props': 'error',
 
