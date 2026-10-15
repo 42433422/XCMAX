@@ -3,6 +3,10 @@ from __future__ import annotations
 from contextlib import nullcontext
 from typing import Any
 
+from app.application.agent_orchestrator.param_references import (
+    UNRESOLVED_CODE,
+    unresolved_placeholders,
+)
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_spec import validate_tool_call, validate_tool_result
 
@@ -29,6 +33,15 @@ class AgentToolExecutor:
                 "message": validation.message,
                 "tool_id": validation.tool_id,
                 "action": validation.action,
+            }
+        leftover = unresolved_placeholders(params)
+        if leftover:
+            return {
+                "success": False,
+                "error_code": UNRESOLVED_CODE,
+                "message": "参数包含未解析的占位符，已拒绝执行：" + "、".join(leftover)[:200],
+                "tool_id": validation.tool_id,
+                "action": validation.action or step.action,
             }
         params["_runtime_context"] = dict(runtime_context or {})
         action = validation.action or step.action

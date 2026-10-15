@@ -40,7 +40,11 @@
 | **MODstore 旧部署指引归档（2026-09-27）** | `~/XCMAX-archives/docs-20260927-modstore-immutable/` | `local-to-remote-push-flow.md` 和 `remote-server-operations.md` 仍推荐 Docker/tar 覆盖生产，与当前 immutable release systemd 链冲突；原文及 SHA256 见 `MANIFEST.txt`。 |
 | **Mac 发布旧部署指引归档（2026-09-27）** | `~/XCMAX-archives/docs-20260927-mac-release-obsolete/` | 旧版 `FHD/docs/guides/DEPLOYMENT_GUIDE.md` 和 MODstore 的 `xcagi-software-download.md` 已失效；原文及 SHA256 见 `MANIFEST.txt`。 |
 
+本轮 Mac 发布旧状态快照：`~/XCMAX-archives/mac-release-status-20261008/MACOS_RELEASE_SSOT.edf274051.md`；原文校验和见同目录 `MANIFEST-edf274051.txt`。当前交付以 FHD/docs/MACOS_RELEASE_SSOT.md 为准。
+
 ## 恢复示例
+
+2026-10-12 #2300：XCAGI 退役小程序规格、旧 Alembic/变更/安全说明及两个重复贡献政策（6 文件 / 1,519 行）已归档至 `~/XCMAX-archives/docs-20261012-pr2300-net-deletion/`；`MANIFEST.json` 记录原提交 `5f8de62c`、逐文件 SHA256 与行数，复制后逐项校验一致再删除。现行迁移公约见 `FHD/docs/guides/ALEMBIC_MIGRATION_GUIDE.md`，其余现行政策见 `FHD/CHANGELOG.md`、`FHD/SECURITY.md` 和 `FHD/.github/`。
 
 2026-10-07 Windows 闭环整理：未登记 SSOT 的 2026-03-17 Excel 迁移快照 `FHD/docs/migration_report.md` 已外置至 `~/XCMAX-archives/docs-20261007-windows-closeout/`；原文与 SHA256 见该目录的 `MANIFEST.txt`，当前迁移入口以 `FHD/docs/MIGRATION_REGISTRY.md` 为准。
 
@@ -65,3 +69,9 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 校验和：`~/XCMAX-archives/MANIFEST.txt`
 
 **体积说明**（2026-06-05）：`du -sh Desktop/XCMAX` 约 **9.7G**（清 frontend 与归档重复的 `node_modules` 残留 ~2.6G 后；`FHD/.venv` **ln -s** `m0-venv-20260605`；含 `FHD/.git` ~**9.4G**）；尽调交付树（不含 `.git`）约 **~0.3G**。可重建依赖在 `m0-venv-20260605`（`npm ci` / rsync 恢复）。详见 `FHD/docs/CLAIMED_VS_ACTUAL.md`。
+
+2026-10-09 原工单支持指引归并：未登记的 `FHD/docs/customer/CUSTOMER_SUPPORT.md` 与 `FHD/docs/guides/DESKTOP_DATABASE_DELIVERY.md` 外置至 `~/XCMAX-archives/docs-20261009-original-ticket-support/`，原文及 SHA256 见 `MANIFEST.json`；当前入口为数据安全、双端发布与客服工单总线 SSOT。
+
+2026-10-11 发布断点收口：未登记的旧 `FHD/docs/DEPLOYMENT.md`、`deploy/RELEASE_CHECKLIST.md` 和 2026-06-05 已结束的 `ai-agent-v1-plan.md` 外置至 `~/XCMAX-archives/docs-20261011-delivery-breakpoints/`；原文与 SHA256 见 `MANIFEST.json`。旧仓库、K8s 与 demo 完成声明不作为本轮发布依据；当前入口为双端发布和客服工单 SSOT，历史 demo 与证据仍保留。 同轮将未登记旧 `FHD/tools/XcagiInstaller/README.md` 外置到 `~/XCMAX-archives/docs-20261011-delivery-breakpoints/windows-installer-readme/README.md`；原文 SHA256 `dadea781b3b40fe9cd8273bb03cf1f7e64f48cdc3531c863187a1c9e992de5dc`，逐字节校验与恢复指引见同目录 `MANIFEST.json`。
+
+同轮将未登记且仍含旧版安装与首启规则的 `FHD/docs/guides/PRODUCT_USER_FLOW.md` 校验外置到上述归档；唯一设置顺序与权益边界并入既有 `DELIVERABLE_PRODUCT.md`，交付判定统一指向发布与工单 SSOT，原文保留于 `MANIFEST.json`。

@@ -1,0 +1,43 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M11.exit-relaunch-persistence",
+ "platform": "macos",
+ "architecture": "arm64",
+ "release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "product_version": "1.0.0.5",
+ "method": "osascript quit，再用同一 XCAGI_DESKTOP_USER_DATA_DIR 与端口 17500 拉起已装包",
+ "before": {
+  "label": "before_quit",
+  "health": "healthy",
+  "git_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+  "products": [
+   {
+    "id": 1,
+    "name": "M07确认品",
+    "price": 8.8
+   }
+  ],
+  "shipment_order_present": true,
+  "quick_check": "ok",
+  "ai_action_audit": 12,
+  "approval_requests": 4,
+  "captured_at_utc": "2026-10-12T11:14:44Z"
+ },
+ "after": {
+  "health": "healthy",
+  "git_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+  "products": [
+   {
+    "id": 1,
+    "name": "M07确认品",
+    "price": 8.8
+   }
+  ],
+  "shipment_order_present": true,
+  "quick_check": "ok",
+  "ai_action_audit": 12,
+  "approval_requests": 4
+ },
+ "verdict": "PASS",
+ "captured_at_utc": "2026-10-12T11:18:04Z"
+}

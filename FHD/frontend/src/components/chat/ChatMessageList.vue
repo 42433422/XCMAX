@@ -20,6 +20,11 @@
             :trace="orchestrationTraceFor(msg)"
             @auto-approve-tool="$emit('approval-confirm')"
           />
+          <div v-if="waitingRunId(msg)" class="run-approve-row">
+            <button type="button" class="run-approve-btn" data-testid="chat-run-approve" @click="$emit('approve-run', waitingRunId(msg))">
+              确认执行
+            </button>
+          </div>
           <div v-if="msg.role === 'ai' && shouldCondenseOrchestrationBody(msg)" class="message-orchestration-intro">
             执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。
           </div>
@@ -172,7 +177,15 @@ defineEmits<{
   'shipment-download-click': []
   'approval-confirm': []
   'approval-cancel': []
+  'approve-run': [runId: string]
 }>()
+
+/** 运行停在待确认步骤且没有待处理的计划卡片时，保留对话内的「确认执行」入口（#2289）。 */
+function waitingRunId(message: ChatMessage): string {
+  const trace = message.role === 'ai' ? message.agentRunTrace : undefined
+  if (!trace || trace.terminal || trace.status !== 'waiting' || message.approvalCard?.status === 'pending') return ''
+  return String(trace.run_id || '')
+}
 
 const messagesHostRef = ref<HTMLElement | null>(null)
 
@@ -229,6 +242,20 @@ watch(
 </script>
 
 <style scoped>
+.run-approve-row {
+  margin-top: 6px;
+}
+
+.run-approve-btn {
+  padding: 2px 10px;
+  border: 1px solid #3b82f6;
+  border-radius: 4px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .message-shipment-actions {
   margin-top: 10px;
   display: flex;

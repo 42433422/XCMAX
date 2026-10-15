@@ -23,11 +23,13 @@ from app.application.approval_notifications import completed_workflow_notificati
 from app.application.mobile_push_app_service import notify_mobile_user
 from app.application.workflow.approval_persistence import (
     AGENT_RUN_UNAVAILABLE_CODE,
+    SETUP_GUIDANCE_CODES,
     WORKFLOW_EXECUTION_FAILED_CODE,
     WORKFLOW_EXECUTION_SUCCESS_CODE,
     WORKFLOW_PLAN_UNAVAILABLE_CODE,
     WORKFLOW_SNAPSHOT_UNAVAILABLE_CODE,
     canonical_workflow_outcome,
+    closed_loop_setup_failure_code,
 )
 from app.db.models.approval import (
     ApprovalAction,

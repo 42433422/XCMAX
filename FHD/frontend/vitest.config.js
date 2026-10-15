@@ -18,6 +18,8 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: [
+      { find: '@/api/xcmaxOps', replacement: path.resolve(__dirname, '../admin-console/src/api/xcmaxOps.ts') },
+      { find: '@/constants/personnelModApi', replacement: path.resolve(__dirname, '../admin-console/src/constants/personnelModApi.ts') },
       {
         find: '@/data/workflow-employee-docs.json',
         replacement: path.resolve(__dirname, './public/workflow-employee-docs.json'),

@@ -625,10 +625,13 @@ class TestRecognizeIntent:
         assert out["is_greeting"] is True
         assert out["intent_source"] == "rule_only_fast"
 
+    @pytest.mark.parametrize("rule_only", [False, True])
     @pytest.mark.asyncio
-    async def test_online_mode_uses_online_service(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_online_mode_uses_online_service(
+        self, monkeypatch: pytest.MonkeyPatch, caplog, rule_only
+    ) -> None:
         monkeypatch.setenv("XCAGI_NEURO_INTENT", "0")
-        monkeypatch.delenv("XCAGI_SKIP_INTENT_LLM", raising=False)
+        monkeypatch.setenv("XCAGI_SKIP_INTENT_LLM", "1" if rule_only else "0")
         host = _IntentHost()
         host.user_preference_service.get_preference.return_value = "online"
         host.online_intent_service = AsyncMock(
@@ -638,6 +641,7 @@ class TestRecognizeIntent:
         out = await host._recognize_intent("产品", source="web", user_id="u1")
         host.online_intent_service.recognize.assert_awaited_once_with("产品")
         assert out["primary_intent"] == "products"
+        assert ("intent_service is unavailable" in caplog.text) is rule_only
 
     @pytest.mark.asyncio
     async def test_neuro_reflex_early_hit_non_pro(self, monkeypatch: pytest.MonkeyPatch) -> None:

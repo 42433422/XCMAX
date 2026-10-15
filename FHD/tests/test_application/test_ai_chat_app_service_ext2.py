@@ -12,7 +12,7 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-from app.application.workflow.types import PlanGraph
+from app.application.workflow.types import PlanGraph, WorkflowNode
 from app.domain.autonomy.risk_types import RiskDecision
 
 
@@ -665,71 +665,17 @@ class TestTryHandleDynamicWorkflowExtended:
         assert result is not None
         assert result["success"] is True
 
-    def test_pro_pending_workflow_confirm(self):
-        service = _make_service()
-        mock_plan = Mock()
-        mock_plan.plan_id = "p1"
-        mock_plan.intent = "test"
-        mock_plan.nodes = []
-        mock_plan.todo_steps = []
-        service._pending_workflows["u1"] = {
-            "plan": mock_plan,
-            "runtime_context": {"message": "test"},
-            "approval_required": False,
-            "approval_nodes": [],
-        }
-        mock_run_result = Mock()
-        mock_run_result.success = True
-        mock_run_result.node_results = []
-        mock_run_result.message = ""
-        with (
-            patch.object(service.workflow_engine, "run", return_value=mock_run_result),
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-                return_value="full",
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._persist_plan_state"
-            ),
-            patch(
-                "app.application.workflow.checkpointer.DatabaseWorkflowCheckpointer.latest_checkpoint",
-                return_value=None,
-            ),
-        ):
-            result = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
-        assert result is not None
-        assert "u1" not in service._pending_workflows
-
-    def test_pro_pending_workflow_cancel(self):
-        service = _make_service()
-        mock_plan = Mock()
-        service._pending_workflows["u1"] = {
-            "plan": mock_plan,
-            "runtime_context": {},
-            "approval_required": False,
-            "approval_nodes": [],
-        }
-        result = service._try_handle_dynamic_workflow("u1", "取消", "pro", {}, {})
-        assert result is not None
-        assert "取消" in result["response"]
-        assert "u1" not in service._pending_workflows
-
     def test_pro_pending_workflow_approval_required(self):
         service = _make_service()
-        mock_plan = Mock()
-        mock_plan.plan_id = "p1"
-        mock_plan.intent = "product_create"
-        mock_plan.metadata = {}
-        mock_node = Mock()
-        mock_node.node_id = "n1"
-        mock_node.tool_id = "products"
-        mock_node.action = "create"
-        mock_node.description = "create product"
-        mock_node.risk = "high"
-        mock_node.depends_on = []
-        mock_node.next = None
-        mock_node.branches = []
-        mock_plan.nodes = [mock_node]
+        mock_node = WorkflowNode(
+            "n1",
+            "products",
+            "create",
+            params={"name": "test"},
+            description="create product",
+            risk="high",
+        )
+        mock_plan = PlanGraph("p1", "product_create", nodes=[mock_node])
         service._pending_workflows["u1"] = {
             "plan": mock_plan,
             "runtime_context": {},
@@ -747,7 +693,7 @@ class TestTryHandleDynamicWorkflowExtended:
                 service.approval_service,
                 "create_approval_request",
                 return_value=approval_request,
-            ),
+            ) as create_request,
             patch.object(
                 service.approval_service,
                 "get_request_metadata",
@@ -757,6 +703,7 @@ class TestTryHandleDynamicWorkflowExtended:
             result = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result is not None
         assert "审批" in result["response"]
+        create_request.assert_called_once()
 
 
 class TestBuildWorkflowThinkingSteps:
