@@ -61,17 +61,48 @@ async def _send_saved(request: Request, path: Path, row: dict[str, Any]) -> dict
     return result
 
 
-async def pending_issues(request: Request) -> dict[str, Any]:
+async def _market_token(request: Request) -> str:
     get_logged_in_user(request)
     token = await _private_delivery_market_token(request)
     if not token:
         raise HTTPException(401, "请登录市场账号查看修复交付")
+    return token
+
+
+async def pending_issues(request: Request) -> dict[str, Any]:
+    token = await _market_token(request)
     sha = build_identity()["git_sha"]
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         return {"items": [], "runtime_unverified": True}
     return await custom_delivery_remote_json(
         token,
         f"/api/customer-service/issues/pending-runtime?host_sha={sha}",
+    )
+
+
+async def list_issues(request: Request) -> dict[str, Any]:
+    """The owner's product issues, flagged where the released fix runs on this client."""
+    mine = await custom_delivery_remote_json(
+        await _market_token(request), "/api/customer-service/issues/mine"
+    )
+    pending = await pending_issues(request)
+    ready = {row.get("id") for row in pending.get("items", []) if row.get("ready")}
+    return {
+        "items": [{**row, "ready": row.get("id") in ready} for row in mine.get("items", [])],
+        "runtime_unverified": bool(pending.get("runtime_unverified")),
+    }
+
+
+async def decide_issue(
+    request: Request, ticket_id: int, *, decision: str, note: str, idempotency_key: str
+) -> dict[str, Any]:
+    if len(note.strip()) < 4:
+        raise HTTPException(400, "请说明原问题现在的使用结果（至少4个字）")
+    return await custom_delivery_remote_json(
+        await _market_token(request),
+        f"/api/customer-service/issues/{int(ticket_id)}/decision",
+        method="POST",
+        payload={"decision": decision, "note": note.strip(), "idempotency_key": idempotency_key},
     )
 
 

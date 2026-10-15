@@ -1,26 +1,26 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-10-05 04:36 UTC",
+  "generated_at": "2026-10-13 02:30 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
   "version": {
-    "product": "1.0.0.5",
+    "product": "1.0.0.6",
     "toolchain": "1.0.0",
     "source": "FHD/VERSION.md"
   },
   "release": {
     "train": {
       "epoch": "1.0.0.0",
-      "product_version": "1.0.0.5",
-      "current": "1.0.0.5",
+      "product_version": "1.0.0.6",
+      "current": "1.0.0.6",
       "day_index": 2,
       "last_bump_at": "2026-08-18T00:04:28.127731+00:00"
     },
     "download": {
-      "version_lock": "1.0.0.5",
-      "download_version": "1.0.0.5",
-      "marketing_version": "1.0.0.5",
+      "version_lock": "1.0.0.6",
+      "download_version": "1.0.0.6",
+      "marketing_version": "1.0.0.6",
       "android_version": "1.0.0.0",
       "release_ready": false,
       "channel_release_ready": null,
@@ -32,9 +32,9 @@
       ],
       "artifacts": {
         "enterprise": {
-          "win": "XCAGI-Enterprise-Setup-1.0.0.1-x64.exe",
-          "mac_arm64": "XCAGI-Enterprise-1.0.0.3-mac-arm64.dmg",
-          "mac_x64": "XCAGI-Enterprise-1.0.0.1-mac-x64.dmg",
+          "win": "XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+          "mac_arm64": "XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+          "mac_x64": "XCAGI-Enterprise-1.0.0.6-mac-x64.dmg",
           "android": "XCAGI-Enterprise-Android-1.0.0.0.apk"
         }
       },
@@ -91,10 +91,10 @@
     }
   },
   "capability_totals": {
-    "total": 157,
+    "total": 158,
     "by_status": {
       "verified": 55,
-      "partial": 94,
+      "partial": 95,
       "implemented": 4,
       "planned": 4
     },
@@ -104,24 +104,24 @@
     "verified_total": 55,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
-      "windows": 98,
-      "macos": 99,
+      "windows": 99,
+      "macos": 100,
       "web": 128,
       "android": 8,
       "ios": 1
     },
     "platform_coverage": {
       "windows": {
-        "applicable": 98,
+        "applicable": 99,
         "verified": 1,
         "partial": 0,
-        "pending": 97,
+        "pending": 98,
         "last_verified_at": "2026-09-24"
       },
       "macos": {
-        "applicable": 99,
+        "applicable": 100,
         "verified": 82,
-        "partial": 13,
+        "partial": 14,
         "pending": 4,
         "last_verified_at": "2026-09-30"
       },
@@ -189,27 +189,27 @@
       "releases": {
         "macos": {
           "source": "FHD/docs/MACOS_RELEASE_SSOT.md",
-          "section": "6. Release Gate 状态（2026-09-18 实跑 1.0.0.5 @ `54325894c`；证据目录 [evidence/e2e/macos-release-1.0.0.5/](evidence/e2e/macos-release-1.0.0.5/)）",
+          "section": "6. Release Gate 状态（最终候选待构建；历史 EDF 证据仅作工程组件结果）",
           "gates": {
             "G1": "YELLOW",
             "G2": "YELLOW",
-            "G3": "GREEN",
+            "G3": "YELLOW",
             "G4": "YELLOW",
-            "G5": "GREEN",
-            "G6": "GREEN",
-            "G7": "GREEN",
-            "G8": "GREEN",
-            "G9": "GREEN",
-            "G10": "GREEN",
-            "G11": "GREEN",
-            "G12": "GREEN",
-            "G13": "GREEN"
+            "G5": "UNKNOWN",
+            "G6": "YELLOW",
+            "G7": "UNKNOWN",
+            "G8": "UNKNOWN",
+            "G9": "YELLOW",
+            "G10": "YELLOW",
+            "G11": "UNKNOWN",
+            "G12": "UNKNOWN",
+            "G13": "YELLOW"
           },
           "summary": {
-            "GREEN": 10,
-            "YELLOW": 3,
+            "GREEN": 0,
+            "YELLOW": 8,
             "RED": 0,
-            "UNKNOWN": 0,
+            "UNKNOWN": 5,
             "total": 13
           }
         },
@@ -220,22 +220,22 @@
             "G1": "YELLOW",
             "G2": "YELLOW",
             "G3": "YELLOW",
-            "G4": "YELLOW",
+            "G4": "RED",
             "G5": "YELLOW",
-            "G6": "UNKNOWN",
-            "G7": "YELLOW",
+            "G6": "RED",
+            "G7": "RED",
             "G8": "YELLOW",
             "G9": "YELLOW",
-            "G10": "YELLOW",
-            "G11": "YELLOW",
+            "G10": "UNKNOWN",
+            "G11": "UNKNOWN",
             "G12": "UNKNOWN",
-            "G13": "YELLOW"
+            "G13": "UNKNOWN"
           },
           "summary": {
             "GREEN": 0,
-            "YELLOW": 11,
-            "RED": 0,
-            "UNKNOWN": 2,
+            "YELLOW": 6,
+            "RED": 3,
+            "UNKNOWN": 4,
             "total": 13
           }
         }
@@ -263,9 +263,9 @@
           "pay",
           "industry"
         ],
-        "total": 38,
+        "total": 39,
         "by_status": {
-          "partial": 23,
+          "partial": 24,
           "verified": 14,
           "planned": 1
         },
@@ -316,7 +316,7 @@
       "id": "release-not-closed",
       "level": "info",
       "source": "download_release.release_ready=false",
-      "detail": "1.0.0.5 发布面未闭环：下载/更新指针未推进到产品版本"
+      "detail": "1.0.0.6 发布面未闭环：下载/更新指针未推进到产品版本"
     },
     {
       "id": "declared-mirror",

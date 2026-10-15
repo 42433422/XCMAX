@@ -1,6 +1,7 @@
 import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
 import type { Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
+import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import type { AgentTaskSummary } from '@/api/agentRuns'
 import { buildFullApiUrl } from '@/api/core'
 import type { TaskItem } from './useChatPersistence'
@@ -162,13 +163,8 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     if (!task || task.type !== 'agent_task') return
     const runId = activeRunIdOfTask(task)
     if (!runId) return
-    if (action === 'approve') {
-      const snapshot = await agentRunsApi.getRun(runId)
-      if (requestedVersion !== lifecycleVersion) return
-      const grant = snapshot.approval?.grant
-      if (!grant) throw new Error('任务当前没有可用的审批凭证')
-      await agentRunsApi.continueRun(runId, { approval_grant: grant })
-    } else if (action === 'pause') await agentRunsApi.pauseRun(runId)
+    if (action === 'approve') await approveRunWithFreshGrant(runId, { isCurrent: () => requestedVersion === lifecycleVersion })
+    else if (action === 'pause') await agentRunsApi.pauseRun(runId)
     else if (action === 'resume') await agentRunsApi.resumeRun(runId)
     else if (action === 'retry') await agentRunsApi.retryRun(runId)
     else await agentRunsApi.cancelRun(runId)

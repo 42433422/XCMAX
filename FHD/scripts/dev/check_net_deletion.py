@@ -1,25 +1,4 @@
-#!/usr/bin/env python3
-"""净删除棘轮门禁：全仓「代码 + 文档」总行数只减不增。
-
-背景：仓库长期「只生成、不删除」，文档与代码持续膨胀，AI 读错与路径漂移随之增加。
-本脚本把「每个迭代必须有净删除行数（代码和文档都算）」固化为一条棘轮：以
-``FHD/metrics/line_baseline.json`` 记录全仓代码+文档总行数，门禁要求当前值
-**不大于**基线，任何净增都会失败。
-
-口径（可复核、确定性）：
-  * 统计范围：``git ls-files`` 跟踪的「代码 + 文档」后缀文件（见 CODE_DOC_SUFFIXES）。
-  * 排除：依赖锁文件、生成物、构建产物、依赖目录、指标/报告目录（见下方常量）。
-  * 计数：按字节统计 ``\\n`` 数量（末行无换行则 +1），不做语义解析。
-
-用法::
-
-    python scripts/dev/check_net_deletion.py            # 门禁：当前必须 <= 基线
-    python scripts/dev/check_net_deletion.py --json     # 机器可读输出
-    python scripts/dev/check_net_deletion.py --update   # 棘轮下调基线（净删除后执行）
-    python scripts/dev/check_net_deletion.py --update --force --reason "..."   # 显式抬升
-
-退出码: 0=通过 1=净增（含 `--update` 试图抬升而未加 --force） 2=用法错。
-"""
+"""净删除棘轮：跟踪的代码和文档总行数不得高于基线。"""
 
 from __future__ import annotations
 
@@ -129,12 +108,7 @@ def _count_lines(abs_path: Path) -> int:
 
 
 def _has_generated_banner(abs_path: Path) -> bool:
-    """文件开头若干行声明「自动生成 / DO NOT EDIT」即视为生成物，不计入人工维护行数。
-
-    只看开头固定**行数**而非固定字节数：字节窗口会随文件顶部散文的增删而漂移，
-    使同一文件在相邻提交间被误判（例如 FHD/CHANGELOG.md 仅插入一行更新日志，
-    就把正文里的「自动生成」挤出窗口，整份 1300+ 行的活文档被当成生成物剔除）。
-    """
+    """开头几行声明自动生成的文件不计入。只看行数，避免正文里的字样把整份文档排除。"""
     try:
         with abs_path.open("rb") as fh:
             head = fh.read(_BANNER_BYTES)

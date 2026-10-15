@@ -7,9 +7,10 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "1.0.0.5"
+        default: "1.0.0.6"
         type: choice
         options:
+          - "1.0.0.6"
           - "1.0.0.5"
           - "1.0.0.4"
           - "1.0.0.2"
@@ -34,7 +35,7 @@ on:
         required: false
         type: string
       acceptance_run_id:
-        description: "Successful clean and upgrade acceptance run ID for the frozen installer"
+        description: "Successful Clean/Upgrade/Gui/Recovery/Rollback run ID for the frozen installer"
         required: false
         type: string
       frontend_run_id:
@@ -93,6 +94,9 @@ jobs:
         run: |
           if ($env:XCAGI_BUILD_SHA -notmatch '^[0-9a-fA-F]{40}$') { throw 'Full release SHA required' }
           if ((git rev-parse HEAD).Trim() -ne $env:XCAGI_BUILD_SHA) { throw 'Checkout SHA mismatch' }
+          if ('${{ github.ref }}' -ne 'refs/heads/main' -or '${{ github.sha }}' -ne $env:XCAGI_BUILD_SHA) { throw 'Candidate must bind to the selected main SHA' }
+          . scripts/package/product-version.ps1
+          if ((Resolve-ProductVersion) -ne '${{ inputs.version }}') { throw 'Product version mismatch' }
           $names = @('ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET', 'XCAGI_WINDOWS_PUBLISHER_NAME')
           $present = @($names | Where-Object { [Environment]::GetEnvironmentVariable($_) })
           if ($present.Count -ne 0 -and $present.Count -ne $names.Count) {
@@ -128,8 +132,10 @@ jobs:
         env:
           DELIVERY_VERSION: ${{ inputs.version }}
         run: |
+          dotnet run --project tools/XcagiInstaller.Tests/XcagiInstaller.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer process regression failed' }
           scripts/package/test-windows-signature-policy.ps1
-          scripts/package/build-installer.ps1 -Version $env:DELIVERY_VERSION -ProductSku enterprise -SkipUiInstaller
+          scripts/package/build-installer.ps1 -Version $env:DELIVERY_VERSION -ProductSku enterprise
       - name: Verify resources, install, start, and uninstall
         shell: pwsh
         env:
@@ -178,7 +184,7 @@ jobs:
           Write-Host "::warning::$n"; "### 未执行正式发布链`n$n" | Add-Content $env:GITHUB_STEP_SUMMARY
 
   publish-interim-windows-pointer:
-    # Windows 临时下载通道只发布经过安装冒烟的精确构建，不写更新元数据。
+    # 仅晋级已通过五模式验收的原候选；不重建、不写稳定更新元数据。
     # 未签名包须有业主风险接受；签名包须由前置 Windows 验收证明签名有效。
     needs: [windows-installer-delivery]
     if: >-
@@ -186,8 +192,7 @@ jobs:
       inputs.windows_installer_only == true &&
       inputs.verify_only != true &&
       inputs.candidate_only != true &&
-      (needs.windows-installer-delivery.result == 'success' ||
-        (needs.windows-installer-delivery.result == 'skipped' && inputs.candidate_run_id != '' && inputs.acceptance_run_id != ''))
+      needs.windows-installer-delivery.result == 'skipped' && inputs.candidate_run_id != '' && inputs.acceptance_run_id != ''
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -212,17 +217,17 @@ jobs:
           path: ${{ runner.temp }}/acceptance
           run-id: ${{ inputs.acceptance_run_id }}
           github-token: ${{ github.token }}
-      - name: Verify the frozen candidate passed both isolated install paths
+      - name: Verify all five frozen candidate acceptance modes
         if: ${{ inputs.candidate_run_id != '' }}
         run: |
           set -euo pipefail
           receipt="${RUNNER_TEMP}/delivery/delivery-receipt.json"
-          for mode in Clean Upgrade; do
+          for mode in Clean Upgrade Gui Recovery Rollback; do
             evidence="${RUNNER_TEMP}/acceptance/windows-candidate-evidence-${mode}-${{ inputs.release_sha }}/acceptance.json"
             test -f "$evidence"
             jq -e --arg mode "$mode" --arg sha "${{ inputs.release_sha }}" \
               --arg hash "$(jq -r .sha256 "$receipt")" '
-              .mode == $mode and .result == "passed" and .candidate_sha == $sha
+              .mode == $mode and .result == ({Clean:"passed", Upgrade:"passed", Gui:"gui_regression_passed", Recovery:"gui_recovery_regression_passed", Rollback:"rollback_passed"}[$mode]) and .candidate_sha == $sha
               and .candidate_sha256 == $hash and (.checks | length) > 0
               and all(.checks[]; .passed == true)' "$evidence" >/dev/null
           done
@@ -301,10 +306,19 @@ jobs:
           printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
           ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '${official_dir}' '${staging_dir}' && chmod 0700 '${staging_dir}'"
-          scp "${SSH_OPTS[@]}" "$artifact" "$sha_file" "root@${HOST}:${staging_dir}/"
+          uploaded=0
+          for attempt in 1 2 3; do
+            if scp "${SSH_OPTS[@]}" "$artifact" "$sha_file" "root@${HOST}:${staging_dir}/"; then
+              uploaded=1
+              break
+            fi
+            echo "interim installer upload attempt ${attempt} failed"
+            sleep 10
+          done
+          test "$uploaded" = 1
           ssh "${SSH_OPTS[@]}" "root@${HOST}" "bash -s" -- \
             "$official_dir" "$staging_dir" "$filename" "$local_sha" <<'REMOTE_INTERIM'
           set -euo pipefail
@@ -352,7 +366,7 @@ jobs:
           echo "Windows interim download is publicly available; the Windows stable update feed was not touched."
 
   release-preflight:
-    if: ${{ inputs.verify_only != true && inputs.windows_installer_only != true }}
+    if: ${{ inputs.verify_only != true && inputs.windows_installer_only != true && inputs.candidate_only != true }}
     runs-on: ubuntu-latest
     # Security evidence lives at repository root; do not inherit FHD working directory.
     defaults:
@@ -496,7 +510,9 @@ jobs:
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller -SkipFrontend
+          dotnet run --project tools/XcagiInstaller.Tests/XcagiInstaller.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer process regression failed' }
+          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipFrontend
       - name: Verify Windows enterprise installer
         shell: pwsh
         run: |

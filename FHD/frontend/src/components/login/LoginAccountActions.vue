@@ -54,9 +54,7 @@ const enterprisePurchaseUrl = purchaseAuthorizationUrl()
   transition: var(--xc-transition-fast);
 }
 
-.login-account-action:hover {
-  background: var(--xc-color-primary-soft);
-}
+.login-account-action:hover { background: var(--xc-color-primary-soft); }
 
 .login-account-action--primary {
   color: #fff;
@@ -64,15 +62,15 @@ const enterprisePurchaseUrl = purchaseAuthorizationUrl()
   background: var(--xc-color-primary);
 }
 
-.login-account-action--primary:hover {
-  color: #fff;
-  background: var(--xc-color-primary-hover, #1d4ed8);
-}
-
+.login-account-action--primary:hover { background: var(--xc-color-primary-hover, #1d4ed8); }
 @media (max-width: 480px) {
   .login-account-actions {
     top: 16px;
     right: 16px;
   }
+}
+:global(html.xcagi-electron-win .login-account-actions) {
+  top: 58px; /* Windows titleBarOverlay occupies the first 50px. */
+  -webkit-app-region: no-drag;
 }
 </style>

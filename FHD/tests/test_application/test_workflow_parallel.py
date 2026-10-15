@@ -1,19 +1,15 @@
-"""Tests for parallel fan-out in WorkflowEngine._run_batch.
-
-Covers:
-  - 三个无依赖只读节点并发执行（可休眠的假工具模拟，断言并发生效）
-  - 写/高风险节点不被并发执行（保持串行）
-  - 并发结果正确合并到 runtime_context["node_outputs"]
-  - parallel=False 回退串行，行为一致
-"""
+"""Workflow read concurrency, authenticated scope and serial writes."""
 
 from __future__ import annotations
 
 import threading
 import time
 
+import pytest
+
 from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
 
 
 def _engine_with_dispatch(dispatch):
@@ -53,7 +49,6 @@ class TestWorkflowParallel:
             with lock:
                 active += 1
                 max_active = max(max_active, active)
-            # 模拟耗时查询；串行约 0.6s，并发应显著更短
             time.sleep(0.2)
             with lock:
                 active -= 1
@@ -68,9 +63,7 @@ class TestWorkflowParallel:
 
         assert result.success is True
         assert len(result.node_results) == 3
-        # 三个只读节点确实并发执行（并发深度达到 3）
         assert max_active >= 3
-        # 总耗时明显小于串行之和（0.6s）
         assert elapsed < 0.5
 
     def test_write_nodes_run_serially(self):
@@ -109,12 +102,12 @@ class TestWorkflowParallel:
         ]
         result = engine._run_batch(_plan(nodes))
         assert result.success is True
-        # 写/高风险节点始终串行，同一时刻最多 1 个在执行
         assert max_active == 1
 
-    def test_parallel_results_merged_into_node_outputs(self):
+    @pytest.mark.parametrize("tenant_id", [None, 41, 42])
+    def test_parallel_results_merged_into_node_outputs(self, tenant_id):
         def dispatch(tool_id, action, params):
-            return {"success": True, "data": params.get("marker")}
+            return {"success": True, "data": params.get("marker"), "tenant": current_tenant_id()}
 
         engine = _engine_with_dispatch(dispatch)
         nodes = [
@@ -122,12 +115,14 @@ class TestWorkflowParallel:
             _read_node("n2", marker="b"),
             _read_node("n3", marker="c"),
         ]
-        result = engine._run_batch(_plan(nodes))
+        with tenant_scope(tenant_id):
+            result = engine._run_batch(_plan(nodes))
 
         outputs = result.final_context["node_outputs"]
         assert outputs["n1"]["data"] == "a"
         assert outputs["n2"]["data"] == "b"
         assert outputs["n3"]["data"] == "c"
+        assert {output["tenant"] for output in outputs.values()} == {tenant_id}
         assert len(result.final_context["workflow_trace"]) == 3
 
     def test_parallel_false_falls_back_to_serial(self):
@@ -149,7 +144,6 @@ class TestWorkflowParallel:
         plan = _plan([_read_node("n1"), _read_node("n2")])
         result = engine._run_batch(plan, parallel=False)
         assert result.success is True
-        # 关闭并行后即使只读节点也串行
         assert max_active == 1
         assert "n1" in result.final_context["node_outputs"]
         assert "n2" in result.final_context["node_outputs"]
