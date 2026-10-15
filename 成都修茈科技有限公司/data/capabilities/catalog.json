@@ -5189,33 +5189,47 @@
               "evidence": {
                 "review": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-sales-order/erp-sales-order-macos-visual-review.json",
                 "impl": [
-                  "FHD/app/fastapi_routes/shipment_orders.py"
+                  "FHD/app/fastapi_routes/shipment_orders.py",
+                  "FHD/app/services/tools_execution/order_parser.py",
+                  "FHD/app/infrastructure/documents/shipment_document_generator_impl.py"
                 ],
                 "api": [],
-                "tests": [],
+                "tests": [
+                  "FHD/tests/test_services/test_order_parser.py"
+                ],
                 "ci": [],
                 "docs": [],
                 "screenshots": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-sales-order/macos/result.png",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-sales-order/erp-sales-order.png"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-sales-order/erp-sales-order.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/00-login-form.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/SO1-orders-read.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/SO2-master-data.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/SO3-planner-generate.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/SO4-records-readback.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/SO5-legacy-fail-closed.png"
                 ],
                 "commits": [],
                 "runs": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-sales-order/erp-sales-order-macos-run.json",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-sales-order/erp-sales-order-windows-run.json"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-sales-order/erp-sales-order-windows-run.json",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/erp-sales-order-web-run.json"
                 ],
                 "videos": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-sales-order/macos/operation.webm",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-sales-order/erp-sales-order.mp4"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-sales-order/erp-sales-order.mp4",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/video/erp-sales-order-web-20260929-221144.webm"
                 ],
                 "logs": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-sales-order/macos/run.log",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-sales-order/erp-sales-order.log"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-sales-order/erp-sales-order.log",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/log/erp-sales-order-web-20260929-221144.log"
                 ],
                 "raw": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-install-identity.json",
                   "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-sales-order/erp-sales-order-windows-run.json",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/erp-sales-order-web-identity.json"
                 ],
                 "platform_assets": {
                   "macos": {
@@ -5280,6 +5294,39 @@
                     "raw": [
                       "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-sales-order/erp-sales-order-windows-run.json",
                       "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"
+                    ]
+                  },
+                  "web": {
+                    "acceptance": {
+                      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/erp-sales-order-web-run.json",
+                      "sha256": "af2900ddb71fb1f1b5b8fcf0e7e7aa02575b612f9a1b04bebf731267f07fce8d",
+                      "required_case_ids": [
+                        "SO1",
+                        "SO2",
+                        "SO3",
+                        "SO4",
+                        "SO5"
+                      ]
+                    },
+                    "identity": {
+                      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/erp-sales-order-web-identity.json",
+                      "git_sha": "site_git_sha",
+                      "version": "site_version"
+                    },
+                    "artifact": {
+                      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/erp-sales-order-web-identity.json",
+                      "sha256": "admin_console_dist_sha256",
+                      "git_sha": "site_git_sha",
+                      "version": "site_version"
+                    },
+                    "logs": [
+                      {
+                        "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/log/erp-sales-order-web-20260929-221144.log",
+                        "sha256": "ffe482c2097b28373c08b45234224afe254319892fe7e93692f5c8dd206f7713"
+                      }
+                    ],
+                    "raw": [
+                      "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/erp-sales-order-web-identity.json"
                     ]
                   }
                 }
@@ -5757,34 +5804,47 @@
                 "runs": [
                   "FHD/docs/evidence/e2e/product-center-20260919/erp-uom.json",
                   "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-uom/erp-uom-macos-run.json",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-uom/erp-uom-windows-run.json"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-uom/erp-uom-windows-run.json",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/erp-uom-web-run.json"
                 ],
                 "impl": [
-                  "FHD/app/services/uom_service.py"
+                  "FHD/app/services/uom_service.py",
+                  "FHD/app/services/tools_execution/order_parser.py",
+                  "FHD/app/infrastructure/documents/shipment_document_generator_impl.py",
+                  "FHD/mods/xcagi-erp-domain-bridge/backend/blueprints.py"
                 ],
                 "api": [],
                 "tests": [
-                  "FHD/tests/test_services/test_uom_service.py"
+                  "FHD/tests/test_services/test_uom_service.py",
+                  "FHD/tests/test_services/test_order_parser.py"
                 ],
                 "ci": [],
                 "docs": [],
                 "screenshots": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-uom/macos/result.png",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-uom/erp-uom.png"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-uom/erp-uom.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/shot/00-login-form.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/shot/UOM1-units-read.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/shot/UOM2-conversion.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/shot/UOM3-conversion-scales.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/shot/UOM4-document.png"
                 ],
                 "commits": [],
                 "videos": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-uom/macos/operation.webm",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-uom/erp-uom.mp4"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-uom/erp-uom.mp4",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/video/erp-uom-web-20260929-222223.webm"
                 ],
                 "logs": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-uom/macos/run.log",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-uom/erp-uom.log"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-uom/erp-uom.log",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/log/erp-uom-web-20260929-222223.log"
                 ],
                 "raw": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-install-identity.json",
                   "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-uom/erp-uom-windows-run.json",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/erp-uom-web-identity.json"
                 ],
                 "platform_assets": {
                   "macos": {
@@ -5848,6 +5908,38 @@
                     "raw": [
                       "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-uom/erp-uom-windows-run.json",
                       "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"
+                    ]
+                  },
+                  "web": {
+                    "acceptance": {
+                      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/erp-uom-web-run.json",
+                      "sha256": "0a8c477cffe1cacf2033cb07a24bbd74fceb80ed009ebbee25ebee66eaca3901",
+                      "required_case_ids": [
+                        "UOM1",
+                        "UOM2",
+                        "UOM3",
+                        "UOM4"
+                      ]
+                    },
+                    "identity": {
+                      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/erp-uom-web-identity.json",
+                      "git_sha": "site_git_sha",
+                      "version": "site_version"
+                    },
+                    "artifact": {
+                      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/erp-uom-web-identity.json",
+                      "sha256": "admin_console_dist_sha256",
+                      "git_sha": "site_git_sha",
+                      "version": "site_version"
+                    },
+                    "logs": [
+                      {
+                        "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/log/erp-uom-web-20260929-222223.log",
+                        "sha256": "334c8aba34ac492f9e1d8e6920c271436df7e4b6b416268bae218e26a19d2b10"
+                      }
+                    ],
+                    "raw": [
+                      "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-uom/erp-uom-web-identity.json"
                     ]
                   }
                 }
@@ -9837,25 +9929,35 @@
                 "docs": [],
                 "screenshots": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ch-realtime-voice/macos/result.png",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-realtime-voice/ch-realtime-voice.png"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-realtime-voice/ch-realtime-voice.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/shot/00-login-form.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/shot/V1-voice-health.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/shot/V2-voice-synthesize-real.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/shot/V3-voice-synthesize-en.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/shot/V4-voice-empty-text.png",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/shot/V5-voice-long-text.png"
                 ],
                 "commits": [],
                 "runs": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ch-realtime-voice/ch-realtime-voice-macos-run.json",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-realtime-voice/ch-realtime-voice-windows-run.json"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-realtime-voice/ch-realtime-voice-windows-run.json",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/ch-realtime-voice-web-run.json"
                 ],
                 "videos": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ch-realtime-voice/macos/operation.webm",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-realtime-voice/ch-realtime-voice.mp4"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-realtime-voice/ch-realtime-voice.mp4",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/video/ch-realtime-voice-web-20260929-214433.webm"
                 ],
                 "logs": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ch-realtime-voice/macos/run.log",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-realtime-voice/ch-realtime-voice.log"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-realtime-voice/ch-realtime-voice.log",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/log/ch-realtime-voice-web-20260929-214433.log"
                 ],
                 "raw": [
                   "FHD/docs/evidence/e2e/feature-acceptance-20260929b/identity/macos-install-identity.json",
                   "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-realtime-voice/ch-realtime-voice-windows-run.json",
-                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"
+                  "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json",
+                  "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/ch-realtime-voice-web-identity.json"
                 ],
                 "platform_assets": {
                   "macos": {
@@ -9919,6 +10021,39 @@
                     "raw": [
                       "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-realtime-voice/ch-realtime-voice-windows-run.json",
                       "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"
+                    ]
+                  },
+                  "web": {
+                    "acceptance": {
+                      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/ch-realtime-voice-web-run.json",
+                      "sha256": "fecdc66ab46c69e6816ad1aa743df24dfad415d5556805a78fd3a2c9b8d5eb10",
+                      "required_case_ids": [
+                        "V1",
+                        "V2",
+                        "V3",
+                        "V4",
+                        "V5"
+                      ]
+                    },
+                    "identity": {
+                      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/ch-realtime-voice-web-identity.json",
+                      "git_sha": "site_git_sha",
+                      "version": "site_version"
+                    },
+                    "artifact": {
+                      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/ch-realtime-voice-web-identity.json",
+                      "sha256": "admin_console_dist_sha256",
+                      "git_sha": "site_git_sha",
+                      "version": "site_version"
+                    },
+                    "logs": [
+                      {
+                        "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/log/ch-realtime-voice-web-20260929-214433.log",
+                        "sha256": "0595c45d03e9efbe4a8e760a875013b4a05e490c880216f3ccf1cb4a31a1cba6"
+                      }
+                    ],
+                    "raw": [
+                      "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/ch-realtime-voice-web-identity.json"
                     ]
                   }
                 }

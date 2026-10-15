@@ -1,0 +1,358 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "erp-sales-order",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-221144",
+  "generated_at": "2026-09-29 22:12:05",
+  "app_git_sha": "2ce620dad868c18f577ad03189be53ddd6bf752f",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 5,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器在 Web 管理端完成销售订单/发货单链路实测：读取订单清单与下一单号（200，26-09-00001A）→ 读取本租户真实客户与产品 → 计划器对话「开发货单 客户 <真实客户> 5桶 <真实型号> 规格20」返回 action=tool_call 且发货单文档生成成功（doc_name/file_path 非空，服务端文件真实存在且非空）→ 发货记录清单读回该单 （purchase_unit 命中）→ 旧 /api/orders 与 /api/shipment/orders 按设计 fail-closed 403。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "healthy",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "2ce620dad868c18f577ad03189be53ddd6bf752f",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "2ce620dad868c18f577ad03189be53ddd6bf752f",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 1634,
+        "processed": 1634,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 3,
+            "max_cache_size": 1000,
+            "hits": 17,
+            "misses": 3,
+            "hit_rate": 0.85,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 1,
+            "success": 1,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 1,
+            "success": 1,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "error.occurred",
+                "evolution.search",
+                "evolution.index",
+                "evolution.mine",
+                "evolution.reflect",
+                "evolution.export"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/erp-sales-order-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "erp-sales-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/00-login-form.png",
+      "sha256": "aa552b4c876d86260da70d816cec3fa68ef4245bb988f64669ed7c51e4859247",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-sales-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/SO1-orders-read.png",
+      "sha256": "ea3b3183a91d0152e384c378a649baeb7482a90efd6940cfc1ade98ed6eb9bd0",
+      "visual_review": "accepted",
+      "visible_result": "卡片显示本轮真实响应：GET /api/mod/xcagi-erp-domain-bridge/orders 返回 200（清单条数）、orders/next_number 返回 200 且 next_order_number 形如 26-09-00001A。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-sales-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/SO2-master-data.png",
+      "sha256": "3f2bf35c70aad254b4fac7836f9ce63cf20af7d4a73f022d6d314e2cc5634b0b",
+      "visual_review": "accepted",
+      "visible_result": "卡片显示本租户真实客户清单与产品清单（均 200）及选中的客户名与型号。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-sales-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/SO3-planner-generate.png",
+      "sha256": "586309ef7dd6a72ac52c70f49b0001e66026815102a55c416c6294b90ec4e3a2",
+      "visual_review": "accepted",
+      "visible_result": "卡片显示对话成单真实响应：chat 200、action=tool_call、document.success=true、doc_name=发货单_<单号>_<时间>.xlsx、file_path 指向服务端文件，并附该文件真实存在与非空字节数。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-sales-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/SO4-records-readback.png",
+      "sha256": "02d3f79e4360e1e4b47d68d254a519b7d41a1a4496e63565b46e4752e8b546ba",
+      "visual_review": "accepted",
+      "visible_result": "卡片显示发货记录清单条数前后对比（after>before）、命中该客户(purchase_unit)的记录数与最新一条记录内容。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-sales-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/shot/SO5-legacy-fail-closed.png",
+      "sha256": "72316dfe5cc40ae2bbe003317ef329021865a02f8d14c60cd7a0718f765b8f88",
+      "visual_review": "accepted",
+      "visible_result": "卡片显示 POST /api/orders 403（detail 指明「该旧业务接口尚未提供安全的租户数据隔离」）、GET /api/shipment/orders 403、POST /api/shipment/orders 405（旧路由无写面）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-sales-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/video/erp-sales-order-web-20260929-221144.webm",
+      "sha256": "46fb8e878a58d6381c665859a9536560d4b4dafbc72559e1bacd626da8419a2a",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，ffmpeg 实测 20.16s，1600x1000 VP8/25fps）：管理员登录 → 订单清单/单号 → 真实客户与产品 → 对话成单并生成发货单文件 → 发货记录读回 → 旧接口 403/405 负例。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "SO1",
+      "title": "租户安全订单清单与下一单号真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 GET /api/mod/xcagi-erp-domain-bridge/orders 与 /orders/next_number。",
+      "expected": "均 HTTP 200，且 next_order_number 非空。",
+      "observed": "{\"orders_http\": 200, \"orders_count\": 0, \"next_order_number\": \"26-09-00004A\", \"sequence\": 4}",
+      "result": "passed"
+    },
+    {
+      "id": "SO2",
+      "title": "本租户真实客户与产品读取（租户隔离读面）",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 GET customers/list 与 products/list。",
+      "expected": "均 HTTP 200，且至少各有 1 条真实数据（客户名/型号非空）。",
+      "observed": "{\"customers_http\": 200, \"customers\": 1, \"customer\": \"VC验收客户SO\", \"products_http\": 200, \"products\": 1, \"model\": \"UOM-164033\"}",
+      "result": "passed"
+    },
+    {
+      "id": "SO3",
+      "title": "对话成单 → 发货单文档真实生成（核心正向）",
+      "input": "管理员会话 + 真实客户名/型号（取自本租户数据），5桶 规格20。",
+      "actions": "页面上下文 POST /api/mod/xcagi-planner-bridge/chat，随后校验服务端生成的 xlsx 文件。",
+      "expected": "chat 200 且 action=tool_call；document.success=true、doc_name 非空、file_path 对应文件真实存在且字节数>0。",
+      "observed": "{\"message\": \"开发货单 客户 VC验收客户SO 5桶 UOM-164033 规格20\", \"action\": \"tool_call\", \"doc_success\": true, \"doc_name\": \"发货单_26-0900001A_20260929_221203.xlsx\", \"order_number\": \"26-0900001A\", \"file_exists\": true, \"file_bytes\": 5678}",
+      "result": "passed"
+    },
+    {
+      "id": "SO4",
+      "title": "发货记录读回含本轮新建记录",
+      "input": "管理员会话 + 真实客户名。",
+      "actions": "读发货记录清单 → 对话再成一单 → 再读回对比。",
+      "expected": "两次均 200，记录数增加且存在 purchase_unit 命中该客户的记录。",
+      "observed": "{\"records_before\": 4, \"records_after\": 5, \"matched_records\": 5}",
+      "result": "passed"
+    },
+    {
+      "id": "SO5",
+      "title": "旧业务接口 fail-closed（负例）",
+      "input": "管理员会话。",
+      "actions": "页面上下文 POST /api/orders、GET/POST /api/shipment/orders。",
+      "expected": "POST /api/orders 与 GET /api/shipment/orders 均 403（detail 指明未提供安全的租户数据隔离）；POST /api/shipment/orders 405（无写面）。",
+      "observed": "{\"orders_post_status\": 403, \"shipment_get_status\": 403, \"shipment_post_status\": 405, \"orders_detail\": \"该旧业务接口尚未提供安全的租户数据隔离\"}",
+      "result": "passed"
+    }
+  ]
+}

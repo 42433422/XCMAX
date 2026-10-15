@@ -1,0 +1,9 @@
+[22:11:44] feature=erp-sales-order platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order
+[22:11:58] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[22:11:59] case SO1: passed - 租户安全订单清单与下一单号真实读取
+[22:11:59] case SO2: passed - 本租户真实客户与产品读取（租户隔离读面）
+[22:12:03] case SO3: passed - 对话成单 → 发货单文档真实生成（核心正向）
+[22:12:04] case SO4: passed - 发货记录读回含本轮新建记录
+[22:12:05] case SO5: passed - 旧业务接口 fail-closed（负例）
+[22:12:05] video: erp-sales-order-web-20260929-221144.webm (1481714 bytes)
+[22:12:05] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-sales-order/log/erp-sales-order-web-20260929-221144.log
