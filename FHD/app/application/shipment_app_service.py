@@ -38,6 +38,12 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
         self._record_command = record_command
         self._purchase_unit_query = purchase_unit_query
 
+    @staticmethod
+    def reserve_order_number(suffix: str = "A") -> dict[str, Any]:
+        from app.infrastructure.database.shipment_order_numbers import reserve_order_number
+
+        return reserve_order_number(suffix)
+
     def create_shipment(
         self,
         unit_name: str,

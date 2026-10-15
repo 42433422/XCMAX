@@ -125,9 +125,14 @@ def test_scheduler_extensions_register_the_capability_and_webhook_jobs(monkeypat
         lambda scheduler, *, track_job: seen.append(("webhook", scheduler, track_job)),
     )
 
+    monkeypatch.setattr(
+        "modstore_server.incident_team_completion.register_completion_job",
+        lambda scheduler, *, track_job: seen.append(("completion", scheduler, track_job)),
+    )
     scheduler_extensions.register_extensions("scheduler", track_job="tracker")
 
     assert seen == [
         ("capability", "scheduler", "tracker"),
         ("webhook", "scheduler", "tracker"),
+        ("completion", "scheduler", "tracker"),
     ]

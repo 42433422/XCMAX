@@ -103,7 +103,6 @@ version_scan:
     - FHD/docs/PROJECT_STATE.md
     - FHD/docs/DELIVERABLE_PRODUCT.md
     - FHD/docs/SSOT_INDEX.md
-    - FHD/docs/deploy/RELEASE_CHECKLIST.md
     - docs/workmap.md
     - specs/product-lines-3-plus-2.md
 

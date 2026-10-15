@@ -82,6 +82,7 @@ class WorkflowPlanStore:
         user_id: str | None = None,
         session_id: str | None = None,
         message: str | None = None,
+        require_commit: bool = False,
     ) -> str:
         """按 ``plan.plan_id`` upsert 计划快照，返回 ``plan_id``。"""
         plan_id = plan.plan_id
@@ -115,9 +116,13 @@ class WorkflowPlanStore:
                     row.runtime_context = _dump_json(dict(runtime_context or {}))
                     row.status = status
                     session.commit()
+                elif require_commit:
+                    raise RuntimeError("workflow_plan concurrent save did not commit")
         except RECOVERABLE_ERRORS:
             session.rollback()
             logger.warning("workflow_plan 保存失败 plan=%s（主流程继续）", plan_id)
+            if require_commit:
+                raise
         finally:
             session.close()
         return plan_id
@@ -140,22 +145,21 @@ class WorkflowPlanStore:
             return None
         return plan_from_dict(data.get("plan") or {})
 
-    def list_active(self, user_id: str, limit: int = 10) -> list[dict[str, Any]]:
+    def list_active(
+        self, user_id: str, limit: int = 10, *, session_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """列出某用户的可续跑计划（running / pending_awaiting），按最近更新倒序。"""
         session = self._get_session()
         try:
             from app.db.models.workflow import WorkflowPlan
 
-            rows = (
-                session.query(WorkflowPlan)
-                .filter(
-                    WorkflowPlan.user_id == user_id,
-                    WorkflowPlan.status.in_(list(_ACTIVE_STATUSES)),
-                )
-                .order_by(WorkflowPlan.updated_at.desc())
-                .limit(max(1, limit))
-                .all()
+            query = session.query(WorkflowPlan).filter(
+                WorkflowPlan.user_id == user_id,
+                WorkflowPlan.status.in_(list(_ACTIVE_STATUSES)),
             )
+            if session_id is not None:
+                query = query.filter(WorkflowPlan.session_id == session_id)
+            rows = query.order_by(WorkflowPlan.updated_at.desc()).limit(max(1, limit)).all()
             return [row.to_dict() for row in rows]
         finally:
             session.close()

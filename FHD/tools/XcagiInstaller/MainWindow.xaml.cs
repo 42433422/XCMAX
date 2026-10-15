@@ -69,12 +69,6 @@ public partial class MainWindow : Window
         }
 
         ApplyStepUi();
-        if (SunbirdSeedExtractor.HasEmbeddedSeed())
-        {
-            FetchSunbirdDataCheck.Visibility = Visibility.Visible;
-            Title = "太阳鸟 PRO";
-            WelcomeSubtitleText.Text = "10.0 · 太阳鸟考勤定制安装";
-        }
     }
 
     private void SyncAgreeFromWelcome(object sender, RoutedEventArgs e)
@@ -151,12 +145,11 @@ public partial class MainWindow : Window
         switch (_step)
         {
             case WizardStep.Welcome:
-                NextButton.Content = "继续";
-                UpdateWelcomeButtonState();
-                break;
             case WizardStep.License:
                 NextButton.Content = "继续";
-                NextButton.IsEnabled = AgreeLicenseCheck.IsChecked == true;
+                NextButton.IsEnabled = _step == WizardStep.Welcome
+                    ? WelcomeAgreeCheck.IsChecked == true
+                    : AgreeLicenseCheck.IsChecked == true;
                 break;
             case WizardStep.Directory:
                 NextButton.Content = "安装";
@@ -166,11 +159,8 @@ public partial class MainWindow : Window
                 NextButton.IsEnabled = false;
                 BackButton.Visibility = Visibility.Collapsed;
                 break;
-            case WizardStep.Complete:
-                NextButton.Content = "好";
-                NextButton.IsEnabled = true;
-                break;
             case WizardStep.Error:
+            case WizardStep.Complete:
                 NextButton.Content = "好";
                 NextButton.IsEnabled = true;
                 break;
@@ -221,27 +211,21 @@ public partial class MainWindow : Window
     {
         switch (_step)
         {
+            case WizardStep.Welcome when WelcomeAgreeCheck.IsChecked == true:
+            case WizardStep.License when AgreeLicenseCheck.IsChecked == true:
+                _step = WizardStep.Directory;
+                ApplyStepUi();
+                break;
             case WizardStep.Welcome:
-                if (WelcomeAgreeCheck.IsChecked != true)
-                    return;
-                _step = WizardStep.Directory;
-                ApplyStepUi();
-                break;
             case WizardStep.License:
-                if (AgreeLicenseCheck.IsChecked != true)
-                    return;
-                _step = WizardStep.Directory;
-                ApplyStepUi();
-                break;
+                return;
             case WizardStep.Directory:
                 _installDir = InstallDirBox.Text.Trim();
                 WelcomePathPreview.Text = _installDir;
                 await RunInstallAsync();
                 break;
-            case WizardStep.Complete:
-                Close();
-                break;
             case WizardStep.Error:
+            case WizardStep.Complete:
                 Close();
                 break;
         }
@@ -315,12 +299,14 @@ public partial class MainWindow : Window
             UpdateInstallProgress(overall, u.Percent == 100 ? "本体安装完成，正在准备收尾…" : u.Status);
         });
 
+        try { NsisSilentInstaller.ValidateRegisteredInstallDirectory(_installDir); }
+        catch (Exception ex) { ShowError(ex.Message); return; }
         var result = await NsisSilentInstaller.RunAsync(
             _setupExePath,
             _installDir,
             installProgress,
-            _installCts.Token);
-
+            _installCts.Token,
+            NsisSilentInstaller.UserDataDirectory(), updaterHandoff: Environment.GetCommandLineArgs().Contains("--updated"));
         if (!result.Success)
         {
             ShowError(result.Error ?? "安装失败");
@@ -328,30 +314,12 @@ public partial class MainWindow : Window
         }
 
         _installedAppExe = result.AppExePath;
-        var sunbirdNote = "";
-        if (FetchSunbirdDataCheck.IsChecked == true && SunbirdSeedExtractor.HasEmbeddedSeed())
-        {
-            UpdateInstallProgress(94, "正在写入太阳鸟业务数据…");
-            try
-            {
-                var sunbirdProgress = new Progress<string>(msg => UpdateInstallProgress(96, msg));
-                var deployed = await SunbirdSeedExtractor.DeployToUserDataAsync(
-                    progress: sunbirdProgress,
-                    cancellationToken: _installCts.Token).ConfigureAwait(true);
-                sunbirdNote = deployed ? "已获取太阳鸟业务数据" : "太阳鸟业务数据未写入";
-            }
-            catch (Exception ex)
-            {
-                sunbirdNote = $"业务数据获取失败：{ex.Message}";
-            }
-        }
-
         UpdateInstallProgress(99, "正在完成快捷方式与启动设置…");
         var desktopShortcut = DesktopShortcutCheck.IsChecked == true;
         var runAfterInstall = RunAfterInstallCheck.IsChecked == true;
         string extras;
-        try { extras = await PostInstallTasks.RunAsync(() => ApplyPostInstallTasks(_installedAppExe, desktopShortcut, runAfterInstall, sunbirdNote)); }
-        catch (Exception ex) { ShowError(ex.Message); return; }
+        try { extras = await PostInstallTasks.RunAsync(() => ApplyPostInstallTasks(_installedAppExe, desktopShortcut, runAfterInstall)); }
+        catch (Exception ex) { ShowError(await result.RecoverPostInstallFailureAsync(ex.Message)); return; }
         UpdateInstallProgress(100, "安装完成");
         CompletePathText.Text = result.InstallDir ?? "";
         CompleteExtrasText.Text = extras;
@@ -359,15 +327,12 @@ public partial class MainWindow : Window
         ApplyStepUi();
     }
 
-    private static string ApplyPostInstallTasks(string? installedAppExe, bool desktopShortcut, bool runAfterInstall, string? sunbirdNote)
+    private static string ApplyPostInstallTasks(string? installedAppExe, bool desktopShortcut, bool runAfterInstall)
     {
         if (string.IsNullOrEmpty(installedAppExe))
-            return sunbirdNote ?? "";
+            return "";
 
         var notes = new List<string>();
-        if (!string.IsNullOrWhiteSpace(sunbirdNote))
-            notes.Add(sunbirdNote);
-
         if (desktopShortcut)
         {
             if (PostInstallTasks.TryCreateDesktopShortcut(installedAppExe))

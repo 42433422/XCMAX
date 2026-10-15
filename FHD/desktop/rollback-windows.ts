@@ -1,7 +1,10 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
+import fs from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
 
 export interface WindowsRollbackAppliedRecord {
+  operationId?: string
   appliedAt: string
   reason: string
   fromVersion: string
@@ -19,8 +22,28 @@ export interface WindowsRollbackLaunchOptions {
   applied: WindowsRollbackAppliedRecord
   databasePath?: string
   databaseBackupPath?: string
+  databaseOriginallyAbsent?: boolean
   restartApp?: boolean
   waitTimeoutSeconds?: number
+  expectedAppFiles?: Record<string, string>
+  expectedDatabaseSha256?: string
+  /** Optional inventory for customer-owned Mods and supported SQLite files. */
+  ownedUserDataRoot?: string
+  ownedBackupRoot?: string
+  expectedOwnedFiles?: Record<string, string>
+  expectedOwnedDirectories?: string[]
+  /** Internal launch handshake. Omitted by the C# installer template generator. */
+  helperStatusPath?: string
+  helperStatusToken?: string
+  helperAuthorizationPath?: string
+}
+
+interface WindowsRollbackHelperStatus {
+  status?: unknown
+  token?: unknown
+  candidateScriptSha256?: unknown
+  message?: unknown
+  processId?: unknown
 }
 
 function powershellLiteral(value: string): string {
@@ -41,10 +64,6 @@ function targetBasename(value: string): string {
   return path.basename(value)
 }
 
-/**
- * Restore the previous app and pre-migration DB after the failed process exits.
- * On failure, preserve SQLite sidecars and compensate both swaps before exiting.
- */
 export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions): string {
   const currentPid = Math.trunc(options.currentPid)
   if (!Number.isSafeInteger(currentPid) || currentPid <= 0) {
@@ -57,13 +76,16 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
   const markerPath = resolveTargetPath(options.markerPath)
   const appliedPath = resolveTargetPath(options.appliedPath)
   const logPath = resolveTargetPath(options.logPath)
+  const helperStatusPath = options.helperStatusPath ? resolveTargetPath(options.helperStatusPath) : ''
+  const helperStatusToken = options.helperStatusToken || ''
+  const helperAuthorizationPath = options.helperAuthorizationPath ? resolveTargetPath(options.helperAuthorizationPath) : ''
   const appFileName = targetBasename(appPath)
   const waitTimeoutSeconds = Math.max(5, Math.trunc(options.waitTimeoutSeconds ?? 120))
   const appliedBase64 = Buffer.from(JSON.stringify(options.applied, null, 2), 'utf8').toString(
     'base64',
   )
   const databasePath =
-    options.databasePath && options.databaseBackupPath
+    options.databasePath && (options.databaseBackupPath || options.databaseOriginallyAbsent)
       ? resolveTargetPath(options.databasePath)
       : ''
   const databaseBackupPath =
@@ -71,6 +93,11 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
       ? resolveTargetPath(options.databaseBackupPath)
       : ''
   const restartApp = options.restartApp !== false
+  const expectedAppFiles = Buffer.from(JSON.stringify(options.expectedAppFiles || {})).toString('base64')
+  const ownedUserDataRoot = options.ownedUserDataRoot ? resolveTargetPath(options.ownedUserDataRoot) : ''
+  const ownedBackupRoot = options.ownedBackupRoot ? resolveTargetPath(options.ownedBackupRoot) : ''
+  const expectedOwnedFiles = Buffer.from(JSON.stringify(options.expectedOwnedFiles || {})).toString('base64')
+  const expectedOwnedDirectories = Buffer.from(JSON.stringify(options.expectedOwnedDirectories || [])).toString('base64')
 
   return [
     "$ErrorActionPreference = 'Stop'",
@@ -82,17 +109,106 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     `$markerPath = ${powershellLiteral(markerPath)}`,
     `$appliedPath = ${powershellLiteral(appliedPath)}`,
     `$logPath = ${powershellLiteral(logPath)}`,
+    `$helperStatusPath = ${powershellLiteral(helperStatusPath)}`,
+    `$helperStatusToken = ${powershellLiteral(helperStatusToken)}`,
+    `$helperAuthorizationPath = ${powershellLiteral(helperAuthorizationPath)}`,
+    '$helperStatusScriptSha256 = [string]$env:XCAGI_ROLLBACK_VERIFIED_SCRIPT_SHA256',
     `$databasePath = ${powershellLiteral(databasePath)}`,
+    `$databaseOriginallyAbsent = $${options.databaseOriginallyAbsent ? 'true' : 'false'}`,
     `$databaseBackupPath = ${powershellLiteral(databaseBackupPath)}`,
+    `$expectedAppFiles = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${expectedAppFiles}')) | ConvertFrom-Json`,
+    `$expectedDatabaseSha256 = ${powershellLiteral(options.expectedDatabaseSha256 || '')}`,
+    `$ownedUserDataRoot = ${powershellLiteral(ownedUserDataRoot)}`,
+    `$ownedBackupRoot = ${powershellLiteral(ownedBackupRoot)}`,
+    `$expectedOwnedFiles = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${expectedOwnedFiles}')) | ConvertFrom-Json`,
+    `$expectedOwnedDirectories = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${expectedOwnedDirectories}')) | ConvertFrom-Json`,
+    `$ownedStaging = if ($ownedBackupRoot) { Join-Path (Split-Path -Parent $ownedBackupRoot) 'os' } else { "" }`,
+    `$ownedFailed = if ($ownedBackupRoot) { Join-Path (Split-Path -Parent $ownedBackupRoot) 'of' } else { "" }`,
     `$stagingDir = "$installDir.xcagi-rollback-staging"`,
     `$failedDir = "$installDir.xcagi-failed"`,
     `$databaseStaging = if ($databasePath) { "$databasePath.xcagi-rollback-staging" } else { "" }`,
     `$databaseFailed = if ($databasePath) { "$databasePath.xcagi-failed" } else { "" }`,
-    '$appliedWritten = $appQuarantined = $databaseQuarantined = $false',
+    '$receiptWrites = @(); $appQuarantined = $databaseQuarantined = $rollbackCommitted = $false',
+    '$stagingCreated = $databaseStagingCreated = $ownedStagingCreated = $false',
+    '$ownedQuarantined = $false',
+    '$ownedQuarantinedFiles = @()',
+    '$ownedPromotedFiles = @()',
+    '$ownedOriginalDirectories = @()',
+    '$helperReady = $false',
+    'function Native-Path([string]$file) { if ($file.StartsWith("\\\\?\\")) { return $file }; if ($file.StartsWith("\\\\")) { return "\\\\?\\UNC\\" + $file.Substring(2) }; return "\\\\?\\" + $file }',
+    'function File-Sha256([string]$file) {',
+    '  $stream = [IO.File]::OpenRead((Native-Path $file)); $hash = [Security.Cryptography.SHA256]::Create()',
+    '  try { return [BitConverter]::ToString($hash.ComputeHash($stream)).Replace("-", "") } finally { $stream.Dispose(); $hash.Dispose() }',
+    '}',
+    'function Copy-AppTree([string]$source, [string]$dest) {',
+    '  foreach ($file in @(Get-ChildItem -LiteralPath (Native-Path $source) -Force)) {',
+    '    $target = Join-Path $dest $file.Name',
+    '    if ($file.PSIsContainer) { [IO.Directory]::CreateDirectory((Native-Path $target)) | Out-Null; Copy-AppTree $file.FullName $target; continue }',
+    '    [IO.Directory]::CreateDirectory((Native-Path (Split-Path -Parent $target))) | Out-Null',
+    '    $copyDeadline = (Get-Date).AddSeconds(180)',
+    '    while ($true) {',
+    '      try { [IO.File]::Copy((Native-Path $file.FullName), (Native-Path $target), $true); break }',
+    '      catch { if ((Get-Date) -ge $copyDeadline) { throw }; Start-Sleep -Seconds 2 }',
+    '    }',
+    '  }',
+    '}',
+    'function Assert-AppSnapshot([string]$root) {',
+    '  $expected = @($expectedAppFiles.PSObject.Properties)',
+    '  if (-not $expected.Count) { return }',
+    '  $root = [IO.Path]::GetFullPath($root).TrimEnd("\\")',
+    '  if ((Get-Item -LiteralPath $root -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "snapshot link rejected" }',
+    '  $entries = @(Get-ChildItem -LiteralPath (Native-Path $root) -Recurse -Force)',
+    '  if (@($entries | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw "snapshot link rejected" }',
+    '  if (@($entries | Where-Object { -not $_.PSIsContainer }).Count -ne $expected.Count) { throw "snapshot file set mismatch" }',
+    '  foreach ($entry in $expected) {',
+    '    $file = [IO.Path]::GetFullPath((Join-Path $root $entry.Name))',
+    '    if (-not $file.StartsWith($root + "\\", [StringComparison]::OrdinalIgnoreCase)) { throw "snapshot path escaped" }',
+    '    if ((File-Sha256 $file) -ne $entry.Value) { throw "snapshot file checksum mismatch" }',
+    '  }',
+    '}',
     'function Move-DatabaseFiles([string]$from, [string]$to) {',
-    '  foreach ($suffix in @("", "-wal", "-shm")) {',
+    '  foreach ($suffix in @("", "-wal", "-shm", "-journal")) {',
     '    if (Test-Path -LiteralPath "$from$suffix") { Move-Item -LiteralPath "$from$suffix" -Destination "$to$suffix" -Force }',
     '  }',
+    '}',
+    'function Get-OwnedFiles([string]$root) {',
+    '  $result = @(); if (-not $root -or -not (Test-Path -LiteralPath (Native-Path $root))) { return $result }',
+    '  $root = [IO.Path]::GetFullPath($root).TrimEnd("\\")',
+    '  $modRoot = Join-Path $root "mods"; if (Test-Path -LiteralPath (Native-Path $modRoot)) { $result += @(Get-ChildItem -LiteralPath (Native-Path $modRoot) -Recurse -File -Force) }',
+    '  $rootDb = Get-ChildItem -LiteralPath (Native-Path $root) -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "(?i)^(products|inventory|voice_learning|error_collection)(__[a-z0-9_-]+)?\\.db(?:-(?:wal|shm|journal))?$" }; $result += @($rootDb)',
+    '  $dataRoot = Join-Path $root "data"; if (Test-Path -LiteralPath (Native-Path $dataRoot)) {',
+    '    $result += @(Get-ChildItem -LiteralPath (Native-Path $dataRoot) -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "(?i)^.+\\.db(?:-(?:wal|shm|journal))?$" -and $_.Name -notmatch "(?i)^xcagi\\.db(?:-(?:wal|shm|journal))?$" })',
+    '    $modDbRoot = Join-Path $dataRoot "mod_dbs"; if (Test-Path -LiteralPath (Native-Path $modDbRoot)) { $result += @(Get-ChildItem -LiteralPath (Native-Path $modDbRoot) -Recurse -File -Force | Where-Object { $_.Name -match "(?i)^.+\\.db(?:-(?:wal|shm|journal))?$" }) }',
+    '  }',
+    '  return @($result | Sort-Object -Property FullName -Unique)',
+    '}',
+    'function Get-OwnedDirectories([string]$root) {',
+    '  $result = @(); if (-not $root -or -not (Test-Path -LiteralPath (Native-Path $root))) { return $result }; $root = [IO.Path]::GetFullPath($root).TrimEnd("\\")',
+    '  foreach ($top in @("mods", "data")) { $base = Join-Path $root $top; if (-not (Test-Path -LiteralPath (Native-Path $base))) { continue }; $result += $top; if ($top -eq "mods") { $scan = $base } else { $scan = Join-Path $base "mod_dbs"; if (Test-Path -LiteralPath (Native-Path $scan)) { $result += "data\\mod_dbs" } }; if (Test-Path -LiteralPath (Native-Path $scan)) { $result += @(Get-ChildItem -LiteralPath (Native-Path $scan) -Recurse -Directory -Force | ForEach-Object { $_.FullName.Substring((Native-Path $root).Length).TrimStart("\\") }) } }',
+    '  return @($result | Sort-Object -Unique)',
+    '}',
+    'function Assert-OwnedInventory([string]$root, $expected) {',
+    '  $root = [IO.Path]::GetFullPath($root).TrimEnd("\\"); $actual = @(Get-OwnedFiles $root)',
+    '  if ($actual.Count -ne @($expected.PSObject.Properties).Count) { throw "owned state file set mismatch (actual=$($actual.Count), expected=$(@($expected.PSObject.Properties).Count))" }',
+    '  foreach ($entry in @($expected.PSObject.Properties)) { $file = [IO.Path]::GetFullPath((Join-Path $root $entry.Name)); if (-not $file.StartsWith($root + "\\", [StringComparison]::OrdinalIgnoreCase)) { throw "owned state path escaped" }; if (-not (Test-Path -LiteralPath (Native-Path $file)) -or (File-Sha256 $file) -ne $entry.Value) { throw "owned state checksum mismatch: $($entry.Name)" } }',
+    '  if (@(Get-ChildItem -LiteralPath (Native-Path $root) -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw "owned state link rejected" }',
+    '}',
+    'function Restore-OwnedState([ref]$stagingRef, [ref]$quarantineRef, [ref]$quarantinedFilesRef, [ref]$promotedFilesRef, [ref]$originalDirectoriesRef) {',
+    '  if (-not $ownedUserDataRoot -or -not $ownedBackupRoot) { return }',
+    '  if ((Test-Path -LiteralPath (Native-Path $ownedStaging)) -or (Test-Path -LiteralPath (Native-Path $ownedFailed))) { throw "retained owned-state rollback files must be recovered first" }',
+    '  if (-not (Test-Path -LiteralPath (Native-Path $ownedBackupRoot))) { throw "owned-state snapshot missing" }',
+    '  Assert-OwnedInventory $ownedBackupRoot $expectedOwnedFiles',
+    '  $backupDirectories = @(Get-OwnedDirectories $ownedBackupRoot); if ($backupDirectories.Count -ne @($expectedOwnedDirectories).Count -or @($expectedOwnedDirectories | Where-Object { $_ -notin $backupDirectories }).Count) { throw "owned state directory snapshot mismatch" }',
+    '  if (@(Get-ChildItem -LiteralPath (Native-Path $ownedUserDataRoot) -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw "owned state link rejected" }',
+    '  $originalDirectoriesRef.Value = @(Get-OwnedDirectories $ownedUserDataRoot)',
+    '  [IO.Directory]::CreateDirectory((Native-Path $ownedStaging)) | Out-Null; $stagingRef.Value = $true',
+    '  foreach ($entry in @($expectedOwnedFiles.PSObject.Properties)) { $src = Join-Path $ownedBackupRoot $entry.Name; $dst = Join-Path $ownedStaging $entry.Name; [IO.Directory]::CreateDirectory((Native-Path (Split-Path -Parent $dst))) | Out-Null; Copy-Item -LiteralPath (Native-Path $src) -Destination (Native-Path $dst); if ((File-Sha256 $dst) -ne $entry.Value) { throw "owned-state staged checksum mismatch" } }',
+    '  $current = @(Get-OwnedFiles $ownedUserDataRoot); [IO.Directory]::CreateDirectory((Native-Path $ownedFailed)) | Out-Null; $quarantineRef.Value = $true',
+    '  foreach ($file in $current) { $rel = $file.FullName.Substring((Native-Path ([IO.Path]::GetFullPath($ownedUserDataRoot).TrimEnd("\\"))).Length).TrimStart("\\"); $dest = Join-Path $ownedFailed $rel; [IO.Directory]::CreateDirectory((Native-Path (Split-Path -Parent $dest))) | Out-Null; Move-Item -LiteralPath (Native-Path $file.FullName) -Destination (Native-Path $dest); $quarantinedFilesRef.Value += $rel }',
+    '  foreach ($entry in @($expectedOwnedFiles.PSObject.Properties)) { $src = Join-Path $ownedStaging $entry.Name; $dst = Join-Path $ownedUserDataRoot $entry.Name; [IO.Directory]::CreateDirectory((Native-Path (Split-Path -Parent $dst))) | Out-Null; Move-Item -LiteralPath (Native-Path $src) -Destination (Native-Path $dst); $promotedFilesRef.Value += $entry.Name }',
+    '  Assert-OwnedInventory $ownedUserDataRoot $expectedOwnedFiles',
+    '  foreach ($relative in $expectedOwnedDirectories) { $directory = [IO.Path]::GetFullPath((Join-Path $ownedUserDataRoot $relative)); if (-not $directory.StartsWith(([IO.Path]::GetFullPath($ownedUserDataRoot).TrimEnd("\\") + "\\"), [StringComparison]::OrdinalIgnoreCase)) { throw "owned directory path escaped" }; [IO.Directory]::CreateDirectory((Native-Path $directory)) | Out-Null }',
+    '  foreach ($relative in @($ownedOriginalDirectories | Sort-Object { $_.Length } -Descending)) { if ($relative -notin $expectedOwnedDirectories) { $directory = Join-Path $ownedUserDataRoot $relative; if (Test-Path -LiteralPath (Native-Path $directory)) { $items = @(Get-ChildItem -LiteralPath (Native-Path $directory) -Force); if ($items.Count -eq 0) { Remove-Item -LiteralPath (Native-Path $directory) -Force -ErrorAction Stop } } } }',
     '}',
     'function Write-RollbackLog([string]$message) {',
     '  try {',
@@ -101,15 +217,32 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '    Add-Content -LiteralPath $logPath -Value ("{0:o} {1}" -f (Get-Date), $message) -Encoding UTF8',
     '  } catch {}',
     '}',
-    'foreach ($candidate in (@($stagingDir, $failedDir, $databaseStaging, $databaseFailed) + @(if ($databaseFailed) { "$databaseFailed-wal"; "$databaseFailed-shm" }))) {',
-    '  if ($candidate -and (Test-Path -LiteralPath $candidate)) { throw "retained rollback files must be recovered first: $candidate" }',
+    'function Write-HelperStatus([string]$status, [string]$message) {',
+    '  if (-not $helperStatusPath -or -not $helperStatusToken) { return }',
+    '  $parent = Split-Path -Parent $helperStatusPath',
+    '  if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }',
+    '  $record = @{ status = $status; token = $helperStatusToken; candidateScriptSha256 = $helperStatusScriptSha256; message = $message; processId = $PID } | ConvertTo-Json -Compress',
+    '  $temporaryPath = "$helperStatusPath.$PID.tmp"',
+    '  [IO.File]::WriteAllText($temporaryPath, $record, (New-Object Text.UTF8Encoding($false)))',
+    '  [IO.File]::Move($temporaryPath, $helperStatusPath)',
     '}',
     'try {',
+    '  Write-RollbackLog "verified rollback helper started"',
+    '  foreach ($candidate in (@($stagingDir, $failedDir, $databaseStaging, $databaseFailed, $ownedStaging, $ownedFailed) + @(if ($databaseFailed) { "$databaseFailed-wal"; "$databaseFailed-shm"; "$databaseFailed-journal" }))) {',
+    '    if ($candidate -and (Test-Path -LiteralPath $candidate)) { throw "retained rollback files must be recovered first: $candidate" }',
+    '  }',
+    '  Write-HelperStatus "ready" ""',
+    '  $helperReady = $true',
     '  Write-RollbackLog "waiting for failed XCAGI process pid=$waitPid"',
     `  $deadline = (Get-Date).AddSeconds(${waitTimeoutSeconds})`,
     '  while (Get-Process -Id $waitPid -ErrorAction SilentlyContinue) {',
     '    if ((Get-Date) -ge $deadline) { throw "timed out waiting for pid=$waitPid" }',
     '    Start-Sleep -Milliseconds 250',
+    '  }',
+    '  if ($helperAuthorizationPath) {',
+    '    if (-not (Test-Path -LiteralPath $helperAuthorizationPath)) { throw "rollback launch authorization missing; helper will not modify files" }',
+    '    $authorization = Get-Content -LiteralPath $helperAuthorizationPath -Raw | ConvertFrom-Json',
+    '    if ($authorization.state -ne "authorized" -or $authorization.token -ne $helperStatusToken -or $authorization.candidateScriptSha256 -ne $helperStatusScriptSha256 -or [int]$authorization.processId -ne $PID) { throw "rollback launch authorization did not match this helper" }',
     '  }',
     '  if (-not (Test-Path -LiteralPath $backupRoot)) { throw "rollback backup missing: $backupRoot" }',
     '  if (-not (Test-Path -LiteralPath (Join-Path $backupRoot $appFileName))) {',
@@ -118,31 +251,76 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
     '  if ($databasePath -and $databaseBackupPath -and (-not (Test-Path -LiteralPath $databaseBackupPath))) {',
     '    throw "database rollback backup missing: $databaseBackupPath"',
     '  }',
-    '  New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null',
-    '  Get-ChildItem -LiteralPath $backupRoot -Force | Copy-Item -Destination $stagingDir -Recurse -Force',
+    '  Restore-OwnedState ([ref]$ownedStagingCreated) ([ref]$ownedQuarantined) ([ref]$ownedQuarantinedFiles) ([ref]$ownedPromotedFiles) ([ref]$ownedOriginalDirectories)',
+    '  New-Item -ItemType Directory -Path $stagingDir | Out-Null',
+    '  $stagingCreated = $true',
+    '  Assert-AppSnapshot $backupRoot',
+    '  Copy-AppTree $backupRoot $stagingDir',
+    '  Assert-AppSnapshot $stagingDir',
     '  if (-not (Test-Path -LiteralPath (Join-Path $stagingDir $appFileName))) {',
     '    throw "staged rollback executable missing: $appFileName"',
     '  }',
     '  if ($databasePath -and $databaseBackupPath) {',
     '    $databaseParent = Split-Path -Parent $databasePath',
     '    New-Item -ItemType Directory -Path $databaseParent -Force | Out-Null',
-    '    Copy-Item -LiteralPath $databaseBackupPath -Destination $databaseStaging -Force',
+    '    if (Test-Path -LiteralPath $databaseStaging) { throw "database staging path already exists: $databaseStaging" }',
+    '    Copy-Item -LiteralPath $databaseBackupPath -Destination $databaseStaging',
+    '    $databaseStagingCreated = $true',
+    '    if ($expectedDatabaseSha256 -and (File-Sha256 $databaseStaging) -ne $expectedDatabaseSha256) { throw "database snapshot checksum mismatch" }',
     '  }',
-    '  if (Test-Path -LiteralPath $installDir) { Move-Item -LiteralPath $installDir -Destination $failedDir -Force; $appQuarantined = $true }',
-    '  Move-Item -LiteralPath $stagingDir -Destination $installDir -Force',
-    '  if ($databasePath -and $databaseBackupPath) {',
+    '  function Install-SnapshotInPlace([string]$source, [string]$dest) {',
+    '    $root = [IO.Path]::GetFullPath($source).TrimEnd("\\")',
+    '    $destRoot = [IO.Path]::GetFullPath($dest).TrimEnd("\\")',
+    '    Copy-AppTree $root $destRoot',
+    '    $expected = @($expectedAppFiles.PSObject.Properties.Name)',
+    '    if ($expected.Count) {',
+    '      foreach ($file in @(Get-ChildItem -LiteralPath (Native-Path $destRoot) -Recurse -File -Force)) {',
+    '        $rel = $file.FullName.Substring((Native-Path $destRoot).Length).TrimStart("\\")',
+    '        if ($expected -notcontains $rel) { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction SilentlyContinue }',
+    '      }',
+    '    }',
+    '  }',
+    '  try {',
+    '    if (Test-Path -LiteralPath $installDir) { [IO.Directory]::Move($installDir, $failedDir); $appQuarantined = $true }',
+    '    [IO.Directory]::Move($stagingDir, $installDir)',
+    '  } catch {',
+    '    Write-RollbackLog ("atomic directory swap blocked, overlaying snapshot: " + $_.Exception.Message)',
+    '    if ($appQuarantined -and (Test-Path -LiteralPath $failedDir) -and -not (Test-Path -LiteralPath $installDir)) {',
+    '      [IO.Directory]::Move($failedDir, $installDir)',
+    '      $appQuarantined = $false',
+    '    }',
+    '    Install-SnapshotInPlace $stagingDir $installDir',
+    '    [IO.Directory]::Delete($stagingDir, $true)',
+    '  }',
+    '  $stagingCreated = $false',
+    '  if ($databasePath -and ($databaseBackupPath -or $databaseOriginallyAbsent)) {',
     '    $databaseQuarantined = $true',
     '    Move-DatabaseFiles $databasePath $databaseFailed',
-    '    Move-Item -LiteralPath $databaseStaging -Destination $databasePath -Force',
+    '    if (-not $databaseOriginallyAbsent) { Move-Item -LiteralPath $databaseStaging -Destination $databasePath -Force; $databaseStagingCreated = $false }',
     '  }',
     `  $appliedJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${appliedBase64}'))`,
     '  $appliedParent = Split-Path -Parent $appliedPath',
     '  if ($appliedParent) { New-Item -ItemType Directory -Path $appliedParent -Force | Out-Null }',
-    '  [IO.File]::WriteAllText($appliedPath, $appliedJson, (New-Object Text.UTF8Encoding($false)))',
-    '  $appliedWritten = $true',
-    '  Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue',
-    '  Remove-Item -LiteralPath $failedDir -Recurse -Force -ErrorAction SilentlyContinue',
-    '  if ($databaseFailed) { foreach ($suffix in @("", "-wal", "-shm")) { Remove-Item -LiteralPath "$databaseFailed$suffix" -Force -ErrorAction SilentlyContinue } }',
+    '  $receiptId = [Guid]::NewGuid().ToString("N")',
+    '  $record = $appliedJson | ConvertFrom-Json',
+    '  if (-not $record.operationId) { $record | Add-Member -NotePropertyName operationId -NotePropertyValue $receiptId -Force }',
+    '  $record | Add-Member -NotePropertyName completedAt -NotePropertyValue ([DateTime]::UtcNow.ToString("o")) -Force',
+    '  $receiptBytes = (New-Object Text.UTF8Encoding($false)).GetBytes(($record | ConvertTo-Json -Compress))',
+    // Keep the consumed notification and durable evidence in the same commit/compensation boundary.
+    '  foreach ($receiptPath in @($appliedPath, [IO.Path]::ChangeExtension($appliedPath, ".last.json"))) {',
+    '    $write = @{ path=$receiptPath; temp="$receiptPath.$receiptId.tmp"; backup="$receiptPath.$receiptId.previous"; previous=(Test-Path -LiteralPath $receiptPath); written=$false }; $receiptWrites += $write',
+    '    $stream = [IO.File]::Open($write.temp, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)',
+    '    try { $stream.Write($receiptBytes, 0, $receiptBytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }',
+    '    if ($write.previous) { [IO.File]::Replace($write.temp, $write.path, $write.backup) } else { [IO.File]::Move($write.temp, $write.path) }',
+    '    $write.written = $true; $receiptBytes = [IO.File]::ReadAllBytes($appliedPath)',
+    '  }',
+    '  Remove-Item -LiteralPath $markerPath -Force -ErrorAction Stop',
+    '  $rollbackCommitted = $true',
+    '  Remove-Item -LiteralPath (Native-Path $failedDir) -Recurse -Force -ErrorAction SilentlyContinue',
+    '  foreach ($write in $receiptWrites) { if (Test-Path -LiteralPath $write.backup) { Remove-Item -LiteralPath $write.backup -Force -ErrorAction SilentlyContinue } }',
+    '  if ($ownedFailed) { Remove-Item -LiteralPath (Native-Path $ownedFailed) -Recurse -Force -ErrorAction SilentlyContinue }',
+    '  if ($ownedStaging) { Remove-Item -LiteralPath (Native-Path $ownedStaging) -Recurse -Force -ErrorAction SilentlyContinue }',
+    '  if ($databaseFailed) { foreach ($suffix in @("", "-wal", "-shm", "-journal")) { Remove-Item -LiteralPath "$databaseFailed$suffix" -Force -ErrorAction SilentlyContinue } }',
     '  Write-RollbackLog "full application rollback completed"',
     ...(restartApp
       ? [
@@ -154,27 +332,78 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
         ]
       : []),
     '} catch {',
+    '  if ($rollbackCommitted) { try { Write-RollbackLog ("rollback committed; later bookkeeping failed: " + $_.Exception.Message) } catch {}; exit 0 }',
     '  Write-RollbackLog ("rollback failed: " + $_.Exception.Message)',
+    '  if (-not $helperReady) { try { Write-HelperStatus "failed" $_.Exception.Message } catch {} }',
     '  Write-Error ("rollback failed: " + $_.Exception.Message) -ErrorAction Continue',
-    '  if ($appliedWritten) { Remove-Item -LiteralPath $appliedPath -Force -ErrorAction SilentlyContinue }',
+    '  foreach ($write in $receiptWrites) {',
+    '    try {',
+    '      if ($write.written -and $write.previous -and (Test-Path -LiteralPath $write.backup)) { [IO.File]::Replace($write.backup, $write.path, ($write.temp + ".failed")) }',
+    '      elseif ($write.written -and -not $write.previous) { [IO.File]::Delete($write.path) }',
+    '    } catch { Write-RollbackLog ("could not restore previous receipt; backup retained at " + $write.backup + ": " + $_.Exception.Message) }',
+    '    if (Test-Path -LiteralPath $write.temp) { Remove-Item -LiteralPath $write.temp -Force -ErrorAction SilentlyContinue }',
+    '  }',
     '  if ($appQuarantined -and (Test-Path -LiteralPath $failedDir)) {',
-    '    Remove-Item -LiteralPath $installDir -Recurse -Force -ErrorAction SilentlyContinue',
+    '    Remove-Item -LiteralPath (Native-Path $installDir) -Recurse -Force -ErrorAction SilentlyContinue',
     '    Move-Item -LiteralPath $failedDir -Destination $installDir -Force -ErrorAction SilentlyContinue',
     '  }',
     '  if ($databaseQuarantined) {',
     '    Move-DatabaseFiles $databaseFailed $databasePath',
     '  }',
-    '  Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue',
-    '  if ($databaseStaging) { Remove-Item -LiteralPath $databaseStaging -Force -ErrorAction SilentlyContinue }',
+    '  if ($ownedQuarantined -and (Test-Path -LiteralPath (Native-Path $ownedFailed))) {',
+    '    $ownedCompensationFailed = $false',
+    '    foreach ($rel in $ownedPromotedFiles) { $promoted = Join-Path $ownedUserDataRoot $rel; if (Test-Path -LiteralPath (Native-Path $promoted)) { try { Remove-Item -LiteralPath (Native-Path $promoted) -Force -ErrorAction Stop } catch { $ownedCompensationFailed = $true; Write-RollbackLog ("owned-state compensation could not remove promoted snapshot file " + $promoted + ": " + $_.Exception.Message) } } }',
+    '    foreach ($rel in $ownedQuarantinedFiles) { $file = Join-Path $ownedFailed $rel; if (Test-Path -LiteralPath (Native-Path $file)) { $dest = Join-Path $ownedUserDataRoot $rel; try { [IO.Directory]::CreateDirectory((Native-Path (Split-Path -Parent $dest))) | Out-Null; $hash = File-Sha256 $file; Move-Item -LiteralPath (Native-Path $file) -Destination (Native-Path $dest) -Force -ErrorAction Stop; if ((File-Sha256 $dest) -ne $hash) { throw "restored candidate checksum mismatch" } } catch { $ownedCompensationFailed = $true; Write-RollbackLog ("owned-state compensation could not restore quarantined file " + $dest + ": " + $_.Exception.Message) } } }',
+    '    foreach ($relative in $ownedOriginalDirectories) { try { [IO.Directory]::CreateDirectory((Native-Path (Join-Path $ownedUserDataRoot $relative))) | Out-Null } catch { $ownedCompensationFailed = $true; Write-RollbackLog ("owned-state compensation could not recreate candidate directory " + $relative + ": " + $_.Exception.Message) } }',
+    '    foreach ($relative in @($expectedOwnedDirectories | Sort-Object { $_.Length } -Descending)) { if ($relative -notin $ownedOriginalDirectories) { $directory = Join-Path $ownedUserDataRoot $relative; if (Test-Path -LiteralPath (Native-Path $directory)) { try { $items = @(Get-ChildItem -LiteralPath (Native-Path $directory) -Force); if ($items.Count -eq 0) { Remove-Item -LiteralPath (Native-Path $directory) -Force -ErrorAction Stop } } catch { $ownedCompensationFailed = $true; Write-RollbackLog ("owned-state compensation could not remove created directory " + $relative + ": " + $_.Exception.Message) } } } }',
+    '    if (-not $ownedCompensationFailed) { Remove-Item -LiteralPath (Native-Path $ownedFailed) -Recurse -Force -ErrorAction SilentlyContinue }',
+    '  }',
+    '  if ($stagingCreated) { Remove-Item -LiteralPath (Native-Path $stagingDir) -Recurse -Force -ErrorAction SilentlyContinue }',
+    '  if ($databaseStagingCreated -and $databaseStaging) { Remove-Item -LiteralPath $databaseStaging -Force -ErrorAction SilentlyContinue }',
+    '  if ($ownedStagingCreated -and $ownedStaging) { Remove-Item -LiteralPath (Native-Path $ownedStaging) -Recurse -Force -ErrorAction SilentlyContinue }',
     '  exit 1',
     '}',
   ].join('\r\n')
 }
 
+export function buildWindowsRollbackFileLoader(scriptPath: string, sha256: string): string {
+  if (!/^[0-9a-f]{64}$/i.test(sha256)) throw new Error('Invalid rollback script checksum')
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    `$stream = [IO.File]::Open(${powershellLiteral(scriptPath)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)`,
+    '$hash = [Security.Cryptography.SHA256]::Create()',
+    'try {',
+    `  if ([BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '') -ne '${sha256}') { throw 'rollback script checksum mismatch' }`,
+    '  $stream.Position = 0',
+    `  $env:XCAGI_ROLLBACK_VERIFIED_SCRIPT_SHA256 = '${sha256}'`,
+    '  $reader = New-Object IO.StreamReader($stream, [Text.Encoding]::UTF8, $true)',
+    '  & ([ScriptBlock]::Create($reader.ReadToEnd()))',
+    '} finally { $stream.Dispose(); $hash.Dispose() }',
+  ].join('\r\n')
+}
+
 export function launchWindowsFullRollback(
   options: WindowsRollbackLaunchOptions,
+  readinessTimeoutMs = 15_000,
 ): Promise<number | undefined> {
-  const encoded = Buffer.from(buildWindowsRollbackScript(options), 'utf16le').toString('base64')
+  const directory = path.dirname(resolveTargetPath(options.logPath))
+  fs.mkdirSync(directory, { recursive: true })
+  const handshakeId = randomUUID()
+  const helperStatusPath = path.join(directory, `rollback-status-${handshakeId}.json`)
+  const helperAuthorizationPath = path.join(directory, `rollback-authorize-${handshakeId}.json`)
+  const helperStatusToken = randomUUID()
+  const finalScript = buildWindowsRollbackScript({ ...options, helperStatusPath, helperStatusToken, helperAuthorizationPath })
+  const finalScriptSha256 = createHash('sha256').update(finalScript).digest('hex')
+  const scriptPath = path.join(directory, `rollback-script-${handshakeId}.ps1`)
+  fs.writeFileSync(scriptPath, finalScript, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+  const encoded = Buffer.from(buildWindowsRollbackFileLoader(scriptPath, finalScriptSha256), 'utf16le').toString('base64')
+  const workDir = powershellLiteral(path.dirname(resolveTargetPath(options.logPath)))
+  // DETACHED_PROCESS makes powershell.exe exit 0 before -EncodedCommand runs.
+  // An attached launcher starts a hidden helper that still runs after Electron exits.
+  const launchCommand = [
+    `$helper = Start-Process -WindowStyle Hidden -PassThru -FilePath powershell.exe -WorkingDirectory ${workDir} -ArgumentList @('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand','${encoded}')`,
+    '[Console]::Out.WriteLine($helper.Id)',
+  ].join('; ')
   return new Promise((resolve, reject) => {
     const child = spawn(
       'powershell.exe',
@@ -182,22 +411,116 @@ export function launchWindowsFullRollback(
         '-NoLogo',
         '-NoProfile',
         '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-EncodedCommand',
-        encoded,
+        '-Command',
+        launchCommand,
       ],
       {
         cwd: path.dirname(resolveTargetPath(options.logPath)),
-        detached: true,
-        stdio: 'ignore',
+        stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       },
     )
-    child.once('error', reject)
-    child.once('spawn', () => {
-      child.unref()
-      resolve(child.pid)
+    let settled = false
+    let spawned = false
+    let helperPid: number | undefined
+    let stdoutBuf = ''
+    let stderrBuf = ''
+    child.stdout?.setEncoding('utf8')
+    child.stderr?.setEncoding('utf8')
+    const capturePid = () => {
+      const match = stdoutBuf.match(/(\d+)/)
+      if (match) helperPid = Number(match[1])
+    }
+    child.stdout?.on('data', (chunk: string) => {
+      stdoutBuf += chunk
+      capturePid()
     })
+    child.stderr?.on('data', (chunk: string) => {
+      stderrBuf += chunk
+    })
+    let pollTimer: NodeJS.Timeout | undefined
+    let timeoutTimer: NodeJS.Timeout | undefined
+    const cleanUp = () => {
+      if (pollTimer) clearInterval(pollTimer)
+      if (timeoutTimer) clearTimeout(timeoutTimer)
+      child.removeListener('error', onError)
+      child.removeListener('exit', onExit)
+      child.removeListener('close', onClose)
+      child.removeListener('spawn', onSpawn)
+    }
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      cleanUp()
+      try { child.unref() } catch {}
+      if (error) reject(error)
+      else resolve(helperPid)
+    }
+    const checkStatus = (acceptReady = true) => {
+      if (!spawned || settled) return
+      capturePid()
+      let status: WindowsRollbackHelperStatus
+      try {
+        status = JSON.parse(fs.readFileSync(helperStatusPath, 'utf8')) as WindowsRollbackHelperStatus
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+        finish(new Error(`Windows rollback helper wrote an unreadable readiness record: ${(error as Error).message}`))
+        return
+      }
+      if (status.token !== helperStatusToken || status.candidateScriptSha256 !== finalScriptSha256) {
+        finish(new Error('Windows rollback helper readiness token did not match'))
+      } else if (status.status === 'failed') {
+        finish(new Error(`Windows rollback helper failed before readiness: ${String(status.message || 'unknown preflight failure')}`))
+      } else if (typeof helperPid !== 'number') {
+        return
+      } else if (status.processId !== helperPid) {
+        finish(new Error('Windows rollback helper process identity did not match'))
+      } else if (status.status === 'ready') {
+        if (!acceptReady) return
+        try {
+          const authorizationPath = `${helperAuthorizationPath}.${process.pid}.tmp`
+          fs.writeFileSync(
+            authorizationPath,
+            JSON.stringify({ state: 'authorized', token: helperStatusToken, candidateScriptSha256: finalScriptSha256, processId: helperPid }),
+            { encoding: 'utf8', mode: 0o600, flag: 'wx' },
+          )
+          fs.renameSync(authorizationPath, helperAuthorizationPath)
+          finish()
+        } catch (error) {
+          finish(new Error(`Could not authorize Windows rollback helper after readiness: ${(error as Error).message}`))
+        }
+      } else {
+        finish(new Error(`Windows rollback helper reported an unknown readiness state: ${String(status.status)}`))
+      }
+    }
+    const launcherFailed = (code: number | null, signal: NodeJS.Signals | null) => {
+      capturePid()
+      if (code === 0 && typeof helperPid === 'number') return
+      checkStatus(false)
+      if (!settled) {
+        const detail = stderrBuf.trim()
+        finish(new Error(`Windows rollback helper exited before readiness (code ${String(code)}, signal ${String(signal)}${detail ? `: ${detail}` : ''})`))
+      }
+    }
+    const onError = (error: Error) => finish(new Error(`Could not launch Windows rollback helper: ${error.message}`))
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      launcherFailed(code, signal)
+    }
+    const onClose = (code: number | null, signal: NodeJS.Signals | null) => {
+      launcherFailed(code, signal)
+    }
+    const onSpawn = () => {
+      spawned = true
+      checkStatus()
+      if (settled) return
+      pollTimer = setInterval(checkStatus, 25)
+      timeoutTimer = setTimeout(() => {
+        finish(new Error(`Windows rollback helper did not report readiness within ${readinessTimeoutMs} ms`))
+      }, readinessTimeoutMs)
+    }
+    child.once('error', onError)
+    child.once('exit', onExit)
+    child.once('close', onClose)
+    child.once('spawn', onSpawn)
   })
 }

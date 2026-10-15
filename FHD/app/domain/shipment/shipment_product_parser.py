@@ -68,12 +68,16 @@ def match_product(
             if _normalize_text(p.get("name")) == name_norm:
                 return p
 
-    # 4) 名称包含
+    # 4) 名称包含：多个命中时取名称最长者，避免短名抢先绑到更具体的商品。
     if name_norm:
-        for p in db_products:
-            p_name = _normalize_text(p.get("name"))
-            if p_name and (name_norm in p_name or p_name in name_norm):
-                return p
+        contained = [
+            p
+            for p in db_products
+            if (p_name := _normalize_text(p.get("name")))
+            and (name_norm in p_name or p_name in name_norm)
+        ]
+        if contained:
+            return max(contained, key=lambda p: len(_normalize_text(p.get("name"))))
 
     return None
 
@@ -101,8 +105,11 @@ def prepare_parsed_products(
         if quantity_tins is None:
             quantity_tins = p.get("quantity", 0)
 
-        tin_spec = p.get("tin_spec") or p.get("spec") or 10.0
+        tin_spec = p.get("tin_spec") or p.get("spec") or p.get("weight_per_unit") or 10.0
 
+        if not model_number:
+            sku_match = match_product("", str(name or ""), tin_spec, db_products)
+            model_number = (sku_match or {}).get("model_number", "")
         matched = match_product(str(name or ""), str(model_number or ""), tin_spec, db_products)
         if matched:
             name = matched.get("name") or name
@@ -120,17 +127,13 @@ def prepare_parsed_products(
 
         quantity_kg = p.get("quantity_kg")
         if quantity_kg is None:
-            try:
-                quantity_kg = float(quantity_tins or 0) * float(tin_spec or 0)
-            except RECOVERABLE_ERRORS:
-                quantity_kg = 0
+            quantity_kg = (_to_float_or_none(quantity_tins) or 0) * (
+                _to_float_or_none(tin_spec) or 0
+            )
 
         amount = p.get("amount")
         if amount is None:
-            try:
-                amount = float(unit_price or 0) * float(quantity_kg or 0)
-            except RECOVERABLE_ERRORS:
-                amount = 0
+            amount = (_to_float_or_none(unit_price) or 0) * (_to_float_or_none(quantity_kg) or 0)
 
         parsed_products.append(
             {

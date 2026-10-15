@@ -159,7 +159,7 @@ class __AIChatApplicationServicePart02MixinPart03Mixin(_DynamicWorkflowPendingRe
                 )
                 self._pending_workflows.pop(user_id, None)
         pending_handled, pending_result = self._resume_pending_dynamic_workflow(
-            user_id, message, text
+            user_id, message, text, context
         )
         if pending_handled:
             return pending_result

@@ -1,11 +1,4 @@
-"""M15 回归：后端中断遗留的 running 任务必须在启动对账时收敛为 failed。
-
-修复前本文件整体 ImportError（``stale_run_reconciler`` 不存在），即测试失败。
-修复后须同时满足：
-- 超过心跳窗口的在途 run/task 被收敛为 failed，且带可检索的 error_code；
-- 仍可恢复的 queued run 不被失败（不破坏持久队列）；
-- 仍持有未过期租约的 run 交由既有重认领机制，不被启动对账改写。
-"""
+"""启动对账收敛中断任务，保留持久队列、有效租约和恢复前的真实回执。"""
 
 from __future__ import annotations
 
@@ -49,10 +42,7 @@ def _backdate_run(factory, run_id: str, *, status: str, updated_at: str) -> None
 
 def _make_repo(tmp_path, name: str):
     engine = create_engine(f"sqlite:///{tmp_path / name}")
-    # 启动对账除 agent_runs/agent_tasks 外还要读队列租约（agent_task_executions），
-    # 而 SQLAlchemyAgentRunRepository._ensure_schema() 只建运行态三张表；
-    # 生产库由 task_execution_sql_repository 建表，测试库须自行补齐。
-    # agent 模型在各仓库内是惰性导入，故此处显式导入以完成 Base.metadata 注册。
+    # 显式注册模型，并补齐启动对账所需的队列租约表。
     import app.db.models.agent  # noqa: F401
 
     Base.metadata.create_all(engine)
@@ -87,6 +77,73 @@ def test_interrupted_running_run_and_task_are_converged(tmp_path) -> None:
         assert task is not None
         assert task.status == "failed"
         assert task.attention_state == "failed"
+    finally:
+        set_agent_run_repository_for_tests(None)
+        engine.dispose()
+
+
+def test_restore_keeps_completed_backup_receipt_and_later_tasks(tmp_path, monkeypatch):
+    import sqlite3
+
+    from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
+    from app.services.database_service import DatabaseService
+
+    engine, factory, repo = _make_repo(tmp_path, "restore-audit.db")
+    service = DatabaseService()
+    live = tmp_path / "restore-audit.db"
+    monkeypatch.setattr(service, "_get_db_path", lambda: str(live))
+    monkeypatch.setattr(service, "_get_backup_dir", lambda: str(tmp_path))
+    try:
+        set_agent_run_repository_for_tests(repo)
+        with engine.begin() as db:
+            db.exec_driver_sql("pragma journal_mode=wal")
+            db.exec_driver_sql("create table restore_probe(price real)")
+            db.exec_driver_sql("insert into restore_probe values(12.5)")
+        step = AgentStep("backup", "system_maintenance", "backup_database", status="running")
+        run = AgentRun(
+            user_id="2",
+            message="备份数据库",
+            intent="database_backup",
+            status="running",
+        )
+        run.steps = [step]
+        repo.save(run)
+        snapshot = service.backup_database()
+        assert snapshot["success"] is True
+        step.status = "completed"
+        step.output = {"success": True, "filename": snapshot["filename"]}
+        run.tool_calls = [
+            ToolCall(
+                step.step_id,
+                "backup",
+                "system_maintenance",
+                "backup_database",
+                status="completed",
+                output=step.output,
+            )
+        ]
+        run.status = "completed"
+        repo.save(run)
+        queued = AgentRun(user_id="other", message="稍后执行", status="queued")
+        repo.save(queued)
+        failed = AgentRun(
+            user_id="2", message="原始失败", status="failed", error="审批请求创建失败"
+        )
+        repo.save(failed)
+        receipts = {item.run_id: repo.get(item.run_id).to_dict() for item in (run, queued, failed)}
+        with engine.begin() as db:
+            db.exec_driver_sql("update restore_probe set price=13.75")
+        assert service.restore_database(snapshot["file_path"])["success"] is True
+        assert reconciler.reconcile_stale_running_runs(now=_iso(300)) == 0
+        for item in (run, queued, failed):
+            assert repo.get(item.run_id).to_dict() == receipts[item.run_id]
+            assert (
+                repo.get_task(user_id=item.user_id, task_id=item.run_id, tenant_id="").status
+                == item.status
+            )
+        with sqlite3.connect(live) as reopened:
+            assert reopened.execute("select price from restore_probe").fetchone()[0] == 12.5
+            assert reopened.execute("pragma integrity_check").fetchone()[0] == "ok"
     finally:
         set_agent_run_repository_for_tests(None)
         engine.dispose()
