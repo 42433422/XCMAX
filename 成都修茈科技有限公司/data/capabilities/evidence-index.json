@@ -1,4 +1,5 @@
 {
+  "_comment": "此文件由 scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。",
   "schema": "xcmax.capability-evidence-index/v1",
   "note": "能力中心公开证据白名单：name → COS 对象键与 SHA-256；后端只为此处登记的对象签发预签名 URL。",
   "api_prefix": "/api/public/evidence",

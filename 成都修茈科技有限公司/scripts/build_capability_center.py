@@ -136,29 +136,23 @@ def privacy_exclusions(evidence: dict, feature_id: str = "") -> set[str]:
     excluded = set(evidence.get("public_excluded_media") or [])
     sensitive = feature_id in _PRIVATE_EVIDENCE_FEATURES
 
-    stack = [v for k, v in evidence.items() if k not in {"impl", "api", "tests", "ci", "docs"}]
-    while stack:
-        value = stack.pop()
-        if isinstance(value, dict):
-            stack.extend(value.values())
-        elif isinstance(value, list):
-            stack.extend(value)
-        elif isinstance(value, str):
-            ext = Path(value).suffix.lower()
-            if sensitive and ext in {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".mov"}:
+    material = {k: v for k, v in evidence.items() if k not in {"impl", "api", "tests", "ci", "docs"}}
+    for value in evidence_paths(material):
+        ext = Path(value).suffix.lower()
+        if sensitive and ext in {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".mov"}:
+            excluded.add(value)
+        elif ext in {".json", ".log", ".txt"}:
+            try:
+                body = e(value).read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            if sensitive or any(marker in body.casefold() for marker in _PUBLIC_PRIVATE_MARKERS):
                 excluded.add(value)
-            elif ext in {".json", ".log", ".txt"}:
-                try:
-                    body = e(value).read_text(encoding="utf-8")
-                except (OSError, UnicodeError):
-                    continue
-                if sensitive or any(marker in body.casefold() for marker in _PUBLIC_PRIVATE_MARKERS):
-                    excluded.add(value)
-                    if ext == ".json":
-                        try:
-                            excluded.update(evidence_paths(json.loads(body)))
-                        except ValueError:
-                            pass
+                if ext == ".json":
+                    try:
+                        excluded.update(evidence_paths(json.loads(body)))
+                    except ValueError:
+                        pass
     # A private acceptance record also withdraws its companion identity, log and media.
     for profile in (evidence.get("platform_assets") or {}).values():
         paths = evidence_paths(profile)
@@ -252,6 +246,7 @@ def evidence_url(name: str, rel: str) -> str:
 
 def evidence_index_payload() -> str:
     index = {
+        "_comment": "此文件由 scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。",
         "schema": "xcmax.capability-evidence-index/v1",
         "note": "能力中心公开证据白名单：name → COS 对象键与 SHA-256；后端只为此处登记的对象签发预签名 URL。",
         "api_prefix": EVIDENCE_API_PREFIX,
@@ -1188,15 +1183,13 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
                 f'<button type="button" class="cap-verify-btn">核验哈希</button>'
                 f'<span class="cap-verify-result" aria-live="polite"></span></span>')
 
-    def run_lines(pairs: list[tuple[str, dict]], platform: str) -> str:
-        if not pairs:
-            return ""
+    def run_lines(pairs: list[tuple[str | None, dict]], platform: str) -> str:
         return "".join(
             f'<p class="cap-plat-run">验收结果：{esc(r.get("verdict") or r.get("status", "未知").upper())}；通过 {esc(r.get("passed", "见记录"))} / 失败 '
             f'{esc(r.get("failed", "见记录"))}；产品版本 {esc(r.get("app_version", "见记录"))}；'
             f'Git SHA <code>{esc(r.get("app_git_sha", ""))}</code>；'
             f'验证时间 {esc(r.get("verified_at", "见记录"))}。'
-            f'<a href="{asset(f["id"], p, platform)}">Acceptance JSON</a> '
+            + (f'<a href="{asset(f["id"], p, platform)}">Acceptance JSON</a> ' if p else '客户资料不公开。') +
             f'SHA-256 <code>{esc(r.get("_acceptance_sha256", ""))}</code></p>'
             for p, r in pairs
         )
@@ -1280,13 +1273,9 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         }.get(r.get("status"), "未通过")} for _, r in pairs for m in r.get("media", [])]
         run_paths = {path for path, _ in pairs}
         visible_hashes = {r.get("_acceptance_sha256") for _, r in pairs}
-        private_identities = "".join(
-            f'<p class="cap-plat-run">历史验收：{esc(r.get("verdict"))}；产品版本 '
-            f'{esc(r.get("app_version"))}；Git SHA <code>{esc(r.get("app_git_sha"))}</code>；'
-            f'验证时间 {esc(r.get("verified_at"))}；记录 SHA-256 '
-            f'<code>{esc(r.get("_acceptance_sha256"))}</code>。客户资料不公开。</p>'
-            for r in v.get("run_identities", []) if r.get("_acceptance_sha256") not in visible_hashes)
-        return (private_identities + run_lines(pairs, v["id"]) + media_figs(media, v["id"])
+        private_identities = [(None, r) for r in v.get("run_identities", [])
+                              if r.get("_acceptance_sha256") not in visible_hashes]
+        return (run_lines(private_identities + pairs, v["id"]) + media_figs(media, v["id"])
                 + (log_blocks(v.get("logs", []), v["id"]) if pairs else "")
                 + raw_block([p for p in v.get("raw", []) if pairs and p not in run_paths and p != v.get("identity_path")], v["id"]))
 
@@ -1523,6 +1512,10 @@ def private_generated_assets(remove: bool = False) -> list[Path]:
     private = []
     for path in EVIDENCE_ASSET_DIR.iterdir():
         if not path.is_file():
+            continue
+        entry = _EVIDENCE_INDEX.get(path.name)
+        if (not path.name.startswith(sensitive_prefixes) and entry
+                and hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"]):
             continue
         try:
             body = path.read_text(encoding="utf-8").casefold() if path.suffix.lower() in {".json", ".log", ".txt"} else ""

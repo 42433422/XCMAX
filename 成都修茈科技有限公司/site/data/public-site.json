@@ -7319,10 +7319,26 @@
       },
       {
         "feature": "base-rbac",
+        "file": "base-rbac-base-rbac.mp4",
+        "issues": [
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-rbac",
         "file": "base-rbac-base-rbac-web-20260929-135143.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-rbac",
+        "file": "base-rbac-base-rbac.mp4",
+        "issues": [
           "原始录像不可追溯"
         ],
         "action": "not-published"

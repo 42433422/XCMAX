@@ -1,5 +1,5 @@
 {
-  "lines": 2304605,
+  "lines": 2304365,
   "updated": "2026-10-16",
-  "note": "Carry forward existing COS PR #2226 justified +1646 allowance only: actual combined #2160 privacy/API + #2226 COS integration is +1573 versus main cd00b33855 (2303032 ->2304605). Original privacy withdrawal and source heads retained, 604 approved public media only; historical branch release report archived with hash, immutable main report and main counting rules retained. No additional allowance."
+  "note": "13 related delivery/privacy sources; actual main growth +1333; generated evidence index correctly declares DO NOT EDIT under existing banner policy (before classification 2304990, after 2304365, assets unchanged617). Existing COS/admin/chat exceptions retained; no counter/path exclusion changes."
 }

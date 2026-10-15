@@ -245,12 +245,7 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     )
     if unexecuted:
         status = "failed"
-    if pending:
-        result_status = "pending_approval"
-    elif unexecuted:
-        result_status = "failed"
-    else:
-        result_status = status
+    result_status = "pending_approval" if pending else status
     if pending:
         summary = _pending_approval_summary(pending)
     elif unexecuted:

@@ -117,31 +117,33 @@ def test_text_only_order_request_is_not_a_completed_business_result() -> None:
     assert "没有工具调用" in result["summary"]
 
 
-def test_order_request_with_a_completed_tool_stays_successful() -> None:
-    run = AgentRun(user_id="2", message="请开一张测试订单", status="completed")
-    run.tool_calls = [
-        ToolCall(
-            step_id="step-1",
-            node_id="write",
-            tool_id="sales",
-            action="create_order",
-            status="completed",
-        )
-    ]
-
+@pytest.mark.parametrize(
+    "message,tool_completed,pending",
+    [
+        ("你好", False, False),
+        ("请开一张测试订单", True, False),
+        ("请开一张测试订单", False, True),
+    ],
+)
+def test_completed_and_pending_order_results(message, tool_completed, pending) -> None:
+    run = AgentRun(user_id="2", message=message, status="completed")
+    if tool_completed:
+        run.tool_calls = [
+            ToolCall(
+                step_id="step-1",
+                node_id="write",
+                tool_id="sales",
+                action="create_order",
+                status="completed",
+            )
+        ]
+    if pending:
+        run.final_output = {"chat_payload": {"pending_approval": True, "message": "请审批"}}
     result = ensure_terminal_business_result(run)
-
-    assert result["success"] is True
-    assert result["evidence"]["completed_tool_count"] == 1
-
-
-def test_plain_chat_without_tools_stays_completed() -> None:
-    run = AgentRun(user_id="2", message="你好", status="completed")
-
-    result = ensure_terminal_business_result(run)
-
-    assert result["success"] is True
-    assert result["status"] == "completed"
+    assert run.status != "failed"
+    assert result["success"] is not pending
+    assert result["status"] == ("pending_approval" if pending else "completed")
+    assert result["evidence"]["completed_tool_count"] == int(tool_completed)
 
 
 def test_explicit_order_request_forces_the_registered_erp_tool() -> None:
@@ -172,14 +174,6 @@ def test_legacy_order_preparation_uses_forced_tool_choice() -> None:
     ):
         prepared = runtime._prepare_chat("请开一张测试订单", None, None, Mock(), "test")
     assert prepared[5] == {"type": "function", "function": {"name": "execute_erp_capability"}}
-
-
-def test_order_awaiting_approval_is_not_marked_unexecuted() -> None:
-    run = AgentRun(user_id="2", message="请开一张测试订单", status="completed")
-    run.final_output = {"chat_payload": {"pending_approval": True, "message": "请审批"}}
-    result = ensure_terminal_business_result(run)
-    assert run.status != "failed"
-    assert result["status"] == "pending_approval" and result["success"] is False
 
 
 def test_conversation_message_envelope_restores_whitelisted_harness_ui() -> None:

@@ -19,32 +19,20 @@ SHA = "a" * 64
 KEY = "FHD/docs/evidence/e2e/demo/clip.webm"
 
 
+def _entry(**changes):
+    return {"key": KEY, "sha256": SHA, "size": 1234, "source": KEY, **changes}
+
+
 @pytest.fixture()
 def index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "evidence-index.json"
-    path.write_text(
-        json.dumps(
-            {
-                "assets": {
-                    "demo-clip.webm": {
-                        "key": KEY,
-                        "sha256": SHA,
-                        "size": 1234,
-                        "source": KEY,
-                    },
-                    # 不在证据前缀下的键必须被拒绝，防止借索引签任意对象。
-                    "evil.png": {
-                        "key": "secrets/prod.env",
-                        "sha256": SHA,
-                        "size": 1,
-                        "source": "x",
-                    },
-                    "../up.png": {"key": KEY, "sha256": SHA, "size": 1, "source": KEY},
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    assets = {
+        "demo-clip.webm": _entry(),
+        # 不在证据前缀下的键必须被拒绝，防止借索引签任意对象。
+        "evil.png": _entry(key="secrets/prod.env", size=1, source="x"),
+        "../up.png": _entry(size=1),
+    }
+    path.write_text(json.dumps({"assets": assets}), encoding="utf-8")
     monkeypatch.setenv("XCMAX_EVIDENCE_INDEX_PATH", str(path))
     for name in ("BUCKET", "REGION", "SECRET_ID", "SECRET_KEY"):
         monkeypatch.delenv(f"XCMAX_EVIDENCE_COS_{name}", raising=False)
@@ -59,12 +47,23 @@ def _enable_cos(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XCMAX_EVIDENCE_COS_SECRET_KEY", "secret-test-only")
 
 
-def _mock_cos(monkeypatch: pytest.MonkeyPatch, handler) -> list[httpx.Request]:
+def _mock_cos(
+    monkeypatch: pytest.MonkeyPatch, handler=None, version="v1"
+) -> list[httpx.Request]:
     seen: list[httpx.Request] = []
 
     def wrapped(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        return handler(request)
+        if handler is not None:
+            return handler(request)
+        return httpx.Response(
+            200,
+            headers={
+                "x-cos-meta-sha256": SHA,
+                "content-length": "1234",
+                "x-cos-version-id": version,
+            },
+        )
 
     monkeypatch.setattr(api, "_transport", lambda: httpx.MockTransport(wrapped))
     return seen
@@ -123,17 +122,7 @@ def test_matching_object_redirects_to_short_lived_presigned_url(
 ) -> None:
     _enable_cos(monkeypatch)
     monkeypatch.setenv("XCMAX_EVIDENCE_URL_TTL_SECONDS", "900")
-    seen = _mock_cos(
-        monkeypatch,
-        lambda r: httpx.Response(
-            200,
-            headers={
-                "x-cos-meta-sha256": SHA,
-                "content-length": "1234",
-                "x-cos-version-id": "v1",
-            },
-        ),
-    )
+    seen = _mock_cos(monkeypatch)
     client = _client()
     resp = client.get("/api/public/evidence/demo-clip.webm", follow_redirects=False)
     assert resp.status_code == 302
@@ -194,17 +183,7 @@ def test_verify_reports_index_and_object_metadata(
     index: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_cos(monkeypatch)
-    _mock_cos(
-        monkeypatch,
-        lambda r: httpx.Response(
-            200,
-            headers={
-                "x-cos-meta-sha256": SHA,
-                "content-length": "1234",
-                "x-cos-version-id": "v9",
-            },
-        ),
-    )
+    _mock_cos(monkeypatch, version="v9")
     body = _client().get("/api/public/evidence/verify/demo-clip.webm").json()
     assert body["match"] is True
     assert body["expected_sha256"] == body["cos_sha256"] == SHA
@@ -251,12 +230,7 @@ def test_malformed_index_never_registers_assets(index, assets):
 @pytest.mark.parametrize("change", ["size", "region"])
 def test_verification_cache_binds_current_size_and_region(index, monkeypatch, change):
     _enable_cos(monkeypatch)
-    seen = _mock_cos(
-        monkeypatch,
-        lambda r: httpx.Response(
-            200, headers={"x-cos-meta-sha256": SHA, "content-length": "1234"}
-        ),
-    )
+    seen = _mock_cos(monkeypatch)
     client = _client()
     assert client.get("/api/public/evidence/verify/demo-clip.webm").json()["match"]
     if change == "size":

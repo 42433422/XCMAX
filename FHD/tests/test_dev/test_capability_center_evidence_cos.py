@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 from urllib.parse import unquote
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
 SITE = ROOT / "成都修茈科技有限公司"
 SCRIPT = SITE / "scripts/build_capability_center.py"
@@ -102,33 +104,12 @@ def test_public_whitelist_does_not_restore_withdrawn_customer_evidence() -> None
     assert cases == []
 
 
-def test_withdrawn_run_excludes_companion_media_and_platform_identity(
-    tmp_path, monkeypatch
-) -> None:
+@pytest.fixture
+def private_run(tmp_path, monkeypatch):
     monkeypatch.setattr(MODULE, "REPO_ROOT", tmp_path)
-    record = {
-        "account": "Sunbird",
-        "media": [{"path": "capture.png"}, {"path": "flow.mp4"}],
-        "log": {"path": "run.log"},
-    }
-    (tmp_path / "run.json").write_text(json.dumps(record))
-    evidence = {
-        "runs": ["run.json"],
-        "platform_assets": {
-            "windows": {"acceptance": {"path": "run.json"}, "identity": {"path": "identity.json"}},
-            "macos": {"acceptance": {"path": "public.json"}, "raw": ["public-identity.json"]},
-        },
-    }
-    excluded = MODULE.privacy_exclusions(evidence, "base-health")
-    assert excluded == {"run.json", "capture.png", "flow.mp4", "run.log", "identity.json"}
-    projected = MODULE.public_projection({"runs": [record], "media": record["media"]}, excluded)
-    assert projected["media"] == []
-
-
-def test_withdrawn_run_retains_only_exact_historical_identity(monkeypatch) -> None:
-    monkeypatch.setattr(MODULE, "traceable_pass", lambda *args: (True, "a" * 64))
-    monkeypatch.setattr(MODULE, "platform_observations", lambda *args: [])
-    monkeypatch.setattr(MODULE, "path_exists", lambda *args: True)
+    monkeypatch.setattr(MODULE, "CATALOG_PATH", tmp_path / "catalog.json")
+    monkeypatch.setattr(MODULE, "EVIDENCE_ASSET_DIR", tmp_path / "public")
+    MODULE.EVIDENCE_ASSET_DIR.mkdir()
     run = {
         "platform": "windows",
         "status": "passed",
@@ -138,19 +119,52 @@ def test_withdrawn_run_retains_only_exact_historical_identity(monkeypatch) -> No
         "app_version": "1.0.0.5",
         "app_git_sha": "b" * 40,
         "verified_at": "2026-09-29T08:00:00Z",
-        "_acceptance_path": "private.json",
+        "_acceptance_path": "run.json",
         "_acceptance_sha256": "c" * 64,
         "account": "sunbird",
-        "media": [],
+        "media": [{"path": "private/shot.png"}, {"path": "private/flow.mp4"}],
+        "log": {"path": "run.log"},
     }
+    (tmp_path / "run.json").write_text(json.dumps(run))
     feature = {
         "id": "base-health",
         "platforms": ["windows"],
-        "evidence": {"platform_assets": {"windows": {"acceptance": {"path": "private.json"}}}},
+        "evidence": {
+            "runs": ["run.json"],
+            "platform_assets": {
+                "windows": {
+                    "acceptance": {"path": "run.json"},
+                    "identity": {"path": "identity.json"},
+                },
+                "macos": {"acceptance": {"path": "public.json"}, "raw": ["public-identity.json"]},
+            },
+        },
     }
-    public = MODULE.public_projection(
-        MODULE.platform_verdicts(feature, [run], []), {"private.json"}
-    )
+    module = {"features": [feature]}
+    catalog = {"domains": [{"modules": [module]}]}
+    MODULE.CATALOG_PATH.write_text(json.dumps(catalog))
+    return feature, run
+
+
+def test_withdrawn_run_excludes_companion_media_and_platform_identity(private_run) -> None:
+    feature, run = private_run
+    excluded = MODULE.privacy_exclusions(feature["evidence"], feature["id"])
+    assert excluded == {
+        "run.json",
+        "private/shot.png",
+        "private/flow.mp4",
+        "run.log",
+        "identity.json",
+    }
+    assert MODULE.public_projection({"media": run["media"]}, excluded)["media"] == []
+
+
+def test_withdrawn_run_retains_only_exact_historical_identity(private_run, monkeypatch) -> None:
+    feature, run = private_run
+    monkeypatch.setattr(MODULE, "traceable_pass", lambda *args: (True, "a" * 64))
+    monkeypatch.setattr(MODULE, "platform_observations", lambda *args: [])
+    monkeypatch.setattr(MODULE, "path_exists", lambda *args: True)
+    public = MODULE.public_projection(MODULE.platform_verdicts(feature, [run], []), {"run.json"})
     assert public[0]["runs"] == []
     assert public[0]["run_identities"] == [
         {
@@ -174,3 +188,16 @@ def test_withdrawn_run_does_not_redact_same_named_public_platform_media() -> Non
     assert MODULE.public_projection(value, {"private/shot.png"}) == {
         "media": [{"path": "public/shot.png"}]
     }
+
+
+def test_withdrawn_run_preserves_only_matching_public_fallback(private_run, monkeypatch) -> None:
+    public = MODULE.EVIDENCE_ASSET_DIR / "base-health-shot.png"
+    public.write_bytes(b"approved public media")
+    monkeypatch.setattr(
+        MODULE,
+        "_EVIDENCE_INDEX",
+        {public.name: {"sha256": hashlib.sha256(public.read_bytes()).hexdigest()}},
+    )
+    assert MODULE.private_generated_assets() == []
+    public.write_bytes(b"unapproved replacement")
+    assert MODULE.private_generated_assets() == [public]
