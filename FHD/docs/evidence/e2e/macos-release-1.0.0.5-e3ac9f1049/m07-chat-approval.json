@@ -1,0 +1,96 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M07.chat-confirm-cancel-approval",
+ "platform": "macos",
+ "architecture": "arm64",
+ "release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "product_version": "1.0.0.5",
+ "actor": {
+  "username": "xcagi-enterprise-demo",
+  "user_id": 2,
+  "tenant_id": 1,
+  "tenant_name": "xcagi-enterprise-demo"
+ },
+ "cancel_branch": {
+  "open": {
+   "success": true,
+   "action": "workflow_confirmation_required",
+   "response": "我已根据语义生成动态工作流计划：\n工作编排:\n1) 业务目标: 处理当前业务请求\n2) 执行计划: 共 1 个业务步骤\n3) 安全边界: 涉及业务变更，执行前需要确认或审批\n4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n5) 业务步骤:\n- 写入产品 M07取消品\n\n- 识别业务实体与写入字段\n- 通过受控业务服务写入数据库\n- 返回写入结果\n\n检测到中高风险步骤（write_business_product），回复「确认」继续执行，回复「取消」终止。\n以下操作需要审批后执行：business_db.write",
+   "plan_id": "wp-5aadb2ab88ba41cf9aeb3938c1579c6f",
+   "intent": "business_db_write",
+   "approval_required": true,
+   "blocking_nodes": [
+    "write_business_product"
+   ],
+   "run_id": "run_7386c7dbe2494dd7b84cc20aa05158f3"
+  },
+  "cancel": {
+   "success": true,
+   "action": "workflow_cancelled",
+   "response": "已取消本次工作流执行。",
+   "plan_id": "wp-5aadb2ab88ba41cf9aeb3938c1579c6f",
+   "intent": null,
+   "approval_required": null,
+   "blocking_nodes": null,
+   "run_id": "run_0a327c4afa794bab820ebece1846ae11"
+  }
+ },
+ "confirm_branch": {
+  "open": {
+   "success": true,
+   "action": "workflow_confirmation_required",
+   "response": "我已根据语义生成动态工作流计划：\n工作编排:\n1) 业务目标: 处理当前业务请求\n2) 执行计划: 共 1 个业务步骤\n3) 安全边界: 涉及业务变更，执行前需要确认或审批\n4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n5) 业务步骤:\n- 写入产品 M07确认品\n\n- 识别业务实体与写入字段\n- 通过受控业务服务写入数据库\n- 返回写入结果\n\n检测到中高风险步骤（write_business_product），回复「确认」继续执行，回复「取消」终止。\n以下操作需要审批后执行：business_db.write",
+   "plan_id": "wp-8cb07432424144dab781ebbbe09db1f1",
+   "intent": "business_db_write",
+   "approval_required": true,
+   "blocking_nodes": [
+    "write_business_product"
+   ],
+   "run_id": "run_0b328b2d8e314d70930f2ce44079fbe6"
+  },
+  "approval": {
+   "confirmed": {
+    "success": true,
+    "action": "approval_pending",
+    "response": "已提交审批请求：207134a3f8504bd98c7acf3ef34c4a81。请前往审批工作台逐笔处理。",
+    "plan_id": "wp-8cb07432424144dab781ebbbe09db1f1",
+    "intent": null,
+    "approval_required": true,
+    "blocking_nodes": null,
+    "run_id": "run_3d2b38d8334744fc9dcbe3513a31500c"
+   },
+   "pending_count": 1,
+   "request_id": 2,
+   "request_no": "207134a3f8504bd98c7acf3ef34c4a81",
+   "business_action": {
+    "tool_id": "business_db",
+    "action": "write",
+    "params": {
+     "entity": "products",
+     "operation": "create",
+     "payload": {
+      "name_or_model": "M07确认品",
+      "product_name": "M07确认品",
+      "price": 8.8
+     }
+    }
+   },
+   "approve_http": 200,
+   "approve_success": true,
+   "approve_message": null
+  },
+  "products_after": {
+   "http": 200,
+   "message": null,
+   "rows": [
+    {
+     "id": 1,
+     "name": "M07确认品",
+     "price": 8.8
+    }
+   ]
+  }
+ },
+ "verdict": "PASS",
+ "captured_at_utc": "2026-10-12T11:13:20Z"
+}

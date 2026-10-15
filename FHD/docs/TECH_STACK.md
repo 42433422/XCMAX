@@ -128,6 +128,6 @@
 ## 六、相关文档
 
 - [架构设计](./ARCHITECTURE.md)
-- [部署指南](./DEPLOYMENT.md)
+- [发布与部署入口](./SSOT_INDEX.md)
 - [快速开始](./QUICK_START.md)
 - [企业级能力](./ENTERPRISE_AUDIT.md)

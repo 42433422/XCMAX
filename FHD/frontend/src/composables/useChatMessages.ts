@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia'
 import chatApi from '../api/chat'
 import { speakText, stopSpeaking, cleanTextForSpeech } from '../utils/tts'
 import { useModsStore } from '@/stores/mods'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useIndustryStore } from '@/stores/industry'
 import { getIndustryWelcomeMarkdown } from '@/constants/industryPresets'
 import { buildChatMessagesKey, buildChatSessionMetaKey } from '@/utils/chatStorageKeys'
@@ -419,7 +420,11 @@ export function useChatMessages(sessionId: Ref<string>) {
     try {
       const sid = String(sessionId.value || '').trim()
       if (!sid) return false
+      const scope = [sid, activeModId.value, productReadAccountEpoch.value]
+      const revision = JSON.stringify(messages.value)
       const data = await chatApi.getConversation(sid)
+      if (scope.some((value, i) => value !== [sessionId.value, activeModId.value, productReadAccountEpoch.value][i])
+        || revision !== JSON.stringify(messages.value)) return false
       const dataRow = asRecord(data)
       const serverMessages = asArray(dataRow.messages)
       if (!serverMessages.length) return false

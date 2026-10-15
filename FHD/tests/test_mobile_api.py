@@ -12,9 +12,16 @@ def client(monkeypatch):
     monkeypatch.setenv("LAN_CIDR_GUARD_ENABLED", "0")
     monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "0")
     from app.fastapi_app.factory import create_fastapi_app
+    from app.fastapi_app.mod_startup import wait_for_background_mod_load
 
     app = create_fastapi_app(enable_cors=False)
-    return TestClient(app)
+    assert wait_for_background_mod_load(app), "Mod loader must finish before route requests"
+    test_client = TestClient(app)
+    try:
+        yield test_client
+    finally:
+        test_client.close()
+        assert wait_for_background_mod_load(app), "Mod loader must not escape the fixture"
 
 
 def test_mobile_health(client: TestClient):

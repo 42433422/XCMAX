@@ -18,6 +18,11 @@ from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_ID
 @pytest.fixture(autouse=True)
 def _isolate_edition_and_sku_env(monkeypatch):
     """全量套件中其它用例可能写入 SKU/EDITION，导致本文件断言 full。"""
+    from app.infrastructure.mods import mod_manager as mm
+    from app.infrastructure.mods.registry import ModRegistry
+
+    monkeypatch.setattr(mm, "_mod_manager", None)
+    monkeypatch.setattr(ModRegistry, "_instance", None)
     for key in (
         "XCAGI_PRODUCT_SKU",
         "XCAGI_EDITION",

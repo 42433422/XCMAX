@@ -12,6 +12,44 @@ def _facade():
     return importlib.import_module("modstore_server.employee_executor")
 
 
+_PARA_FIRST_PLANNING_EMPLOYEES = frozenset(
+    {"vibe-coding-maintainer", "change-request-auditor", "test-qa-runner"}
+)
+
+
+def _para_first_skip_cognition(
+    employee_id: str,
+    handler_list: _facade().List[str],
+    payload: _facade().Dict[str, _facade().Any],
+) -> bool:
+    """Trusted incident repairs always leave planning to Para, including outages.
+
+    The compatibility switch only affects other employee invocations; trusted
+    incidents cannot use it to bypass Para through server-side cognition.
+    """
+    if str(employee_id or "") not in _PARA_FIRST_PLANNING_EMPLOYEES:
+        return False
+    data = payload if isinstance(payload, dict) else {}
+    if data.get("_trusted_incident_team_execution") is True:
+        return True
+    flag = _facade().os.environ.get("MODSTORE_PARA_FIRST_SKIP_COGNITION", "1")
+    if str(flag).strip().lower() in {"0", "false", "no", "off"}:
+        return False
+    if str(data.get("handler") or "").strip() == "direct_python":
+        return False
+    if _facade()._flag_enabled(data.get("burn_in")):
+        return False
+    try:
+        from modstore_server.para_delegate_handler import (
+            para_delegate_enabled,
+            para_delegate_ready_for_dispatch,
+        )
+
+        return bool(para_delegate_enabled() and para_delegate_ready_for_dispatch())
+    except RECOVERABLE_ERRORS:
+        return False
+
+
 def _memory_real(
     config: _facade().Dict[str, _facade().Any],
     ctx: _facade().Dict[str, _facade().Any],

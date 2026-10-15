@@ -1,0 +1,61 @@
+{
+  "observed_at": "2026-10-08T02:41:54.512082+00:00",
+  "scope": "Read-only authoritative isolated18793 persistence; not a new ticket, not management/customer UI verification",
+  "customer": "TEST-WIN-LOOP-20261008",
+  "ticket_count": 1,
+  "tickets": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "ticket_no": "CI4dccaeeafc95a9e05a96dc18735233fd8c9b7a0d65713616",
+      "intent": "product_issue",
+      "status": "processing",
+      "decision_status": "accepted",
+      "created_at": "2026-10-08 02:37:25.061135",
+      "closed_at": null,
+      "evidence_keys": [
+        "source",
+        "source_ref",
+        "title",
+        "description",
+        "issue_domain",
+        "target_mod_id",
+        "installed_version",
+        "acceptance_criteria",
+        "shared_core_prerequisite",
+        "work_order_id",
+        "support_bundle_sha256",
+        "support_bundle_base64",
+        "customer_instance_id",
+        "product_version",
+        "git_sha",
+        "intake_request_sha256",
+        "resolution"
+      ],
+      "context": {
+        "source": "customer_feedback",
+        "source_ref": "WO-6a5a4e928046",
+        "issue_domain": "platform",
+        "work_order_id": "WO-6a5a4e928046",
+        "support_bundle_sha256": "e3619b6ca4175fc64c84806df6f7f46f379afd263236891d6605398dc31ab3a2",
+        "customer_instance_id": "d6571dc9-c869-44ec-a6fa-98091791622f",
+        "product_version": "1.0.0.5",
+        "git_sha": "edf274051b0e6cb5e5d25d99c2bbeb3cb0cf857b",
+        "description": "work_order_id：WO-6a5a4e928046\n客户原话：测试标识：WIN-LOOP-20261008-EDF\n合成测试客户：TEST-WIN-LOOP-20261008\n客户端：Windows，企业版1.0.0.5，edf274051b0e6cb5e5d25d99c2bbeb3cb0cf857b。\n这是同一轮通用产品故障报告，不是私有Mod定制申请。\n\n期望：干净机器正常安装后首次启动可以就绪；认证完成前保持登录页；首页和登录页的注册、购买入口完整可见；安装器保持已有现代外观、许可中文可读；仅本机使用的正常首次启动不重复要求两个程序开放网络。\n实际：首次启动55%时提示后台/api/ping在180000ms内未就绪（端口17500）。后台随后自行就绪，但主程序仍显示启动失败；关闭窗口仅隐藏，必须托盘退出后重开才能继续。尚未输入账号密码时先出现通用助理首页和/api/conversations资源不存在，再跳回企业登录页。登录页右上注册和购买文字不可见，窗口控制下只见浅色胶囊下缘，重叠范围还需在修复包确认。安装器实际是裸NSIS，许可部分字符显示异常。首次启动先后出现XCAGI和xcagi-backend两个Windows防火墙提示，均由人类亲自处理，没有关闭防火墙或预先静默放行。\n\n独立目录问题：正常TEST登录及市场钱包同步成功后，生产员工页面显示远端catalog401、登录会话无效或过期。该项单独定位目录地址和令牌路由，不代替通用工单入口，也不据此改变私有定制权益。\n\n证据：真实首次启动错误截图first-start-ping-timeout.png；安装、登录、向导、两个防火墙提示及目录401原屏均已保存。附件中的Excel全部为合成业务数据，不含真实客户、密码或令牌。首次冷启动仍为失败；尚未完成最终安装包的升级、备份恢复及完整16项验收。\n\n请求：请我的客服与AI辅助办理关联同一张通用产品故障原单，提供真实唯一工单号，再在信息中查看同一记录。不要另建私有定制单，不要用API代建冒充正常界面完成。\n预期：干净机器正常安装后首次启动可以就绪\n实际：首次启动55%时提示后台/api/ping在180000ms内未就绪（端口17500）",
+        "acceptance_criteria": "使用相同客户端操作重现并验证原问题。"
+      },
+      "bundle": {
+        "bytes": 45405,
+        "sha256": "e3619b6ca4175fc64c84806df6f7f46f379afd263236891d6605398dc31ab3a2",
+        "matches_declared": true,
+        "entries": [
+          "README.txt",
+          "manifest.json",
+          "logs/electron-backend.log",
+          "screenshots/1.jpg"
+        ],
+        "integrity": true
+      }
+    }
+  ]
+}
