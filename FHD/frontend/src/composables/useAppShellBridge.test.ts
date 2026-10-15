@@ -139,7 +139,10 @@ describe('desktop and legacy event lifecycle', () => {
     expect(router.push).toHaveBeenCalledOnce()
   })
   it('binds upload entries once, handles absent and failing import hooks, and forwards the file picker click', () => {
-    document.body.innerHTML = '<button id="fileUploadEntry"></button><button id="chooseFileBtn"></button><input id="fileInput" type="file">'
+    document.body.replaceChildren(
+      ...['fileUploadEntry', 'chooseFileBtn'].map(id => Object.assign(document.createElement('button'), { id })),
+      Object.assign(document.createElement('input'), { id: 'fileInput', type: 'file' }),
+    )
     const bridge = useAppShellBridge(makeRouter()), entry = document.getElementById('fileUploadEntry')!, picker = document.getElementById('fileInput')!
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {}), click = vi.spyOn(picker, 'click').mockImplementation(() => {})
     bridge.bindLegacyUploadHooks('settings'); expect(entry.hasAttribute('data-xcagi-bound')).toBe(false)

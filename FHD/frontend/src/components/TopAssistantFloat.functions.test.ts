@@ -1192,7 +1192,10 @@ it('starts a business tutorial with a clean assistant, preserves return state an
   const tutorial = (await import('@/stores/tutorial')).useTutorialStore()
   const start = vi.spyOn(tutorial, 'startTutorial')
   const dom = document.createElement('div')
-  dom.innerHTML = '<button id="newConversationBtn">新对话</button><div id="chatMessages"><div class="message ai"> AI   reply </div><div class="message user">Question</div><div class="message">Other</div><div class="message"> </div></div>'
+  const button = Object.assign(document.createElement('button'), { id: 'newConversationBtn', textContent: '新对话' })
+  const messages = Object.assign(document.createElement('div'), { id: 'chatMessages' })
+  messages.append(...[['message ai', ' AI   reply '], ['message user', 'Question'], ['message', 'Other'], ['message', ' ']].map(([className, textContent]) => Object.assign(document.createElement('div'), { className, textContent })))
+  dom.append(button, messages)
   document.body.append(dom)
   const newConversation = vi.fn(); dom.querySelector('button')!.addEventListener('click', newConversation)
   vm.productKeyword = 'old search'; vm.productRows = [{ id: 3, name: '旧产品' }]
