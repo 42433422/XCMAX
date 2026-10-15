@@ -53,13 +53,7 @@ class __SalesAppServicePart01MixinPart01Mixin:
     def quote(
         self, data: dict[str, _facade().Any], *, db: _facade().Any = None
     ) -> dict[str, _facade().Any]:
-        """创建报价单（state=quote），明细项由 items 提供。
-
-        可选 ``idempotency_key``：同 key 重复调用不重复建单（端到端幂等，GAP-3）。
-        可选 ``db``：调用方持有的 SQLAlchemy 会话。提供时使用该精确对象并交由调用方
-        负责提交/回滚（本方法仅 flush/refresh，不 commit/rollback/close）；缺省时沿用
-        本模块 ``get_db()`` 自有会话并自行提交。
-        """
+        """创建幂等报价；传入 db 时仅 flush/refresh，缺省时使用自有会话并提交。"""
         from app.application.sales_quote_inputs import validated_quote_request
 
         try:
@@ -170,11 +164,7 @@ class __SalesAppServicePart01MixinPart01Mixin:
         }
 
     def confirm(self, order_id: int, *, db: _facade().Any = None) -> dict[str, _facade().Any]:
-        """确认销售订单 → 委托 SalesLifecycleService.confirm。
-
-        可选 ``db``：调用方持有的会话，提供时构造 ``SalesLifecycleService`` 绑定该
-        精确对象且不打开 ``get_db()``，也绝不 commit/rollback/close；缺省时自开会话。
-        """
+        """委托生命周期确认；传入 db 时使用该会话且交由调用方管理事务。"""
         owned = db is None
         cm = _facade().nullcontext(db) if not owned else _facade().get_db()
         with cm as ctx:

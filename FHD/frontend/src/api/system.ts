@@ -12,11 +12,11 @@ export interface Industry {
 
 export const systemApi = {
   getIndustries(): Promise<ApiResponse<Industry[]>> {
-    return api.get<ApiResponse<Industry[]>>('/api/system/industries')
+    return api.get<ApiResponse<Industry[]>>('/api/system/industries', {}, { timeoutMs: 8_000 })
   },
 
   getCurrentIndustry(): Promise<ApiResponse<Industry>> {
-    return api.get<ApiResponse<Industry>>('/api/system/industry')
+    return api.get<ApiResponse<Industry>>('/api/system/industry', {}, { timeoutMs: 8_000 })
   },
 
   /** @deprecated The retired endpoint returns 410; industry comes from account data. */

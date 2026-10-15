@@ -624,7 +624,7 @@ class TestGetRoutes:
         with (
             patch(
                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                side_effect=ImportError,
+                return_value=True,
             ),
             patch.object(mm, "all_mods_roots", return_value=[str(mods_dir)]),
         ):
@@ -662,7 +662,7 @@ class TestLoadAllMods:
         with (
             patch(
                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                side_effect=ImportError,
+                return_value=True,
             ),
             patch.object(mm, "load_mod", return_value=True),
             patch.object(mm, "all_mods_roots", return_value=[str(mods_dir)]),
