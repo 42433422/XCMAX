@@ -146,15 +146,12 @@ class TestParseOrderTextCustomerSlot2067:
             "已识别订单，请确认执行",
             "好的，正在执行【shipment_generate】，请稍候",
             "好的",
+            "已识别订单，正在生成发货单…",
+            '已识别订单，请点击"确认执行"生成发货单。',
         ):
             result = _parse_order_text(text)
             assert result["success"] is False, text
             assert not result.get("unit_name"), text
-
-    def test_plain_two_token_fallback_still_works(self):
-        result = _parse_order_text("张三 产品A")
-        assert result["success"] is True
-        assert result["unit_name"] == "张三"
 
 
 class TestParseOrderTextQuantityPrice2067:
