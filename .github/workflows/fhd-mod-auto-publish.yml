@@ -25,7 +25,6 @@ permissions:
   checks: read
   statuses: read
 
-# A pending release for a different Mod must never be cancelled by this workflow.
 defaults:
   run:
     working-directory: .
