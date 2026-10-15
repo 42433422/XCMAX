@@ -823,6 +823,11 @@ class TestMainFlow:
             "check_incident_budget",
             lambda *args, **kwargs: heal.IncidentBudgetDecision(True, "within_budget"),
         )
+        monkeypatch.setattr(
+            heal,
+            "check_freshness",
+            lambda *a, **k: heal.freshness.Decision("proceed", "not_code_ci_whitelisted"),
+        )
 
     def test_no_run_id_blocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)

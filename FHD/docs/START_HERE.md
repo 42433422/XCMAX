@@ -37,7 +37,7 @@
 |---|------|------|
 | 1 | [`QUICK_START.md`](QUICK_START.md) | 5 分钟跑通宿主 + MOD |
 | 2 | [`guides/快速启动说明.md`](guides/快速启动说明.md) | 桌面 / Docker 命令速查 |
-| 3 | [`guides/PRODUCT_USER_FLOW.md`](guides/PRODUCT_USER_FLOW.md) | 安装 → 首启 → 行业 MOD → 日常使用 |
+| 3 | [`architecture/CUSTOMER_TICKET_BUS_SSOT.md`](architecture/CUSTOMER_TICKET_BUS_SSOT.md) | 原工单处理、结果回流与客户确认 |
 | 4 | [`DELIVERABLE_PRODUCT.md`](DELIVERABLE_PRODUCT.md) | 交付物清单与验收 API |
 | 5 | [`../VERSION.md`](../VERSION.md) | 当前产品版本与企业版交付边界 |
 | 6 | [`desktop_platform_parity_ssot.md`](desktop_platform_parity_ssot.md) | 桌面 SQLite 交付 |
@@ -119,7 +119,7 @@ python3 -m pytest tests/ --cov=app --cov-fail-under=35 -q
 cd frontend && npm run lint && npm run type-check && npm run type-check:build && npm run test:unit
 ```
 
-**CD 稳定版验证**：打 tag `FHD/v1.0.0.0` 后按 [`docs/deploy/RELEASE_CHECKLIST.md`](deploy/RELEASE_CHECKLIST.md) 验证 orchestrator（需对应发布 Secrets）。
+**稳定版验证**：按 [桌面双端平级 SSOT](desktop_platform_parity_ssot.md) 固定同一主线 SHA；完整 CI、双端安装和真实业务证据齐全后再发布。
 
 ---
 
@@ -160,7 +160,7 @@ FHD_API_IMAGE_DIGEST=sha256:... \
 ## 相关链接
 
 - 仓根地图：[`README.md`](../../README.md)
-- **发版检查清单**：[`docs/deploy/RELEASE_CHECKLIST.md`](deploy/RELEASE_CHECKLIST.md)（tag `FHD/v*` → CVM + K8s + 客户端）
+- **发布验收**：[Windows](WINDOWS_RELEASE_SSOT.md)、[macOS](MACOS_RELEASE_SSOT.md) 与 [客服工单闭环](architecture/CUSTOMER_TICKET_BUS_SSOT.md)。
 - **国际化**：[`docs/I18N_ROLLOUT.md`](I18N_ROLLOUT.md) · 前端 `src/i18n/`（zh-CN / en-US）；`localStorage.xcagi_locale` 切换
 - CI 规范：[`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)
 - OpenAPI：启动后 `http://127.0.0.1:5000/docs`

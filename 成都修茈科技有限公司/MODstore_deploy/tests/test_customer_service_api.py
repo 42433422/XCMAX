@@ -151,7 +151,7 @@ def test_customer_service_incomplete_refund_chats_without_ticket(client, monkeyp
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
-def test_customer_service_chat_does_not_block_on_incident_publish_async(client, monkeypatch):
+def _assert_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
     """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
     import time
     from threading import Event
@@ -190,41 +190,11 @@ def test_customer_service_chat_does_not_block_on_incident_publish_async(client, 
 
 
 def test_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
-    """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
-    import time
-    from threading import Event
+    _assert_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch)
 
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
 
-    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
-    user = _make_user("cs_async_inc")
-    started = {"ok": False}
-    started_event = Event()
-
-    def slow_publish(payload):
-        started["ok"] = True
-        started_event.set()
-
-    monkeypatch.setattr(customer_service_api, "_publish_customer_ticket_incident", slow_publish)
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
-        t0 = time.time()
-        r = client.post(
-            "/api/customer-service/chat",
-            json={
-                "message": "订单号 RF123456 想退款，原因是重复购买",
-                "context": {"channel": "web"},
-            },
-        )
-        elapsed = time.time() - t0
-        assert r.status_code == 200, r.text
-        assert r.json().get("ticket")
-        assert elapsed < 4.0, f"chat unexpectedly slow on async incident publish: {elapsed:.2f}s"
-        assert started_event.wait(1.0)
-        assert started["ok"] is True
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+def test_customer_service_chat_does_not_block_on_incident_publish_async(client, monkeypatch):
+    _assert_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch)
 
 
 def test_customer_service_greeting_does_not_create_ticket(client, monkeypatch):
@@ -528,6 +498,17 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
                     "employee_id": "change-request-auditor",
                     "ok": False,
                     "status": "handler_failed",
+                    "handler_outputs": {
+                        "outputs": [
+                            {
+                                "handler": "para_delegate",
+                                "accepted": True,
+                                "completed": False,
+                                "task_id": "p1",
+                                "output_summary": "未产生修复 token=should-be-redacted",
+                            }
+                        ]
+                    },
                 },
                 {
                     "role": "fix",
@@ -564,6 +545,15 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
             .all()
         )
         assert any("员工处理进展" in (m.content or "") for m in msgs)
+        assert "未产生修复" in msgs[0].content and "下一步" in msgs[0].content
+        assert "should-be-redacted" not in msgs[0].content
+        from modstore_server.customer_service_tools import json_loads
+
+        resolution = json_loads(ticket.evidence_json, {})["resolution"]
+        assert resolution["ticket_id"] == ticket_id
+        recorded = resolution["processing"][0]["outputs"][0]
+        assert recorded["task_id"] == "p1"
+        assert recorded["output_summary"] == "未产生修复 token=[redacted]"
 
 
 def test_custom_delivery_requires_quality_acceptance_and_install_receipt(

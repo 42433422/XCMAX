@@ -1,5 +1,5 @@
 {
-  "lines": 2299630,
-  "updated": "2026-10-10",
-  "note": "Merge origin/main (#2214 Mac acceptance / #2067). Shared raise for mobile IM #2228 (+409) and mobile sync #2229 (+273) so they merge in any order."
+  "lines": 2303714,
+  "updated": "2026-10-16",
+  "note": "Preserve existing shared #2228 (+409) and #2229 (+273) allowance only, both original heads retained in mobile integration ancestry; main cd00b33855 actual2303032 -> combined2303714 (+682). IM endpoint routing/real handshake/fanout and manual sync UI/regressions retained; no unrelated allowance or counter changes."
 }

@@ -31,6 +31,13 @@ def execution_succeeded(result: Any) -> bool:
         }
     ):
         return False
+    if result.get("handler") == "para_delegate":
+        return (
+            result.get("ok") is True
+            and result.get("accepted") is True
+            and result.get("completed") is True
+            and bool(_para_task_id(result))
+        )
     nested = result.get("result")
     if isinstance(nested, dict) and nested:
         if any(
@@ -39,7 +46,7 @@ def execution_succeeded(result: Any) -> bool:
             return False
         outputs = nested.get("outputs")
         if isinstance(outputs, list) and outputs:
-            return all(execution_succeeded(row) for row in outputs)
+            return _handler_outputs_succeeded(outputs)
     rows = result.get("results")
     if isinstance(rows, list) and rows:
         return all(execution_succeeded(row) for row in rows)
@@ -47,6 +54,68 @@ def execution_succeeded(result: Any) -> bool:
         result.get("ok") is True
         or result.get("success") is True
         or status in {"success", "completed", "done", "executed", "ok"}
+    )
+
+
+# 只回显服务端推理文本的 handler（无 ok/status、无 error）不是执行结果，不参与判定。
+# 之前 Para 已 completed（ok=True）时，scout/verify 的 llm_md/echo 行因缺 ok 被判失败。
+_INFORMATIONAL_HANDLERS = frozenset({"echo", "llm_md"})
+
+
+def _is_informational_row(row: Any) -> bool:
+    return (
+        isinstance(row, dict)
+        and str(row.get("handler") or "") in _INFORMATIONAL_HANDLERS
+        and not row.get("error")
+        and not any(k in row for k in ("ok", "success", "status", "execution_status"))
+    )
+
+
+def _handler_outputs_succeeded(outputs: list[Any]) -> bool:
+    decisive = [row for row in outputs if not _is_informational_row(row)]
+    return bool(decisive) and all(execution_succeeded(row) for row in decisive)
+
+
+def _para_task_id(row: dict[str, Any]) -> Any:
+    snapshot = row.get("para_result")
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
+    task = snapshot.get("task")
+    return (
+        row.get("para_task_id")
+        or row.get("task_id")
+        or snapshot.get("task_id")
+        or snapshot.get("id")
+        or (task.get("id") if isinstance(task, dict) else None)
+    )
+
+
+def execution_pending(result: dict[str, Any]) -> bool:
+    """Accepted Para work remains pending; a failed companion handler cannot be hidden."""
+    if (
+        result.get("ok") is False
+        or result.get("success") is False
+        or result.get("status") in {"failed", "error", "handler_failed", "blocked_by_risk_gate"}
+        or any(result.get(k) for k in ("error", "handler_failed", "blocked_by_risk_gate"))
+    ):
+        return False
+    nested = result.get("result")
+    outputs = nested.get("outputs") if isinstance(nested, dict) else None
+    decisive = [row for row in outputs or [result] if not _is_informational_row(row)]
+
+    def pending(row):
+        return (
+            isinstance(row, dict)
+            and row.get("handler") == "para_delegate"
+            and row.get("ok") is True
+            and row.get("accepted") is True
+            and row.get("completed") is False
+            and not row.get("error")
+            and row.get("status") in {"para_task_accepted", "pending", "running", "queued"}
+            and bool(_para_task_id(row))
+        )
+
+    return any(pending(row) for row in decisive) and all(
+        pending(row) or execution_succeeded(row) for row in decisive
     )
 
 
@@ -93,11 +162,33 @@ def record_team_progress(
     successful = team_succeeded(rows)
     # An employee run cannot establish release or customer-runtime postconditions.
     resolution.update(
-        state="awaiting_delivery" if successful else "repair_failed",
+        state=(
+            "awaiting_manual_review"
+            if any(row.get("status") == "manual_review" for row in rows)
+            else (
+                "awaiting_delivery"
+                if successful
+                else (
+                    "processing"
+                    if rows and all(row.get("ok") or row.get("status") == "pending" for row in rows)
+                    else "repair_failed"
+                )
+            )
+        ),
         incident_event_id=int(event_id),
         repair_verified=successful,
         team=[{k: row.get(k) for k in ("role", "employee_id", "ok", "status")} for row in rows],
         updated_at=datetime.now(UTC).isoformat(),
     )
+    from modstore_server.incident_team_handler_digest import handler_output_digest
+
+    resolution["processing"] = [
+        {
+            "role": row.get("role"),
+            **handler_output_digest({**row["handler_outputs"], "result": row["handler_outputs"]}),
+        }
+        for row in rows
+        if isinstance(row.get("handler_outputs"), dict)
+    ]
     evidence["resolution"] = resolution
     return resolution
