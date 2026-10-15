@@ -105,6 +105,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return _invoke("products", "batch", body=body or {})
 
     # ── 客户（G2：domain_handlers）──────────────────────────────────
+    from app.mod_sdk.erp_customers_facade import customers_export
+
+    router.add_api_route("/customers/export", customers_export, methods=["GET"])
+
     @router.get("/customers/list")
     def mod_customers_list(
         request: Request,

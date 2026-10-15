@@ -1,11 +1,4 @@
-"""Config-driven ERP capability tool for model-facing agents.
-
-The product's workflow registry is the source of truth for user-facing ERP
-capabilities and their risk policies.  This module exposes that registry to an
-LLM through one typed function call, while keeping execution on the existing
-approval-gated workflow path.  It deliberately does *not* expose raw internal
-HTTP endpoints, authentication, or configuration internals as model tools.
-"""
+"""Model-facing ERP capabilities from the approval-gated workflow registry."""
 
 from __future__ import annotations
 
@@ -14,6 +7,7 @@ import uuid
 from typing import Any
 
 from app.application.workflow.types import normalize_workflow_risk
+from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 ERP_CAPABILITY_TOOL_NAME = "execute_erp_capability"
@@ -277,41 +271,23 @@ def execute_registered_capability(
     capability = {
         key: resolved[key] for key in ("tool_id", "action", "risk", "idempotent", "required_params")
     }
-    approval = decision.to_dict()
+    response = {"success": False, "capability": capability, "approval": decision.to_dict()}
     if decision.pending_approval:
-        return json.dumps(
-            {
-                "success": False,
-                "pending_approval": True,
-                "message": "该 ERP 操作已创建审批请求，审批前不会执行。",
-                "capability": capability,
-                "approval": approval,
-            },
-            ensure_ascii=False,
+        response.update(
+            pending_approval=True,
+            message="该 ERP 操作已创建审批请求，审批前不会执行。",
         )
-    if decision.any_rejected or run_result is None:
-        return json.dumps(
-            {
-                "success": False,
-                "message": "该 ERP 操作未获风险门批准，未执行。",
-                "capability": capability,
-                "approval": approval,
-            },
-            ensure_ascii=False,
+    elif decision.any_rejected or run_result is None:
+        response["message"] = "该 ERP 操作未获风险门批准，未执行。"
+    else:
+        node_result = run_result.node_results[0] if run_result.node_results else None
+        output = dict(getattr(node_result, "output", {}) or {})
+        response.update(
+            success=bool(run_result.success and output.get("success")),
+            message=str(output.get("message") or run_result.message or ""),
+            result=output,
         )
-
-    node_result = run_result.node_results[0] if run_result.node_results else None
-    output = dict(getattr(node_result, "output", {}) or {})
-    return json.dumps(
-        {
-            "success": bool(run_result.success and output.get("success")),
-            "message": str(output.get("message") or run_result.message or ""),
-            "capability": capability,
-            "approval": approval,
-            "result": output,
-        },
-        ensure_ascii=False,
-    )
+    return json.dumps(response, ensure_ascii=False, default=json_safe)
 
 
 __all__ = [

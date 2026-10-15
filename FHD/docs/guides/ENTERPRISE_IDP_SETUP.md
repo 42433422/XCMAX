@@ -16,8 +16,6 @@
 | `SECRET_KEY` | 是 | ≥32 字符，用于 OIDC state 签名 |
 | `REDIS_URL` | 推荐 | 生产限流与会话辅助 |
 
-SAML（可选）：`XCAGI_SAML_*` 见 [`DEPLOYMENT.md`](../DEPLOYMENT.md)。
-
 ## 2. Keycloak 最小配置
 
 1. 创建 Realm `xcmax`（或复用企业 Realm）。

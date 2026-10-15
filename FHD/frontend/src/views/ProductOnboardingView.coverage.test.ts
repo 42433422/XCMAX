@@ -620,11 +620,11 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false })
   })
 
-  it('runBootstrap：industryMissing 时调用 installIndustrySeed', async () => {
+  it.each([false, true])('基础线就绪=%s 时安装缺失的已选行业包', async (ready) => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({
-        baseline_ready: false,
+        baseline_ready: ready,
         missing_industry_mod_ids: ['ind-1'],
       }),
     })
@@ -632,7 +632,7 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     await flushPromises()
     mockContainer.installIndustrySeed.mockResolvedValue({ success: true, message: '' })
     mockContainer.installIndustrySeed.mockClear()
-    mockBaselineForInstallation(mockContainer.installIndustrySeed, createBaselinePlan({ baseline_ready: false, missing_industry_mod_ids: ['ind-1'] }))
+    mockBaselineForInstallation(mockContainer.installIndustrySeed, createBaselinePlan({ baseline_ready: ready, missing_industry_mod_ids: ['ind-1'] }))
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()

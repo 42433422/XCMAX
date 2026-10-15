@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
+import SharedIssueAcceptancePanel from '@/components/SharedIssueAcceptancePanel.vue'
 
 const hostStub = {
-  SharedIssueAcceptancePanel: true,
   HostModBridgeView: {
     props: ['modId', 'view', 'title'],
     template: '<div class="host-bridge" :data-mod="modId" :data-view="view" />',
@@ -27,6 +27,9 @@ describe('additional HostModBridge stub views', () => {
       const mod = await import(`./${name}.vue`)
       const wrapper = mount(mod.default, { global: { stubs: hostStub } })
       expect(wrapper.find('.host-bridge').exists()).toBe(true)
+      if (name === 'InternalCustomerServiceView') {
+        expect(wrapper.findComponent(SharedIssueAcceptancePanel).exists()).toBe(false)
+      }
     })
   }
 })

@@ -16,12 +16,9 @@ async def compat_chat_stream_async(
     from app.application.normal_chat_dispatch import try_normal_slot_read_payload
     from app.fastapi_routes.xcagi_compat_chat_helpers import _sse_event_line
 
-    # 客户缺陷上报必须先于 normal-slot 快路径受理。本函数是桌面端
-    # /api/ai/chat/stream 的真实执行体：下面的 try_normal_slot_read_payload 会在
-    # 任何受理之前直接返回业务答复（例如缺陷原话被当成 intent=purchase_query），
-    # 客户因此永远拿不到工单编号——那正是本工单的原问题。受理实现与门禁 SSOT
-    # 收在 xcagi_compat_chat_stream，这里只负责在正确的位置调用。
+    # 客户缺陷上报先受理；查询快路径保留待澄清工作流的续接。
     from app.fastapi_routes.xcagi_compat_chat_stream import (
+        _apply_client_issue_outcome,
         _classify_and_submit_client_issue_async,
         _client_issue_reply,
     )
@@ -39,7 +36,9 @@ async def compat_chat_stream_async(
             {
                 "type": "done",
                 "result": _facade().attach_chat_trace_run(
-                    _facade()._xcagi_compat_reply_payload(issue_reply),
+                    _apply_client_issue_outcome(
+                        _facade()._xcagi_compat_reply_payload(issue_reply), issue_receipt
+                    ),
                     message=body.message,
                     runtime_context=issue_context,
                     user_id=getattr(body, "user_id", None),
@@ -50,7 +49,9 @@ async def compat_chat_stream_async(
         )
         return
 
-    slot_payload = try_normal_slot_read_payload(body.message, request=request)
+    slot_payload = try_normal_slot_read_payload(
+        body.message, request=request, user_id=str(body.user_id or "default")
+    )
     if isinstance(slot_payload, dict) and slot_payload.get("response"):
         runtime_context, _ = _facade()._merge_runtime_context_with_message_paths(
             body.context, body.message

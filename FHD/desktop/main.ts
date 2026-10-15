@@ -51,6 +51,7 @@ import {
   setAutoLaunchEnabled,
 } from './app-shell'
 import { registerDesktopIpcHandlers } from './ipc-handlers'
+import { syncWindowsBackupTasks } from './backup-task-sync'
 
 // 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）
 // 注：单测环境通过 XCAGI_DESKTOP_TEST=1 跳过 bootstrap()，但模块顶层仍有副作用，
@@ -66,13 +67,26 @@ const isE2ERun = process.env.XCAGI_DESKTOP_E2E === '1'
 /**
  * 非阻塞启动失败提示（与 backend-process.ts 的 showBackendErrorBox 同一约定）。
  *
- * `dialog.showErrorBox` 是同步 API：无人点击「确定」时会永久阻塞主进程事件循环，
- * 使紧随其后的 `app.quit()` 永不执行。更新后启动失败路径下，回滚 helper 会一直
- * 等待进程退出，直到 120s 超时并放弃，自动回滚（恢复上一版本应用与数据库）因此
- * 失败——2026-10-03 实机复现。必须使用异步 `showMessageBox` 后再退出。
+ * `dialog.showErrorBox` 是同步 API；macOS 上不带 BrowserWindow 的 `showMessageBox`
+ * 也会走 `NSAlert.runModal` 同步阻塞主进程事件循环。两者都会让紧随其后的
+ * `app.quit()` 永不执行：回滚 helper 等待进程退出直到 120s 超时放弃，
+ * 更新失败后的自动回滚（恢复上一版应用与数据库）因此失败——2026-10-03 实机复现。
+ * 因此必须把提示挂到主窗口上（window-modal sheet）；没有窗口时只写日志。
  */
 export function showStartupFailureNotice(message: string): void {
-  void dialog.showMessageBox({ type: 'error', title: 'XCAGI', message })
+  const win = desktopRuntime.mainWindow
+  if (win && !win.isDestroyed()) {
+    void dialog.showMessageBox(win, { type: 'error', title: 'XCAGI', message })
+    return
+  }
+  writeBackendLog(`[startup] ${message}\n`)
+}
+
+/** A window-modal failure notice keeps app.quit() from finishing, so the rollback helper times out. */
+function releaseWindowsBeforeRollbackQuit(): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.destroy()
+  }
 }
 
 function bootstrap(): void {
@@ -153,6 +167,7 @@ function bootstrap(): void {
             writeBackendLog(`[autolaunch] initial enable failed: ${init.reason}\n`)
           }
         }
+        syncWindowsBackupTasks(app.getPath('userData'))
       }
 
       registerDesktopIpcHandlers()
@@ -209,6 +224,18 @@ function bootstrap(): void {
         })
       }
 
+      if (pendingRollback?.recoveryRequired) {
+        const rollback = await triggerRollbackSafe('Windows 后端迁移失败后的持久恢复')
+        showStartupFailureNotice(
+          rollback?.scheduled
+            ? 'Windows 数据迁移失败，正在通过已验证恢复记录还原旧程序、Mod 与数据库；请等待 XCAGI 自动重启。'
+            : 'Windows 数据迁移失败，恢复尚未启动。恢复记录和快照已保留；请不要继续更新，并重启 XCAGI 重试或联系支持。',
+        )
+        releaseWindowsBeforeRollbackQuit()
+        app.quit()
+        return
+      }
+
       try {
         // 先出 Splash，再并行拉起后端，避免用户长时间无窗口反馈
         await createWindow()
@@ -227,6 +254,7 @@ function bootstrap(): void {
                   : '更新后启动失败，已恢复上一版本。请重启 XCAGI。',
             )
           }
+          releaseWindowsBeforeRollbackQuit()
           app.quit()
           return
         }
@@ -285,8 +313,6 @@ function bootstrap(): void {
             }
           }
         }
-        // 启动自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归）
-        // 控制器提供新增能力：5min 内 backend 崩溃 ≥3 次自动回滚、磁盘满自动清日志、配置漂移自动纠正
         try {
           const adapter = new DesktopAutonomyAdapter({
             backendProcessRef: () => {
@@ -298,15 +324,11 @@ function bootstrap(): void {
             },
             restartCountRef: () => desktopRuntime.restartCount,
             port: DEFAULT_PORT,
-            appVersion: app.getVersion(),
+            appVersion: readLocalProductVersion(),
             buildSha: readLocalBuildSha(),
             configPath: null,
-            // Phase 1：注入 backend 重启 / 版本回滚闭包
-            // restartBackend 调用 startBackend()；backend exit 时 backendProcess 已被清空，可直接 spawn
             restartBackend: async () => { await startBackend() },
-            // triggerRollback 复用现有 triggerRollbackSafe 吞错语义
             triggerRollback: async () => { await triggerRollbackSafe('autonomy_controller_triggered') },
-            // knownGoodConfigContent 当前为 null（桌面端暂无配置文件概念，repair_config 自动拒绝）
             knownGoodConfigContent: null,
           })
           desktopRuntime.autonomyController = new AutonomyController(
@@ -339,6 +361,7 @@ function bootstrap(): void {
         } else {
           showStartupFailureNotice(msg)
         }
+        releaseWindowsBeforeRollbackQuit()
         app.quit()
       }
     })

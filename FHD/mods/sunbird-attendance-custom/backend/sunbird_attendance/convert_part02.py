@@ -1,5 +1,3 @@
-"""Implementation extracted from the public facade module."""
-
 from __future__ import annotations
 
 import importlib
@@ -203,28 +201,23 @@ def _build_monthly_rows_for_template(
     detail_ws,
 ) -> list[dict[str, object]]:
     """与「明细」每人块顺序一致：按人员管理名单或模板块自上而下；无钉钉汇总仍输出一行（零值），避免月度统计主表与夜班侧栏断行。"""
-    if personnel_roster:
-        out: list[dict[str, object]] = []
-        for dept, _nature, name in personnel_roster:
-            raw_name = str(name).strip() if name is not None else ""
-            p = _facade()._lookup_employee(employees, raw_name)
-            if p is not None:
-                out.append(_facade()._monthly_row_dict_from_payload(p))
-            else:
-                out.append(_facade()._empty_monthly_row(raw_name, dept=str(dept or "").strip()))
-        return out
-    out: list[dict[str, object]] = []
-    for br in _facade().iter_detail_sheet_block_base_rows(detail_ws):
-        raw = detail_ws.cell(br, 3).value
-        raw_name = str(raw).strip() if raw not in (None, "") else ""
-        dept = str(detail_ws.cell(br, 1).value or "").strip()
-        p = _facade()._lookup_employee(employees, raw_name) if raw_name else None
-        if p is not None:
-            out.append(_facade()._monthly_row_dict_from_payload(p))
-        elif raw_name:
-            out.append(_facade()._empty_monthly_row(raw_name, dept=dept))
-        else:
-            out.append(_facade()._empty_monthly_row("", dept=dept))
+    roster = (
+        personnel_roster
+        if personnel_roster is not None
+        else [
+            (detail_ws.cell(br, 1).value, "", detail_ws.cell(br, 3).value)
+            for br in _facade().iter_detail_sheet_block_base_rows(detail_ws)
+        ]
+    )
+    out = []
+    for dept, _, name in roster:
+        name = str(name or "").strip()
+        payload = _facade()._lookup_employee(employees, name) if name else None
+        out.append(
+            _facade()._monthly_row_dict_from_payload(payload)
+            if payload is not None
+            else _facade()._empty_monthly_row(name, dept=str(dept or "").strip())
+        )
     return out
 
 
@@ -298,51 +291,11 @@ def convert_attendance_records(
         return {"success": False, "error": "no attendance records"}
     _facade()._install_owner_policy()
     try:
-        workbook = _facade().open_output_workbook(out, template)
-        detail_ws = workbook["明细"] if "明细" in workbook.sheetnames else workbook.active
-        if personnel_roster:
-            _facade().rebuild_detail_sheet_person_blocks(detail_ws, personnel_roster)
-        template_profiles = _facade().build_template_profiles(detail_ws)
-        if not template_profiles:
-            return {
-                "success": False,
-                "error": "明细页未解析到任何员工块，请检查固定模板或人员管理名单",
-            }
-        filtered = _facade()._filter_records_to_template_roster(records, template_profiles)
-        if not filtered and (not personnel_roster):
-            return {
-                "success": False,
-                "error": "钉钉数据与模板明细中的姓名无交集：请核对模板人员名单与「每日统计」姓名列是否一致（含空格/全半角）。",
-            }
-        employees, analysis_rows = _facade()._aggregate_employee_records(
-            filtered, template_profiles=template_profiles
-        )
-        monthly_rows = _facade()._build_monthly_rows_for_template(
-            employees, personnel_roster, detail_ws
-        )
-        template_result = _facade().write_detail_sheet(workbook, employees, month_label=month_label)
-        _facade().write_monthly_sheet(workbook, monthly_rows, link_detail_side_totals=True)
-        _facade()._retain_detail_and_monthly_sheets(workbook)
-        output_sheet_names = list(workbook.sheetnames)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        workbook.save(out)
-        workbook.close()
-        return {
-            "success": True,
-            "input": "database",
-            "output": str(out),
-            "month": month_label,
-            "rows_in": len(records),
-            "rows_used_for_template": len(filtered),
-            "rows_stats": len(analysis_rows),
-            "employees_total": len(employees),
-            "employees_matched": template_result.matched_employee_count,
-            "unmatched_names": template_result.unmatched_employee_names,
-            "header_info": None,
-            "used_llm": False,
-            "personnel_roster_count": len(personnel_roster) if personnel_roster else 0,
-            "output_sheet_names": output_sheet_names,
-        }
+        from .convert_part03 import write_records
+
+        result = write_records(records, out, template, month_label, personnel_roster)
+        result.update(input="database", rows_in=len(records), header_info=None, used_llm=False)
+        return result
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("Attendance conversion from record list failed")
         return {"success": False, "error": str(exc)}

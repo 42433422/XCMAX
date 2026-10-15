@@ -1,9 +1,6 @@
 # CI SSOT: generated from 成都修茈科技有限公司/.github/workflows/ci-marketing-site.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
-# 组件级 CI：营销官网静态页（根层 *.html + site/ + new/ + assets 等）
-#
-# 责任边界：仅校验静态营销页改动；无需 Vue 构建或 Playwright。
-# 未拆仓前，此工作流保证营销页变更不会触发 Vue/Python/Java 的全量流水线。
+# 官网静态页与能力视频证据发布门禁；根仓工作流由本文件生成。
 
 name: CI - Marketing Site
 
@@ -90,7 +87,6 @@ jobs:
           echo "Validating ${#files[@]} marketing HTML file(s) with htmlhint..."
           htmlhint "${files[@]}"
 
-      # 能力中心 HTML 校验（生成页 + 详情页）
       - name: HTML validate (capabilities)
         run: |
           set -euo pipefail
@@ -103,10 +99,18 @@ jobs:
           echo "Validating ${#files[@]} capability HTML file(s) with htmlhint..."
           htmlhint "${files[@]}"
 
-      # No Evidence, No Claim：目录与已提交页面必须一致，公开数字无法手写
-      # 注：发布副本带 defaults.run.working-directory=本目录，源文件亦按该语义书写相对路径
       - name: Capability acceptance completeness and page integrity gate
         run: python3 scripts/build_capability_center.py --check
+      - name: Decode every capability evidence video
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+          python3 scripts/build_capability_center.py --check-videos --video-report "$RUNNER_TEMP/capability-video-integrity.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capability-video-integrity
+          path: ${{ runner.temp }}/capability-video-integrity.json
+          if-no-files-found: error
 
       # 官网「当前版本」只有一个来源：发布清单 /download-release.json（发布流程在 Windows/macOS
       # 双平台产物通过验证后原子写入）。页面里写死的版本兜底值会与指针冲突，并让本门禁在每次

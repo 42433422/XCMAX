@@ -1,4 +1,3 @@
-/** Vue / Element Plus plugin bundle for Vite. */
 
 import vue from '@vitejs/plugin-vue'
 import VueI18n from '@intlify/unplugin-vue-i18n/vite'
@@ -34,18 +33,14 @@ export function createVitePlugins({ staticCopyPlugin, xcmaxPublicApiPrefix = '',
     {
       name: 'inject-xcmax-api-base',
       transformIndexHtml(html) {
-        if (!xcmaxPublicApiPrefix) return html
-        const escaped = JSON.stringify(xcmaxPublicApiPrefix)
-        const tag = `<script>window.__XCMAX_API_BASE__=${escaped}</script>`
-        if (html.includes('__XCMAX_API_BASE__')) return html
-        return html.replace('<head>', `<head>\n    ${tag}`)
+        if (!xcmaxPublicApiPrefix || html.includes('__XCMAX_API_BASE__')) return html
+        return html.replace('<head>', `<head>\n    <script>window.__XCMAX_API_BASE__=${JSON.stringify(xcmaxPublicApiPrefix)}</script>`)
       },
     },
     {
       name: 'disable-legacy-chat-js',
       transformIndexHtml(html, ctx) {
-        if (ctx.server) return html
-        return html.replace('window.__ENABLE_LEGACY__ !== false', 'window.__ENABLE_LEGACY__ === true')
+        return ctx.server ? html : html.replace('window.__ENABLE_LEGACY__ !== false', 'window.__ENABLE_LEGACY__ === true')
       },
     },
   ]

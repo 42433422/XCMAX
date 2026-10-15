@@ -1,7 +1,7 @@
 {
   "id": "sunbird-attendance-custom",
   "name": "太阳鸟考勤转换",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "XCAGI",
   "description": "在公共考勤工作区上提供太阳鸟账号专属模板、班制规则和考勤文件转换。",
   "artifact": "mod",

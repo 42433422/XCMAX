@@ -98,6 +98,13 @@ exports.default = async function afterPack(context) {
       : context.appOutDir
   assertBundledVueDist(probeRoot, context.electronPlatformName)
 
+  if (context.electronPlatformName === 'win32' && process.platform === 'win32') {
+    execFileSync(path.join(probeRoot, `${appName}.exe`),
+      ['-e', 'require(process.argv[1])', path.join(probeRoot, 'resources/app.asar/node_modules/electron-updater')],
+      { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: 'pipe' })
+    log('packaged updater dependencies load successfully')
+  }
+
   if (context.electronPlatformName !== 'darwin') return
 
   const appPath = probeRoot

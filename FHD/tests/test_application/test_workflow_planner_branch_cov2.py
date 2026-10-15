@@ -196,6 +196,45 @@ class TestExtractBusinessDbWriteNode:
         assert node is not None
         assert node.params["payload"]["product_name"] == "安装验收产品-0112"
 
+    @pytest.mark.parametrize("label", ["产品名称", "商品名称", "产品名", "商品名", "产品", "商品"])
+    @pytest.mark.parametrize("separator", ["是", "："])
+    def test_shipment_product_label_is_not_saved_as_name(self, label, separator) -> None:
+        node = _extract_business_db_write_node(
+            f"请创建出货记录，客户名称是Mac验收客户-31611A88，{label}{separator}验收商品，"
+            "型号MAC-31611A88，数量2箱，规格10kg/箱，单价12.5元/千克。需要人工审批。"
+        )
+        assert node is not None
+        assert node.params["payload"]["products"][0]["product_name"] == "验收商品"
+
+    @pytest.mark.parametrize(
+        "amounts", ["数量20公斤，桶数2桶", "桶数2桶，数量20公斤", "数量20kg，桶数2"]
+    )
+    def test_shipment_explicit_tins_and_name_survive_weight_and_model(self, amounts) -> None:
+        node = _extract_business_db_write_node(
+            "创建出货单，客户名称为Mac验收客户，产品型号MAC-TEST，"
+            f"产品名称为验收涂料，{amounts}，规格10公斤/桶，单价12.5。必须人工审批。"
+        )
+        assert node is not None
+        assert node.params["payload"]["products"] == [
+            {
+                "product_name": "验收涂料",
+                "name": "验收涂料",
+                "quantity_tins": 2,
+                "model_number": "MAC-TEST",
+                "tin_spec": 10.0,
+                "unit_price": 12.5,
+            }
+        ]
+
+    @pytest.mark.parametrize("weight", ["20公斤", "20千克", "20kg", "20斤", "20吨", "20g"])
+    def test_shipment_weight_without_tins_is_not_a_complete_write(self, weight) -> None:
+        assert (
+            _extract_business_db_write_node(
+                f"创建出货单，客户名称为Mac验收客户，产品名称为验收涂料，数量{weight}，规格10公斤/桶。"
+            )
+            is None
+        )
+
     def test_products_missing_product_name_returns_none(self) -> None:
         # "产品数据库" → product_name pattern captures "数据库" → cleaned to "" (数据库 token replaced)
         node = _extract_business_db_write_node("产品数据库")
