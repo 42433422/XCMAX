@@ -6,10 +6,12 @@
          腾讯混元, 智谱GLM, 讯飞星火, 零一万物, 阶跃星辰, 百川智能, 商汤日日新
 """
 
+import asyncio
 import logging
 import os
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, cast
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -105,6 +107,11 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         "sensetime": "SenseChat-5",
     }
 
+    # 账户虚拟名仅修茈网关可解析（与 credentials._XCAUTO_PROVIDER_ALIASES / MODstore 网关 XCauto_VIRTUAL_MODELS 对齐）
+    _XCAUTO_VIRTUAL_MODELS: frozenset = frozenset(
+        {"xcauto-account", "xcauto-default", "xcauto", "xiuci-account", "xiuci-default", "xiuci"}
+    )
+
     # 小米 2026-06-30 下线 V2；缓存/环境变量里的旧 ID 映射到官方替代（与 MODstore llm_chat_proxy 对齐）
     _XIAOMI_MODEL_ALIASES: Dict[str, str] = {
         "mimo-v2-base": "mimo-v2.5-pro",
@@ -171,10 +178,24 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         raw_model = model or self.DEFAULT_MODELS.get(self.provider, "gpt-3.5-turbo")
         if self.provider == "xiaomi":
             raw_model = self._XIAOMI_MODEL_ALIASES.get(raw_model, raw_model)
+        # 账户虚拟名（xcauto-account 等）只在修茈网关（xiu-ci.com）有效；
+        # base_url 被显式改指其他端点（如小米 token-plan 直连）时必须映射为
+        # 该端点的真实模型，否则端点校验模型名直接 400（fail-closed 预检实证）。
+        # 主机判定用 urlsplit 精确匹配（子串 in 会被 CodeQL 判 incomplete-url-sanitization，
+        # 且理论上可被 evil.com/?x=xiaomimimo.com 类 URL 绕过）。
+        if self.provider in ("xcauto", "xiuci") and raw_model in self._XCAUTO_VIRTUAL_MODELS:
+            host = (urlsplit(self._base_url or "").hostname or "").lower()
+            if host == "xiaomimimo.com" or host.endswith(".xiaomimimo.com"):
+                raw_model = self.DEFAULT_MODELS.get("xiaomi", "mimo-v2.5-pro")
         self._model = raw_model
 
         self._client: Optional[httpx.AsyncClient] = None
         self._stream_client: Optional[httpx.AsyncClient] = None
+        # AsyncClient 连接池绑定创建时的 event loop；跨 loop 复用（如基准脚本
+        # 每用例 asyncio.run）会报 "Event loop is closed"。记录创建时的 loop id，
+        # loop 变化即重建客户端。
+        self._client_loop_id: Optional[int] = None
+        self._stream_client_loop_id: Optional[int] = None
 
         # Provider/model/base URL and credential metadata can be tenant-private.
         # Keep initialization logs free of values derived from credentials or requests.
@@ -210,20 +231,28 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
     async def _get_client(self) -> httpx.AsyncClient:
         """获取/创建异步HTTP客户端（用于同步请求）"""
-        if self._client is None or self._client.is_closed:
+        loop_id = id(asyncio.get_running_loop())
+        if self._client is None or self._client.is_closed or self._client_loop_id != loop_id:
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(30.0, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
             )
+            self._client_loop_id = loop_id
         return self._client
 
     async def _get_stream_client(self) -> httpx.AsyncClient:
         """获取/创建流式HTTP客户端"""
-        if self._stream_client is None or self._stream_client.is_closed:
+        loop_id = id(asyncio.get_running_loop())
+        if (
+            self._stream_client is None
+            or self._stream_client.is_closed
+            or self._stream_client_loop_id != loop_id
+        ):
             self._stream_client = httpx.AsyncClient(
                 timeout=httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0),
                 limits=httpx.Limits(max_keepalive_connections=200, max_connections=1000),
             )
+            self._stream_client_loop_id = loop_id
         return self._stream_client
 
     def _normalize_base_url(self) -> str:

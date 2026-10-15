@@ -21,6 +21,14 @@ assert SPEC and SPEC.loader
 ROUTES = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ROUTES)
 
+# 数据按登录账号隔离后，管理端点需要登录态；存量 seed 数据迁移后归属太阳鸟账号。
+TEST_OWNER = "SUNBIRD"
+
+
+class _FakeUser:
+    def __init__(self, username: str) -> None:
+        self.username = username
+
 
 def _seed_db(db_path: Path) -> None:
     conn = sqlite3.connect(db_path)
@@ -104,6 +112,8 @@ def test_shared_schedule_resources_do_not_expose_customer_template(tmp_path):
 
 
 def _client(db_path: Path) -> TestClient:
+    # 模拟已登录：路由层按 owner_user_id 隔离，未登录会读空/写 401。
+    ROUTES.owner_from_request = lambda request: TEST_OWNER
     router = APIRouter(prefix="/api/mod/attendance-industry")
     ROUTES.register(
         router,
@@ -193,11 +203,8 @@ def test_management_and_conversion_share_roster_even_after_last_person_deleted(
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    monkeypatch.setattr(
-        module, "_load_products_personnel_roster_from_host", lambda: [("旧部门", "", "旧人员")]
-    )
     client = _client(db_path)
-    assert module._resolve_personnel_roster(db_path) == [("生产部", "木工", "张三")]
+    assert module._resolve_personnel_roster(db_path, TEST_OWNER) == [("生产部", "木工", "张三")]
 
     assert (
         client.put(
@@ -205,7 +212,7 @@ def test_management_and_conversion_share_roster_even_after_last_person_deleted(
         ).status_code
         == 200
     )
-    assert module._resolve_personnel_roster(db_path) == [("新生产部", "木工", "张三")]
+    assert module._resolve_personnel_roster(db_path, TEST_OWNER) == [("新生产部", "木工", "张三")]
     assert (
         client.put(
             "/api/mod/attendance-industry/employees/1",
@@ -213,9 +220,11 @@ def test_management_and_conversion_share_roster_even_after_last_person_deleted(
         ).status_code
         == 200
     )
-    assert module._resolve_personnel_roster(db_path) == [("新生产部", "计时", "张三改名")]
+    assert module._resolve_personnel_roster(db_path, TEST_OWNER) == [
+        ("新生产部", "计时", "张三改名")
+    ]
     assert client.delete("/api/mod/attendance-industry/employees/1").status_code == 200
-    assert module._resolve_personnel_roster(db_path) == []
+    assert module._resolve_personnel_roster(db_path, TEST_OWNER) == []
 
 
 def test_new_install_can_create_first_department_and_person(tmp_path):
@@ -262,3 +271,59 @@ def test_manual_entry_cannot_duplicate_imported_person_or_department(tmp_path):
         == 409
     )
     assert client.get("/api/mod/attendance-industry/employees").json()["data"]["total"] == 1
+
+
+def test_persisted_order_is_global_stale_safe_and_owner_scoped(tmp_path, monkeypatch):
+    path = tmp_path / "attendance.db"
+    client = _client(path)
+    base = "/api/mod/attendance-industry/employees"
+    ids = [
+        client.post(base, json={"employee_name": n}).json()["data"]["id"]
+        for n in ("甲", "乙", "丙")
+    ]
+    revision = client.get(base).json()["data"]["order_revision"]
+    assert (
+        client.post(f"{base}/{ids[2]}/move", json={"position": 1, "revision": revision}).status_code
+        == 200
+    )
+    client = _client(path)
+    data = client.get(base, params={"page_size": 1, "page": 2}).json()["data"]
+    assert data["items"][0]["id"] == ids[0] and data["items"][0]["order_position"] == 2
+    assert (
+        client.get(base, params={"search": "乙"}).json()["data"]["items"][0]["order_position"] == 3
+    )
+    assert (
+        client.post(f"{base}/{ids[0]}/move", json={"position": 1, "revision": revision}).status_code
+        == 409
+    )
+    for invalid in (0, 4, 1.5, True):
+        assert (
+            client.post(
+                f"{base}/{ids[0]}/move",
+                json={"position": invalid, "revision": data["order_revision"]},
+            ).status_code
+            == 400
+        )
+    new = client.post(base, json={"employee_name": "丁"}).json()["data"]["id"]
+    client.delete(f"{base}/{ids[0]}")
+    assert [r["id"] for r in client.get(base).json()["data"]["items"]] == [ids[2], ids[1], new]
+    from app.mod_sdk.attendance_roster import read_attendance_roster
+
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.get_logged_in_user",
+        lambda request: _FakeUser(TEST_OWNER),
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.private_sqlite.resolve_mod_private_sqlite_path", lambda _: path
+    )
+    assert [r[2] for r in read_attendance_roster(object())] == ["丙", "乙", "丁"]
+    ROUTES.owner_from_request = lambda request: "OTHER"
+    assert client.get(base).json()["data"]["total"] == 0
+    client.post(base, json={"employee_name": "乙"})
+    other = client.get(base).json()["data"]
+    assert (
+        client.post(
+            f"{base}/{ids[1]}/move", json={"position": 1, "revision": other["order_revision"]}
+        ).status_code
+        == 404
+    )

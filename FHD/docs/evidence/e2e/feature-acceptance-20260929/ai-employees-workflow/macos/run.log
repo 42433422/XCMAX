@@ -1,0 +1,6 @@
+2026-09-29T06:42:23+0800 [ai-employees-workflow] 开始验收 ai-employees-workflow 工作流员工（数字员工编排）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:42:23+0800 [ai-employees-workflow] M1 passed :: HTTP 200 15ms；split mods=['xcagi-workflow-employee-label-print', 'xcagi-workflow-employee-shipment-mgmt', 'xcagi-workflow-employee-receipt-confirm', 'xcagi-workflow-employee-wechat-msg', 'xcagi-workflow-employee-wechat-phone', 'xcagi-workflow-employee-real-phone']
+2026-09-29T06:42:23+0800 [ai-employees-workflow] M2 passed :: HTTP 200 17ms；{"success": true, "data": {"ok": true, "summary": "出货管理员工就绪；对话开单与打印后审计由宿主工作流驱动。", "items": [], "warnings": [], "error": "", "meta": {"employee_id": "shipment_mgmt", "action": "status"}}}
+2026-09-29T06:42:27+0800 [ai-employees-workflow] M3 passed :: 导航后路径 /workflow-employee-space；命中文本 ['员工']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 员工空间 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 员工空间 |  | 像素入口与工位实况；数据与副窗工作流开关、智能对话任务快照同步。 |  | 员工工作流：入口与工位实况 |  | 企业版全景 
+2026-09-29T06:42:28+0800 [ai-employees-workflow] screenshot result.png
+2026-09-29T06:42:39+0800 [ai-employees-workflow] video operation.webm bytes=368637

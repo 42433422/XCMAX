@@ -1,5 +1,4 @@
 # mypy: disable-error-code="no-any-return, valid-type"
-"""Implementation extracted from the public facade module."""
 
 from __future__ import annotations
 
@@ -154,19 +153,106 @@ def _is_sales_closed_loop_write(text: str) -> bool:
     return _facade()._parse_sales_write_request(text) is not None
 
 
+_ARTIFACT_REQUEST_PATTERNS = (
+    # 「表格文件 / 可下载的表格 / 导出成 Excel」等**产物**诉求
+    r"(?:表格|报表|清单|文档|文件|excel|csv)[^，,。]{0,12}"
+    r"(?:文件|下载|导出|发我|给我|生成|整理|保存|另存)",
+    r"(?:下载|导出|生成|整理|保存|另存)[^，,。]{0,12}"
+    r"(?:表格|报表|清单|文档|文件|excel|csv)",
+)
+
+# 客户类实体之外的业务实体：与客户类实体同句出现即视为**多实体**请求。
+_OTHER_BUSINESS_ENTITIES = (
+    "产品",
+    "商品",
+    "物料",
+    "原材料",
+    "货物",
+    "订单",
+    "单据",
+    "发货单",
+    "送货单",
+    "采购单",
+    "库存",
+    "仓库",
+    "员工",
+)
+
+
+def _is_artifact_request(text: str) -> bool:
+    """用户是否明确索要**产物**（可下载的表格 / 报表文件）。"""
+    return any(
+        _facade().re.search(pattern, text, _facade().re.IGNORECASE)
+        for pattern in _ARTIFACT_REQUEST_PATTERNS
+    )
+
+
+def _mentions_other_business_entity(text: str) -> bool:
+    return any(k in text for k in _OTHER_BUSINESS_ENTITIES)
+
+
+def _requires_llm_planning(text: str, entity_markers: tuple[str, ...]) -> bool:
+    """具体实体的产物或跨实体任务交给规划；单实体查询保留槽位路由。"""
+    has_entity = any(k in text for k in entity_markers) or _mentions_other_business_entity(text)
+    if not has_entity:
+        return False
+    if _is_artifact_request(text):
+        return True
+    return (
+        bool(entity_markers)
+        and any(k in text for k in entity_markers)
+        and _mentions_other_business_entity(text)
+    )
+
+
 def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     """普通版轻量槽位提取与任务分流。"""
     text = (message or "").strip()
     lower = text.lower()
-    shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单", "打印")
+    from app.application.workflow.sql_execution_policy import database_maintenance_request
+    from app.desktop_automation.service import desktop_action_request
+    from app.services.intent_service import is_negation
+
+    if database_maintenance_request(text) is not None:
+        return {"intent": "workflow", "slots": {}}
+    desktop = desktop_action_request(text)
+    if desktop is not None:
+        return {"intent": "desktop", "slots": desktop}
+    if is_negation(text, action_keywords=["打印", "标签", "贴标", "商标"]):
+        return {"intent": "unknown", "slots": {}}
+    shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单")
+    print_spec_order = (
+        "打印" in text
+        and not any(word in text for word in ("标签", "商标", "贴标"))
+        and bool(_facade().re.search(r"[0-9A-Za-z-]+\s*(?:的\s*)?规格\s*\d+", text))
+    )
     number_style_order = bool(
         _facade().re.search(
             "(?:\\d+|[一二两三四五六七八九十零〇]+)\\s*桶\\s*[0-9A-Za-z-]+\\s*规格\\s*\\d+(?:\\.\\d+)?",
             text,
         )
     )
-    if any(k in text for k in shipment_keywords) or number_style_order:
+    template_preview = bool(
+        _facade().re.search("(?:预览|看看|看下)[^，,。]{0,12}模板|模板[^，,。]{0,8}预览", text)
+    )
+    if _facade()._is_negated_action_request(text) or _facade().re.search(
+        r"(?:不要|别|禁止|不准)[^，,。；;]{0,30}(?:出货|发货|送货)", text
+    ):
+        return {"intent": "unknown", "slots": {}}
+    if _facade().re.search(r"(?:出货|发货)(?:记录|历史|列表|查询|明细)", text):
+        if any(k in text for k in ("创建", "新增", "添加", "写入", "保存", "修改", "更新", "删除")):
+            return {"intent": "unknown", "slots": {}}
+        return {"intent": "shipment_records_query", "slots": {"keyword": ""}}
+    if _facade().re.search(r"人工审批|手动审批|(?:客户|单位)名称\s*(?:仍为|为|是|[:：])", text):
+        return {"intent": "workflow", "slots": {}}
+    if (
+        any(k in text for k in shipment_keywords) or number_style_order or print_spec_order
+    ) and not template_preview:
         return {"intent": "shipment", "slots": {"number_style_order": number_style_order}}
+    if template_preview:
+        return {"intent": "unknown", "slots": {}}
+    if any(k in text for k in ("出货", "发货", "送货")):
+        return {"intent": "workflow", "slots": {}}
     sales_write_payload = _facade()._parse_sales_write_request(text)
     if sales_write_payload is not None:
         return {
@@ -180,6 +266,8 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         _facade().re.search("([^\\s，,。]{2,})\\s*的\\s*([0-9A-Za-z-]{2,})", text)
     )
     customer_entity_markers = ("客户", "购买单位", "买家")
+    if _requires_llm_planning(text, customer_entity_markers):
+        return {"intent": "unknown", "slots": {}}
     if any(k in text for k in customer_entity_markers):
         return {"intent": "customers_query", "slots": {"keyword": ""}}
     delete_keywords = ("删除", "移除", "删掉", "删了")
@@ -189,96 +277,55 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         if target_match:
             del_target = target_match.group(1).strip()
         return {"intent": "delete_entity", "slots": {"keyword": del_target}}
-    report_keywords = (
-        "报表",
-        "销售报表",
-        "库存报表",
-        "采购报表",
-        "汇总",
-        "经营看板",
-        "数据看板",
-        "统计",
+    # 产物请求仍走规划器，单实体汇总保留报表查询。
+    if _requires_llm_planning(text, ()):
+        return {"intent": "unknown", "slots": {}}
+    for keywords, intent, route_slots in (
+        (
+            "报表 销售报表 库存报表 采购报表 汇总 经营看板 数据看板 统计",
+            "reports_query",
+            {"keyword": ""},
+        ),
+        (
+            "库存盘点 盘点 实盘",
+            "inventory_count",
+            {"product_id": "", "warehouse_id": "", "actual_quantity": ""},
+        ),
+        ("库存 库存预警 低库存 库存不足 缺货 原材料库存 仓库", "inventory_alert", {}),
+        ("标签 打标签 打印标签 商标 贴标", "label_print", {}),
+        ("物料 原材料 材料", "materials_query", {"keyword": ""}),
+        ("补货 补货建议 采购建议 建议采购 补多少", "replenishment_suggest", {}),
+        ("生产工单 生产 工单 BOM 领料 完工", "mrp_production", {"order_id": "", "bom_id": ""}),
+        ("采购 供应商 进货 采购单 采购订单 采购入库", "purchase_query", {"keyword": ""}),
+        ("账龄 应收账龄 应付账龄", "aging_report", {"account_type": "应收", "days": 30}),
+        ("财务 凭证 收支 应收 应付 交易流水 资金 对账 总账 记账", "finance_query", {}),
+        (
+            "销售订单 报价单 销售单 下单 收款 开票 发货单确认 销售明细",
+            "sales_query",
+            {"keyword": ""},
+        ),
+        ("知识库 资料库 帮助文档 使用文档 操作手册 帮助中心", "knowledge_query", {}),
+    ):
+        if any(keyword in text for keyword in keywords.split()):
+            if intent == "label_print":
+                from app.application.label_print_inputs import extract_label_print_slots
+
+                route_slots = extract_label_print_slots(text)
+            return {"intent": intent, "slots": route_slots}
+    product_subject = any(word in text for word in ("产品", "商品", "货品"))
+    model_token = bool(
+        _facade().re.search(
+            r"(?<![0-9A-Za-z])(?:[A-Za-z][A-Za-z0-9-]*\d[A-Za-z0-9-]*"
+            r"|\d{2,6}[A-Za-z][A-Za-z0-9-]*|\d{3,6})(?![0-9A-Za-z])",
+            text,
+        )
     )
-    if any(k in text for k in report_keywords):
-        return {"intent": "reports_query", "slots": {"keyword": ""}}
-    inventory_count_keywords = ("库存盘点", "盘点", "实盘")
-    if any(k in text for k in inventory_count_keywords):
-        return {
-            "intent": "inventory_count",
-            "slots": {"product_id": "", "warehouse_id": "", "actual_quantity": ""},
-        }
-    inventory_keywords = ("库存", "库存预警", "低库存", "库存不足", "缺货", "原材料库存", "仓库")
-    if any(k in text for k in inventory_keywords):
-        return {"intent": "inventory_alert", "slots": {}}
-    print_label_keywords = ("标签", "打标签", "打印标签", "商标", "贴标")
-    if any(k in text for k in print_label_keywords):
-        model_m = _facade().re.search("([0-9A-Za-z-]{2,})", text)
-        qty_m = _facade().re.search("(\\d+)\\s*(?:张|份|个|次|条)?", text)
-        return {
-            "intent": "label_print",
-            "slots": {
-                "model_number": (model_m.group(1) if model_m else "").strip().upper(),
-                "quantity": int(qty_m.group(1)) if qty_m else 1,
-            },
-        }
-    material_keywords = ("物料", "原材料", "材料")
-    if any(k in text for k in material_keywords):
-        return {"intent": "materials_query", "slots": {"keyword": ""}}
-    shipment_record_keywords = (
-        "出货记录",
-        "发货记录",
-        "出货历史",
-        "出货列表",
-        "发货列表",
-        "出货查询",
-        "发货查询",
-        "出货明细",
-        "发货明细",
-    )
-    if any(k in text for k in shipment_record_keywords):
-        return {"intent": "shipment_records_query", "slots": {"keyword": ""}}
-    replenish_keywords = ("补货", "补货建议", "采购建议", "建议采购", "补多少")
-    if any(k in text for k in replenish_keywords):
-        return {"intent": "replenishment_suggest", "slots": {}}
-    mrp_keywords = ("生产工单", "生产", "工单", "BOM", "领料", "完工")
-    if any(k in text for k in mrp_keywords):
-        return {"intent": "mrp_production", "slots": {"order_id": "", "bom_id": ""}}
-    purchase_keywords = ("采购", "供应商", "进货", "采购单", "采购订单", "采购入库")
-    if any(k in text for k in purchase_keywords):
-        return {"intent": "purchase_query", "slots": {"keyword": ""}}
-    aging_keywords = ("账龄", "应收账龄", "应付账龄")
-    if any(k in text for k in aging_keywords):
-        return {"intent": "aging_report", "slots": {"account_type": "应收", "days": 30}}
-    finance_keywords = (
-        "财务",
-        "凭证",
-        "收支",
-        "应收",
-        "应付",
-        "交易流水",
-        "资金",
-        "对账",
-        "总账",
-        "记账",
-    )
-    if any(k in text for k in finance_keywords):
-        return {"intent": "finance_query", "slots": {}}
-    sales_keywords = (
-        "销售订单",
-        "报价单",
-        "销售单",
-        "下单",
-        "收款",
-        "开票",
-        "发货单确认",
-        "销售明细",
-    )
-    if any(k in text for k in sales_keywords):
-        return {"intent": "sales_query", "slots": {"keyword": ""}}
-    knowledge_keywords = ("知识库", "资料库", "帮助文档", "使用文档", "操作手册", "帮助中心")
-    if any(k in text for k in knowledge_keywords):
-        return {"intent": "knowledge_query", "slots": {}}
-    if any(k in text for k in query_keywords) or model_signal or unit_model_signal:
+    if not _is_artifact_request(text) and (
+        any(k in text for k in query_keywords)
+        and (product_subject or model_token)
+        or model_signal
+        or unit_model_signal
+    ):
         slots: dict[str, _facade().Any] = {}
         m_unit_model = _facade().re.search("([^\\s，,。]{2,})\\s*的\\s*([0-9A-Za-z-]{2,})", text)
         if m_unit_model:
@@ -335,4 +382,13 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
                 if keyword:
                     slots["keyword"] = keyword
         return {"intent": "product_query", "slots": slots}
+    # 规则全部未命中：走一次 LLM 意图闸（平台模型；离线/测试/失败自动回退 unknown）。
+    try:
+        from app.application.llm_intent_gate import llm_route_message
+
+        llm_route = llm_route_message(text)
+        if llm_route is not None:
+            return llm_route
+    except _facade().RECOVERABLE_ERRORS:
+        _facade().logger.debug("LLM 意图闸跳过", exc_info=True)
     return {"intent": "unknown", "slots": {}}

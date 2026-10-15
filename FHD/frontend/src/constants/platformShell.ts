@@ -46,6 +46,7 @@ export interface DeliverableStatus {
 
 export interface IndustryBaselineItem {
   mod_id: string
+  runtime_mod_id?: string
   label: string
   tier: 'core' | 'host' | 'optional' | 'custom' | 'industry_package' | 'account_custom'
   required: boolean

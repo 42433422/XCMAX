@@ -1,0 +1,24 @@
+{
+  "processes": {
+    "XCAGI": 4,
+    "backend": 1
+  },
+  "db_counts_post_rollback": {
+    "sessions": 27,
+    "users": 3,
+    "products": 10
+  },
+  "product_names_desc": [
+    "SUNBIRD-t3-073556",
+    "SUNBIRD-loop-round2-post-050624",
+    "SUNBIRD-loop-round2-042330",
+    "SUNBIRD-loop-round2-041106",
+    "SUNBIRD-loop-round1-post-000403",
+    "SUNBIRD-loop-round1-234556",
+    "SUNBIRD-loop-round1-231539",
+    "SUNBIRD-loop-round1-230044",
+    "SUNBIRD-probe-baseline",
+    "SUNBIRD-loop-dryrun-191500"
+  ],
+  "note": "downgrade 1.0.0.3 -> 1.0.0.0, data dir untouched"
+}

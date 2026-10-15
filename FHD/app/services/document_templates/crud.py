@@ -150,9 +150,9 @@ def _create_template_with_payload_inner(payload: dict):
             return _j({"success": False, "message": "缺少租户上下文，无法创建模板"}, 403)
 
         with get_db() as db:
-            result = db.execute(
-                text(
-                    """
+            # psycopg3 Cursor 无 lastrowid（PG 需 RETURNING）；SQLite 桌面端保持 lastrowid
+            is_pg = db.get_bind().dialect.name == "postgresql"
+            insert_sql = """
                     INSERT INTO templates (
                         template_key, template_name, template_type,
                         original_file_path, analyzed_data, editable_config,
@@ -164,8 +164,9 @@ def _create_template_with_payload_inner(payload: dict):
                         :zone_config, :merged_cells_config, :style_config,
                         :business_rules, :is_active, :tenant_id
                     )
-                """
-                ),
+                """ + (" RETURNING id" if is_pg else "")
+            result = db.execute(
+                text(insert_sql),
                 {
                     "template_key": template_key,
                     "template_name": template_name,
@@ -181,7 +182,7 @@ def _create_template_with_payload_inner(payload: dict):
                     "tenant_id": tenant_id,
                 },
             )
-            template_id = result.lastrowid
+            template_id = result.scalar_one() if is_pg else result.lastrowid
             db.commit()
             try:
                 db.execute(

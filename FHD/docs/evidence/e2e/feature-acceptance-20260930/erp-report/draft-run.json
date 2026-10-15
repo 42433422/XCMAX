@@ -1,0 +1,70 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-report",
+ "name": "价格表 / 报表 / 统计分析",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/report/dashboard",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/report/dashboard（写操作自动附带 CSRF）：经营看板",
+   "expected": "经营看板：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 616ms；{\"product_count\": 5, \"supplier_count\": 11, \"monthly_sales\": {\"order_count\": 0, \"total_amount\": null}, \"monthly_purchases\": {\"order_count\": 7, \"total_amount\": 350}, \"alerts\": {\"low_stock\": 0, \"pending_",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/report/sales",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/report/sales（写操作自动附带 CSRF）：销售报表",
+   "expected": "销售报表：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 19ms；{\"total_quantity\": 0, \"total_amount\": 0}",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/sales-contract/template-preview",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/sales-contract/template-preview（写操作自动附带 CSRF）：价格表模板预览",
+   "expected": "价格表模板预览：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 14ms；[\"型号\", \"品名\", \"规格\", \"单位\", \"数量\", \"单价\", \"金额\"]",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /kitten-finance",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /kitten-finance，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /kitten-finance，页面可见 分析，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /kitten-finance；命中文本 ['分析']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 财务分析 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 🐱 | 小猫财务分析 |  | 一键查看本月经营状况 |  | 🚀 开始分析 | 🐱 | 还没有分析数据 |  | 点击上方「开始分析」按钮，一键生成财务报告 |  | 立即开",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-report",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-report/macos/result.png",
+   "sha256": "f415de48369d50b4d3f9d311bf569d6bd17f1cd8e8a6a34b03f4b21da59cc870",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-report",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-report/macos/operation.webm",
+   "sha256": "f654c55a0344ef5ec8f1c22f2b82bb226bd9b7f3effdbecde85c51b580b986d2",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-report/macos/run.log",
+  "sha256": "31e3788a84b3501b56b2a4e40c2ef345021b7272f3570892041292c96bf37a8a",
+  "bytes": 1544
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

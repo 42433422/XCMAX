@@ -1,0 +1,14 @@
+{
+  "checked_at": "2026-09-12T22:27:50.225329+00:00",
+  "checks": [
+    {
+      "path": "/download",
+      "windows_interim_contract_present": true
+    },
+    {
+      "path": "/download/releases",
+      "windows_interim_contract_present": true
+    }
+  ],
+  "note": "Preflight only; 1.0.0.2 download metadata has not yet been published."
+}

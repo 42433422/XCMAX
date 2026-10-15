@@ -1,17 +1,4 @@
-"""Tests for app.application.normal_chat_dispatch — branch coverage ramp.
-
-聚焦未覆盖分支：
-- route_normal_mode_message：number_style_order / customer_keyword / inventory / label_print /
-  product_query 各槽位分支（含 keyword 推导、unit/model 组合、tail model 排除 API/HTTP 等）
-- build_product_query_response_dict：非 product_query 早返回 / preview 失败 / query_desc 各分支
-- run_workflow_products_query_normal_profile：profile 命中 / kw_preview 回退各分支 / 异常路径
-- resolve_tool_execution_profile：explicit / ui_surface+intent_channel 组合
-- run_normal_slot_shipment_preview：空 text / parse 失败 / parse 成功
-- run_normal_slot_product_query_from_message：命中与未命中
-- build_customers_query_response_dict：非意图 / 空客户 / 有客户 / 异常
-- build_inventory_alert_response_dict：非意图 / 空低库存 / 有低库存 / 异常
-- build_label_print_response_dict：非意图 / 缺型号 / 成功 / 失败 / 异常
-"""
+"""Normal chat routing, preview, and query regressions."""
 
 from __future__ import annotations
 
@@ -42,38 +29,43 @@ from app.application.normal_chat_dispatch import (
     run_workflow_products_query_normal_profile,
 )
 
-# ---------------------------------------------------------------------------
-# route_normal_mode_message — shipment 分支
-# ---------------------------------------------------------------------------
-
 
 class TestRouteNormalModeMessageShipment:
     """route_normal_mode_message shipment 槽位分支。"""
 
-    def test_shipment_keyword_发货单(self):
-        result = route_normal_mode_message("帮我打开发货单")
-        assert result["intent"] == "shipment"
-        assert result["slots"]["number_style_order"] is False
+    @pytest.mark.parametrize(
+        "text,expected",
+        [
+            ("帮我打开发货单", "shipment"),
+            ("送货单看一下", "shipment"),
+            ("出货单打印", "shipment"),
+            ("开单", "shipment"),
+            ("打单", "shipment"),
+            (
+                "创建出货单：客户名称为用户需提供，产品型号 MAC-7F1B17CE，数量20公斤，规格10公斤/桶，单价12.5元/公斤。必须人工审批后执行。",
+                "workflow",
+            ),
+            ("2桶，客户名称仍为用户需提供，必须人工审批后执行。", "workflow"),
+            ("开出货单：客户名称为请用户提供，型号A001，2桶规格10", "workflow"),
+            ("开出货单：客户名称为需要用户提供，型号A001，2桶规格10", "workflow"),
+            ("请给 Mac验收客户-70BC4E77 出货，必须人工审批后才能执行。", "workflow"),
+            ("给客户发货", "workflow"),
+            ("给客户送货", "workflow"),
+            ("不要给客户出货", "unknown"),
+            ("预览送货单模板", "unknown"),
+            ("查看客户出货记录", "shipment_records_query"),
+            ("请为客户创建出货记录", "unknown"),
+            ("新增发货记录并人工审批", "unknown"),
+            ("删除客户出货记录", "unknown"),
+            ("发货历史", "shipment_records_query"),
+        ],
+    )
+    def test_shipment_actions_keep_queries_and_negation_separate(self, text, expected):
+        assert route_normal_mode_message(text)["intent"] == expected
 
-    def test_shipment_keyword_送货单(self):
-        result = route_normal_mode_message("送货单看一下")
-        assert result["intent"] == "shipment"
-
-    def test_shipment_keyword_出货单(self):
-        result = route_normal_mode_message("出货单打印")
-        assert result["intent"] == "shipment"
-
-    def test_shipment_keyword_开单(self):
-        result = route_normal_mode_message("开单")
-        assert result["intent"] == "shipment"
-
-    def test_shipment_keyword_打单(self):
-        result = route_normal_mode_message("打单")
-        assert result["intent"] == "shipment"
-
-    def test_shipment_keyword_打印(self):
+    def test_unspecified_print_is_not_assumed_to_be_a_shipment(self):
         result = route_normal_mode_message("打印一下")
-        assert result["intent"] == "shipment"
+        assert result["intent"] == "unknown"
 
     def test_shipment_number_style_order_arabic(self):
         result = route_normal_mode_message("10桶A001规格25")
@@ -101,6 +93,15 @@ class TestRouteNormalModeMessageShipment:
 
     def test_whitespace_message_returns_unknown(self):
         result = route_normal_mode_message("   ")
+        assert result["intent"] == "unknown"
+
+    def test_template_preview_not_hijacked_by_bill_keyword(self):
+        # 「预览送货单模板」含「送货单」但属模板预览意图，不应路由到 shipment
+        result = route_normal_mode_message("预览送货单模板")
+        assert result["intent"] == "unknown"
+
+    def test_template_preview_variant(self):
+        result = route_normal_mode_message("看看发货单的模板")
         assert result["intent"] == "unknown"
 
 
@@ -260,7 +261,7 @@ class TestRouteNormalModeMessageLabelPrint:
     """route_normal_mode_message label_print 槽位分支。"""
 
     def test_label_print_keyword_标签(self):
-        """注意 '打印' 是 shipment 关键词，故用 '标签' 触发 label_print。"""
+        """裸标签请求进入标签分支并保留缺失型号。"""
         result = route_normal_mode_message("标签")
         assert result["intent"] == "label_print"
         assert result["slots"]["model_number"] == ""
@@ -273,8 +274,8 @@ class TestRouteNormalModeMessageLabelPrint:
         assert result["slots"]["model_number"] == "B002"
 
     def test_label_print_keyword_打印标签(self):
-        """'打印' 是 shipment 关键词，'打印标签' 会先命中 shipment。改用 '商标'。"""
-        result = route_normal_mode_message("商标")
+        """实际打印标签请求不得被发货单分支截获。"""
+        result = route_normal_mode_message("打印标签")
         assert result["intent"] == "label_print"
 
     def test_label_print_keyword_贴标(self):
@@ -302,46 +303,28 @@ class TestRouteNormalModeMessageLabelPrint:
 class TestRouteNormalModeMessageProductQuery:
     """route_normal_mode_message product_query 槽位分支。"""
 
-    def test_product_query_with_query_keyword(self):
-        """'查询' 单独出现时，清理后 keyword 为空，slots 可能为空。"""
-        result = route_normal_mode_message("查询")
-        assert result["intent"] == "product_query"
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "翻翻往来的单位，找出名字里带测试甲的那个",
+            "帮我找一下昨天没处理完的事情",
+            "看看我还能用哪些功能",
+            "请保存为 UTF-8 文本文件。验收编号：MAC-A-20260930-WXH-2309。",
+        ],
+    )
+    def test_generic_query_defers_to_intent_gate(self, message):
+        predicted = {"intent": "clarify", "slots": {}, "question": "请说明查询对象"}
+        with patch(
+            "app.application.llm_intent_gate.llm_route_message", return_value=predicted
+        ) as gate:
+            assert route_normal_mode_message(message) == predicted
+        gate.assert_called_once_with(message)
 
-    def test_product_query_with_查一下_keyword(self):
-        result = route_normal_mode_message("查一下")
-        assert result["intent"] == "product_query"
-
-    def test_product_query_with_查下_keyword(self):
-        result = route_normal_mode_message("查下")
-        assert result["intent"] == "product_query"
-
-    def test_product_query_with_查_keyword(self):
-        result = route_normal_mode_message("查")
-        assert result["intent"] == "product_query"
-
-    def test_product_query_with_看看_keyword(self):
-        result = route_normal_mode_message("看看")
-        assert result["intent"] == "product_query"
-
-    def test_product_query_with_看下_keyword(self):
-        result = route_normal_mode_message("看下")
-        assert result["intent"] == "product_query"
-
-    def test_product_query_with_搜索_keyword(self):
-        result = route_normal_mode_message("搜索")
-        assert result["intent"] == "product_query"
-
-    def test_product_query_with_找下_keyword(self):
-        result = route_normal_mode_message("找下")
-        assert result["intent"] == "product_query"
-
-    def test_product_query_with_找_keyword(self):
-        result = route_normal_mode_message("找")
-        assert result["intent"] == "product_query"
-
-    def test_product_query_with_检索_keyword(self):
-        result = route_normal_mode_message("检索")
-        assert result["intent"] == "product_query"
+    @pytest.mark.parametrize(
+        "message", ["查询", "查一下", "查下", "查", "看看", "看下", "搜索", "找下", "找", "检索"]
+    )
+    def test_query_verb_without_product_subject(self, message):
+        assert route_normal_mode_message(message)["intent"] == "unknown"
 
     def test_product_query_keyword_stripped_to_nonempty(self):
         """泛化的产品列表问法必须查询全量，而不是把“产品”当筛选词。"""
@@ -397,29 +380,29 @@ class TestRouteNormalModeMessageProductQuery:
 
     def test_product_query_tail_model_excludes_api_keyword(self):
         result = route_normal_mode_message("查询API")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
         # API 应该被排除
         assert result["slots"].get("model_number") != "API"
 
     def test_product_query_tail_model_excludes_http_keyword(self):
         result = route_normal_mode_message("查询HTTP")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
         assert result["slots"].get("model_number") != "HTTP"
 
     def test_product_query_tail_model_excludes_json_keyword(self):
         result = route_normal_mode_message("查询JSON")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
         assert result["slots"].get("model_number") != "JSON"
 
     def test_product_query_tail_model_excludes_xml_keyword(self):
         result = route_normal_mode_message("查询XML")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
         assert result["slots"].get("model_number") != "XML"
 
     def test_product_query_no_keyword_no_unit_no_model(self):
-        """查询关键词但提取后 keyword 为空。"""
+        """没有查询对象时不能默认查产品。"""
         result = route_normal_mode_message("查询")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
 
 # ---------------------------------------------------------------------------

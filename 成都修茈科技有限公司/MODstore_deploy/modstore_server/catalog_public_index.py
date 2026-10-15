@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Set
 
+from modstore_server.catalog_publication_policy import is_private_package
 from modstore_server.catalog_store import load_store, norm_pkg_id, norm_version
 from modstore_server.duty_roster import (
     all_planned_employee_ids,
@@ -19,8 +20,7 @@ logger = logging.getLogger(__name__)
 def _public_pkg_ids_from_db() -> Set[str] | None:
     """返回已上架 pkg_id；数据库不可用时返回 None。"""
     try:
-        from modstore_server.db import get_session_factory
-        from modstore_server.models import CatalogItem
+        from modstore_server.models import CatalogItem, get_session_factory
 
         sf = get_session_factory()
         with sf() as session:
@@ -28,7 +28,7 @@ def _public_pkg_ids_from_db() -> Set[str] | None:
                 session.query(CatalogItem.pkg_id)
                 .filter(
                     CatalogItem.is_public == True,  # noqa: E712
-                    CatalogItem.compliance_status != "delisted",
+                    CatalogItem.compliance_status == "approved",
                 )
                 .all()
             )
@@ -42,14 +42,14 @@ def package_row_eligible_for_public_index(
     row: Dict[str, Any], *, public_pkg_ids: Set[str] | None
 ) -> bool:
     """是否应出现在 XCAGI / 公网 ``index.json``。"""
-    if not isinstance(row, dict):
+    if not isinstance(row, dict) or public_pkg_ids is None:
         return False
     pid = norm_pkg_id(row.get("id"))
     if not pid:
         return False
     ver = norm_version(row.get("version"))
     artifact = str(row.get("artifact") or "mod").strip().lower()
-    if artifact == "customer_delivery_seed":
+    if is_private_package(row):
         return False
 
     if pid in all_planned_employee_ids() or is_planned_duty_employee_pack(pid, artifact):
@@ -59,16 +59,10 @@ def package_row_eligible_for_public_index(
     if channel == "draft" or ver.startswith("draft-"):
         return False
 
-    stored = str(row.get("stored_filename") or "").strip()
-    download_url = str(row.get("download_url") or "").strip()
-    if not stored and not download_url:
-        return False
+    from modstore_server.catalog_store import public_package_available
 
-    if public_pkg_ids is None:
-        # 无市场库时：至少挡掉编制内 employee_pack；其余 mod 保持兼容
-        if artifact == "employee_pack":
-            return False
-        return True
+    if not public_package_available(row):
+        return False
 
     return pid in public_pkg_ids
 

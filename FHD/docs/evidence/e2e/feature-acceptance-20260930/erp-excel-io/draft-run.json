@@ -1,0 +1,70 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-excel-io",
+ "name": "Excel 导入导出",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/excel/test",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/excel/test（写操作自动附带 CSRF）：Excel 模板服务",
+   "expected": "Excel 模板服务：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 68ms；Excel 模板服务运行正常",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/excel/list",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/excel/list（写操作自动附带 CSRF）：导入模板清单",
+   "expected": "导入模板清单：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 20ms；['客户资料初始化表', '产品资料初始化表', '销售订单标准表', '出货记录初始化表']",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/excel/data/logs",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/excel/data/logs（写操作自动附带 CSRF）：导入日志",
+   "expected": "导入日志：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 19ms；logs=0",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /mod/xcagi-erp-domain-bridge/products",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/products，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-erp-domain-bridge/products，页面可见 导入Excel，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/products；命中文本 ['导入Excel']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 业务对象 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 饰品包装品管理 | 导入Excel | 导出价格表 | 导出Excel | + 添加产品 | 产品单位： | 请选择产品单位 | MAC验收0929出货客户13",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-excel-io",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-excel-io/macos/result.png",
+   "sha256": "cb5c67378f61d2e66bb1e8402c8d028faba8424ea263bc4ffa9a918c22b82e06",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-excel-io",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-excel-io/macos/operation.webm",
+   "sha256": "a85ae7cf98d985d1d2a4e3a62190420083cf2d9fc83b32060cc636feb4f47431",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-excel-io/macos/run.log",
+  "sha256": "bf2acba2e2dd02a95e692fd71b678eb2aed0b791dcbc0bdda6f20d1048fef06e",
+  "bytes": 1363
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

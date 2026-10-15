@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "dt-ota",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "c6fb518c47ac56f17ebe840ecd5edd2dd1b05c1004f66a540cc7c34e3f2e433c",
+  "visible_content": "更新检查接口 complete=true、无待更新，设置页可见。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-ota/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-ota/macos/result.png"
+}

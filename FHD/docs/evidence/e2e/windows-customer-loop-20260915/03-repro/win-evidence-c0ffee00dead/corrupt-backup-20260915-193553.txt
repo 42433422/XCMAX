@@ -1,0 +1,1 @@
+up=True; status=degraded; degradedReasons=NEURO_BUS_UNHEALTHY;NEURO_BUS_NOT_RUNNING; victim=xcagi-unknown-20260915112956.db; main=1617920→1617920

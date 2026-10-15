@@ -1,18 +1,5 @@
 # mypy: disable-error-code="arg-type"
-"""测试 app.application.workflow.planner 的分支覆盖。
-
-覆盖目标：
-- _clean_db_slot_value（多 token 清理 / 前后缀正则 / 空值）
-- _extract_named_slot（模式匹配 / 引号回退 / 空）
-- _looks_like_business_db_write（关键词命中 / db 标记 / 不匹配）
-- _infer_business_db_entity（产品 / 客户 / 原材料 / 出货 / 默认）
-- _extract_business_db_write_node（customers / products / materials→None / 缺槽→None）
-- _extract_business_db_read_keyword（引号 / products / customers / materials / 兜底清理）
-- execute_tool（默认 action / handler 命中 / 未知工具）
-- _filter_tool_registry_for_profile（normal / pro_default / shared / 非 dict 跳过）
-- LLMWorkflowPlanner._validate_required_params（缺参 / 满足 / 无 tool_spec）
-- LLMWorkflowPlanner._fallback_plan（employee / db_write / db_read / add_product / generic）
-"""
+"""Workflow planner parsing, dispatch, validation and fallback regression."""
 
 from __future__ import annotations
 
@@ -38,50 +25,37 @@ from app.application.workflow.planner import (
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
 
-class TestCleanDbSlotValue:
-    """_clean_db_slot_value 分支覆盖。"""
-
-    def test_none_returns_empty(self) -> None:
-        assert _clean_db_slot_value(None) == ""
-
-    def test_empty_string(self) -> None:
-        assert _clean_db_slot_value("") == ""
-
-    def test_strips_database_tokens(self) -> None:
-        # "到数据库" is replaced → "客户", then prefix "客户" is stripped → ""
-        assert _clean_db_slot_value("客户到数据库") == ""
-        # "写入数据库" is replaced → "产品", then prefix "产品" is stripped → ""
-        assert _clean_db_slot_value("产品写入数据库") == ""
-        # "入库" is replaced → "原材料", no prefix/suffix match → "原材料"
-        assert _clean_db_slot_value("入库原材料") == "原材料"
-
-    def test_strips_prefix_keywords(self) -> None:
-        # prefix "新增" stripped → "客户A", suffix "客户" not at end → "客户A"
-        assert _clean_db_slot_value("新增客户A") == "客户A"
-        # prefix "添加" stripped → "产品B", suffix "产品" not at end → "产品B"
-        assert _clean_db_slot_value("添加产品B") == "产品B"
-        # prefix "创建" stripped → "单位C", suffix "单位" not at end → "单位C"
-        assert _clean_db_slot_value("创建单位C") == "单位C"
-
-    def test_strips_suffix_keywords(self) -> None:
-        assert _clean_db_slot_value("ABC客户") == "ABC"
-        assert _clean_db_slot_value("XYZ产品") == "XYZ"
-        assert _clean_db_slot_value("DEF单位") == "DEF"
-
-    def test_strips_punctuation(self) -> None:
-        # "，客户，" → strip → "客户" → prefix "客户" stripped → ""
-        assert _clean_db_slot_value("，客户，") == ""
-        # "：产品：" → strip → "产品" → prefix "产品" stripped → ""
-        assert _clean_db_slot_value("：产品：") == ""
-        # ";单位;" → strip → "单位" → prefix "单位" stripped → ""
-        assert _clean_db_slot_value(";单位;") == ""
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (None, ""),
+        ("", ""),
+        ("客户到数据库", ""),
+        ("产品写入数据库", ""),
+        ("入库原材料", "原材料"),
+        ("新增客户A", "客户A"),
+        ("添加产品B", "产品B"),
+        ("创建单位C", "单位C"),
+        ("ABC客户", "ABC"),
+        ("XYZ产品", "XYZ"),
+        ("DEF单位", "DEF"),
+        ("，客户，", ""),
+        ("：产品：", ""),
+        (";单位;", ""),
+    ],
+)
+def test_clean_db_slot_value(value, expected):
+    assert _clean_db_slot_value(value) == expected
 
 
 class TestExtractNamedSlot:
     """_extract_named_slot 分支覆盖。"""
 
-    def test_pattern_match_returns_cleaned_value(self) -> None:
-        result = _extract_named_slot("客户：七彩乐园", (r"客户\s*[:：是为]?\s*([^\s，,。；;]+)",))
+    @pytest.mark.parametrize(
+        "name", ["七彩乐园", "“七彩乐园”", "「七彩乐园」", '"七彩乐园"', "'七彩乐园'"]
+    )
+    def test_pattern_match_returns_cleaned_value(self, name: str) -> None:
+        result = _extract_named_slot(f"客户：{name}", (r"客户\s*[:：是为]?\s*([^\s，,。；;]+)",))
         assert result == "七彩乐园"
 
     def test_pattern_match_with_prefix_keyword(self) -> None:
@@ -91,9 +65,9 @@ class TestExtractNamedSlot:
         )
         assert result == "ABC"
 
-    def test_no_pattern_match_falls_back_to_quoted(self) -> None:
-        result = _extract_named_slot("请处理「七彩乐园」", (r"不存在的模式",))
-        assert result == "七彩乐园"
+    @pytest.mark.parametrize("name", ["「七彩乐园」", '"七彩乐园"', "'七彩乐园'"])
+    def test_no_pattern_match_falls_back_to_quoted(self, name: str) -> None:
+        assert _extract_named_slot(f"请处理{name}", (r"不存在的模式",)) == "七彩乐园"
 
     def test_no_match_no_quotes_returns_empty(self) -> None:
         result = _extract_named_slot("普通文本无引号", (r"不存在的模式",))
@@ -104,79 +78,58 @@ class TestExtractNamedSlot:
         result = _extract_named_slot("客户：数据库", (r"客户\s*[:：是为]?\s*([^\s，,。；;]+)",))
         assert result == ""
 
-    def test_double_quote_fallback(self) -> None:
-        result = _extract_named_slot('请处理"七彩乐园"', (r"不存在的模式",))
-        assert result == "七彩乐园"
 
-    def test_single_quote_fallback(self) -> None:
-        result = _extract_named_slot("请处理'七彩乐园'", (r"不存在的模式",))
-        assert result == "七彩乐园"
-
-
-class TestLooksLikeBusinessDbWrite:
-    """_looks_like_business_db_write 分支覆盖。"""
-
-    def test_chinese_keyword_with_db(self) -> None:
-        assert _looks_like_business_db_write("新增到数据库", "新增到数据库") is True
-
-    def test_english_keyword_with_db(self) -> None:
-        assert _looks_like_business_db_write("add to db", "add to db") is True
-
-    def test_english_keyword_with_database(self) -> None:
-        assert (
-            _looks_like_business_db_write("create database entry", "create database entry") is True
-        )
-
-    def test_chinese_keyword_with_入库(self) -> None:
-        assert _looks_like_business_db_write("入库产品", "入库产品") is True
-
-    def test_no_write_keyword_returns_false(self) -> None:
-        assert _looks_like_business_db_write("查询产品", "查询产品") is False
-
-    def test_business_entity_write_does_not_require_db_jargon(self) -> None:
-        assert _looks_like_business_db_write("新建产品", "新建产品") is True
-
-    def test_legacy_add_product_without_db_jargon_stays_on_legacy_route(self) -> None:
-        assert _looks_like_business_db_write("新增产品", "新增产品") is False
-
-    def test_english_insert_with_db(self) -> None:
-        assert _looks_like_business_db_write("insert into db", "insert into db") is True
-
-    def test_english_upsert_with_database(self) -> None:
-        assert _looks_like_business_db_write("upsert database", "upsert database") is True
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("新增到数据库", True),
+        ("add to db", True),
+        ("create database entry", True),
+        ("入库产品", True),
+        ("查询产品", False),
+        ("新建产品", True),
+        ("新增产品", False),
+        ("insert into db", False),
+        ("upsert database", True),
+    ],
+)
+def test_business_db_write_detection(text, expected):
+    assert _looks_like_business_db_write(text, text) is expected
 
 
-class TestInferBusinessDbEntity:
-    """_infer_business_db_entity 分支覆盖。"""
-
-    def test_products(self) -> None:
-        assert _infer_business_db_entity("产品") == "products"
-        assert _infer_business_db_entity("商品") == "products"
-
-    def test_customers(self) -> None:
-        assert _infer_business_db_entity("客户") == "customers"
-        assert _infer_business_db_entity("单位") == "customers"
-        assert _infer_business_db_entity("购买单位") == "customers"
-
-    def test_materials(self) -> None:
-        assert _infer_business_db_entity("原材料") == "materials"
-        assert _infer_business_db_entity("物料") == "materials"
-
-    def test_shipment(self) -> None:
-        assert _infer_business_db_entity("出货") == "shipment_records"
-        assert _infer_business_db_entity("发货") == "shipment_records"
-        assert _infer_business_db_entity("发货单") == "shipment_records"
-
-    def test_default_returns_products(self) -> None:
-        assert _infer_business_db_entity("无关键词") == "products"
-        assert _infer_business_db_entity("") == "products"
+@pytest.mark.parametrize(
+    "text,entity",
+    [
+        ("产品", "products"),
+        ("商品", "products"),
+        ("客户", "customers"),
+        ("单位", "customers"),
+        ("购买单位", "customers"),
+        ("原材料", "materials"),
+        ("物料", "materials"),
+        ("出货", "shipment_records"),
+        ("发货", "shipment_records"),
+        ("发货单", "shipment_records"),
+        ("无关键词", "products"),
+        ("", "products"),
+    ],
+)
+def test_business_db_entity_detection(text, entity):
+    assert _infer_business_db_entity(text) == entity
 
 
 class TestExtractBusinessDbWriteNode:
     """_extract_business_db_write_node 分支覆盖。"""
 
-    def test_customers_with_unit_name(self) -> None:
-        node = _extract_business_db_write_node("新增客户：七彩乐园")
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "新增客户：七彩乐园",
+            "请新增客户“七彩乐园”，其他可选字段留空。当前是手动模式，请等待人工批准后执行，返回实际客户ID。",
+        ],
+    )
+    def test_customers_with_unit_name(self, message: str) -> None:
+        node = _extract_business_db_write_node(message)
         assert node is not None
         assert node.tool_id == "business_db"
         assert node.action == "write"
@@ -194,15 +147,25 @@ class TestExtractBusinessDbWriteNode:
         assert node.params["payload"]["unit_name"] == "CHATCRUD-TEST-涂料门店"
         assert node.params["payload"]["contact_person"] == "张三"
 
-    def test_customer_explicit_name_label_does_not_leak_into_value(self) -> None:
+    @pytest.mark.parametrize(
+        "name,quotes",
+        [
+            ("安装验收客户-20260822-0112", ""),
+            ("WIN-GUI-36779224876-1-business-AI客户", "“”"),
+            ("客户到数据库", "「」"),
+            ("创建方客户", '""'),
+            ("甲,乙客户", "''"),
+        ],
+    )
+    def test_customer_explicit_name_label_does_not_leak_into_value(self, name, quotes) -> None:
         node = _extract_business_db_write_node(
-            "请新建一个测试客户。客户名称：安装验收客户-20260822-0112；"
+            f"请新建一个测试客户。客户名称：{quotes[:1]}{name}{quotes[1:]}；"
             "联系人：最终验收；联系电话：13800000112；地址：成都市最终验收路112号。"
         )
 
         assert node is not None
-        assert node.params["payload"]["unit_name"] == "安装验收客户-20260822-0112"
-        assert node.params["payload"]["customer_name"] == "安装验收客户-20260822-0112"
+        assert node.params["payload"]["unit_name"] == name
+        assert node.params["payload"]["customer_name"] == name
         assert node.params["payload"]["contact_person"] == "最终验收"
         assert node.params["payload"]["contact_phone"] == "13800000112"
         assert node.params["payload"]["contact_address"] == "成都市最终验收路112号"
@@ -232,6 +195,45 @@ class TestExtractBusinessDbWriteNode:
 
         assert node is not None
         assert node.params["payload"]["product_name"] == "安装验收产品-0112"
+
+    @pytest.mark.parametrize("label", ["产品名称", "商品名称", "产品名", "商品名", "产品", "商品"])
+    @pytest.mark.parametrize("separator", ["是", "："])
+    def test_shipment_product_label_is_not_saved_as_name(self, label, separator) -> None:
+        node = _extract_business_db_write_node(
+            f"请创建出货记录，客户名称是Mac验收客户-31611A88，{label}{separator}验收商品，"
+            "型号MAC-31611A88，数量2箱，规格10kg/箱，单价12.5元/千克。需要人工审批。"
+        )
+        assert node is not None
+        assert node.params["payload"]["products"][0]["product_name"] == "验收商品"
+
+    @pytest.mark.parametrize(
+        "amounts", ["数量20公斤，桶数2桶", "桶数2桶，数量20公斤", "数量20kg，桶数2"]
+    )
+    def test_shipment_explicit_tins_and_name_survive_weight_and_model(self, amounts) -> None:
+        node = _extract_business_db_write_node(
+            "创建出货单，客户名称为Mac验收客户，产品型号MAC-TEST，"
+            f"产品名称为验收涂料，{amounts}，规格10公斤/桶，单价12.5。必须人工审批。"
+        )
+        assert node is not None
+        assert node.params["payload"]["products"] == [
+            {
+                "product_name": "验收涂料",
+                "name": "验收涂料",
+                "quantity_tins": 2,
+                "model_number": "MAC-TEST",
+                "tin_spec": 10.0,
+                "unit_price": 12.5,
+            }
+        ]
+
+    @pytest.mark.parametrize("weight", ["20公斤", "20千克", "20kg", "20斤", "20吨", "20g"])
+    def test_shipment_weight_without_tins_is_not_a_complete_write(self, weight) -> None:
+        assert (
+            _extract_business_db_write_node(
+                f"创建出货单，客户名称为Mac验收客户，产品名称为验收涂料，数量{weight}，规格10公斤/桶。"
+            )
+            is None
+        )
 
     def test_products_missing_product_name_returns_none(self) -> None:
         # "产品数据库" → product_name pattern captures "数据库" → cleaned to "" (数据库 token replaced)
@@ -441,102 +443,45 @@ class TestFilterToolRegistryForProfile:
 class TestValidateRequiredParams:
     """LLMWorkflowPlanner._validate_required_params 分支覆盖。"""
 
-    def test_valid_plan_no_error(self) -> None:
+    @pytest.mark.parametrize(
+        "tool,params,spec,expected_error",
+        [
+            (
+                "products",
+                {"keyword": "x"},
+                {"actions": {"query": {"required_params": ["keyword"]}}},
+                False,
+            ),
+            ("products", {}, {"actions": {"query": {"required_params": ["keyword"]}}}, True),
+            (
+                "products",
+                {"keyword": "  "},
+                {"actions": {"query": {"required_params": ["keyword"]}}},
+                True,
+            ),
+            (
+                "products",
+                {"keyword": None},
+                {"actions": {"query": {"required_params": ["keyword"]}}},
+                True,
+            ),
+            ("unknown", {}, {"actions": {"query": {"required_params": ["keyword"]}}}, False),
+            ("products", {}, "not a dict", False),
+            ("products", {}, {"actions": "not a dict"}, False),
+            ("products", {}, {"actions": {"query": "not a dict"}}, False),
+            ("products", {}, {"actions": {"query": {"required_params": "not a list"}}}, False),
+        ],
+    )
+    def test_required_params(self, tool, params, spec, expected_error):
         plan = PlanGraph(
             plan_id="p1",
             intent="test",
-            nodes=[
-                WorkflowNode(
-                    node_id="n1", tool_id="products", action="query", params={"keyword": "x"}
-                )
-            ],
+            nodes=[WorkflowNode(node_id="n1", tool_id=tool, action="query", params=params)],
         )
-        registry = {"products": {"actions": {"query": {"required_params": ["keyword"]}}}}
-        assert LLMWorkflowPlanner._validate_required_params(plan, registry) is None
-
-    def test_missing_required_param_returns_error(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="products", action="query", params={})],
-        )
-        registry = {"products": {"actions": {"query": {"required_params": ["keyword"]}}}}
-        err = LLMWorkflowPlanner._validate_required_params(plan, registry)
-        assert err is not None
-        assert "keyword" in err
-
-    def test_empty_required_param_value_returns_error(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[
-                WorkflowNode(
-                    node_id="n1", tool_id="products", action="query", params={"keyword": "  "}
-                )
-            ],
-        )
-        registry = {"products": {"actions": {"query": {"required_params": ["keyword"]}}}}
-        err = LLMWorkflowPlanner._validate_required_params(plan, registry)
-        assert err is not None
-
-    def test_none_required_param_value_returns_error(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[
-                WorkflowNode(
-                    node_id="n1", tool_id="products", action="query", params={"keyword": None}
-                )
-            ],
-        )
-        registry = {"products": {"actions": {"query": {"required_params": ["keyword"]}}}}
-        err = LLMWorkflowPlanner._validate_required_params(plan, registry)
-        assert err is not None
-
-    def test_unknown_tool_skipped(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="unknown", action="query", params={})],
-        )
-        registry = {"products": {"actions": {"query": {"required_params": ["keyword"]}}}}
-        assert LLMWorkflowPlanner._validate_required_params(plan, registry) is None
-
-    def test_non_dict_tool_spec_skipped(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="products", action="query", params={})],
-        )
-        registry = {"products": "not a dict"}
-        assert LLMWorkflowPlanner._validate_required_params(plan, registry) is None
-
-    def test_non_dict_actions_skipped(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="products", action="query", params={})],
-        )
-        registry = {"products": {"actions": "not a dict"}}
-        assert LLMWorkflowPlanner._validate_required_params(plan, registry) is None
-
-    def test_non_dict_action_meta_skipped(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="products", action="query", params={})],
-        )
-        registry = {"products": {"actions": {"query": "not a dict"}}}
-        assert LLMWorkflowPlanner._validate_required_params(plan, registry) is None
-
-    def test_non_list_required_params_treated_as_empty(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="products", action="query", params={})],
-        )
-        registry = {"products": {"actions": {"query": {"required_params": "not a list"}}}}
-        assert LLMWorkflowPlanner._validate_required_params(plan, registry) is None
+        error = LLMWorkflowPlanner._validate_required_params(plan, {"products": spec})
+        assert (error is not None) is expected_error
+        if expected_error and not params:
+            assert "keyword" in error
 
     def test_empty_nodes_no_error(self) -> None:
         plan = PlanGraph(plan_id="p1", intent="test", nodes=[])
@@ -607,29 +552,34 @@ class TestFallbackPlan:
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "新增产品", {"customers": {}, "products": {}})
         assert plan.intent == "add_product_to_unit"
-        assert len(plan.nodes) == 2
-        assert plan.nodes[0].tool_id == "customers"
-        assert plan.nodes[1].tool_id == "products"
-        assert plan.nodes[1].depends_on == ["check_or_create_unit"]
+        assert len(plan.nodes) == 3
+        assert plan.nodes[0].tool_id == "clarify"
+        assert [node.tool_id for node in plan.nodes[1:]] == ["customers", "products"]
+        assert plan.nodes[2].depends_on == ["check_or_create_unit"]
 
     def test_generic_fallback_products(self) -> None:
+        # 2026-09 起未命中意图不再静默 products.query，而是 clarify.ask。
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "随便看看", {"products": {}})
-        assert plan.intent == "generic_workflow"
-        assert plan.nodes[0].tool_id == "products"
-        assert plan.nodes[0].action == "query"
+        assert plan.intent == "clarify_ask"
+        assert plan.nodes[0].tool_id == "clarify"
+        assert plan.nodes[0].action == "ask"
 
     def test_generic_fallback_customers(self) -> None:
+        # 客户类查询命中 #1815 确定性读取路由（customer_read_node 优先），
+        # intent 为 customers_query；intent_route_* 兜底只服务无专用路由的域。
         planner = self._make_planner()
-        plan = planner._fallback_plan("p1", "随便看看", {"customers": {}})
-        assert plan.intent == "generic_workflow"
+        plan = planner._fallback_plan("p1", "客户列表", {"customers": {}})
+        assert plan.intent == "customers_query"
         assert plan.nodes[0].tool_id == "customers"
 
     def test_generic_fallback_empty_registry(self) -> None:
+        # 空注册表时 clarify 节点仍产出（意图未命中），不再返回空节点图。
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "随便看看", {})
-        assert plan.intent == "generic_workflow"
-        assert len(plan.nodes) == 0
+        assert plan.intent == "clarify_ask"
+        assert len(plan.nodes) == 1
+        assert plan.nodes[0].tool_id == "clarify"
 
     def test_risk_level_high(self) -> None:
         planner = self._make_planner()

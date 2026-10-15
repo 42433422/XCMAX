@@ -2,6 +2,7 @@
 
 import json
 import os
+import runpy
 from pathlib import Path
 
 import setuptools
@@ -32,6 +33,7 @@ def add_data(relative_path: str):
 for required_resource in (
     "resources/fonts/NotoSansSC-Regular.ttf",
     "resources/fonts/OFL-NotoSansSC.txt",
+    "resources/templates/标准发货单.xlsx",
 ):
     if not (ROOT / required_resource).is_file():
         raise FileNotFoundError(f"missing required label font resource: {required_resource}")
@@ -55,14 +57,14 @@ for item in [
 ]:
     datas.extend(add_data(item))
 
-_staged_mods = (os.environ.get("XCAGI_STAGED_MODS_DIR") or "").strip()
-if _staged_mods and Path(_staged_mods).is_dir():
-    datas.append((str(Path(_staged_mods).resolve()), "mods"))
-    _sku_file = Path(_staged_mods).parent.parent / "build" / "product-sku.json"
-    if _sku_file.is_file():
-        datas.append((str(_sku_file.resolve()), "."))
-else:
-    datas.extend(add_data("mods"))
+_bundle_policy = runpy.run_path(str(ROOT / "scripts/package/bundled_mod_policy.py"))
+_staged_mods = _bundle_policy["validated_staged_mods"](
+    (os.environ.get("XCAGI_STAGED_MODS_DIR") or "").strip()
+)
+datas.append((str(_staged_mods), "mods"))
+_sku_file = _staged_mods.parent.parent / "build" / "product-sku.json"
+if _sku_file.is_file():
+    datas.append((str(_sku_file.resolve()), "."))
 
 # PyInstaller flattens vendored Python packages into its signed ``_MEIPASS``
 # runtime tree. Preserve the audited provenance records separately so the
@@ -101,6 +103,7 @@ for module in [
     "app.fastapi_app",
     "app.fastapi_routes",
     "app.legacy.routes",
+    "app.legacy.lan",
     "app.db",
     "app.db.models",
     "app.middleware",
@@ -140,6 +143,26 @@ hiddenimports.extend(
         "app.services.xcmax_sync_basic_appliers",
         "app.services.xcmax_sync_extended_appliers",
         "app.runtime_integrity",
+    ]
+)
+
+# Mods reach host services through the string-keyed map in
+# app.mod_sdk.host_services, and some routes import modules through
+# importlib literals; PyInstaller's static analysis cannot see either, so the
+# frozen desktop backend answered ModuleNotFoundError at request time (the LAN
+# bridge status route 500ed on macOS and Windows 1.0.0.5). Coverage of this
+# dynamic surface is enforced by
+# tests/test_mod_sdk/test_frozen_dynamic_import_coverage.py.
+hiddenimports.extend(
+    [
+        "app.application.employee_circle_sync",
+        "app.application.user_cs_demand_intake_bridge",
+        "app.services.service_contract_fill",
+        "app.services.user_cs_connected_welcome",
+        "app.services.user_cs_delivery",
+        "app.services.user_cs_enterprise_credentials",
+        "app.services.user_cs_landing_crm",
+        "app.services.user_cs_software_delivery",
     ]
 )
 
@@ -223,7 +246,6 @@ desktop_excludes = [
     "numba",
     "onnxruntime",
     "OpenGL",
-    "opentelemetry",
     "patsy",
     "plotly",
     "playwright",

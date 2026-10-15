@@ -45,7 +45,9 @@ async def mobile_service_bridge_request_respond(
                 )
             req.response = body.response
             req.responded_by = body.responded_by
-            req.responded_at = _facade().datetime.utcnow()
+            from app.utils.time import utc_now_naive
+
+            req.responded_at = utc_now_naive()
             req.status = body.status
             db.flush()
         return _facade().format_mobile_response(data=req.to_dict())
@@ -66,8 +68,26 @@ async def mobile_service_bridge_request_respond(
 
 
 @_facade().extension_router.post("/relay/desktop/register")
-async def mobile_relay_desktop_register(body: _facade().RelayDesktopRegisterBody):
+async def mobile_relay_desktop_register(
+    body: _facade().RelayDesktopRegisterBody, request: _facade().Request
+):
     """Desktop runtime registers a long-lived cloud relay binding session."""
+    if not body.device_id.strip():
+        return _facade().JSONResponse(
+            _facade().format_mobile_response(None, "设备身份无效", success=False, code=400),
+            status_code=400,
+        )
+    from app.security.lan_ip import get_client_ip
+
+    trusted = _facade().os.environ.get("LAN_TRUSTED_PROXIES", "").split(",")
+    ip = get_client_ip(request.scope, trusted)
+    if not ip or not _facade()._pairing_rate_allowed(
+        ip, "mobile-relay-desktop-register", 100, 86400
+    ):
+        return _facade().JSONResponse(
+            _facade().format_mobile_response(None, "注册过于频繁", success=False, code=429),
+            status_code=429,
+        )
     try:
         data = (
             _facade()
@@ -88,21 +108,70 @@ async def mobile_relay_desktop_register(body: _facade().RelayDesktopRegisterBody
         )
 
 
+@_facade().extension_router.post("/relay/desktop/renew")
+async def mobile_relay_desktop_renew(
+    body: _facade().RelayDesktopRenewBody, request: _facade().Request
+):
+    from app.security.lan_ip import get_client_ip
+
+    trusted = _facade().os.environ.get("LAN_TRUSTED_PROXIES", "").split(",")
+    ip = get_client_ip(request.scope, trusted)
+    if not ip or not _facade()._pairing_rate_allowed(ip, "mobile-relay-desktop-renew", 1000, 86400):
+        return _facade().JSONResponse(
+            _facade().format_mobile_response(None, "刷新过于频繁", success=False, code=429),
+            status_code=429,
+        )
+    try:
+        data = (
+            _facade()
+            .MobileRelayService()
+            .renew_desktop_pairing(relay_id=body.relay_id, desktop_token=body.desktop_token)
+        )
+        if data:
+            return _facade().format_mobile_response(data=data)
+        return _facade().JSONResponse(
+            _facade().format_mobile_response(None, "设备不存在或已撤销", success=False, code=404),
+            status_code=404,
+        )
+    except _facade().RECOVERABLE_ERRORS:
+        _facade().logger.exception("mobile_relay_desktop_renew")
+        return _facade().JSONResponse(
+            _facade().format_mobile_response(None, "设备码刷新失败", success=False, code=500),
+            status_code=500,
+        )
+
+
 @_facade().extension_router.post("/relay/mobile/bind-account")
 async def mobile_relay_bind_account(
     body: _facade().RelayMobileBindAccountBody, user=_facade().Depends(_facade().get_mobile_user)
 ):
     uid, username = _facade()._mobile_user_identity(user)
-    if uid <= 0:
+    if uid <= 0 or not getattr(user, "is_active", False):
         return _facade().JSONResponse(
             _facade().format_mobile_response(None, "未授权", success=False, code=401),
             status_code=401,
+        )
+    code = body.pairing_code.strip()
+    if len(code) != 6 or not code.isdigit():
+        return _facade().JSONResponse(
+            _facade().format_mobile_response(None, "设备码无效", success=False, code=400),
+            status_code=400,
+        )
+    if not _facade()._pairing_rate_allowed(str(uid), "mobile-relay-pairing-code", 5, 3600):
+        return _facade().JSONResponse(
+            _facade().format_mobile_response(None, "尝试过多，请稍后重试", success=False, code=429),
+            status_code=429,
         )
     try:
         desktop = (
             _facade()
             .MobileRelayService()
-            .bind_mobile_by_account(user_id=uid, username=username, relay_id=body.relay_id)
+            .bind_mobile_by_account(
+                user_id=uid,
+                username=username,
+                relay_id=body.relay_id,
+                pairing_code=body.pairing_code,
+            )
         )
         if not desktop:
             return _facade().JSONResponse(

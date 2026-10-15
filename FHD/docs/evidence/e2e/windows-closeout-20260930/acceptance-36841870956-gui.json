@@ -1,0 +1,57 @@
+{
+  "mode": "Gui",
+  "candidate_sha": "5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30",
+  "candidate_on_main": true,
+  "customer_acceptance": "not_verified",
+  "started_at": "2026-10-01T09:20:14.7057118Z",
+  "checks": [
+    {
+      "passed": true,
+      "detail": "fresh user data and install path",
+      "name": "isolated_runner"
+    },
+    {
+      "passed": true,
+      "detail": "no prior daily task",
+      "name": "isolated_tasks"
+    },
+    {
+      "passed": true,
+      "detail": "exit=0",
+      "name": "candidate.install"
+    },
+    {
+      "passed": true,
+      "detail": "installed executable exists; build_info={\"version\":\"1.0.0.5\",\"schema_version\":1,\"gitSha\":\"5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30\",\"releaseId\":\"xcagi-1.0.0.5-5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30\"}\n",
+      "name": "candidate.exe"
+    },
+    {
+      "passed": true,
+      "detail": "health=healthy; blockers=0; readyForUi=True; pid=8304",
+      "name": "candidate.first_start_ready"
+    },
+    {
+      "passed": true,
+      "detail": "installed=5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30; running=5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30; legacy_health_identity_missing=False; release=xcagi-1.0.0.5-5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30",
+      "name": "candidate.runtime_build_identity"
+    },
+    {
+      "passed": true,
+      "detail": "pid=3808; exe=D:\\a\\_temp\\xcagi-candidate-Gui\\resources\\backend\\xcagi-backend.exe; actual_data=C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI; expected_data=C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI",
+      "name": "candidate.port_owner"
+    },
+    {
+      "passed": true,
+      "detail": "original pid=8304",
+      "name": "candidate.no_restart"
+    },
+    {
+      "passed": true,
+      "detail": "normal UI must save and read back actual business records",
+      "name": "normal_gui_business"
+    }
+  ],
+  "result": "gui_regression_passed",
+  "candidate_sha256": "a9001626f0ad57fb7756cc66528b5f49286a60e151e6dfad5a91456d864798cf",
+  "finished_at": "2026-10-01T09:23:13.0202320Z"
+}

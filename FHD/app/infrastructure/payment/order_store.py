@@ -11,21 +11,18 @@ from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_data_dir
 
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 
 
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
 def order_store_path() -> Path:
     custom = (os.environ.get("MODEL_PAYMENT_ORDER_STORE_PATH") or "").strip()
     if custom:
         return Path(custom)
-    return _repo_root() / "data" / "model_payment_orders.json"
+    return Path(get_data_dir()) / "model_payment_orders.json"
 
 
 def _utc_iso() -> str:
@@ -247,6 +244,16 @@ def get_entitlement(plan_id: str) -> dict[str, Any] | None:
     if isinstance(record, dict):
         return dict(record)
     return None
+
+
+def list_orders() -> list[dict[str, Any]]:
+    """本地订单记录快照（按创建时间升序）。"""
+    with _lock:
+        data = _load()
+    orders = data.get("orders")
+    items = [dict(v) for v in (orders or {}).values() if isinstance(v, dict)]
+    items.sort(key=lambda r: str(r.get("created_at") or ""))
+    return items
 
 
 def get_order(out_trade_no: str) -> dict[str, Any] | None:

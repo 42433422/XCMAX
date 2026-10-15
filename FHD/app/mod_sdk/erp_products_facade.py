@@ -44,6 +44,7 @@ def _map_create_body(body: dict[str, Any]) -> dict[str, Any]:
     if not mn:
         mn = _norm_model("", name, spec)
     price = body.get("unit_price", body.get("price", 0))
+    price = 0 if price == "" else price
     return {
         "name": name,
         "specification": spec,
@@ -133,6 +134,8 @@ def products_add(request: Request | None, body: dict[str, Any]) -> dict[str, Any
         raise HTTPException(status_code=400, detail=result.get("message") or "添加失败")
     data = result.get("data") or {}
     pid = data.get("id") if isinstance(data, dict) else getattr(data, "id", None)
+    if pid is None:
+        pid = result.get("product_id")
     return {
         "success": True,
         "data": {"id": int(pid) if pid is not None else None},
@@ -155,6 +158,8 @@ def products_update(request: Request | None, body: dict[str, Any]) -> dict[str, 
         raise HTTPException(status_code=400, detail="产品名称不能为空")
     payload = dict(body)
     payload.pop("id", None)
+    if payload.get("price") == "":
+        payload["price"] = 0
     result = _service().update_product(pid, payload)
     if not result.get("success"):
         raise HTTPException(status_code=404, detail=result.get("message") or "产品不存在")

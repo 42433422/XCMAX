@@ -1,0 +1,8 @@
+[14:29:03] feature=pay-wallet platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-wallet
+[14:29:15] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[14:29:17] case W1: passed - 模型用量计费条目真实读取
+[14:29:18] case W2: passed - 模型权益清单真实读取
+[14:29:21] case W3: passed - 钱包余额与流水真实读取
+[14:29:22] case W4: passed - 下单未知套餐被拒（负例/边界）
+[14:29:22] video: pay-wallet-web-20260929-142903.webm (1271800 bytes)
+[14:29:22] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-wallet/log/pay-wallet-web-20260929-142903.log

@@ -139,7 +139,7 @@ def test_agent_tool_executor_restores_durable_runtime_tenant_scope():
     mock_execute.assert_called_once()
 
 
-@pytest.mark.parametrize("tenant_id", [True, 0, -1, "not-a-tenant"])
+@pytest.mark.parametrize("tenant_id", [True, 0, -1, 1.5, "1.5", "not-a-tenant"])
 def test_agent_tool_executor_rejects_invalid_runtime_tenant_scope(tenant_id):
     from app.application.agent_orchestrator.run_models import AgentStep
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
@@ -158,6 +158,34 @@ def test_agent_tool_executor_rejects_invalid_runtime_tenant_scope(tenant_id):
     assert result["success"] is False
     assert result["error_code"] == "invalid_tenant_context"
     mock_execute.assert_not_called()
+
+
+@pytest.mark.parametrize("tenant_id", [7, "7", True, 1.5, "invalid"])
+def test_inventory_tool_restores_and_validates_runtime_tenant(tenant_id):
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    seen = []
+
+    def execute(*args):
+        seen.append(current_tenant_id())
+        return {"success": True}
+
+    step = AgentStep(
+        node_id="in",
+        tool_id="inventory",
+        action="stock_in",
+        params={"product_id": 1, "warehouse_id": 2, "quantity": 50},
+    )
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", side_effect=execute
+    ):
+        result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": tenant_id})
+    valid = tenant_id in (7, "7")
+    assert result["success"] is valid
+    assert seen == ([7] if valid else [])
+    assert current_tenant_id() == 1
 
 
 def test_agent_tool_executor_preserves_opaque_dataset_tenant_key():
@@ -828,7 +856,8 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
                     "operation": "create",
                     "payload": {
                         "unit_name": "新手演示客户",
-                        "products": [{"name": "新手演示商品", "qty": 1}],
+                        "products": [{"product_name": "新手演示商品", "quantity_tins": 1}],
+                        "product_source_node": "find_product",
                     },
                 },
                 risk="medium",
@@ -845,7 +874,12 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
             return {"success": True, "data": [{"customer_id": 10}]}
         if node_id == "find_product":
             assert outputs["find_customer"]["data"][0]["customer_id"] == 10
-            return {"success": True, "data": [{"product_id": 20}]}
+            return {
+                "success": True,
+                "data": [
+                    {"product_id": 20, "name": "新手演示商品", "specification": 1, "price": 99}
+                ],
+            }
         assert outputs["find_product"]["data"][0]["product_id"] == 20
         return {"success": True, "data": {"shipment_id": 30}}
 
@@ -862,6 +896,10 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
             runtime_context={"source": "first-order-acceptance"},
         )
         assert waiting.status == "waiting_user"
+        payload = waiting.steps[-1].params["payload"]
+        assert "product_source_node" not in payload
+        assert payload["products"][0]["tin_spec"] == 1
+        assert payload["products"][0]["unit_price"] == 99
         assert [call.node_id for call in waiting.tool_calls] == ["find_customer", "find_product"]
         run = orchestrator.continue_run(waiting.run_id, approved_by="u1")
 

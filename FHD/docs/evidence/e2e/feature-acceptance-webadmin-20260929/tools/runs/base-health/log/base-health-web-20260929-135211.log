@@ -1,0 +1,9 @@
+[13:52:11] feature=base-health platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-health
+[13:52:23] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:52:24] case H1: passed - 主健康探针真实应答
+[13:52:24] case H2: passed - k8s liveness 探针真实应答
+[13:52:24] case H3: passed - k8s readiness 探针真实应答
+[13:52:26] case H4: passed - k8s details 探针真实应答
+[13:52:28] case H5: passed - 不存在的探针路径不静默回退（负例/边界）
+[13:52:29] video: base-health-web-20260929-135211.webm (1187292 bytes)
+[13:52:29] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-health/log/base-health-web-20260929-135211.log

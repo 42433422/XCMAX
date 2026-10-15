@@ -187,6 +187,14 @@ async def api_register_workflow_employee_catalog(
                 pack_id=pack_id,
                 version=str(saved.get("version") or rec["version"]),
             )
+            # 登记入口的包已通过五维审核，与上传入口的 public_listing 语义一致：
+            # 必须在 catalog_items 置为公开，否则 /v1/packages 只认 is_public 行会把它隐藏。
+            from modstore_server.models import CatalogItem as _CatalogItemRow
+
+            row = db.query(_CatalogItemRow).filter(_CatalogItemRow.pkg_id == pack_id).first()
+            if row is not None:
+                row.is_public = True
+                row.compliance_status = "approved"
             db.commit()
             readiness = analyze_mod_employee_readiness(db, user, d)
     finally:

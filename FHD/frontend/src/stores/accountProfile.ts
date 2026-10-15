@@ -6,6 +6,7 @@ import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { refreshTenantScopedClientStores } from '@/utils/refreshTenantScopedClientStores'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import type { TenantStorageScopeInput } from '@/utils/tenantStorageScope'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 function buildScopeInput(
   tenantId: number | null,
@@ -32,10 +33,13 @@ async function syncTenantScopedStoresFromProfile(
 ): Promise<void> {
   const input = buildScopeInput(tenantId, marketUserId, localUserId, accountKind, marketUsername)
   setRuntimeTenantStorageScopeInput(input)
-  await refreshTenantScopedClientStores(input)
+  const refreshing = refreshTenantScopedClientStores(input)
+  const epoch = productReadAccountEpoch.value
+  await refreshing
+  if (epoch !== productReadAccountEpoch.value) throw new Error('登录工作空间已改变，请重试')
   if (tenantId !== null || localUserId !== null || marketUserId !== null) {
     const { useIndustryStore } = await import('@/stores/industry')
-    await useIndustryStore().loadFromServer()
+    await useIndustryStore().loadFromServer(accountKind !== 'admin')
   }
 }
 
@@ -56,7 +60,13 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   const budgetRange = ref('')
   const entitledIndustries = ref<string[]>([])
   const marketMembershipTier = ref<string | null>(null)
+  const permissions = ref<string[]>([])
+  const tenantIsOwner = ref(false)
+  const userRole = ref('')
   const loaded = ref(false)
+  const workspaceEpoch = ref(-1)
+  const workspaceReady = computed(() => loaded.value && workspaceEpoch.value === productReadAccountEpoch.value)
+  let hydrationEpoch = 0
 
   const isAdminAccount = computed(() => accountKind.value === 'admin' && marketIsAdmin.value)
 
@@ -69,6 +79,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   })
 
   function applySessionFields(data: Record<string, unknown>): Promise<void> {
+    const epoch = ++hydrationEpoch
     const kind = String(data.account_kind || 'enterprise').trim()
     if (kind === 'personal' || kind === 'enterprise' || kind === 'admin') {
       accountKind.value = kind
@@ -76,8 +87,12 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     companyBrand.value = String(data.company_brand || '').trim()
     marketIsAdmin.value = Boolean(data.market_is_admin)
     marketIsEnterprise.value = Boolean(data.market_is_enterprise)
-    const tid = data.tenant_id
-    tenantId.value = tid === null || tid === undefined || tid === '' ? null : Number(tid)
+    // 会话校验与登录等局部载荷不含租户/权限键；缺失键必须保留已知状态，否则会把设置页里
+    // 依赖权限的入口（如「角色与权限」）清掉（显式 null 仍然表示“无”）。
+    if ('tenant_id' in data) {
+      const tid = data.tenant_id
+      tenantId.value = tid === null || tid === undefined || tid === '' ? null : Number(tid)
+    }
     tenantName.value = String(data.tenant_name || data.company_brand || '').trim()
     const mid = data.market_user_id
     marketUserId.value = mid === null || mid === undefined || mid === '' ? null : Number(mid)
@@ -102,6 +117,11 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     entitledIndustries.value = Array.isArray(data.entitled_industries) ? (data.entitled_industries as unknown[]).map((x) => String(x)) : []
     const mmt = data.market_membership_tier
     marketMembershipTier.value = mmt === null || mmt === undefined || mmt === '' ? null : String(mmt).trim()
+    if (Array.isArray(data.permissions)) permissions.value = (data.permissions as unknown[]).map(String)
+    if ('tenant_is_owner' in data) tenantIsOwner.value = data.tenant_is_owner === true
+    const nestedUser = data.user
+    userRole.value = nestedUser && typeof nestedUser === 'object' && !Array.isArray(nestedUser)
+      ? String((nestedUser as Record<string, unknown>).role || '') : ''
     loaded.value = true
     return syncTenantScopedStoresFromProfile(
       tenantId.value,
@@ -109,7 +129,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
       localUserId.value,
       accountKind.value,
       impersonatingUsername.value,
-    )
+    ).then(() => { if (epoch === hydrationEpoch) workspaceEpoch.value = productReadAccountEpoch.value })
   }
 
   function applyFromMeData(data: Record<string, unknown> | null | undefined): Promise<void> {
@@ -123,6 +143,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   }
 
   async function refreshFromServer() {
+    let requestEpoch = hydrationEpoch
     try {
       let sku = 'generic'
       try {
@@ -132,25 +153,35 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
       }
       if (isEnterpriseEdition(sku)) {
         const valid = await validateEnterpriseSessionCached()
+        if (requestEpoch !== hydrationEpoch) return
         if (!valid) {
           clear()
           return
         }
       }
       const res = await authApi.getCurrentUser()
+      if (requestEpoch !== hydrationEpoch) return
       if (res?.success && res.data) {
-        await applyFromMeData(res.data as Record<string, unknown>)
+        const hydration = applyFromMeData(res.data as Record<string, unknown>)
+        requestEpoch = hydrationEpoch
+        await hydration
         return
       }
       invalidateEnterpriseSessionCache()
       clear()
-    } catch {
+    } catch (error) {
+      if (requestEpoch !== hydrationEpoch) return
+      // 仅当服务端明确判定会话失效（401/403）才清空资料；超时/被取代/网络抖动属瞬时失败，清空会隐藏依赖权限的入口。
+      const status = (error as { status?: unknown } | null | undefined)?.status
+      if (status !== 401 && status !== 403) return
       invalidateEnterpriseSessionCache()
       clear()
     }
   }
 
-  function clear() {
+  function clear(hydrate = true) {
+    hydrationEpoch++
+    workspaceEpoch.value = -1
     accountKind.value = 'enterprise'
     companyBrand.value = ''
     marketIsAdmin.value = false
@@ -166,9 +197,12 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     budgetRange.value = ''
     entitledIndustries.value = []
     marketMembershipTier.value = null
+    permissions.value = []
+    tenantIsOwner.value = false
+    userRole.value = ''
     loaded.value = false
     setRuntimeTenantStorageScopeInput(null)
-    refreshTenantScopedClientStores({ tenantId: null, accountKind: 'enterprise' })
+    void refreshTenantScopedClientStores({ tenantId: null, accountKind: 'enterprise' }, hydrate)
   }
 
   return {
@@ -187,7 +221,11 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     budgetRange,
     entitledIndustries,
     marketMembershipTier,
+    permissions,
+    tenantIsOwner,
+    userRole,
     loaded,
+    workspaceReady,
     isAdminAccount,
     isImpersonating,
     displayBrand,

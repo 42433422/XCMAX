@@ -168,21 +168,15 @@ class MobileRelayService(MobileRelayPairingMixin, MobileRelayTaskMixin):
                 "relay task completion push failed task_id=%s", task.get("task_id"), exc_info=True
             )
 
-    def _fresh_pairing_code(self) -> str:
-        with get_db() as db:
-            self.ensure_tables(db)
-            for _ in range(100):
-                code = str(secrets.randbelow(900000) + 100000)
-                exists = (
-                    db.execute(
-                        text("SELECT 1 FROM mobile_relay_desktops WHERE pairing_code = :code"),
-                        {"code": code},
-                    ).first()
-                    is not None
-                )
-                if not exists:
-                    return code
-        return str(secrets.randbelow(900000) + 100000)
+    def _fresh_pairing_code(self, db) -> str:
+        for _ in range(100):
+            code = str(secrets.randbelow(900000) + 100000)
+            if not db.execute(
+                text("SELECT 1 FROM mobile_relay_desktops WHERE pairing_code = :code"),
+                {"code": code},
+            ).first():
+                return code
+        raise RuntimeError("No unused relay pairing code is available")
 
     def _desktop_belongs_to_user(self, *, user_id: int, relay_id: str) -> bool:
         with get_db() as db:

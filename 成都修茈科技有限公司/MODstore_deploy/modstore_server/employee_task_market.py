@@ -19,6 +19,7 @@ from sqlalchemy import func
 
 from modstore_server.code_ownership import resolve_incident_ownership
 from modstore_server.employee_executor import execute_employee_task
+from modstore_server.incident_bus import _incident_payload as _payload
 from modstore_server.models import (
     CatalogItem,
     EmployeeExecutionMetric,
@@ -51,14 +52,6 @@ def _admin_user_id(session) -> int:
         return int(row.id)
     row = session.query(User).order_by(User.id.asc()).first()
     return int(row.id) if row else 0
-
-
-def _payload(row: IncidentEvent) -> Dict[str, Any]:
-    try:
-        data = json.loads(row.payload_json or "{}")
-        return data if isinstance(data, dict) else {}
-    except json.JSONDecodeError:
-        return {}
 
 
 def _incident_priority(event_type: str, payload: Dict[str, Any]) -> int:
@@ -367,7 +360,7 @@ def dispatch_incident_via_market(event_id: int) -> Dict[str, Any]:
                 "score": chosen.get("score"),
                 "scope": ranked.get("scope"),
             }
-            ev2.payload_json = json.dumps(updated_payload, ensure_ascii=False)[:8000]
+            ev2.payload_json = json.dumps(updated_payload, ensure_ascii=False)
             ev2.dispatched_count = int(ev2.dispatched_count or 0) + 1
             session.commit()
     return {

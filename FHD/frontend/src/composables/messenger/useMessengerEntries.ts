@@ -228,10 +228,13 @@ export function avatarText(name: string): string {
   return s ? s.slice(0, 1).toUpperCase() : '?'
 }
 
+/** IM 后端以不带时区的 UTC ISO 返回时间戳 */
+const NAIVE_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/
+
 export function formatTime(iso: string | null): string {
   if (!iso) return ''
   try {
-    return new Date(iso).toLocaleString()
+    return new Date(NAIVE_ISO.test(iso) ? `${iso}Z` : iso).toLocaleString()
   } catch {
     return iso
   }
@@ -241,6 +244,7 @@ export function dutyContactLabel(channel: string): string {
   const raw = String(channel || '').trim()
   if (raw === 'admin-duty') return '管理端工作台'
   if (raw === 'mobile' || raw === 'mobile-chat') return '手机端会话'
+  if (raw === 'super') return '超级员工调度'
   return raw || '员工通讯录'
 }
 
@@ -294,7 +298,6 @@ export function systemEntryDispatch(entry: SystemEmployeeEntry): string {
   if (isCodexSuperEmployeeEntry(entry)) return '全设备 Codex'
   if (isClaudeSuperEmployeeEntry(entry)) return '全设备 Claude'
   if (isCursorSuperEmployeeEntry(entry)) return '全设备 Cursor'
-  if (entry.api_base_path) return `${dutyContactLabel(entry.phone_channel)} · ${entry.api_base_path}`
   return dutyContactLabel(entry.phone_channel)
 }
 

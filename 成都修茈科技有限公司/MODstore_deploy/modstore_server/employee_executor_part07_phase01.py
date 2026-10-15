@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import importlib
 
+from modstore_server.employee_executor_part03_part01_part02 import (
+    _para_first_skip_cognition,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -176,6 +179,19 @@ def _execute_employee_phase_01(state):
             "input": dict(state["payload"]) if isinstance(state["payload"], dict) else {},
             "reasoning": "",
             "skipped_cognition": True,
+        }
+        state["recovery_meta"] = {}
+    elif _para_first_skip_cognition(
+        state["employee_id"],
+        state["handler_list"],
+        state["payload"] if isinstance(state["payload"], dict) else {},
+    ):
+        state["memory"] = {}
+        state["reasoning"] = {
+            "input": dict(state["payload"]) if isinstance(state["payload"], dict) else {},
+            "reasoning": "",
+            "skipped_cognition": True,
+            "skipped_cognition_reason": "para_first",
         }
         state["recovery_meta"] = {}
     else:

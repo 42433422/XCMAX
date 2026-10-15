@@ -1,0 +1,23 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "customer-chain-onboarding-entry",
+  "industry": "饰品包装",
+  "login_status": 200,
+  "at_utc": "2026-09-21T03:43:21Z",
+  "steps": {
+    "host_pack_step": {
+      "onOnboarding": false,
+      "found": false,
+      "text": "",
+      "disabled": null,
+      "status": "",
+      "hasStrictBlock": false,
+      "hasVendorPending": false,
+      "hasEntered": false,
+      "hash": "#/product-onboarding?step=host-pack&industry=%E9%A5%B0%E5%93%81%E5%8C%85%E8%A3%85",
+      "bodyTail": "饰品包装助手\nSUNBIRD\n智能对话\n考勤工作区\n信息\n智能生态\n知识库\n数据对接中心\n员工工作台\n饰品包装品管理\n原材料仓库\n库存管理\n客户管理\n订单管理\n出货记录\n数据来源\n包装标签打印\n标签模板库\n系统设置\n系统正常\n通用考勤模块\nv1.0.0.5\nSUNBIRD\n智能对话\n副窗\n◈\n工作区\n查产品\n订单\n库存预警\n打印标签\n考勤\n已为您解决 0 次任务 · 预计节约人工费用 ¥0\n\n你好，我是饰品包装助手。\n\n查产品与订单\n管库存与标签\n\n请说出需求。\n\n11:43\n任务\n对话\n新建对话\n清空\n暂无历史\n发送消息后会自动记录在这里\n 新对话\n 审批\n 上传附件\n 解析办公文件\n主动意识启用\n语音播报\n按住说话\n发送\n请输入内容后再发送"
+    }
+  },
+  "verdict": "BLOCKED",
+  "blocking_reason": "未渲染出 onboarding 主按钮（可能未进入配置步）"
+}

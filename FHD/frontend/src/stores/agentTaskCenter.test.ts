@@ -1,3 +1,4 @@
+vi.mock('@/utils/authenticatedEventStream', () => ({ AuthenticatedEventStream: class { constructor(url: string) { return new EventSource(url) } } }))
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -366,4 +367,48 @@ describe('agent task center store', () => {
     store.stop()
     vi.useRealTimers()
   })
+})
+
+it.each(['scope', 'selection'])('discards detail response after %s changes', async (change) => {
+  setActivePinia(createPinia())
+  let resolve!: (value: unknown) => void
+  apiMock.getTask.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+  const store = useAgentTaskCenterStore()
+  const pending = store.openTask('old-task')
+  if (change === 'scope') store.restartForScope()
+  else store.showTaskList()
+  resolve({ success: true, data: { ...task, task_id: 'old-task' } })
+  await pending
+  expect(store.selectedTask).toBeNull()
+  expect(store.selectedTaskId).toBe('')
+})
+
+it('does not submit an approval fetched before a scope switch', async () => {
+  setActivePinia(createPinia())
+  vi.clearAllMocks()
+  apiMock.getTask.mockResolvedValue({ success: true, data: task })
+  let resolve!: (value: unknown) => void
+  apiMock.getRun.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+  const store = useAgentTaskCenterStore()
+  await store.openTask('task-1')
+  const pending = store.control('approve')
+  store.restartForScope()
+  resolve({ success: true, approval: { grant: 'old-grant' } })
+  await pending
+  expect(apiMock.continueRun).not.toHaveBeenCalled()
+  expect(store.actionPending).toBe('')
+})
+
+it('does not apply an old read receipt to a same-id task in a new scope', async () => {
+  setActivePinia(createPinia())
+  let resolve!: (value: unknown) => void
+  apiMock.markTaskRead.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+  const store = useAgentTaskCenterStore()
+  const pending = store.markTaskRead('task-1')
+  store.restartForScope()
+  store.tasks = [{ ...task, title: 'new scope', attention_state: 'result_unread' }]
+  resolve({ success: true, data: { ...task, title: 'old scope', attention_state: '' } })
+  await pending
+  expect(store.tasks[0].title).toBe('new scope')
+  expect(store.tasks[0].attention_state).toBe('result_unread')
 })

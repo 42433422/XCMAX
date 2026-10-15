@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-replenishment",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "e952b3a28ecfc1e3232ec0974d4a86cdbcb819f9f4628fb12bf2fb9473d625fb",
+  "visible_content": "对话中询问补货建议得到 AI 回复，库存预警接口可读；验收账号无库存，预警表为空。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-replenishment/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-replenishment/macos/result.png"
+}

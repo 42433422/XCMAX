@@ -1,4 +1,4 @@
-# 开发环境重启：与仓库根 start-dev.bat 走同一套启动链（xcagi-backend-with-db.cmd → xcagi-backend.cmd）。
+﻿# 开发环境重启：与仓库根 start-dev.bat 走同一套启动链（xcagi-backend-with-db.cmd → xcagi-backend.cmd）。
 # 请勿仅用「python run.py」替代：会跳过 DATABASE_URL / Postgres / CORS 等初始化。
 #
 # Vite :5001 将 /api 代理到 FastAPI :5000（见 frontend/vite.config.js）。

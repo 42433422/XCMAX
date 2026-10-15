@@ -46,7 +46,15 @@ def web_jwt_auth_enabled() -> bool:
     return (os.environ.get("XCAGI_WEB_JWT_AUTH") or "").strip().lower() in ("1", "true", "yes")
 
 
-def _issue(*, user_id: int, username: str, account_kind: str, ttl_hours: int, typ: str) -> str:
+def _issue(
+    *,
+    user_id: int,
+    username: str,
+    account_kind: str,
+    ttl_hours: int,
+    typ: str,
+    session_id: str = "",
+) -> str:
     now = int(time.time())
     payload = {
         "aud": WEB_JWT_AUD,
@@ -59,11 +67,13 @@ def _issue(*, user_id: int, username: str, account_kind: str, ttl_hours: int, ty
         "exp": now + ttl_hours * 3600,
         "jti": uuid.uuid4().hex,
     }
+    if session_id:
+        payload["session_id"] = session_id
     return jwt.encode(payload, _secret_key(), algorithm=WEB_JWT_ALG)
 
 
 def issue_web_tokens(
-    *, user_id: int, username: str = "", account_kind: str = "enterprise"
+    *, user_id: int, username: str = "", account_kind: str = "enterprise", session_id: str = ""
 ) -> dict[str, str]:
     return {
         "access_token": _issue(
@@ -72,6 +82,7 @@ def issue_web_tokens(
             account_kind=account_kind,
             ttl_hours=WEB_ACCESS_TTL_HOURS,
             typ="access",
+            session_id=session_id,
         ),
         "refresh_token": _issue(
             user_id=user_id,
@@ -79,6 +90,7 @@ def issue_web_tokens(
             account_kind=account_kind,
             ttl_hours=WEB_REFRESH_TTL_HOURS,
             typ="refresh",
+            session_id=session_id,
         ),
     }
 
@@ -113,6 +125,7 @@ def refresh_web_access_token(refresh_token: str) -> dict[str, str] | None:
         user_id=int(payload["user_id"]),
         username=str(payload.get("username") or ""),
         account_kind=str(payload.get("account_kind") or "enterprise"),
+        session_id=str(payload.get("session_id") or ""),
     )
 
 
@@ -131,9 +144,9 @@ def resolve_user_from_web_jwt(token: str) -> Any | None:
         return None
     try:
         from app.db.models.user import User
-        from app.db.session import get_db
+        from app.db.session import get_host_db
 
-        with get_db() as db:
+        with get_host_db() as db:
             user = db.get(User, int(uid))
             if user is None or not getattr(user, "is_active", True):
                 return None

@@ -2,15 +2,15 @@
 # macOS：产品版本用于发布路径/制品名，三段工具链版本用于 npm/Electron。
 set -euo pipefail
 
-VERSION="${1:-1.0.0.1}"
+. "$(dirname "${BASH_SOURCE[0]}")/../deploy/lib/version.sh"
+VERSION="${1:-$(product_version)}"
 SKU="${2:-}"
 VERSION="${VERSION#FHD/}"
-VERSION="${VERSION#v}"
-VERSION="${VERSION#V}"
+VERSION="${VERSION#[vV]}"
 # workflow_dispatch on branch can leave ref_name=main; never feed that to npm version
 if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-  echo "[warn] invalid VERSION='${VERSION}', falling back to 1.0.0.1" >&2
-  VERSION="1.0.0.1"
+  VERSION="$(product_version)"
+  echo "[warn] invalid VERSION='${1:-}', falling back to ${VERSION}" >&2
 fi
 TOOLCHAIN_VERSION="$(printf '%s' "${VERSION}" | cut -d. -f1-3)"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -32,16 +32,14 @@ if [ -f "${MAC_SIGNING_ENV}" ]; then
   done < "${MAC_SIGNING_ENV}"
 fi
 
-# Apply signing normalization to both the local dotenv path and callers that
-# inject the same values through CI or a clean release worktree environment.
 if [ -n "${CSC_NAME:-}" ]; then
   # electron-builder 26 selects the certificate class itself and rejects this prefix.
   CSC_NAME="${CSC_NAME#Developer ID Application: }"
   export CSC_NAME
 fi
-if [ -n "${CSC_LINK:-}" ] && [ -z "${CSC_KEY_PASSWORD:-}" ] && command -v security >/dev/null 2>&1; then
-  # Prefer an already unlocked keychain identity when the local P12 has no configured password.
-  # CI normally provides CSC_KEY_PASSWORD and continues to use CSC_LINK.
+if [ -n "${CSC_KEYCHAIN:-}" ]; then
+  unset CSC_LINK
+elif [ -n "${CSC_LINK:-}" ] && [ -z "${CSC_KEY_PASSWORD:-}" ] && command -v security >/dev/null 2>&1; then
   if security find-identity -v -p codesigning 2>/dev/null | grep -Fq "${CSC_NAME:-}"; then
     unset CSC_LINK
   fi
@@ -100,7 +98,7 @@ build_one_sku() {
 
   echo "========== Building macOS SKU: ${sku} =========="
   if [ "${SKIP_BACKEND:-0}" != "1" ]; then
-    XCAGI_PRODUCT_SKU="${sku}" scripts/package/build-backend.sh "${VERSION}"
+    SKIP_FRONTEND=0 FHD_REBUILD_FRONTEND=1 XCAGI_PRODUCT_SKU="${sku}" scripts/package/build-backend.sh "${VERSION}"
   else
     if ! "${PYTHON:-python3}" -m pip --version >/dev/null 2>&1; then
       "${PYTHON:-python3}" -m ensurepip --upgrade
@@ -109,10 +107,18 @@ build_one_sku() {
   fi
 
   printf '{"sku":"%s","schema_version":1}\n' "${sku}" > desktop/resources/product-sku.json
-  local build_sha
+  local build_sha recovery_dir
   build_sha="$("${PYTHON:-python3}" scripts/package/generate-desktop-build-info.py --version "${VERSION}")"
   export XCAGI_BUILD_SHA="${build_sha}"
   "${PYTHON:-python3}" scripts/package/generate-desktop-resources.py
+  recovery_dir="desktop/resources/legacy-macos-recovery/${sku}-$(uname -m | sed 's/x86_64/x64/')"
+  "${PYTHON:-python3}" scripts/package/prepare-macos-legacy-recovery.py --sku "${sku}" --arch "$(uname -m | sed 's/x86_64/x64/')" --out "${recovery_dir}"
+  "${PYTHON:-python3}" - "${builder_config}" "${recovery_dir#desktop/}" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1])
+p.write_text(p.read_text().replace('publish:\n', f'  - from: {sys.argv[2]}\n    to: legacy-macos-recovery\npublish:\n', 1))
+PY
 
   (cd desktop && [ -d node_modules ] || npm install)
   # Finder/provenance xattrs can survive npm's Electron extraction and make
@@ -143,6 +149,7 @@ build_one_sku() {
       "--config.artifactName=${artifact_name}" \
       "--config.appId=$(sku_app_id "$sku")" \
       "--config.publish.url=$(sku_update_url "$sku")" \
+      "--config.dmg.title=XCAGI${label}" \
       "--config.extraMetadata.productSku=${sku}"); then
       package_ok=1
       break
@@ -172,11 +179,10 @@ build_one_sku() {
     x86_64) artifact_arch="x64" ;;
     *) artifact_arch="$(uname -m)" ;;
   esac
-  # hdiutil rejects volume names containing spaces on this macOS build
-  # ("could not access /Volumes/XCAGI Enterprise/XCAGI.app - 操作不被允许").
-  # Use a hyphenated, space-free volume name for the mount, while keeping the
-  # public artifact file name unchanged.
-  local dmg_volume_name="XCAGI-${label}"
+  # hdiutil on this Mac rejects both spaces and the hyphenated name
+  # XCAGI-Enterprise ("could not access /Volumes/XCAGI-Enterprise/XCAGI.app").
+  # Keep the public file name, and mount as XCAGIEnterprise / XCAGIPersonal.
+  local dmg_volume_name="XCAGI${label}"
   if [ -n "${XCAGI_DMG_VOLUME_SUFFIX:-}" ]; then
     dmg_volume_name="${dmg_volume_name}-${XCAGI_DMG_VOLUME_SUFFIX}"
   fi

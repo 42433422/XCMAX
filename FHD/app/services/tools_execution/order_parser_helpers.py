@@ -60,8 +60,14 @@ def parse_cn_number(token: str):
 
 def cleanup_unit_name(raw: str) -> str:
     s = (raw or "").strip()
+    # 剥掉书名号/引号包裹：客户名常写成「客户A」「客户A」""客户A""，引号本身不是名称内容。
+    # 用 str.strip 而非正则，避免「引号重复串」上的多项式回溯（CodeQL py/polynomial-redos）。
+    s = s.lstrip("「『“\"'《【[")
+    s = s.rstrip("」』”\"'》】]")
     s = re.sub(r"^(哎|嗯|啊|呃)[，,\s]*", "", s)
     s = re.sub(r"^(帮我|给我|请)?\s*打印(一下)?", "", s)
+    s = re.sub(r"^(帮我|给我|请|给)?\s*(开一张|开单|打单|下单|出单)(一下)?", "", s)
+    s = re.sub(r"(开单|打单|下单|出单)$", "", s)
     s = re.sub(r"^(把|给)?", "", s)
     s = re.sub(
         r"^(再加|还要|继续加|再补|加上|增加|加|减少|减去|减|删掉|删除|去掉|移除|改成|改为|改)\s*",
@@ -166,6 +172,111 @@ def normalize_quantity_token(quantity_token: str):
     digits = normalize_chinese_digits(quantity_token)
     if digits.isdigit():
         return int(digits)
+    return None
+
+
+# 引号包裹的客户名（「客户A」/“客户A”/【客户A】）与键值写法（客户=客户A）优先级最高。
+_QUOTED_UNIT = re.compile(r"[「『“\"'《【\[]([^」』”\"'》】\]]{1,120})[」』”\"'》】\]]")
+_KEYED_UNIT = re.compile(r"(?:客户|购买单位|单位|公司)\s*[:：=]\s*([^\s，,。；;]{1,120})")
+# 会话填充词与助手话术，绝不能被当成客户名（#2067）。
+_FILLER_FRAGMENTS = ("正在", "稍候", "确认执行", "处理", "发货单", "送货单", "出货单", "识别")
+_CONVERSATIONAL_FILLERS = frozenset(
+    {
+        "好的",
+        "好",
+        "嗯",
+        "行",
+        "可以",
+        "收到",
+        "明白",
+        "是的",
+        "确认",
+        "请确认",
+        "已识别",
+        "已识别订单",
+        "生成",
+        "执行",
+        "正在执行",
+        "处理",
+        "处理中",
+        "完成",
+        "已收到",
+        "订单确认",
+        "稍候",
+        "请稍候",
+        "订单",
+    }
+)
+
+
+def looks_like_conversational_filler(token: str) -> bool:
+    """判断一个 token 是否为会话话术而非客户名。"""
+    t = re.sub(r"\s+", "", token or "")
+    if not t:
+        return True
+    if t in _CONVERSATIONAL_FILLERS:
+        return True
+    return any(frag in t for frag in _FILLER_FRAGMENTS)
+
+
+def extract_explicit_unit_name(text: str) -> str:
+    """显式写法给出的客户名（引号/键值），无则返回空串。"""
+    for pattern in (_QUOTED_UNIT, _KEYED_UNIT):
+        m = pattern.search(text or "")
+        if m:
+            name = cleanup_unit_name(m.group(1))
+            if name:
+                return name
+    return ""
+
+
+_RETAIL_QTY_PRICE = re.compile(
+    r"^(?P<unit>.{1,80}?)\s*(?:发货单|送货单|出货单)\s*[:：]\s*"
+    r"(?P<product>.{1,120}?)\s+数量\s*(?P<qty>\d{1,12}(?:\.\d{1,4})?)"
+    r"(?:\s*[\u4e00-\u9fffA-Za-z]{1,4})?\s+单价\s*(?P<price>\d{1,12}(?:\.\d{1,4})?)\s*$"
+)
+
+
+def retail_quantity_price_order(text: str) -> dict | None:
+    """显式「客户 发货单：商品 数量N 单价P」按件数计价，不套工业默认规格。"""
+    match = _RETAIL_QTY_PRICE.match((text or "").strip())
+    if match is None:
+        return None
+    unit_name = match.group("unit").strip()
+    if looks_like_conversational_filler(unit_name):
+        return None
+    quantity = float(match.group("qty"))
+    price = float(match.group("price"))
+    if quantity <= 0 or price < 0:
+        return None
+    return {
+        "success": True,
+        "unit_name": unit_name,
+        "products": [
+            {
+                "name": match.group("product").strip(),
+                "quantity_tins": quantity,
+                "quantity_kg": quantity,
+                "tin_spec": 1.0,
+                "unit_price": price,
+                "amount": quantity * price,
+            }
+        ],
+    }
+
+
+def loose_order_fallback(text: str) -> dict | None:
+    """末位兜底：显式数量单价优先；否则仅当首个 token 像客户名时按「客户名 + 产品名」（#2067）。"""
+    retail = retail_quantity_price_order(text)
+    if retail is not None:
+        return retail
+    parts = (text or "").split()
+    if len(parts) >= 2 and not looks_like_conversational_filler(parts[0]):
+        return {
+            "success": True,
+            "unit_name": parts[0].strip(),
+            "products": [{"name": " ".join(parts[1:]), "quantity_tins": 1, "tin_spec": 10.0}],
+        }
     return None
 
 

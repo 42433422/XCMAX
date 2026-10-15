@@ -15,18 +15,9 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from app.application.ai_chat_app_service import AIChatApplicationService
-
-
-def _make_service():
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
-
+from tests.test_application.ai_chat_test_helpers import (
+    _make_svc as _make_service,
+)
 
 # ========================= _customer_hint_from_preview_grid =================
 

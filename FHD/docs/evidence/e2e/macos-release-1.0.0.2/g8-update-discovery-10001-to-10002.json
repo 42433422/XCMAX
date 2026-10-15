@@ -1,0 +1,64 @@
+attached: http://127.0.0.1:17500/login?redirect=/
+checkForUpdates: {
+  "isUpdateAvailable": true,
+  "versionInfo": {
+    "version": "1.0.0",
+    "productVersion": "1.0.0.2",
+    "buildSha": "6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "releaseId": "xcagi-1.0.0.2-6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "releaseNotes": "版本 1.0.0.2\n构建 6eda2203df27\n\n• 更新桌面壳与本地后端运行时\n• 保留本机业务数据与已安装 Mod\n• 安装完成后重新加载进入新版本\n",
+    "files": [
+      {
+        "url": "XCAGI-Enterprise-1.0.0.2-mac-arm64.zip",
+        "sha512": "1ryEtv+nlqe72gUZvMK56fNjp5Ncb7MslaACYv3p43q/ifYGRwSMiZpdimmo1wCzMH6qsASQv2/NPm/TYDchUw==",
+        "size": 264517668
+      },
+      {
+        "url": "XCAGI-Enterprise-1.0.0.2-mac-arm64.zip.blockmap",
+        "sha512": "n2J5lLM/Hk5OkYEqQkIk6roAaGGtF+5fXlpc+O1c6iEGJ3pXVI5LsZuKBK++tI3Q7GV8SM1k1AE2oG5Kj9UaTw==",
+        "size": 273616
+      }
+    ],
+    "path": "XCAGI-Enterprise-1.0.0.2-mac-arm64.zip",
+    "sha512": "1ryEtv+nlqe72gUZvMK56fNjp5Ncb7MslaACYv3p43q/ifYGRwSMiZpdimmo1wCzMH6qsASQv2/NPm/TYDchUw==",
+    "releaseDate": "2026-09-13T02:22:10.223Z",
+    "stagingPercentage": 100,
+    "forceUpgrade": false,
+    "minVersion": "1.0.0",
+    "signature": "ed25519:Twgy+6jsF9J9T2k15uGEjQINKW6EwxnnWYHpNQiWvqWv/dISuDHQcRYyv+XpyoxkOpXYxgzdJHEgDBXrDqnrAA=="
+  },
+  "updateInfo": {
+    "version": "1.0.0",
+    "productVersion": "1.0.0.2",
+    "buildSha": "6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "releaseId": "xcagi-1.0.0.2-6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "releaseNotes": "版本 1.0.0.2\n构建 6eda2203df27\n\n• 更新桌面壳与本地后端运行时\n• 保留本机业务数据与已安装 Mod\n• 安装完成后重新加载进入新版本\n",
+    "files": [
+      {
+        "url": "XCAGI-Enterprise-1.0.0.2-mac-arm64.zip",
+        "sha512": "1ryEtv+nlqe72gUZvMK56fNjp5Ncb7MslaACYv3p43q/ifYGRwSMiZpdimmo1wCzMH6qsASQv2/NPm/TYDchUw==",
+        "size": 264517668
+      },
+      {
+        "url": "XCAGI-Enterprise-1.0.0.2-mac-arm64.zip.blockmap",
+        "sha512": "n2J5lLM/Hk5OkYEqQkIk6roAaGGtF+5fXlpc+O1c6iEGJ3pXVI5LsZuKBK++tI3Q7GV8SM1k1AE2oG5Kj9UaTw==",
+        "size": 273616
+      }
+    ],
+    "path": "XCAGI-Enterprise-1.0.0.2-mac-arm64.zip",
+    "sha512": "1ryEtv+nlqe72gUZvMK56fNjp5Ncb7MslaACYv3p43q/ifYGRwSMiZpdimmo1wCzMH6qsASQv2/NPm/TYDchUw==",
+    "releaseDate": "2026-09-13T02:22:10.223Z",
+    "stagingPercentage": 100,
+    "forceUpgrade": false,
+    "minVersion": "1.0.0",
+    "signature": "ed25519:Twgy+6jsF9J9T2k15uGEjQINKW6EwxnnWYHpNQiWvqWv/dISuDHQcRYyv+XpyoxkOpXYxgzdJHEgDBXrDqnrAA=="
+  },
+  "cancellationToken": {
+    "_events": {},
+    "_eventsCount": 0,
+    "parentCancelHandler": null,
+    "_parent": null,
+    "_cancelled": false
+  },
+  "downloadPromise": null
+}

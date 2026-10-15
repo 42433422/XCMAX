@@ -1,0 +1,8 @@
+[14:29:22] feature=pay-member-plan platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-member-plan
+[14:29:35] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[14:29:37] case M1: passed - 市场会员计划真实读取
+[14:29:37] case M2: passed - 市场支付套餐真实读取
+[14:29:38] case M3: passed - 本地模型支付套餐真实读取
+[14:29:38] case M4: passed - 查询不存在支付订单被拒（负例/边界）
+[14:29:38] video: pay-member-plan-web-20260929-142922.webm (1525809 bytes)
+[14:29:38] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-member-plan/log/pay-member-plan-web-20260929-142922.log

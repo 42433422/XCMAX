@@ -1,6 +1,6 @@
 import { nextTick, ref, watch } from 'vue'
 import type { Router } from 'vue-router'
-import { installHostFoundation, installMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
+import { installHostFoundation, installMod, installPrivateMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
 import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
 import { deliverySeedModIds } from '@/utils/deliverySeedPackages'
 import { patchWorkspacePrefs, queueWorkspacePrefsSync } from '@/utils/workspacePrefsApi'
@@ -28,7 +28,6 @@ type ProductFlow = ReturnType<typeof useProductFlow>
 type IndustryStore = ReturnType<typeof useIndustryStore>
 type ProductOnboardingNav = ReturnType<typeof useProductOnboardingNav>
 
-// ProductOnboardingView 的加载与操作逻辑（与拆分前逐字一致）
 export function useProductOnboardingActions(
   state: ProductOnboardingState,
   options: {
@@ -125,7 +124,8 @@ export function useProductOnboardingActions(
       }
       for (const modId of customMissing) {
         try {
-          const ir = await installMod(modId)
+          const item = baselinePlan.value?.groups.flatMap(group => group.items).find(item => item.mod_id === modId)
+          const ir = item?.runtime_mod_id ? await installPrivateMod(modId) : await installMod(modId)
           if (!ir.success) {
             installErrors.push(`${modId}：${ir.message || '安装失败'}`)
           }
@@ -159,6 +159,16 @@ export function useProductOnboardingActions(
       if (baselineOk.value) {
         invalidateHostPackCompletionCache()
         flow.markHostPackAcknowledged()
+        const pendingCustom = (baselinePlan.value?.groups || [])
+          .filter((group) => group.id === 'account_custom')
+          .flatMap((group) => group.items)
+          .filter((item) => !item.installed)
+          .map((item) => item.label)
+        if (pendingCustom.length) {
+          await appAlert(
+            `已进入工作空间。账号定制功能（${pendingCustom.join('、')}）待供应商交付，可稍后在扩展市场重试。`,
+          )
+        }
         return true
       }
 
@@ -275,7 +285,7 @@ export function useProductOnboardingActions(
       // readiness; an earlier ready plan may belong to the previous industry.
       await persistIndustryChoice()
       await refreshBaseline(true)
-      if (!baselineOk.value && !(await runBootstrap())) return
+      if ((!baselineOk.value || baselinePlan.value?.missing_industry_mod_ids?.length) && !(await runBootstrap())) return
       // This confirms configuration only; no demo run is queued or completed.
       const saved = await patchWorkspacePrefs({ host_pack_acknowledged: true, product_flow_completed: true })
       if (saved.success !== true) throw new Error('工作空间配置未保存，请重试')

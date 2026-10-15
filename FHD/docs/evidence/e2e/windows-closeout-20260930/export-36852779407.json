@@ -1,0 +1,20 @@
+{
+  "run": "36852779407-1",
+  "release_sha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+  "file": "C:\\xcagi-delivery-closeout\\evidence-91c73-gui-36852779407\\发货单_26-10-00001A_20261001_110459.xlsx",
+  "sha256": "90d62b5c154ffc05d04dfbca21375aecfbd078c7b89bc8bf9e5929360b3c6aa1",
+  "cells": {
+    "A4": "WIN-GUI-36852779407-1-business",
+    "D4": "WIN-GUI-36852779407-1-business-产品",
+    "E4": "2",
+    "F4": "10",
+    "G4": "20",
+    "H4": "12.5",
+    "I4": "250",
+    "E15": "2",
+    "G15": "20",
+    "D16": "250"
+  },
+  "customer_order_header": "购货单位：WIN-GUI-36852779407-1-business-客户       联系人：验收员              2026年10月1日      订单编号：26-10-00001A",
+  "result": "actual_export_content_verified"
+}

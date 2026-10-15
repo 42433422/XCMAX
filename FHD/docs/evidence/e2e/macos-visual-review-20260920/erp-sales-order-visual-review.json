@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "erp-sales-order",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "cd1ffb6fbd3cbf4882c6fa7ce8b2bd043047109c5fe558f68a7911a3c2385739",
+  "visible_content": "订单列表有多条同号、同金额的 G11 重测客户记录，状态均 pending；未展示本次创建、编辑或完成结果。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/erp-sales-order.png"
+}

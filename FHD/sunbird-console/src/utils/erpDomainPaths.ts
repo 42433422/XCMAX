@@ -5,6 +5,7 @@ import {
 } from '@/constants/erpDomainMod'
 import { isProtectedClientModId } from '@/constants/protectedMods'
 import { useModsStore } from '@/stores/mods'
+import { getActivePinia } from 'pinia'
 import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
 
 const MOD_FACADE_BASE = `/api/mod/${ERP_DOMAIN_BRIDGE_MOD_ID}`
@@ -80,19 +81,8 @@ const HOST_ONLY_API_PREFIXES: readonly string[] = [
 
 function normalizeApiPath(path: string): string {
   const raw = path.startsWith('/') ? path : `/${path}`
-  const q = raw.indexOf('?')
-  const h = raw.indexOf('#')
-  let end = raw.length
-  if (q >= 0) end = Math.min(end, q)
-  if (h >= 0) end = Math.min(end, h)
+  const end = Math.min(raw.length, ...['?', '#'].map(separator => raw.indexOf(separator)).filter(index => index >= 0))
   return raw.slice(0, end) || raw
-}
-
-function pathSuffix(path: string): string {
-  const raw = path.startsWith('/') ? path : `/${path}`
-  const base = normalizeApiPath(raw)
-  if (raw.length <= base.length) return ''
-  return raw.slice(base.length)
 }
 
 export function readActiveExtensionModId(): string {
@@ -158,7 +148,7 @@ export function resolveErpApiBase(installedModIds?: string[]): string {
 export function resolveErpApiPath(hostPath: string, installedModIds?: string[]): string {
   const raw = hostPath.startsWith('/') ? hostPath : `/${hostPath}`
   const pathOnly = normalizeApiPath(raw)
-  const suffix = pathSuffix(raw)
+  const suffix = raw.slice(pathOnly.length)
   const ids = readInstalledModIds(installedModIds)
 
   if (isHostOnlyApiPath(pathOnly)) {
@@ -197,17 +187,19 @@ export function resolveErpApiPath(hostPath: string, installedModIds?: string[]):
     return `${erpBase}${pathOnly.slice(4)}${suffix}`
   }
 
-  for (const [hostPrefix] of ERP_DOMAIN_PREFIX_MAP) {
-    if (pathOnly === hostPrefix || pathOnly.startsWith(`${hostPrefix}/`)) {
-      return `${erpBase}${pathOnly.slice(4)}${suffix}`
-    }
-  }
-
   return raw
 }
 
 export function useErpDomainModFacade(): boolean {
   return readErpDomainModFacadeEnabled()
+}
+
+export async function resolveErpApiPathWhenReady(path: string): Promise<string> {
+  const only = normalizeApiPath(path)
+  if (!getActivePinia() || isHostOnlyApiPath(only) || !pathMatchesPrefixes(only, ERP_DOMAIN_PREFIX_MAP.map(([prefix]) => prefix))) return path
+  const store = useModsStore()
+  if (!store.clientModsUiOff && !store.isLoaded && !store.mods.length) await store.fetchMods()
+  return resolveErpApiPath(path)
 }
 
 /** Mod 门面 HTTP 探针路径 */

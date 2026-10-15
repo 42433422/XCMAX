@@ -30,7 +30,7 @@
 
 ### T2 运维 / 工具脚本
 
-1. 新增脚本说明它解决什么场景、谁会调（人 / CI / 远程入口），并在最相关的 runbook 加一行（如 [`docs/runbooks/remote-server-operations.md`](docs/runbooks/remote-server-operations.md) 的 Action 表）。
+1. 新增脚本说明它解决什么场景、谁会调（人 / CI / 远程入口），并更新实际发布入口或相关 runbook。
 2. 危险动作（删除、重启、覆写 DB）默认 dry-run；改为执行需显式 `--confirm` flag，参考 [`chaos/chaos_drill.py`](chaos/chaos_drill.py)、[`scripts/restore_postgres.py`](scripts/restore_postgres.py)。
 3. 不引用 T1 内部模块；如确需复用核心逻辑，抽到 T1 的公共 API 层后再被脚本 import。
 

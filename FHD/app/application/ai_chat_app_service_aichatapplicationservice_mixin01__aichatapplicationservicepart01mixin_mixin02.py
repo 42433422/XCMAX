@@ -25,7 +25,14 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
         session_id = str(context.get("session_id") or context.get("conversation_id") or "").strip()
         if not session_id:
             return
+        from app.application.task_conversation_store import durable_user_id
         from app.services import get_conversation_service
+
+        # The web_normal_* id scopes model memory, not the authenticated history owner.
+        owner_id = durable_user_id(context.get("local_user_id")) or durable_user_id(
+            context.get("actor_id")
+        )
+        history_user_id = str(owner_id) if owner_id is not None else user_id
 
         inner = response_data.get("data") if isinstance(response_data.get("data"), dict) else {}
         if not isinstance(inner, dict):
@@ -137,7 +144,7 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
         conv = get_conversation_service()
         conv.save_message(
             session_id=session_id,
-            user_id=user_id,
+            user_id=history_user_id,
             role="user",
             content=str(message)[:8000],
             intent=intent or "chat",
@@ -148,7 +155,7 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
             response_data = {}
         conv.save_message(
             session_id=session_id,
-            user_id=user_id,
+            user_id=history_user_id,
             role="assistant",
             content=reply,
             intent=intent or "assistant_reply",
@@ -195,6 +202,30 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
         except _facade().RECOVERABLE_ERRORS as err:
             _facade().logger.warning("注入 Excel 向量上下文失败: %s", err, exc_info=True)
         return context
+
+    def _inject_wechat_contact_context(
+        self, message: str, context: dict[str, _facade().Any]
+    ) -> dict[str, _facade().Any]:
+        """
+        注入微信联系人情报（服务器侧微信同步基建 → 聊天智慧）。
+
+        解析顺序：context.wechat_contact_key 显式指定 > 消息文本自动匹配已同步联系人名。
+        命中时写入 ``wechat_contact_context``（由 PromptsMixin 渲染进 system prompt）；
+        未命中时显式置 None，避免上一轮残留情报污染本轮（request_context 按 user 跨轮合并）。
+        任何异常静默降级，不阻断聊天主链路。
+        """
+        if not isinstance(context, dict):
+            return {}
+        try:
+            from app.application.wechat_chat_context import resolve_wechat_chat_context
+
+            payload = resolve_wechat_chat_context(message, context)
+        except _facade().RECOVERABLE_ERRORS as err:
+            _facade().logger.warning("注入微信联系人情报失败: %s", err, exc_info=True)
+            return context
+        enriched = dict(context)
+        enriched["wechat_contact_context"] = payload
+        return enriched
 
     @staticmethod
     def _build_fallback_response(message: str, error_reason: str) -> dict[str, _facade().Any]:

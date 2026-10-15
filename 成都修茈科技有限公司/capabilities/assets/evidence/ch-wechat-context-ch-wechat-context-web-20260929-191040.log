@@ -1,0 +1,7 @@
+[19:10:40] feature=ch-wechat-context platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-wechat-context
+[19:10:54] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[19:10:55] case C1: passed - 联系人情报成功返回（核心正向闭环）
+[19:10:55] case C2: passed - 缺 contact_key 被校验拒绝（边界/负例）
+[19:10:56] case C3: passed - 无令牌访问情报入口被拒（负例）
+[19:10:56] video: ch-wechat-context-web-20260929-191040.webm (1239413 bytes)
+[19:10:56] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-wechat-context/log/ch-wechat-context-web-20260929-191040.log

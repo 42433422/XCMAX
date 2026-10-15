@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -13,6 +14,18 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SOURCE = REPO_ROOT / "FHD/.github/workflows/release-orchestrator.yml"
 MIRROR = REPO_ROOT / ".github/workflows/fhd-release-orchestrator.yml"
+
+
+def test_dispatch_product_version_matches_current_release_anchor():
+    expected = re.search(
+        r"\*\*XCAGI 稳定产品版本\*\* \| `([\d.]+)`",
+        (REPO_ROOT / "FHD/VERSION.md").read_text(encoding="utf-8"),
+    ).group(1)
+    for path in (SOURCE, MIRROR):
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        dispatch = workflow.get("on", workflow.get(True))["workflow_dispatch"]
+        value = dispatch["inputs"]["product_version"]
+        assert value["default"] == expected and value["options"] == [expected]
 
 
 def _dispatch_step(workflow_path: Path) -> dict:

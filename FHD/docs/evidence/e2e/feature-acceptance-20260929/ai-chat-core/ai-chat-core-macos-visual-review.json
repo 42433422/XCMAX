@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-chat-core",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "c411e5f9b36bd67c9c9c12f89155da2b61cb7c9935f05f3a0291029ab76a147e",
+  "visible_content": "AI 服务自检通过；界面内两轮对话均收到回复，第二轮「刚才你说的第一项能力再展开一句」得到产品管理展开说明，上下文连续。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-chat-core/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-chat-core/macos/result.png"
+}

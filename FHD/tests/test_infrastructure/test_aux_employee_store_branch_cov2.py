@@ -25,7 +25,7 @@ class TestIsAuxEmployeePackModId:
     """is_aux_employee_pack_mod_id 分支覆盖。"""
 
     def test_returns_true_for_known_mod_ids(self) -> None:
-        assert aux_employee_store.is_aux_employee_pack_mod_id("wechat-contacts-ai-employee") is True
+        assert aux_employee_store.is_aux_employee_pack_mod_id("lan-gate-ai-employee") is True
         assert aux_employee_store.is_aux_employee_pack_mod_id("lan-gate-ai-employee") is True
 
     def test_returns_false_for_unknown_mod_id(self) -> None:
@@ -38,10 +38,7 @@ class TestIsAuxEmployeePackModId:
         assert aux_employee_store.is_aux_employee_pack_mod_id(None) is False
 
     def test_strips_whitespace(self) -> None:
-        assert (
-            aux_employee_store.is_aux_employee_pack_mod_id("  wechat-contacts-ai-employee  ")
-            is True
-        )
+        assert aux_employee_store.is_aux_employee_pack_mod_id("  lan-gate-ai-employee  ") is True
 
 
 class TestRepoModSeedDirs:
@@ -96,53 +93,46 @@ class TestReadAuxEmployeePackManifest:
             return_value=[Path("/nonexistent")],
         ):
             assert (
-                aux_employee_store.read_aux_employee_pack_manifest("wechat-contacts-ai-employee")
-                is None
+                aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee") is None
             )
 
     def test_returns_manifest_when_valid(self, tmp_path: Path) -> None:
-        mod_dir = tmp_path / "wechat-contacts-ai-employee"
+        mod_dir = tmp_path / "lan-gate-ai-employee"
         mod_dir.mkdir()
-        manifest = {"id": "wechat-contacts-ai-employee", "version": "1.0.0"}
+        manifest = {"id": "lan-gate-ai-employee", "version": "1.0.0"}
         (mod_dir / "manifest.json").write_text(json.dumps(manifest))
         with patch("app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]):
-            result = aux_employee_store.read_aux_employee_pack_manifest(
-                "wechat-contacts-ai-employee"
-            )
+            result = aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee")
             assert result == manifest
 
     def test_returns_none_when_manifest_not_dict(self, tmp_path: Path) -> None:
-        mod_dir = tmp_path / "wechat-contacts-ai-employee"
+        mod_dir = tmp_path / "lan-gate-ai-employee"
         mod_dir.mkdir()
         (mod_dir / "manifest.json").write_text(json.dumps(["not a dict"]))
         with patch("app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]):
             assert (
-                aux_employee_store.read_aux_employee_pack_manifest("wechat-contacts-ai-employee")
-                is None
+                aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee") is None
             )
 
     def test_returns_none_on_json_error(self, tmp_path: Path) -> None:
-        mod_dir = tmp_path / "wechat-contacts-ai-employee"
+        mod_dir = tmp_path / "lan-gate-ai-employee"
         mod_dir.mkdir()
         (mod_dir / "manifest.json").write_text("invalid json {")
         with patch("app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]):
             assert (
-                aux_employee_store.read_aux_employee_pack_manifest("wechat-contacts-ai-employee")
-                is None
+                aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee") is None
             )
 
     def test_skips_missing_manifest_in_first_root(self, tmp_path: Path) -> None:
-        mod_dir = tmp_path / "second" / "wechat-contacts-ai-employee"
+        mod_dir = tmp_path / "second" / "lan-gate-ai-employee"
         mod_dir.mkdir(parents=True)
-        manifest = {"id": "wechat-contacts-ai-employee"}
+        manifest = {"id": "lan-gate-ai-employee"}
         (mod_dir / "manifest.json").write_text(json.dumps(manifest))
         with patch(
             "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs",
             return_value=[tmp_path / "first", tmp_path / "second"],
         ):
-            result = aux_employee_store.read_aux_employee_pack_manifest(
-                "wechat-contacts-ai-employee"
-            )
+            result = aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee")
             assert result == manifest
 
 
@@ -151,7 +141,7 @@ class TestAuxEmployeePackCatalogRow:
 
     def test_uses_manifest_values_when_present(self) -> None:
         manifest = {
-            "id": "wechat-contacts-ai-employee",
+            "id": "lan-gate-ai-employee",
             "name": "WeChat Contacts",
             "version": "2.0.0",
             "author": "Custom Author",
@@ -162,9 +152,9 @@ class TestAuxEmployeePackCatalogRow:
             "app.mod_sdk.aux_employee_store.read_aux_employee_pack_manifest", return_value=manifest
         ):
             row = aux_employee_store.aux_employee_pack_catalog_row(
-                pack_id="wechat-contacts-ai-employee", installed=True
+                pack_id="lan-gate-ai-employee", installed=True
             )
-            assert row["id"] == "wechat-contacts-ai-employee"
+            assert row["id"] == "lan-gate-ai-employee"
             assert row["name"] == "WeChat Contacts"
             assert row["version"] == "2.0.0"
             assert row["author"] == "Custom Author"
@@ -177,10 +167,10 @@ class TestAuxEmployeePackCatalogRow:
             "app.mod_sdk.aux_employee_store.read_aux_employee_pack_manifest", return_value=None
         ):
             row = aux_employee_store.aux_employee_pack_catalog_row(
-                pack_id="wechat-contacts-ai-employee", installed=False
+                pack_id="lan-gate-ai-employee", installed=False
             )
-            assert row["id"] == "wechat-contacts-ai-employee"
-            assert row["name"] == "wechat-contacts-ai-employee"
+            assert row["id"] == "lan-gate-ai-employee"
+            assert row["name"] == "lan-gate-ai-employee"
             assert row["version"] == "1.0.0"
             assert row["author"] == "成都修茈科技有限公司"
             assert row["description"] == ""
@@ -193,7 +183,7 @@ class TestAuxEmployeePackCatalogRow:
             "app.mod_sdk.aux_employee_store.read_aux_employee_pack_manifest", return_value=manifest
         ):
             row = aux_employee_store.aux_employee_pack_catalog_row(
-                pack_id="wechat-contacts-ai-employee", installed=True
+                pack_id="lan-gate-ai-employee", installed=True
             )
             assert row["dependencies"] == {}
 
@@ -203,9 +193,9 @@ class TestAuxEmployeePackCatalogRow:
             "app.mod_sdk.aux_employee_store.read_aux_employee_pack_manifest", return_value=manifest
         ):
             row = aux_employee_store.aux_employee_pack_catalog_row(
-                pack_id="wechat-contacts-ai-employee", installed=True
+                pack_id="lan-gate-ai-employee", installed=True
             )
-            assert row["id"] == "wechat-contacts-ai-employee"
+            assert row["id"] == "lan-gate-ai-employee"
             assert row["version"] == "1.0.0"
 
 
@@ -213,24 +203,21 @@ class TestInjectAuxEmployeePackRows:
     """inject_aux_employee_pack_rows 分支覆盖。"""
 
     def test_appends_new_row_when_not_present(self) -> None:
-        # 两个 pack_id 都需要返回 manifest
-        manifest = {"id": "wechat-contacts-ai-employee", "name": "WeChat"}
-        manifest2 = {"id": "lan-gate-ai-employee", "name": "LanGate"}
+        manifest = {"id": "lan-gate-ai-employee", "name": "LanGate"}
         with patch(
             "app.mod_sdk.aux_employee_store.read_aux_employee_pack_manifest",
-            side_effect=lambda pid: manifest if pid == "wechat-contacts-ai-employee" else manifest2,
+            side_effect=lambda pid: manifest if pid == "lan-gate-ai-employee" else None,
         ):
             available: list[dict] = []
             aux_employee_store.inject_aux_employee_pack_rows(available, set())
-            assert len(available) == 2
+            assert len(available) == 1
             ids = {r["id"] for r in available}
-            assert "wechat-contacts-ai-employee" in ids
             assert "lan-gate-ai-employee" in ids
 
     def test_replaces_existing_row_preserving_is_installed(self) -> None:
-        manifest = {"id": "wechat-contacts-ai-employee", "name": "WeChat"}
+        manifest = {"id": "lan-gate-ai-employee", "name": "LanGate"}
         existing = {
-            "id": "wechat-contacts-ai-employee",
+            "id": "lan-gate-ai-employee",
             "name": "Old Name",
             "is_installed": True,
             "extra_field": "keep",
@@ -240,9 +227,9 @@ class TestInjectAuxEmployeePackRows:
         ):
             available = [existing]
             aux_employee_store.inject_aux_employee_pack_rows(available, set())
-            assert len(available) == 2
-            row = next(r for r in available if r["id"] == "wechat-contacts-ai-employee")
-            assert row["name"] == "WeChat"
+            assert len(available) == 1
+            row = next(r for r in available if r["id"] == "lan-gate-ai-employee")
+            assert row["name"] == "LanGate"
             assert row["is_installed"] is True
 
     def test_skips_when_no_manifest(self) -> None:
@@ -254,34 +241,32 @@ class TestInjectAuxEmployeePackRows:
             assert available == []
 
     def test_marks_installed_when_in_installed_ids(self) -> None:
-        manifest = {"id": "wechat-contacts-ai-employee"}
+        manifest = {"id": "lan-gate-ai-employee"}
         with patch(
             "app.mod_sdk.aux_employee_store.read_aux_employee_pack_manifest", return_value=manifest
         ):
             available: list[dict] = []
-            aux_employee_store.inject_aux_employee_pack_rows(
-                available, {"wechat-contacts-ai-employee"}
-            )
-            row = next(r for r in available if r["id"] == "wechat-contacts-ai-employee")
+            aux_employee_store.inject_aux_employee_pack_rows(available, {"lan-gate-ai-employee"})
+            row = next(r for r in available if r["id"] == "lan-gate-ai-employee")
             assert row["is_installed"] is True
 
     def test_handles_existing_row_not_dict(self) -> None:
-        manifest = {"id": "wechat-contacts-ai-employee"}
+        manifest = {"id": "lan-gate-ai-employee"}
         with patch(
             "app.mod_sdk.aux_employee_store.read_aux_employee_pack_manifest", return_value=manifest
         ):
-            available: list[dict] = [{"id": "wechat-contacts-ai-employee"}]  # type: ignore[list-item]
+            available: list[dict] = [{"id": "lan-gate-ai-employee"}]  # type: ignore[list-item]
             aux_employee_store.inject_aux_employee_pack_rows(available, set())
-            assert len(available) == 2
+            assert len(available) == 1
 
     def test_uses_pkg_id_when_id_missing(self) -> None:
-        manifest = {"id": "wechat-contacts-ai-employee"}
+        manifest = {"id": "lan-gate-ai-employee"}
         with patch(
             "app.mod_sdk.aux_employee_store.read_aux_employee_pack_manifest", return_value=manifest
         ):
-            available = [{"pkg_id": "wechat-contacts-ai-employee", "is_installed": False}]
+            available = [{"pkg_id": "lan-gate-ai-employee", "is_installed": False}]
             aux_employee_store.inject_aux_employee_pack_rows(available, set())
-            assert len(available) == 2
+            assert len(available) == 1
 
 
 class TestInstallAuxEmployeePackFromRepoSeed:
@@ -303,18 +288,18 @@ class TestInstallAuxEmployeePackFromRepoSeed:
             return_value=[Path("/nonexistent")],
         ):
             ok, msg = aux_employee_store.install_aux_employee_pack_from_repo_seed(
-                "wechat-contacts-ai-employee"
+                "lan-gate-ai-employee"
             )
             assert ok is False
             assert "未找到" in msg
 
     def test_install_success(self, tmp_path: Path) -> None:
-        mod_dir = tmp_path / "mods" / "wechat-contacts-ai-employee"
+        mod_dir = tmp_path / "mods" / "lan-gate-ai-employee"
         mod_dir.mkdir(parents=True)
-        (mod_dir / "manifest.json").write_text(json.dumps({"id": "wechat-contacts-ai-employee"}))
+        (mod_dir / "manifest.json").write_text(json.dumps({"id": "lan-gate-ai-employee"}))
         (mod_dir / "code.py").write_text("x = 1")
 
-        dest_dir = tmp_path / "dest" / "wechat-contacts-ai-employee"
+        dest_dir = tmp_path / "dest" / "lan-gate-ai-employee"
         mock_mm = MagicMock()
         mock_mm.mods_root = str(tmp_path / "dest")
 
@@ -326,7 +311,7 @@ class TestInstallAuxEmployeePackFromRepoSeed:
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
         ):
             ok, msg = aux_employee_store.install_aux_employee_pack_from_repo_seed(
-                "wechat-contacts-ai-employee"
+                "lan-gate-ai-employee"
             )
             assert ok is True
             assert "已从内置种子安装" in msg
@@ -334,11 +319,11 @@ class TestInstallAuxEmployeePackFromRepoSeed:
             mock_mm.load_all_mods.assert_called_once()
 
     def test_install_overwrites_existing_dest(self, tmp_path: Path) -> None:
-        mod_dir = tmp_path / "mods" / "wechat-contacts-ai-employee"
+        mod_dir = tmp_path / "mods" / "lan-gate-ai-employee"
         mod_dir.mkdir(parents=True)
-        (mod_dir / "manifest.json").write_text(json.dumps({"id": "wechat-contacts-ai-employee"}))
+        (mod_dir / "manifest.json").write_text(json.dumps({"id": "lan-gate-ai-employee"}))
 
-        dest_dir = tmp_path / "dest" / "wechat-contacts-ai-employee"
+        dest_dir = tmp_path / "dest" / "lan-gate-ai-employee"
         dest_dir.mkdir(parents=True)
         (dest_dir / "old.txt").write_text("old")
 
@@ -353,15 +338,15 @@ class TestInstallAuxEmployeePackFromRepoSeed:
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
         ):
             ok, msg = aux_employee_store.install_aux_employee_pack_from_repo_seed(
-                "wechat-contacts-ai-employee"
+                "lan-gate-ai-employee"
             )
             assert ok is True
             assert not (dest_dir / "old.txt").exists()
 
     def test_install_handles_os_error(self, tmp_path: Path) -> None:
-        mod_dir = tmp_path / "mods" / "wechat-contacts-ai-employee"
+        mod_dir = tmp_path / "mods" / "lan-gate-ai-employee"
         mod_dir.mkdir(parents=True)
-        (mod_dir / "manifest.json").write_text(json.dumps({"id": "wechat-contacts-ai-employee"}))
+        (mod_dir / "manifest.json").write_text(json.dumps({"id": "lan-gate-ai-employee"}))
 
         mock_mm = MagicMock()
         mock_mm.mods_root = str(tmp_path / "dest")
@@ -377,7 +362,7 @@ class TestInstallAuxEmployeePackFromRepoSeed:
             ),
         ):
             ok, msg = aux_employee_store.install_aux_employee_pack_from_repo_seed(
-                "wechat-contacts-ai-employee"
+                "lan-gate-ai-employee"
             )
             assert ok is False
             assert "copy failed" in msg

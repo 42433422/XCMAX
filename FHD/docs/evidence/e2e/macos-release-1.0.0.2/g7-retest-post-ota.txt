@@ -1,0 +1,22 @@
+== warmup GET /api/health ==
+200 {"status":"healthy","version":"1.0.0.2","service":"xcagi-fastapi","runtime":{"status":"healthy","components":{"desktop_r
+
+== POST /api/auth/login (xcagi-enterprise-demo / enterprise) ==
+200 success= True message= None
+
+== GET /api/auth/me ==
+200 success= True username= None
+
+== POST /api/templates/upload (尹玉华1.xlsx) ==
+500 {"success":false,"message":"分析失败：[Errno 13] Permission denied: '/Applications/XCAGI.app/Contents/Resources/backend/_internal/app'","ingested":false}
+
+== GET /api/shipment/orders/next_number ==
+200 {"success":true,"data":{"order_number":"26-09-00001A","sequence":1,"year_month":"26-09"}}
+
+== POST /api/shipment/generate (真实业务) ==
+500 {"success":false,"message":"出货单操作失败","doc_name":null,"file_path":null,"products_source":"request","template_resolution":{"template_id":null,"template_name":null,"template_type":null,"source":null,"reason":"no_template_found","path":null,"score":null,"error_code":"TEMPLATE_NOT_FOUND","ok":false},"run_id":"run_d9ba6dd560464274b6ff5bf0816c5131","agent_run_id":"run_d9ba6dd560464274b6ff5bf0816c5131","agent_status":"failed"}
+
+template_resolution: {"template_id": null, "template_name": null, "template_type": null, "source": null, "reason": "no_template_found", "path": null, "score": null, "error_code": "TEMPLATE_NOT_FOUND", "ok": false}
+agent_status: failed
+success: False
+file_path: None

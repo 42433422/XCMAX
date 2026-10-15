@@ -301,7 +301,7 @@ def _import_daily_records_if_possible(
     month: str,
 ) -> tuple[int, int, str]:
     try:
-        from app.shell.taiyangniao_attendance.parser import parse_attendance_workbook
+        from app.mod_sdk.attendance import parse_attendance_workbook
     except ModuleNotFoundError:
         return 0, 0, month
 

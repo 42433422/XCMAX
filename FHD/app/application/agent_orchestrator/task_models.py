@@ -28,6 +28,12 @@ def attention_for_status(status: str) -> TaskAttention:
     }.get(str(status or ""), "")  # type: ignore[return-value]
 
 
+def mod_id_of_run(run: AgentRun) -> str:
+    runtime = run.metadata.get("runtime_context") or {}
+    binding = runtime.get("_mod_authorization") or {}
+    return str(binding.get("mod_id") or "")
+
+
 def tenant_id_of_run(run: AgentRun) -> str:
     runtime = run.metadata.get("runtime_context")
     runtime = runtime if isinstance(runtime, dict) else {}

@@ -1,0 +1,42 @@
+{
+  "phase": "G6-Mod/AI员工加载（1.0.0.3 OTA 后登录态）",
+  "date": "2026-09-14T04:15+08:00",
+  "login": {
+    "status": 200,
+    "success": true,
+    "user": "xcagi-enterprise-demo"
+  },
+  "health": {
+    "status": 200,
+    "version": "1.0.0.3"
+  },
+  "mods": {
+    "status": 200,
+    "count": 62,
+    "attendance_industry": {
+      "id": "attendance-industry",
+      "version": "1.0.1",
+      "primary": true
+    }
+  },
+  "employees": {
+    "status": 200,
+    "catalog_schema": 1,
+    "split_mod_entries": 6,
+    "legacy_employee_ids": [
+      "label_print",
+      "shipment_mgmt",
+      "receipt_confirm",
+      "wechat_msg"
+    ]
+  },
+  "attendance_capabilities": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "custom_features": [],
+      "delivery_id": ""
+    }
+  },
+  "conclusion": "G6 PASS：62 mods（attendance-industry v1.0.1 primary=True）+ employees catalog + attendance capabilities 登录态全部 200，1.0.0.3 OTA 后 Mod/AI 员工加载正常"
+}

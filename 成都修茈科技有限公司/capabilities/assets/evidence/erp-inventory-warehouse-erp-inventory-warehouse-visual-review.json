@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "erp-inventory-warehouse",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "dfb6a9e84017b1864df2fe547d8b3014b4c5f3e029a56f46da6af990e870b0ad",
+  "visible_content": "整张图片仅有渐变背景，应用导航与业务内容均未呈现。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/erp-inventory-warehouse.png"
+}

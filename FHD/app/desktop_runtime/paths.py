@@ -12,6 +12,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 DESKTOP_ENV = "XCAGI_DESKTOP_MODE"
 DATA_DIR_ENV = "XCAGI_DATA_DIR"
 LEGACY_DATA_DIR_ENV = "XCAGI_DESKTOP_DATA_DIR"
+_DB_RECOVERY_MARKER = "database-recovery-required"
 
 
 def get_desktop_mode() -> str:
@@ -41,7 +42,9 @@ def get_desktop_data_dir(data_dir: str | os.PathLike[str] | None = None) -> Path
     return Path(raw).expanduser().resolve() if raw else _default_user_data_dir().resolve()
 
 
-def ensure_desktop_dirs(data_dir: str | os.PathLike[str] | None = None) -> dict[str, Path]:
+def ensure_desktop_dirs(
+    data_dir: str | os.PathLike[str] | None = None,
+) -> dict[str, Path]:
     root = get_desktop_data_dir(data_dir)
     dirs = {
         "root": root,
@@ -63,7 +66,19 @@ def sqlite_database_url(data_dir: str | os.PathLike[str] | None = None) -> str:
     return "sqlite:///" + dirs["data"].joinpath("xcagi.db").as_posix()
 
 
-def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None) -> Path:
+def clear_database_recovery_marker(data_dir: str | os.PathLike[str] | None = None) -> bool:
+    marker = get_desktop_data_dir(data_dir) / "config" / _DB_RECOVERY_MARKER
+    try:
+        marker.unlink(missing_ok=True)
+        return True
+    except OSError as exc:
+        logging.getLogger(__name__).warning("could not clear database recovery marker: %s", exc)
+        return False
+
+
+def configure_desktop_environment(
+    data_dir: str | os.PathLike[str] | None = None,
+) -> Path:
     """Set process environment defaults for the local desktop runtime.
 
     Delivery default is SQLite under userData. Optional ``config/database.json``
@@ -84,17 +99,24 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
     if os.environ.get("DATABASE_URL", "").startswith("sqlite"):
         from .migrate import recover_if_corrupt
 
+        marker = root / "config" / _DB_RECOVERY_MARKER
         try:
             recovery = recover_if_corrupt(root)
             if recovery["action"] == "corrupt_no_backup":
+                os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "corrupt_no_backup"
                 logging.getLogger(__name__).error(
                     "desktop db corrupt and no usable backup: %s", recovery["detail"]
                 )
-                # 不阻塞启动：让后续 bootstrap 流程决定如何处理（可能创建空库）。
-                # 但要把状态暴露出去供上层 UI/支持工具感知。
-                os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "corrupt_no_backup"
+                marker.write_text("corrupt_no_backup\n", encoding="utf-8")
             elif recovery["action"] == "restored":
-                os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = f"restored:{recovery['detail']}"
+                if clear_database_recovery_marker(root):
+                    os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = f"restored:{recovery['detail']}"
+                else:
+                    os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "corrupt_no_backup"
+            elif marker.exists():
+                os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "corrupt_no_backup"
+            else:
+                os.environ.pop("XCAGI_DESKTOP_DB_RECOVERY", None)
         except RECOVERABLE_ERRORS as exc:
             logging.getLogger(__name__).warning("recover_if_corrupt failed (non-fatal): %s", exc)
     os.environ.setdefault("DATABASE_PATH", str(dirs["data"]))
@@ -147,12 +169,5 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
         refresh_installed_industry_mods_from_bundle(mods_root=dirs["mods"])
     except RECOVERABLE_ERRORS as exc:
         logging.getLogger(__name__).warning("Desktop industry mod refresh skipped: %s", exc)
-
-    try:
-        from app.desktop_runtime.sunbird_delivery_seed import apply_sunbird_roster_seed_if_needed
-
-        apply_sunbird_roster_seed_if_needed(root)
-    except RECOVERABLE_ERRORS as exc:
-        logging.getLogger(__name__).warning("Sunbird roster seed skipped: %s", exc)
 
     return root

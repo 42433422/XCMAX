@@ -1,0 +1,7 @@
+2026-09-29T20:24:52+0800 [erp-purchase] 开始验收 erp-purchase 采购管理；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
+2026-09-29T20:24:53+0800 [erp-purchase] M1 passed :: HTTP 200 193ms；供应商 id=8 code=MACSUP684693
+2026-09-29T20:24:53+0800 [erp-purchase] M2 passed :: HTTP 200 384ms；订单 id=6 no=PO20260929202453 金额=50
+2026-09-29T20:24:53+0800 [erp-purchase] M3 passed :: HTTP 200 86ms；{"success": false, "message": "第 1 行明细未选择产品", "run_id": "run_50a78e3fc97c46b2a995d3b91b7cbdf1", "agent_run_id": "run_50a78e3fc97c46b2a995d3b91b7cbdf1", "agent_status": "failed"}
+2026-09-29T20:24:57+0800 [erp-purchase] M4 passed :: 已在 /mod/xcagi-erp-domain-bridge/purchase 页面看到「PO20260929202453」；上下文：9供应商 | MAC验收0929供应商 | 采购订单 | 采购入库 | 供应商 | 订单号	供应商	订单日期	交货日期	总金额	状态	操作 | PO20260929202453	MAC验收0929供应商	2026-09-29	2026-10-08	¥50.00	草稿	查看编辑审核 | PO20260929130258	MAC验收0929供应商	2026-09-29	2026-10-08
+2026-09-29T20:24:58+0800 [erp-purchase] screenshot result.png
+2026-09-29T20:25:03+0800 [erp-purchase] video operation.webm bytes=355540

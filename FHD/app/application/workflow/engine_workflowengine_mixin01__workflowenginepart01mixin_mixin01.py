@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+from contextvars import copy_context
 
 
 def _facade():
@@ -290,7 +291,11 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 read_map = {node.node_id: node for node in read_nodes}
                 future_map = {
                     node_id: executor.submit(
-                        self._run_node, node, runtime_context, max_retries=max_retries
+                        copy_context().run,
+                        self._run_node,
+                        node,
+                        runtime_context,
+                        max_retries=max_retries,
                     )
                     for node_id, node in read_map.items()
                 }

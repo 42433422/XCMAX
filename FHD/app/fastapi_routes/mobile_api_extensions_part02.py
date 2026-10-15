@@ -68,6 +68,9 @@ from app.fastapi_routes.mobile_api_extensions_part02_part02 import (
     mobile_relay_desktop_register as mobile_relay_desktop_register,
 )
 from app.fastapi_routes.mobile_api_extensions_part02_part02 import (
+    mobile_relay_desktop_renew as mobile_relay_desktop_renew,
+)
+from app.fastapi_routes.mobile_api_extensions_part02_part02 import (
     mobile_relay_desktops as mobile_relay_desktops,
 )
 from app.fastapi_routes.mobile_api_extensions_part02_part02 import (

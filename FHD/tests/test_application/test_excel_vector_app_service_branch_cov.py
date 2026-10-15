@@ -657,6 +657,8 @@ class TestVectorStoreFactoryBranches:
 
     def test_get_vector_store_sqlite_fallback_disabled(self, monkeypatch):
         monkeypatch.setenv("ENABLE_SQLITE_VECTOR_FALLBACK", "0")
+        monkeypatch.delenv("VECTOR_DB_URL", raising=False)
+        monkeypatch.setenv("DATABASE_URL", "postgresql://user:pw@localhost:5432/fhd")
         mock_pg = MagicMock()
         with (
             patch.object(evas_mod, "_vector_store_instance", None),
@@ -668,6 +670,8 @@ class TestVectorStoreFactoryBranches:
     def test_get_vector_store_sqlite_fallback_empty_string(self, monkeypatch):
         # Empty string -> treated as "0" -> pg path
         monkeypatch.setenv("ENABLE_SQLITE_VECTOR_FALLBACK", "")
+        monkeypatch.delenv("VECTOR_DB_URL", raising=False)
+        monkeypatch.setenv("DATABASE_URL", "postgresql://user:pw@localhost:5432/fhd")
         mock_pg = MagicMock()
         with (
             patch.object(evas_mod, "_vector_store_instance", None),
@@ -675,6 +679,20 @@ class TestVectorStoreFactoryBranches:
         ):
             result = get_vector_store()
         assert result is mock_pg
+
+    def test_get_vector_store_sqlite_url_auto_downgrades(self, monkeypatch):
+        """桌面端 DATABASE_URL=sqlite 时自动降级 SQLite store（无需显式开关）。"""
+        monkeypatch.setenv("ENABLE_SQLITE_VECTOR_FALLBACK", "0")
+        monkeypatch.delenv("VECTOR_DB_URL", raising=False)
+        monkeypatch.setenv("DATABASE_URL", "sqlite:////tmp/xcagi.db")
+        mock_sqlite = MagicMock()
+        with (
+            patch.object(evas_mod, "_vector_store_instance", None),
+            patch.object(evas_mod, "get_sqlite_vector_store", return_value=mock_sqlite),
+            patch.object(evas_mod, "get_pg_vector_store", side_effect=AssertionError("不该走 PG")),
+        ):
+            result = get_vector_store()
+        assert result is mock_sqlite
 
     def test_get_pg_vector_store_no_url_raises(self, monkeypatch):
         monkeypatch.delenv("VECTOR_DB_URL", raising=False)

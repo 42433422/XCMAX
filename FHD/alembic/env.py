@@ -25,8 +25,11 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
+# ``disable_existing_loggers=False``：桌面端启动迁移在 frozen 进程内以 API 方式
+# 调用 ``command.upgrade``，旧行为会把已存在的 ``app.*`` logger 全部置为 disabled，
+# 迁移之后应用静默丢日志；同 pytest 会话内的后续用例也会因此收不到告警。
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # add your model's MetaData object here
 # for 'autogenerate' support

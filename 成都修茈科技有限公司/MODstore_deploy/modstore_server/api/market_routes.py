@@ -74,6 +74,10 @@ from modstore_server.models import (
     get_session_factory,
     init_db,
 )
+from modstore_server.market_shared import (
+    market_item_public as _market_item_public,
+    market_item_visible_to_user as _market_item_visible_to_user,
+)
 
 router = APIRouter(prefix="/api", tags=["market"])
 

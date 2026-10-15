@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-task-workspace",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "dee22a5891e09e01dcd6cb5cc6cfeb814ce140458b1571297102ab7045e44e70",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。独立工作区，标题「MAC验收0929任务」，状态等待审批，第 1 次尝试 1 次运行。进度 0%，按钮审批并执行、暂停、取消。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-task-workspace/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-task-workspace/macos/result.png"
+}

@@ -32,17 +32,35 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify ${{ matrix.language }} changed paths (unified classifier)
+        id: paths
+        if: github.event_name == 'pull_request'
+        run: |
+          # 统一分类器（scripts/dev/change_classifier.py）——禁止此处再写死路径正则。
+          category="${{ matrix.language == 'python' && 'codeql_python' || 'codeql_javascript' }}"
+          python scripts/dev/change_classifier.py --category "$category" \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
 
       - name: Initialize CodeQL
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform CodeQL Analysis
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+
+      - name: No ${{ matrix.language }} changes (targeted skip)
+        if: github.event_name == 'pull_request' && steps.paths.outputs.run != 'true'
+        run: echo "No ${{ matrix.language }} source changes; CodeQL skipped for this PR; required check satisfied."
 
   security-no-new-critical-high:
     name: security-no-new-critical-high

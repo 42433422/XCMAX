@@ -26,23 +26,6 @@ abstract class _ApiPairingBase extends _ApiCsAuthBase {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
-  Future<MobileEnvelope<Map<String, Object?>>> pairingLookup({
-    required String code,
-    String baseUrl = '',
-  }) async {
-    final json = await postJson(
-      XcagiMobileEndpoints.pairingLookup,
-      {'code': code.trim()},
-      baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
-    );
-    return MobileEnvelope.fromJson(json, _asObjectMap);
-  }
-
-  Future<MobileEnvelope<Map<String, Object?>>> issuePairing() async {
-    final json = await postJson(XcagiMobileEndpoints.pairingIssue, const {});
-    return MobileEnvelope.fromJson(json, _asObjectMap);
-  }
-
   Future<MobileEnvelope<Map<String, Object?>>> confirmAuthQr({
     required String qrId,
     required String username,
@@ -88,11 +71,13 @@ abstract class _ApiPairingBase extends _ApiCsAuthBase {
 
 
   Future<MobileEnvelope<Map<String, Object?>>> relayBindAccount(
-    String relayId,
-  ) async {
+    String relayId, {
+    String pairingCode = '',
+  }) async {
     final json = await postJson(XcagiMobileEndpoints.relayMobileBindAccount, {
       'relay_id': relayId.trim(),
-    });
+      if (pairingCode.trim().isNotEmpty) 'pairing_code': pairingCode.trim(),
+    }, baseUrl: _config.baseUrl);
     final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
     if (envelope.success) {
       await persistRelayBindingMeta(relayId.trim(), envelope.data);

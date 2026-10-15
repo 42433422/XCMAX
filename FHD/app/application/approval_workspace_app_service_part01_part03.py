@@ -28,10 +28,25 @@ def _approve_ai_workflow_request_without_node(
         return _facade().JSONResponse(
             {"success": False, "message": "AI 审批流程缺少合法留痕节点"}, status_code=409
         )
+    try:
+        business = (
+            _facade().json.loads(req.business_data) if isinstance(req.business_data, str) else {}
+        )
+    except (ValueError, TypeError):
+        business = {}
+    restore_approval = isinstance(business, dict) and (
+        business.get("tool_id"),
+        business.get("action"),
+    ) == ("system_maintenance", "restore_database")
     workflow_execution = _facade()._resume_pending_ai_workflow_after_approval(
         request_no=str(req.request_no or ""), opinion=opinion, approved_by=str(actor)
     )
     _execution_success = bool(workflow_execution and workflow_execution.get("success"))
+    if _execution_success and restore_approval:
+        # The restored snapshot predates this approval. Reload its identity from
+        # the restored DB so a missing row is inserted instead of a stale UPDATE.
+        db.expunge(req)
+        req = db.merge(req)
     status_before = req.status
     terminal_status = (
         _facade().ApprovalStatus.APPROVED.value
@@ -142,8 +157,11 @@ def _approve_ai_workflow_request_without_node(
     data = _facade()._request_to_dict(req, include_records=True)
     data["workflow_execution"] = bounded_outcome
     if not _execution_success:
+        failure_message = "审批通过后 AI 工作流执行失败，审批已取消"
+        if safe_code in _facade().SETUP_GUIDANCE_CODES:
+            failure_message = f"{failure_message}：{safe_message}"
         return _facade().JSONResponse(
-            {"success": False, "data": data, "message": "审批通过后 AI 工作流执行失败，审批已取消"},
+            {"success": False, "data": data, "message": failure_message},
             status_code=409,
         )
     return {"success": True, "data": data}

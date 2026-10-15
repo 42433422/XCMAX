@@ -1,0 +1,6 @@
+2026-09-29T06:53:50+0800 [pay-wallet] 开始验收 pay-wallet Token 钱包与模型计费；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:53:54+0800 [pay-wallet] M1 passed :: HTTP 200 4312ms；{"orders": [], "order_total": 0, "refunds": [], "transactions": [{"order_no": "AIHe4bba781bdf24d16", "amount": -0.04, "txn_type": "ai_settle_extra", "balance_af
+2026-09-29T06:53:54+0800 [pay-wallet] M2 passed :: HTTP 200 18ms；entries=19
+2026-09-29T06:53:58+0800 [pay-wallet] M3 passed :: 导航后路径 /settings?section=model-payment；命中文本 ['模型']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮
+2026-09-29T06:53:59+0800 [pay-wallet] screenshot result.png
+2026-09-29T06:54:02+0800 [pay-wallet] video operation.webm bytes=387473

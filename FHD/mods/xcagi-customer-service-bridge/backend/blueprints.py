@@ -176,31 +176,6 @@ class IntakeNoticeBody(BaseModel):
     force: bool = False
 
 
-class PassivePollBody(BaseModel):
-    market_user_id: int = Field(..., gt=0)
-    username: str = Field(default="", max_length=128)
-    dry_run: bool = Field(default=True, description="True=只探测不发送")
-    auto_reply: bool = Field(default=True)
-    max_replies: int = Field(default=0, ge=0, le=5, description="0=按绑定群数每群 1 条")
-    use_llm: bool = Field(default=True, description="True=用 LLM 生成回复，失败则回退模板")
-    skip_sync: bool = Field(
-        default=False,
-        description="True=跳过服务端同步（由前端先调 refresh_messages，与数据来源按钮一致）",
-    )
-    refresh_count_new: int | None = Field(default=None, ge=0)
-    refresh_latest_label: str = Field(default="", max_length=32)
-    catch_up_latest: bool = Field(
-        default=False, description="True=手动被动回复时可补答游标时刻的最新一条他人消息"
-    )
-
-
-class PassiveLoopConfigBody(BaseModel):
-    market_user_id: int = Field(..., gt=0)
-    username: str = Field(default="", max_length=128)
-    poll_enabled: bool = False
-    poll_interval_sec: int = Field(default=60, ge=10, le=600)
-
-
 async def _run_user_cs_employee(payload: Dict[str, Any]) -> Dict[str, Any]:
     """调用 user-customer-service-officer 员工包（mods/_employees）。"""
     from app.mod_sdk.host_services import run_user_cs_employee

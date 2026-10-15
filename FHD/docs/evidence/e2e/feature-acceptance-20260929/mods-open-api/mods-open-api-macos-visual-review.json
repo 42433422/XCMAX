@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "mods-open-api",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "7b5f83deea5fb5a4d7daa58552757e9d1e0a4707d8ceedf4b21063ff8c1bb31d",
+  "visible_content": "AIOPEN manifest 与工具清单可读；同会话创建 API Key（前缀已脱敏）并在列表读回 3 个；manifest 版本仍显示 1.0.0.3（与产品 1.0.0.5 不一致，已修复待新构建验收）。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-open-api/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-open-api/macos/result.png"
+}

@@ -35,6 +35,9 @@ from app.application.normal_chat_dispatch_part02_part01 import (
     build_shipment_records_query_response_dict as build_shipment_records_query_response_dict,
 )
 from app.application.normal_chat_dispatch_part02_part02 import (
+    build_clarify_response_dict as build_clarify_response_dict,
+)
+from app.application.normal_chat_dispatch_part02_part02 import (
     build_finance_query_response_dict as build_finance_query_response_dict,
 )
 from app.application.normal_chat_dispatch_part02_part02 import (

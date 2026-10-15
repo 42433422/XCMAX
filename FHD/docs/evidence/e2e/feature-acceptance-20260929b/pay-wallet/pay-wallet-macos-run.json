@@ -1,0 +1,67 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。账号仅记录用户名。",
+  "kind": "feature-acceptance",
+  "feature": "pay-wallet",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929b",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "app_version": "1.0.0.5",
+  "account": "SUNBIRD",
+  "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。 各步结果均为通过。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/market/wallet/overview",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/market/wallet/overview（写操作自动附带 CSRF）：钱包总览",
+      "expected": "钱包总览：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 9007ms；{\"orders\": [], \"order_total\": 0, \"refunds\": [], \"transactions\": [{\"order_no\": \"AIHa624d60e59444ff1\", \"amount\": -0.04, \"txn_type\": \"ai_settle_extra\", \"balance_af",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/model-payment/usage",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/model-payment/usage（写操作自动附带 CSRF）：模型用量",
+      "expected": "模型用量：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 18ms；entries=50",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "界面路由 /settings?section=model-payment",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /settings?section=model-payment，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /settings，页面可见 模型，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /settings?section=model-payment；命中文本 ['模型']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "pay-wallet",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/pay-wallet/macos/result.png",
+      "sha256": "25a94a14e8352db12b4623dac8d2d3c55e88f4fbe5210737297b8aac507257f8",
+      "visual_review": "accepted",
+      "visible_result": "系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-wallet",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/pay-wallet/macos/operation.webm",
+      "sha256": "759ba5232228af425d6357d2c72825aaf11855f7e1bda517e79f1373d0c505e8",
+      "visual_review": "accepted",
+      "visible_result": "录屏结束停在上述结果画面。系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/pay-wallet/macos/run.log",
+    "sha256": "e69502f47fadece8058d809cbebf62bb3194efd6fed00a5cbe017160a431c530",
+    "bytes": 1297
+  }
+}

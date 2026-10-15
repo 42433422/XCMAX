@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,6 +14,10 @@ from app.fastapi_routes import shipment_orders
 
 def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(shipment_orders, "_svc", lambda: fake_service)
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_principal.resolve_session_user",
+        lambda _r: SimpleNamespace(id="tenant-a", is_active=True, tenant_id=None),
+    )
     app = FastAPI()
     app.include_router(shipment_orders.router)
     return TestClient(app, raise_server_exceptions=False)
@@ -38,8 +44,10 @@ def test_shipment_order_routes_execute_through_agent_orchestrator(
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    shipment_outputs = tmp_path / "shipment_outputs"
-    shipment_outputs.mkdir()
+    from app.utils.path_io.path_utils import get_shipment_output_dir
+
+    shipment_outputs = Path(get_shipment_output_dir())
+    shipment_outputs.mkdir(parents=True)
     shipment_file = shipment_outputs / "shipment.xlsx"
     shipment_file.write_bytes(b"fake")
     svc = MagicMock()

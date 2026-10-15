@@ -1,0 +1,60 @@
+# dt-process-mgmt 进程管理与托底通知
+# verified_at=2026-09-20T09:44:57.856Z
+# app=1.0.0.5@9d6134d5cc37372d9e14bad83ca1fcf2ea060f56
+url=http://127.0.0.1:17500/desktop-runtime
+title=桌面运行时 - XCAGI
+--- body text (head) ---
+饰品包装助手
+SUNBIRD
+智能对话
+考勤工作区
+信息
+智能生态
+知识库
+员工工作台
+数据对接中心
+饰品包装品管理
+原材料仓库
+库存管理
+客户管理
+订单管理
+出货记录
+数据来源
+包装标签打印
+标签模板库
+系统设置
+系统正常
+通用考勤模块
+v1.0.0.5
+SUNBIRD
+桌面运行时
+SUNBIRD
+副窗
+◈
+工作区
+桌面运行时
+
+该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。
+
+刷新状态检查桌面更新
+运行状态
+桌面模式
+是
+数据目录
+/Users/a4243342/Library/Application Support/XCAGI
+数据库
+/Users/a4243342/Library/Application Support/XCAGI/data/xcagi.db
+存储模式
+本地 SQLite
+连接（脱敏）
+sqlite:////Users/a4243342/Library/Application Support/XCAGI/data/xcagi.db
+Mod 目录
+/Users/a4243342/Library/Application Support/XCAGI/mods
+模型目录
+/Users/a4243342/Library/Application Support/XCAGI/models
+本地模型
+
+暂无已安装模型。桌面版会在首次使用对应能力时按需下载。
+
+更新事件
+{"type":"update-not-available","data":{"version":"1.0.0","productVersion":"1.0.0.5","buildSha":"9d6134d5cc37372d9e14bad83ca1fcf2ea060f56","releaseId":"xcagi-1.0.0.5-9d6134d5cc37372d9e14ba

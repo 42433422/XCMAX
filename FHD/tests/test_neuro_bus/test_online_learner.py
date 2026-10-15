@@ -6,10 +6,10 @@ from app.neuro_bus.routing.online_learner import OnlineLearner
 
 
 def test_should_explore_returns_bool():
-    """should_explore 返回 bool 类型。"""
-    learner = OnlineLearner(epsilon=0.5)
-    result = learner.should_explore()
-    assert isinstance(result, bool)
+    for epsilon, expected in ((0.0, False), (1.0, True)):
+        learner = OnlineLearner(epsilon=epsilon)
+        assert learner.should_explore() is expected
+        assert learner.get_stats()["explore_count"] == int(expected)
 
 
 def test_record_decision_adds_to_window():

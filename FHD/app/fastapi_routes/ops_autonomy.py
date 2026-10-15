@@ -20,9 +20,11 @@ from app.application.autonomy.approval_resume import (
     resume_action,
 )
 from app.domain.autonomy.autonomy_guard import ProhibitedActionError, evaluate_risk
+from app.fastapi_routes.ops_autonomy_work_orders import router as work_order_router
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/ops/autonomy", tags=["ops-autonomy"])
+router.include_router(work_order_router)
 
 _WORKFLOW_ACTIONS = {
     "apply_release_to_cvm": "apply-latest",

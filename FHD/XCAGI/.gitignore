@@ -211,6 +211,9 @@ test_labels/
 # AI report (generated)
 AI企业解决方案对比分析报告.*
 
+# OpenAPI 文档由 generate_api_docs.py 生成，按需再生成，不再入库（见根 ARCHIVE_POINTER.md）
+API_DOCS.md
+
 # Local junction/symlink to repo-root ../app (create via ../scripts/ensure_xcagi_app_link.*)
 /app
 # Duplicate frontend tree; authoritative code is repo-root ../frontend/

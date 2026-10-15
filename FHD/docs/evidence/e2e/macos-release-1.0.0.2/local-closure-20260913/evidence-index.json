@@ -1,0 +1,643 @@
+{
+  "updated_at": "2026-09-13T08:16:36.177405+00:00",
+  "objective": "mac端本机必须全部闭环并截图或者录屏全部证据",
+  "complete": false,
+  "integration_pr": 1905,
+  "integration_head": "f0ce370202234327c31f98dc6d61f2eb89d40582",
+  "mainline_version_bump": "1c93d9f6318ca5902fd7e4590143b46784077f9c",
+  "installed_baseline": "99854233c5d4ea05a96b1f6ae1e3b7edfe03b526",
+  "remaining": [
+    "PR1920 final required CI and mainline merge",
+    "Build signed exact-main artifact containing PR1920, release and repeat OTA to verify intentional shutdown race fix",
+    "Fresh macOS user or clean VM installation acceptance: administrator authentication unavailable",
+    "Actual Mac reboot and recovery verification",
+    "Final installed shipment regression and evidence reconciliation"
+  ],
+  "files": {
+    "01-initial-login.png": {
+      "bytes": 62422,
+      "sha256": "ac6612f035950288436f9b96908358f902e57e9c7ab7c31be46e8817c0019370"
+    },
+    "02-main-cold-start.png": {
+      "bytes": 96553,
+      "sha256": "c4c0521138ccc415e38d6f01746dfff6f8c3251886570021bd16a045f1cab210"
+    },
+    "03-main-window.png": {
+      "bytes": 63767,
+      "sha256": "95ab2bbacb3734bba3d2ea35a68c51f70863e91f19a2c1e5531baf1740253049"
+    },
+    "04-main-login-ready.png": {
+      "bytes": 64123,
+      "sha256": "80874bf14b887cfa85c5a9b67078868dea1811efcd341d781df14d7798b7e704"
+    },
+    "05-main-support-before-ota.zip": {
+      "bytes": 141846,
+      "sha256": "00008e5462f5a37f5424f42589a1045a4f3a5db59181cad94601c1ff4eafd955"
+    },
+    "06-support-export-success.png": {
+      "bytes": 17259,
+      "sha256": "f5196fc0021309d413d9167b886df34c7cf3e85db2fa25db74eb7cc8e71d44c6"
+    },
+    "07-main-about-version.png": {
+      "bytes": 8568,
+      "sha256": "baf1f0b11784a2a944492e39ec94bae7d1aa3cbddf879b2cc3af7c7c47313e03"
+    },
+    "08-ci-backend-progress.png": {
+      "bytes": 69076,
+      "sha256": "28e410c6241766a43eefd5983d6ae81e880b6b5d523cacf36341906d0f892a88"
+    },
+    "09-ci-coverage-gates.png": {
+      "bytes": 55912,
+      "sha256": "4eee081e26cfebf9b468f88bdc99468ee6c26c0ddd199f09f6825e4aca64b842"
+    },
+    "baseline-restore-data-compare.json": {
+      "bytes": 31548,
+      "sha256": "20eda11af365f4dc18f85c836da11c8c670a2fc3f4478207c4fc35c0c0a12b73"
+    },
+    "business-files-backup-receipt.json": {
+      "bytes": 198507,
+      "sha256": "85df963e0c5d92c6575e92720612a940b185cd20957063a907dc7c0e7aa6fd3d"
+    },
+    "ci-progress.json": {
+      "bytes": 34901,
+      "sha256": "ae4d19a217ad8d8c5f07cf82af3dbc7a0f74ed06d0003f3b691fa21af76777ef"
+    },
+    "db-backup-receipt.json": {
+      "bytes": 2959,
+      "sha256": "14fab149051b65825a855c889d98f27eae582dd50b4c1fc41f2e4728a17e40ad"
+    },
+    "feed-signature-receipt.json": {
+      "bytes": 438,
+      "sha256": "a2d5db647ee3c7fbbdc6af9d025b67a3feadf5ec7260addc253d843c2978972c"
+    },
+    "initial-state.json": {
+      "bytes": 1170,
+      "sha256": "af1b3bfcef83d8560a94a4a9f1a52b57a9344d2e1145be5aafc915d408a893c6"
+    },
+    "machine-baseline.json": {
+      "bytes": 622,
+      "sha256": "ba6b542662eeafee16e48b82f87a10440c8d8f83c483c82f26156c6cc7e5ad34"
+    },
+    "main-cold-start-receipt.json": {
+      "bytes": 1054,
+      "sha256": "f3ac6643d1957010a9946b402c6a7145e116757b7aa933b58750e137dcbd9e85"
+    },
+    "main-install-receipt.json": {
+      "bytes": 801,
+      "sha256": "aea391e64cd549c513a27f48d8fb31b80956724875c9352f7fd67d0889783654"
+    },
+    "official-feed-before-ota.yml": {
+      "bytes": 883,
+      "sha256": "5881aca4c41e395d49af58a8ea723abff90ee602be5a25136daaf7c0f9b09489"
+    },
+    "10-backend-ci-completed.jpg": {
+      "bytes": 67212,
+      "sha256": "9daf75429e0c07de985dc139c0f5dcd7a35d87cc4b9ac7fa3a9695db63fc950e"
+    },
+    "backend-ci-raw.log": {
+      "bytes": 6399911,
+      "sha256": "80935d2d0adeca0682d1b8c71dd482a2fd8fcda432a03a2d9a9f5b01f3eddb07"
+    },
+    "integration-merge-receipt.json": {
+      "bytes": 256,
+      "sha256": "a36ff160e39c765744c69f6b2c72902035d3463b540b6287ee1551bf281af487"
+    },
+    "final-main-codeql-analyses.json": {
+      "bytes": 1090,
+      "sha256": "7c1b10e9a2f79886275a12de03ea5a26d1841105bf010cb6f7444e3606fa733d"
+    },
+    "security-first-scan-verification.json": {
+      "bytes": 1741,
+      "sha256": "133b4dee76e138321ed9bba7f0b3d88f8c2e351abd12140b234ed6994c99a212"
+    },
+    "11-first-security-scan-passed.jpg": {
+      "bytes": 56075,
+      "sha256": "821e38a47910b9f4d4e965e838767d3063559a9b6b9a9c72b2f8ff090bf7535f"
+    },
+    "security-pair-verification.json": {
+      "bytes": 145,
+      "sha256": "d798d2085820a5ddc3d778e9d17d4c4bf3331ec6a4dde4b0b2100e52be30db52"
+    },
+    "final-main-ci.json": {
+      "bytes": 34901,
+      "sha256": "da1488469ecf5bd82461d356f78dac13b072b17c5decffd364e7c3f9ec9bcdd3"
+    },
+    "12-release-build-in-progress.jpg": {
+      "bytes": 58042,
+      "sha256": "9f404625c0a0046ab8fa15796f5ec1858f655e0c9a41ea0ab72c26b82dbb133d"
+    },
+    "signing-repair-live-release-progress.json": {
+      "bytes": 5988,
+      "sha256": "27bfdc449eb47192e3ff42e220a0fa038946e4a6acf0ebfc2d7a829c1ca8cc18"
+    },
+    "security-fa3-first-verification.json": {
+      "bytes": 1741,
+      "sha256": "c400f2e5bee534787aba0d2f1ddae95139d6b6bfb76e4237adfd923068fcf4c8"
+    },
+    "13-fa3-security-first-passed.jpg": {
+      "bytes": 56166,
+      "sha256": "94178fe41d6871a767add306a4b2efc1017a5b07f2aede38d1be6df2ba4dac68"
+    },
+    "fa3-main-ci-progress.json": {
+      "bytes": 21363,
+      "sha256": "a5e59d2d526f928c6608341d4ba45ad926d8d596b5b89acf523aa0549aa3b3be"
+    },
+    "security-fa3-pair-verification.json": {
+      "bytes": 145,
+      "sha256": "2df694599d1388353713b9e83ef049ef79b39d94aa748712a03761adb24419fd"
+    },
+    "14-fa3-security-second-passed.jpg": {
+      "bytes": 56158,
+      "sha256": "4f8082814b86581c7a79e86e66514a81a7de97a8fe99a2f91c25b3d159152464"
+    },
+    "fa3-main-ci-final.json": {
+      "bytes": 34876,
+      "sha256": "dd38bcb87bcd2c3a3091c36acde8d9191103baee68e18733a9c700ef24e0c9bf"
+    },
+    "15-fa3-main-ci-passed.jpg": {
+      "bytes": 70297,
+      "sha256": "9d725806fdd71b03e32c03d863c534f532f831216d1843982fc2e372bdbc1dd0"
+    },
+    "formal-artifact-verification.json": {
+      "bytes": 1656,
+      "sha256": "8360b3336e2a4b75ac7d57d516c3b29b27fd84afc2197826ab9105c0619548ac"
+    },
+    "main-ota-detection.json": {
+      "bytes": 623,
+      "sha256": "b56b560693c01ec4d6a8004c3a79891b22f7dc97b2239cc0e3947f3f81972c09"
+    },
+    "16-main-update-detected-login.jpg": {
+      "bytes": 63815,
+      "sha256": "575c66ac6870f2ec30220e1c8c7f954cfd98b58d4f4ce2e266326202d2b0d4ed"
+    },
+    "formal-server-artifact-match.json": {
+      "bytes": 491,
+      "sha256": "654e3532eddf5a6ac2168404009551c39cc2a6966b093f70ec28e68ba309e212"
+    },
+    "download-page-preflight.json": {
+      "bytes": 339,
+      "sha256": "f303191e36f36f4dd6368a2651522d8353d40567716b6c08c4c6a0c0c6360aba"
+    },
+    "17-download-center-before-metadata.jpg": {
+      "bytes": 65747,
+      "sha256": "f70d154d23c746b89eaf6f1c8245ca2b9bdcf4da21d36279219688fe7d4478ad"
+    },
+    "download-metadata-publication.json": {
+      "bytes": 1285,
+      "sha256": "710cfdbd125f96b087212249fb6bf068bd9e32bfc599a2d76225a093dab0776d"
+    },
+    "download-metadata-public-verification.json": {
+      "bytes": 482,
+      "sha256": "952078fc81eea12e3ebc12ff4ca334ab391e09e99ff67ea5d238b72ee8f41af2"
+    },
+    "18-download-center-10002-published.jpg": {
+      "bytes": 65742,
+      "sha256": "2e52d09ae088203e8081c5aadc26a952f69f3bae98b0124c5cb433aac8897d76"
+    },
+    "19-release-notes-10002-published.jpg": {
+      "bytes": 68481,
+      "sha256": "36cfbc5a97ea81107adc058c8a34ec0019d5168104071e8cc60aacb885522df2"
+    },
+    "20-status-copy-local-preview.jpg": {
+      "bytes": 65837,
+      "sha256": "d0a7fbd5e05a348903c532d89c3954c03cfa6085cf004a98647697336403ddc6"
+    },
+    "21-release-summary-local-preview.jpg": {
+      "bytes": 67686,
+      "sha256": "3797581d57195ba4d8e17b64c19d88b82939ff592759f84cf99247dd654f68dd"
+    },
+    "pr1911-ci-final.json": {
+      "bytes": 492,
+      "sha256": "68d6558a1d5fe96c07650b8913d6ed6854da90a1c35e5cbeb53b0eef7b06fa86"
+    },
+    "download-pages-pr1912-public-verification.json": {
+      "bytes": 852,
+      "sha256": "67571359fb68d3c8ad751979e3dfb589246ec9228da55a0e2d220d6eb32052b1"
+    },
+    "22-download-status-public.jpg": {
+      "bytes": 53893,
+      "sha256": "8e88931b270e19986a6a3411047f70e4ce8038ed5cedd20189140969b980c25c"
+    },
+    "23-release-summary-public.jpg": {
+      "bytes": 67645,
+      "sha256": "2524798f3510397d7ba7156bcf82f6345cd86f576ca289642a088695840bdd23"
+    },
+    "pr1912-backend-ci-review.json": {
+      "bytes": 628,
+      "sha256": "e57cd8aaa16927ecd85eb0d892ce3c47038e74d199373b0da6c7e45d4684616b"
+    },
+    "pr1912-ci-final.json": {
+      "bytes": 52890,
+      "sha256": "288bfdd575320a3b73c3d0f05020b668dd7c3698b5af7a1ee390e4e29126aad4"
+    },
+    "demo-login-result.json": {
+      "bytes": 1685,
+      "sha256": "b8232ab332657b5aff133ae4a2799e8da121ae90fe95c37ab8ab7d9abe77636a"
+    },
+    "24-demo-login-stalled.png": {
+      "bytes": 67106,
+      "sha256": "f633a94dc70e796346b26b1fbc1717709fb0593f94bc14741b9a3080503f3397"
+    },
+    "formal-recovery-install.json": {
+      "bytes": 754,
+      "sha256": "8cb3a52e4af2bfc69e692c4aafb5ccbc804396a171a263893d4c85d9e47a180b"
+    },
+    "25-demo-login-server-error.png": {
+      "bytes": 66312,
+      "sha256": "be97b54f0d1b01b4ff5f88594a3a9dc467b6eb40fd1b0867ae809a32fa03e62e"
+    },
+    "26-formal-10002-first-launch.png": {
+      "bytes": 5401,
+      "sha256": "14b2e55d00989878230c16650b640baebc826946c44d7c27025d22e135383570"
+    },
+    "27-formal-attendance-restored.png": {
+      "bytes": 121393,
+      "sha256": "618028dfac1a08a9bd4f3d7d5c03431a55b3077d7d2ac62d7e0720fabe31d92b"
+    },
+    "formal-template-ui-attempt.json": {
+      "bytes": 654,
+      "sha256": "ff65d37f3811e0fe0d41c1fec6849212aa9822aece288aff372221a627195fdc"
+    },
+    "28-template-file-picker-block.png": {
+      "bytes": 10377,
+      "sha256": "fcef8f0c4ae739b64c9fb1862e69e47cd8239036f357c5900e7c58025ba54896"
+    },
+    "formal-recovery-data-comparison.json": {
+      "bytes": 30093,
+      "sha256": "3598cfeb41d9b27f75945e5f51c7a6b5b47b07a3b2382d88b44c024210863068"
+    },
+    "formal-recovery-auth-data-delta.json": {
+      "bytes": 207,
+      "sha256": "e7a0aef6804d06e19f1afd0e454f1e678f07dd49bb95a7ced9fc7e7c78765579"
+    },
+    "29-formal-template-grid-browser.png": {
+      "bytes": 75883,
+      "sha256": "1907793b24197a71c69f201b785b328e425d2821408a0462818e7b469b04b7e2"
+    },
+    "30-formal-template-saved-browser.png": {
+      "bytes": 106211,
+      "sha256": "db200a82d9a349fe3056e53e8c7801d2ed5d3eadabb74581221dbacc7db05e3f"
+    },
+    "31-formal-order-template-block-browser.png": {
+      "bytes": 60698,
+      "sha256": "7a63e9f7f9a65bada4b34100fc652c0f1d1a1d448800ca96f959b8c66c14b9be"
+    },
+    "formal-browser-business-acceptance.json": {
+      "bytes": 645,
+      "sha256": "121d8a27966835abf7635bd1a5c6d0167290e6bd04bbe7832d1f2bfc36ceafed"
+    },
+    "34-candidate-shipment-download-passed.png": {
+      "bytes": 61956,
+      "sha256": "ab281d5b4e8882d8793e6b71cabdfe17c147ea19b77fd46df46efc767f0bc0ba"
+    },
+    "35-candidate-customer-product-linked.png": {
+      "bytes": 55067,
+      "sha256": "6f613bdd31ceb427a5800a8cfee34835fa97ed15b79453315764b8aa6ebe820c"
+    },
+    "signing-repair-merge-receipt.json": {
+      "bytes": 196,
+      "sha256": "41cc6b2a98dd5f12a79f1f90396497ede146d647e6a8d9953b39a895b404b432"
+    },
+    "native-formal-business-acceptance.json": {
+      "bytes": 795,
+      "sha256": "6bd007c657fda3ad08bd94c211b88c63e9f68632aea69601eae3185175f1cddf"
+    },
+    "candidate-output-after-eval.json": {
+      "bytes": 1204,
+      "sha256": "65bf08a5dd9b51479f9d932353de330820d48cdef48e0ac65ccbfc89c8f41ddb"
+    },
+    "candidate-shipment-acceptance.json": {
+      "bytes": 1314,
+      "sha256": "dcd4fd9e27257f71231868cae111d25bf35868a271387fbb235b059d2fdf6385"
+    },
+    "32-candidate-shipment-ready.png": {
+      "bytes": 67405,
+      "sha256": "e30aad268332aa1e2aac46aef4f48cfd315b8c97d4d00cf521e2035a68881337"
+    },
+    "37-native-formal-attendance-converted.jpg": {
+      "bytes": 164600,
+      "sha256": "7aaa2dd4ef96cf7f546af171007c02eef3340ee777cd233c63ed71dd469adbbc"
+    },
+    "candidate-output-before-eval.json": {
+      "bytes": 1222,
+      "sha256": "28b0f944c7ce56c492f177ea1367d1c7320aa3e421264250818b5989fc4b15f2"
+    },
+    "36-native-formal-template-grid.jpg": {
+      "bytes": 124870,
+      "sha256": "c92c5fc1c8245515dc3df7c01cc9be84b6f403d625d936d881a3e7b3e05701d2"
+    },
+    "33-candidate-shipment-generated.png": {
+      "bytes": 60897,
+      "sha256": "d7a4e7fc577c4c503614b3ee7c4fee7ab0ee91bee1dc7f7decb689f3af0ddbe3"
+    },
+    "candidate-shipment-1920.xlsx": {
+      "bytes": 5247,
+      "sha256": "180169c6ebe5122f105ec27a49b04db5dd8569e66e66f1d95d9aa0cc15475736"
+    },
+    "40-candidate-final-shipment.png": {
+      "bytes": 62374,
+      "sha256": "4cff3878f841adc4544f87d62b22cef0f9ac2883a9b38d77df92f2fa0092f9a5"
+    },
+    "38-candidate-order-list-corrected.png": {
+      "bytes": 51681,
+      "sha256": "9e425c46029d6c59c04ed7706ed77d8493c78dfa145effd01375dd543332b224"
+    },
+    "41-candidate-final-order-list.png": {
+      "bytes": 63669,
+      "sha256": "50578082797d31c4be98bcb46bea8fe1f8c600601496af7c02f99e20374992ab"
+    },
+    "39-candidate-linked-shipment-generated.png": {
+      "bytes": 62401,
+      "sha256": "4487685d745c577fedd3a8cce24539e68e4fa7200fb9d41b6d0a2c295e9ee21f"
+    },
+    "official-ota-6eda-receipt.json": {
+      "bytes": 2468,
+      "sha256": "3efcc69a163f1ba66340b5740fff4043f7752ebcddbe4954812f47478ce409ac"
+    },
+    "42-native-official-ota-6eda-offer.jpg": {
+      "bytes": 94012,
+      "sha256": "9402c8feb5c754a60d3188c4b4ad52aab0aabcc931a0f075844f36560c0d5920"
+    },
+    "pr1920-latest-ci.json": {
+      "bytes": 7230,
+      "sha256": "570b55306fddceaed170c4e66e2f7fa0a408190a48894dda8280234d2af47fcc"
+    },
+    "44-native-post-ota-6eda-roster.jpg": {
+      "bytes": 121680,
+      "sha256": "697fedba812d000b9e7dccffa09a295676a4f50ceca92610f14e89ee79eb0af4"
+    },
+    "45-native-post-ota-6eda-conversion.jpg": {
+      "bytes": 165273,
+      "sha256": "14c0c13ad42c5619435dac70bdb66f842bdbf6f17f082edc08b96eeb00637788"
+    },
+    "43-native-official-ota-downloaded.jpg": {
+      "bytes": 94917,
+      "sha256": "0bc927cdb90da09362d8882aa608d57415e0fadf717ced486e9a9e9e57d90671"
+    },
+    "official-feed-ota-6eda.yml": {
+      "bytes": 1058,
+      "sha256": "c1b53da6037f4ac21c6da16a687ad82bf2e3dbdd379c10d2ac648be0b646f9aa"
+    },
+    "pr1920-cleanup-receipt.json": {
+      "bytes": 461,
+      "sha256": "6543ceee08e470fcf7358687ad0674186ca720aa6f8d1f08e4ffa2e1ba31e575"
+    },
+    "installed-6eda-health-current.json": {
+      "bytes": 415,
+      "sha256": "982ae26114ff29055e95f51d20ce0a157bee595bc64f0160f175f8ea1f5faf66"
+    },
+    "46-native-6eda-session-retained.jpg": {
+      "bytes": 126120,
+      "sha256": "8ec6c09814383bdd0051b6c4093f066b6036e70433d1e33af455a89a8c29cdea"
+    },
+    "47-native-6eda-settings-navigation.jpg": {
+      "bytes": 108183,
+      "sha256": "2e1ea3b520b55fa09fef0838791357d0b7acaaf1ddc746cf6239284c70800d45"
+    },
+    "48-native-6eda-ai-readonly-query.jpg": {
+      "bytes": 121970,
+      "sha256": "53bd80ca96696de584ecf2afa4179a4a69825fb16a59ddc2f113f562fd74aef2"
+    },
+    "template-path-real-excel-acceptance.json": {
+      "bytes": 12794,
+      "sha256": "ca02c9a2b7538a70b14235c903959877870acae4f6e129b04718aa5f6f6acc8a"
+    }
+  },
+  "ci_run": 34708890450,
+  "ci_state": "Final-main CI 34712414660 completed successfully",
+  "superseded_ci": {
+    "run": 34705905666,
+    "head": "d19191b9411c4fd939e08c51c53dcc1400ea3033",
+    "conclusion": "cancelled",
+    "reason": "Replaced by current PR head f0ce370202234327c31f98dc6d61f2eb89d40582; only obsolete PR container scan remained"
+  },
+  "baseline_restore_data": "93 tables: row counts and complete row-content digests identical",
+  "integration_merge": "6f02bc6d823d9499be4567ac1e99dd08c705d764",
+  "integration_state": "MERGED",
+  "backend_ci_raw_review": {
+    "full_tests_passed": 37728,
+    "behavior_tests_passed": 37727,
+    "behavior_line_percent": 88.4,
+    "behavior_branch_percent": 80.7,
+    "observation_check_incomplete": "Schema drift: ModuleNotFoundError: No module named app",
+    "source_run": 34708890450,
+    "job": 103595241056
+  },
+  "security_scan_current": 34712776961,
+  "security_scan_previous_ineligible": {
+    "run": 34712618907,
+    "reason": "CodeQL export completed 18:56:05Z, before final-main Python analysis at 18:56:38Z"
+  },
+  "final_main_codeql": "Both required categories completed successfully for 6f02bc6d823d9499be4567ac1e99dd08c705d764",
+  "schema_parity_authoritative": {
+    "run": 34712414699,
+    "conclusion": "success"
+  },
+  "security_first_scan": {
+    "run": 34712776961,
+    "passed": true,
+    "required_reports": 10,
+    "critical": 0,
+    "high": 0,
+    "reports_dir": "/Users/a4243342/XCMAX-runtime/mac-closure-20260913/security-34712776961",
+    "second_scan_not_before_utc": "2026-09-12T19:36:04Z"
+  },
+  "security_second_scan": {
+    "run": 34714660274,
+    "started_at_utc": "2026-09-12T19:36:24Z",
+    "release_sha": "6f02bc6d823d9499be4567ac1e99dd08c705d764",
+    "status": "completed",
+    "previous_run": 34712776961,
+    "conclusion": "success"
+  },
+  "security_pair_passed": true,
+  "mac_release": {
+    "run": 34715296351,
+    "job": 103611345813,
+    "version": "1.0.0.2",
+    "release_sha": "6f02bc6d823d9499be4567ac1e99dd08c705d764",
+    "security_pair_gate": "success",
+    "secrets_preflight": "success",
+    "status": "completed",
+    "conclusion": "failure",
+    "failure": "electron-builder duplicate certificate import: temporary keychain unlock failure"
+  },
+  "signing_repair": {
+    "mergeCommit": {
+      "oid": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b"
+    },
+    "mergedAt": "2026-09-12T20:52:56Z",
+    "state": "MERGED",
+    "url": "https://github.com/42433422/XCMAX/pull/1909"
+  },
+  "current_release_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+  "security_pair_scope_note": "Historical 6f02bc6d pair retained below; current_security_pair proves fa3c8832 exact binary SHA.",
+  "latest_observed_release_attempt": {
+    "run_id": 34718474818,
+    "status": "failure",
+    "workflow_head": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "actual_release_sha": "a534b2e820679d03e8da735f117a2d64cbe35b5f",
+    "reason": "npm ETIMEDOUT downloading yargs 15.4.1 from cdn.npmmirror.com; build did not reach signing. This attempt does not test merged signing repair.",
+    "raw_log": "/Users/a4243342/XCMAX-runtime/mac-closure-20260913/mac-release-34718474818-failed.log"
+  },
+  "current_security_first_scan": {
+    "run_id": 34718727288,
+    "release_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "passed": true,
+    "high": 0,
+    "critical": 0,
+    "second_scan_not_before_utc": "2026-09-12T21:39:04Z"
+  },
+  "current_security_second_scan": {
+    "run_id": 34720566551,
+    "release_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "dispatched_at": "2026-09-12T21:39:22Z",
+    "status": "success",
+    "pair_verified": true
+  },
+  "current_security_pair": {
+    "previous_run_id": 34718727288,
+    "current_run_id": 34720566551,
+    "release_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "passed": true,
+    "blockers": []
+  },
+  "current_main_ci": {
+    "run_id": 34718368286,
+    "release_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "conclusion": "success",
+    "limitation": "Observation-only Schema drift check exited 1; workflow continues by configuration. Not a zero-error run."
+  },
+  "formal_artifact_verified": true,
+  "download_metadata_repair_pr": 1911,
+  "current_formal_release": {
+    "run_id": 34720769444,
+    "release_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "version": "1.0.0.2",
+    "artifact_signature_notarization": "verified",
+    "stable_feed": "published",
+    "workflow_conclusion": "failure",
+    "remaining_failure": "Original workflow ended at metadata mismatch; merged PR 1911 metadata manually published and verified. Historical workflow stays failed."
+  },
+  "current_installed_build": {
+    "schema_version": 1,
+    "gitSha": "6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "version": "1.0.0.2",
+    "releaseId": "xcagi-1.0.0.2-6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "builtAt": "2026-09-13T02:13:17.009Z"
+  },
+  "current_ui": "Native /Applications/XCAGI.app SUNBIRD session retained; system healthy; screenshot 46. Historical first-order chat reports missing personnel binding and is not a passed AI business scenario.",
+  "download_metadata_repair": {
+    "pr": 1911,
+    "state": "MERGED",
+    "main_sha": "77aca574376b3e01049404eeeb1aa2b6ebfae916",
+    "published": true,
+    "public_bytes_verified": true,
+    "binary_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "ci_final": "success; observation-only schema check error retained in pr1911-ci-final.json"
+  },
+  "download_status_copy": {
+    "pr": 1912,
+    "commit": "6b6507890",
+    "local_preview_passed": true,
+    "preview_scope": "Actual HTML with same-origin release_root override for published metadata; not production deployment",
+    "published": true,
+    "preview_server_stopped": true,
+    "state": "MERGED",
+    "main_sha": "7c589f2b7abc4300fcb0e68888decb3bd01d5767",
+    "public_bytes_verified": true,
+    "visual_verification_pending": false,
+    "visual_verification_passed": true,
+    "backend_ci_review": "pr1912-backend-ci-review.json",
+    "ci_final": "success"
+  },
+  "demo_login_attempt": {
+    "checked_at": "2026-09-13T03:36:21.267442+00:00",
+    "account": "xcagi-enterprise-demo",
+    "credentials_source": "FHD/config/surface_audit_demo_account.json",
+    "installed_version": "1.0.0.1",
+    "real_market_auth_accepted": true,
+    "ui_result": "stalled at signing in; login not accepted as complete",
+    "backend_evidence": [
+      "    | AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'",
+      "AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'",
+      "[stderr] INFO:app.fastapi_routes.market_account:market auth normalized base=https://xiu-ci.com success=True is_enterprise=True is_market_admin=False username=xcagi-enterprise-demo raw_keys=['access_token', 'account_state', 'account_tier', 'activation_source', 'active_plan_id', 'desktop_access', 'next_action', 'ok', 'refresh_token', 'user'] me_keys=['account_state', 'account_tier', 'activation_source', 'active_plan_id', 'avatar_url', 'company', 'created_at', 'desktop_access', 'email', 'experience', 'id', 'is_admin', 'is_enterprise', 'level_profile', 'next_action', 'username']",
+      "INFO:app.application.enterprise_login_flow:enterprise market-first login completed",
+      "    | AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'",
+      "AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'",
+      "    | AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'",
+      "AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'"
+    ],
+    "password_recorded": false
+  },
+  "formal_recovery": {
+    "receipt": "formal-recovery-install.json",
+    "method": "manual signed DMG install, not OTA",
+    "observed_account": "SUNBIRD original local session",
+    "attendance_ui": "loads successfully, 80 personnel rows",
+    "root_cause_old_host": "No module named app.mod_sdk.customer_features; failed import cached a partial attendance_routes module",
+    "data_comparison": "formal-recovery-data-comparison.json"
+  },
+  "formal_template_ui_attempt": {
+    "time": "2026-09-13T05:15:18.044460+00:00",
+    "build_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "result": "NOT COMPLETED",
+    "stage": "native file picker",
+    "source_fixture": "FHD/tests/fixtures/shipment_etl/闭环测试_送货单模板.xlsx",
+    "source_sha256": "6a7958dfcdc883593b769f8c8d3e5c084ebd0e9992290ecf6b5805ce881ee5b2",
+    "observation": "CUA key confirmation returns path field to root; file not uploaded; cannot classify as product defect without independent reproduction",
+    "cleanup": "Stopped exact application process after native cancel failed; no business write submitted; removed current-task identical temporary copy"
+  },
+  "formal_browser_business_acceptance": {
+    "tested_at": "2026-09-13T05:52:55.013028+00:00",
+    "surface": "CUA in-app browser against installed formal desktop backend",
+    "url": "http://127.0.0.1:17500",
+    "build_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "account": "xcagi-enterprise-demo",
+    "login": "real UI login passed",
+    "template_grid": "passed",
+    "template_create": "saved; completeness 5/5",
+    "template_name": "正式版验收-20260913-送货单",
+    "shipment": "blocked: legacy /templates?action=api returns SPA HTML; /documents and /download are also stale in source",
+    "native_file_picker": "automation unresolved, browser upload used",
+    "complete": false
+  },
+  "shipment_fix_pr": 1920,
+  "shipment_fix_head": "6c50eef9f92bbc4e18d1c22e8f6f04646ad458ed",
+  "installed_current_sha": "6eda2203df27c53958b9d7af0e6db26d22b560c4",
+  "shipment_receipt_fix": {
+    "head": "fab22e69b2a68ca5fe53d6601284efca5923445d",
+    "desktop_tests_passed": 34,
+    "typecheck": "passed",
+    "installed": false
+  },
+  "native_settings_recheck": {
+    "build_sha": "6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "result": "settings page rendered correctly after native sidebar click; earlier transient issue not reproduced",
+    "screenshot": "47-native-6eda-settings-navigation.jpg"
+  },
+  "shipment_ci_pending": [
+    "new-head checks"
+  ],
+  "native_ai_readonly_query": {
+    "build_sha": "6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "account": "SUNBIRD",
+    "query": "Find customers whose names contain XC. Query only; do not create, update, or delete any data.",
+    "ui_result": "No matching customer",
+    "db_readonly_check": {
+      "customers_total": 0,
+      "customers_matching_XC": 0
+    },
+    "personnel_binding_error": false,
+    "scope": "Only this empty-result query; not full AI order creation acceptance",
+    "screenshot": "48-native-6eda-ai-readonly-query.jpg"
+  },
+  "template_readonly_fix": {
+    "head": "6c50eef9f92bbc4e18d1c22e8f6f04646ad458ed",
+    "observed": "POST /api/templates/upload 500; attempted write inside signed application bundle",
+    "tests_passed": 46,
+    "old_implementation_regression_exit": 1,
+    "installed": false,
+    "real_excel_analysis": "HTTP 200, success true, uploaded workbook byte-identical in isolated user-data directory"
+  }
+}

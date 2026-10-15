@@ -1,0 +1,8 @@
+[19:10:00] feature=ch-wechat-ingest platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-wechat-ingest
+[19:10:18] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[19:10:20] case I1: passed - 共享令牌鉴权/协议面真实可用（Bearer 心跳 200）
+[19:10:20] case I2: passed - 真实上行入库→读回联系人/上下文（核心正向闭环）
+[19:10:21] case I3: passed - 无令牌被拒（负例）
+[19:10:23] case I4: passed - 缺 CSRF 双提交被拒（负例/边界）
+[19:10:24] video: ch-wechat-ingest-web-20260929-191000.webm (1950375 bytes)
+[19:10:24] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-wechat-ingest/log/ch-wechat-ingest-web-20260929-191000.log

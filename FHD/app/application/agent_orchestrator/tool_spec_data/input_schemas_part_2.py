@@ -4,15 +4,32 @@ from typing import Any
 
 _BUSINESS_ENTITIES = ["customers", "products", "materials", "shipment_records"]
 
+_SHIPMENT_PRODUCTS_SCHEMA = {
+    "type": "array",
+    "minItems": 1,
+    "items": {
+        "type": "object",
+        "required": ["quantity_tins", "unit_price"],
+        "allOf": [
+            {"anyOf": [{"required": ["product_name"]}, {"required": ["name"]}]},
+            {"anyOf": [{"required": ["tin_spec"]}, {"required": ["spec_per_tin"]}]},
+        ],
+    },
+}
+
+
 SPECIAL_INPUT_SCHEMAS_PART_2: dict[tuple[str, str], dict[str, Any]] = {
     ("shipment_records", "create"): {
         "type": "object",
-        "required": ["unit_name"],
+        "allOf": [
+            {"anyOf": [{"required": ["unit_name"]}, {"required": ["purchase_unit"]}]},
+            {"anyOf": [{"required": ["products"]}, {"required": ["items"]}]},
+        ],
         "properties": {
             "unit_name": {"type": "string"},
             "purchase_unit": {"type": "string"},
-            "products": {"type": "array"},
-            "items": {"type": "array"},
+            "products": _SHIPMENT_PRODUCTS_SCHEMA,
+            "items": _SHIPMENT_PRODUCTS_SCHEMA,
             "contact_person": {"type": "string"},
             "contact_phone": {"type": "string"},
         },

@@ -228,6 +228,29 @@ class TestPushOutbox:
         assert result["failed"] == 0
         mock_db.mark_outbox_sent.assert_called_once_with(1)
 
+    def test_push_sends_shared_sync_secret(self, monkeypatch):
+        monkeypatch.setenv("XCMAX_SYNC_SHARED_SECRET", "node-secret")
+        mock_db = MagicMock()
+        mock_db.get_pending_outbox.return_value = [
+            {"id": 1, "entity_type": "personnel", "entity_id": "1", "operation": "insert"},
+        ]
+        mock_resp = MagicMock()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        opener = _mock_http_opener(mock_resp)
+        with (
+            patch(
+                "app.services.xcmax_sync_service._direct_cookie_opener",
+                return_value=(opener, MagicMock()),
+            ),
+            patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+        ):
+            push_outbox(remote_host="127.0.0.1", remote_port=8080)
+
+        req = opener.open.call_args.args[0]
+        assert req.get_header("X-xcmax-sync-token") == "node-secret"
+
     def test_push_marks_failed_on_http_5xx_error(self):
         import urllib.error
 
@@ -390,6 +413,23 @@ class TestPullFromRemote:
         assert result["pulled"] == 1
         mock_db.enqueue_inbox.assert_called_once()
         mock_db.update_remote_cursor.assert_called_once()
+
+    def test_pull_sends_shared_sync_secret(self, monkeypatch):
+        monkeypatch.setenv("XCMAX_SYNC_SHARED_SECRET", "node-secret")
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"data": []}'
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        with (
+            patch(
+                "app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
+            ) as opener,
+            patch("app.db.xcmax_sync.SyncDb", return_value=MagicMock()),
+        ):
+            pull_from_remote(remote_host="127.0.0.1", remote_port=8080, since_cursor=0)
+
+        req = opener.call_args.args[0]
+        assert req.get_header("X-xcmax-sync-token") == "node-secret"
 
     def test_pull_returns_zero_on_empty_data(self):
         mock_db = MagicMock()

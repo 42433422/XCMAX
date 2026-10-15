@@ -368,6 +368,65 @@ class TestRespondRequest:
                 await respond_request(999, body)
             assert exc_info.value.status_code == 404
 
+    @pytest.mark.asyncio
+    async def test_success_does_not_touch_orm_object_after_session_close(self):
+        """回归：会话关闭后再读 ORM 属性会抛 DetachedInstanceError，曾使本路由 500。
+
+        这里用一个真实 SQLAlchemy 会话（关闭后实例即 detached）驱动该路由，确保响应成功返回，
+        且日志所需字段是在会话内取出的。
+        """
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        from app.db.models.service_request import ServiceRequest
+        from app.fastapi_routes.service_bridge import respond_request
+
+        engine = create_engine("sqlite://")
+        ServiceRequest.__table__.create(bind=engine)
+        factory = sessionmaker(bind=engine)
+
+        setup = factory()
+        row = ServiceRequest(
+            source_instance_id="inst-detach",
+            source_instance_name="DetachProbe",
+            title="detached instance regression",
+            priority="normal",
+        )
+        setup.add(row)
+        setup.commit()
+        request_id = row.id
+        setup.close()
+
+        session = factory()
+        assert session.get(ServiceRequest, request_id) is not None
+
+        class _ClosingCtx:
+            """get_db 的等价语义：成功即 commit + close，实例随之 detached（属性已过期）。"""
+
+            def __enter__(self_inner):
+                return session
+
+            def __exit__(self_inner, exc_type, *_exc):
+                if exc_type is None:
+                    session.commit()
+                else:
+                    session.rollback()
+                session.close()
+                return False
+
+        body = ServiceRequestRespond(response="done", status="resolved", responded_by="tester")
+        with patch("app.fastapi_routes.service_bridge.get_db", return_value=_ClosingCtx()):
+            result = await respond_request(request_id, body)
+
+        assert result["success"] is True
+        assert result["data"]["id"] == request_id
+
+        verify = factory()
+        stored = verify.get(ServiceRequest, request_id)
+        assert stored.status == "resolved"
+        assert stored.response == "done"
+        verify.close()
+
 
 class TestListInstances:
     @pytest.mark.asyncio

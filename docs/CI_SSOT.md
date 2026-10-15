@@ -4,6 +4,180 @@
 
 子目录 `FHD/.github/workflows/`、`MODstore_deploy/.github/workflows/` 仅保留 **README 指针**与 Issue/PR 模板，**不会**被 GitHub 执行。
 
+## CI / PR 提速执行 SSOT（2026-09-28 立即生效）
+
+> **适用对象**：Windows AI、Mac AI 及后续所有自动开发/修复 Agent。
+> **目标**：缩短「发现问题 → 修改 → 验证 → 合并」的单轮时间，同时保留发布级质量门禁。
+> 与本文档其他章节的关系：本节是**验证分级/PR 纪律的总纲**；required checks 清单见 [Branch protection（main）](#branch-protectionmain)，E2E 分层见 [E2E 分层](#e2e-分层)。
+
+### 1. 总原则
+
+禁止把每一次小修改都当成一次完整发布来验证。统一采用四级验证：
+
+**本地快测 → PR 快速 CI → 夜间全量 CI → 发布前终极 Gate**
+
+开发阶段优先追求快速反馈；全量验证集中执行。
+
+### 2. PR 规则：一个问题只维护一个 PR
+
+同一问题修复过程中：
+
+- 可以连续提交多个 commit
+- 可以继续修改同一分支
+- 可以反复补测试
+- **禁止因为发现第二层、第三层小问题就重新创建新的 PR**
+
+只有以下情况才新开 PR：已进入另一个独立问题域、改动目标发生实质变化、原 PR 已经合并。
+
+> 原则：**一个问题 = 一个 PR，而不是一次修改 = 一个 PR。**
+
+### 3. 开发阶段：LOCAL FAST PATH
+
+AI 每次完成代码修改后，默认只运行与改动直接相关的最小测试集。
+
+| 改动类型 | 只运行 |
+|----------|--------|
+| 前端 | 对应 unit test、lint / type check、与修改页面直接相关的 smoke、必要时单条 Playwright 场景 |
+| 后端 | 被修改模块对应单测、API contract / targeted integration tests、必要 lint / type check |
+| 数据库迁移 | Alembic SSOT、migration validation、数据库相关 integration test（**仅改 migration / schema 时触发**） |
+| macOS 专属 | **仅** macOS 构建 / runtime / 签名 / updater 等相关文件改动时，才跑 macOS 专属检查 |
+| Windows 专属 | **仅** Windows 直接相关的 targeted test / 实机验证，不得自动牵连 macOS 完整流程 |
+
+禁止默认运行：全量 E2E、全仓 backend tests、Alembic、Performance、Mutation、CodeQL、macOS runtime、mobile CI、Release Gate。不得因为改一个接口就运行整仓所有模块。
+
+### 4. PR 阶段：FAST CI
+
+普通 PR 的 CI 目标：**5–10 分钟内给出可合并反馈**。PR 只保留真正需要阻止明显错误进入 main 的检查。建议 Required Fast Checks：
+
+- lint / syntax
+- frontend-unit 或对应 backend targeted test
+- Source Governance
+- 必要 smoke test
+- secrets / basic security guard
+- 与 changed paths 直接对应的专项检查
+
+所有工作流必须优先使用 **changed paths / path filter / change detection**，不相关模块直接 skip（屏蔽示例见 [`fhd-test.yml`](../.github/workflows/fhd-test.yml) 的 path 过滤）。
+
+### 5. 禁止普通 PR 默认全跑的任务
+
+以下检查原则上移出普通 PR 快路径，统一进入 **Nightly / Release Gate**：
+
+- 全量 E2E
+- Release gate CI
+- Performance Smoke Test
+- mutation-smoke
+- 全量 CodeQL
+- 全量 gitleaks 深扫
+- Mac control runtime contract
+- 跨平台完整 smoke
+- mobile Flutter / iOS 完整 CI
+- 全模块 MODstore test
+- 全量 archive / artifact 深度检查
+- 大型 benchmark
+- 完整 release provenance
+- 安装包发布验证
+
+### 6. 夜间 CI
+
+每天夜间针对当天最新 `main` 运行一次完整验证，至少包含：
+
+- 全量 backend tests / 全量 frontend tests
+- E2E / Smoke Tests
+- Performance / Mutation
+- CodeQL / gitleaks
+- Alembic / migration
+- Runtime Artifacts Guard
+- Mac runtime contract / Windows / macOS 关键契约
+- mobile CI
+- Release Gate
+- 必要 benchmark
+
+夜间 CI 允许耗时较长。**开发 Agent 不得等待夜间 CI 完成才继续第二天之前的普通开发任务。**
+
+### 7. Nightly 失败处理
+
+| 等级 | 示例 | 处理 |
+|------|------|------|
+| **P0 / P1** | 登录失效、数据丢失、安装失败、权限绕过、安全问题、主流程完全不可用 | **立即阻止发布，并创建修复任务** |
+| **P2 / P3** | 边缘 UI、非主流程测试、性能轻微退化、非阻断性 warning | 记录问题并继续开发，**不得让整个仓库停下来反复跑 CI** |
+
+### 8. 发布前 Gate
+
+只有准备：出正式安装包 / OTA / 客户交付 / stable release / production deployment，才执行真正完整的发布门禁。必须包括：
+
+**完整 CI + Windows 实机 + Mac 实机 + 安装 / 升级 / 登录 / 绑定 / 运行真实证据。**
+
+发布级 Gate 不能被 Nightly 替代（实机验收口径见 `FHD/docs/MACOS_RELEASE_SSOT.md`、`FHD/docs/WINDOWS_RELEASE_SSOT.md`）。
+
+### 9. 当前 XCMAX 特别要求
+
+禁止出现「改 3 个前端文件 → 全仓十几套 CI 全部重新执行」。正确行为应为：
+
+**前端权限修改 → frontend unit → targeted smoke / e2e → governance / security 基础检查 → 合并**
+
+其余完整检查交由夜间 CI。
+
+### 10. AI 执行纪律
+
+Windows AI / Mac AI 在开始任何修改前，都必须先判断：
+
+1. 修改属于哪个 subsystem？
+2. 最小需要验证哪些测试？
+3. 哪些 CI 与本次改动无关？
+4. 当前是否可以继续使用已有 PR？
+5. 是否真的属于发布级操作？
+
+如果答案不是「正在发布」，不得自行升级成完整 Release Gate。
+
+### 11. 禁止行为
+
+- 每改一次代码就跑全仓
+- 每发现一个小问题就新开一个 PR
+- 无关平台 CI 跟随运行
+- 为等待 CI 停止后续独立开发
+- 为了「保险」无条件运行全部测试
+- 已有成功结果没有代码影响却重复执行
+- Nightly 能完成的验证强制塞进每个 PR
+- 把「测试越多」错误理解为「质量越高」
+
+> 质量目标：**正确的测试，在正确的时间运行。**
+
+### 12. 推荐流程
+
+```text
+发现问题
+  ↓
+定位 subsystem
+  ↓
+修改代码
+  ↓
+本地 targeted test
+  ↓
+继续修改同一个 PR
+  ↓
+PR Fast CI
+  ↓
+合并 main
+  ↓
+继续下一个问题
+  ↓
+夜间统一 Full CI
+  ↓
+发现异常再生成修复任务
+  ↓
+真正发布前跑 Full Release Gate
+```
+
+### 13. 例外申请
+
+任何 Agent 若认为必须恢复全量 PR CI，必须明确写出：
+
+1. 哪一个具体风险要求这样做
+2. 哪一条测试只有全量流程能够发现
+3. 为什么 Nightly / Release Gate 无法承担
+
+否则默认继续执行本 SSOT。普通 bug fix 的目标为「修改 → 快测 → PR 验证 → 合并」尽量在分钟级完成，开发速度以**有效修复数量 / 单位时间**衡量，而非「跑了多少次 CI」。
+
 ## 仓库 git 历史说明（2026-08-01）
 
 本仓当前工作区的 git 历史**始于 2026-07-21**（首个 commit `1b6ae8560`，`fix(deploy): bootstrap FHD staging on single CVM`）。
@@ -47,7 +221,7 @@
 
 - **产品版本锚点**：产品 `1.0.0.1`，工具链 `1.0.0`（见 `FHD/VERSION.md`）。
 - **Git tag（发版触发）**：`FHD/v1.0.0.1`；制品身份同时记录 `git_sha` + `sha256`。
-- **串联（单一编排入口）**：`FHD/v*` tag 仅触发两个 workflow —— `fhd-ci-cd.yml`（测试+镜像+CVM）与 `fhd-release-orchestrator.yml`。后者先跑 `verify-version-anchors`，再 **dispatch** 客户端 `fhd-release-desktop/web/android.yml`（**仅 Android**；服务器由 `fhd-ci-cd` 的 `cvm-push-release` 负责）。这些被编排的 workflow **已移除自身 `FHD/v*` tag 触发**，避免 tag 推送时双重运行。详见 [FHD/docs/deploy/RELEASE_CHECKLIST.md](FHD/docs/deploy/RELEASE_CHECKLIST.md)。
+- **串联（单一编排入口）**：`FHD/v*` tag 仅触发两个 workflow —— `fhd-ci-cd.yml`（测试+镜像+CVM）与 `fhd-release-orchestrator.yml`。后者先跑 `verify-version-anchors`，再 **dispatch** 客户端 `fhd-release-desktop/web/android.yml`（**仅 Android**；服务器由 `fhd-ci-cd` 的 `cvm-push-release` 负责）。这些被编排的 workflow **已移除自身 `FHD/v*` tag 触发**，避免 tag 推送时双重运行。桌面验收见 [双端平级 SSOT](../FHD/docs/desktop_platform_parity_ssot.md)，服务端按已登记的部署链执行。
 
 ## 多环境 channel（stable / staging）
 
@@ -116,7 +290,7 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 `fhd-deploy.yml` 仅为 **break-glass**：SSH 到该机执行 `apply-latest`（强制跑 `fhd-auto-update.sh`）或 `restart-only`（`docker compose restart`）。
 
 > 2026-07-14：已删除 `FHD/k8s/`、`FHD/helm/` 及 blue-green/canary/GitOps/预览环境等从未接通真实集群的清单与文档路径。
-> 历史脚本在 `archive/ops/`；需要时从 git 历史取回。
+> 历史脚本已外置归档（见根 `ARCHIVE_POINTER.md` 第六批 `docs-20260917-batch6/`）；需要时从归档或 git 历史取回。
 
 
 ## Secrets / Variables 清单
@@ -143,6 +317,8 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 ## Branch protection（main）
 
 已通过 API 配置（2026-06-13，2026-07 发版红线扩展，2026-08-05 校正为 GitHub 实配 11 项）：required status checks 含 `guard-temp-scripts`、`arch-fitness`、`security-scan`、`gitleaks`、`analyze (python)`、`analyze (javascript-typescript)`、`SSOT Drift Gate`、`Release gate (hard block)`、`backend-test`、`frontend-test`、**`mutation-smoke`**（变异测试 kill rate ≥80%，作用域 app/di + app/contexts，2026-08-05 实测 **93.02%**，80/86）；`vue-tsc` / `mypy` / `build:strict` 已在 `frontend-test` / `backend-test` 内硬失败。**覆盖率门禁**（2026-08-05 诚实化；2026-09-01 D2-5 起 `coverage_ramp` stub 82 个已全部去前缀迁出为契约测试，总口径=真实行为口径，floor **78% 行 / 69% 分支**，只升不降）：`backend-test` 内以 `coverage_ratchet.py --check --behavior --require-backend` 为唯一硬 gate（行为口径，stub 清零后 `-m 'not coverage_ramp'` 等价于全量）；`frontend-test` 内以 `coverage_ratchet.py --check --require-frontend` 硬阻断前端覆盖率回退。本地等价：`bash FHD/scripts/dev/release_verify.sh`。
+
+**文档新鲜度门禁**（2026-09-09 起，`arch-fitness` job 内硬阻断，check 名仍为 `arch-fitness`）：`docs_ssot_lint.py --strict`（SSOT 声明与登记表一致）、`verify_doc_versions.py`（docs 版本表述对齐 `VERSION.md` 锚点）、`verify_doc_claims.py`（文档覆盖率数字必须源于 SSOT 快照）、`gen_claimed_vs_actual.py --check`（`CLAIMED_VS_ACTUAL.md` 与 `metrics/` 一致；日更 metrics 由 `fhd-slo-metrics-collect.yml` 同步重生成该文档）。
 
 > **Public 仓库**：`42433422/XCMAX` 已为 **PUBLIC**；Actions 对 public repo 有免费额度。若 job 仍报 `payments have failed or spending limit`，在 [Payment information](https://github.com/settings/billing/payment_information) 添加有效支付方式。
 

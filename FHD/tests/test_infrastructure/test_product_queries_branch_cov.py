@@ -856,6 +856,6 @@ class TestLoadProductsAllForExport:
             "app.infrastructure.persistence.compat_db.product_queries._load_products_list_impl_pg",
             return_value=([], 0, "error"),
         ) as mock_impl:
-            result = _load_products_all_for_export(None, None)
-        assert result == []
+            with pytest.raises(ValueError, match="error"):
+                _load_products_all_for_export(None, None)
         mock_impl.assert_called_once_with(1, 50000, None, None)

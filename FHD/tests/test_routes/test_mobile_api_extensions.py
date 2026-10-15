@@ -30,6 +30,7 @@ def _mock_pairing_request(host_header: str = "127.0.0.1:5112", hostname: str = "
     return SimpleNamespace(
         headers={"host": host_header},
         url=SimpleNamespace(hostname=hostname),
+        client=SimpleNamespace(host="127.0.0.1"),
     )
 
 
@@ -135,11 +136,17 @@ class TestPairingIssuePort:
 
 class TestPairingIssue:
     @pytest.mark.asyncio
-    async def test_issue_success(self, ext_mod):
+    async def test_issue_success(self, ext_mod, monkeypatch):
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
         body = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
-        request = _mock_pairing_request("192.168.1.10:5000", "192.168.1.10")
+        request = _mock_pairing_request()
         with (
             patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"),
+            patch.object(
+                ext_mod,
+                "_register_desktop_relay_for_pairing",
+                return_value={"relay_id": "r", "pairing_code": "123456"},
+            ),
             patch(
                 "app.security.mobile_pairing.issue_pairing_nonce",
                 return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
@@ -156,7 +163,8 @@ class TestPairingIssue:
         assert data.get("success") is True or data.get("data", {}).get("host") == "192.168.1.10"
 
     @pytest.mark.asyncio
-    async def test_issue_returns_mobile_ready_base_url(self, ext_mod):
+    async def test_issue_returns_mobile_ready_base_url(self, ext_mod, monkeypatch):
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
         body = ext_mod.PairingIssueBody()
         request = _mock_pairing_request("127.0.0.1:17500", "127.0.0.1")
         with (
@@ -172,7 +180,11 @@ class TestPairingIssue:
                     "exp": 123,
                 },
             ),
-            patch.object(ext_mod, "_register_desktop_relay_for_pairing", return_value=None),
+            patch.object(
+                ext_mod,
+                "_register_desktop_relay_for_pairing",
+                return_value={"relay_id": "r", "pairing_code": "123456"},
+            ),
         ):
             result = await ext_mod.mobile_pairing_issue(body, request)
         data = result if isinstance(result, dict) else __import__("json").loads(result.body)
@@ -180,11 +192,13 @@ class TestPairingIssue:
         assert payload["api_base_url"] == "http://192.168.0.38:17500/"
         assert payload["base_url"] == "http://192.168.0.38:17500/"
         assert payload["code"] == "123456"
-        assert payload["qr_json"]["api_base_url"] == "http://192.168.0.38:17500/"
+        assert payload["qr_json"]["kind"] == "xcagi_relay_pairing"
+        assert payload["qr_json"]["code"] == "123456"
         assert "xcagi://pairing?" in payload["deep_link"]
 
     @pytest.mark.asyncio
-    async def test_issue_keeps_qr_lan_when_relay_exists(self, ext_mod):
+    async def test_issue_uses_cloud_qr_when_relay_exists(self, ext_mod, monkeypatch):
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
         body = ext_mod.PairingIssueBody()
         request = _mock_pairing_request("127.0.0.1:42422", "127.0.0.1")
         with (
@@ -207,26 +221,31 @@ class TestPairingIssue:
                     "relay_id": "relay-account-1",
                     "pairing_code": "654321",
                     "relay_base_url": "https://relay.example.test/fhd-api/",
+                    "exp": 456,
                 },
             ),
         ):
             result = await ext_mod.mobile_pairing_issue(body, request)
         data = result if isinstance(result, dict) else __import__("json").loads(result.body)
         payload = data["data"]
-        assert payload["code"] == "123456"
+        assert payload["code"] == "654321"
+        assert payload["shortCode"] == "654321"
         assert payload["relay_id"] == "relay-account-1"
         assert payload["relay_binding_mode"] == "account_auth"
-        assert payload["qr_json"]["kind"] == "xcagi_pairing"
-        assert payload["qr_json"]["code"] == "123456"
-        assert "xcagi://pairing?" in payload["deep_link"]
-        assert "relay-pairing" not in payload["deep_link"]
+        assert payload["qr_json"]["kind"] == "xcagi_relay_pairing"
+        assert payload["qr_json"]["code"] == "654321"
+        assert payload["qr_json"]["relay_id"] == "relay-account-1"
+        assert payload["exp"] == 456
+        assert "relay_id=relay-account-1" in payload["deep_link"]
 
 
 class TestPairingLookup:
     @pytest.mark.asyncio
     async def test_invalid_code(self, ext_mod):
         body = ext_mod.PairingLookupBody(code="000000")
-        result = await ext_mod.mobile_pairing_lookup(body)
+        result = await ext_mod.mobile_pairing_lookup(
+            body, user=SimpleNamespace(id=7, is_active=True)
+        )
         import json
 
         data = json.loads(result.body)
@@ -235,7 +254,8 @@ class TestPairingLookup:
 
 class TestPairingExchange:
     @pytest.mark.asyncio
-    async def test_exchange_by_nonce(self, ext_mod):
+    async def test_exchange_by_nonce(self, ext_mod, monkeypatch):
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
         # Mock the pairing functions to return valid data
         with (
             patch(
@@ -247,12 +267,17 @@ class TestPairingExchange:
                 return_value={"host": "192.168.1.10", "port": 5000, "shortCode": "123456"},
             ),
             patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"),
+            patch.object(
+                ext_mod,
+                "_register_desktop_relay_for_pairing",
+                return_value={"relay_id": "r", "pairing_code": "123456"},
+            ),
         ):
             # First issue a pairing to get a nonce
             body_issue = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
             issue_result = await ext_mod.mobile_pairing_issue(
                 body_issue,
-                _mock_pairing_request("192.168.1.10:5000", "192.168.1.10"),
+                _mock_pairing_request(),
             )
             if hasattr(issue_result, "body"):
                 import json
@@ -262,7 +287,9 @@ class TestPairingExchange:
                 issue_data = issue_result
             nonce = issue_data.get("data", {}).get("nonce", "abc123")
             body_exchange = ext_mod.PairingExchangeBody(nonce=nonce)
-            result = await ext_mod.mobile_pairing_exchange(body_exchange)
+            result = await ext_mod.mobile_pairing_exchange(
+                body_exchange, user=SimpleNamespace(id=7, is_active=True, role="enterprise")
+            )
             if hasattr(result, "body"):
                 import json
 
@@ -284,7 +311,9 @@ class TestPairingExchange:
                 "shortCode": "123456",
             },
         ) as consume:
-            result = await ext_mod.mobile_pairing_exchange(body)
+            result = await ext_mod.mobile_pairing_exchange(
+                body, user=SimpleNamespace(id=7, is_active=True, role="enterprise")
+            )
         consume.assert_called_once_with("123456")
         if hasattr(result, "body"):
             import json
@@ -300,7 +329,9 @@ class TestPairingExchange:
     @pytest.mark.asyncio
     async def test_exchange_no_credentials(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="", nonce="")
-        result = await ext_mod.mobile_pairing_exchange(body)
+        result = await ext_mod.mobile_pairing_exchange(
+            body, user=SimpleNamespace(id=7, is_active=True)
+        )
         assert result.status_code == 400
 
 

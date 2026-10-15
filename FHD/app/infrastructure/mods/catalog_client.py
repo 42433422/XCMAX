@@ -236,8 +236,8 @@ async def catalog_download_to(
     dest: Path,
     *,
     headers: dict[str, str] | None = None,
-) -> None:
-    """Stream a catalog artifact into ``dest``."""
+) -> dict[str, str]:
+    """Stream a catalog artifact into ``dest`` and retain its delivery headers."""
     url = _catalog_url(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     request_headers = _catalog_headers()
@@ -256,6 +256,7 @@ async def catalog_download_to(
                     async for chunk in resp.aiter_bytes():
                         if chunk:
                             fh.write(chunk)
+                return dict(resp.headers)
     except HTTPException:
         raise
     except httpx.RequestError as exc:

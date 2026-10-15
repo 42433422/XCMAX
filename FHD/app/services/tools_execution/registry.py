@@ -53,7 +53,7 @@ ACTION_ALIASES = {
 }
 
 REQUIRED_PARAMS_BY_TOOL_ACTION = {
-    ("products", "create"): ["name_or_model", "unit_name"],
+    ("products", "create"): ["name_or_model"],
     ("customers", "create"): ["unit_name"],
     ("customers", "update"): ["id"],
     ("customers", "delete"): ["id"],
@@ -69,7 +69,7 @@ REQUIRED_PARAMS_BY_TOOL_ACTION = {
     ("inventory", "update_storage_location"): ["location_id"],
     ("inventory", "delete_warehouse"): ["warehouse_id"],
     ("inventory", "update_warehouse"): ["warehouse_id"],
-    ("inventory", "stock_in"): ["product_id", "warehouse_id", "quantity"],
+    ("inventory", "stock_in"): ["quantity"],
     ("inventory", "stock_out"): ["product_id", "warehouse_id", "quantity"],
     ("inventory", "transfer"): ["product_id", "from_warehouse_id", "to_warehouse_id", "quantity"],
     ("purchase", "update_supplier"): ["supplier_id"],
@@ -97,7 +97,8 @@ REQUIRED_PARAMS_BY_TOOL_ACTION = {
     ("mrp", "consume"): ["order_id", "warehouse_id"],
     ("mrp", "finish"): ["order_id", "warehouse_id"],
     ("mrp", "query_orders"): [],
-    ("sales", "quote"): ["customer_id", "items"],
+    ("sales", "quote"): ["items"],
+    ("sales", "create_order"): ["items"],
     ("sales", "confirm"): ["order_id"],
     ("sales", "deliver"): ["order_id"],
     ("sales", "invoice"): ["order_id"],
@@ -160,7 +161,6 @@ REQUIRED_PARAMS_BY_TOOL_ACTION = {
     ("excel_import", "import_records"): ["records"],
     ("unit_products_import", "execute_import"): ["saved_name", "unit_name"],
     ("generate_office_document", "execute"): [],
-    ("shipment_records", "create"): ["unit_name"],
 }
 
 
@@ -182,24 +182,26 @@ def _normalize_action(action: str, params: dict | None = None) -> str:
 
 
 def _validate_required_params(tool_id: str, action: str, params: dict | None) -> tuple[bool, str]:
+    from app.application.shipment_inputs import missing_shipment_call_fields
+
+    missing = missing_shipment_call_fields(tool_id, action, dict(params or {}))
+    if missing:
+        return False, "缺少有效出货参数：" + "、".join(missing)
     required = REQUIRED_PARAMS_BY_TOOL_ACTION.get(
         (str(tool_id or "").strip(), str(action or "").strip()), []
     )
     if not required:
         return True, ""
     payload = dict(params or {})
-    missing = []
-    for key in required:
-        value = payload.get(key)
-        if value is None:
-            missing.append(key)
-            continue
-        if isinstance(value, str) and not value.strip():
-            missing.append(key)
-            continue
-        if isinstance(value, list) and len(value) == 0:
-            missing.append(key)
-            continue
+    missing = [
+        key
+        for key in required
+        if payload.get(key) is None
+        or isinstance(payload.get(key), str)
+        and not payload[key].strip()
+        or isinstance(payload.get(key), list)
+        and not payload[key]
+    ]
     if missing:
         return False, f"缺少参数：{', '.join(missing)}"
     return True, ""

@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-purchase-inbound",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "b20ed2cfa40a94914715f2ae2d65ab39ab145c23946a47b68dcc8643ccaf9eb1",
+  "visible_content": "采购入库接口可读写，采购页展示验收采购单。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase-inbound/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase-inbound/macos/result.png"
+}

@@ -1,0 +1,161 @@
+{
+  "generated_at": "2026-09-09T08:57:59.299937Z",
+  "window_days": 7,
+  "merged_prs": 65,
+  "total_diff_weight": 177.08,
+  "total_human_minutes": 5410.0,
+  "net_rate_weight_per_hour_human": 1.96,
+  "note": "净速率=被集成产出/人类瓶颈资源；revert 负权重；分母为 review 近似",
+  "items": [
+    {
+      "pr": 1833,
+      "weight": 0.23,
+      "human_min": 0
+    },
+    {
+      "pr": 1832,
+      "weight": 2.26,
+      "human_min": 0
+    },
+    {
+      "pr": 1824,
+      "weight": 0.28,
+      "human_min": 0
+    },
+    {
+      "pr": 1822,
+      "weight": 0.67,
+      "human_min": 0
+    },
+    {
+      "pr": 1819,
+      "weight": 2.57,
+      "human_min": 0
+    },
+    {
+      "pr": 1814,
+      "weight": 5.0,
+      "human_min": 0
+    },
+    {
+      "pr": 1813,
+      "weight": 1.05,
+      "human_min": 0
+    },
+    {
+      "pr": 1811,
+      "weight": 5.0,
+      "human_min": 0
+    },
+    {
+      "pr": 1810,
+      "weight": 2.17,
+      "human_min": 0
+    },
+    {
+      "pr": 1809,
+      "weight": 5.0,
+      "human_min": 200
+    },
+    {
+      "pr": 1808,
+      "weight": 1.26,
+      "human_min": 0
+    },
+    {
+      "pr": 1807,
+      "weight": 1.89,
+      "human_min": 0
+    },
+    {
+      "pr": 1806,
+      "weight": 5.0,
+      "human_min": 140
+    },
+    {
+      "pr": 1805,
+      "weight": 0.88,
+      "human_min": 0
+    },
+    {
+      "pr": 1802,
+      "weight": 5.0,
+      "human_min": 0
+    },
+    {
+      "pr": 1801,
+      "weight": 5.0,
+      "human_min": 10
+    },
+    {
+      "pr": 1800,
+      "weight": 1.85,
+      "human_min": 0
+    },
+    {
+      "pr": 1799,
+      "weight": 4.02,
+      "human_min": 0
+    },
+    {
+      "pr": 1797,
+      "weight": 5.0,
+      "human_min": 80
+    },
+    {
+      "pr": 1796,
+      "weight": 0.6,
+      "human_min": 0
+    },
+    {
+      "pr": 1794,
+      "weight": 3.7,
+      "human_min": 0
+    },
+    {
+      "pr": 1793,
+      "weight": 5.0,
+      "human_min": 0
+    },
+    {
+      "pr": 1792,
+      "weight": 0.46,
+      "human_min": 0
+    },
+    {
+      "pr": 1791,
+      "weight": 0.35,
+      "human_min": 0
+    },
+    {
+      "pr": 1790,
+      "weight": 1.26,
+      "human_min": 0
+    },
+    {
+      "pr": 1789,
+      "weight": 0.95,
+      "human_min": 0
+    },
+    {
+      "pr": 1787,
+      "weight": 5.0,
+      "human_min": 280
+    },
+    {
+      "pr": 1785,
+      "weight": 5.0,
+      "human_min": 380
+    },
+    {
+      "pr": 1784,
+      "weight": 5.0,
+      "human_min": 0
+    },
+    {
+      "pr": 1770,
+      "weight": 1.83,
+      "human_min": 0
+    }
+  ]
+}

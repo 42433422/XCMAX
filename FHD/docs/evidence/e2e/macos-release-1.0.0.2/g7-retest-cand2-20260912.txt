@@ -1,0 +1,33 @@
+# G7 修复重测 + G10 复测（2026-09-12 17:26–17:45 CST，1.0.0.2 候选包 v2，含修复）
+
+候选包 v2：从合并后分支树（9a4a06bc49b8885111dc7dc4c61eb15d0dd748db = fix/g7-template-upload-default-mount 合并 main 6f75ce184 后的 HEAD）干净构建：
+- DMG SHA256: da2a1bd7bc0b5f386db483f2c53348f46718ba8ff72a0f0a9d557f382d0c2e82
+- ZIP SHA256: e866079bf32ee70a27f09d7a85e67928f1cd9941572798fcef86e3ee93478655
+- codesign --verify --deep --strict → exit=0；spctl → rejected Unnotarized Developer ID（候选包预期）
+- build-info: releaseId=xcagi-1.0.0.2-9a4a06bc4..., builtAt=2026-09-12T09:26:33Z
+
+## G10 数据保留（覆盖升级 1.0.0.2(3d3ec8d98) → 1.0.0.2(9a4a06bc4)）
+- acceptance-macos.sh --overwrite-upgrade ACCEPT_EXIT=0
+- 升级前 digest = 升级后 digest：xcagi.db 986,615,808B 不变、uploads 151 不变、mods 847 不变、backups 4 不变
+- 数据保留标记存活：.xcagi-acceptance-marker-20260912-173900.txt
+- 记录：data-retention-cand2.json（result=PASS）
+
+## G7 模板导入端点（带 CSRF cookie+token 实测，PID 32654 实例）
+- POST /api/templates/upload  → **401 UNAUTHORIZED（请先登录）** —— 405 断链已根治，路由默认挂载且鉴权生效
+- POST /api/templates/analyze → **401 UNAUTHORIZED（请先登录）** —— 同上
+- POST /api/templates/progress → 405：前端契约实为 GET /api/templates/progress/{task_id}（legacy_gap 与修复均为 GET），POST 405 属预期
+- GET  /api/templates/list   → 200
+- GET  /api/shipment/orders/next_number → 200（26-09-00001A）
+- 结论：G7 端点级修复实证通过；完整出单（upload 2xx → generate）需登录态，并入 T2/T3
+
+## G4 冷启动（覆盖升级后）
+- 进程出现 0.1s（PID 32654）；health PASS；runtime.blockers=[] failures=[]
+- status=degraded 仅因 NEURO_BUS_NOT_RUNNING（neuro bus 启动中/未登录预期态），LLM 不报 UNAVAILABLE
+- 截图：07-cold-start-cand2.png
+
+## G6
+- /api/mods → 62 mods（含 attendance-industry）；启动日志无路由注册 ERROR
+- /attendance/capabilities 未登录返 SPA HTML（权益门控设计行为）
+
+## 已知非阻断偏差
+- build-info.json `version` 字段=1.0.0.1（Python 包版本，慢于产品号；产品版本以 Info.plist=1.0.0.2/releaseId 为准）——验收脚本对此误报 ✘，已在 §7-10 记录口径；建议后续把 generate-desktop-build-info.py 的 version 改为产品版本

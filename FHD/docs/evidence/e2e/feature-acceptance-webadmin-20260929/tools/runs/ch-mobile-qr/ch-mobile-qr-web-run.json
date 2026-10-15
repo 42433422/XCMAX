@@ -1,0 +1,317 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ch-mobile-qr",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-160202",
+  "generated_at": "2026-09-29 16:02:17",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。",
+    "部分验证：POST /api/auth/qr/issue（签发 qr_id/poll_secret）与 GET /api/auth/qr/status（pending）为真实正向；扫码确认环节（POST /api/mobile/v1/auth/qr/confirm）需真实移动端扫码，本环境无移动端，未验证。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：签发一个扫码登录二维码（拿到 qr_id/poll_secret/expires_at）→ 用 poll_secret 轮询其状态为 pending → 以真实 404 QR_NOT_FOUND 记录无效二维码被拒（边界/负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "healthy",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 4698,
+        "processed": 4698,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.reflect",
+                "evolution.search",
+                "evolution.export",
+                "evolution.index",
+                "evolution.mine",
+                "error.occurred"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-mobile-qr/ch-mobile-qr-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ch-mobile-qr",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-mobile-qr/shot/00-login-form.png",
+      "sha256": "edd7e31e6af192f04880c35593e6faee62644a12ace4daaa49717547e68f8166",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ch-mobile-qr",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-mobile-qr/shot/Q1-qr-issue-status.png",
+      "sha256": "47b1ee5871f35b46bc195e358cfacf68872ffbb70c374fbf240d347c6be086e4",
+      "visual_review": "accepted",
+      "visible_result": "卡片显示两处真实响应：POST /api/auth/qr/issue 200 success=true，返回 qr_id 与 poll_secret（指纹脱敏）及 expires_at；随后的 GET /api/auth/qr/status 返回 200，data.status=pending。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ch-mobile-qr",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-mobile-qr/shot/Q3-qr-not-found.png",
+      "sha256": "c33b59589823933dd0d439ec173e5b2bf03bc1e6b5ae82d5ee5890d557d29b4c",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/auth/qr/status?qr_id=not-a-real-qr-id 返回 404，error.code=QR_NOT_FOUND，message=二维码无效。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ch-mobile-qr",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-mobile-qr/video/ch-mobile-qr-web-20260929-160202.webm",
+      "sha256": "aa13888696482f8295af3bb201fe3c443a7d1d4c3961efeec15c0758a39b5308",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，15.08s，ffmpeg 实测）：管理员登录 → 二维码签发 → 状态 pending → 无效二维码 404。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "Q1",
+      "title": "签发扫码登录二维码",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 POST /api/auth/qr/issue。",
+      "expected": "HTTP 200，success=true，返回 qr_id/poll_secret/expires_at。",
+      "observed": "{\"status\": 200, \"success\": true, \"qr_id\": \"ghLd6gxF5wH0sF0EFl12w8_C\", \"poll_secret_fp\": \"MuN8…Vu\", \"expires_at\": 1790669056, \"account_kind\": \"enterprise\"}",
+      "result": "passed"
+    },
+    {
+      "id": "Q2",
+      "title": "二维码状态轮询真实读取",
+      "input": "上一步签发的 qr_id 与 poll_secret。",
+      "actions": "页面上下文 GET /api/auth/qr/status。",
+      "expected": "HTTP 200，success=true，data.status=pending。",
+      "observed": "{\"status\": 200, \"body\": {\"success\": true, \"data\": {\"status\": \"pending\"}}}",
+      "result": "passed"
+    },
+    {
+      "id": "Q3",
+      "title": "无效二维码轮询被拒（负例/边界）",
+      "input": "不存在的 qr_id。",
+      "actions": "页面上下文 GET /api/auth/qr/status?qr_id=not-a-real-qr-id。",
+      "expected": "HTTP 404，error.code=QR_NOT_FOUND。",
+      "observed": "{\"status\": 404, \"error_code\": \"QR_NOT_FOUND\"}",
+      "result": "passed"
+    }
+  ]
+}

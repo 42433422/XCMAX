@@ -1,0 +1,57 @@
+{
+  "observed_at": "2026-09-12T22:09:19.829463+00:00",
+  "run_id": 34720769444,
+  "build_info": {
+    "schema_version": 1,
+    "gitSha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "version": "1.0.0.2",
+    "releaseId": "xcagi-1.0.0.2-fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "builtAt": "2026-09-12T21:50:56.429Z"
+  },
+  "mount": "/Volumes/XCAGI-Enterprise 1",
+  "checks": [
+    {
+      "command": [
+        "codesign",
+        "--verify",
+        "--deep",
+        "--strict",
+        "/Volumes/XCAGI-Enterprise 1/XCAGI.app"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "spctl",
+        "--assess",
+        "--type",
+        "execute",
+        "--verbose=2",
+        "/Volumes/XCAGI-Enterprise 1/XCAGI.app"
+      ],
+      "exit_code": 0,
+      "output": "/Volumes/XCAGI-Enterprise 1/XCAGI.app: accepted\nsource=Notarized Developer ID\n"
+    },
+    {
+      "command": [
+        "xcrun",
+        "stapler",
+        "validate",
+        "/Users/a4243342/XCMAX-runtime/mac-closure-20260913/formal-34720769444/XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg"
+      ],
+      "exit_code": 0,
+      "output": "Processing: /Users/a4243342/XCMAX-runtime/mac-closure-20260913/formal-34720769444/XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg\nThe validate action worked!\n"
+    }
+  ],
+  "files": {
+    "XCAGI-Enterprise-1.0.0.2-mac-arm64.zip": {
+      "size": 264517367,
+      "sha256": "d3d71ab9564726d6abfcae9fd9c9aa4af7ca887cddd4fd414d70378889b2ee65"
+    },
+    "XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg": {
+      "size": 305289492,
+      "sha256": "710e73656d75ab316cb5ebdbc8ae030aaa5957b3ef2c062b5440d17671d5db67"
+    }
+  }
+}

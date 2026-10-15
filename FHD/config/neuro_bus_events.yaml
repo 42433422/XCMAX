@@ -184,6 +184,10 @@ streams:
         - { type: "payment.refunded",          const: PAYMENT_REFUNDED }
         - { type: "payment.method_changed",    const: PAYMENT_METHOD_CHANGED }
         - { type: "payment.notification_sent", const: PAYMENT_NOTIFICATION_SENT }
+      work_order:
+        # 主线闭环工单状态机事件（app/services/work_order_ssot.py 静态字面量发布）
+        - { type: "work_order.transition",     const: WORK_ORDER_TRANSITION,
+            payload_fields: [wo_id, to_state, ref] }
 
   application_bridge:
     description: |

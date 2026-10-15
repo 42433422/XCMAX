@@ -1,0 +1,6 @@
+2026-09-29T20:35:12+0800 [dt-install-sign] 开始验收 dt-install-sign 安装 · 签名 · 身份校验；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
+2026-09-29T20:35:12+0800 [dt-install-sign] M1 passed :: HTTP 200 16ms；{"admin_console_sha256": "", "admin_console_git_sha": "", "artifact_sha256": "", "built_at": "2026-09-29T11:16:03.975Z", "git_sha": "027c8ec59443f1be9d7934e77282348e7483f883", "image_digest": "", "product_version": "1.0.0.5", "release_id": 
+2026-09-29T20:35:15+0800 [dt-install-sign] M2 failed :: codesign rc=1；spctl rc=1：/Applications/XCAGI.app: a sealed resource is missing or invalid
+2026-09-29T20:35:18+0800 [dt-install-sign] M3 passed :: 导航后路径 /settings；命中文本 ['v1.0.0.5']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名
+2026-09-29T20:35:19+0800 [dt-install-sign] screenshot result.png
+2026-09-29T20:35:22+0800 [dt-install-sign] video operation.webm bytes=390963

@@ -43,6 +43,7 @@ from fastapi.testclient import TestClient
 
 from app.infrastructure.db import mod_database_url as mod_db_url_mod
 from app.shell import xcagi_mods_discover as discover_mod
+from tests.fixtures.backend_ci_isolation import isolated_login_host_db  # noqa: F401
 
 # ===========================================================================
 # Shared helpers / fixtures
@@ -859,16 +860,19 @@ class TestPerformanceOptimizerHealthCheck:
         health = opt.get_health_check()
         assert health["status"] == "degraded"
 
-    def test_memory_check_with_psutil(self):
+    @pytest.mark.parametrize("rss_mb", [500, 2048])
+    def test_memory_check_with_psutil(self, rss_mb):
         from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         mock_process = MagicMock()
-        mock_process.memory_info.return_value = SimpleNamespace(rss=500 * 1024 * 1024)
+        mock_process.memory_info.return_value = SimpleNamespace(rss=rss_mb * 1024 * 1024)
         mock_process.memory_percent.return_value = 30.0
         with patch("psutil.Process", return_value=mock_process):
             health = opt.get_health_check()
         assert "memory" in health["checks"]
+        assert health["checks"]["memory"]["status"] == ("warning" if rss_mb > 1024 else "ok")
+        assert any("内存使用过高" in issue for issue in health.get("issues", [])) == (rss_mb > 1024)
 
     def test_memory_check_without_psutil(self):
         from app.utils.performance.performance_initializer import PerformanceOptimizer
@@ -1328,6 +1332,8 @@ class TestFinalizeEnterpriseLogin:
                 "app.application.enterprise_login_flow.bind_tenant_for_login",
                 return_value={"tenant_id": 5, "tenant_name": "Co"},
             ),
+            # 市场身份绑定依赖真实宿主库账号，本用例聚焦“市场成功即保存 token”
+            patch("app.application.tenant_rbac_app_service.bind_verified_market_identity"),
         ):
             out = await finalize_enterprise_login(
                 result=result,
@@ -1362,6 +1368,7 @@ class TestFinalizeEnterpriseLogin:
         assert "market_access_token" not in out
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("isolated_login_host_db")
     async def test_skip_market_sync(self):
         from app.application.enterprise_login_flow import finalize_enterprise_login
 

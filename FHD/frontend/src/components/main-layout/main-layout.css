@@ -134,6 +134,11 @@
   cursor: not-allowed;
 }
 
+/* 顶栏作为 TopQuickNav（absolute 居中）的定位上下文 */
+.top-bar {
+  position: relative;
+}
+
 .top-bar-settings-btn {
   width: 36px;
   height: 36px;

@@ -197,6 +197,60 @@ def test_credential_rotation_requires_independent_hashed_evidence() -> None:
     assert normalizer._credential_resolution_is_valid(row) is False
 
 
+def test_owner_accepted_risk_closes_incident() -> None:
+    normalizer = _normalizer_module()
+    now = datetime.now(UTC)
+    row = {
+        "id": "INC-1",
+        "fingerprint_sha256": "a" * 64,
+        "status": "accepted_risk",
+        "author": "codex-security-remediation",
+        "reviewer": "owner-42433422",
+        "accepted_at": (now - timedelta(hours=2)).isoformat(),
+        "reviewed_at": (now - timedelta(hours=1)).isoformat(),
+        "review_due": (now + timedelta(days=30)).isoformat(),
+        "resolution_evidence_sha256": "b" * 64,
+    }
+    rows = normalizer.normalize(
+        "credential-incidents", {"schema": "credential-incidents/v1", "incidents": [row]}
+    )
+    assert rows[0]["status"] == "closed"
+    assert rows[0]["secret"] is False
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"reviewer": "codex-security-remediation"},
+        {"resolution_evidence_sha256": "not-a-hash"},
+        {"reviewed_at": "2099-01-01T00:00:00+00:00"},
+        {"review_due": "2020-01-01T00:00:00+00:00"},
+        {"accepted_at": ""},
+        {"status": "rotation_pending"},
+    ],
+)
+def test_owner_accepted_risk_fails_closed_on_weak_evidence(mutation) -> None:
+    normalizer = _normalizer_module()
+    now = datetime.now(UTC)
+    row = {
+        "id": "INC-1",
+        "fingerprint_sha256": "a" * 64,
+        "status": "accepted_risk",
+        "author": "codex-security-remediation",
+        "reviewer": "owner-42433422",
+        "accepted_at": (now - timedelta(hours=2)).isoformat(),
+        "reviewed_at": (now - timedelta(hours=1)).isoformat(),
+        "review_due": (now + timedelta(days=30)).isoformat(),
+        "resolution_evidence_sha256": "b" * 64,
+    }
+    row.update(mutation)
+    rows = normalizer.normalize(
+        "credential-incidents", {"schema": "credential-incidents/v1", "incidents": [row]}
+    )
+    assert rows[0]["status"] == "open"
+    assert rows[0]["secret"] is True
+
+
 def test_false_positive_requires_independent_fresh_review(tmp_path: Path) -> None:
     mod = _module()
     now = datetime(2026, 9, 4, tzinfo=UTC)

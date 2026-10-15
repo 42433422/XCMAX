@@ -1,0 +1,1 @@
+﻿retention OK: sessions 25->25; products 8->8; product 'SUNBIRD-loop-round2-042330' read-back OK

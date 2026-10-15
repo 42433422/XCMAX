@@ -171,6 +171,35 @@ def _validate_promotion(
     return True, "repository owner approved a governed capability proposal"
 
 
+CUSTOM_TRACK_APPROVED_LABEL = "custom-track-approved"
+
+
+def _custom_track_blocked(issue: dict[str, Any], issue_number: int) -> tuple[bool, str]:
+    """单客户定制轨道拦截：无显式 custom-track-approved 标签时拒绝派发。
+
+    工单查询失败按不拦截处理（工单系统 best-effort，issue 是对外载体）；
+    只有确证 track == customer_custom 且缺批准标签时才 fail closed。
+    """
+    labels = _label_names(issue)
+    if CUSTOM_TRACK_APPROVED_LABEL in labels:
+        return False, ""
+    try:
+        from app.services.work_order_ssot import find_by_issue
+
+        view = find_by_issue(issue_number)
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单视图读取失败不阻断通用轨道派发
+        logger.debug("work_order track lookup skipped", exc_info=True)
+        return False, ""
+    if view is None:
+        return False, ""
+    if str(view.get("track") or "") != "customer_custom":
+        return False, ""
+    return True, (
+        "工单轨道为 customer_custom（单客户定制）：禁止自动进入主线开发；"
+        f"确认按定制流程交付后，请补打 {CUSTOM_TRACK_APPROVED_LABEL} 标签再派发"
+    )
+
+
 def _receipt_marker(issue_number: int, approval_comment_id: int) -> str:
     return f"<!-- {RECEIPT_PREFIX}:{issue_number}:{approval_comment_id} -->"
 
@@ -270,6 +299,12 @@ def run(args: argparse.Namespace) -> int:
     )
     if not valid:
         return _finish(result, ok=False, status="rejected", reason=reason)
+
+    # 统一 Router 防污染门禁：单客户定制轨道的工单不得自动进入主线开发，
+    # 须由所有者显式补打 custom-track-approved 标签后才放行派发。
+    custom_blocked, custom_reason = _custom_track_blocked(issue, issue_number)
+    if custom_blocked:
+        return _finish(result, ok=False, status="rejected", reason=custom_reason)
 
     marker = _receipt_marker(issue_number, approval_comment_id)
     existing_receipt = _find_receipt(comments if isinstance(comments, list) else [], marker)
@@ -388,12 +423,32 @@ def run(args: argparse.Namespace) -> int:
             ),
         )
 
+    _record_in_dev_transition(issue_number)
     return _finish(
         result,
         ok=True,
         status="dispatched",
         reason="owner-approved capability proposal dispatched to controlled implementation",
     )
+
+
+def _record_in_dev_transition(issue_number: int) -> None:
+    """主线接线：工单随 ai-implement 派发进入开发态（best-effort）。"""
+    try:
+        from app.services.work_order_ssot import find_by_issue, record_transition
+
+        view = find_by_issue(issue_number)
+        if view is None:
+            return
+        record_transition(
+            str(view["wo_id"]),
+            "in_dev",
+            ref={"issue_number": int(issue_number)},
+            note="owner 批准并派发实现工作流",
+            source="capability_proposal_promote",
+        )
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单写入失败不阻塞派发回执
+        logger.debug("work_order in_dev transition skipped", exc_info=True)
 
 
 def main() -> None:

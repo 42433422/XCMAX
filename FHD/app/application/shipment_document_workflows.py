@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime
 from typing import Any, cast
+from uuid import uuid4
 
 from app.application.ports import ShipmentDocumentGeneratorPort, ShipmentRecordStorePort
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -19,6 +21,25 @@ class ShipmentDocumentWorkflowMixin:
 
     def get_shipment_records(self, unit_name: str | None = None) -> list[dict[str, Any]]:
         raise NotImplementedError
+
+    def record_created_shipment(
+        self,
+        *,
+        unit_name: str,
+        items: list[dict[str, Any]],
+        contact_person: str = "",
+        contact_phone: str = "",
+    ) -> dict[str, Any]:
+        _ = contact_person or contact_phone
+        if self._record_store is None:
+            return {"success": False, "message": "record_store 未配置"}
+        return self._record_store.record_document_generation(
+            unit_name=unit_name,
+            unit_id=None,
+            products=items,
+            document_result={"doc_name": unit_name},
+            raw_text="source=business_shipment_create",
+        )
 
     def export_shipment_records(
         self,
@@ -53,7 +74,8 @@ class ShipmentDocumentWorkflowMixin:
                     ]
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            unit_prefix = unit_name if unit_name else "all"
+            unit_prefix = re.sub(r"[^\w\u4e00-\u9fff-]", "_", unit_name or "all")[:80]
+            unit_prefix += "_" + uuid4().hex
             filename = f"shipment_records_{unit_prefix}_{timestamp}.xlsx"
 
             export_dir = os.path.join(get_data_dir(), "exports")

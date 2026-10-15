@@ -123,7 +123,7 @@ def _build_knowledge_graph_payload(
             )
     topic_rows = _facade()._extract_graph_topics(chunk_node_rows, limit=18)
     for topic in topic_rows:
-        topic_id = f"topic:{_facade().hashlib.sha1(topic['key'].encode('utf-8')).hexdigest()[:12]}"
+        topic_id = f"topic:{_facade().hashlib.sha1(topic['key'].encode('utf-8'), usedforsecurity=False).hexdigest()[:12]}"
         nodes.append(
             {
                 "id": topic_id,
@@ -264,7 +264,7 @@ def _graph_chunk_node_id(chunk: _facade().RetrievedChunk) -> str:
     metadata = dict(chunk.metadata or {})
     document_id = str(metadata.get("document_id") or chunk.source or "inline")
     raw = f"{document_id}:{chunk.chunk_index}:{chunk.char_start}:{chunk.text}"
-    return f"knowledge:{_facade().hashlib.sha1(raw.encode('utf-8')).hexdigest()[:16]}"
+    return f"knowledge:{_facade().hashlib.sha1(raw.encode('utf-8'), usedforsecurity=False).hexdigest()[:16]}"
 
 
 def _graph_source_label(source: str) -> str:

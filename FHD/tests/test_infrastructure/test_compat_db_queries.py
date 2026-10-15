@@ -530,3 +530,50 @@ class TestProductsUnitsForSelect:
             result = _products_units_for_select()
         assert result["success"] is True
         assert result["data"] == []
+
+
+def test_shipment_units_include_records_and_isolate_tenants():
+    from contextlib import contextmanager
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.db.models import ShipmentRecord
+    from app.infrastructure.persistence.compat_db.queries import _shipment_units_for_select
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    engine = create_engine("sqlite:///:memory:")
+    ShipmentRecord.__table__.create(engine)
+    with Session(engine) as db:
+        for tid, name in [(1, "Fresh"), (1, "Existing"), (2, "Other")]:
+            db.add(
+                ShipmentRecord(
+                    tenant_id=tid,
+                    purchase_unit=name,
+                    product_name="P",
+                    quantity_kg=1,
+                    quantity_tins=1,
+                )
+            )
+        db.commit()
+
+    @contextmanager
+    def isolated_db():
+        with Session(engine) as db:
+            yield db
+
+    with (
+        patch("app.db.session.get_db", isolated_db),
+        patch(
+            "app.infrastructure.persistence.compat_db.queries._products_units_for_select",
+            side_effect=lambda: {"success": True, "data": [{"id": 1, "name": "Existing"}]},
+        ),
+    ):
+        for tid, expected in [
+            (1, ["Existing", "Fresh"]),
+            (2, ["Existing", "Other"]),
+            (None, ["Existing"]),
+        ]:
+            with tenant_scope(tid):
+                assert [r["name"] for r in _shipment_units_for_select()["data"]] == expected
+    engine.dispose()

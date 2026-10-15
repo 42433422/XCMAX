@@ -1,0 +1,53 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "base-update-mgmt",
+ "name": "版本与更新管理",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 2,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/mod-store/updates",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod-store/updates（写操作自动附带 CSRF）：Mod 更新检查",
+   "expected": "Mod 更新检查：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 6908ms；{\"updates_available\": [], \"count\": 0, \"complete\": true, \"source_errors\": {}}",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "界面路由 /settings",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /settings，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /settings，页面可见 版本，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /settings；命中文本 ['版本']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名 | S",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "base-update-mgmt",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-update-mgmt/macos/result.png",
+   "sha256": "6bbcbc2685cfdaad5cd5bfee6a816589c87357f126211642b4833b1b5a1e76b1",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "base-update-mgmt",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-update-mgmt/macos/operation.webm",
+   "sha256": "3d668b6f4d715d35b1190b5dfe154c30bd357732ede06ab0e83928d281d87cee",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-update-mgmt/macos/run.log",
+  "sha256": "6247741816ec3e585589d17d23fa67336770645cc52f0b63c60f4a7eb4aad7cb",
+  "bytes": 1121
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

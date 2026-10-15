@@ -1,0 +1,33 @@
+{
+  "generated_at": "2026-09-14T12:20:27.0592135+00:00",
+  "install_root": "C:\\XCAGI-acceptance",
+  "data_root": "C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI",
+  "scenarios": [
+    {
+      "场景": "dual-process",
+      "结果": "PASS",
+      "说明": "单实例锁生效：第二实例 1s 退出（ExitCode=0），主实例 degraded"
+    },
+    {
+      "场景": "migration-mutex",
+      "结果": "PASS",
+      "说明": "竞态双启动收敛：degraded；XCAGI 进程 5 个、后端 1 个、监听 8476"
+    },
+    {
+      "场景": "disk-full(人工)",
+      "结果": "SKIP",
+      "说明": "CI 环境：实体机场景待人工执行"
+    },
+    {
+      "场景": "power-cut(人工)",
+      "结果": "SKIP",
+      "说明": "CI 环境：实体机场景待人工执行"
+    }
+  ],
+  "summary": {
+    "partial": 0,
+    "fail": 0,
+    "pass": 2,
+    "skip": 2
+  }
+}

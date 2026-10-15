@@ -62,9 +62,9 @@ def templates_db(monkeypatch):
         def __exit__(self, *args):
             self.session.close()
 
-    # store 模块级 import 了 get_db，必须 patch 使用处
+    # store 运行时经 app.db.session.get_db 解析，patch 会话工厂即可
     monkeypatch.setattr(
-        "app.infrastructure.templates.template_store_impl.get_db",
+        "app.db.session.get_db",
         lambda: _Ctx(),
     )
     monkeypatch.setattr(

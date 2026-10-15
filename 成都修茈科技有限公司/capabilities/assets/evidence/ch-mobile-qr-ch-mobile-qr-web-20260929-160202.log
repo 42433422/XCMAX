@@ -1,0 +1,7 @@
+[16:02:02] feature=ch-mobile-qr platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-mobile-qr
+[16:02:15] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[16:02:16] case Q1: passed - 签发扫码登录二维码
+[16:02:17] case Q2: passed - 二维码状态轮询真实读取
+[16:02:17] case Q3: passed - 无效二维码轮询被拒（负例/边界）
+[16:02:17] video: ch-mobile-qr-web-20260929-160202.webm (1162159 bytes)
+[16:02:17] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-mobile-qr/log/ch-mobile-qr-web-20260929-160202.log

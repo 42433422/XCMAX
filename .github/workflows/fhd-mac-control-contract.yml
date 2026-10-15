@@ -1,0 +1,57 @@
+# CI SSOT: generated from FHD/.github/workflows/mac-control-contract.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Mac control runtime contract
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Nightly 全量（每日 16:30 UTC = 北京 00:30）；日常 PR 仅在 runtime 相关改动时跑。
+    - cron: "30 16 * * *"
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.c.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Classify changed paths (unified classifier)
+        id: c
+        # 非 PR（push/schedule）时 base/head 为空 → 分类器 fail-open 返回 run=true。
+        run: |
+          python ../scripts/dev/change_classifier.py --category runtime_contract \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+  runtime-contract:
+    needs: classify
+    if: needs.classify.outputs.run != 'false'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/autonomy/runtime_tools/control_receipt_outbox.test.mjs scripts/autonomy/runtime_tools/control_git_handoff.test.mjs scripts/autonomy/runtime_tools/e2e_agent_runtime_policy.test.mjs
+      - uses: actions/checkout@v4
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          repository: 42433422/devfleet
+          ref: b2c99fd999016a673b0eadeadf1e3e3ae2d47f24
+          path: para-test-deps
+      - run: npm ci --prefix ../para-test-deps
+        if: matrix.os == 'ubuntu-latest'
+      - run: node --test scripts/autonomy/runtime_tools/provision_para_control.test.mjs scripts/autonomy/runtime_tools/merge_worker.test.mjs
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          PARA_TEST_PACKAGE_ROOT: ${{ github.workspace }}/para-test-deps

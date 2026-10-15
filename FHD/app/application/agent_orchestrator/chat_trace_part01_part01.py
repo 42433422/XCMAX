@@ -64,6 +64,11 @@ def _payload_status(payload: dict[str, _facade().Any]) -> _facade().RunStatus:
     data = _facade()._payload_data(payload)
     if payload.get("requires_token") or data.get("requires_token"):
         return "waiting_user"
+    if any(
+        isinstance(record.get("output"), dict) and record["output"].get("pending_approval") is True
+        for record in _facade()._extract_legacy_tool_records(payload)
+    ):
+        return "waiting_user"
     if payload.get("success") is False:
         return "failed"
     return "completed"

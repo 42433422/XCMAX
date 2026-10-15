@@ -1,0 +1,8 @@
+[15:16:24] feature=erp-master-data platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-master-data
+[15:16:37] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:16:39] case MD1: passed - 产品主数据真实写-读回
+[15:16:40] case MD2: passed - 客户主数据真实写-读回
+[15:16:40] case MD3: passed - 域门面与仓储注册真实读取
+[15:16:40] case MD4: passed - 缺名称产品 400 · 旧未隔离接口 403（负例）
+[15:16:40] video: erp-master-data-web-20260929-151624.webm (1199913 bytes)
+[15:16:40] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-master-data/log/erp-master-data-web-20260929-151624.log

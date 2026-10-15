@@ -1,0 +1,8 @@
+[08:05:43] feature=ops-delivery-sync base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery-sync
+[08:05:55] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:05:55] case DS1: passed - 交付阶段推进缺少参数被拒（边界）
+[08:05:55] case DS2: passed - 对未授权客户私有 Mod 推进阶段被越权拒绝（负例）
+[08:05:55] case DS3: passed - 对未授权客户私有 Mod 更新被越权拒绝（负例）
+[08:06:00] case DS4: passed - 「客户交付中心」页真实渲染交付台账并触发同步动作
+[08:06:00] video: ops-delivery-sync-web-20260929-080543.webm (1235094 bytes)
+[08:06:00] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery-sync/log/ops-delivery-sync-web-20260929-080543.log

@@ -1,0 +1,7 @@
+2026-09-29T20:33:55+0800 [ch-im-core] 开始验收 ch-im-core 站内 IM 与实时通道；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
+2026-09-29T20:34:00+0800 [ch-im-core] M1 passed :: HTTP 200 5302ms；['企业专属客服']
+2026-09-29T20:34:05+0800 [ch-im-core] M2 passed :: HTTP 200 4358ms；{"success": true, "conversation_id": 58, "message": {"id": 21655, "conversation_id": 58, "sender_user_id": 25, "sender_display_name": "SUNBIRD", "body": "MAC验收0929 站内消息", "origin": "customer", "operat
+2026-09-29T20:34:08+0800 [ch-im-core] M3 passed :: HTTP 200 2999ms；会话 企业专属客服
+2026-09-29T20:34:13+0800 [ch-im-core] M4 passed :: 已在会话中看到新消息；上下文： | 企 | 企业专属客服 | @enterprise-cs | 企 | 企业专属客服 | 待人工 | AI 已转人工 | AI置信度不足或风险较高 |  | MAC验收0929 站内消息 |  | 9/29/2026, 7:08:46 AM | 企业专属客服 |  | 这个问题已为您转接人工客服，客服人员会在本会话继续回复，请稍候。 |  | 9/29/2026, 7:09:21 A
+2026-09-29T20:34:14+0800 [ch-im-core] screenshot result.png
+2026-09-29T20:34:21+0800 [ch-im-core] video operation.webm bytes=560500

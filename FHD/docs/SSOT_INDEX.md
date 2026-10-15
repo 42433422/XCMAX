@@ -1,7 +1,7 @@
 # SSOT 索引（唯一真相源登记表）
 
 > **本文件为 SSOT 索引的 SSOT**。任何文档声称 SSOT 必须在此登记。
-> 最后更新：2026-07-31
+> 最后更新：2026-10-03
 
 ## 登记规则
 
@@ -14,10 +14,12 @@
 
 | 领域 | SSOT 文档 | 说明 |
 |------|----------|------|
+| audit-benchmark（18 领域对标审计） | [AUDIT_BENCHMARK_SSOT.md](AUDIT_BENCHMARK_SSOT.md) | JSON 为规范源、本文生成；商业 90 / 开源 60 锚点、证据等级与新旧分隔离 |
 | coverage（覆盖率） | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 后端/前端覆盖率基线、目标、棘轮 floor |
 | ci（CI/CD） | [../../docs/CI_SSOT.md](../../docs/CI_SSOT.md) | 根仓 .github/workflows/ 唯一调度入口 |
 | mod（Mod 开发） | [guides/MOD_AUTHORING_GUIDE.md](guides/MOD_AUTHORING_GUIDE.md) | Mod 开发规范、mods/ 为唯一编辑源 |
-| version（产品版本） | [VERSION.md](../VERSION.md) | 产品版本 1.0.0.0、工具链映射 1.0.0 |
+| version（产品版本） | [VERSION.md](../VERSION.md) | 产品版本与工具链映射唯一数字来源（`verify_version_anchors.py` 校验） |
+| release-changelog（用户更新记录） | [../CHANGELOG.md](../CHANGELOG.md) | 产品 PR 强制更新的用户修复记录 |
 | route（路由） | [reports/WAVE2_ROUTE_SSOT.md](reports/WAVE2_ROUTE_SSOT.md) | RouteRegistry + mounts/* 路由 SSOT |
 | git（Git 仓库） | [reports/GIT_WORKTREE_RECOVERY.md](reports/GIT_WORKTREE_RECOVERY.md) | 根仓 XCMAX/ 为 Git SSOT |
 | mypy（类型检查） | [../pyproject.toml](../pyproject.toml) | [tool.mypy] 配置 |
@@ -45,6 +47,12 @@
 | customer-delivery（客户私有交付） | [../config/customer_delivery.json](../config/customer_delivery.json) | 客户品牌；`legacy_mod_id` vs `industry_mod_id`；**双轨** `modules` / `employees` 及轨道节点进度；生产员工只列定制包；太阳鸟「考勤表转化」= 模块轨节点 |
 | process-flow（业务流程与交付流程） | [architecture/PROCESS_FLOW_SSOT.md](architecture/PROCESS_FLOW_SSOT.md) | 业务工作流程 + 对外交付流程唯一真相源；供 AGI 编排（Agent Orchestrator / Workflow Engine / NeuroBus 事件驱动）消费；含统一单据生命周期、自动化就绪度矩阵、断点行动项 |
 | utils-boundary（app/utils 职责域） | [devex/utils-domain-boundaries.md](devex/utils-domain-boundaries.md) | app/utils 47 模块职责域归类 + 目标包结构唯一真相源；excel/resilience 已迁移，其余待后续 Stage |
+| net-deletion（净删除棘轮） | [../metrics/line_baseline.json](../metrics/line_baseline.json) | 全仓「人工维护代码 + 文档」总行数基线，只减不增；口径与排除项见 scripts/dev/check_net_deletion.py |
+| macos-release（macOS 发布交付） | [MACOS_RELEASE_SSOT.md](MACOS_RELEASE_SSOT.md) | macOS 版本/产物/SHA256/构建环境/下载与更新地址/测试机 + 12 项 Release Gate 状态与实机验收任务；每次发版复用 |
+| windows-release（Windows 发布交付） | [WINDOWS_RELEASE_SSOT.md](WINDOWS_RELEASE_SSOT.md) | 新版 WPF 唯一出包入口、版本/产物/SHA256/下载与更新地址/测试机 + 13 项 Release Gate（含 G13 回滚）状态与实机验收任务 |
+| desktop-platform-parity（桌面双端平级） | [desktop_platform_parity_ssot.md](desktop_platform_parity_ssot.md) | Windows 与 macOS 平级发布（同版本/同 release_sha/双端齐备）；功能双端验证通过才算完成；平台差异收口 desktop/platform/ 适配层 |
+| capability-center（产品能力中心） | [../成都修茈科技有限公司/data/capabilities/catalog.json](../成都修茈科技有限公司/data/capabilities/catalog.json) | 官网公开能力证据库唯一事实源（域→模块→功能+证据路径）；No Evidence, No Claim 降级引擎；生成页面见 `成都修茈科技有限公司/capabilities/` |
+| product-lines（三产品线控制面） | [PRODUCT_LINES_STATUS.md](PRODUCT_LINES_STATUS.md) | 三产品线版本/发布状态/能力/成熟度单一事实来源（自动生成；声明式输入 [../config/product_lines.yaml](../config/product_lines.yaml)，不含任何数字） |
 
 ## 机器注册表（ssot.yaml）
 
@@ -53,12 +61,14 @@
 
 | 域名 | SSOT 路径 | 门禁 |
 |------|----------|------|
+| audit-benchmark | `FHD/config/audit_benchmark_ssot.json` | blocking |
 | mods | `FHD/mods/` | blocking |
 | ci-workflows | `FHD/.github/workflows/` | blocking |
 | coverage | `FHD/metrics/coverage_ratchet_baseline.json` | blocking |
 | version | `FHD/VERSION.md` | blocking |
 | docs-ssot | `FHD/docs/SSOT_INDEX.md` | blocking |
 | account-system | `FHD/docs/account_system_ssot.md` | blocking |
+| public-site | `FHD/config/public_cases.json` | blocking |
 | test-files | `FHD/tests/` | blocking |
 | deploy-scripts | `FHD/scripts/deploy/` | blocking |
 | deps | `FHD/pyproject.toml` | blocking |
@@ -75,6 +85,12 @@
 | repository-ssot | `FHD/app/infrastructure/repositories/` | blocking |
 | dev-inventory | `FHD/scripts/dev/` | blocking |
 | dev-guards | `FHD/scripts/dev/` | blocking |
+| net-deletion | `FHD/metrics/line_baseline.json` | blocking |
+| desktop-platform-parity | `FHD/docs/desktop_platform_parity_ssot.md` | blocking |
+| macos-release | `FHD/docs/MACOS_RELEASE_SSOT.md` | blocking |
+| windows-release | `FHD/docs/WINDOWS_RELEASE_SSOT.md` | blocking |
+| capability-center | `成都修茈科技有限公司/data/capabilities/catalog.json` | blocking |
+| product-lines | `FHD/config/product_lines.yaml` | blocking |
 
 ## 已退役 SSOT（指针化）
 

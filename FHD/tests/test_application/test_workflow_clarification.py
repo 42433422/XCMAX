@@ -1,21 +1,14 @@
-"""Tests for the clarification (反问澄清) gate in app.application.workflow.
-
-Covers:
-  - needs_clarification: customers.delete with multiple same-name candidates → ambiguous,
-    and does NOT directly execute the delete,
-  - engine routing: clarify node pauses (write node blocked), then on user confirmation
-    routes via conditional edge back to the original delete node,
-  - clarification TTL: expired sessions are auto-cancelled (no backlog),
-  - resolve_confirmed_target: resolves a unique target from the user's answer.
-"""
+"""Clarification gating, resume routing, expiry and target resolution tests."""
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
+from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.workflow.clarification_node import (
     build_clarify_node,
-    entry_is_expired,
     insert_clarify_node,
     make_pending_entry,
     needs_clarification,
@@ -41,18 +34,18 @@ def _customers_registry() -> dict:
     }
 
 
+_CUSTOMER_CANDIDATES = [
+    {"id": "cust_1", "name": "北京智造科技"},
+    {"id": "cust_2", "name": "北京智造科技"},
+]
+
+
 def _ambiguous_delete_plan() -> PlanGraph:
-    """删除客户：存在多个同名候选，id 未解析。"""
     delete_node = WorkflowNode(
         node_id="delete_customer",
         tool_id="customers",
         action="delete",
-        params={
-            "_candidates": [
-                {"id": "cust_1", "name": "北京智造科技"},
-                {"id": "cust_2", "name": "北京智造科技"},
-            ]
-        },
+        params={"_candidates": [dict(candidate) for candidate in _CUSTOMER_CANDIDATES]},
         risk="high",
         idempotent=False,
         description="删除客户",
@@ -69,11 +62,6 @@ def _ambiguous_delete_plan() -> PlanGraph:
 def _executed(engine, plan, runtime_context=None):
     result = engine.run(plan, runtime_context=runtime_context or {})
     return result, set(result.final_context["workflow_status"]["executed_nodes"])
-
-
-# ===========================================================================
-# needs_clarification
-# ===========================================================================
 
 
 class TestNeedsClarification:
@@ -124,11 +112,6 @@ class TestNeedsClarification:
             ],
         )
         assert needs_clarification(plan, _customers_registry()) == []
-
-
-# ===========================================================================
-# engine: clarify node pauses, then confirmation routes to delete
-# ===========================================================================
 
 
 class TestEngineClarificationGate:
@@ -188,11 +171,6 @@ class TestEngineClarificationGate:
         assert clarify_output.get("answer_confirmed") is True
 
 
-# ===========================================================================
-# build_clarify_node
-# ===========================================================================
-
-
 class TestBuildClarifyNode:
     def test_builds_clarify_node_with_branch_to_target(self):
         node = build_clarify_node(
@@ -216,31 +194,28 @@ class TestBuildClarifyNode:
         assert len(plan.nodes) == 1
 
 
-# ===========================================================================
-# TTL 防堆积：过期自动取消
-# ===========================================================================
-
-
 class TestClarificationTTL:
-    def test_expired_clarification_is_swept(self):
-        pending = {
-            "u1": make_pending_entry(
-                plan=_ambiguous_delete_plan(),
-                runtime_context={},
-                thinking_steps="s",
-                clarification={},
-                clarify_node_id="clarify_1",
-                target_node_id="delete_customer",
-                now=1000.0,
-            )
-        }
-        # 未过期
-        assert entry_is_expired(pending["u1"], now=1000.0 + 60) is False
-        # 超过 TTL（默认 1800s）→ 过期
-        assert entry_is_expired(pending["u1"], now=1000.0 + 2000) is True
-        expired = sweep_expired(pending, now=1000.0 + 2000)
-        assert expired == ["u1"]
-        assert "u1" not in pending  # 自动取消，不堆积
+    def test_expired_clarification_is_swept(self, monkeypatch):
+        service = AIChatApplicationService()
+        service._pending_workflows["u1"] = make_pending_entry(
+            plan=_ambiguous_delete_plan(),
+            runtime_context={"session_id": "s"},
+            thinking_steps="s",
+            clarification={"candidates": [{"id": 7, "name": "好的测试商品"}]},
+            clarify_node_id="clarify_1",
+            target_node_id="delete_customer",
+            now=1000.0,
+        )
+        runner = MagicMock(return_value=(None, {}))
+        monkeypatch.setattr(service, "_hydrate_pending_workflow", lambda *_a: False)
+        monkeypatch.setattr(service, "_run_workflow_with_state_updates", runner)
+        monkeypatch.setattr(
+            service, "_format_workflow_run_response", lambda *_a, **_k: {"success": True}
+        )
+        result = service.process_chat("u1", "好的", context={"session_id": "s"}, source="normal")
+        runner.assert_not_called()
+        assert result["data"]["action"] == "clarification_required"
+        assert "u1" not in service._pending_workflows
 
     def test_non_clarification_pending_is_not_swept(self):
         pending = {"u1": {"kind": "confirmation", "created_at": 1.0, "ttl_seconds": 30}}
@@ -248,16 +223,8 @@ class TestClarificationTTL:
         assert "u1" in pending
 
 
-# ===========================================================================
-# resolve_confirmed_target
-# ===========================================================================
-
-
 class TestResolveConfirmedTarget:
-    CANDIDATES = [
-        {"id": "cust_1", "name": "北京智造科技"},
-        {"id": "cust_2", "name": "北京智造科技"},
-    ]
+    CANDIDATES = _CUSTOMER_CANDIDATES
 
     def test_resolve_by_index(self):
         assert resolve_confirmed_target("1", self.CANDIDATES) == {"id": "cust_1"}
@@ -273,11 +240,6 @@ class TestResolveConfirmedTarget:
         assert resolve_confirmed_target("3", self.CANDIDATES) is None
         assert resolve_confirmed_target("", self.CANDIDATES) is None
         assert resolve_confirmed_target("随便", []) is None
-
-
-# ---------------------------------------------------------------------------
-# ERP 业务澄清（Task 6，吸收 Odoo 18 深度）
-# ---------------------------------------------------------------------------
 
 
 def _stock_out_plan(quantity: str) -> PlanGraph:
@@ -380,3 +342,98 @@ class TestErpClarification:
 
         assert ("sales", "quote") in _WRITE_REQUIRED_FALLBACK
         assert ("finance", "journal_entry_create") in _WRITE_REQUIRED_FALLBACK
+
+
+_SHIPMENT_ITEM = {
+    "product_name": "Paint",
+    "quantity_tins": 1,
+    "tin_spec": 10,
+    "unit_price": 1,
+    "amount": 10,
+}
+_SHIPMENT_ALIAS = {k: v for k, v in _SHIPMENT_ITEM.items() if k not in {"product_name", "tin_spec"}}
+_SHIPMENT_ALIAS.update(name="Paint", spec_per_tin=10)
+
+
+@pytest.mark.parametrize(
+    "params,expected",
+    [
+        ({"unit_name": "{{selected_unit_name}}"}, ["unit_name", "products"]),
+        ({"unit_name": "用户需提供"}, ["unit_name", "products"]),
+        ({"unit_name": "Co", "products": "invalid"}, ["products"]),
+        ({"unit_name": "Co", "products": ["invalid"]}, ["products.0"]),
+        ({"unit_name": "Co", "products": [_SHIPMENT_ITEM]}, []),
+        (
+            {
+                "unit_name": "Co",
+                "products": [{k: v for k, v in _SHIPMENT_ITEM.items() if k != "amount"}],
+            },
+            [],
+        ),
+        ({"purchase_unit": "Co", "items": [_SHIPMENT_ALIAS]}, []),
+        *[
+            (
+                {"unit_name": "Co", "products": [{**_SHIPMENT_ITEM, key: value}]},
+                [f"products.0.{key}"],
+            )
+            for key, value in [
+                ("quantity_tins", None),
+                ("tin_spec", None),
+                ("unit_price", None),
+                ("amount", None),
+                ("product_name", "用户需提供"),
+                ("product_name", "{{selected_product_name}}"),
+                ("quantity_tins", 1.5),
+                ("amount", float("nan")),
+                ("quantity_tins", True),
+                ("amount", float("inf")),
+                ("unit_price", -1),
+                ("amount", 10**1000),
+            ]
+        ],
+    ],
+)
+@pytest.mark.parametrize("generic", [False, "shipment_records", "shipments", "发货单"])
+def test_shipment_inputs_shared_by_clarification_and_execution(params, expected, generic):
+    from unittest.mock import MagicMock, patch
+
+    from app.application.agent_orchestrator.clarification import pause_for_clarification
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
+    from app.services.tools_execution.registry import _validate_required_params
+    from app.services.tools_workflow_shipments_docs import _registered_router_shipment_records
+
+    params = {**params, "contact_person": "Alice", "contact_phone": "1234"}
+    node = WorkflowNode(
+        node_id="create",
+        tool_id="shipment_records",
+        action="create",
+        params=params,
+        risk="high",
+        idempotent=False,
+    )
+    if generic:
+        node.tool_id, node.action = "business_db", "write"
+        node.params = {"entity": generic, "operation": "create", "payload": params}
+    plan = PlanGraph(plan_id="shipment", intent="create", nodes=[node])
+    clarification = needs_clarification(plan, {})
+    assert (clarification[0]["missing_fields"] if clarification else []) == expected
+    assert _validate_required_params(node.tool_id, node.action, node.params)[0] is (not expected)
+    assert validate_tool_call(node.tool_id, node.action, node.params).ok is (
+        not expected and generic in (False, "shipment_records")
+    )
+    step = AgentStep("write", node.tool_id, node.action, node.params)
+    run = AgentRun("owner", "创建出货", steps=[step])
+    assert pause_for_clarification(run, step) is bool(expected and generic)
+    assert run.tool_calls == []
+    if expected and generic:
+        assert run.status == "blocked" and all(key in run.error for key in expected)
+    svc = MagicMock()
+    svc.create_shipment.return_value = {"success": True}
+    with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        result = _registered_router_shipment_records("create", params, {}, "admin", "")
+    assert result["success"] is (not expected)
+    assert svc.create_shipment.call_count == (0 if expected else 1)
+    if not expected:
+        for key in ("contact_person", "contact_phone"):
+            assert svc.create_shipment.call_args.kwargs[key] == params[key]

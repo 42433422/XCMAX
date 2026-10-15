@@ -1,0 +1,70 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "base-rbac",
+ "name": "权限与角色控制（RBAC）",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/rbac/permissions",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/rbac/permissions（写操作自动附带 CSRF）：读取权限点清单",
+   "expected": "读取权限点清单：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 66ms；权限点 6 个，示例 ['etl.execute', 'etl.read', 'etl.rollback', 'etl.target.manage']",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/rbac/roles 请求体 {\"name\": \"MAC验收0929角色13425\", \"description\": \"macOS 验收\", \"permissions\": []}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/rbac/roles（写操作自动附带 CSRF）：新建租户角色",
+   "expected": "新建租户角色：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 201 26ms；角色 id=9 key=tenant:1:MAC验收0929角色13425",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/rbac/roles",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/rbac/roles（写操作自动附带 CSRF）：读回角色列表含新角色",
+   "expected": "读回角色列表含新角色：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 83ms；角色数 5，含 MAC验收0929角色13425",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /tenant-roles",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /tenant-roles，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /tenant-roles，页面可见 角色，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /tenant-roles；命中文本 ['角色']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 角色与权限 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 角色与权限 |  | 管理当前企业的业务角色，并将角色分配给本企业用户。 |  | 刷新 | 角色 | 新建角色 | MAC验收0929角色 | 0 项权限 | MA",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "base-rbac",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-rbac/macos/result.png",
+   "sha256": "c535f9acc5a482201c7a501c5ac76e08d601394dc673840362225156e451339f",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "base-rbac",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-rbac/macos/operation.webm",
+   "sha256": "f8567c6a234ad981c1861a12b76cf721d74adeebcac60f957fcc2189b4c809ad",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-rbac/macos/run.log",
+  "sha256": "ac575ef685ed9d21e65d9ae3e131fd4c73e7114ca2c1525eaa18f349d06db7f5",
+  "bytes": 1378
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

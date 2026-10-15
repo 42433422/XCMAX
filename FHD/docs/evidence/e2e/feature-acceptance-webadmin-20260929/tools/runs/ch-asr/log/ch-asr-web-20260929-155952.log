@@ -1,0 +1,8 @@
+[15:59:52] feature=ch-asr platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-asr
+[16:00:05] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[16:00:06] case A1: passed - ASR 健康与模型源真实读取
+[16:00:09] case A2: passed - 真实上传中文语音并拿到非空转写（正向）
+[16:00:10] case A3: passed - 缺 file 的转写请求被校验拒绝（负例）
+[16:00:10] case A4: passed - 缺 CSRF 双提交的转写请求被拒（负例/边界）
+[16:00:10] video: ch-asr-web-20260929-155952.webm (1383036 bytes)
+[16:00:10] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-asr/log/ch-asr-web-20260929-155952.log

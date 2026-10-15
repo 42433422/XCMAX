@@ -140,23 +140,11 @@ from modstore_server.market_auth_api_part01 import (
 
 
 from modstore_server.market_auth_api_part02 import (
-    api_register as api_register,
-    api_login as api_login,
     InternalSsoIssueTokenDTO as InternalSsoIssueTokenDTO,
     api_internal_sso_issue_token as api_internal_sso_issue_token,
-    api_me as api_me,
     api_upload_avatar as api_upload_avatar,
     api_delete_avatar as api_delete_avatar,
     api_avatar_file as api_avatar_file,
-    api_send_code as api_send_code,
-    api_send_register_code as api_send_register_code,
-    api_login_with_code as api_login_with_code,
-    api_send_reset_password_code as api_send_reset_password_code,
-    api_reset_password as api_reset_password,
-    api_update_profile as api_update_profile,
-    api_change_password as api_change_password,
-    api_admin_reset_user_password as api_admin_reset_user_password,
-    api_refresh_token as api_refresh_token,
     SendPhoneCodeDTO as SendPhoneCodeDTO,
     LoginWithPhoneCodeDTO as LoginWithPhoneCodeDTO,
     api_send_phone_code as api_send_phone_code,
@@ -167,7 +155,6 @@ from modstore_server.market_auth_api_part02 import (
     AccountDeleteDTO as AccountDeleteDTO,
     api_account_delete as api_account_delete,
     api_account_export as api_account_export,
-    api_admin_status as api_admin_status,
 )
 
 from modstore_server.browser_handoff_api import router as browser_handoff_router

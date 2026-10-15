@@ -1,0 +1,9 @@
+[13:54:32] feature=ai-employees-workflow platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-employees-workflow
+[13:54:44] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:54:45] case W1: passed - 工作流员工清单真实读取
+[13:54:46] case W2: passed - 员工编目真实读取
+[13:54:46] case W3: passed - 标签打印员工 status 真实应答
+[13:54:46] case W4: passed - 标签打印员工 run 真实应答
+[13:54:46] case W5: passed - 不存在员工被拒（负例/边界）
+[13:54:46] video: ai-employees-workflow-web-20260929-135432.webm (1046112 bytes)
+[13:54:46] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-employees-workflow/log/ai-employees-workflow-web-20260929-135432.log

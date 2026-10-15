@@ -60,4 +60,7 @@ def test_golden_route_snapshot_essential(essential_app: FastAPI):
     assert len(paths) >= len(REQUIRED_PATHS)
     if GOLDEN_PATH.exists():
         expected = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
-        assert paths == expected
+        assert paths == expected, {
+            "added": sorted(set(paths) - set(expected)),
+            "missing": sorted(set(expected) - set(paths)),
+        }
