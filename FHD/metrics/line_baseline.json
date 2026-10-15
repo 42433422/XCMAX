@@ -1,5 +1,5 @@
 {
   "lines": 2303315,
   "updated": "2026-10-14",
-  "note": "Owner approved isolated Windows lifecycle acceptance harness and targeted tests: actual +283 lines, within +350 cap; no product runtime changes"
+  "note": "Owner approved isolated Windows lifecycle acceptance harness, tests and reconciled changelog: actual +283 lines versus main, within +350 cap; no product runtime changes"
 }
