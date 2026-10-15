@@ -328,7 +328,9 @@ def continue_agent_run(
         return JSONResponse(
             {"success": False, "message": "审批存储暂时不可用，请稍后重试"}, status_code=503
         )
-    except ApprovalGrantError:
+    except ApprovalGrantError as exc:
+        # 对外仍是统一的 403 文案；内部原因写日志，便于排查“点了没反应”（#2289）。
+        logger.warning("agent run %s approval refused: %s", run_id, exc)
         return JSONResponse(
             {"success": False, "message": _PUBLIC_APPROVAL_ERROR},
             status_code=403,

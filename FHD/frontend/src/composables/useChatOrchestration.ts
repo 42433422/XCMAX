@@ -480,6 +480,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
 
   async function syncSessionMessages(): Promise<void> {
+    if (isLoading.value || isExecuting.value) return
     try {
       await syncFromServer()
     } finally {

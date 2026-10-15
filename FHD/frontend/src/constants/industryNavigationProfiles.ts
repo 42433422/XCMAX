@@ -307,7 +307,7 @@ export function resolveIndustryNavigationProfile(industryId: string): IndustryNa
     id: id || base.id,
     categoryId: base.categoryId,
     categoryLabel: base.categoryLabel,
-    businessMenuKeys: withDefaultTemplateLibrary(fineGrained.businessMenuKeys || base.businessMenuKeys),
+    businessMenuKeys: withDefaultTemplateLibrary([...new Set<IndustryBusinessMenuKey>([...(fineGrained.businessMenuKeys || base.businessMenuKeys), 'approval-hub'])]),
     previewMenuKeys: withDefaultTemplateLibrary(fineGrained.previewMenuKeys || base.previewMenuKeys),
     menuLabels: { ...base.menuLabels, ...(fineGrained.menuLabels || {}) },
     deferredCapabilities: [...(fineGrained.deferredCapabilities || base.deferredCapabilities)],

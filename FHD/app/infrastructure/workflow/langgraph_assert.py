@@ -33,6 +33,7 @@ EXPECTED_PROVENANCE: Final[dict[str, tuple[str | None, str, str | None]]] = {
         "b2926a0ff9589c28c7e01fe7cdbb337b86d5a4b4",
         "3.1.1",
     ),
+    "xcagi_langgraph_sdk": ("sdk==0.4.4", "d5f4b2aa960940effc8430165ab3604038e817af", "0.4.4"),
 }
 
 # vendored module -> package directory relative to FHD/packages that must own it.

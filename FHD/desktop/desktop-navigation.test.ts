@@ -84,6 +84,30 @@ describe('既有权重行为回归', () => {
 })
 
 describe('browser handoff navigation contract', () => {
+  it.each([
+    '/api/ai/kitten/document/pickup/test-report-token',
+    '/api/ai/analyze/export/test-report-id',
+    '/api/shipment/download/test-report.pdf',
+  ])('downloads local business files without creating an empty child: %s', path => {
+    const url = `http://127.0.0.1:17504${path}`
+    const download = vi.fn()
+    const external = vi.fn()
+    expect(handleDesktopWindowOpen(url, 17504, external, vi.fn(), download)).toBe('deny')
+    expect(download).toHaveBeenCalledExactlyOnceWith(url)
+    expect(external).not.toHaveBeenCalled()
+  })
+
+  it('preserves local pages and never downloads from another origin', () => {
+    const download = vi.fn()
+    for (const url of [
+      'http://127.0.0.1:17503/api/ai/kitten/document/pickup/token',
+      'https://evil.example/api/ai/kitten/document/pickup/token',
+      'http://127.0.0.1.evil.example:17504/api/ai/kitten/document/pickup/token',
+    ]) expect(handleDesktopWindowOpen(url, 17504, vi.fn(), vi.fn(), download)).toBe('deny')
+    expect(handleDesktopWindowOpen('http://localhost:17504/orders', 17504, vi.fn(), vi.fn(), download)).toBe('allow')
+    expect(download).not.toHaveBeenCalled()
+  })
+
   it('delegates a trusted code URL to the system browser and denies an Electron child', () => {
     const url = 'https://xiu-ci.com/wallet?recharge=30#xcagi_code=' + 'a'.repeat(43)
     const open = vi.fn().mockResolvedValue(undefined)

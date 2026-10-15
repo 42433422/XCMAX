@@ -729,6 +729,7 @@ class TestSingletonLifecycle:
         svc1 = get_user_memory_service()
         svc2 = get_user_memory_service()
         assert svc1 is svc2
+        assert UserMemoryService() is svc1
 
     def test_reset_clears_singleton(self, monkeypatch, tmp_path):
         json_path = str(tmp_path / "memory_store.json")
