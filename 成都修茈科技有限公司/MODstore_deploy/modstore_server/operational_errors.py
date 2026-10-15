@@ -43,6 +43,13 @@ except ImportError:  # pragma: no cover - optional WebSocket client
     pass
 
 try:
+    from aiohttp import client_exceptions as _aiohttp_client_exceptions
+
+    _optional_errors += (_aiohttp_client_exceptions.ClientError,)
+except ImportError:  # pragma: no cover - optional HTTP client
+    pass
+
+try:
     import jwt
 
     _optional_errors += (jwt.PyJWTError,)

@@ -6,6 +6,7 @@ import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { refreshTenantScopedClientStores } from '@/utils/refreshTenantScopedClientStores'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import type { TenantStorageScopeInput } from '@/utils/tenantStorageScope'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 function buildScopeInput(
   tenantId: number | null,
@@ -32,10 +33,13 @@ async function syncTenantScopedStoresFromProfile(
 ): Promise<void> {
   const input = buildScopeInput(tenantId, marketUserId, localUserId, accountKind, marketUsername)
   setRuntimeTenantStorageScopeInput(input)
-  await refreshTenantScopedClientStores(input)
+  const refreshing = refreshTenantScopedClientStores(input)
+  const epoch = productReadAccountEpoch.value
+  await refreshing
+  if (epoch !== productReadAccountEpoch.value) throw new Error('登录工作空间已改变，请重试')
   if (tenantId !== null || localUserId !== null || marketUserId !== null) {
     const { useIndustryStore } = await import('@/stores/industry')
-    await useIndustryStore().loadFromServer()
+    await useIndustryStore().loadFromServer(accountKind !== 'admin')
   }
 }
 
@@ -60,6 +64,9 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   const tenantIsOwner = ref(false)
   const userRole = ref('')
   const loaded = ref(false)
+  const workspaceEpoch = ref(-1)
+  const workspaceReady = computed(() => loaded.value && workspaceEpoch.value === productReadAccountEpoch.value)
+  let hydrationEpoch = 0
 
   const isAdminAccount = computed(() => accountKind.value === 'admin' && marketIsAdmin.value)
 
@@ -72,6 +79,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   })
 
   function applySessionFields(data: Record<string, unknown>): Promise<void> {
+    const epoch = ++hydrationEpoch
     const kind = String(data.account_kind || 'enterprise').trim()
     if (kind === 'personal' || kind === 'enterprise' || kind === 'admin') {
       accountKind.value = kind
@@ -121,7 +129,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
       localUserId.value,
       accountKind.value,
       impersonatingUsername.value,
-    )
+    ).then(() => { if (epoch === hydrationEpoch) workspaceEpoch.value = productReadAccountEpoch.value })
   }
 
   function applyFromMeData(data: Record<string, unknown> | null | undefined): Promise<void> {
@@ -135,6 +143,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   }
 
   async function refreshFromServer() {
+    let requestEpoch = hydrationEpoch
     try {
       let sku = 'generic'
       try {
@@ -144,19 +153,24 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
       }
       if (isEnterpriseEdition(sku)) {
         const valid = await validateEnterpriseSessionCached()
+        if (requestEpoch !== hydrationEpoch) return
         if (!valid) {
           clear()
           return
         }
       }
       const res = await authApi.getCurrentUser()
+      if (requestEpoch !== hydrationEpoch) return
       if (res?.success && res.data) {
-        await applyFromMeData(res.data as Record<string, unknown>)
+        const hydration = applyFromMeData(res.data as Record<string, unknown>)
+        requestEpoch = hydrationEpoch
+        await hydration
         return
       }
       invalidateEnterpriseSessionCache()
       clear()
     } catch (error) {
+      if (requestEpoch !== hydrationEpoch) return
       // 仅当服务端明确判定会话失效（401/403）才清空资料；超时/被取代/网络抖动属瞬时失败，清空会隐藏依赖权限的入口。
       const status = (error as { status?: unknown } | null | undefined)?.status
       if (status !== 401 && status !== 403) return
@@ -165,7 +179,9 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     }
   }
 
-  function clear() {
+  function clear(hydrate = true) {
+    hydrationEpoch++
+    workspaceEpoch.value = -1
     accountKind.value = 'enterprise'
     companyBrand.value = ''
     marketIsAdmin.value = false
@@ -186,7 +202,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     userRole.value = ''
     loaded.value = false
     setRuntimeTenantStorageScopeInput(null)
-    refreshTenantScopedClientStores({ tenantId: null, accountKind: 'enterprise' })
+    void refreshTenantScopedClientStores({ tenantId: null, accountKind: 'enterprise' }, hydrate)
   }
 
   return {
@@ -209,6 +225,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     tenantIsOwner,
     userRole,
     loaded,
+    workspaceReady,
     isAdminAccount,
     isImpersonating,
     displayBrand,
