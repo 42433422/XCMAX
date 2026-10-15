@@ -89,3 +89,14 @@ def test_detail_pages_show_originals_playable_video_and_hash_controls() -> None:
             r'<a class="cap-shot-link" href="([^"]+)"[^>]*><img src="([^"]+)"', html
         ):
             assert href == src and href.startswith(API), page.name
+
+
+def test_public_whitelist_does_not_restore_withdrawn_customer_evidence() -> None:
+    private = ("base-login-", "ind-attendance-", "erp-sales-order-", "ind-szqsm-")
+    assert not [name for name in INDEX if name.startswith(private)]
+    assert not any(
+        marker in json.dumps(INDEX, ensure_ascii=False).casefold()
+        for marker in MODULE._PUBLIC_PRIVATE_MARKERS
+    )
+    cases = json.loads((ROOT / "FHD/config/public_cases.json").read_text())["cases"]
+    assert cases == []
