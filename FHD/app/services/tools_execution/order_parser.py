@@ -14,6 +14,7 @@ from app.services.tools_execution.order_parser_helpers import (
     normalize_quantity_token,
     normalize_trailing_unit_name,
     parse_cn_number,
+    retail_quantity_price_order,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -37,6 +38,9 @@ def _parse_order_text(order_text: str) -> dict:
         # input and every regex repetition keeps malformed payloads from turning
         # the fallback parser into a CPU denial-of-service vector.
         original_text = (order_text or "").strip()[:4096]
+        retail = retail_quantity_price_order(original_text)
+        if retail is not None:
+            return retail
 
         text = original_text
         for kw in ["发货单", "送货单", "出货单"]:
