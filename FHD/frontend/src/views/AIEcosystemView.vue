@@ -25,6 +25,7 @@
           <span class="app-launcher-desc">进入客户交付中心，承接企业客户的标准交付与定制生产闭环</span>
         </button>
         <button
+          v-if="!isAdminConsoleSpa()"
           class="app-launcher app-launcher--modstore"
           type="button"
           data-tour="ecosystem-launcher-modstore"
@@ -59,6 +60,7 @@
 <script setup>
 import { ref, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { resolvePlannerPageRedirectForRouteName } from '@/utils/plannerPagePaths'
 import AiOpenLauncherIcon from '@/components/aiopen/AiOpenLauncherIcon.vue'
 import KittenLauncherIcon from '@/components/kitten/KittenLauncherIcon.vue'
