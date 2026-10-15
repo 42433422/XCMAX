@@ -116,7 +116,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push backend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           # 生产镜像统一走 FHD/Dockerfile（server-api 锁定依赖）。此前 context=FHD/XCAGI
           # 会把含 `-e ..` 本地 editable 引用的 XCAGI/requirements.txt 带进构建并失败。
@@ -128,7 +128,7 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/backend:${{ env.RELEASE_TAG }}
             ${{ env.IMAGE_PREFIX }}/backend:latest
       - name: Build and push frontend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           # 上下文为 FHD/：镜像内直接 COPY 共享 templates/vue-dist（不再 vite build）。
           # 非 tag 触发的 workflow_dispatch（无共享产物）时，改用上下文 FHD（含已构建 vue-dist 或退化为空）。
