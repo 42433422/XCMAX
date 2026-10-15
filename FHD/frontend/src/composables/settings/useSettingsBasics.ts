@@ -8,7 +8,6 @@ import {
   type DeploymentModeId,
 } from '@/constants/deploymentModes.generated'
 import { SIDEBAR_THEME_OPTIONS, persistSidebarTheme } from '@/utils/sidebarTheme'
-import packageJson from '../../../package.json'
 import { appAlert } from '@/utils/appDialog'
 import { setAppLocale } from '@/i18n'
 import {
@@ -167,11 +166,12 @@ export function useSettingsBasics() {
   const sidebarThemePreset = ref('office-default')
 
   const isDesktopShell = computed(() => Boolean(window.xcagiDesktop))
-  const appVersionLabel = ref(isDesktopShell.value ? '—' : String(packageJson.version || ''))
+  const appVersionLabel = ref('—')
   onMounted(async () => {
-    if (!isDesktopShell.value) return
     try {
-      const identity = await window.xcagiDesktop?.getAppIdentity?.()
+      const identity = isDesktopShell.value
+        ? await window.xcagiDesktop?.getAppIdentity?.()
+        : { version: (await api.get<{ build?: { product_version?: string } }>('/api/health', { lite: true }))?.build?.product_version }
       appVersionLabel.value = String(identity?.version || '').trim() || '—'
     } catch {
       appVersionLabel.value = '—'

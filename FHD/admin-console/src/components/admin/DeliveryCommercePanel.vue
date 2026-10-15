@@ -4,11 +4,12 @@
       <div>
         <h3>{{ isInitialIncluded ? '首次交付费用规则' : '交付后新增开发·报价与收款' }}</h3>
         <p class="delivery-commerce__rule">{{ ticket.custom_delivery?.pricing_label }}</p>
-        <p v-if="ticket.custom_delivery?.commerce_ready">商务条件已齐备，可进入客户安装。</p>
+        <p v-if="ticket.custom_delivery?.commerce_ready">商务条件已齐备；安装仍需技术验收和交付产物。</p>
         <p v-else>{{ (ticket.custom_delivery?.commerce_blockers || []).join('、') || '商务资料待完善' }}</p>
+        <p>技术交付：{{ ticket.custom_delivery?.gate_ok && ticket.custom_delivery?.artifacts?.length ? '验收通过且已有产物' : '待验收或缺少产物，不可安装' }}</p>
       </div>
       <span :class="['commerce-state', ticket.custom_delivery?.commerce_ready ? 'is-ready' : 'is-pending']">
-        {{ ticket.custom_delivery?.commerce_ready ? '已就绪' : '未就绪' }}
+        {{ ticket.custom_delivery?.commerce_ready ? '商务已就绪' : '商务未就绪' }}
       </span>
     </header>
     <div v-if="isInitialIncluded" class="delivery-commerce__included">
