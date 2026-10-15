@@ -15,6 +15,7 @@ from app.services.tools_execution.order_parser_helpers import (
     normalize_trailing_unit_name,
     parse_cn_number,
     retail_quantity_price_order,
+    strip_bill_keywords,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -42,9 +43,8 @@ def _parse_order_text(order_text: str) -> dict:
         if retail is not None:
             return retail
 
-        text = original_text
-        for kw in ["发货单", "送货单", "出货单"]:
-            text = text.replace(kw, " ")
+        # 先剥完整动词再剥单据名（见 strip_bill_keywords：避免「开发货单」残留「开」被当成客户名）。
+        text = strip_bill_keywords(original_text)
 
         text = (
             text.replace("。", " ")
@@ -57,7 +57,8 @@ def _parse_order_text(order_text: str) -> dict:
 
         text = text.replace("的规格", "规格")
         slot_text = (
-            original_text.replace("。", " ")
+            strip_bill_keywords(original_text)
+            .replace("。", " ")
             .replace("，", " ")
             .replace(",", " ")
             .replace("、", " ")
@@ -316,6 +317,8 @@ def _parse_order_text(order_text: str) -> dict:
                 unit_candidate = cleanup_unit_name(prefix_text)
                 if not unit_candidate:
                     unit_candidate = cleanup_unit_name(text.split()[0] if text.split() else "")
+                explicit_unit = extract_explicit_unit_name(original_text)
+                unit_candidate = explicit_unit or unit_candidate  # 显式客户名优先
 
                 if unit_candidate:
                     return {"success": True, "unit_name": unit_candidate, "products": products}
