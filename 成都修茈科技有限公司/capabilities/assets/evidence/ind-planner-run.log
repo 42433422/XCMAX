@@ -1,6 +1,0 @@
-2026-09-30T04:32:04+0800 [ind-planner] 开始验收 ind-planner 规划器桥接 Mod；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:32:04+0800 [ind-planner] M1 passed :: HTTP 200 89ms；{"success": true, "data": {"schema_version": 1, "edition": "full", "core_workflow_mod_id": "xcagi-workflow-visualization-bridge", "protected_client_mod_ids": ["attendance-industry", "coating-industry"
-2026-09-30T04:32:04+0800 [ind-planner] M2 passed :: HTTP 200 18ms；{"success": true, "data": {"success": true, "tool_count": 34, "tool_names": ["excel_analysis", "excel_schema_understand", "excel_join_compare", "excel_chart_recommend", "import_excel_to_database", "te
-2026-09-30T04:32:08+0800 [ind-planner] M3 passed :: 导航后路径 /；命中文本 ['智能对话']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 13 次任务 · 预计节约人工费用 ¥55 |  | 你好，我是饰品包装助手。 - 查产
-2026-09-30T04:32:09+0800 [ind-planner] screenshot result.png
-2026-09-30T04:32:11+0800 [ind-planner] video operation.webm bytes=190610

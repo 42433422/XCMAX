@@ -35,9 +35,9 @@
         <div class="admin-card">
           <div class="card-header">
             <i class="fa fa-desktop card-icon" aria-hidden="true"></i>
-            <h3>本地节点</h3>
+            <h3>本地服务健康（/api/health）</h3>
             <span class="status-badge" :class="localStatus.state !== 'ready' ? 'badge-info' : localStatus.ok ? 'badge-ok' : 'badge-err'">
-              {{ observationLabel(localStatus.state) || (localStatus.ok ? '正常' : '异常') }}
+              {{ observationLabel(localStatus.state) || (localStatus.ok ? '服务健康' : '服务异常') }}
             </span>
           </div>
           <dl class="card-info">
@@ -108,7 +108,7 @@
             <dt>本地游标</dt><dd>{{ syncStatus.localCursor ?? '—' }}</dd>
             <dt>已拉取服务器游标</dt><dd>{{ syncStatus.remoteCursor ?? '—' }}</dd>
             <dt>待发送</dt><dd>{{ syncStatus.outboxCount ?? '—' }} 条</dd>
-            <dt>最近游标更新</dt><dd>{{ syncStatus.lastSyncAt || '—' }}</dd>
+            <dt>最近收到变更</dt><dd>{{ syncStatus.lastSyncAt || '—' }}</dd>
             <dt>冲突数</dt><dd>{{ syncStatus.conflictCount ?? '—' }}</dd>
           </dl>
           <div class="card-actions">

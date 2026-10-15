@@ -1,7 +1,0 @@
-2026-09-30T04:33:20+0800 [mods-open-api] 开始验收 mods-open-api 开放 API（ai_open）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:33:20+0800 [mods-open-api] M1 passed :: HTTP 200 37ms；version=1.0.0.5 tools=['api_catalog', 'api_call', 'chat', 'capability_loop', 'ui_sessions']
-2026-09-30T04:33:20+0800 [mods-open-api] M2 passed :: HTTP 200 16ms；key 前缀 aiopen_fVW…（已脱敏）
-2026-09-30T04:33:20+0800 [mods-open-api] M3 passed :: HTTP 200 40ms；1 个
-2026-09-30T04:33:24+0800 [mods-open-api] M4 passed :: 导航后路径 /ai-ecosystem；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能生态 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | AI生态应用 | 智慧分析 | 接入可视化 AI 员工，上传表格、对话洞察、生成 ECharts 图表与报告 | AIOPEN 开放智
-2026-09-30T04:33:25+0800 [mods-open-api] screenshot result.png
-2026-09-30T04:33:27+0800 [mods-open-api] video operation.webm bytes=274213

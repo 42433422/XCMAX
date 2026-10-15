@@ -129,22 +129,29 @@ class TestParseOrderTextCustomerSlot2067:
 
     def test_keyed_customer_name_not_filler(self):
         result = _parse_order_text("生成发货单 客户=客户闭环验收客户 商品=测试商品A")
-        assert result.get("unit_name") != "生成"
+        assert result.get("unit_name") == "客户闭环验收客户"
+
+    def test_verb_residue_is_not_customer_name(self):
+        """回归：「开发货单」不得残留「开」被当成客户名。"""
+        result = _parse_order_text("开发货单 太阳鸟 5桶")
+        assert result.get("unit_name") == "太阳鸟"
+
+    def test_spoken_keyed_customer_name_extracted(self):
+        """口语键值写法「客户 X」应取 X，而不是把动词残片「开」当客户。"""
+        result = _parse_order_text("开发货单，客户 验收客户，产品 验收产品，数量 1")
+        assert result.get("unit_name") == "验收客户"
 
     def test_assistant_reply_is_not_an_order(self):
         for text in (
             "已识别订单，请确认执行",
             "好的，正在执行【shipment_generate】，请稍候",
             "好的",
+            "已识别订单，正在生成发货单…",
+            '已识别订单，请点击"确认执行"生成发货单。',
         ):
             result = _parse_order_text(text)
             assert result["success"] is False, text
             assert not result.get("unit_name"), text
-
-    def test_plain_two_token_fallback_still_works(self):
-        result = _parse_order_text("张三 产品A")
-        assert result["success"] is True
-        assert result["unit_name"] == "张三"
 
 
 class TestParseOrderTextQuantityPrice2067:

@@ -20,13 +20,25 @@ beforeEach(() => {
   vi.stubGlobal('xcagiDesktop', undefined)
 })
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.unstubAllGlobals(); vi.restoreAllMocks() })
-async function open() {
+async function open(retainCalls = false) {
   wrapper = mount(defineComponent({ setup() { settings = useSettingsBasics(); return {} }, template: '<div />' }))
   await flushPromises()
+  if (!retainCalls) boundary.get.mockClear()
   return settings
 }
 
 describe('Mac settings runtime boundaries', () => {
+  it.each(['1.0.0.6', '', undefined])('reads Web product identity %s without package or API-version fallback', async version => {
+    boundary.get.mockResolvedValue({ version: 'api-schema-version', build: { product_version: version } })
+    const ui = await open(true)
+    expect(boundary.get).toHaveBeenCalledWith('/api/health', { lite: true })
+    expect(ui.appVersionLabel.value).toBe(version || '—')
+  })
+  it('keeps unavailable Web product identity unknown', async () => {
+    boundary.get.mockRejectedValue(new Error('offline'))
+    expect((await open()).appVersionLabel.value).toBe('—')
+  })
+
   it.each(['1.0.0.5', ''])('reads the installed shell version %s rather than package metadata', async (version) => {
     const identity = vi.fn().mockResolvedValue({ version })
     vi.stubGlobal('xcagiDesktop', { getAppIdentity: identity })

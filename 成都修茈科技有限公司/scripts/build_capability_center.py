@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+from urllib.parse import quote
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
@@ -22,6 +23,16 @@ CATALOG_PATH = WEBSITE_DIR / "data" / "capabilities" / "catalog.json"
 OUT_DIR = WEBSITE_DIR / "capabilities"
 PUBLIC_DATA_PATH = WEBSITE_DIR / "data" / "capabilities.json"
 EVIDENCE_ASSET_DIR = OUT_DIR / "assets" / "evidence"
+# 证据原件对外经 MODstore 签发短时效 COS 预签名 URL（桶保持私有）；后端或 COS 不可用时
+# 回退到同名本地副本 /capabilities/assets/evidence/<name>。
+EVIDENCE_INDEX_REL = "data/capabilities/evidence-index.json"
+EVIDENCE_API_PREFIX = "/api/public/evidence"
+EVIDENCE_LOCAL_PREFIX = "/capabilities/assets/evidence"
+# 已上传到证据桶的仓库路径前缀；对象键与仓库路径一致。
+EVIDENCE_COS_PREFIXES = ("FHD/docs/evidence/", "成都修茈科技有限公司/capabilities/assets/evidence/")
+EVIDENCE_PUBLIC_COPY_PREFIX = "成都修茈科技有限公司/capabilities/assets/evidence/"
+# 只有截图与录像原件进证据桶；JSON / 日志体积小、页面已逐件展示 SHA-256，继续由站内提供。
+EVIDENCE_COS_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov")
 PROJECT_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 STATUS_META = {
@@ -81,6 +92,75 @@ def catalog_payload(data: dict) -> str:
     return json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
 
 
+_PUBLIC_PRIVATE_MARKERS = ("sunbird", "太阳鸟", "奇士美", "余额", "真实订单")
+_PUBLIC_REDACTION = "客户账户及业务数据已脱敏，详细内容不公开。"
+_PRIVATE_EVIDENCE_FEATURES = {"base-login", "ind-attendance", "erp-sales-order", "ind-szqsm"}
+_PUBLIC_EXCLUDED_FEATURES = {"ind-szqsm"}
+
+
+def public_projection(value: object, excluded: set[str]) -> object:
+    private_paths = {path.casefold() for path in excluded}
+
+    def hidden(item: object) -> bool:
+        if isinstance(item, str):
+            return item in excluded
+        return isinstance(item, dict) and (
+            item.get("id") in _PUBLIC_EXCLUDED_FEATURES
+            or any(isinstance(item.get(k), str) and item[k] in excluded
+                   for k in ("path", "_acceptance_path", "acceptance_path", "record_path", "identity_path"))
+        )
+
+    def project(item: object) -> object:
+        if isinstance(item, dict):
+            return {k: project(v) for k, v in item.items() if k != "public_excluded_media" and not hidden(v)}
+        if isinstance(item, list):
+            return [project(child) for child in item if not hidden(child)]
+        if isinstance(item, str) and any(x in item.casefold() for x in (*_PUBLIC_PRIVATE_MARKERS, *private_paths)):
+            return _PUBLIC_REDACTION
+        return item
+
+    return project(value)
+
+
+def evidence_paths(value: object) -> set[str]:
+    if isinstance(value, dict):
+        return set().union(*(evidence_paths(v) for v in value.values()))
+    if isinstance(value, list):
+        return set().union(*(evidence_paths(v) for v in value))
+    return {value} if isinstance(value, str) and Path(value).suffix.lower() in {
+        ".json", ".log", ".txt", ".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".mov",
+    } else set()
+
+
+def privacy_exclusions(evidence: dict, feature_id: str = "") -> set[str]:
+    excluded = set(evidence.get("public_excluded_media") or [])
+    sensitive = feature_id in _PRIVATE_EVIDENCE_FEATURES
+
+    material = {k: v for k, v in evidence.items() if k not in {"impl", "api", "tests", "ci", "docs"}}
+    for value in evidence_paths(material):
+        ext = Path(value).suffix.lower()
+        if sensitive and ext in {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".mov"}:
+            excluded.add(value)
+        elif ext in {".json", ".log", ".txt"}:
+            try:
+                body = e(value).read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            if sensitive or any(marker in body.casefold() for marker in _PUBLIC_PRIVATE_MARKERS):
+                excluded.add(value)
+                if ext == ".json":
+                    try:
+                        excluded.update(evidence_paths(json.loads(body)))
+                    except ValueError:
+                        pass
+    # A private acceptance record also withdraws its companion identity, log and media.
+    for profile in (evidence.get("platform_assets") or {}).values():
+        paths = evidence_paths(profile)
+        if paths & excluded:
+            excluded.update(paths)
+    return excluded
+
+
 def e(path: str) -> Path:
     return REPO_ROOT / path
 
@@ -118,6 +198,67 @@ def evidence_asset_name(feature: str, rel: str, platform: str | None = None,
     qualified = platform and Path(rel).name in (collisions or set())
     prefix = f"{feature}-{platform}" if qualified else feature
     return f"{prefix}-{Path(rel).name}"
+
+
+_SHA_CACHE: dict[str, tuple[str, int]] = {}
+_EVIDENCE_INDEX: dict[str, dict] = {}
+
+
+def file_digest(rel: str) -> tuple[str, int] | None:
+    """仓库内文件的 SHA-256 与字节数（同一次构建内缓存）。"""
+    if rel not in _SHA_CACHE:
+        try:
+            raw = e(rel).read_bytes()
+        except OSError:
+            return None
+        _SHA_CACHE[rel] = (hashlib.sha256(raw).hexdigest(), len(raw))
+    return _SHA_CACHE[rel]
+
+
+def evidence_cos_key(rel: str, name: str) -> str:
+    """COS 对象键：源文件已在证据桶前缀下用原路径，否则用公开副本路径。"""
+    if rel.startswith(EVIDENCE_COS_PREFIXES):
+        return rel
+    return EVIDENCE_PUBLIC_COPY_PREFIX + name
+
+
+def register_evidence(name: str, rel: str) -> dict | None:
+    """登记一份公开证据：页面链接、后端白名单与哈希核验共用这一份索引。"""
+    if not rel.lower().endswith(EVIDENCE_COS_SUFFIXES):
+        return None
+    digest = file_digest(rel)
+    if digest is None:
+        return None
+    entry = {"key": evidence_cos_key(rel, name), "source": rel, "sha256": digest[0], "size": digest[1]}
+    previous = _EVIDENCE_INDEX.get(name)
+    if previous and previous["sha256"] != entry["sha256"]:
+        raise ValueError(f"公开证据重名但内容不同：{name}（{previous['source']} / {rel}）")
+    _EVIDENCE_INDEX.setdefault(name, entry)
+    return _EVIDENCE_INDEX[name]
+
+
+def evidence_url(name: str, rel: str) -> str:
+    """证据原件 URL：截图 / 录像走后端预签名跳转；其余文件或源文件缺失时保留站内路径。"""
+    if register_evidence(name, rel) is None:
+        return f"{EVIDENCE_LOCAL_PREFIX}/{name}"
+    return f"{EVIDENCE_API_PREFIX}/{quote(name, safe='')}"
+
+
+def evidence_index_payload() -> str:
+    index = {
+        "_comment": "此文件由 scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。",
+        "schema": "xcmax.capability-evidence-index/v1",
+        "note": "能力中心公开证据白名单：name → COS 对象键与 SHA-256；后端只为此处登记的对象签发预签名 URL。",
+        "api_prefix": EVIDENCE_API_PREFIX,
+        "local_prefix": EVIDENCE_LOCAL_PREFIX,
+    }
+    head = json.dumps(index, ensure_ascii=False, indent=2)[:-2]
+    # 每件证据一行：便于审阅差异，也不让索引按字段撑大仓库行数。
+    rows = ",\n".join(f"    {json.dumps(k, ensure_ascii=False)}: "
+                      f"{json.dumps(_EVIDENCE_INDEX[k], ensure_ascii=False, separators=(',', ':'))}"
+                      for k in sorted(_EVIDENCE_INDEX))
+    return f'{head},\n  "assets": {{\n{rows}\n  }}\n}}\n'
+
 
 
 def public_asset_matches(feature: str, rel: str, platform: str | None = None,
@@ -257,8 +398,9 @@ def nested_value(value: dict, dotted_path: str):
 def traceable_pass(feat: dict, platform: str, run: dict) -> tuple[bool, str | None]:
     assets = (feat.get("evidence", {}) or {}).get("platform_assets", {}).get(platform, {})
     try:
-        accept, ident, art = assets["acceptance"], assets["identity"], assets["artifact"]
-        read = lambda ref: json.loads(e(ref["path"]).read_text(encoding="utf-8"))
+        ident, art = assets["identity"], assets["artifact"]
+        def read(ref):
+            return json.loads(e(ref["path"]).read_text(encoding="utf-8"))
         identity, artifact = read(ident), read(art)
         sha = nested_value(artifact, art["sha256"])
         logs = assets.get("logs", [])
@@ -303,6 +445,9 @@ def platform_verdicts(feat: dict, runs: list[dict], warnings: list[str], head: s
             "name": PLATFORM_META.get(p, p),
             "status": status,
             "runs": p_runs,
+            "run_identities": [{k: r.get(k) for k in (
+                "app_version", "app_git_sha", "verified_at", "verdict", "passed", "failed",
+                "_acceptance_sha256")} for r in p_runs],
             "accepted": [latest] if complete and passed else [],
             "media": [m for r in p_runs for m in r.get("media", [])],
             "logs": [x["path"] for x in (assets.get("logs") or []) if path_exists(x.get("path", ""))],
@@ -428,6 +573,7 @@ def contains_key(value, key: str) -> bool:
 def validate_feature(feat: dict, warnings: list[str], head: str | None = None) -> dict:
     """校验单个功能的证据，返回最终状态与证据明细。No Evidence, No Claim。"""
     ev = feat.get("evidence", {}) or {}
+    ev["public_excluded_media"] = sorted(privacy_exclusions(ev, feat["id"]))
     if ("status" in feat or "platform_status" in feat
             or contains_key(ev.get("platform_assets") or {}, "status")):
         raise ValueError(f"[{feat['id']}] capability and platform status must be evidence-derived")
@@ -457,10 +603,14 @@ def validate_feature(feat: dict, warnings: list[str], head: str | None = None) -
     commit_time = git("log", "-1", "--format=%cI", *ref, "--", *paths) if paths else None
     verified_at = project_code_date(commit_time)
     accepted_at = max((v["verified_at"] for v in verdicts if v["verified_at"]), default=None)
+    public_review_note = None
+    if ev.get("review"):
+        public_review_note = json.loads(e(ev["review"]).read_text(encoding="utf-8")).get("visible_content")
 
-    return {
+    result = {
         **feat,
         "status": final,
+        "public_review_note": public_review_note,
         "platform_status": [{"id": v["id"], "name": v["name"], "status": v["status"],
                              "verified_at": v["verified_at"], "run_count": len(v["runs"]),
                              "accepted_count": len(v["accepted"])} for v in verdicts],
@@ -475,6 +625,7 @@ def validate_feature(feat: dict, warnings: list[str], head: str | None = None) -
         },
         "verified_at": verified_at,
     }
+    return public_projection(result, set(ev.get("public_excluded_media") or []))
 
 
 def load_platform_levels() -> dict[str, str]:
@@ -544,6 +695,8 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
         for mod in dom["modules"]:
             feats_out = []
             for feat in mod["features"]:
+                if feat["id"] in _PUBLIC_EXCLUDED_FEATURES:
+                    continue
                 if "status" in feat:
                     # 硬守卫：总体状态只能由平台状态自动汇总，不接受目录里手写。
                     raise SystemExit(
@@ -554,6 +707,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                 evidence_ref = feat.get("evidence_ref") or None
                 enriched = {
                     **enriched,
+                    "_public_excluded_media": sorted(privacy_exclusions(feat.get("evidence", {}) or {}, feat["id"])),
                     "featured": featured,
                     "evidence_ref": evidence_ref,
                     "evidence_ref_name": id_to_name.get(evidence_ref) if evidence_ref else None,
@@ -653,7 +807,7 @@ def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
 
 
 def css(href: str) -> str:
-    return f'<link rel="stylesheet" href="{href}?v=20260922b" />'
+    return f'<link rel="stylesheet" href="{href}?v=20261010a" />'
 
 
 def header_html(page_key: str, title_suffix: str, description: str, canonical: str) -> str:
@@ -1016,18 +1170,26 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         )
 
     def asset(fid: str, path: str, platform: str | None = None) -> str:
-        """证据资产在站点内的相对路径（构建时会把原始文件复制到 assets/evidence/）。"""
-        return f"/capabilities/assets/evidence/{esc(evidence_asset_name(fid, path, platform, collisions))}"
+        """证据原件 URL：经后端签发 COS 预签名地址；本地副本仍复制到 assets/evidence/ 作回退。"""
+        return esc(evidence_url(evidence_asset_name(fid, path, platform, collisions), path))
 
-    def run_lines(pairs: list[tuple[str, dict]], platform: str) -> str:
-        if not pairs:
+    def verify_control(fid: str, path: str, platform: str | None = None) -> str:
+        """页面内哈希核验：对照构建索引、COS 对象元数据 x-cos-meta-sha256。"""
+        name = evidence_asset_name(fid, path, platform, collisions)
+        entry = register_evidence(name, path)
+        if entry is None:
             return ""
+        return (f'<span class="cap-verify" data-evidence="{esc(name)}" data-sha256="{entry["sha256"]}">'
+                f'<button type="button" class="cap-verify-btn">核验哈希</button>'
+                f'<span class="cap-verify-result" aria-live="polite"></span></span>')
+
+    def run_lines(pairs: list[tuple[str | None, dict]], platform: str) -> str:
         return "".join(
             f'<p class="cap-plat-run">验收结果：{esc(r.get("verdict") or r.get("status", "未知").upper())}；通过 {esc(r.get("passed", "见记录"))} / 失败 '
             f'{esc(r.get("failed", "见记录"))}；产品版本 {esc(r.get("app_version", "见记录"))}；'
             f'Git SHA <code>{esc(r.get("app_git_sha", ""))}</code>；'
             f'验证时间 {esc(r.get("verified_at", "见记录"))}。'
-            f'<a href="{asset(f["id"], p, platform)}">Acceptance JSON</a> '
+            + (f'<a href="{asset(f["id"], p, platform)}">Acceptance JSON</a> ' if p else '客户资料不公开。') +
             f'SHA-256 <code>{esc(r.get("_acceptance_sha256", ""))}</code></p>'
             for p, r in pairs
         )
@@ -1039,22 +1201,24 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             p = m["path"]
             src = asset(f["id"], p, platform)
             outcome = esc(m.get("outcome") or "资料收录")
-            digest = f"；SHA-256：{esc(m['sha256'])}" if m.get("sha256") else ""
+            known = m.get("sha256") or (file_digest(p) or ("",))[0]
+            digest = f"；SHA-256：<code>{esc(known)}</code>" if known else ""
             review = "媒体内容已复核，" if m.get("visual_review") == "accepted" else ""
             visible = f"；画面内容：{esc(m['visible_result'])}" if m.get("visible_result") else ""
             cap = (f"{review}记录结论：{outcome}{visible}{digest}"
-                   f"（原始文件：{esc(p)}）")
+                   f"（原始文件：{esc(p)}）{verify_control(f['id'], p, platform)}")
             suffix = Path(p).suffix.lower()
             if suffix in (".mp4", ".webm", ".mov"):
                 videos.append(
                     f'<figure class="cap-shot"><video controls preload="metadata" '
-                    f'playsinline src="{src}"></video><figcaption>{cap}</figcaption></figure>')
+                    f'playsinline src="{src}"></video><figcaption>{cap} '
+                    f'<a href="{src}" target="_blank" rel="noopener">下载原始录像</a></figcaption></figure>')
             else:
                 shots.append(
                     f'<figure class="cap-shot"><a class="cap-shot-link" href="{src}" '
                     f'target="_blank" rel="noopener"><img src="{src}" '
                     f'alt="{esc(f["name"])} 已复核截图" loading="lazy" /></a>'
-                    f'<figcaption>{cap}</figcaption></figure>')
+                    f'<figcaption>{cap} <a href="{src}" target="_blank" rel="noopener">查看原图</a></figcaption></figure>')
         out = ""
         if videos:
             out += ('<div class="cap-evidence-media"><h3>实机录像 / 操作流程</h3>'
@@ -1108,14 +1272,20 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             "passed": "通过", "failed": "失败", "blocked": "阻塞",
         }.get(r.get("status"), "未通过")} for _, r in pairs for m in r.get("media", [])]
         run_paths = {path for path, _ in pairs}
-        return (run_lines(pairs, v["id"]) + media_figs(media, v["id"])
+        visible_hashes = {r.get("_acceptance_sha256") for _, r in pairs}
+        private_identities = [(None, r) for r in v.get("run_identities", [])
+                              if r.get("_acceptance_sha256") not in visible_hashes]
+        return (run_lines(private_identities + pairs, v["id"]) + media_figs(media, v["id"])
                 + (log_blocks(v.get("logs", []), v["id"]) if pairs else "")
-                + raw_block([p for p in v.get("raw", []) if pairs and p not in run_paths and p != v["identity_path"]], v["id"]))
+                + raw_block([p for p in v.get("raw", []) if pairs and p not in run_paths and p != v.get("identity_path")], v["id"]))
 
     def artifact_block(v: dict) -> str:
-        return (f'<p class="cap-plat-run">安装包 / 部署产物 SHA-256：<code>{esc(v["artifact_sha256"])}</code> · '
-                f'<a href="{asset(f["id"], v["artifact_path"], v["id"])}">交付身份 JSON</a></p>'
-                if v.get("artifact_sha256") else "")
+        if not v.get("artifact_sha256"):
+            return ""
+        link = (f' · <a href="{asset(f["id"], v["artifact_path"], v["id"])}">交付身份 JSON</a>'
+                if v.get("artifact_path") else " · 交付身份文件因隐私审查暂不公开")
+        return (f'<p class="cap-plat-run">安装包 / 部署产物 SHA-256：'
+                f'<code>{esc(v["artifact_sha256"])}</code>{link}</p>')
 
     def observation_blocks(v: dict) -> str:
         blocks = []
@@ -1179,14 +1349,15 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         '<h2>平台验证状态</h2>'
         '<p class="cap-section-note">本项适用于 ' 
         f'{len(verdicts)} 个平台，逐平台独立判定：平台状态只由该平台的实机验收记录产生，'
-        '总体状态由平台状态自动汇总，目录与页面都不存放可手写的状态。</p>'
+        '总体状态由平台状态自动汇总，目录与页面都不存放可手写的状态。'
+        '验收结论仅覆盖记录所列版本、Git SHA 与产物；当前源码或新安装包仍需独立验收。</p>'
         + "".join(plat_sections) + "</div></section>"
     )
 
     remarks = []
     if verified_plats and pending_plats:
         remarks.append(
-            f'当前仅在 {esc("、".join(verified_plats))} 通过实机验收；'
+            f'所列构建仅在 {esc("、".join(verified_plats))} 有通过的实机验收记录；'
             f'{esc("、".join(pending_plats))} 仍为「待验证」，因此总体状态不构成「已验证」。')
     elif pending_plats and not verified_plats:
         has_attempts = any(v["runs"] or v["observations"] for v in verdicts)
@@ -1221,7 +1392,8 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
     usage = f.get("usage", "") or "请联系我们获取演示或参阅关联文档。"
     review_note = (
         f'<p class="cap-section-note">图片内容复核（{esc(review.get("reviewed_at", "待补"))}，'
-        f'Mac {esc(review.get("app_version", "待补"))}）：{esc(review.get("visible_content", "尚无本项图片内容复核记录"))}</p>'
+        f'Mac {esc(review.get("app_version", "待补"))}）：'
+        f'{esc(f.get("public_review_note") or "尚无本项图片内容复核记录")}</p>'
         if review else ""
     )
     docs_html = f'<div class="cap-evidence-block"><h3>关联文档</h3>{evidence_list(ev["docs"])}</div>' if ev["docs"] else ""
@@ -1234,7 +1406,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
       <div>
         <span class="eyebrow">{esc(dom['name'])} / {esc(mod['name'])}</span>
         <h1>{esc(f['name'])}</h1>
-        <div class="cap-feature-meta">{status_badge(f['status'])}{platform_chips(verdicts)}</div>
+        <div class="cap-feature-meta">{status_badge(f['status'])}{platform_chips(verdicts)}<span>代码更新于 {esc(verified_time)}</span></div>
         <p>{esc(f.get('summary', ''))}</p>
       </div>
       <div class="page-hero-side"><p><a class="btn btn-secondary btn-sm" href="/capabilities/catalog.html?domain={esc(dom['id'])}">返回 {esc(dom['name'])}</a></p></div>
@@ -1248,7 +1420,6 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         <div class="cap-info-block"><h3>使用方式</h3><p>{esc(usage)}</p></div>
         <div class="cap-info-block"><h3>所属模块</h3><p>{esc(dom['name'])} / {esc(mod['name'])}</p></div>
         <div class="cap-info-block"><h3>适用平台</h3><p>{platform_chips(verdicts) or '—'}</p></div>
-        <div class="cap-info-block"><h3>当前状态</h3><p>{status_badge(f['status'])}（相关代码更新时间：{esc(verified_time)}）</p></div>
         <div class="cap-info-block"><h3>已知限制</h3><ul class="cap-limitations">{limitations}</ul></div>
       </div>
       {panel}
@@ -1270,14 +1441,19 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         {un_html}
         {docs_html}
       </div>
+      <p class="cap-section-note cap-evidence-origin">证据原件存放于私有对象存储，页面通过短时效签名地址读取原图与原始录像；
+      「核验哈希」会对照本页登记的 SHA-256 与存储对象元数据。对象存储不可用时自动改用站内副本，
+      也可下载原件后用 <code>sha256sum</code> 自行核对。</p>
     </div>
   </section>
 </main>
+<script src="/capabilities/assets/evidence.js?v=20261010a"></script>
 {footer_html()}"""
 
 
 def write_outputs(data: dict, domains_full: list[dict]) -> dict[str, str]:
     outputs: dict[str, str] = {}
+    _EVIDENCE_INDEX.clear()
     outputs["capabilities/index.html"] = render_index(data, domains_full)
     outputs["capabilities/catalog.html"] = render_catalog(data)
     for d in domains_full:
@@ -1285,17 +1461,20 @@ def write_outputs(data: dict, domains_full: list[dict]) -> dict[str, str]:
             for f in m["features"]:
                 outputs[f"capabilities/feature/{f['id']}.html"] = render_feature(f, d, m, data)
     outputs["data/capabilities.json"] = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    outputs[EVIDENCE_INDEX_REL] = evidence_index_payload()
     return {p: "\n".join(line.rstrip() for line in body.splitlines()) + "\n"
             for p, body in outputs.items()}
 
 
 def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
-    """Copy evidence assets; add platform suffixes only when basename collisions exist."""
+    """Copy only public evidence; never copy assets excluded by privacy review."""
     copied = []
     EVIDENCE_ASSET_DIR.mkdir(parents=True, exist_ok=True)
 
     def copy(feature: str, path: str, platform: str | None = None,
-             collisions: set[str] | None = None) -> None:
+             collisions: set[str] | None = None, excluded: set[str] | None = None) -> None:
+        if path in (excluded or set()):
+            return
         src = e(path)
         if src.is_file():
             dst = EVIDENCE_ASSET_DIR / evidence_asset_name(feature, path, platform, collisions)
@@ -1306,16 +1485,48 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
         for m in d["modules"]:
             for f in m["features"]:
                 collisions = platform_asset_collisions(f)
+                excluded = set(f.get("_public_excluded_media") or [])
                 # Unattributed catalog material keeps the legacy public name.
                 for kind in ("screenshots", "videos", "runs", "review", "logs", "raw"):
                     paths = [f["evidence"][kind]] if kind == "review" and f["evidence"].get(kind) else f["evidence"].get(kind, []) or []
                     for p in paths:
                         if p:
-                            copy(f["id"], p)
+                            copy(f["id"], p, excluded=excluded)
                 for v in f.get("verdicts", []):
                     for p in platform_evidence_paths(v):
-                        copy(f["id"], p, v["id"], collisions)
+                        copy(f["id"], p, v["id"], collisions, excluded)
     return copied
+
+
+def private_generated_assets(remove: bool = False) -> list[Path]:
+    sensitive_prefixes = ("base-login-", "ind-attendance-", "erp-sales-order-", "ind-szqsm-")
+    private_names = set()
+    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    for domain in catalog["domains"]:
+        for module in domain["modules"]:
+            for feature in module["features"]:
+                for rel in privacy_exclusions(feature.get("evidence") or {}, feature["id"]):
+                    private_names.add(evidence_asset_name(feature["id"], rel))
+                    for platform in feature.get("platforms", []):
+                        private_names.add(evidence_asset_name(feature["id"], rel, platform, {Path(rel).name}))
+    private = []
+    for path in EVIDENCE_ASSET_DIR.iterdir():
+        if not path.is_file():
+            continue
+        entry = _EVIDENCE_INDEX.get(path.name)
+        if (not path.name.startswith(sensitive_prefixes) and entry
+                and hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"]):
+            continue
+        try:
+            body = path.read_text(encoding="utf-8").casefold() if path.suffix.lower() in {".json", ".log", ".txt"} else ""
+        except (OSError, UnicodeError):
+            continue
+        if (path.name in private_names or path.name.startswith(sensitive_prefixes)
+                or any(marker in body for marker in _PUBLIC_PRIVATE_MARKERS)):
+            private.append(path)
+            if remove:
+                path.unlink()
+    return private
 
 
 def platform_evidence_paths(verdict: dict, checked: bool = False) -> list[str]:
@@ -1338,7 +1549,8 @@ def missing_public_evidence(domains: list[dict]) -> list[str]:
                 for v in f["verdicts"]:
                     paths = platform_evidence_paths(v, checked=True)
                     missing.extend(f"{f['id']}/{v['id']}: {p}" for p in paths
-                                   if p and e(p).is_file()
+                                   if p and p not in set(f.get("_public_excluded_media") or [])
+                                   and e(p).is_file()
                                    and not public_asset_matches(f["id"], p, v["id"], collisions))
     return missing
 
@@ -1386,6 +1598,8 @@ def main() -> int:
             if not f.exists() or f.read_text(encoding="utf-8") != content:
                 drift.append(f"{'缺失' if not f.exists() else '不一致'}: {rel}")
         drift.extend(f"已验证平台公开证据缺失或哈希不匹配: {p}" for p in missing_public_evidence(domains_full))
+        drift.extend(f"隐私审查未通过的证据副本仍公开: {p.relative_to(WEBSITE_DIR)}"
+                     for p in private_generated_assets())
         for w in warnings:
             print(w if w.startswith("ERROR ") else f"WARN {w}")
         drift.extend(f"证据来源或 SHA-256 校验失败: {w[6:]}" for w in evidence_errors)
@@ -1403,13 +1617,14 @@ def main() -> int:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
     copied = copy_evidence_assets(domains_full)
+    removed_assets = private_generated_assets(remove=True)
     removed = prune_stale_generated(outputs)
 
     s = data["stats"]
     print(f"已生成能力中心：{s['total']} 项能力 / {s['modules']} 模块 / {s['domains']} 域")
     print(f"状态分布：{s['by_status']}")
     print(f"最近验证时间：{s['last_verified_at']}")
-    print(f"证据资产复制（截图/录像）：{len(copied)} 个；清理过期页：{len(removed)} 个")
+    print(f"证据资产复制（截图/录像）：{len(copied)} 个；隐私排除副本删除：{len(removed_assets)} 个；清理过期页：{len(removed)} 个")
     if warnings:
         print(f"\n构建警告 {len(warnings)} 条：")
         for w in warnings:

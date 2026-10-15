@@ -1,0 +1,9 @@
+[21:43:27] feature=ch-realtime-voice platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice
+[21:43:41] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[21:43:42] case V1: passed - 语音链路健康与模型源真实读取
+[21:43:46] case V2: passed - 真实语音合成 + 同一浏览器解码通过（核心正向）
+[21:43:46] case V3: passed - 英文请求真实合成并可解码（多语种）
+[21:43:47] case V4: passed - 空文本被拒（边界/负例）
+[21:43:47] case V5: passed - 长文本真实合成（边界）
+[21:43:47] video: ch-realtime-voice-web-20260929-214327.webm (1398625 bytes)
+[21:43:47] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-realtime-voice/log/ch-realtime-voice-web-20260929-214327.log

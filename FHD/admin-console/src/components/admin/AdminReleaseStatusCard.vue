@@ -11,10 +11,10 @@
       <dt>update 站版本</dt><dd>{{ deployStatus?.update_hub?.version || '—' }}</dd>
       <dt>update 站 Git</dt><dd class="mono small">{{ shortSha(deployStatus?.update_hub?.git_sha) }}</dd>
       <dt>企业端</dt><dd>{{ enterpriseText }}</dd>
-      <dt>安装回执</dt>
+      <dt>本构建安装回执</dt>
       <dd>
         <template v-if="receiptSummary">
-          {{ receiptSummary.installed_devices }} 台已安装
+          {{ receiptSummary.installed_devices }} 台报告已安装
           <span v-if="receiptSummary.failed_devices"> · {{ receiptSummary.failed_devices }} 台异常</span>
         </template>
         <span v-else>{{ loading ? '检测中' : error && deployStatus ? '读取失败' : '未检测' }}</span>
@@ -64,6 +64,7 @@ const status = computed(() => {
   if (loading.value) return { text: '检测中', kind: 'dim', hint: '正在检测软件版本和安装回执。' }
   if (error.value) return { text: '异常', kind: 'error', hint: error.value }
   if (deployStatus.value?.update_hub?.reachable === false) return { text: '未连通', kind: 'error', hint: 'update 站不可达，请检查连接配置。' }
+  if (deployStatus.value && [undefined, null, '', 'local'].includes(deployStatus.value.update_hub?.git_sha)) return { text: '未知', kind: 'dim', hint: 'update 站构建身份未知，无法统计本构建安装回执。' }
   const flags = deployStatus.value?.flags || {}
   const version = deployStatus.value?.admin_local?.version || deployStatus.value?.update_hub?.version || ''
   const { failed_devices: failed, installed_devices: installed } = receiptSummary.value || {}
@@ -108,7 +109,9 @@ async function refresh() {
     const data = result?.data && typeof result.data === 'object' && !Array.isArray(result.data) ? result.data : null
     if (!data) throw new Error(result?.message || '版本检测失败')
     deployStatus.value = data
-    const report = await xcmaxAdminApi.listUpdateInstallReceipts(String(data.update_hub?.git_sha || ''))
+    const target = String(data.update_hub?.git_sha || '').trim()
+    if (!target || target === 'local') return
+    const report = await xcmaxAdminApi.listUpdateInstallReceipts(target)
     if (!Array.isArray(report?.items) || !['installed_devices', 'failed_devices'].every(
       key => Number.isInteger(report?.summary?.[key]) && report.summary[key] >= 0,
     )) {

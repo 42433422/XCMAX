@@ -133,6 +133,22 @@ describe('DeliveryCenterView', () => {
     appConfirm.mockResolvedValue(true)
   })
 
+  it.each([[true, true, true], [true, true, false], [false, false, true]])(
+    'separates commerce %s, acceptance %s and artifacts %s', async (commerce, accepted, artifacts) => {
+      const ticket = structuredClone(delivery)
+      ticket.custom_delivery.commerce_ready = commerce
+      ticket.custom_delivery.gate_ok = accepted
+      if (!artifacts) ticket.custom_delivery.artifacts = []
+      listCustomDeliveries.mockResolvedValue({ items: [ticket] })
+      const wrapper = mount(DeliveryCenterView)
+      await flushPromises()
+      const panel = wrapper.get('.delivery-commerce')
+      expect(panel.text()).toContain(commerce ? '商务已就绪' : '商务未就绪')
+      expect(panel.text()).toContain(accepted && artifacts ? '验收通过且已有产物' : '待验收或缺少产物，不可安装')
+      expect(panel.text()).not.toContain('可进入客户安装')
+    },
+  )
+
   it('renders the real customer, quality gate, artifact, and receipt state', async () => {
     const wrapper = mount(DeliveryCenterView)
     await flushPromises()
