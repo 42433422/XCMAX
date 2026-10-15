@@ -64,7 +64,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.19.0'
 
       - name: Install Playwright
         working-directory: 成都修茈科技有限公司
