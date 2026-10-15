@@ -27,10 +27,11 @@ def check() -> int:
     if "SkipUiInstaller" in build + all_skus or "XcagiInstaller.csproj" not in build:
         print("[windows-release] DRIFT: Windows delivery must use the WPF installer")
         return 1
-    for name in ("build-windows-installer.sh", "build-windows-electron-only.sh"):
-        if 'OUT_DIR="${ROOT}/release/_windows-payload/' not in (ROOT / "scripts/package" / name).read_text():
-            print(f"[windows-release] DRIFT: {name} must not write delivery installers")
-            return 1
+    shim = (ROOT / "scripts/package/build-windows-installer.sh").read_text()
+    thin = (ROOT / "scripts/package/build-windows-electron-only.sh").read_text()
+    if "build-installer.ps1" not in shim or "electron-builder" in shim or 'OUT_DIR="${ROOT}/release/_windows-payload/' not in thin:
+        print("[windows-release] DRIFT: legacy payloads must not enter Windows delivery")
+        return 1
     return status
 
 

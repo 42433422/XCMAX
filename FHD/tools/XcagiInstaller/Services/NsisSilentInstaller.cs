@@ -33,7 +33,7 @@ public sealed class NsisSilentInstaller
         string installDirectory,
         IProgress<InstallProgressUpdate>? progress = null,
         CancellationToken cancellationToken = default,
-        string? userDataDirectory = null)
+        string? userDataDirectory = null, bool updaterHandoff = false)
     {
         if (!File.Exists(setupExePath))
             return InstallResult.Fail($"未找到安装包：{setupExePath}");
@@ -51,7 +51,7 @@ public sealed class NsisSilentInstaller
             return InstallResult.Fail($"无法创建目录：{ex.Message}");
         }
         WindowsUpgradeSnapshot? snapshot;
-        try { snapshot = await Task.Run(() => WindowsUpgradeSnapshot.Prepare(dir, userDataDirectory, cancellationToken), cancellationToken); }
+        try { snapshot = await Task.Run(() => WindowsUpgradeSnapshot.Prepare(dir, userDataDirectory, cancellationToken, updaterHandoff), cancellationToken); }
         catch (Exception ex) { return InstallResult.Fail(ex.Message); }
         async Task<InstallResult> FailAfterExit(string error, Process child)
         {

@@ -306,7 +306,7 @@ public partial class MainWindow : Window
             _installDir,
             installProgress,
             _installCts.Token,
-            NsisSilentInstaller.UserDataDirectory());
+            NsisSilentInstaller.UserDataDirectory(), updaterHandoff: Environment.GetCommandLineArgs().Contains("--updated"));
 
         if (!result.Success)
         {
