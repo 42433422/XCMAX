@@ -188,6 +188,13 @@ const Ops = (() => {
     return modstoreBase();
   }
 
+  /* MODstore 生产线接口须管理员 Bearer；复用日更条目模块的本机登录令牌 */
+  async function modstoreAuthHeaders() {
+    const items = window.EmpWfActionItems;
+    const tok = items && items.modstoreToken ? await items.modstoreToken() : null;
+    return tok ? { Authorization: 'Bearer ' + tok } : {};
+  }
+
   function applyStepStatus(steps) {
     if (!steps || typeof steps !== 'object') return;
     let totalPct = 0;
@@ -267,6 +274,7 @@ const Ops = (() => {
       const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
       try {
         const opts = { credentials: isFile ? 'omit' : 'include' };
+        if (url.includes('/api/admin/production-line/')) opts.headers = await modstoreAuthHeaders();
         if (ctrl) opts.signal = ctrl.signal;
         const resp = await fetch(url, opts);
         if (resp.status === 403) throw new Error('HTTP 403 (需登录或CSRF)');
@@ -368,7 +376,7 @@ const Ops = (() => {
     if (btn) btn.disabled = true;
     try {
       const url = healthBase() + '/api/admin/production-line/webhook-outbox/process?limit=20';
-      const resp = await fetch(url, { method: 'POST', credentials: 'include' });
+      const resp = await fetch(url, { method: 'POST', headers: await modstoreAuthHeaders() });
       const json = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error((json && json.message) || 'HTTP ' + resp.status);
       // alert 的内容是后端 JSON 文本，使用 textContent 方式输出更安全

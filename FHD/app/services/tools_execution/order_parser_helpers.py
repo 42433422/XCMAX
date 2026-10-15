@@ -230,8 +230,46 @@ def extract_explicit_unit_name(text: str) -> str:
     return ""
 
 
+_RETAIL_QTY_PRICE = re.compile(
+    r"^(?P<unit>.{1,80}?)\s*(?:发货单|送货单|出货单)\s*[:：]\s*"
+    r"(?P<product>.{1,120}?)\s+数量\s*(?P<qty>\d{1,12}(?:\.\d{1,4})?)"
+    r"(?:\s*[\u4e00-\u9fffA-Za-z]{1,4})?\s+单价\s*(?P<price>\d{1,12}(?:\.\d{1,4})?)\s*$"
+)
+
+
+def retail_quantity_price_order(text: str) -> dict | None:
+    """显式「客户 发货单：商品 数量N 单价P」按件数计价，不套工业默认规格。"""
+    match = _RETAIL_QTY_PRICE.match((text or "").strip())
+    if match is None:
+        return None
+    unit_name = match.group("unit").strip()
+    if looks_like_conversational_filler(unit_name):
+        return None
+    quantity = float(match.group("qty"))
+    price = float(match.group("price"))
+    if quantity <= 0 or price < 0:
+        return None
+    return {
+        "success": True,
+        "unit_name": unit_name,
+        "products": [
+            {
+                "name": match.group("product").strip(),
+                "quantity_tins": quantity,
+                "quantity_kg": quantity,
+                "tin_spec": 1.0,
+                "unit_price": price,
+                "amount": quantity * price,
+            }
+        ],
+    }
+
+
 def loose_order_fallback(text: str) -> dict | None:
-    """末位兜底：仅当首个 token 像客户名时，按「客户名 + 产品名」兜底（#2067）。"""
+    """末位兜底：显式数量单价优先；否则仅当首个 token 像客户名时按「客户名 + 产品名」（#2067）。"""
+    retail = retail_quantity_price_order(text)
+    if retail is not None:
+        return retail
     parts = (text or "").split()
     if len(parts) >= 2 and not looks_like_conversational_filler(parts[0]):
         return {

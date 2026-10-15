@@ -33,7 +33,7 @@ const electronMocks = vi.hoisted(() => {
     setBadgeCount: vi.fn(),
     isQuitting: false as boolean
   }
-  const BrowserWindow = vi.fn(() => ({
+  const BrowserWindow = vi.fn(function () { return ({
     loadURL: vi.fn(),
     on: vi.fn(),
     once: vi.fn(),
@@ -48,13 +48,13 @@ const electronMocks = vi.hoisted(() => {
     flashFrame: vi.fn(),
     close: vi.fn(),
     destroy: vi.fn()
-  }))
+  }) })
   // 模态提示必须挂到窗口上；macOS 上无窗口的 showMessageBox 会同步阻塞主进程事件循环。
   const dialogParentWindow = { isDestroyed: vi.fn(() => false) }
   ;(BrowserWindow as unknown as { getAllWindows: () => unknown[] }).getAllWindows =
     vi.fn(() => [dialogParentWindow])
   const Menu = { buildFromTemplate: vi.fn(() => ({})), setApplicationMenu: vi.fn() }
-  const Tray = vi.fn(() => ({ setToolTip: vi.fn(), setContextMenu: vi.fn() }))
+  const Tray = vi.fn(function () { return ({ setToolTip: vi.fn(), setContextMenu: vi.fn() }) })
   const Notification = vi.fn(() => ({ show: vi.fn() }))
   ;(Notification as unknown as { isSupported: () => boolean }).isSupported = vi.fn(() => true)
   const dialog = {
@@ -230,6 +230,22 @@ describe('main — resolveDesktopBackendBindHost', () => {
 })
 
 describe('main — isPortAvailable', () => {
+  it.skipIf(process.platform !== 'win32')('checks every configured local IPv4 address before declaring the wildcard backend port free', async () => {
+    const { isPortAvailable } = await import('./main.js')
+    const net = await import('node:net')
+    const server = net.createServer()
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.2', resolve))
+    try {
+      expect(await isPortAvailable((server.address() as { port: number }).port, '0.0.0.0')).toBe(false)
+    } finally { await new Promise<void>(resolve => server.close(() => resolve())) }
+  })
+  it('keeps the Windows shell probe on loopback without changing backend LAN binding', async () => {
+    const { isPortAvailable, DESKTOP_BACKEND_BIND_HOST } = await import('./main.js')
+    const net = await import('node:net')
+    const listen = vi.spyOn(net.Server.prototype, 'listen')
+    expect(await isPortAvailable(0)).toBe(true)
+    expect(listen.mock.calls[0][1]).toBe(process.platform === 'win32' ? '127.0.0.1' : DESKTOP_BACKEND_BIND_HOST)
+  })
   it('returns true for a free port', async () => {
     const { isPortAvailable } = await import('./main.js')
     // 用一个几乎不可能被占用的端口

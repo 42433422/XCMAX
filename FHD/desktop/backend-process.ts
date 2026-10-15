@@ -18,24 +18,27 @@ import { desktopRuntime } from './runtime-state'
 import {
   attachDatabaseBackupToRollback,
   cancelPreparedRollback,
+  clearPreparedRollbackRecoveryRequired,
+  markPreparedRollbackRecoveryRequired,
   prepareRollback,
   triggerRollback,
   type RollbackTriggerResult,
 } from './rollback'
-import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
+import { relayBackendOutput, terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { desktopBackendEnv } from './backend-env'
 import { sanitizeBackendProxyEnv } from './backend-env-utils'
 import { createForceUpgradeHandler } from './desktop-resilience'
+import { loopbackHttpGet } from './backend-loopback-http'
+import { clearBackendStopRequest, markBackendStopRequested, shouldRestartBackendAfterExit } from './backend-process-stop-guard'
 
 export const POST_UPDATE_STABILITY_MS = 5_000
+let backendRestartTimer: NodeJS.Timeout | null = null
+let migrationStopInProgress = false
 
 function rotateBackendLogIfNeeded(logPath: string): void {
   const maxBytes = 8 * 1024 * 1024
   try {
-    if (!fs.existsSync(logPath)) {
-      return
-    }
-    if (fs.statSync(logPath).size < maxBytes) {
+    if (!fs.existsSync(logPath) || fs.statSync(logPath).size < maxBytes) {
       return
     }
     const rotated = `${logPath}.1`
@@ -57,9 +60,7 @@ function ensureBackendLogStream(): fs.WriteStream | null {
     fs.mkdirSync(logDir, { recursive: true })
     const logPath = path.join(logDir, 'electron-backend.log')
     rotateBackendLogIfNeeded(logPath)
-    desktopRuntime.backendLogStream = fs.createWriteStream(logPath, {
-      flags: 'a'
-    })
+    desktopRuntime.backendLogStream = fs.createWriteStream(logPath, { flags: 'a' })
     desktopRuntime.backendLogStream.write(`\n[${new Date().toISOString()}] XCAGI desktop backend bootstrap\n`)
     desktopRuntime.backendLogStream.write(
       JSON.stringify(
@@ -113,10 +114,8 @@ export async function waitForBackendPing(
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/ping`, {
-        signal: AbortSignal.timeout(2_000)
-      })
-      const server = (response.headers.get('server') || '').toLowerCase()
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/ping`, 2_000)
+      const server = (response.getHeader('server') || '').toLowerCase()
       if (response.ok && server.includes('uvicorn')) {
         desktopRuntime.startupMarks.backendHealthMs = Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? started)
         return
@@ -153,9 +152,7 @@ async function waitForStartupHealth(port: number, timeoutMs: number): Promise<bo
   let last = ''
   while (Date.now() - started <= budget) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
-        signal: AbortSignal.timeout(2_000)
-      })
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/health`, 2_000)
       if (response.ok) {
         const body = (await response.json()) as {
           status?: string
@@ -196,9 +193,7 @@ export async function waitForBackendApplicationReady(
   const remaining = () => Math.max(0, timeoutMs - (Date.now() - started))
   while (remaining() > 0) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/desktop/status`, {
-        signal: AbortSignal.timeout(2_000)
-      })
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/desktop/status`, 2_000)
       if (response.ok) {
         const body = (await response.json()) as {
           appRoutesReady?: boolean
@@ -223,7 +218,7 @@ export async function waitForBackendStatus(port: number, timeoutMs = 60_000): Pr
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/desktop/status`)
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/desktop/status`, 2_000)
       if (response.ok) {
         desktopRuntime.startupMarks.desktopStatusMs = Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? started)
         return (await response.json()) as Record<string, unknown>
@@ -284,6 +279,7 @@ export async function showDbRecoveryDialogIfNeeded(status: Record<string, unknow
 export const BACKEND_STABLE_WINDOW_MS = 60_000
 
 export async function startBackend(): Promise<void> {
+  if (migrationStopInProgress) return
   if (desktopRuntime.backendProcess) {
     return
   }
@@ -335,22 +331,16 @@ export async function startBackend(): Promise<void> {
     windowsHide: true
   })
   desktopRuntime.backendProcess = child
-  child.stdout.on('data', data => {
-    process.stdout.write(`[xcagi-backend] ${data}`)
-    writeBackendLog(`[stdout] ${data}`)
-  })
-  child.stderr.on('data', data => {
-    process.stderr.write(`[xcagi-backend] ${data}`)
-    writeBackendLog(`[stderr] ${data}`)
-  })
+  child.stdout.on('data', data => relayBackendOutput('stdout', data, app.isPackaged, writeBackendLog))
+  child.stderr.on('data', data => relayBackendOutput('stderr', data, app.isPackaged, writeBackendLog))
   child.on('error', error => {
     handleBackendSpawnError(error)
   })
   child.on('exit', code => {
     const uptimeMs = Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? Date.now())
     writeBackendLog(`[exit] backend process exited code=${code} uptime=${uptimeMs}ms\n`)
-    desktopRuntime.backendProcess = null
-    if (app.isQuitting) {
+    if (desktopRuntime.backendProcess === child) desktopRuntime.backendProcess = null
+    if (!shouldRestartBackendAfterExit(child, app.isQuitting === true, migrationStopInProgress === true)) {
       return
     }
     // 通知自治控制器 backend 退出（控制器据此追踪崩溃频率，5min ≥3 次则自动回滚）
@@ -377,7 +367,11 @@ export async function startBackend(): Promise<void> {
     }
     desktopRuntime.restartCount += 1
     if (desktopRuntime.restartCount <= 3) {
-      setTimeout(() => void startBackend(), 1500)
+      if (backendRestartTimer) clearTimeout(backendRestartTimer)
+      backendRestartTimer = setTimeout(() => {
+        backendRestartTimer = null
+        if (!migrationStopInProgress) void startBackend()
+      }, 1500)
       return
     }
     showBackendErrorBox('后端服务已退出', `后端服务已退出（code=${code}），请重启 XCAGI。`)
@@ -385,12 +379,45 @@ export async function startBackend(): Promise<void> {
 }
 
 export async function runBackendMigrationWithRollback(toVersion: string): Promise<void> {
+  const resumeBackendAfterPrepareFailure = process.platform === 'win32' && (desktopRuntime.backendProcess !== null || backendRestartTimer !== null)
+  if (resumeBackendAfterPrepareFailure) {
+    migrationStopInProgress = true
+    if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null }
+    try { await stopBackend() } catch (error) { migrationStopInProgress = false; throw error }
+  }
+  let prepared = false
+  let migrationStarted = false
   try {
     await prepareRollback(toVersion)
+    prepared = true
+    if (process.platform === 'win32') markPreparedRollbackRecoveryRequired()
+    migrationStarted = true
     await runBackendMigration()
+    if (process.platform === 'win32') clearPreparedRollbackRecoveryRequired()
   } catch (error) {
+    if (process.platform === 'win32' && prepared) {
+      if (!migrationStarted) {
+        writeBackendLog(`[rollback] Windows 数据迁移尚未启动：无法持久化恢复意图，因此未启动迁移子进程。恢复快照保留。\n`)
+      } else {
+        writeBackendLog('[rollback] Windows 数据迁移失败，迁移前持久化的恢复意图仍有效；保留完整恢复记录。\n')
+      }
+      app.quit()
+      migrationStopInProgress = false
+      throw new Error(migrationStarted
+        ? `Windows 后端迁移失败，已保留迁移前持久化的恢复记录并安排下次启动恢复：${error instanceof Error ? error.message : String(error)}`
+        : `Windows 后端迁移未启动，恢复意图无法持久化；未启动迁移子进程。恢复快照已保留：${error instanceof Error ? error.message : String(error)}`)
+    }
+    if (process.platform === 'win32') {
+      migrationStopInProgress = false
+      if (resumeBackendAfterPrepareFailure) {
+        try { await startBackend() } catch (restartError) { writeBackendLog(`[rollback] 快照准备失败后恢复后端失败：${restartError instanceof Error ? restartError.message : restartError}\n`) }
+      }
+      throw error
+    }
     cancelPreparedRollback()
     throw error
+  } finally {
+    migrationStopInProgress = false
   }
 }
 
@@ -428,11 +455,11 @@ function runBackendMigration(): Promise<string> {
     let backupAttachError: unknown
     child.stderr.on('data', data => {
       stderr += String(data)
-      process.stderr.write(`[xcagi-migrate] ${data}`)
+      relayBackendOutput('stderr', data, app.isPackaged, writeBackendLog, 'migrate')
     })
     child.stdout.on('data', data => {
       stdout += String(data)
-      process.stdout.write(`[xcagi-migrate] ${data}`)
+      relayBackendOutput('stdout', data, app.isPackaged, writeBackendLog, 'migrate')
       if (!databaseBackupPath) {
         const match = stdout.match(/^XCAGI_MIGRATION_BACKUP=(.+)$/m)
         const candidate = match?.[1]?.trim() || ''
@@ -465,9 +492,11 @@ function runBackendMigration(): Promise<string> {
 export async function stopBackend(): Promise<void> {
   const child = desktopRuntime.backendProcess
   desktopRuntime.backendProcess = null
+  if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null }
   if (!child) {
     return
   }
+  markBackendStopRequested(child)
   writeBackendLog(`[${new Date().toISOString()}] backend stop requested\n`)
   let result = 'already-exited'
   if (process.platform === 'win32' && child.pid) {
@@ -475,7 +504,13 @@ export async function stopBackend(): Promise<void> {
     await new Promise<void>(resolve => {
       execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => resolve())
     })
-    result = (await exited) ? 'killed' : 'kill-timeout'
+    const hasExited = await exited
+    result = hasExited ? 'killed' : 'kill-timeout'
+    if (!hasExited) {
+      clearBackendStopRequest(child)
+      if (desktopRuntime.backendProcess === null) desktopRuntime.backendProcess = child
+      throw new Error('Windows 后端未能在 2.5 秒内退出，已中止更新快照和数据库迁移。')
+    }
   } else {
     result = await terminateChildProcess(child)
   }
@@ -484,17 +519,8 @@ export async function stopBackend(): Promise<void> {
 }
 
 /**
- * 非阻塞错误提示。
- *
- * `dialog.showErrorBox` 是**同步** API：无人点击「确定」时它会永久阻塞主进程事件循环
- * （表现为 9222 端口 TCP 可连但 HTTP 无响应、`app.quit()` 永不执行）。
- *
- * 仅换成 `showMessageBox` 还不够：macOS 上不带 BrowserWindow 时它走
- * `NSAlert.runModal` → `NSApplication runModalForWindow:`，同样同步阻塞主进程
- * （2026-10-03 用 exact-main 候选包 sample 实测，调用栈停在 -[NSAlert runModal]）。
- * 更新后启动失败时这会让 `app.quit()` 永不执行，回滚 helper 等到 120s 超时才放弃，
- * 自动回滚因此失败。必须挂到窗口上成为 window-modal sheet；确实没有窗口时只写日志，
- * 绝不以模态阻塞退出路径。
+ * Attach an async dialog to a live window: showErrorBox and unparented macOS
+ * NSAlert block quit and rollback. With no window, preserve the error in the log.
  */
 function showBackendErrorBox(message: string, detail: string): void {
   const win = BrowserWindow.getAllWindows().find(candidate => !candidate.isDestroyed())

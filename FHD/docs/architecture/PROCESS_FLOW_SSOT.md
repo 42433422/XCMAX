@@ -26,7 +26,7 @@
 | 风险门禁 | ✅ 节点级 risk（low / medium） | `../../app/application/workflow/risk_gate.py` |
 | 单据状态机 | ⚠️ 各域自建，未统一（见 §4） | 各 `app/db/models/*.py` |
 
-**结论**：编排引擎已就位，但当前仅落 1 条样板自动编排（发票→入库→审批→月报，见 `../../app/db/seeds/workflow_definitions_seed.py`）。
+**结论**：编排引擎已就位，但尚无内置 WorkflowDefinition；发票→入库→审批→月报 由 NeuroBus 域处理器直接编排（`../../app/neuro_bus/domains/inventory_domain_handlers.py`、`finance_domain_handlers.py`，月报由 `../../app/application/monthly_report_scheduler.py` 触发）。
 
 ## 3. 工作流程（企业内部业务）
 

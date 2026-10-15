@@ -1,6 +1,5 @@
 /**
  * KittenAnalyzerView.vue 覆盖率补齐测试
- * 目标：覆盖脚本内所有函数的 happy path、空值、边界、异常路径
  * 重点：onVizEmployeeSelect、applyVizEmployeeChartType、runDocGen、onQuickPick、
  *       runFinancialBriefAndClose、startVoiceInput、stopVoiceInput、openDownloadLink
  */
@@ -1473,6 +1472,6 @@ function createMockSpeechRecognition() {
     abort: vi.fn(),
   }
   // 返回构造器函数本身，instance 作为属性挂载，便于测试中直接赋值给 window.SpeechRecognition
-  const Ctor = vi.fn(() => instance)
+  const Ctor = vi.fn(function () { return instance })
   return Object.assign(Ctor, { instance }) as typeof Ctor & { instance: typeof instance }
 }

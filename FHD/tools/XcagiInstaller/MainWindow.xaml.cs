@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
-using System.Windows.Threading;
 using XcagiInstaller.Services;
 
 namespace XcagiInstaller;
@@ -30,10 +29,6 @@ public partial class MainWindow : Window
 
     private const double ExtractPhaseMax = 12;
 
-    private double _displayProgress;
-    private double _targetProgress;
-    private DispatcherTimer? _progressSmoothTimer;
-
     public MainWindow()
     {
         InitializeComponent();
@@ -47,6 +42,8 @@ public partial class MainWindow : Window
     private void MainWindow_OnLoaded(object sender, RoutedEventArgs e)
     {
         LoadLogo();
+        var version = typeof(MainWindow).Assembly.GetName().Version?.ToString() ?? "unknown";
+        WelcomeSubtitleText.Text = $"{version} · 企业 AI 员工宿主";
         InstallDirBox.Text = _installDir;
         WelcomePathPreview.Text = _installDir;
 
@@ -60,24 +57,18 @@ public partial class MainWindow : Window
         _hasEmbeddedPayload = EmbeddedPayloadExtractor.HasEmbeddedPayload();
         if (!_hasEmbeddedPayload)
         {
-            _setupExePath = PayloadLocator.FindSetupExeOnDisk("8.0.0");
+            _setupExePath = PayloadLocator.FindSetupExeOnDisk(version);
             if (_setupExePath == null)
             {
                 ShowError(
                     "未找到安装包。\n\n" +
                     "请使用完整发行包（build-installer.ps1 生成），\n" +
-                    "或将 XCAGI-Setup-8.0.0-x64.exe 置于本程序同目录。");
+                    $"或将 XCAGI-Setup-{version}-x64.exe 置于本程序同目录。");
                 return;
             }
         }
 
         ApplyStepUi();
-        if (SunbirdSeedExtractor.HasEmbeddedSeed())
-        {
-            FetchSunbirdDataCheck.Visibility = Visibility.Visible;
-            Title = "太阳鸟 PRO";
-            WelcomeSubtitleText.Text = "10.0 · 太阳鸟考勤定制安装";
-        }
     }
 
     private void SyncAgreeFromWelcome(object sender, RoutedEventArgs e)
@@ -154,12 +145,11 @@ public partial class MainWindow : Window
         switch (_step)
         {
             case WizardStep.Welcome:
-                NextButton.Content = "继续";
-                UpdateWelcomeButtonState();
-                break;
             case WizardStep.License:
                 NextButton.Content = "继续";
-                NextButton.IsEnabled = AgreeLicenseCheck.IsChecked == true;
+                NextButton.IsEnabled = _step == WizardStep.Welcome
+                    ? WelcomeAgreeCheck.IsChecked == true
+                    : AgreeLicenseCheck.IsChecked == true;
                 break;
             case WizardStep.Directory:
                 NextButton.Content = "安装";
@@ -169,11 +159,8 @@ public partial class MainWindow : Window
                 NextButton.IsEnabled = false;
                 BackButton.Visibility = Visibility.Collapsed;
                 break;
-            case WizardStep.Complete:
-                NextButton.Content = "好";
-                NextButton.IsEnabled = true;
-                break;
             case WizardStep.Error:
+            case WizardStep.Complete:
                 NextButton.Content = "好";
                 NextButton.IsEnabled = true;
                 break;
@@ -224,27 +211,21 @@ public partial class MainWindow : Window
     {
         switch (_step)
         {
+            case WizardStep.Welcome when WelcomeAgreeCheck.IsChecked == true:
+            case WizardStep.License when AgreeLicenseCheck.IsChecked == true:
+                _step = WizardStep.Directory;
+                ApplyStepUi();
+                break;
             case WizardStep.Welcome:
-                if (WelcomeAgreeCheck.IsChecked != true)
-                    return;
-                _step = WizardStep.Directory;
-                ApplyStepUi();
-                break;
             case WizardStep.License:
-                if (AgreeLicenseCheck.IsChecked != true)
-                    return;
-                _step = WizardStep.Directory;
-                ApplyStepUi();
-                break;
+                return;
             case WizardStep.Directory:
                 _installDir = InstallDirBox.Text.Trim();
                 WelcomePathPreview.Text = _installDir;
                 await RunInstallAsync();
                 break;
-            case WizardStep.Complete:
-                Close();
-                break;
             case WizardStep.Error:
+            case WizardStep.Complete:
                 Close();
                 break;
         }
@@ -314,16 +295,18 @@ public partial class MainWindow : Window
 
         var installProgress = new Progress<InstallProgressUpdate>(u =>
         {
-            var overall = ExtractPhaseMax + u.Percent * (100 - ExtractPhaseMax) / 100.0;
-            UpdateInstallProgress(overall, u.Status);
+            var overall = ExtractPhaseMax + Math.Min(u.Percent, 98) * (100 - ExtractPhaseMax) / 100.0;
+            UpdateInstallProgress(overall, u.Percent == 100 ? "本体安装完成，正在准备收尾…" : u.Status);
         });
 
+        try { NsisSilentInstaller.ValidateRegisteredInstallDirectory(_installDir); }
+        catch (Exception ex) { ShowError(ex.Message); return; }
         var result = await NsisSilentInstaller.RunAsync(
             _setupExePath,
             _installDir,
             installProgress,
-            _installCts.Token);
-
+            _installCts.Token,
+            NsisSilentInstaller.UserDataDirectory(), updaterHandoff: Environment.GetCommandLineArgs().Contains("--updated"));
         if (!result.Success)
         {
             ShowError(result.Error ?? "安装失败");
@@ -331,59 +314,40 @@ public partial class MainWindow : Window
         }
 
         _installedAppExe = result.AppExePath;
-        var sunbirdNote = "";
-        if (FetchSunbirdDataCheck.IsChecked == true && SunbirdSeedExtractor.HasEmbeddedSeed())
-        {
-            UpdateInstallProgress(94, "正在写入太阳鸟业务数据…");
-            try
-            {
-                var sunbirdProgress = new Progress<string>(msg => UpdateInstallProgress(96, msg));
-                var deployed = await SunbirdSeedExtractor.DeployToUserDataAsync(
-                    progress: sunbirdProgress,
-                    cancellationToken: _installCts.Token).ConfigureAwait(true);
-                sunbirdNote = deployed ? "已获取太阳鸟业务数据" : "太阳鸟业务数据未写入";
-            }
-            catch (Exception ex)
-            {
-                sunbirdNote = $"业务数据获取失败：{ex.Message}";
-            }
-        }
-
+        UpdateInstallProgress(99, "正在完成快捷方式与启动设置…");
+        var desktopShortcut = DesktopShortcutCheck.IsChecked == true;
+        var runAfterInstall = RunAfterInstallCheck.IsChecked == true;
+        string extras;
+        try { extras = await PostInstallTasks.RunAsync(() => ApplyPostInstallTasks(_installedAppExe, desktopShortcut, runAfterInstall)); }
+        catch (Exception ex) { ShowError(await result.RecoverPostInstallFailureAsync(ex.Message)); return; }
         UpdateInstallProgress(100, "安装完成");
-        await Task.Delay(450).ConfigureAwait(true);
-
-        var extras = ApplyPostInstallTasks(sunbirdNote);
-        StopProgressSmoothTimer();
         CompletePathText.Text = result.InstallDir ?? "";
         CompleteExtrasText.Text = extras;
         _step = WizardStep.Complete;
         ApplyStepUi();
     }
 
-    private string ApplyPostInstallTasks(string? sunbirdNote = null)
+    private static string ApplyPostInstallTasks(string? installedAppExe, bool desktopShortcut, bool runAfterInstall)
     {
-        if (string.IsNullOrEmpty(_installedAppExe))
-            return sunbirdNote ?? "";
+        if (string.IsNullOrEmpty(installedAppExe))
+            return "";
 
         var notes = new List<string>();
-        if (!string.IsNullOrWhiteSpace(sunbirdNote))
-            notes.Add(sunbirdNote);
-
-        if (DesktopShortcutCheck.IsChecked == true)
+        if (desktopShortcut)
         {
-            if (PostInstallTasks.TryCreateDesktopShortcut(_installedAppExe))
+            if (PostInstallTasks.TryCreateDesktopShortcut(installedAppExe))
                 notes.Add("已创建桌面快捷方式");
             else
                 notes.Add("桌面快捷方式创建失败");
         }
 
-        PostInstallTasks.TryCreateStartMenuShortcut(_installedAppExe);
+        PostInstallTasks.TryCreateStartMenuShortcut(installedAppExe);
 
-        if (RunAfterInstallCheck.IsChecked == true)
+        if (runAfterInstall)
         {
             try
             {
-                PostInstallTasks.TryLaunchApp(_installedAppExe);
+                PostInstallTasks.TryLaunchApp(installedAppExe);
                 notes.Add("已启动 XCAGI");
             }
             catch (Exception ex)
@@ -398,45 +362,10 @@ public partial class MainWindow : Window
     private void BeginInstallProgressUi()
     {
         InstallProgress.IsIndeterminate = false;
-        _displayProgress = 0;
-        _targetProgress = 0;
         InstallProgress.Value = 0;
         InstallPercentText.Visibility = Visibility.Visible;
         InstallPercentText.Text = "0%";
         InstallStatusText.Text = "准备中…";
-        StartProgressSmoothTimer();
-    }
-
-    private void StartProgressSmoothTimer()
-    {
-        _progressSmoothTimer?.Stop();
-        _progressSmoothTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(45) };
-        _progressSmoothTimer.Tick += (_, _) =>
-        {
-            if (_displayProgress < _targetProgress)
-            {
-                var gap = _targetProgress - _displayProgress;
-                var step = Math.Max(0.35, gap * 0.14);
-                _displayProgress = Math.Min(_targetProgress, _displayProgress + step);
-            }
-            else
-            {
-                _displayProgress = _targetProgress;
-            }
-
-            InstallProgress.Value = _displayProgress;
-            InstallPercentText.Text = $"{_displayProgress:0}%";
-
-            if (_step != WizardStep.Installing)
-                StopProgressSmoothTimer();
-        };
-        _progressSmoothTimer.Start();
-    }
-
-    private void StopProgressSmoothTimer()
-    {
-        _progressSmoothTimer?.Stop();
-        _progressSmoothTimer = null;
     }
 
     private void UpdateInstallProgress(double percent, string status)
@@ -448,11 +377,9 @@ public partial class MainWindow : Window
         }
 
         var clamped = Math.Clamp(percent, 0, 100);
-        _targetProgress = Math.Max(_targetProgress, clamped);
+        InstallProgress.Value = Math.Max(InstallProgress.Value, clamped);
+        InstallPercentText.Text = $"{InstallProgress.Value:0}%";
         InstallStatusText.Text = status;
-
-        if (_progressSmoothTimer == null)
-            StartProgressSmoothTimer();
     }
 
     private static string DescribeExtractStatus(double extractPercent) =>
@@ -466,7 +393,7 @@ public partial class MainWindow : Window
 
     private void ShowError(string message)
     {
-        StopProgressSmoothTimer();
+        NsisSilentInstaller.Trace("GUI install failed: " + message);
         ErrorMessageText.Text = message;
         _step = WizardStep.Error;
         ApplyStepUi();
@@ -474,7 +401,6 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        StopProgressSmoothTimer();
         _installCts?.Cancel();
         base.OnClosed(e);
     }

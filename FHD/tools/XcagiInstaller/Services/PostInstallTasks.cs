@@ -4,6 +4,20 @@ namespace XcagiInstaller.Services;
 
 public static class PostInstallTasks
 {
+    // Shell COM keeps its STA apartment without blocking the wizard dispatcher.
+    public static Task<string> RunAsync(Func<string> action)
+    {
+        var completion = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var worker = new Thread(() =>
+        {
+            try { completion.SetResult(action()); }
+            catch (Exception ex) { completion.SetException(ex); }
+        }) { IsBackground = true };
+        worker.SetApartmentState(ApartmentState.STA);
+        worker.Start();
+        return completion.Task;
+    }
+
     public static bool TryCreateDesktopShortcut(string targetExe, string shortcutName = "XCAGI")
     {
         var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);

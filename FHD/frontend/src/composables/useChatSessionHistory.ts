@@ -117,18 +117,28 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       const serverMessages = asArray(dataRow.messages)
       const localMessages = readLocalMessagesBySession(sid)
       if (data.success && serverMessages.length > 0) {
-        loadMessages(
-          serverMessages.map((msg: unknown) => {
-            const row = asRecord(msg)
-            const roleRaw = asString(row.role)
-            return {
-              role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
-              content: normalizeServerContentToHtml(asString(row.content)),
-              time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at),
-              ...chatMessageExtrasFromServerRow(row),
-            }
-          }),
-        )
+        const merged = [...localMessages]
+        const matched = new Set<number>()
+        for (const message of serverMessages.map((msg: unknown): ChatMessage => {
+          const row = asRecord(msg)
+          const roleRaw = asString(row.role)
+          return {
+            role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
+            content: normalizeServerContentToHtml(asString(row.content)),
+            time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at),
+            ...chatMessageExtrasFromServerRow(row),
+          }
+        })) {
+          const index = localMessages.findIndex((local, i) => !matched.has(i)
+            && local.role === message.role && local.time === message.time
+            && historyPersistence.toPlainText(local.content) === historyPersistence.toPlainText(message.content))
+          if (index < 0) merged.push(message)
+          else {
+            matched.add(index)
+            merged[index] = { ...merged[index], ...message }
+          }
+        }
+        loadMessages(merged)
       } else if (localMessages.length > 0) {
         loadMessages(
           localMessages.map((msg) => {

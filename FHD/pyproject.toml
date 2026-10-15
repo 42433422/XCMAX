@@ -1,6 +1,6 @@
 [project]
 name = "xcagi"
-version = "1.0.0.5"
+version = "1.0.0.6"
 description = "XCAGI - 企业 AI 员工平台（桌面版 + Web 版并行交付）"
 license = "Apache-2.0"
 requires-python = ">=3.11"
@@ -11,7 +11,7 @@ dependencies = [
     "langgraph-checkpoint-sqlite==3.1.1",
     "langgraph-checkpoint-postgres==3.1.1",
     "langgraph-prebuilt==1.1.0",
-    "langgraph-sdk==0.4.2",
+    "langgraph-sdk==0.4.4",
 ]
 
 [project.scripts]

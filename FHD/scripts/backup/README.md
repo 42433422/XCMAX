@@ -23,7 +23,7 @@
 
 ## 备份文件位置
 
-- **本地**：`%APPDATA%\XCAGI\backups\xcagi-{version}-{stamp}.db`
+- **本地**：`<数据目录>\backups\xcagi-{version}-{stamp}.db`。默认数据目录是 `%APPDATA%\XCAGI`；若桌面使用 `XCAGI_DESKTOP_USER_DATA_DIR`，启动后会把每日和每周任务的 `-DataDir` 改到该目录。
 - **外部（可选）**：通过 `-ExternalDir` 参数指定（如 USB 盘 `E:\XCAGI-Backup`）
 - **日志**：`%APPDATA%\XCAGI\logs\backup.log`
 
