@@ -1,0 +1,90 @@
+== ShipIt 卡住态快照 2026-09-17 05:18:02+0800
+-- install_start: 2026-09-16T21:15:28.089Z ; ShipIt 首见: 21:15:35Z ; 本快照时点
+-- 盘上版本: 1.0.0.3
+-- app PID: 93750 
+-- ShipIt PID: 4502 
+-- health: 1.0.0.3 healthy
+-- ShipItState.plist:
+{
+  "bundleIdentifier" => "com.xcagi.desktop.enterprise"
+  "launchAfterInstallation" => false
+  "targetBundleURL" => "file:///Applications/XCAGI.app/"
+  "updateBundleURL" => "file:///Users/a4243342/Library/Caches/com.xcagi.desktop.enterprise.ShipIt/update.9MWdVhS/XCAGI.app/"
+  "useUpdateBundleName" => true
+}
+-- ShipIt 缓存目录:
+total 7920
+drwxr-xr-x@   6 a4243342  staff      192  9月 17 05:15 .
+drwx------+ 160 a4243342  staff     5120  9月 17 05:05 ..
+-rw-r--r--    1 a4243342  staff  4049934  9月 17 05:15 ShipIt_stderr.log
+-rw-r--r--    1 a4243342  staff        0  9月  4 23:16 ShipIt_stdout.log
+-rw-r--r--@   1 a4243342  staff      297  9月 17 05:15 ShipItState.plist
+drwx------@   3 a4243342  staff       96  9月 17 05:15 update.9MWdVhS
+-- 暂存 update 目录内容:
+total 0
+drwx------@ 3 a4243342  staff   96  9月 17 05:15 .
+drwxr-xr-x@ 6 a4243342  staff  192  9月 17 05:15 ..
+drwxr-xr-x@ 3 a4243342  staff   96  9月 14 14:48 XCAGI.app
+-- 暂存内 app 版本:
+{"schema_version":1,"gitSha":"280225ac77ce0b5f66470d2d7a11ad2844cdad67","version":"1.0.0.4","releaseId":"xcagi-1.0.0.4-280225ac77ce0b5f66470d2d7a11ad2844cdad67","builtAt":"2026-09-14T14:48:06.725Z"}
+-- ShipIt_stderr.log 尾部 60 行:
+        Remove
+    );
+} }
+2026-09-13 15:41:49.956 ShipIt[99981:20755826] On main thread and launching: file:///Applications/XCAGI.app/
+2026-09-13 15:41:49.956 ShipIt[99981:20755826] Bundle URL is valid
+2026-09-13 15:41:49.956 ShipIt[99981:20755826] Attempting to launch app on 11.0 or higher
+2026-09-13 15:41:49.956 ShipIt[99981:20755826] Launching new ShipIt at /Applications/XCAGI.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt with instructions to launch file:///Applications/XCAGI.app/
+2026-09-13 15:41:49.957 ShipIt[99981:20739208] Installation completed successfully
+2026-09-13 15:41:49.962 ShipIt[99981:20755826] New ShipIt pid: 3531
+2026-09-13 15:41:52.476 ShipIt[3531:20755919] Detected this as a launch request
+2026-09-13 15:41:52.572 ShipIt[3531:20755919] Successfully launched application at file:///Applications/XCAGI.app/
+2026-09-13 15:41:52.572 ShipIt[3531:20755919] ShipIt quitting
+2026-09-13 15:41:52.574 ShipIt[99981:20755826] ShipIt status 0
+2026-09-13 15:41:52.574 ShipIt[99981:20755826] New ShipIt exited
+2026-09-13 15:41:52.575 ShipIt[99981:20755826] ShipIt quitting
+2026-09-14 03:41:20.132 ShipIt[97148:1259575] Detected this as an install request
+2026-09-14 03:45:11.468 ShipIt[97148:1259699] Beginning installation
+2026-09-14 03:45:12.957 ShipIt[97148:1268969] Moving bundle from file:///Applications/XCAGI.app/ to file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.a4jJxTrK/XCAGI.app
+2026-09-14 03:45:12.957 ShipIt[97148:1268969] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-09-14 03:45:12.958 ShipIt[97148:1268969] Moved bundle contents from file:///Applications/XCAGI.app/ to file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.a4jJxTrK/XCAGI.app
+2026-09-14 03:45:12.958 ShipIt[97148:1268969] Moving bundle from file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.dI2K51Cl/XCAGI.app to file:///Applications/XCAGI.app/
+2026-09-14 03:45:12.958 ShipIt[97148:1268969] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-09-14 03:45:12.958 ShipIt[97148:1268969] Moved bundle contents from file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.dI2K51Cl/XCAGI.app to file:///Applications/XCAGI.app/
+2026-09-14 03:45:13.110 ShipIt[97148:1268969] Couldn't remove owned bundle at location file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.dI2K51Cl/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: "“XCAGI.app” couldn’t be removed.", failureReason: "The file doesn’t exist.", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: "The operation couldn’t be completed. No such file or directory" }, userInfo: {
+    NSFilePath = "/var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.dI2K51Cl/XCAGI.app";
+    NSURL = "file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.dI2K51Cl/XCAGI.app";
+    NSUserStringVariant =     (
+        Remove
+    );
+} }
+2026-09-14 03:45:13.266 ShipIt[97148:1268969] Installation completed successfully
+2026-09-14 03:45:13.267 ShipIt[97148:1268969] ShipIt quitting
+2026-09-15 14:41:18.228 ShipIt[79511:2785705] Detected this as an install request
+2026-09-15 15:09:06.802 ShipIt[79511:2785762] Beginning installation
+2026-09-15 15:09:08.312 ShipIt[79511:2854188] Moving bundle from file:///Applications/XCAGI.app/ to file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.P4gO78f2/XCAGI.app
+2026-09-15 15:09:08.313 ShipIt[79511:2854188] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-09-15 15:09:08.313 ShipIt[79511:2854188] Moved bundle contents from file:///Applications/XCAGI.app/ to file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.P4gO78f2/XCAGI.app
+2026-09-15 15:09:08.313 ShipIt[79511:2854188] Moving bundle from file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.owUrcTdv/XCAGI.app to file:///Applications/XCAGI.app/
+2026-09-15 15:09:08.313 ShipIt[79511:2854188] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-09-15 15:09:08.313 ShipIt[79511:2854188] Moved bundle contents from file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.owUrcTdv/XCAGI.app to file:///Applications/XCAGI.app/
+2026-09-15 15:09:08.451 ShipIt[79511:2854188] Couldn't remove owned bundle at location file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.owUrcTdv/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: "“XCAGI.app” couldn’t be removed.", failureReason: "The file doesn’t exist.", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: "The operation couldn’t be completed. No such file or directory" }, userInfo: {
+    NSFilePath = "/var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.owUrcTdv/XCAGI.app";
+    NSURL = "file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.owUrcTdv/XCAGI.app";
+    NSUserStringVariant =     (
+        Remove
+    );
+} }
+2026-09-15 15:09:08.603 ShipIt[79511:2854256] On main thread and launching: file:///Applications/XCAGI.app/
+2026-09-15 15:09:08.603 ShipIt[79511:2854256] Bundle URL is valid
+2026-09-15 15:09:08.603 ShipIt[79511:2854256] Attempting to launch app on 11.0 or higher
+2026-09-15 15:09:08.603 ShipIt[79511:2854256] Launching new ShipIt at /Applications/XCAGI.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt with instructions to launch file:///Applications/XCAGI.app/
+2026-09-15 15:09:08.604 ShipIt[79511:2854188] Installation completed successfully
+2026-09-15 15:09:08.605 ShipIt[79511:2854256] New ShipIt pid: 97741
+2026-09-15 15:09:12.351 ShipIt[97741:2854405] Detected this as a launch request
+2026-09-15 15:09:12.399 ShipIt[97741:2854405] Successfully launched application at file:///Applications/XCAGI.app/
+2026-09-15 15:09:12.399 ShipIt[97741:2854405] ShipIt quitting
+2026-09-15 15:09:12.400 ShipIt[79511:2854256] ShipIt status 0
+2026-09-15 15:09:12.400 ShipIt[79511:2854256] New ShipIt exited
+2026-09-15 15:09:12.401 ShipIt[79511:2854256] ShipIt quitting
+2026-09-17 05:15:33.561 ShipIt[4502:566829] Detected this as an install request

@@ -1,0 +1,128 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "customer-chain-runtime",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "session_tag": "PRE-OTA",
+  "data_root": "/private/tmp/xcagi-custchain/userdata-upgrade",
+  "started_at_utc": "2026-09-20T20:30:52Z",
+  "steps": {
+    "health": {
+      "status": 200,
+      "snapshot": {
+        "reachable": true,
+        "top_status": "healthy",
+        "runtime_status": "healthy",
+        "degradedReasons": [],
+        "components_total": 37,
+        "components_ok": 37,
+        "required_total": 11,
+        "required_failed": [],
+        "runtime_failures": [],
+        "runtime_blockers": [],
+        "version": "1.0.0.5",
+        "git_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+        "release_id": "xcagi-1.0.0.5-eb07dfcf372532292dc87c187b67c0ee620640b2"
+      },
+      "verdict": "PASS"
+    },
+    "login_binding": {
+      "endpoint": "POST /api/auth/login",
+      "status": 200,
+      "success": true,
+      "session_id_prefix": "c132a117",
+      "user": null,
+      "me": {
+        "status": 200,
+        "success": true,
+        "username": "SUNBIRD",
+        "permission_count": 15,
+        "has_shipment_edit": true
+      },
+      "verdict": "PASS"
+    },
+    "entitlement_mods": {
+      "status": 200,
+      "discovered": 13,
+      "installed": 13,
+      "loaded": 13,
+      "manifest_errors": [],
+      "load_errors": [],
+      "partial_failure": false,
+      "load_mismatch": false,
+      "installed_mod_ids": [
+        "xcagi-erp-domain-bridge",
+        "xcagi-planner-bridge",
+        "xcagi-office-employee-pack-bridge",
+        "xcagi-planner-excel-tools",
+        "xcagi-lan-license-bridge",
+        "xcagi-neuro-bus-bridge",
+        "xcagi-core-workflow-employees",
+        "xcagi-customer-service-bridge",
+        "xcagi-model-payment-bridge",
+        "xcagi-approval-bridge",
+        "attendance-industry",
+        "lan-gate-ai-employee",
+        "xcagi-workflow-visualization-bridge"
+      ],
+      "baseline": {
+        "status": 200,
+        "industry_id": "general",
+        "required_mod_ids": [
+          "xcagi-planner-bridge",
+          "xcagi-neuro-bus-bridge"
+        ],
+        "missing_required_mod_ids": [],
+        "account_custom_mod_ids": [],
+        "missing_account_custom_mod_ids": [],
+        "host_baseline_ready": true,
+        "account_custom_ready": true,
+        "full_stack_ready": true
+      },
+      "verdict": "PASS"
+    },
+    "business": {
+      "input": {
+        "file": "business-input-PRE-OTA.xlsx",
+        "bytes": 5002,
+        "sha256": "d15772d701adc997d62245d939d55ec494023cc1c1565def90cfadd452b1886a"
+      },
+      "templates_upload": {
+        "status": 200,
+        "template_id": "db:1",
+        "message": "解析并入库模版库成功",
+        "probe_present": true
+      },
+      "customers_create": {
+        "status": 200,
+        "success": true,
+        "already_exists": false,
+        "message": ""
+      },
+      "shipment_generate": {
+        "status": 200,
+        "success": true,
+        "message": "发货单生成成功",
+        "doc_name": "发货单_26-0900001A_20260921_043111.xlsx"
+      },
+      "file_download": {
+        "status": 200,
+        "bytes": 5186,
+        "xlsx_magic": true,
+        "sha256": "c193c8253c3f249fcbb52890cb7b58dd2e7617a381fbe16afb0b65e4b37eb98e",
+        "filename": "发货单_26-0900001A_20260921_043111.xlsx"
+      },
+      "verdict": "PASS"
+    },
+    "data_digest": {
+      "xcagi.db.bytes": 1445888,
+      "uploads.files": 1,
+      "mods.files": 426,
+      "models.files": 0,
+      "backups.files": 1,
+      "backups.latest": "xcagi-unknown-20260920203101.db"
+    }
+  },
+  "verdict": "PASS",
+  "finished_at_utc": "2026-09-20T20:31:11Z"
+}

@@ -3,6 +3,8 @@ from __future__ import annotations
 import threading
 import time
 
+import pytest
+
 from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
@@ -152,6 +154,41 @@ def test_expired_idempotent_step_recovers_but_non_idempotent_step_fails_closed()
     assert blocked.metadata["non_retryable"] is True
     assert blocked.metadata["recovery"]["state"] == "manual_reconciliation_required"
     assert len(executor.contexts) == calls_before
+
+
+@pytest.mark.parametrize("legacy_claim", [False, True])
+def test_quote_recovery_uses_real_registry_and_does_not_replay_unknown_write(legacy_claim):
+    from app.application.workflow.types import WorkflowNode
+
+    repository = InMemoryAgentRunRepository()
+    executor = _ConcurrentExecutor()
+    executor.release.set()
+    orchestrator = _orchestrator_factory(repository, executor)
+    run = _queued_run("unknown-quote")
+    run.steps = [
+        orchestrator._step_from_node(
+            WorkflowNode(
+                node_id="quote",
+                tool_id="sales",
+                action="quote",
+                idempotent=True,
+                params={
+                    "customer_id": 1,
+                    "items": [{"product_id": 2, "quantity": 1, "unit_price": 50}],
+                },
+            )
+        )
+    ]
+    assert run.steps[0].idempotent is False  # Registry overrides planner optimism.
+    if legacy_claim:
+        run.steps[0].idempotent = True  # Simulate an already persisted pre-fix plan.
+    run.status = "running"
+    run.steps[0].status = "running"
+    repository.save(run)
+    recovered = orchestrator.execute_dispatched_run(run.run_id, recovered=True)
+    assert recovered.status == "blocked"
+    assert recovered.error == "non_idempotent_recovery_blocked"
+    assert executor.contexts == []
 
 
 def test_dispatcher_restart_claims_expired_lease_and_completes_idempotent_task() -> None:

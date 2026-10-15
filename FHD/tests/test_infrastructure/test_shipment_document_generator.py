@@ -58,6 +58,7 @@ class TestLegacyShipmentDocumentGenerator:
             result = gen.generate(unit_name="测试单位", products=[])
 
         assert result["success"] is True
+        assert ShipmentDocumentGenerator.call_args.kwargs["output_dir"] == gen.output_dir
 
     @patch("app.infrastructure.documents.shipment_document_generator_impl.resolve_purchase_unit")
     def test_generate_unit_not_found(self, mock_resolve):

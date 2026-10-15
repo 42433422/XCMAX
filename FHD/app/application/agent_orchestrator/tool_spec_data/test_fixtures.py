@@ -3,6 +3,29 @@ from __future__ import annotations
 from typing import Any
 
 _SPECIAL_TEST_FIXTURES: dict[tuple[str, str], list[dict[str, Any]]] = {
+    ("sales", "create_order"): [
+        {
+            "name": "confirmed_named_order",
+            "input": {
+                "customer_name": "测试客户",
+                "items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}],
+            },
+            "output": {
+                "success": True,
+                "data": {"id": 1, "state": "confirmed", "total_amount": 100},
+            },
+        }
+    ],
+    ("sales", "quote"): [
+        {
+            "name": "named_quote",
+            "input": {
+                "customer_name": "测试客户",
+                "items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}],
+            },
+            "output": {"success": True, "data": {"id": 1, "total_amount": 100}},
+        }
+    ],
     ("business_db", "read"): [
         {
             "name": "read_products_by_keyword",
@@ -480,7 +503,15 @@ _SPECIAL_TEST_FIXTURES: dict[tuple[str, str], list[dict[str, Any]]] = {
             "name": "create_shipment_record",
             "input": {
                 "unit_name": "星光贸易",
-                "products": [{"name": "5003", "qty": 2}],
+                "products": [
+                    {
+                        "name": "5003",
+                        "quantity_tins": 2,
+                        "tin_spec": 10,
+                        "unit_price": 3.5,
+                        "amount": 70,
+                    }
+                ],
                 "contact_person": "张三",
                 "contact_phone": "13900000000",
             },

@@ -52,6 +52,8 @@ class _ConnectionManager:
 
     async def send_json_to_user(self, user_id: int, payload: dict[str, Any]) -> int:
         """推送给该用户所有已连接；返回成功送达的套接字数。"""
+        if not get_user_by_id(user_id):
+            return 0
         data = json.dumps(payload, ensure_ascii=False)
         async with self._lock:
             conns = list(self._sockets.get(user_id, ()))
@@ -145,6 +147,9 @@ async def websocket_channel(
                     pass
                 break
             except WebSocketDisconnect:
+                break
+            if not get_user_by_id(user_id):
+                await websocket.close(code=1008)
                 break
             try:
                 body = json.loads(msg)

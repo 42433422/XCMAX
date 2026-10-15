@@ -37,6 +37,12 @@ export const SHELL_ROUTES: RouteRecordRaw[] = [
     meta: { title: '设置' },
   },
   {
+    path: '/tenant-roles',
+    name: 'tenant-roles',
+    component: () => import('../../views/TenantRolesView.vue'),
+    meta: { title: '角色与权限' },
+  },
+  {
     path: '/im',
     name: 'im',
     component: () => import('../../views/ImMessengerView.vue'),

@@ -1,0 +1,9 @@
+[13:59:03] feature=mods-store platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-store
+[13:59:16] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:59:20] case S1: passed - 本机 Mod 目录真实读取
+[13:59:25] case S2: passed - 市场目录真实读取
+[13:59:31] case S3: passed - Mod 详情真实读取
+[13:59:31] case S4: passed - 缺 mod_id 的卸载被拒（负例/边界）
+[13:59:33] case S5: passed - 远端私有源不可用时 fail-closed（负例/边界）
+[13:59:34] video: mods-store-web-20260929-135903.webm (1743270 bytes)
+[13:59:34] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-store/log/mods-store-web-20260929-135903.log

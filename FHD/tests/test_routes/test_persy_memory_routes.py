@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -12,6 +13,11 @@ from app.application.dataset_rag_app_service import (
 from app.application.persy_memory_app_service import PersyMemoryApplicationService
 from app.fastapi_routes.knowledge_v1 import router as knowledge_router
 from app.services.user_memory_service import UserMemoryService, UserMemoryStore
+
+
+@pytest.fixture(autouse=True)
+def _explicit_gateway_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XCAGI_TRUST_DATASET_ACCESS_HEADERS", "1")
 
 
 def _headers(*, actor: str = "7", tenant: str = "2", write: bool = True) -> dict[str, str]:

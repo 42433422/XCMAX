@@ -1,0 +1,15 @@
+{
+ "reachable": true,
+ "top_status": "healthy",
+ "runtime_status": "healthy",
+ "degradedReasons": [],
+ "components_total": 37,
+ "components_ok": 37,
+ "required_total": 11,
+ "required_failed": [],
+ "runtime_failures": [],
+ "runtime_blockers": [],
+ "version": "1.0.0.5",
+ "git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+ "release_id": "xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f"
+}

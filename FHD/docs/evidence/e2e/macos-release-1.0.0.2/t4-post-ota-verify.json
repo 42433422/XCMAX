@@ -1,0 +1,9 @@
+{
+  "phase": "T4-post-ota",
+  "timestamp": "2026-09-13T07:45:00Z",
+  "upgrade": "1.0.0.1(99854233) -> 1.0.0.2(6eda2203)",
+  "g8_update_discovery": {"isUpdateAvailable": true, "remoteProductVersion": "1.0.0.2", "remoteBuildSha": "6eda2203df27c53958b9d7af0e6db26d22b560c4", "signature": "ed25519 present", "evidence": "g8-update-discovery-10001-to-10002.json"},
+  "g9_update_install": {"shipit": "Installation completed successfully", "localProductVersion": "1.0.0.2", "localBuildSha": "6eda2203df27c53958b9d7af0e6db26d22b560c4", "appRelaunched": true, "evidence": "ShipIt_stderr / updater-events install_start 07:36:59Z"},
+  "g10_data_retention": {"xcagi_db_bytes": 986886144, "uploads": 155, "mods": 847, "backups": 4, "diff": "backups.latest advanced to xcagi-startup-20260913074200.db (expected startup backup)", "result": "PASS"},
+  "g11_business_after_update": {"health": "healthy", "productVersion": "1.0.0.2", "gitSha": "6eda2203df27c53958b9d7af0e6db26d22b560c4", "degradedReasons": [], "blockers": [], "modsApi": 200, "employeesApi": 200, "attendanceCapabilitiesProbe": "401 (entitlement gate, expected pre-login)"}
+}

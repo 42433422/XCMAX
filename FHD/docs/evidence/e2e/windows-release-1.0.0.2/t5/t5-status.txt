@@ -1,0 +1,20 @@
+T5 rollback drill RESULT (G13 path B: downgrade install) - 2026-09-14 14:2x local
+sequence (all on this machine, the designated test machine):
+  1. baseline 1.0.0.3@4bfb23365c5e...: health=healthy; sessions=27 users=3 products=10
+     (incl. SUNBIRD-t3-073556 created same day); db backup taken (db-backup-pre/)
+  2. official manifest https://xiu-ci.com/xcagi-v1.0.0.0/manifest.json (release_ready=true)
+     -> win enterprise exe, size+sha256 verified PASS (t5-download-sha256.txt)
+  3. graceful+force taskkill -> Uninstall XCAGI.exe /S -> install dir polled absent (UNINSTALL-OK)
+  4. XCAGI-Enterprise-Setup-1.0.0.0-x64.exe /S -> 52s -> build-info version=1.0.0.0 gitSha=656db7b7...
+  5. cold start: /api/health status=healthy after 12s (t5-health-post-rollback.json)
+  6. data retention post-rollback: sessions=27 users=3 products=10, all names identical
+     (t5-db-snapshot-pre.json vs t5-db-snapshot-post-rollback.json) -> RETENTION PASS
+  7. login state retained (SUNBIRD in old-version UI), old UI functional
+     (t5-rollback-ui-1.0.0.0.png, desktop screenshot; 1.0.0.0 has no CDP port)
+
+observed deviation (honest record): 1.0.0.0 runtime + 1.0.0.3-era mod files ->
+  /api/health neuro.status=error "No module named 'app.mod_sdk.host_services'"
+  main status remains healthy; classified as known downgrade-compatibility class (P3 note).
+
+G13 criteria (path B): version rollback OK + health healthy OK + data intact OK
+RESULT: G13 PASS (path B); path A (observation auto-rollback) remains covered by unit/e2e specs in repo.

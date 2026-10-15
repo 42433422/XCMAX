@@ -1,0 +1,7 @@
+2026-09-29T07:23:10+0800 [ai-ppt] 开始验收 ai-ppt PPT 生成与解析；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:23:10+0800 [ai-ppt] M1 passed :: HTTP 200 25ms；ok=True；{"output_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790637790/outputs/output.pptx", "slide_count": 1, "title": "MAC验收0929 汇报", "output_schema": ["title", "slides", "slide
+2026-09-29T07:23:10+0800 [ai-ppt] M2 passed :: HTTP 200 31ms；ok=True；{"output_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790637790/outputs/ppt-read.json", "meta_output_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_
+2026-09-29T07:23:10+0800 [ai-ppt] M3 passed :: HTTP 200 9ms；{"success": true, "data": {"files": [{"path": "temp_excel/mac0929-ai-ppt-1790637790/outputs/ppt-read.json", "kind": "json", "json": {"title": "MAC验收0929 汇报", "slide_count": 1, "outline": [{"level": 1,
+2026-09-29T07:23:14+0800 [ai-ppt] M4 passed :: 导航后路径 /mod/xcagi-office-employee-pack-bridge/other-tools；命中文本 ['员工']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 员工工作流 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 员工工作流管理 | 流程与员工 |  | 在此查看与管理副窗中的固定六类与当前 manifest 已声明的扩展工作流员工；开关样式与侧栏「专业
+2026-09-29T07:23:15+0800 [ai-ppt] screenshot result.png
+2026-09-29T07:23:18+0800 [ai-ppt] video operation.webm bytes=357692

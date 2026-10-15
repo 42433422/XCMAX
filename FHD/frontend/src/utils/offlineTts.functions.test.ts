@@ -152,7 +152,7 @@ describe('offlineTts ensureOfflineReady and synthesis', () => {
     it('resolves on audio context error without throwing', async () => {
       const original = window.AudioContext
       // @ts-expect-error mock
-      window.AudioContext = vi.fn(() => {
+      window.AudioContext = vi.fn(function () {
         throw new Error('AudioContext not available')
       })
 

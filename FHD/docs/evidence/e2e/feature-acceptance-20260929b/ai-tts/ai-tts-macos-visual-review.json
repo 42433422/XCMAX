@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-tts",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "36155b3df26f93a8e60f6cbf80e90a4f10d234ecafb27c6104324080648d4ab4",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置个人主页。展示名称和登录名 SUNBIRD，邮箱 sunbird@xcagi.local，余额 ¥97.06。画面没有打开语音试听。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-tts/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-tts/macos/result.png"
+}

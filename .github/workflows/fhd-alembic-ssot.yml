@@ -8,7 +8,26 @@ name: FHD Alembic SSOT
     branches: [main, develop]
 
 jobs:
+  # 统一 changed-path 分类（SSOT: scripts/dev/change_classifier.py）——docs/前端改动不跑迁移重活。
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.c.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Classify changed paths (backend)
+        id: c
+        if: github.event_name == 'pull_request'
+        run: |
+          python scripts/dev/change_classifier.py --category backend \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+
   single-head:
+    needs: classify
+    if: needs.classify.outputs.backend != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +38,8 @@ jobs:
         run: python3 scripts/guard_alembic_single_head.py
 
   ssot-parity-sqlite:
+    needs: classify
+    if: needs.classify.outputs.backend != 'false'
     runs-on: ubuntu-latest
     defaults:
       run:

@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/private/tmp/xcagi-real/data_digest.py", line 10, in <module>
+    out = sys.argv[1]
+IndexError: list index out of range

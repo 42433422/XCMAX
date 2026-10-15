@@ -1,0 +1,30 @@
+{
+  "observed_at": "2026-09-12T22:14:47.341073+00:00",
+  "application": "/Applications/XCAGI.app",
+  "pid": 16078,
+  "events": [
+    {
+      "ts": "2026-09-12T22:13:02.733Z",
+      "type": "update_available",
+      "data": {
+        "version": "1.0.0"
+      }
+    },
+    {
+      "ts": "2026-09-12T22:13:51.939Z",
+      "type": "update_available",
+      "data": {
+        "version": "1.0.0"
+      }
+    },
+    {
+      "ts": "2026-09-12T22:13:58.222Z",
+      "type": "update_available",
+      "data": {
+        "version": "1.0.0"
+      }
+    }
+  ],
+  "ui": "login page; no download action visible",
+  "ota_complete": false
+}

@@ -1,0 +1,168 @@
+{
+  "round": "2026-09-17",
+  "gate": "G12 重启 Mac 后复验",
+  "status": "PASS",
+  "reboot_proof": {
+    "kern_boottime": "Thu Sep 17 01:31:51 2026 (sec=1789579911)",
+    "previous_boottime": "Mon Sep 14 13:57:35 2026",
+    "uptime_at_verify": "~6 min",
+    "verdict": "确为整机重启，非进程重启"
+  },
+  "autostart_proof": {
+    "app_pid": 691,
+    "app_start": "四 9月/17 01:36:51 2026",
+    "backend_pid": 1067,
+    "backend_start": "四 9月/17 01:37:06 2026",
+    "onboot_start": "01:37:16",
+    "backend_healthy_at": "01:37:31 (poll#1)",
+    "note": "【2026-09-17 14:2x 本轮更正】原文为「登录后应用自动恢复，无需人工启动」，属过度声称：本机登录项为空（无开机自启），应用却在 boot 后约 5 分钟才出现，来源未取证。中性描述应为「登录后应用已在运行（PID 691，boot 后约 5 分钟）；启动来源未单独取证，不据此判定产品具备开机自启」。"
+  },
+  "armed_job": {
+    "plist": "~/Library/LaunchAgents/com.xcagi.t6-postreboot.plist (RunAtLoad)",
+    "fired": true,
+    "finished_at": "01:37:34",
+    "self_cleaned": "plist + creds removed"
+  },
+  "health": {
+    "version": "1.0.0.4",
+    "git_sha": "280225ac77ce",
+    "status": "healthy",
+    "degradedReasons": [],
+    "runtime_status": "healthy"
+  },
+  "db_integrity": {
+    "tool": "sqlite3 PRAGMA quick_check (read-only, post-reboot)",
+    "result": "ok",
+    "journal_mode": "wal"
+  },
+  "data_retention": {
+    "pre": {
+      "xcagi.db.bytes": 987168768,
+      "xcagi.db.wal.bytes": 2537952,
+      "excel_vectors.db.bytes": -1,
+      "mod_dbs.files": 0,
+      "uploads.files": 166,
+      "uploads.templates.files": 20,
+      "routing_policies.files": 1,
+      "mods.files": 1257,
+      "models.files": 1,
+      "backups.files": 5,
+      "backups.latest": "xcagi-unknown-20260916161910.db",
+      "rows.templates": 21,
+      "rows.sales_orders": 0,
+      "rows.manufacturing_orders": 0,
+      "rows.customers": 0,
+      "rows.users": 6
+    },
+    "post": {
+      "xcagi.db.bytes": 987402240,
+      "xcagi.db.wal.bytes": 0,
+      "excel_vectors.db.bytes": -1,
+      "mod_dbs.files": 0,
+      "uploads.files": 168,
+      "uploads.templates.files": 22,
+      "routing_policies.files": 1,
+      "mods.files": 1259,
+      "models.files": 1,
+      "backups.files": 6,
+      "backups.latest": "xcagi-unknown-20260916173730.db",
+      "rows.templates": 23,
+      "rows.sales_orders": 0,
+      "rows.manufacturing_orders": 0,
+      "rows.customers": 0,
+      "rows.users": 6
+    },
+    "deltas": {
+      "xcagi.db.bytes": 233472,
+      "xcagi.db.wal.bytes": -2537952,
+      "uploads.files": 2,
+      "uploads.templates.files": 2,
+      "routing_policies.files": 0,
+      "mods.files": 2,
+      "models.files": 0,
+      "backups.files": 1,
+      "rows.templates": 2,
+      "rows.users": 0
+    },
+    "verdict": "OK — 无数据丢失",
+    "honest_caveats": [
+      "唯一负向 delta 为 xcagi.db.wal.bytes 2,537,952→0：这是干净关机时的 WAL checkpoint（内容已合并进主库），非数据丢失",
+      "pre 基线采集于 01:12，而 01:22 我方进程级冷启动测试额外写入 1 模板/1 发货单，故 uploads/templates/mods.files 的 +2 属我方测试写入，非漂移"
+    ]
+  },
+  "g7_business_chain_post_reboot": {
+    "health": {
+      "status": 200,
+      "version": "1.0.0.4",
+      "git_sha": "280225ac77ce"
+    },
+    "login": {
+      "status": 200,
+      "success": true
+    },
+    "auth_me": {
+      "status": 200,
+      "user": null
+    },
+    "templates_upload": {
+      "status": 200,
+      "template_id": "db:24",
+      "file_sha256": "be5e1ca38be53b2c7232f399829a1f21bcc80138aa50a94d553df94081f668e6"
+    },
+    "templates_list": {
+      "status": 200,
+      "probe_present": false
+    },
+    "customer_ensure": {
+      "status": 400,
+      "customer_id": null
+    },
+    "shipment_generate": {
+      "status": 200,
+      "success": true,
+      "message": "发货单生成成功",
+      "doc_name": "发货单_26-0900001A_20260917_013734.xlsx",
+      "agent_status": "completed",
+      "run_id": "run_e807d1ee1a4144829d6faa279e246ad1"
+    },
+    "file_download": {
+      "status": 200,
+      "bytes": 5194,
+      "xlsx_magic": true,
+      "sha256": "7b6b1d8d08324d7d913dad0d52f7f3c05a47379d1c1ba4867ec686d58984cfe4",
+      "filename": "发货单_26-0900001A_20260917_013734.xlsx"
+    }
+  },
+  "mods_employees": {
+    "mods_http": 200,
+    "mods_count": 62,
+    "employees_http": 200
+  },
+  "worktree_cleanup": {
+    "cmd": "git worktree prune -v",
+    "removed": [
+      "xcmax-p1920",
+      "xcmax-1937",
+      "xcmax-closure",
+      "xcmax-p1923",
+      "xcmax-fi-fix"
+    ],
+    "remaining": "仅 /Users/Shared/XCMAX（死记录已清）"
+  },
+  "new_finding": {
+    "title": "冷启动会生成 ~1–2 份全量备份，单份 ~987MB",
+    "evidence": [
+      "/Users/.../XCAGI/backups/xcagi-unknown-20260916173730.db = 987,402,240B（mtime 01:37）",
+      "/Users/.../XCAGI/backups/xcagi-unknown-20260916173738.db = 987,439,104B（mtime 01:37）",
+      "digest at 01:37:32 计 backups.files=6（pre=5），第二份于 01:37:38 落盘"
+    ],
+    "note": "文件名时间戳为 UTC（=北京时间 01:37:30/01:37:38），恰为本次冷启动时刻；与既往 09-16 00:03/00:19 两份 xcagi-unknown-* 同型。命名 reason=unknown，触发源（启动即备份 or 迁移前备份）待确认。单次冷启动占约 2GB。"
+  },
+  "evidence_files": [
+    "round-20260917-g12-post-reboot-verify.log",
+    "round-20260917-g12-post-reboot-digest.json",
+    "round-20260917-g12-health.json",
+    "round-20260917-g12-g7-retest.json",
+    "round-20260917-g12-onboot.log"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "base-login",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "f67cceff8dbd6e6f84600b2b0a25993389292ca8fdb08cc332388fc64c392d35",
+  "visible_content": "聊天首页与问候语，有历史会话标题；可支持界面已加载，未呈现登录流程或考勤数据。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/base-login.png"
+}

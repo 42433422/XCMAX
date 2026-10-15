@@ -17,12 +17,6 @@ def resolve_tenant_id(request: Request) -> int | None:
         return None
     try:
         from app.application.facades.session_facade import get_session_service
-        from app.application.session_account_meta import load_session_account_meta
-
-        meta = load_session_account_meta(sid) or {}
-        session_tenant = meta.get("tenant_id")
-        if session_tenant is not None:
-            return int(session_tenant)
 
         user = get_session_service().validate_session(sid)
         if user is None:

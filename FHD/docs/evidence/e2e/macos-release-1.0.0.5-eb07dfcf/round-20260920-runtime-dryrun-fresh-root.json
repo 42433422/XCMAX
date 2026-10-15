@@ -1,0 +1,54 @@
+{
+  "schema": "xcagi.release_gate.v1",
+  "gate": "SUPPORT-runtime-dryrun",
+  "platform": "macos",
+  "round": "2026-09-20",
+  "release_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+  "product_version": "1.0.0.5",
+  "purpose": "Boot the backend runtime that ships INSIDE the notarized DMG, against a brand-new empty data root, to prove the packaged runtime is self-provisioning before the clean-account customer chain runs. This is supporting evidence only; it does NOT stand in for the clean-account customer chain.",
+  "how": {
+    "artifact": "/tmp/xcagi-macota-art/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg (mounted read-only at /Volumes/XCAGI-Enterprise)",
+    "binary": "XCAGI.app/Contents/Resources/backend/xcagi-backend",
+    "binary_sha256": "72014821c8ed78ef30e4c6df909729010c7a9785716a61bfeaac234f0531ed1f",
+    "command": "\"$MP/XCAGI.app/Contents/Resources/backend/xcagi-backend\" --desktop --headless --host 127.0.0.1 --port 17501 --data-dir /tmp/xcagi-dryrun-data",
+    "flags_identical_to_real_launch": "The installed app launches the same binary with --desktop --headless --host --port --data-dir (observed via ps); only host/port/data-dir were changed here to avoid colliding with the user's running instance on 17500.",
+    "fresh_data_root": "/tmp/xcagi-dryrun-data (created empty for this run)"
+  },
+  "result": {
+    "boot": "Application startup complete. Uvicorn running on http://127.0.0.1:17501",
+    "health_status": "degraded",
+    "health_note": "status=degraded immediately after boot is the documented warm-up state; runtime.status is already 'healthy'.",
+    "runtime_status": "healthy",
+    "components_total": 37,
+    "required_components_total": 11,
+    "required_components_failed": [],
+    "optional_components_failed": [],
+    "build_git_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+    "build_product_version": "1.0.0.5",
+    "build_release_id": "xcagi-1.0.0.5-eb07dfcf372532292dc87c187b67c0ee620640b2",
+    "build_built_at": "2026-09-20T12:12:30.393Z",
+    "build_git_sha_equals_release_sha": true
+  },
+  "fresh_root_provisioning": {
+    "created_dirs": [".runtime", "autonomy", "backups", "cache", "config", "data", "logs", "models", "mods", "saved_analyses", "temp_excel", "uploads"],
+    "main_db": "data/xcagi.db",
+    "main_db_bytes": 1437696,
+    "main_db_journal_mode_evidence": "xcagi.db-shm (32768 B) and xcagi.db-wal (4124152 B) present => WAL mode active on the fresh database",
+    "migration_lock": "data/.xcagi-migration.lock present => migrations ran on the fresh root",
+    "other_created": ["data/neuro_health_events.db", "data/xcagi-langgraph-checkpoints.sqlite3", "data/xcagi-langgraph-shadow-checkpoints.sqlite3"],
+    "bundled_mods_provisioned": 14,
+    "bundled_mod_ids": ["_employees", "attendance-industry", "lan-gate-ai-employee", "xcagi-approval-bridge", "xcagi-core-workflow-employees", "xcagi-customer-service-bridge", "xcagi-erp-domain-bridge", "xcagi-lan-license-bridge", "xcagi-model-payment-bridge", "xcagi-neuro-bus-bridge", "xcagi-office-employee-pack-bridge", "xcagi-planner-bridge", "xcagi-planner-excel-tools", "xcagi-workflow-visualization-bridge"],
+    "verdict": "PASS - a brand-new data root is fully provisioned by the packaged runtime itself (main DB + migrations + 14 bundled mods)."
+  },
+  "observations": [
+    {
+      "id": "mod-parent-db-warn-on-fresh-root",
+      "severity": "informational",
+      "observed": "app.db.init_db logs WARN '无法为 Mod <id> 准备专用库：母库不存在 <root>/products.db|inventory.db|voice_learning.db|error_collection.db（跳过 ...）' for several mods on the fresh root.",
+      "why_not_yet_a_defect": "These are the mod parent DBs; they are created lazily when the corresponding business feature is first used. The backend continues, runtime.status=healthy, 0 required/optional component failures, and 14 mods are provisioned. The user's long-lived install does have products.db but no inventory.db/voice_learning.db either, so absence on a fresh root is consistent with lazy creation.",
+      "to_verify_in_clean_chain": "During the clean-account real-business step, confirm the relevant parent DB is created on first use and that the business write/read round-trip succeeds. If it does not, this becomes a real defect to fix and regression-test.",
+      "state": "OPEN - to be settled by the clean-account business step, not asserted either way here."
+    }
+  ],
+  "verdict": "PASS (supporting evidence only)"
+}

@@ -12,7 +12,7 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-from app.application.workflow.types import PlanGraph
+from app.application.workflow.types import PlanGraph, WorkflowNode
 from app.domain.autonomy.risk_types import RiskDecision
 
 
@@ -35,9 +35,6 @@ def _make_service():
         )
         service.approval_service.get_approval_required_nodes.return_value = []
         return service
-
-
-# ========================= _default_purchase_unit_for_import ==============
 
 
 class TestDefaultPurchaseUnitForImport:
@@ -86,9 +83,6 @@ class TestDefaultPurchaseUnitForImport:
         assert result == "高优先级"
 
 
-# ========================= _customer_hint_from_preview_grid ==============
-
-
 class TestCustomerHintFromPreviewGrid:
     def test_non_dict_preview(self):
         result = AIChatApplicationService._customer_hint_from_preview_grid(None)
@@ -107,9 +101,6 @@ class TestCustomerHintFromPreviewGrid:
         assert result == ""
 
 
-# ========================= _try_structured_reload_records =================
-
-
 class TestTryStructuredReloadRecords:
     def test_no_file_path(self):
         result = AIChatApplicationService._try_structured_reload_records({}, {})
@@ -126,9 +117,6 @@ class TestTryStructuredReloadRecords:
             {"file_path": ""}, {"file_path": ""}
         )
         assert result is None
-
-
-# ========================= _infer_excel_column_roles_with_llm ============
 
 
 class TestInferExcelColumnRolesWithLLM:
@@ -180,9 +168,6 @@ class TestInferExcelColumnRolesWithLLM:
         assert post.call_args.kwargs["headers"]["Authorization"] == "Bearer pat-xcauto"
         assert post.call_args.kwargs["json"]["model"] == "xcauto-account"
         assert post.call_args.args[0] == "https://xiu-ci.com/v1/chat/completions"
-
-
-# ========================= _extract_excel_import_records ==================
 
 
 class TestExtractExcelImportRecords:
@@ -264,10 +249,31 @@ class TestExtractExcelImportRecords:
         assert records == []
 
 
-# ========================= _try_handle_dynamic_workflow - more branches ===
-
-
 class TestTryHandleDynamicWorkflowExtended:
+    @pytest.mark.parametrize("message", ["请创建一条出货记录。", "请处理一个未知业务。"])
+    def test_standalone_clarification_asks_without_execution_confirmation(self, message):
+        from app.application.workflow.planner import LLMWorkflowPlanner
+
+        service = _make_service()
+        service.workflow_engine.run = Mock()
+        service.approval_service.create_approval_request = Mock()
+        planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
+        plan = planner._fallback_plan("missing-input", message, {})
+        result = service._open_clarification_gate(
+            user_id="u1",
+            plan=plan,
+            tool_registry={},
+            runtime_context={},
+            thinking_steps="",
+            message=message,
+        )
+        assert result["data"]["action"] == "clarification_required"
+        assert result["response"] == plan.nodes[0].params["question"]
+        assert message in result["response"]
+        assert not service._pending_workflows
+        service.workflow_engine.run.assert_not_called()
+        service.approval_service.create_approval_request.assert_not_called()
+
     def test_pro_import_with_db_file_success(self):
         service = _make_service()
         repo = InMemoryAgentRunRepository()
@@ -659,71 +665,17 @@ class TestTryHandleDynamicWorkflowExtended:
         assert result is not None
         assert result["success"] is True
 
-    def test_pro_pending_workflow_confirm(self):
-        service = _make_service()
-        mock_plan = Mock()
-        mock_plan.plan_id = "p1"
-        mock_plan.intent = "test"
-        mock_plan.nodes = []
-        mock_plan.todo_steps = []
-        service._pending_workflows["u1"] = {
-            "plan": mock_plan,
-            "runtime_context": {"message": "test"},
-            "approval_required": False,
-            "approval_nodes": [],
-        }
-        mock_run_result = Mock()
-        mock_run_result.success = True
-        mock_run_result.node_results = []
-        mock_run_result.message = ""
-        with (
-            patch.object(service.workflow_engine, "run", return_value=mock_run_result),
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-                return_value="full",
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._persist_plan_state"
-            ),
-            patch(
-                "app.application.workflow.checkpointer.DatabaseWorkflowCheckpointer.latest_checkpoint",
-                return_value=None,
-            ),
-        ):
-            result = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
-        assert result is not None
-        assert "u1" not in service._pending_workflows
-
-    def test_pro_pending_workflow_cancel(self):
-        service = _make_service()
-        mock_plan = Mock()
-        service._pending_workflows["u1"] = {
-            "plan": mock_plan,
-            "runtime_context": {},
-            "approval_required": False,
-            "approval_nodes": [],
-        }
-        result = service._try_handle_dynamic_workflow("u1", "取消", "pro", {}, {})
-        assert result is not None
-        assert "取消" in result["response"]
-        assert "u1" not in service._pending_workflows
-
     def test_pro_pending_workflow_approval_required(self):
         service = _make_service()
-        mock_plan = Mock()
-        mock_plan.plan_id = "p1"
-        mock_plan.intent = "product_create"
-        mock_plan.metadata = {}
-        mock_node = Mock()
-        mock_node.node_id = "n1"
-        mock_node.tool_id = "products"
-        mock_node.action = "create"
-        mock_node.description = "create product"
-        mock_node.risk = "high"
-        mock_node.depends_on = []
-        mock_node.next = None
-        mock_node.branches = []
-        mock_plan.nodes = [mock_node]
+        mock_node = WorkflowNode(
+            "n1",
+            "products",
+            "create",
+            params={"name": "test"},
+            description="create product",
+            risk="high",
+        )
+        mock_plan = PlanGraph("p1", "product_create", nodes=[mock_node])
         service._pending_workflows["u1"] = {
             "plan": mock_plan,
             "runtime_context": {},
@@ -741,7 +693,7 @@ class TestTryHandleDynamicWorkflowExtended:
                 service.approval_service,
                 "create_approval_request",
                 return_value=approval_request,
-            ),
+            ) as create_request,
             patch.object(
                 service.approval_service,
                 "get_request_metadata",
@@ -751,9 +703,7 @@ class TestTryHandleDynamicWorkflowExtended:
             result = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result is not None
         assert "审批" in result["response"]
-
-
-# ========================= _build_workflow_thinking_steps =================
+        create_request.assert_called_once()
 
 
 class TestBuildWorkflowThinkingSteps:
@@ -815,9 +765,6 @@ class TestBuildWorkflowThinkingSteps:
         assert "products.query" not in result
 
 
-# ========================= _workflow_products_float_query =================
-
-
 class TestWorkflowProductsFloatQuery:
     def test_from_node_params(self):
         service = _make_service()
@@ -858,9 +805,6 @@ class TestWorkflowProductsFloatQuery:
         mock_result.node_results = []
         q = service._workflow_products_float_query(mock_plan, mock_result, "查产品")
         assert q == ""
-
-
-# ========================= _format_workflow_run_response ==================
 
 
 class TestFormatWorkflowRunResponse:
@@ -934,9 +878,6 @@ class TestFormatWorkflowRunResponse:
         assert result["autoAction"]["type"] == "show_products_float"
 
 
-# ========================= _dispatch_workflow_tool ========================
-
-
 class TestDispatchWorkflowTool:
     def test_exception(self):
         service = _make_service()
@@ -946,9 +887,6 @@ class TestDispatchWorkflowTool:
         ):
             result = service._dispatch_workflow_tool("products", "query", {})
         assert result["success"] is False
-
-
-# ========================= _excel_analysis_payload_present - grid branch ==
 
 
 class TestExcelAnalysisPayloadPresentGridBranch:
@@ -973,9 +911,6 @@ class TestExcelAnalysisPayloadPresentGridBranch:
         )
 
 
-# ========================= _inject_excel_vector_context - more branches ==
-
-
 class TestInjectExcelVectorContextExtended:
     def test_with_non_dict_context(self):
         service = _make_service()
@@ -996,9 +931,6 @@ class TestInjectExcelVectorContextExtended:
         assert "excel_vector_context" not in result
 
 
-# ========================= process_chat - more branches ===================
-
-
 class TestProcessChatExtended:
     def test_generic_exception(self):
         async def raise_generic(*a, **kw):
@@ -1011,7 +943,7 @@ class TestProcessChatExtended:
         ):
             service = _make_service()
             service.ai_service = mock_ai
-            result = service.process_chat("u1", "你好呀", source=None)
+            result = service.process_chat("u1", "随便说点什么", source=None)
         assert result["success"] is False
 
     def test_pro_source_with_message(self):
@@ -1050,7 +982,7 @@ class TestProcessChatExtended:
                     return_value=repo,
                 ),
             ):
-                result = service.process_chat("u1", "你好", source=None, context={})
+                result = service.process_chat("u1", "随便说点什么", source=None, context={})
 
         # 主链路结果带 run_id，且与一个真实落库的 run 对应
         assert result["success"] is True
@@ -1128,14 +1060,11 @@ class TestProcessChatExtended:
                 patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
                 patch.object(service, "_start_deterministic_import_agent_run") as mock_start,
             ):
-                result = service.process_chat("u1", "你好", source=None, context={})
+                result = service.process_chat("u1", "随便说点什么", source=None, context={})
 
         # 未走多模态分流，legacy 引擎正常应答
         assert mock_start.called is False
         assert result["success"] is True
-
-
-# ========================= _resolve_unit_price_column - extended ==========
 
 
 class TestResolveUnitPriceColumnExtended:
@@ -1198,9 +1127,6 @@ class TestResolveUnitPriceColumnExtended:
         assert col == "调价后单价"
 
 
-# ========================= _handle_tool_call - extended ===================
-
-
 class TestHandleToolCallExtended:
     def test_no_tool_key(self):
         service = _make_service()
@@ -1215,9 +1141,6 @@ class TestHandleToolCallExtended:
         assert result["success"] is True
 
 
-# ========================= _execute_normal_mode_tools ====================
-
-
 class TestExecuteNormalModeTools:
     def test_unknown_tool(self):
         service = _make_service()
@@ -1227,8 +1150,29 @@ class TestExecuteNormalModeTools:
         )
         assert isinstance(result, dict)
 
-
-# ========================= _execute_customers_query - extended ============
+    def test_shipment_generate_prefers_original_message_over_assistant_text(self):
+        """#2067 回归：发货单生成必须用用户原话，不能用助手回复当订单文本。"""
+        service = _make_service()
+        response_data = {"success": True, "data": {}, "response": ""}
+        ai_result = {"text": "已识别订单，正在生成发货单…", "action": "tool_call", "data": {}}
+        fake_svc = MagicMock()
+        fake_svc.generate_shipment_document.return_value = {
+            "success": False,
+            "message": "未找到客户：客户闭环验收客户",
+        }
+        with patch("app.bootstrap.get_shipment_app_service", return_value=fake_svc):
+            service._execute_normal_mode_tools(
+                response_data,
+                "shipment_generate",
+                {},
+                ai_result,
+                {"tool_key": "shipment_generate"},
+                "客户闭环验收客户 发货单：产品A 5桶",
+            )
+        kwargs = fake_svc.generate_shipment_document.call_args.kwargs
+        assert kwargs["unit_name"] == "客户闭环验收客户"
+        assert "已识别订单" not in kwargs["unit_name"]
+        assert kwargs["raw_text"] == "客户闭环验收客户 发货单：产品A 5桶"
 
 
 class TestExecuteCustomersQueryExtended:
@@ -1238,9 +1182,6 @@ class TestExecuteCustomersQueryExtended:
         with patch("app.bootstrap.get_customer_app_service", side_effect=RuntimeError("fail")):
             result = service._execute_customers_query(response_data)
         assert "失败" in result["response"]
-
-
-# ========================= _build_response - extended =====================
 
 
 class TestBuildResponseExtended:

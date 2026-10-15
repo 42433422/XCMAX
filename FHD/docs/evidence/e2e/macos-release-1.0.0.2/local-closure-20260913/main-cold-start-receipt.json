@@ -1,0 +1,30 @@
+{
+  "at": "2026-09-12T17:43:03.481410+00:00",
+  "build": {
+    "schema_version": 1,
+    "gitSha": "99854233c5d4ea05a96b1f6ae1e3b7edfe03b526",
+    "version": "1.0.0.1",
+    "releaseId": "xcagi-1.0.0.1-99854233c5d4ea05a96b1f6ae1e3b7edfe03b526",
+    "builtAt": "2026-09-04T16:39:02.096Z"
+  },
+  "health": {
+    "status": "degraded",
+    "runtime": "healthy",
+    "degradedReasons": [
+      "LLM_RUNTIME_UNAVAILABLE"
+    ]
+  },
+  "ui": "login page after initial workspace render; login not proven",
+  "processes": {
+    "exit": 0,
+    "output": "15276 /Applications/XCAGI.app/Contents/MacOS/XCAGI\n15327 /Applications/XCAGI.app/Contents/Resources/backend/xcagi-backend --desktop --headless --host 0.0.0.0 --port 17500 --data-dir /Users/a4243342/Library/Application Support/XCAGI\n"
+  },
+  "listener": {
+    "exit": 0,
+    "output": "COMMAND     PID     USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME\nxcagi-bac 15327 a4243342   32u  IPv4 0xda26e9e33aa47877      0t0  TCP *:17500 (LISTEN)\n"
+  },
+  "signature": {
+    "exit": 0,
+    "output": ""
+  }
+}

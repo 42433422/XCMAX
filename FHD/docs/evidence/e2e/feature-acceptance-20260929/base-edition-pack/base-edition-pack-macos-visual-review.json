@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-edition-pack",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "b8a18f6c03ba1da3464c71bb3c6cac4aafd5def019719a67d599ae532a8219ec",
+  "visible_content": "版本包为 full、通用包已安装、8 个桥接 Mod；可交付状态 deliverable=true，能力库页展示预装员工。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-edition-pack/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-edition-pack/macos/result.png"
+}

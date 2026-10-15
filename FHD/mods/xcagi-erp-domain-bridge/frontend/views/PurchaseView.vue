@@ -57,6 +57,7 @@
                   <button class="btn btn-sm btn-secondary" @click="viewOrder(order)">查看</button>
                   <button v-if="order.status === 'draft'" class="btn btn-sm btn-primary" @click="editOrder(order)">编辑</button>
                   <button v-if="order.status === 'draft'" class="btn btn-sm btn-success" @click="approveOrder(order)">审核</button>
+                  <button v-if="['approved', 'partial'].includes(order.status)" class="btn btn-sm btn-success" @click="receiveOrder(order)">确认收货</button>
                 </td>
               </tr>
               <tr v-if="orders.length === 0">
@@ -136,12 +137,12 @@
 
     <div v-if="showOrderModalFlag" class="modal active">
       <div class="modal-content" style="max-width:800px;">
-        <div class="modal-header">{{ isEditOrder ? '编辑采购订单' : '新建采购订单' }}</div>
+        <div class="modal-header">{{ receiving ? '采购收货入库' : isEditOrder ? '编辑采购订单' : '新建采购订单' }}</div>
         <div class="modal-body">
           <div class="form-row">
             <div class="form-group">
               <label>供应商 *</label>
-              <select v-model="orderForm.supplier_id">
+              <select v-model="orderForm.supplier_id" :disabled="receiving">
                 <option value="">选择供应商</option>
                 <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
               </select>
@@ -155,6 +156,7 @@
               <input v-model="orderForm.delivery_date" type="date">
             </div>
           </div>
+          <div v-if="receiving" class="form-group"><label>收货仓库 *</label><select v-model="receiveWarehouse"><option value="">选择仓库</option><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option></select><button class="btn btn-secondary" @click="createWarehouse">新建收货仓库</button></div>
           <div class="form-group">
             <label>订单明细</label>
             <table class="data-table">
@@ -170,19 +172,19 @@
               <tbody>
                 <tr v-for="(item, idx) in orderForm.items" :key="idx">
                   <td>
-                    <select v-model="item.product_id" @change="selectProduct(idx)">
+                    <select v-model="item.product_id" :disabled="receiving" @change="selectProduct(idx)">
                       <option value="">选择产品</option>
                       <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name }}</option>
                     </select>
                   </td>
-                  <td><input v-model.number="item.quantity" type="number" min="1" @input="calcItemAmount(idx)"></td>
+                  <td><input v-model.number="item.quantity" type="number" min="1" :max="receiving ? item.remaining_quantity : undefined" aria-label="数量" @input="calcItemAmount(idx)"></td>
                   <td><input v-model.number="item.unit_price" type="number" step="0.01" @input="calcItemAmount(idx)"></td>
                   <td>{{ item.amount?.toFixed(2) || '0.00' }}</td>
-                  <td><button class="btn btn-sm btn-danger" @click="removeOrderItem(idx)">删除</button></td>
+                  <td><button v-if="!receiving" class="btn btn-sm btn-danger" @click="removeOrderItem(idx)">删除</button></td>
                 </tr>
               </tbody>
             </table>
-            <button class="btn btn-sm btn-secondary" @click="addOrderItem">+ 添加产品</button>
+            <button v-if="!receiving" class="btn btn-sm btn-secondary" @click="addOrderItem">+ 添加产品</button>
           </div>
           <div class="form-group">
             <label>备注</label>
@@ -194,7 +196,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showOrderModalFlag = false">取消</button>
-          <button class="btn btn-primary" @click="saveOrder">保存</button>
+          <button class="btn btn-primary" @click="saveOrder">{{ receiving ? '确认入库' : '保存' }}</button>
         </div>
       </div>
     </div>

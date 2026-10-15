@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "feature": "base-update-mgmt",
+  "platform": "macos",
+  "result": "PARTIAL",
+  "status": "partial",
+  "verified_at": "2026-09-25T00:29:59.911Z",
+  "product_version": "1.0.0.5",
+  "git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+  "source_main_sha": "93b9ad2f68b72103816d4e0b75ff9165f60f9267",
+  "test_method": "ui",
+  "target": "/settings",
+  "scope": "设置页面打开并渲染；未查询更新源、下载、安装或回滚。",
+  "screenshot": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-update-mgmt.png",
+  "video": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-update-mgmt.webm",
+  "log": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-update-mgmt.log",
+  "media": [
+    {
+      "kind": "screenshot",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-update-mgmt.png",
+      "sha256": "0589bbbf74f8ed6ece5b298b1368084e8bcdfd2b8cf33dd193c8c1a422fca9c6"
+    },
+    {
+      "kind": "video",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-update-mgmt.webm",
+      "sha256": "42bd56ecda6d22f49bb8e64b9050a0821f078eb10dc1cda9f03e3422ec401a1c"
+    },
+    {
+      "kind": "log",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-update-mgmt.log",
+      "sha256": "0910576e53267897ac91e8ba38b9e1b23be29534d982e5b8b86e707fbe0ac8b1"
+    }
+  ],
+  "limitations": "Supplementary observation only; this record is not an acceptance PASS."
+}

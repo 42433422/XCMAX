@@ -1,0 +1,16 @@
+{
+  "phase": "G5-登录绑定（1.0.0.3 原生 UI 证据）",
+  "date": "2026-09-14T08:25+08:00",
+  "screenshot": "t2-logged-in-main-window-1.0.0.3.png（1513x932 主窗口实拍）",
+  "login_state_at_capture": {
+    "renderer_authenticated_polling_200": [
+      "GET /api/agent/tasks?limit=200 → 200",
+      "GET /api/im/unread-total → 200",
+      "GET /api/xcmax/sync/entitlements/current → 200"
+    ],
+    "source": "~/Library/Application Support/XCAGI/logs/electron-backend.log 08:2x 时段访问日志",
+    "api_login_retest": "g6-post-ota-10003.json（04:15）auth/login 200 + attendance capabilities 200 会话有效"
+  },
+  "version_at_capture": "1.0.0.3（/api/health 200 healthy，Info.plist=1.0.0.3）",
+  "conclusion": "G5：1.0.0.3 原生登录态主窗口截图 + 渲染进程认证请求 200 双证，UI 登录证据补齐（版本错位问题消除）"
+}

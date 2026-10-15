@@ -1,0 +1,104 @@
+{
+  "step": "shipment_generate_via_ui",
+  "actions": [
+    {
+      "click": "刷新模板列表",
+      "label": "刷新模板列表",
+      "rect": {
+        "x": 1233.671875,
+        "y": 244.9921875,
+        "w": 124,
+        "h": 36.796875,
+        "text": "刷新模板列表"
+      }
+    },
+    {
+      "select_template": {
+        "ok": true,
+        "value": "db:2",
+        "text": "客户送货单模板-UI"
+      }
+    },
+    {
+      "select_unit": {
+        "ok": true,
+        "value": "UI客户-0921",
+        "text": "UI客户-0921",
+        "via": "exact"
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-10-form-filled.png",
+      "bytes": 341741
+    },
+    {
+      "click": "选择产品名称",
+      "label": "选择产品名称",
+      "rect": {
+        "x": 492.5,
+        "y": 500.7578125,
+        "w": 149,
+        "h": 36.796875,
+        "text": "选择产品名称"
+      }
+    },
+    {
+      "picker_open": true
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-11-product-picker.png",
+      "bytes": 222756
+    },
+    {
+      "picked_product": "UI验收商品-0921型号: UI-0921-A"
+    },
+    {
+      "product_rows": [
+        [
+          "UI-0921-A",
+          "1",
+          "UI验收商品-0921",
+          "1",
+          "500",
+          "500",
+          "3.50",
+          "1750"
+        ]
+      ]
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-12-product-row.png",
+      "bytes": 322607
+    },
+    {
+      "typed": {
+        "input2": "24",
+        "input3": "25"
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-13-product-values.png",
+      "bytes": 323106
+    },
+    {
+      "click": "生成发货单",
+      "label": "生成发货单",
+      "rect": {
+        "x": 674,
+        "y": 780.9375,
+        "w": 195,
+        "h": 51.59375,
+        "text": "生成发货单"
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-14-generated.png",
+      "bytes": 311557
+    }
+  ],
+  "verdict": "PASS",
+  "result_panel": {
+    "doc": "发货单_26-09-00002A_20260922_022059.xlsx",
+    "text": " 生成结果文件名: 发货单_26-09-00002A_20260922_022059.xlsx 下载发货单 新建发货单 "
+  }
+}

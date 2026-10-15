@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-sales-order",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "223a568a3c36181d18a6ac40f34fba8d74baffd92652b2df9b35e9cc572a411d",
+  "visible_content": "订单号门面与订单列表可读；边界：非法分页参数返回 422。「旧 /api/purchase_units、/api/orders/next_number 返回 403，已按预期接口白名单处理」。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-sales-order/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-sales-order/macos/result.png"
+}

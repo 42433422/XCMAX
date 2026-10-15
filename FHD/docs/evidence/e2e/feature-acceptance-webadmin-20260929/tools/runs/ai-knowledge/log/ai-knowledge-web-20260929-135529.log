@@ -1,0 +1,8 @@
+[13:55:29] feature=ai-knowledge platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-knowledge
+[13:55:41] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:55:42] case K1: passed - 知识库 RAG 引擎健康真实读取
+[13:55:42] case K2: passed - 数据集与已沉淀文档真实读取
+[13:55:43] case K3: passed - 兼容别名 /api/knowledge 复核同一口径
+[13:55:43] case K4: passed - 旧索引查询受租户隔离门控（负例/边界）
+[13:55:44] video: ai-knowledge-web-20260929-135529.webm (1040340 bytes)
+[13:55:44] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-knowledge/log/ai-knowledge-web-20260929-135529.log

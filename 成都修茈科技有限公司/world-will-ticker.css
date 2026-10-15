@@ -16,6 +16,14 @@
   overflow: hidden;
 }
 
+/* 页面内嵌挂载（首页「公开工作轨迹」区块）：不吸顶，随文档流 */
+.world-will--inline {
+  position: static;
+  z-index: auto;
+  border: 1px solid rgba(15, 40, 80, 0.1);
+  border-radius: 14px;
+}
+
 .world-will__label {
   flex: 0 0 auto;
   display: inline-flex;

@@ -1,0 +1,11 @@
+[08:44:14] feature=sec-audit-standard base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-audit-standard
+[08:44:26] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:44:27] case A1: passed - 审计基准目录 SSOT 在 Web 后端真实可读且锚点完整
+[08:44:28] case A2: passed - 生成阅读视图与唯一维护源一致地对外可读
+[08:44:28] AUDIT-BENCHMARK check exit=0 stdout='audit-benchmark: standard valid (18 domains / 54 commercial / 18 OSS slots); no product score asserted'
+[08:44:28] case A3: passed - 标准校验器在本机真实执行通过（正例）
+[08:44:28] SSOT-CLI check audit-benchmark exit=0 stdout='audit-benchmark: standard valid (18 domains / 54 commercial / 18 OSS slots); no product score asserted\naudit-benchmark: OK'
+[08:44:28] case A4: passed - SSOT 统一 CLI 的 audit-benchmark 域在本机真实校验通过
+[08:44:29] case A5: passed - 标准只定义锚点、不声明产品得分；历史分数不可换算（边界）
+[08:44:29] video: sec-audit-standard-web-20260929-084414.webm (1077222 bytes)
+[08:44:29] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-audit-standard/log/sec-audit-standard-web-20260929-084414.log

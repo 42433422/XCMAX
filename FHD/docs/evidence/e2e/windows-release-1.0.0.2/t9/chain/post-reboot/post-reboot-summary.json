@@ -1,0 +1,8 @@
+﻿{
+    "boot_time":  "2026-09-15T11:12:56.5000000+08:00",
+    "verify_time":  "2026-09-15T14:47:23.9426236+08:00",
+    "app_version":  "1.0.0.4",
+    "app_sha":  "604b85e1ee82631418002708def18800d7c7f338",
+    "health_status":  "unreachable",
+    "db_counts":  "{\"sessions\": 27, \"users\": 3, \"products\": 12, \"last_products\": [\"SUNBIRD-t9-post-ota-045248\", \"SUNBIRD-t9-195902\", \"SUNBIRD-t3-073556\", \"SUNBIRD-loop-round2-post-050624\", \"SUNBIRD-loop-round2-042330\"]}"
+}

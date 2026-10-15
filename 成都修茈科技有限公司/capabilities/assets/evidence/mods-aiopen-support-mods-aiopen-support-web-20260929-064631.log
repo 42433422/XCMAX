@@ -1,0 +1,8 @@
+[06:46:31] feature=mods-aiopen-support base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-aiopen-support
+[06:46:42] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:46:48] case O1: passed - AIOPEN MCP 能力清单（manifest）真实读取
+[06:46:58] case O2: passed - MCP initialize 协议版本协商
+[06:47:04] case O3: passed - REST invoke 能力探询（api_catalog 路由清单）
+[06:47:08] case O4: passed - 未知 MCP 方法被 JSON-RPC 拒绝（负例）
+[06:47:09] video: mods-aiopen-support-web-20260929-064631.webm (2775862 bytes)
+[06:47:09] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-aiopen-support/log/mods-aiopen-support-web-20260929-064631.log

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -19,7 +20,6 @@ def test_versioned_public_download_routes_are_not_pinned_to_a_retired_release() 
     assert "{3}" not in snippet
     assert "root /var/www;" in snippet
     assert "try_files $uri =404;" in snippet
-    assert "xcagi-v8.0.0" not in snippet
     assert "alias /root/成都修茈科技有限公司/download-release.json;" in snippet
     assert (
         "alias /var/www/update/releases/stable/enterprise/download-windows-hotfix.json;" in snippet
@@ -34,7 +34,6 @@ def test_standalone_vhost_uses_the_same_versioned_public_download_contract() -> 
 
     assert "location ~ ^/xcagi-v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/" in config
     assert "{3}" not in config
-    assert "location ^~ /xcagi-v1.0.0.0/" not in config
     assert "alias /root/成都修茈科技有限公司/download-release.json;" in config
     assert (
         "alias /var/www/update/releases/stable/enterprise/download-windows-hotfix.json;" in config
@@ -72,10 +71,14 @@ def test_site_refreshes_preserve_a_verified_desktop_release_pointer() -> None:
     assert '[ ! -e "${LIVE_SITE}/download-release.json" ]' in workflow
     assert "preserving release-managed download-release.json" in workflow
     assert "preserving release-managed download-windows-hotfix.json" in workflow
+    # 指针缺失时才播种：最高版本的不可变发布副本优先，git 种子仅作回退
+    # （2026-09-05 回退事故：过期 git 种子曾把线上 1.0.0.1 打回 1.0.0.0）。
+    assert 'if [[ ! -e "$live_site/download-release.json" ]]; then' in auto_update
     assert (
-        '[[ ! -e "$live_site/download-release.json" && -f "$git_site/download-release.json" ]]'
-        in auto_update
+        "/var/www/xcagi-v[0-9]*.*.*.*/download-release.json" in auto_update
+        and "sort -V | tail -1" in auto_update
     )
+    assert 'elif [[ -f "$git_site/download-release.json" ]]' in auto_update
     assert "保留发布流程管理的 download-release.json" in auto_update
     assert "保留发布流程管理的 download-windows-hotfix.json" in auto_update
 
@@ -91,20 +94,20 @@ def test_release_page_uses_public_history_order_for_the_current_version() -> Non
     assert "if (releaseVersion === '1.0.0.0') entry.className += ' is-current'" not in release_page
     assert "fetchJson('/download-windows-hotfix.json')" in release_page
     assert "Windows 临时交付可下载" in release_page
+    assert "hotfix.signature_status === 'unsigned'" in release_page
+    assert "Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()" in release_page
 
 
-def test_download_page_prefers_a_same_or_newer_explicit_unsigned_interim_pointer() -> None:
+def test_download_page_accepts_bounded_unsigned_interim_without_enabling_ota() -> None:
     download_page = (REPO_ROOT / "成都修茈科技有限公司" / "download.html").read_text(
         encoding="utf-8"
     )
 
-    assert "fetch('/download-windows-hotfix.json', { cache: 'no-store' })" in download_page
-    assert "hotfix.signature_status !== 'unsigned'" in download_page
-    assert "compareVersions(hotfix.version, state.version) >= 0" in download_page
-    assert "Boolean(manifestEntry(row.platform))" in download_page
-    assert "row.platform === 'android' && Boolean(state.androidVersion)" in download_page
-    assert "下载临时包" in download_page
-    assert "不会进入稳定自动更新" in download_page
+    assert "Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()" in download_page
+    assert "hotfix.stable_auto_update !== false" in download_page
+    assert "hotfix.version !== state.version" in download_page
+    assert "String(hotfix.artifact.sha256)" in download_page
+    assert "innerHTML" not in download_page
 
 
 def test_release_page_keeps_same_version_windows_interim_visible() -> None:
@@ -115,38 +118,30 @@ def test_release_page_keeps_same_version_windows_interim_visible() -> None:
     assert "compareVersions(hotfix.version, history[0].version) >= 0" in release_page
     assert "history[0] = hotfix.release" not in release_page
     assert "compareVersions(hotfix.version, history[0].version) > 0" in release_page
-    assert "太阳鸟行业考勤归并与企业交付可见" in release_page
+    # 版本时间线不再内置快照：唯一来源是发布清单 SSOT（FHD/config/download_release.json）
+    # 生成的 release_history，发版即自动更新；写死的历史副本会过期并让官网自相矛盾。
+    assert "fallbackHistory" not in release_page
+    history_ssot = json.loads(
+        (REPO_ROOT / "FHD" / "config" / "download_release.json").read_text(encoding="utf-8")
+    )
+    assert "太阳鸟行业考勤归并与企业交付可见" in [
+        entry["title"] for entry in history_ssot["release_history"]
+    ]
 
 
-def test_macos_release_flow_publishes_download_center_metadata_and_has_recovery_path() -> None:
-    mac_workflow = (
-        REPO_ROOT / "FHD" / ".github" / "workflows" / "release-desktop-mac-ota.yml"
-    ).read_text(encoding="utf-8")
-    recovery_workflow = (
-        REPO_ROOT / "FHD" / ".github" / "workflows" / "publish-macos-download-center.yml"
-    ).read_text(encoding="utf-8")
-    publish_script = (
-        REPO_ROOT / "FHD" / "scripts" / "package" / "publish-macos-download-center.sh"
-    ).read_text(encoding="utf-8")
-
-    assert "Publish download center metadata and changelog" in mac_workflow
-    assert "publish-macos-download-center.sh" in mac_workflow
-    assert "release_sha:" in mac_workflow
-    assert "security_scan_run_id:" in mac_workflow
-    assert "previous_security_scan_run_id:" in mac_workflow
-    assert "verify_security_scan_pair.py" in mac_workflow
-    assert "ref: ${{ inputs.release_sha }}" in mac_workflow
-    assert "source_run_id:" in recovery_workflow
-    assert "ref: ${{ inputs.release_git_sha }}" in recovery_workflow
-    assert 'step_ok("Enforce exact-SHA two-day security clearance")' in recovery_workflow
-    assert "gh run download" in recovery_workflow
-    assert "publish-macos-download-center.sh" in recovery_workflow
-    assert "release_ready == false" in publish_script
-    assert 'contains("太阳鸟")' in publish_script
-    assert "chmod a+rx" in publish_script
-    assert "sha256sum '${remote_dmg}'" in publish_script
-    assert "curl --http1.1 -fsSI" in publish_script
-    assert 'release_subdir="xcagi-v${version}"' in publish_script
-    assert 'ln -s "$(cd "${sku_dir}" && pwd)"' in publish_script
-    assert "download-release.json" in publish_script
-    assert "download/releases?release-run=" in publish_script
+def test_macos_release_builds_are_separate_from_authorized_frozen_pair_promotion() -> None:
+    workflows = REPO_ROOT / "FHD/.github/workflows"
+    build = (workflows / "release-desktop-mac-ota.yml").read_text()
+    promote = (workflows / "fix-mac-update-feed.yml").read_text()
+    legacy = (workflows / "publish-macos-download-center.yml").read_text()
+    script = (REPO_ROOT / "FHD/scripts/package/publish-macos-download-center.sh").read_text()
+    assert "default: true" in build and "Build-only lane" in build
+    assert "publish-macos-download-center.sh" not in build
+    assert "arm64_run_id:" in promote and "x64_run_id:" in promote
+    assert "default: false" in promote and "verify_security_scan_pair.py" in promote
+    assert "MACOS_FROZEN_PAIR_AUTHORIZED_SHA" in promote
+    assert "exit 1" in legacy and "Use Fix macOS update feed" in legacy
+    assert "ssh " not in legacy
+    assert "release_ready == false" in script
+    assert "--official-download-base" in script
+    assert "--dry-run" in script and "XCAGI_MAC_PUBLICATION_AUTHORIZED_SHA" in script

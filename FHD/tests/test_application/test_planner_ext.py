@@ -221,7 +221,8 @@ class TestLLMWorkflowPlannerPlanExtended:
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
         ):
             result = planner.plan("u1", "生成发货单", get_tool_registry(), {})
-        assert result.intent in ("shipment_generate", "generic_workflow")
+        # 2026-09 起未映射到工作流工具的意图走 clarify_ask，不再静默 products.query。
+        assert result.intent in ("shipment_generate", "generic_workflow", "clarify_ask")
 
     def test_fallback_for_customers(self):
         planner = self._make_planner()
@@ -234,7 +235,14 @@ class TestLLMWorkflowPlannerPlanExtended:
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
         ):
             result = planner.plan("u1", "添加客户公司A", get_tool_registry(), {})
-        assert result.intent in ("add_customer", "ensure_customer", "generic_workflow")
+        # 2026-09 起 customers 意图按 tool_key 路由到 customers.query（intent_route_customers）。
+        assert result.intent in (
+            "add_customer",
+            "ensure_customer",
+            "generic_workflow",
+            "intent_route_customers",
+            "clarify_ask",
+        )
 
 
 # ========================= _validate_required_params - extended ===========

@@ -1,0 +1,74 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "base-rbac",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "visible_content": "权限点列表可读；同会话新建角色 201 并在角色列表读回，角色与权限页可见新角色。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/rbac/permissions",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/rbac/permissions（写操作自动附带 CSRF）：读取权限点清单",
+      "expected": "读取权限点清单：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 40ms；权限点 6 个，示例 ['etl.execute', 'etl.read', 'etl.rollback', 'etl.target.manage']",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "POST /api/rbac/roles 请求体 {\"name\": \"MAC验收0929角色35125\", \"description\": \"macOS 验收\", \"permissions\": []}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/rbac/roles（写操作自动附带 CSRF）：新建租户角色",
+      "expected": "新建租户角色：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 201 27ms；角色 id=7 key=tenant:1:MAC验收0929角色35125",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "GET /api/rbac/roles",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/rbac/roles（写操作自动附带 CSRF）：读回角色列表含新角色",
+      "expected": "读回角色列表含新角色：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 25ms；角色数 3，含 MAC验收0929角色35125",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
+      "input": "界面路由 /tenant-roles",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /tenant-roles，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /tenant-roles，页面可见 角色，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /tenant-roles；命中文本 ['角色']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 角色与权限 | SUNBIRD | 副窗 | ◈ | 工作区 | 角色与权限 |  | 管理当前企业的业务角色，并将角色分配给本企业用户。 |  | 刷新 | 角色 | 新建角色 | MAC验收0929角色 | 0 项权限 | MAC验",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "base-rbac",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-rbac/macos/result.png",
+      "sha256": "0169747ae76f7fb24c948bea91bc853acfaaf1b77a2765ab499a7355dc031059",
+      "visual_review": "accepted",
+      "visible_result": "「角色与权限」页：角色列表含 MAC验收0929角色（新建），右侧权限勾选项（执行 ETL / 查看数据对接 / 回滚 ETL / 管理 ETL 目标 等）与「保存角色」、用户角色分配区。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "base-rbac",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-rbac/macos/operation.webm",
+      "sha256": "b4e0597acad57a2c0b3aead3e33c7fca6e7e15524ae3a02d1857be85f2466632",
+      "visual_review": "accepted",
+      "visible_result": "录屏为角色与权限页，新建角色出现在左侧列表并被选中。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-rbac/macos/run.log",
+    "sha256": "d12c4fa5351e76511688c6ba56177b64f42e4273473bac99e0a3aa3c9a8b0773",
+    "bytes": 1356
+  }
+}

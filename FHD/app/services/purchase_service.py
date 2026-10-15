@@ -20,7 +20,13 @@ from app.db.models import (
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.inventory_service import InventoryService
-from app.services.purchase_service_supplier_mixin import PurchaseSupplierMixin
+from app.services.purchase_service_supplier_mixin import (
+    DATE_FIELDS,
+    PurchaseSupplierMixin,
+    as_date,
+    items_without_product,
+    page_result,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -67,13 +73,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 )
                 result.append(order_dict)
 
-            return {
-                "success": True,
-                "data": result,
-                "total": total,
-                "page": page,
-                "per_page": per_page,
-            }
+            return page_result(result, total, page, per_page)
 
     def get_purchase_order(self, order_id: int) -> dict[str, Any]:
         with get_db() as db:
@@ -93,6 +93,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
             return {"success": True, "data": order_dict}
 
     def create_purchase_order(self, data: dict[str, Any]) -> dict[str, Any]:
+        if invalid := items_without_product(data.get("items") or []):
+            return invalid
         with get_db() as db:
             try:
                 order_no = data.get("order_no") or self._generate_order_no()
@@ -102,8 +104,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     order_no=order_no,
                     supplier_id=data.get("supplier_id"),
                     warehouse_id=data.get("warehouse_id"),
-                    order_date=data.get("order_date", datetime.now().date()),
-                    delivery_date=data.get("delivery_date"),
+                    order_date=as_date(data.get("order_date"), datetime.now().date()),
+                    delivery_date=as_date(data.get("delivery_date")),
                     total_amount=0,
                     status="draft",
                     remark=data.get("remark"),
@@ -168,6 +170,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 return {"success": False, "message": str(e)}
 
     def update_purchase_order(self, order_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        if invalid := items_without_product(data.get("items") or []):
+            return invalid
         with get_db() as db:
             try:
                 order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
@@ -180,6 +184,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 for key, value in data.items():
                     if key == "items":
                         continue
+                    if key in DATE_FIELDS:
+                        value = as_date(value)
                     if hasattr(order, key):
                         setattr(order, key, value)
                 order.updated_at = datetime.now()
@@ -279,6 +285,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 return {"success": False, "message": str(e)}
 
     def create_purchase_inbound(self, data: dict[str, Any]) -> dict[str, Any]:
+        if invalid := items_without_product(data.get("items") or []):
+            return invalid
         with get_db() as db:
             try:
                 inbound_no = data.get("inbound_no") or self._generate_inbound_no()
@@ -290,7 +298,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     order_id=data.get("order_id"),
                     supplier_id=data.get("supplier_id"),
                     warehouse_id=data.get("warehouse_id"),
-                    inbound_date=data.get("inbound_date", datetime.now().date()),
+                    inbound_date=as_date(data.get("inbound_date"), datetime.now().date()),
                     total_amount=0,
                     status="draft",
                     handler=data.get("handler"),
@@ -341,12 +349,17 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                         reference_id=inbound.id,
                         operator=data.get("handler"),
                         remark=f"采购入库单: {inbound_no}",
+                        session=db,
                     )
                     if not result.get("success"):
-                        logger.warning("库存入库失败: %s", result.get("message"))
+                        raise ValueError(result.get("message") or "库存入库失败")
 
                 inbound.total_amount = Decimal(str(total_amount))
                 inbound.status = "completed"
+                order_id = data.get("order_id")
+                if order_id is not None:
+                    self._update_order_received_quantity(db, int(order_id))
+
                 db.commit()
                 db.refresh(inbound)
 
@@ -381,10 +394,6 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                             logger.warning("应付账款记账失败: %s", journal_result.get("message"))
                     except RECOVERABLE_ERRORS:  # noqa: BLE001 - 记账失败不阻断入库主流程
                         logger.warning("应付账款记账失败", exc_info=True)
-
-                order_id = data.get("order_id")
-                if order_id is not None:
-                    self._update_order_received_quantity(db, int(order_id))
 
                 self._publish_event(
                     "inventory.inbound_created",
@@ -477,13 +486,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 )
                 result.append(inbound_dict)
 
-            return {
-                "success": True,
-                "data": result,
-                "total": total,
-                "page": page,
-                "per_page": per_page,
-            }
+            return page_result(result, total, page, per_page)
 
 
 # NEURO-DDD: 为 Services 层类添加 instrumentation

@@ -222,7 +222,11 @@ export async function reportPendingUpdateInstallation(input: {
     `http://127.0.0.1:${input.backendPort}/api/desktop/update-install-receipts/report`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // 本机桌面调用无浏览器 CSRF Cookie；路由层仍校验桌面模式与回环来源。
+        'X-XCAGI-Desktop-Local': '1',
+      },
       body: JSON.stringify({
         installation_id: pending.installationId,
         idempotency_key: pending.idempotencyKey,

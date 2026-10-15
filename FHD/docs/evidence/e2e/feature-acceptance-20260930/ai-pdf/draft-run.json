@@ -1,0 +1,78 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ai-pdf",
+ "name": "PDF 生成与解析",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 5,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/mod/pdf-generate-employee/employees/pdf-generate-employee/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/pdf-generate-employee/employees/pdf-generate-employee/status（写操作自动附带 CSRF）：PDF 生成员工就绪",
+   "expected": "PDF 生成员工就绪：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 14ms；{\"employee_id\": \"pdf-generate-employee\", \"status\": \"ready\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/mod/pdf-generate-employee/employees/pdf-generate-employee/run 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790713080\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSE",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/pdf-generate-employee/employees/pdf-generate-employee/run（写操作自动附带 CSRF）：由文本生成 PDF",
+   "expected": "由文本生成 PDF：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 24ms；ok=True；pdf=/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790713080/outputs/generated_document.pdf",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "回读：解析刚生成的 PDF 文本",
+   "actions": "运行 pdf-full-read-employee 解析 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790713080/outputs/generated_document.pdf，再读取产出文本",
+   "expected": "解析文本含原文「太阳鸟」「包装盒」",
+   "observed": "解析 document_full.txt 文本：'MAC验收0929 汇报\\n客户：太阳鸟\\n产品：包装盒 数量：24'",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "POST /api/mod/pdf-full-read-employee/employees/pdf-full-read-employee/run 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790713080\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/pdf-full-read-employee/employees/pdf-full-read-employee/run（写操作自动附带 CSRF）：边界：缺少 file_path 时如实报错",
+   "expected": "ok=false 且提示缺少 file_path",
+   "observed": "HTTP 200 11ms；\"缺少 file_path：请上传或指定要处理的文件。\"",
+   "result": "passed"
+  },
+  {
+   "id": "M5",
+   "input": "界面路由 /mod/xcagi-office-employee-pack-bridge/tools",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-office-employee-pack-bridge/tools，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-office-employee-pack-bridge/tools，页面可见 工具表，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 ['工具表']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管理 | 系统设",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ai-pdf",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-pdf/macos/result.png",
+   "sha256": "f03fb0c52adc5260b1e6ce32597403d4c31bb5222b7b45294dc690fc1e291d07",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ai-pdf",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-pdf/macos/operation.webm",
+   "sha256": "23baf5b8e0e76fbd2ae34442c0e6ddf36e9a75603e387e8258497aa37025845b",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-pdf/macos/run.log",
+  "sha256": "a71c55fbcdbf44bf851ade88789b5207f45094735b989e7b47b8aaa2ef691cad",
+  "bytes": 1596
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

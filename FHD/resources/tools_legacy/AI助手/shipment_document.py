@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Dict, List
 
 import openpyxl
+from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import Alignment, Border, Font, Side
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
@@ -181,14 +182,15 @@ class ShipmentDocumentGenerator:
 
     # 使用绝对路径，确保无论从哪个目录启动都能正确找到文件
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    TEMPLATE_FOLDER = SCRIPT_DIR
     OUTPUT_FOLDER = os.path.join(SCRIPT_DIR, "outputs")
     DEFAULT_TEMPLATE = "尹玉华1.xlsx"
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str = None, output_dir: str = None):
         """初始化"""
         # 获取脚本所在目录
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        if output_dir is not None:
+            self.OUTPUT_FOLDER = os.path.abspath(output_dir)
         logger.info(f"发货单生成器运行目录: {self.base_dir}")
 
         # 使用当前目录中的数据库文件
@@ -203,8 +205,6 @@ class ShipmentDocumentGenerator:
 
     def _find_template(self, template_name):
         """查找模板文件"""
-        import os
-
         # 尝试多个可能的模板目录（使用绝对路径）
         possible_dirs = [
             # 相对于AI助手目录的templates目录
@@ -296,6 +296,7 @@ class ShipmentDocumentGenerator:
                     total_quantity_tins=total_quantity_tins,
                     total_amount=total_amount,
                     order_text=order_text,
+                    order_date=parsed_data.get("date"),
                 )
             else:
                 logger.warning(f"模板文件不存在: {template_file}，创建新文档")
@@ -311,8 +312,12 @@ class ShipmentDocumentGenerator:
                     total_quantity_tins,
                     total_amount,
                     order_text,
+                    order_date=parsed_data.get("date"),
                 )
 
+            for sheet in list(workbook.worksheets):
+                if sheet is not worksheet:
+                    workbook.remove(sheet)
             # 6. 保存文档
             output_filename = self._generate_output_filename(order_number)
             output_path = os.path.join(self.OUTPUT_FOLDER, output_filename)
@@ -347,6 +352,45 @@ class ShipmentDocumentGenerator:
                 except BOUNDARY_ERRORS:
                     pass
 
+    @staticmethod
+    def _write_cell(worksheet, row: int, column: int, value) -> bool:
+        """写入可写单元格；合并区域内非左上角单元格只读，跳过而不中断生成。
+
+        客户自带的送货单模板通常把「产品型号」列与「人民币大写」区域设为合并单元格，
+        openpyxl 对合并区内的 MergedCell 赋值会抛 AttributeError，进而让整单生成 500。
+        """
+        cell = worksheet.cell(row=row, column=column)
+        if isinstance(cell, MergedCell):
+            logger.warning("模板合并单元格只读，跳过写入 %s（值为 %s）", cell.coordinate, value)
+            return False
+        cell.value = value
+        return True
+
+    @staticmethod
+    def _find_column_by_label(worksheet, labels: tuple) -> int | None:
+        """按表头词条定位列号（用于合并版式下按列名写合计）。"""
+        for row in range(1, min(worksheet.max_row, 10) + 1):
+            for column in range(1, worksheet.max_column + 1):
+                raw = worksheet.cell(row=row, column=column).value
+                text = str(raw or "").replace(" ", "")
+                if text and any(label in text for label in labels):
+                    return column
+        return None
+
+    def _write_total_by_header(self, worksheet, labels: tuple, row: int, value) -> bool:
+        """合并版式下按表头列写合计；模板自带 SUM 公式时不覆盖。"""
+        column = self._find_column_by_label(worksheet, labels)
+        if not column:
+            return False
+        cell = worksheet.cell(row=row, column=column)
+        if isinstance(cell, MergedCell):
+            return False
+        existing = cell.value
+        if isinstance(existing, str) and existing.startswith("="):
+            return False
+        cell.value = value
+        return True
+
     def _fill_from_template(
         self,
         worksheet,
@@ -357,14 +401,11 @@ class ShipmentDocumentGenerator:
         total_quantity_tins: int,
         total_amount: float,
         order_text: str,
+        order_date: str = None,
     ):
         """使用模板填充数据 - 匹配尹玉华1.xlsx原模板格式"""
-        # 手动格式化日期以避免locale编码问题
-        now = datetime.now()
-        year = now.year
-        month = now.month
-        day = now.day
-        today = f"{year}年{month}月{day}日"
+        now = datetime.fromisoformat(order_date) if order_date else datetime.now()
+        today = f"{now.year}年{now.month}月{now.day}日"
 
         # 第2行：购货单位、联系人、日期、订单编号（合并单元格A2:J2）
         header_cell = worksheet.cell(row=2, column=1)
@@ -373,7 +414,7 @@ class ShipmentDocumentGenerator:
         )
         unit_name = purchase_unit.name if purchase_unit and purchase_unit.name else "未指定单位"
         header_info = f"购货单位：{unit_name}       联系人：{contact}              {today}      订单编号：{order_number}"
-        header_cell.value = header_info
+        self._write_cell(worksheet, header_cell.row, header_cell.column, header_info)
         logger.info(f"填写购买单位信息: {unit_name}, 联系人: {contact}")
 
         # 填充产品数据（从第4行开始）
@@ -382,44 +423,51 @@ class ShipmentDocumentGenerator:
             row = start_row + i
 
             # 产品型号 (A列, A-C合并)
-            worksheet.cell(row=row, column=1, value=product.get("model_number", ""))
+            self._write_cell(worksheet, row, 1, product.get("model_number", ""))
 
             # 产品名称 (D列)
-            worksheet.cell(row=row, column=4, value=product.get("name", ""))
+            self._write_cell(worksheet, row, 4, product.get("name", ""))
 
             # 数量/件 (E列) - 桶数
-            worksheet.cell(row=row, column=5, value=product.get("quantity_tins", 0))
+            self._write_cell(worksheet, row, 5, product.get("quantity_tins", 0))
 
             # 规格/KG (F列) - 每桶的KG数
-            worksheet.cell(row=row, column=6, value=product.get("tin_spec", 0))
+            self._write_cell(worksheet, row, 6, product.get("tin_spec", 0))
 
             # 数量/KG (G列) - 直接填入数值
             kg_value = float(product.get("quantity_kg", 0))
             if kg_value > 0:
-                worksheet.cell(row=row, column=7, value=kg_value)
+                self._write_cell(worksheet, row, 7, kg_value)
 
             # 单价/元 (H列)
             unit_price = float(product.get("unit_price", 0))
             if unit_price > 0:
-                worksheet.cell(row=row, column=8, value=unit_price)
+                self._write_cell(worksheet, row, 8, unit_price)
 
             # 金额/元 (I列) - 直接填入数值
             amount = float(product.get("amount", 0))
             if amount > 0:
-                worksheet.cell(row=row, column=9, value=amount)
+                self._write_cell(worksheet, row, 9, amount)
             elif kg_value > 0 and unit_price > 0:
-                worksheet.cell(row=row, column=9, value=round(kg_value * unit_price, 2))
-
-            # 备注 (J列) - 保持空白
+                self._write_cell(worksheet, row, 9, round(kg_value * unit_price, 2))
 
         # 第15行：合计行的数量/件 (E15公式保持SUM(E4:E14))
-        if total_quantity_tins > 0:
-            worksheet.cell(row=15, column=5, value=total_quantity_tins)
+        if total_quantity_tins > 0 and not self._write_cell(
+            worksheet, 15, 5, total_quantity_tins
+        ):
+            self._write_total_by_header(worksheet, ("数量/件", "数量"), 15, total_quantity_tins)
+
+        # 第15行：数量/KG 合计与「合计」标签——模板行被清空后按表头列补回，
+        # 保证客户拿到的单据既能看到总公斤数，也保留模板原有的合计行标识。
+        if total_quantity_kg > 0:
+            self._write_total_by_header(worksheet, ("数量/KG", "数量/kg"), 15, total_quantity_kg)
+        if not worksheet.cell(row=15, column=1).value:
+            self._write_cell(worksheet, 15, 1, "合计")
 
         # 第16行：金额区域
         # 大写人民币在A16，金额在I16（保持公式SUM(I4:I14)）
-        if total_amount > 0:
-            worksheet.cell(row=16, column=4, value=total_amount)
+        if total_amount > 0 and not self._write_cell(worksheet, 16, 4, total_amount):
+            self._write_total_by_header(worksheet, ("金额",), 16, total_amount)
 
     def _create_default_document(
         self,
@@ -431,14 +479,11 @@ class ShipmentDocumentGenerator:
         total_quantity_tins: int,
         total_amount: float,
         order_text: str,
+        order_date: str = None,
     ):
         """创建默认文档格式"""
-        # 手动格式化日期以避免locale编码问题
-        now = datetime.now()
-        year = now.year
-        month = now.month
-        day = now.day
-        today = f"{year}年{month}月{day}日"
+        now = datetime.fromisoformat(order_date) if order_date else datetime.now()
+        today = f"{now.year}年{now.month}月{now.day}日"
 
         # 设置列宽
         worksheet.column_dimensions["A"].width = 15
@@ -571,50 +616,9 @@ class ShipmentDocumentGenerator:
         return unit
 
     def _generate_order_number(self) -> str:
-        """生成订单编号 - 格式: 26-010003A (年-月-日(00)-序号)"""
-        now = datetime.now()
+        from app.infrastructure.database.shipment_order_numbers import reserve_order_number
 
-        # 格式: 26-月日序号+数量编号
-        # 例如: 26-010003A = 2026年1月第3个订单数量A
-        year = now.strftime("%y")  # 26
-        month = now.strftime("%m")  # 01
-        day = "00"  # 日固定为00
-
-        # 获取当天订单数量作为序号基数
-        sequence = self._get_daily_sequence(now)
-
-        # 根据订单数量确定数量编号
-        quantity_code = self._get_quantity_code()
-
-        return f"{year}-{month}{day}{sequence:03d}{quantity_code}"
-
-    def _get_daily_sequence(self, date: datetime) -> int:
-        """获取当天订单序号"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-
-            date_str = date.strftime("%Y-%m-%d")
-            cursor.execute(
-                """
-                SELECT COUNT(*) FROM shipment_records
-                WHERE DATE(created_at) = ?
-            """,
-                (date_str,),
-            )
-
-            count = cursor.fetchone()[0]
-            conn.close()
-
-            return count + 1
-
-        except BOUNDARY_ERRORS as e:
-            logger.error(f"获取订单序号失败: {e}")
-            return 1
-
-    def _get_quantity_code(self) -> str:
-        """获取数量编号 (A=小, B=中, C=大, D=特大)"""
-        return "A"  # 默认A，后续可根据实际数量调整
+        return reserve_order_number(output_dir=self.OUTPUT_FOLDER)["order_number"]
 
     def _prepare_products(self, parsed_data: Dict, order_number: str) -> List[Dict]:
         """准备产品数据 - 支持多产品"""
@@ -670,303 +674,3 @@ class ShipmentDocumentGenerator:
                 templates.append(filename)
 
         return templates
-
-
-class DocumentAPIGenerator:
-    """文档API生成器"""
-
-    def __init__(self, db_path: str = None):
-        self.generator = ShipmentDocumentGenerator(db_path)
-        self.excel_sync_manager = None
-        self.excel_sync_enabled = False
-
-    def enable_excel_sync(self, excel_path: str, worksheet_name: str = "25出货"):
-        """启用Excel出货记录同步"""
-        try:
-            from shipment_excel_sync import FixedTemplateSyncManager
-
-            self.excel_sync_manager = FixedTemplateSyncManager(excel_path, worksheet_name)
-            self.excel_sync_enabled = True
-            logger.info(f"已启用Excel同步: {excel_path}, 工作表: {worksheet_name}")
-            return True
-        except BOUNDARY_ERRORS as e:
-            logger.error(f"启用Excel同步失败: {e}")
-            return False
-
-    def disable_excel_sync(self):
-        """禁用Excel出货记录同步"""
-        self.excel_sync_manager = None
-        self.excel_sync_enabled = False
-        logger.info("已禁用Excel同步")
-
-    def sync_to_excel(self, doc, parsed_data: Dict) -> bool:
-        """同步发货数据到Excel出货记录"""
-        if not self.excel_sync_enabled or not self.excel_sync_manager:
-            logger.warning("Excel同步未启用或管理器未初始化")
-            return False
-
-        try:
-            # 确保doc是字典
-            if hasattr(doc, "to_dict"):
-                doc = doc.to_dict()
-
-            # 提取订单信息
-            order_no = doc.get("order_number", "")
-            order_date = doc.get("order_date", "")
-            if not order_date:
-                order_date = datetime.now().strftime("%Y-%m-%d")
-
-            # 提取产品列表
-            products = parsed_data.get("products", [])
-
-            # 兼容单产品结构
-            if not products:
-                # 尝试从旧格式提取产品
-                product_name = parsed_data.get("product_name", "")
-                if product_name:
-                    products = [
-                        {
-                            "name": product_name,
-                            "model_number": parsed_data.get("model_number", ""),
-                            "quantity_tins": parsed_data.get("quantity_tins", 0),
-                            "tin_spec": parsed_data.get("tin_spec", 10),
-                            "unit_price": parsed_data.get("unit_price", 0),
-                        }
-                    ]
-                else:
-                    logger.warning("未找到产品数据")
-                    return False
-
-            logger.info(f"准备同步 {len(products)} 个产品到Excel")
-
-            # 提取单价映射
-            unit_price_map = {}
-            for product in products:
-                name = product.get("name", "")
-                price = product.get("unit_price", 0)
-                if name and price:
-                    unit_price_map[name] = price
-
-            # 调用同步
-            success = self.excel_sync_manager.insert_records(
-                order_no, order_date, products, unit_price_map
-            )
-            logger.info(f"Excel同步结果: {success}")
-            return success
-
-        except BOUNDARY_ERRORS as e:
-            logger.error(f"同步到Excel失败: {e}", exc_info=True)
-            return False
-
-    def parse_and_generate(
-        self,
-        order_text: str,
-        custom_mode: bool = False,
-        number_mode: bool = False,
-        generate_labels: bool = False,
-        enable_excel_sync: bool = None,
-        custom_order_number: str = None,
-    ) -> Dict:
-        """
-        解析订单并生成文档
-        :param order_text: 订单文本
-        :param custom_mode: 是否使用自定义模式
-        :param number_mode: 是否使用编号模式
-        :param generate_labels: 是否生成标签
-        :param enable_excel_sync: 是否启用Excel同步（None则使用默认设置）
-        :return: 生成结果
-        """
-        try:
-            # 优先使用同目录 AI 增强解析器
-            from ai_augmented_parser import AIAugmentedShipmentParser
-
-            parser = AIAugmentedShipmentParser(self.generator.db_path)
-        except ImportError:
-            try:
-                # 回退到同目录传统解析器
-                from shipment_parser import ShipmentParser
-
-                parser = ShipmentParser(self.generator.db_path)
-            except ImportError:
-                # 最终兜底：使用 XCAGI 内部解析函数，避免依赖外部 98k 目录
-                logger.warning("未找到本地解析器模块，回退到 XCAGI 内部解析器")
-                from app.application.facades.tools_facade import _parse_order_text
-
-                class _FallbackParsedOrder:
-                    def __init__(self, raw_text: str, parsed: Dict):
-                        self.raw_text = raw_text
-                        self.purchase_unit = str((parsed or {}).get("unit_name") or "")
-                        self.products = list((parsed or {}).get("products") or [])
-                        self.parsed_data = dict(parsed or {})
-
-                    def is_valid(self) -> bool:
-                        return bool(self.products)
-
-                    def to_dict(self) -> Dict:
-                        return {
-                            "purchase_unit": self.purchase_unit,
-                            "products": self.products,
-                            "raw_text": self.raw_text,
-                            "parsed_data": self.parsed_data,
-                            "product_name": (
-                                self.products[0].get("name", "") if self.products else ""
-                            ),
-                            "model_number": (
-                                self.products[0].get("model_number", "") if self.products else ""
-                            ),
-                            "quantity_kg": sum(
-                                float(p.get("quantity_kg", 0) or 0) for p in self.products
-                            ),
-                            "quantity_tins": sum(
-                                int(p.get("quantity_tins", 0) or 0) for p in self.products
-                            ),
-                            "tin_spec": (
-                                float(self.products[0].get("tin_spec", 0) or 0)
-                                if self.products
-                                else 0.0
-                            ),
-                            "unit_price": (
-                                float(self.products[0].get("unit_price", 0) or 0)
-                                if self.products
-                                else 0.0
-                            ),
-                            "amount": sum(float(p.get("amount", 0) or 0) for p in self.products),
-                        }
-
-                class _FallbackParser:
-                    def parse(
-                        self, text: str, custom_mode: bool = False, number_mode: bool = False
-                    ):
-                        parsed = _parse_order_text(text) or {}
-                        if not parsed.get("success"):
-                            return _FallbackParsedOrder(text, {"unit_name": "", "products": []})
-                        return _FallbackParsedOrder(text, parsed)
-
-                parser = _FallbackParser()
-
-        # 1. 解析订单
-        parsed_order = parser.parse(order_text, custom_mode, number_mode)
-
-        if not parsed_order.is_valid():
-            return {
-                "success": False,
-                "message": "无法解析订单信息",
-                "parsed_data": parsed_order.to_dict(),
-            }
-
-        # 2. 获取购买单位信息
-        purchase_unit = None
-        if parsed_order.purchase_unit:
-            purchase_unit = self.generator._get_purchase_unit_info(parsed_order.purchase_unit)
-
-        # 3. 生成文档（使用尹玉华1.xlsx模板）
-        try:
-            doc = self.generator.generate_document(
-                order_text=order_text,
-                parsed_data=parsed_order.to_dict(),
-                purchase_unit=purchase_unit,
-                template_name="尹玉华1.xlsx",
-                custom_order_number=custom_order_number,
-            )
-
-            # 4. 创建发货记录
-            from shipment_parser import ShipmentRecordManager
-
-            manager = ShipmentRecordManager(self.generator.db_path)
-            record_id = manager.create_record(
-                parsed_order, purchase_unit.id if purchase_unit else None
-            )
-
-            # 5. 保存订单到数据库（新增）
-            order_info = None
-            try:
-                from order_manager import OrderManager
-
-                order_manager = OrderManager(self.generator.db_path)
-
-                # 准备订单数据
-                order_data = {
-                    "order_number": doc.order_number,
-                    "purchase_unit": parsed_order.purchase_unit,
-                    "unit_id": purchase_unit.id if purchase_unit else None,
-                    "products": parsed_order.products,
-                    "raw_text": order_text,
-                    "parsed_data": parsed_order.to_dict(),
-                }
-
-                logger.info(f"准备保存订单数据: {order_data}")
-
-                # 保存订单
-                order_info = order_manager.create_order(order_data)
-                logger.info(f"✅ 订单保存成功: {doc.order_number}, 返回数据: {order_info}")
-
-            except BOUNDARY_ERRORS as e:
-                logger.error(f"保存订单到数据库失败: {e}", exc_info=True)
-                order_info = None
-
-            # 6. 同步到Excel出货记录（如果已启用）
-            excel_sync_success = False
-            should_sync = (
-                self.excel_sync_enabled if enable_excel_sync is None else enable_excel_sync
-            )
-            logger.info(
-                f"Excel同步检查: enable_excel_sync参数={enable_excel_sync}, self.excel_sync_enabled={self.excel_sync_enabled}, should_sync={should_sync}, manager存在={self.excel_sync_manager is not None}"
-            )
-            if should_sync and self.excel_sync_manager:
-                logger.info("🚀 开始同步到Excel出货记录...")
-                excel_sync_success = self.sync_to_excel(doc, parsed_order.to_dict())
-                logger.info(f"Excel同步结果: {excel_sync_success}")
-
-            result = {
-                "success": True,
-                "message": "发货单生成成功",
-                "record_id": record_id,
-                "order_id": order_info.get("order_id") if order_info else None,
-                "parsed_data": parsed_order.to_dict(),
-                "document": doc.to_dict(),
-                "purchase_unit": purchase_unit.__dict__ if purchase_unit else None,
-            }
-
-            # 添加Excel同步信息
-            if self.excel_sync_enabled:
-                result["excel_sync"] = {"enabled": True, "success": excel_sync_success}
-
-            return result
-
-        except BOUNDARY_ERRORS as e:
-            logger.error(f"生成发货单失败: {e}")
-            return {
-                "success": False,
-                "message": f"生成发货单失败: {str(e)}",
-                "parsed_data": parsed_order.to_dict(),
-            }
-
-
-if __name__ == "__main__":
-    # 测试文档生成
-    api_gen = DocumentAPIGenerator()
-
-    test_orders = [
-        "蕊芯PU哑光黑面漆20公斤",
-        "蕊芯 PU净味面漆稀释剂 180KG",
-    ]
-
-    print("=== 发货单生成测试（使用尹玉华1.xlsx模板）===\n")
-
-    for order_text in test_orders:
-        print(f"订单: {order_text}")
-        result = api_gen.parse_and_generate(order_text)
-
-        if result["success"]:
-            print("生成成功!")
-            print(f"   文档: {result['document']['filename']}")
-            print(
-                f"   购买单位: {result['purchase_unit']['name'] if result['purchase_unit'] else '未知'}"
-            )
-            print(f"   产品: {result['parsed_data']['product_name']}")
-            print(
-                f"   数量: {result['parsed_data']['quantity_kg']}kg = {result['parsed_data']['quantity_tins']}桶"
-            )
-        else:
-            print(f"失败: {result['message']}")
-        print("-" * 60)

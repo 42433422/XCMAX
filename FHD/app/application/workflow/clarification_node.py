@@ -1,21 +1,12 @@
-"""反问澄清门控（clarification gate）：写/高风险操作参数缺失或歧义时先反问，待用户确认后再执行。
-
-对标 MODstore ``retort_clarification_gate`` 与 LangGraph ``human-in-the-loop`` interrupt：
-
-- 写/高风险节点（``risk == "high"`` 或非幂等）若必填参数缺失，或多候选目标歧义（如同一客户
-  存在多个同名候选），则规划器/服务侧先插入一个"反问节点"。
-- 反问节点执行时**不调用业务工具**，仅产出 ``output`` 含 ``requires_confirmation=true`` 与
-  ``question``，从而暂停工作流（等价 interrupt）。
-- 用户回复后，服务侧用确认答案丰富目标节点参数，再经条件边（``branches`` 依据
-  ``answer_confirmed``）路由回原操作节点继续执行。
-- TTL 防堆积：过期未答的澄清会话被自动取消，避免积压队列。
-
-本模块为自包含实现，仅依赖 ``app.application.workflow.types`` 的 ``WorkflowNode``/``Branch``。
-"""
+"""Detect missing or ambiguous write inputs; lifecycle helpers pause and resume safely."""
 
 from __future__ import annotations
 
 from typing import Any
+
+from app.services.tools_execution.registry import (
+    REQUIRED_PARAMS_BY_TOOL_ACTION as _WRITE_REQUIRED_FALLBACK,
+)
 
 from . import clarification_lifecycle as _lifecycle
 from .types import PlanGraph, WorkflowNode
@@ -28,79 +19,26 @@ make_pending_entry = _lifecycle.make_pending_entry
 resolve_confirmed_target = _lifecycle.resolve_confirmed_target
 sweep_expired = _lifecycle.sweep_expired
 
-# 写/高风险节点必填参数回退表（与 services/tools_execution/registry REQUIRED_PARAMS 对齐，
-# 规避依赖完整 registry 的耦合；调用方可传 tool_registry 覆盖，见 needs_clarification）。
-_WRITE_REQUIRED_FALLBACK: dict[tuple[str, str], list[str]] = {
-    ("customers", "delete"): ["id"],
-    ("customers", "batch_delete"): ["ids"],
-    ("customers", "update"): ["id"],
-    ("products", "delete"): ["id"],
-    ("products", "update"): ["id"],
-    ("products", "batch_delete"): ["ids"],
-    ("materials", "delete"): ["id"],
-    ("materials", "update"): ["id"],
-    ("shipment_records", "delete"): ["id"],
-    ("shipment_records", "update"): ["id"],
-    ("shipment_orders", "delete"): ["id"],
-    ("finance", "delete_transaction"): ["transaction_id"],
-    ("finance", "update_transaction"): ["transaction_id"],
-    ("document_template", "delete"): ["id"],
-    ("document_template", "update"): ["id"],
-    ("inventory", "transfer"): [
-        "product_id",
-        "from_warehouse_id",
-        "to_warehouse_id",
-        "quantity",
-    ],
-    ("inventory", "stock_in"): ["product_id", "warehouse_id", "quantity"],
-    ("inventory", "stock_out"): ["product_id", "warehouse_id", "quantity"],
-    ("business_db", "write"): ["entity", "operation", "payload"],
-    # ERP 工具（吸收 Odoo 18，Task 5/6）
-    ("sales", "quote"): ["customer_id", "items"],
-    ("sales", "confirm"): ["order_id"],
-    ("sales", "deliver"): ["order_id"],
-    ("sales", "invoice"): ["order_id"],
-    ("sales", "payment"): ["order_id", "amount"],
-    ("sales", "cancel"): ["order_id"],
-    ("finance", "journal_entry_create"): ["lines"],
-}
-
-
-def _is_write_or_high_risk(node: WorkflowNode) -> bool:
-    return node.risk == "high" or not node.idempotent
-
 
 def _action_required(node: WorkflowNode, tool_registry: dict[str, Any] | None) -> list[str]:
-    """从 tool_registry 的动作元信息取 required_params；缺失时回退到本地表。"""
-    if isinstance(tool_registry, dict):
-        spec = tool_registry.get(node.tool_id)
-        if isinstance(spec, dict):
-            actions = spec.get("actions")
-            if isinstance(actions, dict):
-                meta = actions.get(node.action)
-                if isinstance(meta, dict) and isinstance(meta.get("required_params"), list):
-                    return [str(x) for x in meta["required_params"]]
+    meta = tool_registry
+    for key in (node.tool_id, "actions", node.action):
+        meta = meta.get(key) if isinstance(meta, dict) else None
+    if isinstance(meta, dict) and isinstance(meta.get("required_params"), list):
+        return [str(x) for x in meta["required_params"]]
     return list(_WRITE_REQUIRED_FALLBACK.get((node.tool_id, node.action), []))
 
 
 def _missing_fields(params: dict[str, Any], required: list[str]) -> list[str]:
-    missing = []
-    for key in required:
-        value = params.get(key)
-        if value is None:
-            missing.append(key)
-            continue
-        if isinstance(value, str) and not value.strip():
-            missing.append(key)
-            continue
-        if isinstance(value, list) and len(value) == 0:
-            missing.append(key)
-            continue
-    return missing
-
-
-def _first_required(node: WorkflowNode, required: list[str]) -> str:
-    return required[0] if required else "target"
+    return [
+        key
+        for key in required
+        if params.get(key) is None
+        or isinstance(params.get(key), str)
+        and not params[key].strip()
+        or isinstance(params.get(key), list)
+        and not params[key]
+    ]
 
 
 def _build_missing_question(node: WorkflowNode, missing: list[str]) -> str:
@@ -127,17 +65,12 @@ def needs_clarification(
     plan: PlanGraph,
     tool_registry: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """对写/高风险节点检测"必填缺失 / 多候选歧义"，返回需澄清的字段/问题列表。
-
-    返回空列表表示无需澄清；每个元素为澄清描述：
-    ``node_id`` / ``tool_id`` / ``action`` / ``reason``（missing_required | ambiguous_target）
-    / ``field`` / ``question`` / 可选 ``candidates`` / ``missing_fields``。
-    """
+    """Detect missing write inputs and ambiguous targets before execution."""
     items: list[dict[str, Any]] = []
     for node in plan.nodes or []:
         if node.tool_id == "clarify":
             continue
-        if not _is_write_or_high_risk(node):
+        if node.risk != "high" and node.idempotent:
             continue
         params = node.params or {}
         required = _action_required(node, tool_registry)
@@ -186,7 +119,7 @@ def needs_clarification(
                     "tool_id": node.tool_id,
                     "action": node.action,
                     "reason": "ambiguous_target",
-                    "field": _first_required(node, required) or "id",
+                    "field": (required[0] if required else "target") or "id",
                     "candidates": general_candidates[:20],
                     "question": _build_ambiguous_question(node, general_candidates),
                 }
@@ -194,6 +127,18 @@ def needs_clarification(
             continue
 
         missing = _missing_fields(params, required)
+        from app.application.shipment_inputs import missing_shipment_call_fields
+
+        missing += missing_shipment_call_fields(node.tool_id, node.action, params)
+        missing = list(dict.fromkeys(missing))
+        if (node.tool_id, node.action) == ("inventory", "stock_in"):
+            from app.application.inventory_inputs import missing_stock_in_fields
+
+            missing = missing_stock_in_fields(params)
+        if node.tool_id == "sales" and node.action in {"quote", "create_order"}:
+            from app.application.sales_quote_inputs import missing_quote_fields
+
+            missing = missing_quote_fields(params)
         if missing:
             items.append(
                 {
@@ -209,10 +154,6 @@ def needs_clarification(
     return items
 
 
-# ---------------------------------------------------------------------------
-# ERP 业务澄清（吸收 Odoo 18 业务深度，Task 6）
-# ---------------------------------------------------------------------------
-
 # 多单位换算：斤/公斤/吨/克/千克 等常见重量单位，出现多个单位字面量即视为换算歧义。
 _ERP_UNIT_RE = "斤|公斤|千克|克|吨|Kg|kg|KG|g|G|件|个|箱|包|瓶|米|卷"
 
@@ -223,18 +164,7 @@ def detect_erp_clarification(
     user_message: str = "",
     context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """对 ERP 业务场景做"业务澄清"检测，返回需反问的描述列表。
-
-    覆盖（吸收 Odoo 18 业务深度）：
-    - ``multi_unit`` 多单位换算歧义：同一数量出现多个单位字面量（如"出 500 斤"应确认是
-      斤/KG 还是按产品多单位换算），不直接执行。
-    - ``report_scope`` 报表口径缺失：销售/库存/采购报表未给日期范围或分组口径。
-    - ``reversal_confirm`` 冲销/盘点确认：冲销凭证、盘点调整、作废等破坏性操作需二次确认。
-    - ``batch_scope`` 批量操作范围：批量删除/导入未指明范围或数量过大时需确认。
-
-    返回元素：``node_id`` / ``reason`` / ``field`` / ``question`` / ``severity``。
-    复用 ``build_clarify_node`` 与 TTL 防堆积（调用方插入反问节点与 pending entry）。
-    """
+    """Detect unit ambiguity, missing report/batch scope and destructive confirmations."""
     items: list[dict[str, Any]] = []
     message = str(user_message or "").strip()
     ctx = context or {}
@@ -269,9 +199,7 @@ def detect_erp_clarification(
     for node in plan.nodes or []:
         if node.tool_id == "reports" and node.action in (
             "sales_summary",
-            "inventory_summary",
             "purchase_summary",
-            "dashboard",
         ):
             params = node.params or {}
             if not params.get("start_date") or not params.get("end_date"):
@@ -338,7 +266,6 @@ def detect_erp_clarification(
                     )
                 )
 
-    # 5) ERP 业务确认（Task 6：盘点差异复审 / 凭证冲销确认 / 信用额度超限）
     for node in plan.nodes or []:
         if node.tool_id == "clarify":
             continue
@@ -410,11 +337,7 @@ def _erp_clar(
 
 
 def _has_multi_unit_text(value: Any) -> bool:
-    """判断文本是否含"数量+单位"（斤/KG/吨等）的量词表达。
-
-    出现数字后紧跟单位（如"500 斤"、"出 500 斤"）即视为存在单位换算歧义——Agent 需确认
-    实际操作单位与换算口径，避免把斤当公斤执行。多个单位字面量同样命中。
-    """
+    """Detect quantity-and-unit expressions."""
     import re
 
     text = str(value or "")

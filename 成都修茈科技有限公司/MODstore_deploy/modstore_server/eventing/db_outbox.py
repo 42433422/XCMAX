@@ -188,16 +188,18 @@ def _session_scope() -> Iterator[Session]:
         session.close()
 
 
-def fetch_pending(limit: int = 50) -> list[OutboxRecord]:
-    sf = get_session_factory()
-    with sf() as session:
-        rows = (
-            session.query(OutboxEvent)
-            .filter(OutboxEvent.status == "pending")
-            .order_by(OutboxEvent.id.asc())
-            .limit(max(1, int(limit)))
-            .all()
+def fetch_pending(
+    limit: int = 50, *, aggregate_prefix: str = "", include_dispatched: bool = False
+) -> list[OutboxRecord]:
+    with get_session_factory()() as session:
+        query = session.query(OutboxEvent).filter(
+            OutboxEvent.status.in_(["pending", "dispatched"] if include_dispatched else ["pending"])
         )
+        if aggregate_prefix:
+            query = query.filter(
+                OutboxEvent.aggregate_id.startswith(aggregate_prefix, autoescape=True)
+            )
+        rows = query.order_by(OutboxEvent.id.asc()).limit(max(1, int(limit))).all()
         return [_row_to_record(r) for r in rows]
 
 
@@ -271,7 +273,12 @@ def drain(
             except RECOVERABLE_ERRORS:
                 logger.exception("neuro_bus publish failed event_id=%s", record.event_id)
         try:
-            result = dispatcher(record.to_envelope())
+            if record.event_name == "ops.intake.customer_ticket":
+                from modstore_server.customer_issue_intake import dispatch_issue_event
+
+                result = dispatch_issue_event(record.to_envelope())
+            else:
+                result = dispatcher(record.to_envelope())
         except RECOVERABLE_ERRORS as exc:
             logger.exception("outbox dispatcher raised event_id=%s", record.event_id)
             mark_failed(

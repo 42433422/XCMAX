@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-csv",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "5851e17493b5edff8261de7ed60b064f82a8c7ad90839ff322006b4bd0b1fbf7",
+  "visible_content": "CSV 生成员工由文本生成 .csv，CSV 读取员工解析后写出 JSON，经界面读取接口读回含「太阳鸟」「包装盒」。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-csv/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-csv/macos/result.png"
+}

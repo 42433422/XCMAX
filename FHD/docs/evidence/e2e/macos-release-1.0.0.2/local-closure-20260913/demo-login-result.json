@@ -1,0 +1,19 @@
+{
+  "checked_at": "2026-09-13T03:36:21.267442+00:00",
+  "account": "xcagi-enterprise-demo",
+  "credentials_source": "FHD/config/surface_audit_demo_account.json",
+  "installed_version": "1.0.0.1",
+  "real_market_auth_accepted": true,
+  "ui_result": "stalled at signing in; login not accepted as complete",
+  "backend_evidence": [
+    "    | AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'",
+    "AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'",
+    "[stderr] INFO:app.fastapi_routes.market_account:market auth normalized base=https://xiu-ci.com success=True is_enterprise=True is_market_admin=False username=xcagi-enterprise-demo raw_keys=['access_token', 'account_state', 'account_tier', 'activation_source', 'active_plan_id', 'desktop_access', 'next_action', 'ok', 'refresh_token', 'user'] me_keys=['account_state', 'account_tier', 'activation_source', 'active_plan_id', 'avatar_url', 'company', 'created_at', 'desktop_access', 'email', 'experience', 'id', 'is_admin', 'is_enterprise', 'level_profile', 'next_action', 'username']",
+    "INFO:app.application.enterprise_login_flow:enterprise market-first login completed",
+    "    | AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'",
+    "AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'",
+    "    | AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'",
+    "AttributeError: module 'xcagi_attendance_industry_attendance_routes' has no attribute 'register'"
+  ],
+  "password_recorded": false
+}

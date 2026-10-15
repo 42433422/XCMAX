@@ -21,6 +21,7 @@ const mockContainer = vi.hoisted(() => ({
   updateCompanyBrand: vi.fn(),
   installHostFoundation: vi.fn(),
   installMod: vi.fn(),
+  installPrivateMod: vi.fn(),
   installIndustrySeed: vi.fn(),
   installCustomerDeliverySeed: vi.fn(),
   autoOnboardWorkflowEmployeesFromMods: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock('@/api/auth', () => ({ authApi: { getSubscriptionStatus: vi.fn().mockRes
 vi.mock('@/api/modStore', () => ({
   installHostFoundation: mockContainer.installHostFoundation,
   installMod: mockContainer.installMod,
+  installPrivateMod: mockContainer.installPrivateMod,
   installIndustrySeed: mockContainer.installIndustrySeed,
   installCustomerDeliverySeed: mockContainer.installCustomerDeliverySeed,
 }))
@@ -101,10 +103,14 @@ vi.mock('@/composables/useTutorialCatalog', () => ({
   useTutorialCatalog: () => mockContainer.tutorialState,
 }))
 
-vi.mock('@/utils/hostPackOnboardingGate', () => ({
-  invalidateHostPackCompletionCache: mockContainer.invalidateHostPackCompletionCache,
-  markHostPackSkippedThisSession: mockContainer.markHostPackSkippedThisSession,
-}))
+vi.mock('@/utils/hostPackOnboardingGate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/hostPackOnboardingGate')>()
+  return {
+    ...actual,
+    invalidateHostPackCompletionCache: mockContainer.invalidateHostPackCompletionCache,
+    markHostPackSkippedThisSession: mockContainer.markHostPackSkippedThisSession,
+  }
+})
 
 vi.mock('@/utils/workspacePrefsApi', () => ({
   patchWorkspacePrefs: mockContainer.patchWorkspacePrefs,
@@ -309,6 +315,7 @@ async function mountComponent(
     mockContainer.updateCompanyBrand.mockImplementation(async (name: string) => ({ success: true, company_brand: name, tenant_name: name }))
     mockContainer.installHostFoundation.mockResolvedValue({ success: true, message: '' })
     mockContainer.installMod.mockResolvedValue({ success: true, message: '' })
+    mockContainer.installPrivateMod.mockResolvedValue({ success: true, message: '' })
     mockContainer.installIndustrySeed.mockResolvedValue({ success: true, message: '' })
     mockContainer.installCustomerDeliverySeed.mockResolvedValue({ success: true, message: '' })
     mockContainer.autoOnboardWorkflowEmployeesFromMods.mockResolvedValue([])
@@ -613,11 +620,11 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false })
   })
 
-  it('runBootstrap：industryMissing 时调用 installIndustrySeed', async () => {
+  it.each([false, true])('基础线就绪=%s 时安装缺失的已选行业包', async (ready) => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({
-        baseline_ready: false,
+        baseline_ready: ready,
         missing_industry_mod_ids: ['ind-1'],
       }),
     })
@@ -625,7 +632,7 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     await flushPromises()
     mockContainer.installIndustrySeed.mockResolvedValue({ success: true, message: '' })
     mockContainer.installIndustrySeed.mockClear()
-    mockBaselineForInstallation(mockContainer.installIndustrySeed, createBaselinePlan({ baseline_ready: false, missing_industry_mod_ids: ['ind-1'] }))
+    mockBaselineForInstallation(mockContainer.installIndustrySeed, createBaselinePlan({ baseline_ready: ready, missing_industry_mod_ids: ['ind-1'] }))
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
@@ -688,25 +695,26 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     expect(mockContainer.appAlert.mock.calls[0][0]).toContain('行业包异常')
   })
 
-  it('runBootstrap：customMissing 时调用 installMod 与 autoOnboard', async () => {
+  it.each([['custom-1', undefined], ['taiyangniao-pro', 'sunbird-attendance-custom']])('runBootstrap：客户包 %s 安装实际运行包', async (modId, runtimeModId) => {
+    const missing = createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: [modId], groups: [{ id: 'custom', title: '客户包', hint: '', items: [{ mod_id: modId, runtime_mod_id: runtimeModId, label: '客户包', tier: 'account_custom', required: true, installed: false }] }] })
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        missing_account_custom_mod_ids: ['custom-1'],
-      }),
+      baseline: missing,
     })
     await flushPromises()
     await flushPromises()
     mockContainer.installMod.mockClear()
+    mockContainer.installPrivateMod.mockClear()
+    const install = runtimeModId ? mockContainer.installPrivateMod : mockContainer.installMod
     mockContainer.autoOnboardWorkflowEmployeesFromMods.mockClear()
-    mockBaselineForInstallation(mockContainer.installMod, createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] }))
+    mockBaselineForInstallation(install, missing)
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
     await flushPromises()
     await flushPromises()
-    expect(mockContainer.installMod).toHaveBeenCalledWith('custom-1')
+    expect(install).toHaveBeenCalledWith(modId)
+    if (runtimeModId) expect(mockContainer.installMod).not.toHaveBeenCalled()
     expect(mockContainer.autoOnboardWorkflowEmployeesFromMods).toHaveBeenCalled()
     await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: true })
     expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()

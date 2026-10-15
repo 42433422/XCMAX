@@ -1,0 +1,83 @@
+{
+  "_comment": "官网公开案例 SSOT。官网案例页/首页的案例内容必须由本文件生成，禁止在 HTML 中另行维护一份事实。字段说明：public_status 为对外交付口径；evidence_status 为公开验证范围（功能已展示/实机验收已通过/验收材料待补）；screenshots/videos 引用成都修茈科技有限公司/capabilities/assets/evidence/ 下的真实文件；acceptance_ref 指向能力证据 feature id，供验证中心反查 run.json / SHA256。修改本文件后必须重新生成 site/data/public-site.json（scripts/build_public_site.py）。",
+  "schema": "xcagi.public_cases/v1",
+  "generated_note": "人工维护的事实源（case 口径），由 build_public_site.py 聚合进 public-site.json",
+  "cases": [
+    {
+      "case_id": "taiyangniao-attendance",
+      "customer_display_name": "太阳鸟·饰品包装行业考勤",
+      "industry": "饰品包装制造",
+      "scenario": "花名册与考勤规则整理 → AI 按行业规则汇总 → 异常自动标注 → 人事复核 → 报表 / Excel 导出",
+      "public_status": "delivered",
+      "scenario_title": "考勤核对：从每天人工比对到 AI 执行",
+      "evidence_status": "功能已展示，客户验收材料待补",
+      "workflow_steps": [
+        "导入花名册与考勤规则",
+        "AI 按行业规则整理每日考勤",
+        "迟到、缺卡、异常自动标注",
+        "人事在系统内复核确认",
+        "一键导出报表与 Excel"
+      ],
+      "outcome_summary": "把每天人工核对考勤的过程交给 AI 员工执行，人事只处理异常，结果直接可导出交付。",
+      "before_summary": "人事每天从多处导出花名册和打卡记录，按行业规则逐人核对，异常靠肉眼发现，汇总到 Excel 再上报。",
+      "screenshots": [
+        {
+          "feature": "base-login",
+          "file": "capabilities/assets/evidence/base-login-03-postlogin-screen.png",
+          "caption": "太阳鸟企业账号（SUNBIRD·饰品包装助手）登录后的工作台实机截图，已通过 macOS 实机验收"
+        },
+        {
+          "feature": "ind-attendance",
+          "file": "capabilities/assets/evidence/ind-attendance-03-launched.png",
+          "caption": "行业考勤入口客户端实机截图（macOS 实机）"
+        }
+      ],
+      "videos": [],
+      "acceptance_ref": ["ind-attendance", "base-login"],
+      "limitations": "考勤规则汇总与异常标注的完整实机验收录像待补；当前公开证据为客户端实机截图与登录验收。"
+    },
+    {
+      "case_id": "coatings-erp",
+      "customer_display_name": "涂料行业 ERP 业务协同",
+      "industry": "涂料 / 化工制造",
+      "scenario": "订单 → 出货 → 库存 → 标签打印 → Excel / 报表导出",
+      "public_status": "delivered",
+      "scenario_title": "订单到导出：一个桌面闭环",
+      "evidence_status": "功能已展示，客户验收材料待补",
+      "workflow_steps": [
+        "采购 / 销售订单录入与跟踪",
+        "出货记录与出库联动",
+        "库存实时查询与管理",
+        "产品标签编辑与打印",
+        "Excel 导入导出与报表交付"
+      ],
+      "outcome_summary": "订单、出货、库存、标签在同一桌面闭环，AI 员工负责录入、核对与导出，业务员只处理需要决策的环节。",
+      "before_summary": "订单在表格、出货在系统、库存在盘点表、标签靠手工排版，数据反复搬运，出错后要逐单回查。",
+      "screenshots": [
+        {
+          "feature": "erp-sales-order",
+          "file": "capabilities/assets/evidence/erp-sales-order-erp-sales-order-01-sales-order-list.png",
+          "caption": "订单管理模块实机界面（公共演示环境，含真实订单记录）"
+        },
+        {
+          "feature": "erp-inventory",
+          "file": "capabilities/assets/evidence/erp-inventory-erp-inventory-01-inventory-management.png",
+          "caption": "库存管理模块实机界面（演示环境，初始列表为空）"
+        },
+        {
+          "feature": "erp-label",
+          "file": "capabilities/assets/evidence/erp-label-erp-label-01-label-editor.png",
+          "caption": "标签编辑器模块实机界面（演示环境，模板待创建）"
+        },
+        {
+          "feature": "erp-excel-io",
+          "file": "capabilities/assets/evidence/erp-excel-io-erp-excel-io-01-etl-center.png",
+          "caption": "Excel 导入导出中心实机界面（macOS 实机截图）"
+        }
+      ],
+      "videos": [],
+      "acceptance_ref": ["erp-sales-order", "erp-shipment", "erp-inventory", "erp-label", "erp-excel-io"],
+      "limitations": "订单到导出的端到端实机验收录像待补；当前公开证据为各模块实机截图，标签模板数据为空属正常初始状态。"
+    }
+  ]
+}

@@ -78,7 +78,9 @@ def _chat_request_subject(request: Request) -> str:
     if not ip:
         ip = "unknown"
     ua = str(request.headers.get("user-agent") or "").strip()
-    ua_fingerprint = hashlib.sha1(ua.encode("utf-8")).hexdigest()[:12] if ua else "na"
+    ua_fingerprint = (
+        hashlib.sha1(ua.encode("utf-8"), usedforsecurity=False).hexdigest()[:12] if ua else "na"
+    )
     return f"{ip}|{ua_fingerprint}"
 
 

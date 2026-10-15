@@ -1,4 +1,4 @@
-import { app, dialog } from 'electron'
+import { BrowserWindow, app, dialog } from 'electron'
 import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -18,24 +18,27 @@ import { desktopRuntime } from './runtime-state'
 import {
   attachDatabaseBackupToRollback,
   cancelPreparedRollback,
+  clearPreparedRollbackRecoveryRequired,
+  markPreparedRollbackRecoveryRequired,
   prepareRollback,
   triggerRollback,
   type RollbackTriggerResult,
 } from './rollback'
-import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
+import { relayBackendOutput, terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { desktopBackendEnv } from './backend-env'
 import { sanitizeBackendProxyEnv } from './backend-env-utils'
 import { createForceUpgradeHandler } from './desktop-resilience'
+import { loopbackHttpGet } from './backend-loopback-http'
+import { clearBackendStopRequest, markBackendStopRequested, shouldRestartBackendAfterExit } from './backend-process-stop-guard'
 
 export const POST_UPDATE_STABILITY_MS = 5_000
+let backendRestartTimer: NodeJS.Timeout | null = null
+let migrationStopInProgress = false
 
 function rotateBackendLogIfNeeded(logPath: string): void {
   const maxBytes = 8 * 1024 * 1024
   try {
-    if (!fs.existsSync(logPath)) {
-      return
-    }
-    if (fs.statSync(logPath).size < maxBytes) {
+    if (!fs.existsSync(logPath) || fs.statSync(logPath).size < maxBytes) {
       return
     }
     const rotated = `${logPath}.1`
@@ -57,9 +60,7 @@ function ensureBackendLogStream(): fs.WriteStream | null {
     fs.mkdirSync(logDir, { recursive: true })
     const logPath = path.join(logDir, 'electron-backend.log')
     rotateBackendLogIfNeeded(logPath)
-    desktopRuntime.backendLogStream = fs.createWriteStream(logPath, {
-      flags: 'a'
-    })
+    desktopRuntime.backendLogStream = fs.createWriteStream(logPath, { flags: 'a' })
     desktopRuntime.backendLogStream.write(`\n[${new Date().toISOString()}] XCAGI desktop backend bootstrap\n`)
     desktopRuntime.backendLogStream.write(
       JSON.stringify(
@@ -113,10 +114,8 @@ export async function waitForBackendPing(
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/ping`, {
-        signal: AbortSignal.timeout(2_000)
-      })
-      const server = (response.headers.get('server') || '').toLowerCase()
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/ping`, 2_000)
+      const server = (response.getHeader('server') || '').toLowerCase()
       if (response.ok && server.includes('uvicorn')) {
         desktopRuntime.startupMarks.backendHealthMs = Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? started)
         return
@@ -144,6 +143,43 @@ export async function waitForBackendPing(
 /** @deprecated 使用 waitForBackendPing；保留别名供测试/旧引用。 */
 export const waitForBackendHealth = waitForBackendPing
 
+const STARTUP_HEALTH_LIMIT_MS = 180_000
+
+/** 同一进程内轮询 /api/health，直到 healthy 或超过启动时限。不改写 health 返回值。 */
+async function waitForStartupHealth(port: number, timeoutMs: number): Promise<boolean> {
+  const budget = Math.min(Math.max(timeoutMs, 0), STARTUP_HEALTH_LIMIT_MS)
+  const started = Date.now()
+  let last = ''
+  while (Date.now() - started <= budget) {
+    try {
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/health`, 2_000)
+      if (response.ok) {
+        const body = (await response.json()) as {
+          status?: string
+          degradedReasons?: string[]
+        }
+        const status = String(body.status || '')
+        const reasons = Array.isArray(body.degradedReasons) ? body.degradedReasons.join(',') : ''
+        const line = `${status}|${reasons}`
+        if (line !== last) {
+          console.log(`[xcagi-desktop] startup health status=${status} reasons=${reasons || '-'}`)
+          last = line
+        }
+        if (status === 'healthy') {
+          return true
+        }
+      }
+    } catch {
+      /* health route still coming up */
+    }
+    await new Promise(resolve => setTimeout(resolve, 500))
+  }
+  console.warn(
+    `[xcagi-desktop] startup health stayed non-healthy for ${budget}ms last=${last || 'none'}`
+  )
+  return false
+}
+
 /** ping 就绪且业务路由已挂载（fast-start deferred 完成后）再加载主应用。 */
 export async function waitForBackendApplicationReady(
   port: number,
@@ -157,16 +193,15 @@ export async function waitForBackendApplicationReady(
   const remaining = () => Math.max(0, timeoutMs - (Date.now() - started))
   while (remaining() > 0) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/desktop/status`, {
-        signal: AbortSignal.timeout(2_000)
-      })
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/desktop/status`, 2_000)
       if (response.ok) {
         const body = (await response.json()) as {
           appRoutesReady?: boolean
           readyForUi?: boolean
         }
-        const routesReady = body.appRoutesReady ?? body.readyForUi
-        if (routesReady !== false) {
+        const routesReady = body.appRoutesReady === true || body.readyForUi === true
+        if (routesReady) {
+          await waitForStartupHealth(port, remaining())
           return
         }
       }
@@ -183,7 +218,7 @@ export async function waitForBackendStatus(port: number, timeoutMs = 60_000): Pr
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/desktop/status`)
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/desktop/status`, 2_000)
       if (response.ok) {
         desktopRuntime.startupMarks.desktopStatusMs = Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? started)
         return (await response.json()) as Record<string, unknown>
@@ -237,7 +272,14 @@ export async function showDbRecoveryDialogIfNeeded(status: Record<string, unknow
   }
 }
 
+/**
+ * 连续快速重启的稳定窗口：后端**健康运行**超过该时长即视为已恢复，
+ * 自动拉起计数复位，使上限只约束「连续崩溃」而不是终身累计。
+ */
+export const BACKEND_STABLE_WINDOW_MS = 60_000
+
 export async function startBackend(): Promise<void> {
+  if (migrationStopInProgress) return
   if (desktopRuntime.backendProcess) {
     return
   }
@@ -250,7 +292,7 @@ export async function startBackend(): Promise<void> {
       `已检查：\n${candidates}\n\n` +
       `请确认安装包包含 resources/backend/${process.platform === 'win32' ? 'xcagi-backend.exe' : 'xcagi-backend'}。`
     writeBackendLog(`[error] ${detail}\n`)
-    void dialog.showErrorBox(APP_NAME, detail)
+    showBackendErrorBox('找不到后端程序', detail)
     return
   }
 
@@ -260,11 +302,13 @@ export async function startBackend(): Promise<void> {
   if (!portFree) {
     const hint = portOccupiedHint(DEFAULT_PORT)
     writeBackendLog(`[error] port ${DEFAULT_PORT} occupied, abort backend spawn\n`)
-    void dialog.showErrorBox(APP_NAME, hint)
+    showBackendErrorBox(`端口 ${DEFAULT_PORT} 已被占用`, hint)
     return
   }
 
   desktopRuntime.startupMarks.backendSpawnMs = Date.now()
+  // 清掉上一轮的健康耗时，避免用陈旧值误判「已稳定运行」。
+  desktopRuntime.startupMarks.backendHealthMs = undefined
   writeBackendLog(`[spawn] ${executable.command} ${executable.args.join(' ')}\n`)
   writeBackendLog(`[cwd] ${executable.cwd}\n`)
   const child = spawn(executable.command, executable.args, {
@@ -287,22 +331,16 @@ export async function startBackend(): Promise<void> {
     windowsHide: true
   })
   desktopRuntime.backendProcess = child
-  child.stdout.on('data', data => {
-    process.stdout.write(`[xcagi-backend] ${data}`)
-    writeBackendLog(`[stdout] ${data}`)
-  })
-  child.stderr.on('data', data => {
-    process.stderr.write(`[xcagi-backend] ${data}`)
-    writeBackendLog(`[stderr] ${data}`)
-  })
+  child.stdout.on('data', data => relayBackendOutput('stdout', data, app.isPackaged, writeBackendLog))
+  child.stderr.on('data', data => relayBackendOutput('stderr', data, app.isPackaged, writeBackendLog))
   child.on('error', error => {
     handleBackendSpawnError(error)
   })
   child.on('exit', code => {
     const uptimeMs = Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? Date.now())
     writeBackendLog(`[exit] backend process exited code=${code} uptime=${uptimeMs}ms\n`)
-    desktopRuntime.backendProcess = null
-    if (app.isQuitting) {
+    if (desktopRuntime.backendProcess === child) desktopRuntime.backendProcess = null
+    if (!shouldRestartBackendAfterExit(child, app.isQuitting === true, migrationStopInProgress === true)) {
       return
     }
     // 通知自治控制器 backend 退出（控制器据此追踪崩溃频率，5min ≥3 次则自动回滚）
@@ -316,28 +354,70 @@ export async function startBackend(): Promise<void> {
     })
     // 快速退出（< 5 秒）：通常是端口占用或配置错误，不自动重启以免浪费用户时间
     if (uptimeMs < 5000) {
-      void dialog.showErrorBox(
-        APP_NAME,
+      showBackendErrorBox(
+        '后端服务启动后立即退出',
         `后端服务启动后立即退出（code=${code}）。\n\n请查看数据目录 logs/ 下后端日志，或从菜单导出诊断包。`
       )
       return
     }
+    // 上一轮后端已稳定运行超过窗口 → 视为已恢复，复位「连续重启」计数，
+    // 否则 restartCount 会终身累计，历史上崩过 3 次后便永久放弃自动拉起。
+    if (backendWasStable(uptimeMs)) {
+      desktopRuntime.restartCount = 0
+    }
     desktopRuntime.restartCount += 1
     if (desktopRuntime.restartCount <= 3) {
-      setTimeout(() => void startBackend(), 1500)
+      if (backendRestartTimer) clearTimeout(backendRestartTimer)
+      backendRestartTimer = setTimeout(() => {
+        backendRestartTimer = null
+        if (!migrationStopInProgress) void startBackend()
+      }, 1500)
       return
     }
-    void dialog.showErrorBox(APP_NAME, `后端服务已退出（code=${code}），请重启 XCAGI。`)
+    showBackendErrorBox('后端服务已退出', `后端服务已退出（code=${code}），请重启 XCAGI。`)
   })
 }
 
 export async function runBackendMigrationWithRollback(toVersion: string): Promise<void> {
+  const resumeBackendAfterPrepareFailure = process.platform === 'win32' && (desktopRuntime.backendProcess !== null || backendRestartTimer !== null)
+  if (resumeBackendAfterPrepareFailure) {
+    migrationStopInProgress = true
+    if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null }
+    try { await stopBackend() } catch (error) { migrationStopInProgress = false; throw error }
+  }
+  let prepared = false
+  let migrationStarted = false
   try {
     await prepareRollback(toVersion)
+    prepared = true
+    if (process.platform === 'win32') markPreparedRollbackRecoveryRequired()
+    migrationStarted = true
     await runBackendMigration()
+    if (process.platform === 'win32') clearPreparedRollbackRecoveryRequired()
   } catch (error) {
+    if (process.platform === 'win32' && prepared) {
+      if (!migrationStarted) {
+        writeBackendLog(`[rollback] Windows 数据迁移尚未启动：无法持久化恢复意图，因此未启动迁移子进程。恢复快照保留。\n`)
+      } else {
+        writeBackendLog('[rollback] Windows 数据迁移失败，迁移前持久化的恢复意图仍有效；保留完整恢复记录。\n')
+      }
+      app.quit()
+      migrationStopInProgress = false
+      throw new Error(migrationStarted
+        ? `Windows 后端迁移失败，已保留迁移前持久化的恢复记录并安排下次启动恢复：${error instanceof Error ? error.message : String(error)}`
+        : `Windows 后端迁移未启动，恢复意图无法持久化；未启动迁移子进程。恢复快照已保留：${error instanceof Error ? error.message : String(error)}`)
+    }
+    if (process.platform === 'win32') {
+      migrationStopInProgress = false
+      if (resumeBackendAfterPrepareFailure) {
+        try { await startBackend() } catch (restartError) { writeBackendLog(`[rollback] 快照准备失败后恢复后端失败：${restartError instanceof Error ? restartError.message : restartError}\n`) }
+      }
+      throw error
+    }
     cancelPreparedRollback()
     throw error
+  } finally {
+    migrationStopInProgress = false
   }
 }
 
@@ -375,11 +455,11 @@ function runBackendMigration(): Promise<string> {
     let backupAttachError: unknown
     child.stderr.on('data', data => {
       stderr += String(data)
-      process.stderr.write(`[xcagi-migrate] ${data}`)
+      relayBackendOutput('stderr', data, app.isPackaged, writeBackendLog, 'migrate')
     })
     child.stdout.on('data', data => {
       stdout += String(data)
-      process.stdout.write(`[xcagi-migrate] ${data}`)
+      relayBackendOutput('stdout', data, app.isPackaged, writeBackendLog, 'migrate')
       if (!databaseBackupPath) {
         const match = stdout.match(/^XCAGI_MIGRATION_BACKUP=(.+)$/m)
         const candidate = match?.[1]?.trim() || ''
@@ -412,9 +492,11 @@ function runBackendMigration(): Promise<string> {
 export async function stopBackend(): Promise<void> {
   const child = desktopRuntime.backendProcess
   desktopRuntime.backendProcess = null
+  if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null }
   if (!child) {
     return
   }
+  markBackendStopRequested(child)
   writeBackendLog(`[${new Date().toISOString()}] backend stop requested\n`)
   let result = 'already-exited'
   if (process.platform === 'win32' && child.pid) {
@@ -422,12 +504,40 @@ export async function stopBackend(): Promise<void> {
     await new Promise<void>(resolve => {
       execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => resolve())
     })
-    result = (await exited) ? 'killed' : 'kill-timeout'
+    const hasExited = await exited
+    result = hasExited ? 'killed' : 'kill-timeout'
+    if (!hasExited) {
+      clearBackendStopRequest(child)
+      if (desktopRuntime.backendProcess === null) desktopRuntime.backendProcess = child
+      throw new Error('Windows 后端未能在 2.5 秒内退出，已中止更新快照和数据库迁移。')
+    }
   } else {
     result = await terminateChildProcess(child)
   }
   desktopRuntime.backendLogStream?.end(`[${new Date().toISOString()}] backend log closed result=${result}\n`)
   desktopRuntime.backendLogStream = null
+}
+
+/**
+ * Attach an async dialog to a live window: showErrorBox and unparented macOS
+ * NSAlert block quit and rollback. With no window, preserve the error in the log.
+ */
+function showBackendErrorBox(message: string, detail: string): void {
+  const win = BrowserWindow.getAllWindows().find(candidate => !candidate.isDestroyed())
+  if (win) {
+    void dialog.showMessageBox(win, { type: 'error', title: APP_NAME, message, detail })
+    return
+  }
+  writeBackendLog(`[error] ${message} — ${detail}\n`)
+}
+
+/** 上一轮后端是否**确实健康过**且健康运行已超过稳定窗口。 */
+function backendWasStable(uptimeMs: number): boolean {
+  const healthMs = desktopRuntime.startupMarks.backendHealthMs
+  if (typeof healthMs !== 'number') {
+    return false
+  }
+  return uptimeMs - healthMs >= BACKEND_STABLE_WINDOW_MS
 }
 
 export function handleBackendSpawnError(error: Error): void {
@@ -436,10 +546,8 @@ export function handleBackendSpawnError(error: Error): void {
   if (app.isQuitting) {
     return
   }
-  void dialog.showErrorBox(
-    APP_NAME,
-    `后端服务启动失败：${error.message}\n\n应用将退出，请重启 XCAGI。`,
-  )
+  showBackendErrorBox('后端服务启动失败', `后端服务启动失败：${error.message}\n\n应用将退出，请重启 XCAGI。`)
+  // 提示已非阻塞，quit 不再依赖用户点击对话框，退出必然发生。
   app.quit()
 }
 

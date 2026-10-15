@@ -117,18 +117,19 @@ class TestDefaultModsRoot:
 
 
 class TestModManagerInit:
-    def test_default_init(self):
+    def test_default_init(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/nonexistent_mods_for_test")
-        assert mm.mods_root == "/tmp/nonexistent_mods_for_test"
+        mm = ModManager(mods_root=str(tmp_path / "missing-mods"))
+        assert mm.mods_root == str(tmp_path / "missing-mods")
+        assert (tmp_path / "missing-mods").is_dir()
         assert mm._loaded_mods == []
         assert mm._recent_load_failures == []
 
-    def test_invalidate_scan_cache(self):
+    def test_invalidate_scan_cache(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/test_mods")
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         mm._scan_cache_fp = "old_fp"
         mm._scan_cache_mods = ["old"]
         mm.invalidate_scan_cache()
@@ -137,25 +138,25 @@ class TestModManagerInit:
 
 
 class TestModManagerRecordFailures:
-    def test_record_load_failure(self):
+    def test_record_load_failure(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/test_mods")
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         mm._record_load_failure("test_mod", "backend", "something went wrong")
         assert len(mm._recent_load_failures) == 1
         assert mm._recent_load_failures[0]["mod_id"] == "test_mod"
 
-    def test_record_blueprint_failure(self):
+    def test_record_blueprint_failure(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/test_mods")
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         mm.record_blueprint_failure("test_mod", "blueprint error")
         assert len(mm._blueprint_failures) == 1
 
-    def test_get_recent_load_failures(self):
+    def test_get_recent_load_failures(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/test_mods")
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         mm._record_load_failure("mod1", "stage1", "err1")
         failures = mm.get_recent_load_failures()
         assert len(failures) == 1
@@ -163,27 +164,27 @@ class TestModManagerRecordFailures:
         failures.append({"mod_id": "extra"})
         assert len(mm._recent_load_failures) == 1
 
-    def test_get_blueprint_failures(self):
+    def test_get_blueprint_failures(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/test_mods")
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         mm.record_blueprint_failure("mod1", "err")
         assert len(mm.get_blueprint_failures()) == 1
 
-    def test_get_scan_manifest_errors(self):
+    def test_get_scan_manifest_errors(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/test_mods")
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         errors = mm.get_scan_manifest_errors()
         assert isinstance(errors, list)
 
 
 class TestModManagerMetadataToApiDict:
-    def test_basic_conversion(self):
+    def test_basic_conversion(self, tmp_path):
         from app.infrastructure.mods.manifest import ModMetadata
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/test_mods")
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         meta = ModMetadata(
             id="test-mod",
             name="Test Mod",
@@ -198,24 +199,24 @@ class TestModManagerMetadataToApiDict:
 
 
 class TestModManagerResolveModDirectory:
-    def test_empty_mod_id(self):
+    def test_empty_mod_id(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/test_mods")
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         assert mm.resolve_mod_directory("") is None
 
-    def test_none_mod_id(self):
+    def test_none_mod_id(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/test_mods")
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         assert mm.resolve_mod_directory(None) is None
 
 
 class TestModManagerValidateModPackage:
-    def test_file_not_found(self):
+    def test_file_not_found(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/test_mods")
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         ok, msg, info = mm.validate_mod_package("/nonexistent/file.xcmod")
         assert ok is False
         assert "不存在" in msg
@@ -223,7 +224,7 @@ class TestModManagerValidateModPackage:
     def test_not_zip_file(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp/test_mods")
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         fake_file = tmp_path / "fake.xcmod"
         fake_file.write_text("not a zip")
         ok, msg, info = mm.validate_mod_package(str(fake_file))

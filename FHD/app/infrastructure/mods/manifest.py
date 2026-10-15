@@ -69,6 +69,8 @@ class ModMetadata:
     # 例如 entity/query_title/starter_pack 等，未声明时由 industry 字段推导。
     ui_labels: dict[str, Any] = field(default_factory=dict)
     ui_starter_pack: list[dict[str, Any]] = field(default_factory=list)
+    scope: str = "global"
+    frontend_runtime: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], mod_path: str = "") -> "ModMetadata":
@@ -130,6 +132,10 @@ class ModMetadata:
             artifact=normalize_artifact(data),
             bundle=bundle,
             dependencies=_normalize_dependencies(data.get("dependencies")),
+            scope=str(data.get("scope") or "global"),
+            frontend_runtime=(
+                dict(frontend.get("runtime")) if isinstance(frontend.get("runtime"), dict) else {}
+            ),
             backend_entry=backend.get("entry", ""),
             backend_init=backend.get("init", ""),
             frontend_routes=frontend.get("routes", ""),
@@ -199,9 +205,10 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
         if dep_id == "xcagi":
             if not _check_xcagi_version(version_spec):
                 logger.warning(
-                    "Mod %s requires xcagi %s but host version is 1.0.0.1",
+                    "Mod %s requires xcagi %s but host version is %s",
                     metadata.id,
                     version_spec,
+                    host_xcagi_version(),
                 )
                 return False
         elif dep_id not in loaded_mods:
@@ -215,15 +222,19 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
     return True
 
 
+def host_xcagi_version() -> str:
+    """宿主产品版本（版本锚点，由 scripts/dev/version_sync.py 按 VERSION.md 同步）。"""
+    current_version = "1.0.0.6"
+    return current_version
+
+
 def _check_xcagi_version(version_spec: str) -> bool:
     import re
-
-    current_version = "1.0.0.1"
 
     match = re.match(r">=([\d.]+)", version_spec)
     if match:
         required = match.group(1)
-        return _compare_versions(current_version, required) >= 0
+        return _compare_versions(host_xcagi_version(), required) >= 0
 
     return True
 

@@ -1,0 +1,62 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M07.clean-install-first-launch",
+ "platform": "macos",
+ "round": "M04-M16-2026-10-12",
+ "product_version": "1.0.0.5",
+ "release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "architecture": "arm64",
+ "install": {
+  "source_dmg_sha256": "b1edf7cbaebc00336f52d1009315a9be04a0955e6529e0fab4c2383a1525be9e",
+  "method": "hdiutil attach -> ditto XCAGI.app /Applications（旧包先行 mv 留存，规避 App Management TCC 覆写限制）",
+  "old_app_preserved": [
+   "/Applications/XCAGI.app.pre-m04m16-e3ac9f10 (c46f93821b)",
+   "/Users/Shared/xcagi-t6-tools/macos-final-m04-m16-e3ac9f1049/backup/XCAGI.app.old-c46f93821b"
+  ],
+  "installed_build_info": {
+   "gitSha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+   "version": "1.0.0.5",
+   "builtAt": "2026-10-12T09:51:04.060Z"
+  },
+  "installed_codesign_deep_strict": "PASS"
+ },
+ "isolated_data_dir": "/Users/Shared/xcagi-t6-tools/macos-final-m04-m16-e3ac9f1049/runtime/arm64-userdata",
+ "first_launch": {
+  "backend_up": true,
+  "port": 17500,
+  "health_status": "degraded",
+  "runtime_status": "healthy",
+  "degraded_reasons": [
+   "LLM_RUNTIME_UNAVAILABLE"
+  ],
+  "degraded_note": "Neuro 认知层本地 LLM 端口未就绪（全新数据目录无本地模型）；必需组件全部 ok，AI 对话/工作流/审批链路实测可用",
+  "version": "1.0.0.5",
+  "git_sha": "e3ac9f1049cb"
+ },
+ "ui": {
+  "login_page": "evidence/m07-01-first-launch-login.png（企业账号登录页）",
+  "onboarding": "evidence/m07-02-onboarding-welcome.png（首次启动引导：创建数字公司 3 步向导）",
+  "workspace": "evidence/m07-03-workspace.png（工作台：智能对话/审批工作台/业务单据等）"
+ },
+ "login": {
+  "api": "POST /api/auth/login",
+  "method": "UI 表单真实登录（CDP 驱动输入账号口令并点击登录）+ API 复核",
+  "username": "xcagi-enterprise-demo",
+  "account_kind": "enterprise",
+  "success": true,
+  "market_base_url": "https://xiu-ci.com"
+ },
+ "enterprise_binding": {
+  "user_id": 2,
+  "market_user_id": 33,
+  "local_user_id": 2,
+  "tenant_id": 1,
+  "tenant_name": "xcagi-enterprise-demo",
+  "tier": "enterprise",
+  "market_is_enterprise": true,
+  "account_kind": "enterprise"
+ },
+ "sunbird_note": "SUNBIRD 客户账号口令不在本机（钥匙串条目校验 MARKET_AUTH_FAILED），本轮以产品预置合法企业账号完成实机链；客户身份专项留待口令可用时补验",
+ "captured_at_utc": "2026-10-12T10:38:00Z",
+ "verdict": "PASS"
+}

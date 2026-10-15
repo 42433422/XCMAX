@@ -1,0 +1,50 @@
+{
+  "phase": "G9-更新安装（OTA 1.0.0.3→1.0.0.4）",
+  "date": "2026-09-15T06:30+08:00",
+  "main_head": "280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+  "chain": {
+    "g8_discovery": "1.0.0.3 应用内检查更新 → update_available（updater-events.jsonl 2026-09-14T18:00-18:03Z 自动检查 + 21:52Z 启动检查），productVersion=1.0.0.4 buildSha=280225ac77ce 锚定一致；UI 截图 g8-settings-panel.png/g8-update-discovered-ui.png",
+    "download": "download_start 18:04:41Z → update_downloaded 18:13:27Z；缓存 pending/XCAGI-Enterprise-1.0.0.4-mac-arm64.zip 264533286 字节，SHA256=5514e649ac4add504144595adfaba7d5cf7417283db821b9c69d2472908f7ba8（与 CVM 发布产物五点同指纹，blockmap 增量生效）",
+    "install_attempts": [
+      {
+        "attempt": 1,
+        "time_utc": "2026-09-14T22:01-22:02Z",
+        "path": "GUI 设置页「重启以更新 1.0.0.4」chip → 「更新并重新加载」按钮 disabled → CDP installUpdate()",
+        "result": "SecurityAgent 特权授权弹窗（添加帮助程序）→ 未授权 → 「更新服务已退出 (Code:null)」错误对话框 → 应用未退出，更新未安装",
+        "screenshots": ["g9-before-install-click.png", "g9-after-install-click.png"]
+      },
+      {
+        "attempt": 2,
+        "time_utc": "2026-09-14T22:14:40Z",
+        "path": "应用重启（挂 CDP 9222）→ 更新对话框「更新并重新加载」enabled（update_downloaded 状态恢复）→ CDP DOM btn.click() 真实按钮路径",
+        "result": "install_start 事件已记录（updater-events.jsonl 22:14:40Z）；SecurityAgent 授权弹窗再次出现，等待用户输入管理员密码（ShipIt 特权 helper 安装）；应用存活（见 defect_found）",
+        "screenshots": ["g9-retry-dialog.png"]
+      }
+    ]
+  },
+  "environment_blocker": {
+    "issue": "/Applications/XCAGI.app owner=root:wheel（2026-09-13 18:16 手动安装污染）",
+    "impact": "ShipIt 用户态 rename 被拒（Permission denied，App Management TCC 保护 root-owned bundle）→ 自动触发特权 helper 安装请求 → 需一次管理员密码授权",
+    "resolution": "用户 14:41 点击安装+输密码授权 ShipIt helper → ShipIt 等待 app 退出 → 15:09 app 退出（手动 Cmd+Q，1.0.0.3 触发方缺陷预期内）→ 15:09:08 ShipIt 替换完成（Installation completed successfully，日志 Moving bundle 双向）→ app 自动重启 1.0.0.4。授权后 helper 常驻，后续 OTA 免密全自动",
+    "chown_attempt": "osascript with administrator privileges chown -R 被系统 App Management TCC 拦截（Operation not permitted），印证需走 ShipIt 授权路径",
+    "classification": "本机安装状态污染，非产品缺陷"
+  },
+  "defect_found": {
+    "gate": "G9",
+    "symptom": "install_start 记录后应用不自动退出（与 1.0.0.2→1.0.0.3 复测现象一致）",
+    "expected": "#1930 isQuitting 预置修复应使应用自动退出",
+    "root_cause_of_non_fix": "isQuitting 修复位于 installUpdate()（触发方代码）。1.0.0.3→1.0.0.4 OTA 的触发方是 1.0.0.3 构建（4bfb23365），不含该修复（修复于 1.0.0.3 发布后合入 main 3d872b32e）。修复对 1.0.0.4+ 发起的下一次 OTA 生效",
+    "conclusion": "G9 自动退出修复的完整验证只能在 1.0.0.4→1.0.0.5 OTA 时进行；本轮如实记录触发方缺陷复现"
+  },
+  "minor_issue": "首次点击时「更新并重新加载」disabled（应用重启后恢复 enabled）；怀疑为 update_downloaded 状态跨重启恢复时序问题，建议后续排查",
+  "runtime_findings_after_install": {
+    "stale_backend_process": "OTA 替换后旧 1.0.0.3 backend 进程（9/15 06:14 启动）残留占用 17500，新 app 复用之 → health version 短暂报旧值而 git_sha 已读新 bundle build-info（280225ac7）；完整重启应用栈后 health = healthy + 1.0.0.4 + 280225ac77ce（t5-post-ota-verify.log）。建议：app 启动时若 bundle 版本 > 运行中 backend 版本则强杀重启 backend",
+    "bundle_ownership": "ShipIt 替换后 /Applications/XCAGI.app owner=root（保留归档内文件元数据）——每次 OTA 都会触发同样的 TCC 特权请求；本轮已通过 ShipIt helper 授权永久解决，记录为已知行为"
+  },
+  "final_state": {
+    "time": "2026-09-15T15:17+08:00",
+    "health": {"status": "healthy", "version": "1.0.0.4", "git_sha": "280225ac77ce0b5f66470d2d7a11ad2844cdad67", "release_id": "xcagi-1.0.0.4-280225ac77ce0b5f66470d2d7a11ad2844cdad67"},
+    "verdict": "G9 安装链路 PASS（G8 发现→下载→授权→ShipIt 替换→重启 1.0.0.4）；自动退出子项归 1.0.0.4→1.0.0.5 验证（触发方修复生效前提）"
+  },
+  "next": "G10 数据保持 ✓（t5 digest 字节级无损）→ G11 业务复测 ✓（G7 全链与 1.0.0.3 基线一致+下载验证）→ G6 ✓（mods=62 员工=6 与基线逐项一致）→ G12 重启复验（待执行）"
+}

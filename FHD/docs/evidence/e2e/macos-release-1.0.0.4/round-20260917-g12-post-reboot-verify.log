@@ -1,0 +1,72 @@
+[01:37:32] health OK (poll#1): {"status":"healthy","version":"1.0.0.4","service":"xcagi-fastapi","runtime":{"status":"healthy","components":{"desktop_runtime_routes":{"ok":true,"required":true,"detail":""},"desktop_automation_route
+[01:37:32] running version: 1.0.0.4 (expect 1.0.0.4)
+{
+  "xcagi.db.bytes": 987402240,
+  "xcagi.db.wal.bytes": 0,
+  "excel_vectors.db.bytes": -1,
+  "mod_dbs.files": 0,
+  "uploads.files": 168,
+  "uploads.templates.files": 22,
+  "routing_policies.files": 1,
+  "mods.files": 1259,
+  "models.files": 1,
+  "backups.files": 6,
+  "backups.latest": "xcagi-unknown-20260916173730.db",
+  "rows.templates": 23,
+  "rows.sales_orders": 0,
+  "rows.manufacturing_orders": 0,
+  "rows.customers": 0,
+  "rows.users": 6
+}
+
+==== G7 RESULT ====
+{
+  "phase": "G7-retest-10004",
+  "steps": {
+    "health": {
+      "status": 200,
+      "version": "1.0.0.4",
+      "git_sha": "280225ac77ce"
+    },
+    "login": {
+      "status": 200,
+      "success": true
+    },
+    "auth_me": {
+      "status": 200,
+      "user": null
+    },
+    "templates_upload": {
+      "status": 200,
+      "template_id": "db:24",
+      "file_sha256": "be5e1ca38be53b2c7232f399829a1f21bcc80138aa50a94d553df94081f668e6"
+    },
+    "templates_list": {
+      "status": 200,
+      "probe_present": false
+    },
+    "customer_ensure": {
+      "status": 400,
+      "customer_id": null
+    },
+    "shipment_generate": {
+      "status": 200,
+      "success": true,
+      "message": "发货单生成成功",
+      "doc_name": "发货单_26-0900001A_20260917_013734.xlsx",
+      "agent_status": "completed",
+      "run_id": "run_e807d1ee1a4144829d6faa279e246ad1"
+    },
+    "file_download": {
+      "status": 200,
+      "bytes": 5194,
+      "xlsx_magic": true,
+      "sha256": "7b6b1d8d08324d7d913dad0d52f7f3c05a47379d1c1ba4867ec686d58984cfe4",
+      "filename": "发货单_26-0900001A_20260917_013734.xlsx"
+    }
+  }
+}
+evidence: /Users/Shared/xcagi-t6-tools/g7-retest-10004.json
+[01:37:34] /api/mods -> HTTP 200
+[01:37:34] /api/employees -> HTTP 200
+[01:37:34] T6 post-reboot verify DONE (manual review: compare digest with pre-reboot baseline)

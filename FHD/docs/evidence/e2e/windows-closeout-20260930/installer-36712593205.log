@@ -1,0 +1,94 @@
+windows-installer-delivery	Verify resources, install, start, and uninstall	﻿2026-09-30T12:17:18.1208481Z ##[group]Run $allowUnsigned = $env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '0'
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1209200Z ^[[36;1m$allowUnsigned = $env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '0'^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1210277Z ^[[36;1mscripts/package/pre-release-security.ps1 -Phase post -Version $env:DELIVERY_VERSION -ProductSku enterprise -AllowUnsigned:$allowUnsigned^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1211292Z ^[[36;1m$installer = "release/xcagi-v$env:DELIVERY_VERSION/enterprise/XCAGI-Enterprise-Setup-$env:DELIVERY_VERSION-x64.exe"^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1212732Z ^[[36;1mscripts/package/verify-windows-installed-runtime.ps1 -InstallerPath $installer -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME -ExpectedBuildSha $env:XCAGI_BUILD_SHA -ExpectedProductVersion $env:DELIVERY_VERSION -AllowUnsigned:$allowUnsigned^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1289821Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1290259Z env:
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1290577Z   XCAGI_BUILD_SHA: e5b2412ace0c7b202a6f60c41472b1deef83d8d8
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1291049Z   PYTHONUTF8: 1
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1291309Z   PYTHONIOENCODING: utf-8
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1291581Z   ES_USERNAME: 
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1291824Z   ES_PASSWORD: 
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1292074Z   CREDENTIAL_ID: 
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1292322Z   ES_TOTP_SECRET: 
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1292584Z   XCAGI_WINDOWS_PUBLISHER_NAME: 
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1292922Z   XCAGI_WINDOWS_SIGNING_PROVIDER: sslcom
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1293251Z   XCAGI_REQUIRE_WINDOWS_SIGNING: 0
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1293630Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.11.9\x64
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1294626Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.11.9\x64/lib/pkgconfig
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1295148Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.11.9\x64
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1295614Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.11.9\x64
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1296070Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.11.9\x64
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1296465Z   DOTNET_ROOT: C:\Program Files\dotnet
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1296815Z   DELIVERY_VERSION: 1.0.0.5
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.1297102Z ##[endgroup]
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.5926493Z === Post-build security scan ===
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.6449568Z OK enterprise packaged backend executable Windows GUI subsystem
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.7549402Z OK: enterprise includes ERP mod
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.7675664Z OK: all 13 profile stage mod(s) present
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.7993839Z OK: mods/ contains no industry or custom client mods
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:18.8610506Z OK: industry-seeds/ contains 6 of 6 open industry mod(s)
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:20.0268764Z Authenticode path: D:\a\XCMAX\XCMAX\FHD\release\xcagi-v1.0.0.5\enterprise\win-unpacked\XCAGI.exe
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:20.0298405Z Authenticode status: NotSigned
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:20.0317209Z Authenticode message: The file D:\a\XCMAX\XCMAX\FHD\release\xcagi-v1.0.0.5\enterprise\win-unpacked\XCAGI.exe is not digitally signed. You cannot run this script on the current system. For more information about running scripts and setting execution policy, see about_Execution_Policies at https://go.microsoft.com/fwlink/?LinkID=135170
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:20.0365754Z ^[[33;1mWARNING: UNSIGNED: manual installer delivery only; not eligible for stable automatic updates.^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:20.2807268Z Authenticode path: D:\a\XCMAX\XCMAX\FHD\release\xcagi-v1.0.0.5\enterprise\win-unpacked\resources\backend\xcagi-backend.exe
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:20.2817052Z Authenticode status: NotSigned
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:20.2827558Z Authenticode message: The file D:\a\XCMAX\XCMAX\FHD\release\xcagi-v1.0.0.5\enterprise\win-unpacked\resources\backend\xcagi-backend.exe is not digitally signed. You cannot run this script on the current system. For more information about running scripts and setting execution policy, see about_Execution_Policies at https://go.microsoft.com/fwlink/?LinkID=135170
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:20.2830902Z ^[[33;1mWARNING: UNSIGNED: manual installer delivery only; not eligible for stable automatic updates.^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:21.4276406Z Authenticode path: D:\a\XCMAX\XCMAX\FHD\release\xcagi-v1.0.0.5\enterprise\XCAGI-Enterprise-Setup-1.0.0.5-x64.exe
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:21.4282602Z Authenticode status: NotSigned
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:21.4291223Z Authenticode message: The file D:\a\XCMAX\XCMAX\FHD\release\xcagi-v1.0.0.5\enterprise\XCAGI-Enterprise-Setup-1.0.0.5-x64.exe is not digitally signed. You cannot run this script on the current system. For more information about running scripts and setting execution policy, see about_Execution_Policies at https://go.microsoft.com/fwlink/?LinkID=135170
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:21.4294016Z ^[[33;1mWARNING: UNSIGNED: manual installer delivery only; not eligible for stable automatic updates.^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:21.4299055Z OK enterprise artifact: XCAGI-Enterprise-Setup-1.0.0.5-x64.exe
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:21.4305497Z Post-build security: PASSED
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:21.5024439Z Verifying installer before installation (AllowUnsigned=True): D:\a\XCMAX\XCMAX\FHD\release\xcagi-v1.0.0.5\enterprise\XCAGI-Enterprise-Setup-1.0.0.5-x64.exe
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:22.6831364Z Authenticode path: D:\a\XCMAX\XCMAX\FHD\release\xcagi-v1.0.0.5\enterprise\XCAGI-Enterprise-Setup-1.0.0.5-x64.exe
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:22.6837127Z Authenticode status: NotSigned
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:22.6847004Z Authenticode message: The file D:\a\XCMAX\XCMAX\FHD\release\xcagi-v1.0.0.5\enterprise\XCAGI-Enterprise-Setup-1.0.0.5-x64.exe is not digitally signed. You cannot run this script on the current system. For more information about running scripts and setting execution policy, see about_Execution_Policies at https://go.microsoft.com/fwlink/?LinkID=135170
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:22.6850447Z ^[[33;1mWARNING: UNSIGNED: manual installer delivery only; not eligible for stable automatic updates.^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:17:24.7067333Z Installing package silently into: D:\a\_temp\xcagi-installed-runtime-36712593205-1-d16d65da
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:15.3995195Z Verifying installed executable signatures.
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:16.4444181Z Authenticode path: D:\a\_temp\xcagi-installed-runtime-36712593205-1-d16d65da\XCAGI.exe
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:16.4450338Z Authenticode status: NotSigned
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:16.4459945Z Authenticode message: The file D:\a\_temp\xcagi-installed-runtime-36712593205-1-d16d65da\XCAGI.exe is not digitally signed. You cannot run this script on the current system. For more information about running scripts and setting execution policy, see about_Execution_Policies at https://go.microsoft.com/fwlink/?LinkID=135170
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:16.4463199Z ^[[33;1mWARNING: UNSIGNED: manual installer delivery only; not eligible for stable automatic updates.^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:16.6733424Z Authenticode path: D:\a\_temp\xcagi-installed-runtime-36712593205-1-d16d65da\resources\backend\xcagi-backend.exe
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:16.6739325Z Authenticode status: NotSigned
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:16.6748990Z Authenticode message: The file D:\a\_temp\xcagi-installed-runtime-36712593205-1-d16d65da\resources\backend\xcagi-backend.exe is not digitally signed. You cannot run this script on the current system. For more information about running scripts and setting execution policy, see about_Execution_Policies at https://go.microsoft.com/fwlink/?LinkID=135170
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:16.6752393Z ^[[33;1mWARNING: UNSIGNED: manual installer delivery only; not eligible for stable automatic updates.^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:18.6800825Z Launching installed desktop runtime: D:\a\_temp\xcagi-installed-runtime-36712593205-1-d16d65da\XCAGI.exe
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:30.5237749Z waiting: readyForUi=False;modsReady=True
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:33.6768134Z waiting: readyForUi=False;modsReady=True
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.7141359Z ready: readyForUi=True;modsReady=True;storageMode=local_sqlite
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.7366553Z PASS health code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.7505160Z PASS desktop-status readyForUi=True;modsReady=True;storageMode=local_sqlite
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.7745329Z PASS runtime-product-sku sku=enterprise;enterprise=True
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.7986920Z PASS mods-list count=23
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.8126896Z PASS mods-loading-status loaded=13;partial_failure=False
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.8252855Z PASS mod-detail:xcagi-erp-domain-bridge code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.8326572Z PASS mod-detail:xcagi-approval-bridge code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.8400217Z PASS mod-detail:xcagi-customer-service-bridge code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.8476721Z PASS mod-detail:xcagi-model-payment-bridge code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.8546675Z PASS mod-detail:xcagi-lan-license-bridge code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.8612756Z PASS mod-detail:xcagi-neuro-bus-bridge code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.8677193Z PASS mod-detail:xcagi-office-employee-pack-bridge code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.8740456Z PASS mod-detail:xcagi-planner-bridge code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.8803885Z PASS mod-detail:xcagi-workflow-visualization-bridge code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.8945570Z PASS purchase-summary code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:36.9283721Z PASS report-dashboard code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:38.5444308Z FAIL mobile-pairing-issue Response status code does not indicate success: 503 (Service Unavailable).
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:38.5923760Z PASS erp-mod-products-list code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:38.6048077Z PASS erp-mod-purchase-units code=200
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:38.6668002Z PASS compat-products-list-anonymous-denied code=401
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:38.6771174Z PASS compat-purchase-units-anonymous-denied code=401
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:38.6776365Z SMOKE_PASS=20
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:38.6783323Z SMOKE_FAIL=1
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:45.6355501Z Cleanup uninstall exit=0
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:45.7895491Z ^[[31;1mException: ^[[0mD:\a\XCMAX\XCMAX\FHD\scripts\package\smoke-installed-windows.ps1:245^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:45.7897073Z ^[[31;1m^[[0m^[[36;1mLine |^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:45.7898349Z ^[[31;1m^[[0m^[[36;1m^[[36;1m 245 | ^[[0m   ^[[36;1mthrow "Installed Windows smoke failed: $script:FailCount"^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:45.7899501Z ^[[31;1m^[[0m^[[36;1m^[[36;1m^[[0m^[[36;1m^[[0m^[[36;1m     | ^[[31;1m   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:45.7900419Z ^[[31;1m^[[0m^[[36;1m^[[36;1m^[[0m^[[36;1m^[[0m^[[36;1m^[[31;1m^[[31;1m^[[36;1m     | ^[[31;1mInstalled Windows smoke failed: 1^[[0m
+windows-installer-delivery	Verify resources, install, start, and uninstall	2026-09-30T12:18:45.8164022Z ##[error]Process completed with exit code 1.

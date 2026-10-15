@@ -1,0 +1,43 @@
+[20:28:37Z] === Chain1 start (current official installer) ===
+[20:28:37Z] port_before=
+[20:28:37Z] --- 1) 安装包校验 ---
+dmg_sha256=414d9f226fac826302a02657ff9ef97fccbc141f005bb13bf6db8735bbe18783 dmg_size=300180224
+[20:28:38Z] --- 2) 模拟浏览器下载隔离属性 + Gatekeeper 判定 ---
+dmg_quarantine=0083;6ab041f6;Safari;
+/private/tmp/xcagi-custchain/dmg/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
+[20:28:39Z] --- 3) 挂载 + 三方核验 ---
+--- spctl ---
+/private/tmp/xcagi-custchain/mnt/fresh/XCAGI.app: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
+--- codesign ---
+codesign_ok=1
+--- stapler ---
+Processing: /private/tmp/xcagi-custchain/mnt/fresh/XCAGI.app
+The validate action worked!
+--- build-info ---
+{"schema_version":1,"gitSha":"c8fb73c95235cb5a03733c85512303de3997894f","version":"1.0.0.5","releaseId":"xcagi-1.0.0.5-c8fb73c95235cb5a03733c85512303de3997894f","builtAt":"2026-09-20T18:59:05.947Z"}
+
+[20:28:47Z] --- 4) 安装到规范路径 /Applications ---
+installed_build_info:
+{"schema_version":1,"gitSha":"c8fb73c95235cb5a03733c85512303de3997894f","version":"1.0.0.5","releaseId":"xcagi-1.0.0.5-c8fb73c95235cb5a03733c85512303de3997894f","builtAt":"2026-09-20T18:59:05.947Z"}
+
+installed_quarantine=none
+[20:28:48Z] --- 5) 首启（open -a / LaunchServices） ---
+[20:28:59Z] backend up; cdp_targets=1
+screenshot: True -> /private/tmp/xcagi-custchain/evidence/chain1-01-firstlaunch.png
+[20:28:59Z] --- 6) 登录绑定 + 权益 + Mod + 真实业务出单 ---
+{"health": "PASS", "login_binding": "PASS", "entitlement_mods": "PASS", "business": "PASS"}
+verdict: PASS -> /private/tmp/xcagi-custchain/evidence/chain1-business.json
+screenshot: True -> /private/tmp/xcagi-custchain/evidence/chain1-02-business.png
+[20:29:18Z] --- 7) 重启恢复 ---
+[20:29:26Z] backend up; cdp_targets=1
+{"relogin": {"status": 405, "success": false, "me_status": 404, "username": null}, "template_present": {"status": 404, "probe": "验收模板-FRESH", "found": false}, "customer_present": {"status": 404, "probe": "验收客户-FRESH", "found": false}, "prior_document": {"doc_name": "发货单_26-0900001A_20260921_042918.xlsx", "status": 404, "bytes": 113, "xlsx_magic": false, "sha256": "c5f11b0ce519a9cf381756eebbcc7c2fb162c96c0cabcb000091138d5d77b3f8"}}
+verdict: BLOCKED -> /private/tmp/xcagi-custchain/evidence/chain1-restart-continuity.json
+screenshot: True -> /private/tmp/xcagi-custchain/evidence/chain1-03-afterrestart.png
+[20:29:27Z] --- 8) 安装身份 ---
+
+[20:29:27Z] === Chain1 done ===
+[20:30:31Z] NOTE: 首次 continuity 因探针未等 auth 路由就绪(404 竞态)误判 BLOCKED；修正探针(-f)后同一实例复检 PASS。

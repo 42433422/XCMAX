@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
 import {
@@ -115,9 +115,7 @@ export function useSettingsBasics() {
   }
 
   async function loadDesktopDatabaseStatus() {
-    let triedDeploymentEndpoint = false
     try {
-      triedDeploymentEndpoint = true
       const deploymentRes = await api.get<DesktopDeploymentResponse>('/api/desktop/deployment')
       const deployment = (deploymentRes?.data ?? deploymentRes) as DesktopDeploymentResponse
       if (deployment?.success && deployment.desktopMode !== false) {
@@ -160,9 +158,6 @@ export function useSettingsBasics() {
         currentDbPath.value = String(data.database)
       }
     } catch {
-      if (!triedDeploymentEndpoint) {
-        deploymentStatusMessage.value = ''
-      }
       desktopDatabaseVisible.value = false
       databaseStorageLabel.value = ''
       currentDbPath.value = ''
@@ -171,8 +166,17 @@ export function useSettingsBasics() {
 
   const sidebarThemePreset = ref('office-default')
 
-  const appVersionLabel = computed(() => String(packageJson.version || '1.0.0'))
   const isDesktopShell = computed(() => Boolean(window.xcagiDesktop))
+  const appVersionLabel = ref(isDesktopShell.value ? '—' : String(packageJson.version || ''))
+  onMounted(async () => {
+    if (!isDesktopShell.value) return
+    try {
+      const identity = await window.xcagiDesktop?.getAppIdentity?.()
+      appVersionLabel.value = String(identity?.version || '').trim() || '—'
+    } catch {
+      appVersionLabel.value = '—'
+    }
+  })
 
   const sidebarThemeOptions = computed(() =>
     SIDEBAR_THEME_OPTIONS.map((theme) => ({

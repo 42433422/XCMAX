@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-mac-client",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "84d5cc239f0c0dbf1ca673455527653d56e953bf8bdc98eb59ee03b7be71c6c2",
+  "visible_content": "桌面模式 readyForUi、本地 SQLite 存储，health 返回版本 1.0.0.5 与 git_sha 37f22bcb，与安装包 build-info 一致；桌面运行时页可见同一目录信息。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-mac-client/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-mac-client/macos/result.png"
+}

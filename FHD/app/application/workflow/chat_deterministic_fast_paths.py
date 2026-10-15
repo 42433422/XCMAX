@@ -30,6 +30,48 @@ _NUMERIC_ONLY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# 纯小闲聊固定话术：问候/再见/求助。仅当消息不含任何业务意图时短路，
+# 避免「你好」被 planner 误判成 generic_workflow 并真的执行查询工具。
+_SMALLTALK_REPLIES: dict[str, str] = {
+    "greeting": "您好！我是 XCAGI 智能助手。您可以直接吩咐：开发货单、查产品/客户库存、"
+    "打印标签、管理考勤人员，或上传 Excel 让我分析。请问有什么可以帮您？",
+    "goodbye": "再见！祝您工作顺利，有需要随时找我。",
+    "help": "我可以帮您处理这些业务：\n"
+    "• 开单发货：「发货单 太阳鸟 5桶 20L规格」\n"
+    "• 查询数据：「查一下客户」「XX产品还有库存吗」\n"
+    "• 打印标签：「打印 A-100 规格20 标签 50张」\n"
+    "• 表格处理：上传 Excel 后可问「统计总金额」「导入产品库」\n"
+    "• 文档生成：「生成一份对账单」\n"
+    "• 考勤管理：考勤工作区维护人员/部门，按登录账号隔离\n"
+    "直接说需求即可，我会自动识别并执行。",
+}
+
+
+def _try_smalltalk_reply(text: str) -> dict[str, str] | None:
+    """纯问候/再见/求助短路；含业务意图时返回 None 交给后续链路。"""
+    try:
+        from app.services.intent_service import recognize_intents
+
+        flags = recognize_intents(text)
+    except RECOVERABLE_ERRORS:
+        return None
+    if not isinstance(flags, dict):
+        return None
+    # 只要识别出任何业务意图/工具/提示，就不短路（如「你好，帮我开单」）。
+    if flags.get("primary_intent") or flags.get("tool_key") or flags.get("intent_hints"):
+        return None
+    for key in ("greeting", "goodbye", "help"):
+        if flags.get(f"is_{key}"):
+            reply = _SMALLTALK_REPLIES[key]
+            return {
+                "response": reply,
+                "text": reply,
+                "thinking_steps": "[小闲聊短路：未调用业务工具]",
+                "action": key,
+                "trace_intent": f"smalltalk_{key}",
+            }
+    return None
+
 
 def _wants_numeric_only(message: str) -> bool:
     return bool(_NUMERIC_ONLY_RE.search(str(message or "")))
@@ -111,6 +153,10 @@ def try_deterministic_chat_reply(
     text = str(message or "").strip()
     if not text:
         return None
+
+    smalltalk = _try_smalltalk_reply(text)
+    if smalltalk is not None:
+        return smalltalk
 
     numeric_only = _wants_numeric_only(text)
 

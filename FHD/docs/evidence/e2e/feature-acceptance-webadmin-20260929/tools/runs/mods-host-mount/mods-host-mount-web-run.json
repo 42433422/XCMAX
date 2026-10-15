@@ -1,0 +1,327 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "mods-host-mount",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-141355",
+  "generated_at": "2026-09-29 14:14:17",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：读取宿主已装 Mod 注册表 → 读取后端声明的前端路由挂载清单 → 读取 Mod 加载根与状态 → 以真实 409 记录「扩展包未完成签名与安装验证」时运行时挂载被拒（边界/负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 35353,
+        "processed": 35347,
+        "errors": 0,
+        "dropped": 6,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 2,
+            "max_cache_size": 1000,
+            "hits": 19,
+            "misses": 2,
+            "hit_rate": 0.9047619047619048,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-host-mount/mods-host-mount-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "mods-host-mount",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-host-mount/shot/00-login-form.png",
+      "sha256": "76e88970b3fa7a20bd7307a5daea25459eaf360f1a262ff7ce848ce2fbcc3442",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "mods-host-mount",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-host-mount/shot/H1-mods-registry.png",
+      "sha256": "11d672bf8f1f937d6daca959403fa6b3e9a1df508fd62a4b95cfc7dc80ff8999",
+      "visual_review": "accepted",
+      "visible_result": "卡片汇总三处真实响应：GET /api/mods 200 返回已装 Mod 注册表（含 coating-industry、attendance-industry 等）；GET /api/mods/routes 200 返回前端路由挂载清单；GET /api/mods/loading-status 200 返回 mods_root=/private/tmp/xcmax-verifycenter-main/FHD/mods 与搜索根列表。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "mods-host-mount",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-host-mount/shot/H4-runtime-blocked.png",
+      "sha256": "d732d83a1972f0dfc0ec4589a0aacffc36f1b8ab5a9e143faf56ec132677f0cd",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/mods/runtime/coating-industry 返回 409，success=false，message=扩展包尚未完成签名与安装验证 —— 未签名扩展不挂载运行时。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "mods-host-mount",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-host-mount/video/mods-host-mount-web-20260929-141355.webm",
+      "sha256": "a25c4593b20575b589dd82bb6785e5a8c2e619bf6161f38a5b622b35aa66d7b0",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，20.16s，ffmpeg 实测）：管理员登录 → Mod 注册表 → 路由挂载 → 加载状态 → 未签名运行时 409。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "H1",
+      "title": "宿主已装 Mod 注册表真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/mods。",
+      "expected": "HTTP 200，data 非空且含 coating-industry、attendance-industry。",
+      "observed": "{\"status\": 200, \"count\": 63, \"ids\": [\"attendance-industry\", \"coating-industry\", \"sz-qsm-pro\", \"xcagi-planner-bridge\", \"accessories-packaging-industry\", \"lan-gate-ai-employee\", \"xcagi-approval-bridge\", \"xcagi-core-workflow-employees\"], \"sample\": [{\"id\": \"attendance-industry\", \"name\": \"通用考勤模块\", \"version\": \"1.0.1\", \"primary\": true}, {\"id\": \"coating-industry\", \"name\": \"涂料行业包\", \"version\": \"1.0.0\", \"primary\": true}, {\"id\": \"sz-qsm-pro\", \"name\": \"奇士美 PRO\", \"version\": \"1.0.0\", \"primary\": true}, {\"id\": \"xcagi-planner-bridge\", \"name\": \"XCAGI 对话 Planner 门面 Mod\", \"version\": \"1.0.0.0\", \"primary\": true}]}",
+      "result": "passed"
+    },
+    {
+      "id": "H2",
+      "title": "后端声明的路由挂载清单真实读取",
+      "input": "同上。",
+      "actions": "页面上下文 fetch GET /api/mods/routes。",
+      "expected": "HTTP 200，非空且每项含 mod_id 与 routes_path。",
+      "observed": "{\"status\": 200, \"route_count\": 13, \"sample\": [{\"mod_id\": \"attendance-industry\", \"routes_path\": \"frontend/routes\"}, {\"mod_id\": \"coating-industry\", \"routes_path\": \"frontend/routes\"}, {\"mod_id\": \"xcagi-planner-bridge\", \"routes_path\": \"frontend/routes\"}, {\"mod_id\": \"accessories-packaging-industry\", \"routes_path\": \"frontend/routes\"}]}",
+      "result": "passed"
+    },
+    {
+      "id": "H3",
+      "title": "Mod 加载根与状态真实读取",
+      "input": "同上。",
+      "actions": "页面上下文 fetch GET /api/mods/loading-status。",
+      "expected": "HTTP 200，含 mods_root 与非空搜索根列表。",
+      "observed": "{\"status\": 200, \"mods_root\": \"/private/tmp/xcmax-verifycenter-main/FHD/mods\", \"search_root_count\": 2}",
+      "result": "passed"
+    },
+    {
+      "id": "H4",
+      "title": "未签名扩展的运行时挂载被拒（负例/边界）",
+      "input": "同上，coating-industry 扩展包未完成签名。",
+      "actions": "页面上下文 fetch GET /api/mods/runtime/coating-industry。",
+      "expected": "HTTP 409，success=false，提示扩展包尚未完成签名与安装验证。",
+      "observed": "{\"status\": 409, \"message\": \"扩展包尚未完成签名与安装验证\"}",
+      "result": "passed"
+    }
+  ]
+}

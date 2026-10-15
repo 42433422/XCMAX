@@ -178,6 +178,16 @@ def get_log_dir() -> str:
     return log_dir
 
 
+def get_shipment_output_dir() -> str:
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    root = get_app_data_dir()
+    tenant = current_tenant_id()
+    if tenant is not None:
+        root = os.path.join(root, "tenants", str(tenant))
+    return os.path.join(root, "shipment_outputs")
+
+
 def get_db_path(db_name: str = "products.db") -> str:
     """
     获取数据库文件路径

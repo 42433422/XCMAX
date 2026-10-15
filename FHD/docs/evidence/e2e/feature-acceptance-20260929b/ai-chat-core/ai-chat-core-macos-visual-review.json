@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-chat-core",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "7eb91e594f3b949272659cfdabd95b3a8d4a8eaf0fe3c8bb102e991291128716",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。智能对话页。助手回复可管产品、客户、订单和库存，以及数据查询、Excel 导入导出、生成文档。右栏 19 条消息仅本地。底栏有按住说话、发送，语音播报已勾选。左下 v1.0.0.5，系统正常，顶栏 SUNBIRD。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-chat-core/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-chat-core/macos/result.png"
+}

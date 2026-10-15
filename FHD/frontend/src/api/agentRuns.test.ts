@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const apiMock = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  download: vi.fn(),
 }))
 
 vi.mock('./core', () => ({
@@ -12,6 +13,10 @@ vi.mock('./core', () => ({
 import agentRunsApi from './agentRuns'
 
 describe('agentRunsApi', () => {
+  it('downloads artifacts through the authenticated client with encoded identities', async () => {
+    await agentRunsApi.downloadArtifact('run/1', 'file/2')
+    expect(apiMock.download).toHaveBeenCalledWith('/api/agent/runs/run%2F1/artifacts/file%2F2')
+  })
   beforeEach(() => {
     apiMock.get.mockReset().mockResolvedValue({ success: true })
     apiMock.post.mockReset().mockResolvedValue({ success: true })

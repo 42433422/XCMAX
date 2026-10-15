@@ -318,8 +318,7 @@
           "risk": "medium",
           "idempotent": false,
           "required_params": [
-            "name_or_model",
-            "unit_name"
+            "name_or_model"
           ],
           "availability": "shared",
           "action_class": "business_db.write"
@@ -508,8 +507,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "product_id",
-            "warehouse_id",
             "quantity"
           ],
           "availability": "shared"
@@ -657,11 +654,17 @@
           "required_params": [],
           "availability": "shared"
         },
+        "create_order": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": ["items"],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
         "quote": {
           "risk": "medium",
-          "idempotent": true,
+          "idempotent": false,
           "required_params": [
-            "customer_id",
             "items"
           ],
           "availability": "shared",
@@ -1152,6 +1155,7 @@
         },
         "restore_database": {
           "risk": "high",
+          "approval": "always",
           "idempotent": false,
           "required_params": [
             "backup_file"
@@ -1490,6 +1494,32 @@
             "printer_name"
           ],
           "availability": "shared"
+        }
+      }
+    },
+    "desktop_automation": {
+      "description": "已登记桌面应用：打开应用或查询运行状态；不执行任意命令或消息发送",
+      "availability": "shared",
+      "actions": {
+        "list": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": []
+        },
+        "open_app": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "app_id"
+          ],
+          "approval": "always"
+        },
+        "app_status": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "app_id"
+          ]
         }
       }
     },

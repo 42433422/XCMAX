@@ -1,0 +1,343 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "pay-entitlement-delivery",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-070204",
+  "generated_at": "2026-09-29 07:02:23",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端完成：管理员登录 → 「客户交付中心」页真实渲染（购买权益、定制与验收口径）→ 套餐接口按预算区间派生推荐档位与账号等级（5–10 万→pro、50–100 万→ultra）→ 非法/未知预算回退默认档（normal）→ 用户已授权 Mod（资产交付清单）接口在未绑定市场账号时被拒（401）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 48724,
+        "processed": 48685,
+        "errors": 0,
+        "dropped": 39,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 3,
+            "max_cache_size": 1000,
+            "hits": 8,
+            "misses": 3,
+            "hit_rate": 0.7272727272727273,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "error.occurred",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "evolution.search"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/pay-entitlement-delivery/pay-entitlement-delivery-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "pay-entitlement-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement-delivery/shot/00-login-form.png",
+      "sha256": "60c9caf50c5c8bcad7259904bd9036eea0bc81c5ec4f50383a24d68977285912",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号 admin、密码为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-entitlement-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement-delivery/shot/PD1-delivery-center.png",
+      "sha256": "be7ee51e7b75c24869773ef9247abd7d069e0644cbfca6340f0f61463e661941",
+      "visual_review": "accepted",
+      "visible_result": "「客户交付中心」页真实渲染：「Mac 主控 · 四设备协同」任务单（目标/执行设备/任务类型/关联工单）与「客户安装与业务验收独立核对；执行器报告完成不等于已交付。」，红条提示「尚未绑定修茈服务器账号…」；下方「CUSTOMER DELIVERY CONTROL 客户交付中心」说明「所有企业用户统一进入交付台账；内部本 Mac 永不计入客户交付；购买权益、定制、安装与首次登录证据分别如实展示。」，含 企业用户/永久购买账户/体验账户/永久待安装/待首次登录/永久交付完成/内部本机排除/定义交付工单/生产中 等指标卡（本轮多为 0）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-entitlement-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement-delivery/shot/PD2-tier-derivation.png",
+      "sha256": "238079ab24ecbe258fd8a0063c024ad7240a5d6e377a90d7e90b4c7aad5d141f",
+      "visual_review": "accepted",
+      "visible_result": "本工具在真实浏览器中渲染的本轮响应：GET /api/model-payment/plans?budget_range=5–10 万 推荐 saas-permanent-growth(account_tier=pro)；budget_range=50–100 万 推荐 saas-permanent-ultra(account_tier=ultra)。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-entitlement-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement-delivery/shot/PD3-unknown-budget-fallback.png",
+      "sha256": "77e132651494d112491d84f5e31f22ac00fe3626320be6448552e48bd39c9628",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/model-payment/plans?budget_range=__unknown_budget__ 返回 200，budget_range 原样回显，推荐档回退 saas-permanent-starter(account_tier=normal)。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-entitlement-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement-delivery/shot/PD4-user-mods-denied.png",
+      "sha256": "5ed5b7954997b5cd076735167a26475df2bdc67cc9bbf94992f0de2957921b0d",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/xcmax/admin/market/users/1/mods 返回 401，success=false，message=尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-entitlement-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement-delivery/video/pay-entitlement-delivery-web-20260929-070204.webm",
+      "sha256": "0431db2e2485f478f6ed1c0b35f36954b4b261cd1a13dd5d73c4c3d889e1c97a",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，18.72s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 客户交付中心页渲染 → 预算派生推荐档（pro/ultra）→ 未知预算回退 normal → 用户 Mod 清单 401。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "PD1",
+      "title": "「客户交付中心」页真实渲染（权益开通与交付口径）",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器导航到 /admin/delivery-center，等待 SPA 渲染后读取标题与正文。",
+      "expected": "渲染出「客户交付中心」并含「购买权益」交付口径说明。",
+      "observed": "{\"final_url\": \"http://127.0.0.1:42423/admin/delivery-center\", \"title\": \"客户交付中心 - XCAGI\", \"has_delivery_center\": true, \"has_entitlement_wording\": true, \"text_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能力未就绪 版本检测中 平台运维 · 系统管理 客户交付中心 副窗 ◈ 工作区 3 Mac 主控 · 四设备协同  服务器保存任务与回执，Mac 主控编排执行。  刷新  尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization  目标 执行设备 Mac 主设备 Windows 验证设备 任务类型 只读分析与验证 开发并推进到现有审批点 关联工单（可选） 交给主控  客户安装\"}",
+      "result": "passed"
+    },
+    {
+      "id": "PD2",
+      "title": "套餐推荐档位与账号等级随预算区间派生",
+      "input": "预算区间 5–10 万 与 50–100 万。",
+      "actions": "页面上下文分别 fetch GET /api/model-payment/plans?budget_range=5–10 万 / 50–100 万。",
+      "expected": "200；前者推荐 saas-permanent-growth(pro)，后者推荐 saas-permanent-ultra(ultra)。",
+      "observed": "{\"low_status\": 200, \"low\": [{\"id\": \"saas-permanent-growth\", \"account_tier\": \"pro\"}], \"high_status\": 200, \"high\": [{\"id\": \"saas-permanent-ultra\", \"account_tier\": \"ultra\"}]}",
+      "result": "passed"
+    },
+    {
+      "id": "PD3",
+      "title": "非法/未知预算回退默认档（边界）",
+      "input": "budget_range=__unknown_budget__。",
+      "actions": "页面上下文 fetch GET /api/model-payment/plans?budget_range=__unknown_budget__。",
+      "expected": "200 且成功，原样回显 budget_range，推荐档回退 saas-permanent-starter(normal)。",
+      "observed": "{\"status\": 200, \"budget_range_echo\": \"__unknown_budget__\", \"recommended\": [{\"id\": \"saas-permanent-starter\", \"account_tier\": \"normal\"}]}",
+      "result": "passed"
+    },
+    {
+      "id": "PD4",
+      "title": "用户已授权 Mod（资产交付清单）未绑定市场账号被拒",
+      "input": "已建立的管理员会话，但未绑定市场 Authorization。",
+      "actions": "页面上下文 fetch GET /api/xcmax/admin/market/users/1/mods。",
+      "expected": "HTTP 401，success=false，不返回 Mod 交付数据。",
+      "observed": "{\"status\": 401, \"message\": \"尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization\"}",
+      "result": "passed"
+    }
+  ]
+}

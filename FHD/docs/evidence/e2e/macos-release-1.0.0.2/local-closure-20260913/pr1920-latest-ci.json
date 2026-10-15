@@ -1,0 +1,216 @@
+{
+  "head": "fab22e69b2a68ca5fe53d6601284efca5923445d",
+  "at": "2026-09-13T07:58:28.306344+00:00",
+  "checks": [
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003419/job/103695174606",
+      "name": "desktop-test",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003419/job/103695174584",
+      "name": "desktop-build-smoke",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003426/job/103694398038",
+      "name": "security-no-new-critical-high",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003419/job/103694001847",
+      "name": "frontend-test",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/runs/103694259591",
+      "name": "CodeQL",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003419/job/103694001842",
+      "name": "backend-test",
+      "state": "IN_PROGRESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003419/job/103694001827",
+      "name": "security-scan",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003419/job/103694001849",
+      "name": "arch-fitness",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003419/job/103694001829",
+      "name": "SSOT Drift Gate",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003424/job/103693986271",
+      "name": "frontend-smoke",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003426/job/103693952673",
+      "name": "analyze (python)",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003408/job/103693952662",
+      "name": "migration-status-check",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003426/job/103693952580",
+      "name": "analyze (javascript-typescript)",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003691/job/103693953227",
+      "name": "Playwright P0 关键路径 / Playwright P0",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003387/job/103693952796",
+      "name": "Signed customer delivery round trip",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003398/job/103693952498",
+      "name": "review",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003419/job/103694001861",
+      "name": "desktop-windows-release-script-smoke",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003424/job/103693986197",
+      "name": "backend-smoke",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003503/job/103693952818",
+      "name": "Forbid committed runtime artifacts",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/runs/103694034587",
+      "name": "Electronegativity",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003451/job/103693952687",
+      "name": "gitleaks",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003609/job/103693953055",
+      "name": "smoke",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003408/job/103693952551",
+      "name": "code-cleanup-check",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003442/job/103693952603",
+      "name": "Changelog updated",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003489/job/103693952671",
+      "name": "Release gate (hard block)",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003476/job/103693952943",
+      "name": "Electron build + launch (macOS)",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003466/job/103693952625",
+      "name": "single-head",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003458/job/103693952631",
+      "name": "mutation-smoke",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003419/job/103693952672",
+      "name": "guard-temp-scripts",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003396/job/103693952801",
+      "name": "sunbird-source-build",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003390/job/103693952726",
+      "name": "Electronegativity (Electron security)",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003419/job/103693952716",
+      "name": "Agent PostgreSQL transactions",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003396/job/103693952730",
+      "name": "ratchet",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003422/job/103693952619",
+      "name": "runtime-contract (windows-2022)",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003422/job/103693952423",
+      "name": "runtime-contract (ubuntu-latest)",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003448/job/103693952866",
+      "name": "Vitest (173 文件 · jsdom)",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003371/job/103693952428",
+      "name": "Forbid _archive in workspace",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003466/job/103693952776",
+      "name": "ssot-parity-sqlite",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003424/job/103693952654",
+      "name": "repo-hygiene",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003476/job/103693953657",
+      "name": "macOS dmg + deliverable smoke (${{ matrix.arch }})",
+      "state": "SKIPPED"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003408/job/103693953189",
+      "name": "migration-progress-badge",
+      "state": "SKIPPED"
+    },
+    {
+      "link": "https://github.com/42433422/XCMAX/actions/runs/34746003371/job/103693953223",
+      "name": "archive secret scan (--check --strict)",
+      "state": "SKIPPED"
+    }
+  ]
+}

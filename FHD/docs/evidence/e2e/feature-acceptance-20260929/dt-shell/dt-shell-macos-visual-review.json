@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "dt-shell",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "b671d4e12b8713a93721e365bfb4ee4cf2dd67d72145a09bc03e42b8ad55477c",
+  "visible_content": "桌面壳 appRoutesReady=true、modsFullLoadDone=true，桌面运行时页可见。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-shell/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-shell/macos/result.png"
+}

@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import type { ChatMessage } from './useChatMessages'
+import { chatMessageExtrasFromServerRow, type ChatMessage } from './useChatMessages'
 import type { ShipmentTask } from './useShipmentTask'
 import {
   CHAT_MESSAGES_STORAGE_PREFIX,
@@ -160,27 +160,24 @@ export function extractLikelyProductQueryKeyword(raw: string): string | null {
   if (/(出货单|发货单|订单列表|客户列表|工作流|批量|导入|上传|数据库|打印标签|打印\s|有哪些客户|今天.*单)/.test(t)) {
     return null
   }
-  // “当前/全部产品列表”是全量查询，不是名为“当前产品列表”的产品关键词。
-  // 交给服务端产品查询路由以空 keyword 拉取全量，避免快路径误报“未找到”。
+  // 全量列表交给服务端；不要将字段选择并入产品型号。
   if (/^(?:查询|查一下|查下|查看|看看|看下|查)?\s*(?:当前|现有|全部|所有)?\s*产品(?:列表|库)?\s*[。！？…]*$/u.test(t)) {
     return null
   }
   const patterns: RegExp[] = [
     /^查询\s*(.+)$/u,
     /^查一下\s*(.+?)\s*的?(?:价格|价钱|多少钱)?\s*[。！？…]*$/iu,
-    /^帮我查(?:询)?\s*(.+?)\s*(?:的)?(?:价格|多少钱)?\s*[。！？…]*$/iu,
   ]
   for (const re of patterns) {
     const m = t.match(re)
     if (m?.[1]) {
-      let k = String(m[1])
-        .trim()
-        .replace(/[。！？…]+$/g, '')
-        .trim()
+      let k = String(m[1]).trim().replace(/[。！？…]+$/g, '').trim()
       if ((k.startsWith('「') && k.endsWith('」')) || (k.startsWith('"') && k.endsWith('"')) || (k.startsWith('『') && k.endsWith('』'))) {
         k = k.slice(1, -1).trim()
       }
       k = k.replace(/^(产品|型号|货号)[是为：:\s]+/i, '').trim()
+      k = k.replace(/^([a-z0-9][a-z0-9._/-]*)\s*的(?:名称|单价|价格|库存)(?:(?:[、，,和及与\s]+)(?:名称|单价|价格|库存))*$/i, '$1')
+      if (!/(产品|型号|货号|价格|价钱|单价|库存|多少钱)/.test(t) && !/^[a-z0-9][a-z0-9._/-]*$/i.test(k)) return null
       if (k.length >= 1 && k.length <= 120) return k
     }
   }
@@ -275,7 +272,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
         const s = session as Record<string, unknown>
         const sid = String(s?.session_id || s?.id || '').trim()
         if (!sid) return null
-        const title = String(s?.title || s?.summary || '').trim() || `会话 ${idx + 1}`
+        const title = String(s?.title || s?.summary || readLocalSessionMeta(sid)?.title || '').trim() || `会话 ${idx + 1}`
         const count = Number(s?.message_count ?? (Array.isArray(s?.messages) ? s.messages.length : 0))
         return {
           ...s,
@@ -304,6 +301,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
             role: m?.role === 'user' || m?.role === 'task' ? m.role : 'ai',
             content: String(m?.content || ''),
             time: String(m?.time || '').trim() || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+            ...chatMessageExtrasFromServerRow({ ui_payload: m }),
           } as ChatMessage
         })
         .filter((msg: ChatMessage) => !!toPlainText(msg.content))
@@ -402,6 +400,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
       byId.set(sid, {
         ...(prev || {}),
         ...session,
+        message_count: Math.max(Number(prev?.message_count || 0), Number(session.message_count || 0)),
         is_local_only: false,
       })
     })

@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ind-workflow-viz",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "6595815b0539fa68e3548848be4d95887b5f55a0583a8af50e01ad878c9c068a",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。员工空间工位实况，考勤 AI 助手副窗未启用，与员工空间验收同一画面。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ind-workflow-viz/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ind-workflow-viz/macos/result.png"
+}

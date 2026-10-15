@@ -61,6 +61,9 @@ from app.fastapi_routes.market_account_part01 import (
     _error_message as _error_message,
 )
 from app.fastapi_routes.market_account_part01 import (
+    _market_api_base_url as _market_api_base_url,
+)
+from app.fastapi_routes.market_account_part01 import (
     _market_base_url as _market_base_url,
 )
 from app.fastapi_routes.market_account_part01 import (

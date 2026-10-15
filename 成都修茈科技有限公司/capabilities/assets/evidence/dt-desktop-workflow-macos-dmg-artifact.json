@@ -1,0 +1,37 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "macos-candidate-dmg",
+  "at_utc": "2026-09-28T20:51:30Z",
+  "dmg": "/Users/Shared/XCAGI-FULLCLOSED-20260928/artifact/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+  "expected_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "expected_version": "1.0.0.5",
+  "dmg_sha256": "a05a482e4936d11e64d475cca6e0cffab3abfb84db13801df8bb2e531875dcf7",
+  "dmg_size": 304586120,
+  "mount_ok": true,
+  "app_present": true,
+  "codesign_verify": [
+    0,
+    "--prepared:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/XCAGI Helper.app\n--validated:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/XCAGI Helper.app\n--prepared:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/XCAGI Helper (Renderer).app\n--validated:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/XCAGI Helper (Renderer).app\n--prepared:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/.\n--prepared:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/Helpers/chrome_crashpad_handler\n--validated:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/Helpers/chrome_crashpad_handler\n--validated:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/.\n--prepared:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/ReactiveObjC.framework/Versions/Current/.\n--validated:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/ReactiveObjC.framework/Versions/Current/.\n--prepared:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/Squirrel.framework/Versions/Current/.\n--validated:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/Squirrel.framework/Versions/Current/.\n--prepared:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/Mantle.framework/Versions/Current/.\n--validated:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/Mantle.framework/Versions/Current/.\n--prepared:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/XCAGI Helper (GPU).app\n--validated:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/XCAGI Helper (GPU).app\n--prepared:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/XCAGI Helper (Plugin).app\n--validated:/private/tmp/xcagi-dmg-0qdAZ2/XCAGI.app/Contents/Frameworks/XCAGI Helper (Plugin).app\n/tmp/xcagi-dmg-0qdAZ2/XCAGI.app: valid on disk\n/tmp/xcagi-dmg-0qdAZ2/XCAGI.app: satisfies its Designated Requirement"
+  ],
+  "codesign_ok": true,
+  "spctl": [
+    0,
+    "/tmp/xcagi-dmg-0qdAZ2/XCAGI.app: accepted\nsource=Notarized Developer ID\norigin=Developer ID Application: jialong Li (G26WSH472M)"
+  ],
+  "gatekeeper_ok": true,
+  "stapler": [
+    0,
+    "Processing: /tmp/xcagi-dmg-0qdAZ2/XCAGI.app\nThe validate action worked!"
+  ],
+  "stapled_ok": true,
+  "build_info": {
+    "schema_version": 1,
+    "gitSha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+    "version": "1.0.0.5",
+    "releaseId": "xcagi-1.0.0.5-37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+    "builtAt": "2026-09-28T01:42:42.396Z"
+  },
+  "notarization_is_devid": true,
+  "outbound_network_entitlements": "-: No such file or directory",
+  "verdict": "PASS"
+}

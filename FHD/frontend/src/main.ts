@@ -16,7 +16,7 @@ bootstrapAdminConsoleShellDefaults()
 import App from './App.vue'
 import router from './router'
 import { bindTutorialRouter } from '@/stores/tutorial'
-import { registerAllModRoutesFromGlob, registerModRoutes } from './router/registerModRoutes'
+import { ensureGlobModRoutes, registerModRoutes } from './router/registerModRoutes'
 
 bindTutorialRouter(router)
 import { fetchModRoutesPayloadShared } from './utils/modRoutesSharedFetch'
@@ -195,7 +195,7 @@ async function bootstrap() {
   if (!readVanillaNoModUi()) {
     void (async () => {
       try {
-        await registerAllModRoutesFromGlob(router)
+        await ensureGlobModRoutes(router)
         scheduleRouterAddressSync('glob')
       } catch (e) {
         console.warn('[bootstrap] mod routes (glob) after mount failed:', e)

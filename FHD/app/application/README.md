@@ -370,7 +370,6 @@ def authenticate(self, username, password):
 
 ## 📚 相关文档
 
-- [DDD 重构计划](ddd-refactoring-plan.md)
 - [DDD 重构验证报告](ddd-refactoring-verification.md)
 - [DDD 重构总结](DDD_REFACTORING_SUMMARY.md)
 

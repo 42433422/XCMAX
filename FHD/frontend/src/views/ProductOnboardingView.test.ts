@@ -51,7 +51,8 @@ vi.mock('@/utils/platformShellApi', () => ({
 vi.mock('@/composables/useTutorialCatalog', () => ({
   useTutorialCatalog: () => ({ buildContext: vi.fn(() => ({})) }),
 }))
-vi.mock('@/utils/hostPackOnboardingGate', () => ({
+vi.mock('@/utils/hostPackOnboardingGate', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/hostPackOnboardingGate')>()),
   invalidateHostPackCompletionCache: vi.fn(),
   markHostPackSkippedThisSession: vi.fn(),
 }))

@@ -6,8 +6,12 @@ from typing import TYPE_CHECKING, Any, cast
 
 from app.application.agent_orchestrator.artifact_attachment import ArtifactAttachmentMixin
 from app.application.agent_orchestrator.budget import apply_ai_budget_metadata
-from app.application.agent_orchestrator.run_lifecycle import RunLifecycleMixin
+from app.application.agent_orchestrator.run_lifecycle import (
+    RunLifecycleMixin,
+    requires_retry_reconciliation,
+)
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
+from app.application.agent_orchestrator.runtime_context import merge_runtime_context
 from app.application.agent_orchestrator.task_plan import UnifiedTaskPlanMixin
 
 _WORKER_EXECUTION_FAILED = "worker_execution_failed"
@@ -25,12 +29,73 @@ def task_execution_context(run: AgentRun, step: Any) -> dict[str, Any]:
     }
 
 
+def apply_approved_step(
+    run: AgentRun,
+    step: Any,
+    *,
+    approved_by: str,
+    runtime_context: dict[str, Any] | None = None,
+) -> None:
+    """Apply an already validated approval without performing storage I/O."""
+    context = merge_runtime_context(run, runtime_context)
+    run.metadata["runtime_context"] = context
+    apply_ai_budget_metadata(run, context)
+    step.status = "pending"
+    run.status = "queued"
+    run.error = ""
+    run.metadata["dispatch"] = {
+        "state": "queued",
+        "approved_step_id": step.step_id,
+        "approved_by": str(approved_by or ""),
+        "queued_at": utc_now_iso(),
+    }
+    run.add_event(
+        "step.approved",
+        f"步骤 {step.node_id} 已确认继续",
+        {
+            "step_id": step.step_id,
+            "node_id": step.node_id,
+            "tool_id": step.tool_id,
+            "action": step.action,
+            "approved_by": str(approved_by or ""),
+        },
+    )
+    run.add_event(
+        "task.queued",
+        "任务已进入后台执行队列",
+        {
+            "step_id": step.step_id,
+            "node_id": step.node_id,
+            "approved_by": str(approved_by or ""),
+        },
+    )
+
+
 class BackgroundTaskExecutionMixin:
     if TYPE_CHECKING:
         _apply_requested_control: Any
         _execute_with_durable_lease: Any
         _find_waiting_step: Any
     _repo: Any
+
+    def stage_clarification_answer(
+        self, run_id: str, *, step_id: str, parameters: dict[str, Any], requested_by: str
+    ) -> AgentRun | None:
+        from app.application.agent_orchestrator.clarification import apply_clarification_answer
+
+        run = self._repo.get(run_id)
+        if run is None:
+            return None
+        apply_clarification_answer(run, step_id=step_id, parameters=parameters)
+        run.status = "queued"
+        run.metadata["dispatch"] = {
+            "state": "queued",
+            "approved_step_id": "",
+            "requested_by": str(requested_by),
+            "queued_at": utc_now_iso(),
+        }
+        run.add_event("task.queued", "已补充信息，任务等待继续执行")
+        return cast("AgentRun", self._repo.save(run))
 
     def stage_run_for_dispatch(
         self,
@@ -63,6 +128,7 @@ class BackgroundTaskExecutionMixin:
         approved_by: str,
         approved_step_id: str,
         runtime_context: dict[str, Any] | None = None,
+        authenticated_binding: dict[str, Any] | None = None,
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None:
@@ -70,39 +136,12 @@ class BackgroundTaskExecutionMixin:
         step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         if step is None:
             return cast("AgentRun | None", self._repo.save(run))
-        context = dict(run.metadata.get("runtime_context") or {})
-        context.update(dict(runtime_context or {}))
-        run.metadata["runtime_context"] = context
-        apply_ai_budget_metadata(run, context)
-        step.status = "pending"
-        run.status = "queued"
-        run.error = ""
-        run.metadata["dispatch"] = {
-            "state": "queued",
-            "approved_step_id": step.step_id,
-            "approved_by": str(approved_by or ""),
-            "queued_at": utc_now_iso(),
-        }
-        run.add_event(
-            "step.approved",
-            f"步骤 {step.node_id} 已确认继续",
-            {
-                "step_id": step.step_id,
-                "node_id": step.node_id,
-                "tool_id": step.tool_id,
-                "action": step.action,
-                "approved_by": str(approved_by or ""),
-            },
+        from app.application.agent_orchestrator.session_renewal import renew_approval_session
+
+        renew_approval_session(
+            run, principal_id=approved_by, authenticated_binding=authenticated_binding
         )
-        run.add_event(
-            "task.queued",
-            "任务已进入后台执行队列",
-            {
-                "step_id": step.step_id,
-                "node_id": step.node_id,
-                "approved_by": str(approved_by or ""),
-            },
-        )
+        apply_approved_step(run, step, approved_by=approved_by, runtime_context=runtime_context)
         return cast("AgentRun | None", self._repo.save(run))
 
     def stage_resume_run(
@@ -111,22 +150,35 @@ class BackgroundTaskExecutionMixin:
         *,
         requested_by: str = "",
         runtime_context: dict[str, Any] | None = None,
+        authenticated_binding: dict[str, Any] | None = None,
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None or run.status != "paused":
             return cast("AgentRun | None", run)
+        if requires_retry_reconciliation(run):
+            raise ValueError("任务执行结果尚需人工核对，不能恢复执行")
+        from app.application.agent_orchestrator.session_renewal import renew_approval_session
+
+        renew_approval_session(
+            run,
+            principal_id=requested_by,
+            authenticated_binding=authenticated_binding,
+            operation="resume",
+        )
         control = run.metadata.get("control")
         resume_status = str(control.get("resume_status") or "") if isinstance(control, dict) else ""
+        context = merge_runtime_context(run, runtime_context)
         command = self._repo.request_task_control(run_id, "resume", requested_by=requested_by)
-        context = dict(run.metadata.get("runtime_context") or {})
-        context.update(dict(runtime_context or {}))
         run.metadata["runtime_context"] = context
         run.metadata["control"] = {
             "state": "queued",
             "requested_by": requested_by,
             "command_id": command.command_id,
         }
-        run.status = "waiting_user" if resume_status == "waiting_user" else "queued"
+        needs_approval = resume_status == "waiting_user" or any(
+            step.status == "waiting_user" for step in run.steps
+        )
+        run.status = "waiting_user" if needs_approval else "queued"
         if run.status == "queued":
             run.metadata["dispatch"] = {
                 "state": "queued",
@@ -194,10 +246,17 @@ class BackgroundTaskExecutionMixin:
         return cast("AgentRun | None", self._repo.save(run))
 
     def _prepare_expired_execution_recovery(self, run: AgentRun) -> bool:
+        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
         running_steps = [step for step in run.steps if step.status == "running"]
         if not running_steps:
             run.add_event("task.worker_recovered", "任务执行租约已恢复", {})
             return True
+        for step in running_steps:
+            current_spec = get_tool_action_spec(step.tool_id, step.action)
+            # Old persisted plans may carry a superseded replay-safety claim.
+            # Never upgrade an unsafe historical step based on a newer registry.
+            step.idempotent = bool(step.idempotent and current_spec and current_spec.idempotent)
         if any(not step.idempotent for step in running_steps):
             run.status = "blocked"
             run.error = _NON_IDEMPOTENT_RECOVERY_BLOCKED

@@ -9,7 +9,7 @@
 - `DATABASE_USER` / `DATABASE_PASSWORD`: PostgreSQL 账号
 - `REDIS_URL`: Redis URL，生产环境必须带认证/TLS
 - `MODSTORE_JWT_SECRET`: 与 Python `auth_service.py` 相同，用于校验 SPA Bearer Token
-- `PAYMENT_SECRET_KEY`: 与 Python 兼容的 checkout 签名密钥
+- `PAYMENT_SECRET_KEY`: 与 Python 兼容的 checkout 签名密钥。**必填**：未设置、长度不足 16 字节或仍为历史占位值 `default_secret_key` 时服务启动即失败（fail-closed），本地启动也需显式设置，例如 `set PAYMENT_SECRET_KEY=local-dev-please-change-me-0123456789`
 - `MODSTORE_ADMIN_RECHARGE_TOKEN`: 与 Python 钱包直充接口一致；未配置时 `/api/wallet/recharge` 返回不可用，避免普通用户自充值
 - `ALIPAY_*`: 支付宝应用、私钥、公钥、回调 URL
 

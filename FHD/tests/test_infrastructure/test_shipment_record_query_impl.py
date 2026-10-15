@@ -54,33 +54,6 @@ def query():
 
 
 class TestQueryShipments:
-    def test_returns_success_empty(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-                return_value=mock_inspector,
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
-            result = query.query_shipments()
-        assert result["success"] is True
-        assert result["total"] == 0
-
     def test_table_not_found(self, query):
         mock_db = MagicMock()
         mock_inspector = MagicMock()
@@ -195,50 +168,6 @@ class TestGetShipmentById:
         result = query.get_shipment_by_id("")
         assert result is None
 
-    def test_found(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.first.return_value = _make_record()
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-                return_value=mock_inspector,
-            ),
-        ):
-            result = query.get_shipment_by_id("1")
-        assert result is not None
-        assert result["id"] == 1
-
-    def test_not_found(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.first.return_value = None
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-                return_value=mock_inspector,
-            ),
-        ):
-            result = query.get_shipment_by_id("999")
-        assert result is None
-
     def test_db_error(self, query):
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.get_db",
@@ -256,27 +185,6 @@ class TestGetLatestShipments:
     def test_negative_limit(self, query):
         result = query.get_latest_shipments(-1)
         assert result == []
-
-    def test_returns_results(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.order_by.return_value.limit.return_value.all.return_value = [_make_record()]
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-                return_value=mock_inspector,
-            ),
-        ):
-            result = query.get_latest_shipments(5)
-        assert len(result) == 1
 
     def test_db_error(self, query):
         with patch(

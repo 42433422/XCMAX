@@ -1,0 +1,24 @@
+{
+  "at": "2026-09-12T17:41:59.039349+00:00",
+  "source": "/Volumes/XCAGI-Enterprise 1/XCAGI.app",
+  "installed": "/Applications/XCAGI.app",
+  "preserved_previous": "/Users/a4243342/XCMAX-runtime/mac-closure-20260913/XCAGI-before-main.app",
+  "build": {
+    "schema_version": 1,
+    "gitSha": "99854233c5d4ea05a96b1f6ae1e3b7edfe03b526",
+    "version": "1.0.0.1",
+    "releaseId": "xcagi-1.0.0.1-99854233c5d4ea05a96b1f6ae1e3b7edfe03b526",
+    "builtAt": "2026-09-04T16:39:02.096Z"
+  },
+  "checks": {
+    "codesign": {
+      "exit": 0,
+      "output": ""
+    },
+    "gatekeeper": {
+      "exit": 0,
+      "output": "/Applications/XCAGI.local-closure-staging.app: accepted\nsource=Notarized Developer ID\n"
+    }
+  },
+  "purpose": "Official 1.0.0.1 baseline for real OTA to 1.0.0.2; not final delivery"
+}

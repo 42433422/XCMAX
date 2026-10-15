@@ -1,36 +1,27 @@
 #!/usr/bin/env bash
-# =====================================================================
-# XCAGI 桌面端 macOS 真机验收引导脚本（协议 D1-3）
-#
-# 用法：
-#   bash scripts/package/acceptance-macos.sh --version 1.0.0.1 \
-#        [--dmg /path/to/XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg] \
-#        [--skip-launch] [--keep-dmg] [--dest /custom/install/dir] [--help]
-#
-# 自动执行：下载 dmg → SHA256 校验 → 挂载 → codesign/spctl 校验
-#           → 安装到 ~/Applications/acceptance/（不触碰 /Applications）
-#           → 版本身份读取（Info.plist / build-info.json / product-sku.json）
-#           → 冷启动计时 + 截图 + 后端健康检查（可用 --skip-launch 跳过）
-#           → 卸载 dmg，打印 OTA / 回滚两步的人工操作指引
-#
-# 幂等：重复运行会重建 ~/Applications/acceptance/XCAGI.app，重用/覆盖下载缓存。
-# 安全边界：绝不修改 /Applications 下的任何内容；OTA 与回滚只打印指引，不自动执行。
-# =====================================================================
+# Isolated installed startup verification; customer workflow, OTA and rollback remain separate.
+# Usage: acceptance-macos.sh --version V [--dmg FILE] [--dest DIR] [--data-dir DIR]
+#        [--overwrite-upgrade] [--skip-launch] [--keep-dmg]
+# Existing installs require explicit --overwrite-upgrade and are archived before replacement.
+# Runtime data defaults to the isolated installation, never the regular customer's profile.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+. "${SCRIPT_DIR}/../deploy/lib/version.sh"
 BASE_URL="https://xiu-ci.com"
 TMP_ROOT="/tmp"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-WORK_DIR="${TMP_ROOT}/xcagi-acceptance-${STAMP}"
-ACCEPT_DIR="${HOME}/Applications/acceptance"
-HEALTH_URL="http://127.0.0.1:17500/api/health"
+WORK_DIR="${TMP_ROOT}/xcagi-acceptance-${STAMP}-${RANDOM}"
+ACCEPT_DIR="${WORK_DIR}/install"
+ACCEPT_PORT="${XCAGI_ACCEPTANCE_PORT:-18790}"
 
 VERSION=""
 LOCAL_DMG=""
 SKIP_LAUNCH=0
 KEEP_DMG=0
+OVERWRITE_UPGRADE=0
+DATA_ROOT=""
 
 MOUNT_PT=""
 DMG_PATH=""
@@ -66,8 +57,57 @@ cleanup_mount() {
 }
 trap cleanup_mount EXIT
 
+# 业务数据快照（口径对齐 acceptance-windows.ps1 Get-BusinessDataDigest）：
+# 主库/向量库大小、mod_dbs 与 uploads/mods/models 文件数、自动备份数量与最新备份。
+capture_data_digest() {
+  local out_file="$1"
+  python3 - "${DATA_ROOT}" "${out_file}" <<'PY'
+import json, os, sys
+root, out = sys.argv[1], sys.argv[2]
+def count_files(p):
+    return sum(len(fs) for _, _, fs in os.walk(p)) if os.path.isdir(p) else 0
+d = {}
+db = os.path.join(root, 'data', 'xcagi.db')
+d['xcagi.db.bytes'] = os.path.getsize(db) if os.path.isfile(db) else -1
+vec = os.path.join(root, 'data', 'excel_vectors.db')
+d['excel_vectors.db.bytes'] = os.path.getsize(vec) if os.path.isfile(vec) else -1
+d['mod_dbs.files'] = count_files(os.path.join(root, 'data', 'mod_dbs'))
+for sub in ('uploads', 'mods', 'models'):
+    d[sub + '.files'] = count_files(os.path.join(root, sub))
+bdir = os.path.join(root, 'backups')
+bks = sorted(
+    (f for f in os.listdir(bdir) if f.startswith('xcagi-') and f.endswith('.db')),
+    key=lambda f: os.path.getmtime(os.path.join(bdir, f)),
+) if os.path.isdir(bdir) else []
+d['backups.files'] = len(bks)
+d['backups.latest'] = bks[-1] if bks else ''
+with open(out, 'w') as fh:
+    json.dump(d, fh, ensure_ascii=False, indent=1)
+print(' '.join(f'{k}={v}' for k, v in d.items()))
+PY
+}
+
+# 比对升级前后快照（口径对齐 Compare-DataDigest）：零值/缺失不算丢失。
+# 有任何 lost 键则退出码 1，stdout 逐行输出 LOST/GAINED 明细。
+compare_data_digests() {
+  python3 - "$1" "$2" <<'PY'
+import json, sys
+b = json.load(open(sys.argv[1]))
+a = json.load(open(sys.argv[2]))
+keys = ('xcagi.db.bytes', 'excel_vectors.db.bytes', 'mod_dbs.files',
+        'uploads.files', 'mods.files', 'models.files')
+lost = [f'{k}: {b.get(k)} → {a.get(k)}' for k in keys if b.get(k, 0) > 0 and a.get(k, 0) < b[k]]
+gained = [f'{k}: {b.get(k)} → {a.get(k)}' for k in keys if a.get(k, 0) > b.get(k, 0)]
+for line in lost:
+    print('LOST ' + line)
+for line in gained:
+    print('GAINED ' + line)
+sys.exit(1 if lost else 0)
+PY
+}
+
 usage() {
-  sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,6p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -79,24 +119,30 @@ while [[ $# -gt 0 ]]; do
     --skip-launch) SKIP_LAUNCH=1; shift ;;
     --keep-dmg)   KEEP_DMG=1; shift ;;
     --dest)       ACCEPT_DIR="${2:-}"; shift 2 ;;
+    --data-dir)   DATA_ROOT="${2:-}"; shift 2 ;;
+    --overwrite-upgrade) OVERWRITE_UPGRADE=1; shift ;;
     --help|-h)    usage ;;
     *) die "未知参数：$1（使用 --help 查看用法）" ;;
   esac
 done
+
+DATA_ROOT="${DATA_ROOT:-${ACCEPT_DIR}/userdata}"
+EVIDENCE_DIR="${XCAGI_ACCEPTANCE_EVIDENCE_DIR:-${WORK_DIR}/evidence}"
+mkdir -p "${DATA_ROOT}" "${EVIDENCE_DIR}"
+ACCEPT_DIR="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${ACCEPT_DIR}")"
+DATA_ROOT="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${DATA_ROOT}")"
+log "本次隔离目录：work=${WORK_DIR} install=${ACCEPT_DIR} data=${DATA_ROOT} evidence=${EVIDENCE_DIR}"
 
 # -------------------------------------------------------------- [1/9] 版本
 STEP_NAME="确定验收版本"
 log "[1/9] ${STEP_NAME}"
 
 if [[ -z "${VERSION}" ]]; then
-  VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' "${FHD_ROOT}/VERSION.md" | head -n1 || true)"
-  if [[ -z "${VERSION}" ]]; then
-    die "未提供 --version 且无法从 ${FHD_ROOT}/VERSION.md 解析出四段产品版本。用法：--version 1.0.0.1"
-  fi
+  VERSION="$(product_version)" || die "未提供 --version 且无法从 ${FHD_ROOT}/VERSION.md 解析出四段产品版本。用法：--version <版本>"
   log "未提供 --version，已从 FHD/VERSION.md 读取默认版本：${VERSION}"
 fi
 if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  die "版本号必须是四段产品版本（如 1.0.0.1），当前为：${VERSION}"
+  die "版本号必须是四段产品版本（如 <版本>），当前为：${VERSION}"
 fi
 
 ARCH="$(uname -m)"
@@ -123,7 +169,11 @@ for candidate in "${BASE_URL}/xcagi-v${VERSION}/manifest.json" "${BASE_URL}/rele
 done
 
 DMG_URL=""
-if [[ "${MANIFEST_STATUS}" != "未获取" ]]; then
+if [[ -n "${LOCAL_DMG}" ]]; then
+  # 本地候选包验收：线上 manifest 必然无此版本条目，跳过解析避免误判为缺产物。
+  ok "本地 dmg 模式（--dmg）：跳过线上 manifest 解析，SHA256 仅输出实测值。"
+  MANIFEST_STATUS="本地 dmg，跳过线上基准"
+elif [[ "${MANIFEST_STATUS}" != "未获取" ]]; then
   manifest_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version",""))' "${MANIFEST_FILE}")"
   # manifest 的 version 与验收目标不一致时（如 releases/stable/manifest.json 仍是旧版本），
   # 其条目与 git_sha 都不能作为本版本基准。
@@ -163,7 +213,7 @@ else
   warn "manifest 获取失败（xcagi-v${VERSION} 与 releases/stable 均不可达）——SHA256 将无线上基准，仅输出实测值。"
 fi
 
-if [[ -z "${DMG_URL}" ]]; then
+if [[ -z "${DMG_URL}" && -z "${LOCAL_DMG}" ]]; then
   DMG_FILENAME="XCAGI-Enterprise-${VERSION}-mac-${DMG_ARCH}.dmg"
   DMG_URL="${BASE_URL}/xcagi-v${VERSION}/enterprise/${DMG_FILENAME}"
   if ! curl -fsIL --max-time 20 -A "xcagi-acceptance/1.0" "${DMG_URL}" >/dev/null 2>&1; then
@@ -209,20 +259,13 @@ fi
 STEP_NAME="挂载 dmg 并校验签名"
 log "[5/9] ${STEP_NAME}"
 
-# 幂等：若同名卷已挂载，先卸载
-STALE_MOUNT="$(hdiutil info | awk -v fn="${DMG_PATH##*/}" 'index($0, fn) {found=1} found && /^\/Volumes\// {print; exit}')"
-if [[ -n "${STALE_MOUNT}" ]]; then
-  warn "检测到同名卷已挂载（${STALE_MOUNT}），先卸载。"
-  hdiutil detach "${STALE_MOUNT}" -force >/dev/null 2>&1 || true
-fi
-
-MOUNT_OUT="$(hdiutil attach "${DMG_PATH}" -nobrowse -readonly)"
-MOUNT_PT="$(echo "${MOUNT_OUT}" | grep -oE '/Volumes/.*' | head -n1 | sed 's/[[:space:]]*$//')"
-[[ -n "${MOUNT_PT}" && -d "${MOUNT_PT}" ]] || die "无法解析 dmg 挂载点。hdiutil 输出：${MOUNT_OUT}"
+MOUNT_PT="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${WORK_DIR}/mounted")"
+mkdir -p "${MOUNT_PT}"
+hdiutil attach "${DMG_PATH}" -nobrowse -readonly -mountpoint "${MOUNT_PT}" >/dev/null
 ok "已挂载：${MOUNT_PT}"
 
-SRC_APP="$(find "${MOUNT_PT}" -maxdepth 2 -name '*.app' -type d | head -n1)"
-[[ -n "${SRC_APP}" ]] || die "挂载卷内未找到 .app：${MOUNT_PT}"
+SRC_APP="${MOUNT_PT}/XCAGI.app"
+[[ -d "${SRC_APP}" ]] || die "挂载卷内未找到 XCAGI.app：${MOUNT_PT}"
 ok "找到应用：$(basename "${SRC_APP}")"
 
 log "codesign -dv（签名身份）："
@@ -232,13 +275,17 @@ if codesign --verify --deep --strict "${SRC_APP}" 2>/dev/null; then
   ok "codesign --verify --deep --strict：签名完整"
 else
   fail "codesign 校验未通过（未公证的 adhoc 包或签名损坏）"
-  CODESIGN_VERIFY=FAIL
+  die "签名损坏：停止安装和启动，保留原始安装包用于定位。"
 fi
 CODESIGN_VERIFY="${CODESIGN_VERIFY:-PASS}"
 
 SPCTL_OUT="$(spctl -a -vv -t execute "${SRC_APP}" 2>&1)" || true
 if echo "${SPCTL_OUT}" | grep -q "accepted"; then
   ok "spctl 评估：${SPCTL_OUT}"
+elif [[ -n "${LOCAL_DMG}" ]] && echo "${SPCTL_OUT}" | grep -q "Unnotarized Developer ID"; then
+  # 候选包为 Developer ID 签名但未公证（本地构建无公证密钥）：允许继续，汇总时明确降级。
+  warn "候选包未公证（Unnotarized Developer ID）——本地 dmg 验收模式放行，G3 按 YELLOW 记录：${SPCTL_OUT}"
+  SPCTL_STATUS=CANDIDATE_UNNOTARIZED
 else
   fail "Gatekeeper 拒绝（spctl 未 accepted）：${SPCTL_OUT}"
   SPCTL_STATUS=FAIL
@@ -253,12 +300,40 @@ if [[ -d "/Applications/XCAGI.app" ]]; then
   warn "/Applications/XCAGI.app 已存在——本脚本不会触碰它，验收实例独立安装在 ${ACCEPT_DIR}。"
 fi
 
+# 覆盖升级验收：安装前采集业务数据基线 + 数据保留标记（对齐协议 6b / Windows STEP4）。
+BASELINE_FILE=""
+MARKER_FILE=""
+if [[ "${OVERWRITE_UPGRADE}" -eq 1 ]]; then
+  OLD_APP="${ACCEPT_DIR}/XCAGI.app"
+  OLD_BI="${OLD_APP}/Contents/Resources/build-info.json"
+  [[ -f "${OLD_BI}" ]] || die "覆盖升级模式：未在 ${OLD_APP} 找到既有安装（缺 build-info.json）。请先装好旧版再跑覆盖升级验收。"
+  if ps -axo command= | awk -v exe="${OLD_APP}/Contents/MacOS/XCAGI" 'index($0, exe) == 1 {found=1} END {exit !found}'; then
+    die "覆盖升级模式：检测到正在运行的 XCAGI 实例，请先完全退出（Dock 右键 → 退出）后重跑。"
+  fi
+  read -r OLD_VER OLD_SHA <<<"$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("version",""), d.get("gitSha",""))' "${OLD_BI}")"
+  ok "升级前安装：${OLD_APP}（version=${OLD_VER} gitSha=${OLD_SHA}）"
+  if [[ "${OLD_VER}" == "${VERSION}" ]]; then
+    warn "升级前版本已等于验收目标 ${VERSION}，本次不构成跨版本覆盖升级（仍可验证重装数据保留）。"
+  fi
+  BASELINE_FILE="${EVIDENCE_DIR}/data-baseline.json"
+  mkdir -p "${WORK_DIR}"
+  ok "升级前业务数据：$(capture_data_digest "${BASELINE_FILE}")"
+  MARKER_FILE="${DATA_ROOT}/.xcagi-acceptance-marker-$(date +%Y%m%d-%H%M%S).txt"
+  printf 'xcagi-acceptance-overwrite baseline version=%s gitSha=%s\n' "${OLD_VER}" "${OLD_SHA}" > "${MARKER_FILE}"
+  ok "已写入数据保留标记：${MARKER_FILE}"
+fi
+
 mkdir -p "${ACCEPT_DIR}"
-rm -rf "${ACCEPT_DIR}/XCAGI.app"
+if [[ -e "${ACCEPT_DIR}/XCAGI.app" ]]; then
+  [[ "${OVERWRITE_UPGRADE}" -eq 1 ]] || die "既有安装保留；覆盖升级必须明确指定 --overwrite-upgrade。"
+  mv "${ACCEPT_DIR}/XCAGI.app" "${WORK_DIR}/previous-XCAGI.app"
+fi
 ditto "${SRC_APP}" "${ACCEPT_DIR}/XCAGI.app"
 ok "已安装：${ACCEPT_DIR}/XCAGI.app"
 
 INSTALLED_APP="${ACCEPT_DIR}/XCAGI.app"
+lipo "${INSTALLED_APP}/Contents/MacOS/XCAGI" -verify_arch "${ARCH}" || die "客户端架构与本机 ${ARCH} 不匹配"
+lipo "${INSTALLED_APP}/Contents/Resources/backend/xcagi-backend" -verify_arch "${ARCH}" || die "后端架构与本机 ${ARCH} 不匹配"
 
 # -------------------------------------------------------------- [7/9] 版本身份
 STEP_NAME="读取并核对应用版本身份"
@@ -292,6 +367,8 @@ else
   VERSION_MATCH=UNKNOWN
 fi
 
+[[ "${VERSION_MATCH}" != FAIL && "${GITSHA_MATCH:-MATCH}" != MISMATCH ]] || die "安装身份与目标不一致；停止启动并保留证据。"
+
 SKU_FILE="${INSTALLED_APP}/Contents/Resources/product-sku.json"
 if [[ -f "${SKU_FILE}" ]]; then
   ok "product-sku.json：$(cat "${SKU_FILE}")"
@@ -302,57 +379,53 @@ STEP_NAME="冷启动（计时 + 截图 + 健康检查）"
 log "[8/9] ${STEP_NAME}"
 
 if [[ "${SKIP_LAUNCH}" -eq 1 ]]; then
-  warn "已指定 --skip-launch：跳过真实启动。请在证据中注明「启动步骤以代码评审 + CI 冒烟替代」。"
+  warn "已指定 --skip-launch：真实启动未验证。"
   LAUNCH_RESULT=SKIP
 else
-  if pgrep -f "XCAGI.app/Contents/MacOS/XCAGI" >/dev/null 2>&1; then
-    pgrep -fl "XCAGI.app/Contents/MacOS/XCAGI" | sed 's/^/    已有实例: /'
-    die "检测到正在运行的 XCAGI 实例（单实例锁 + 17500 端口会冲突，并干扰计时）。请先完全退出它，或改用 --skip-launch。"
-  fi
+  node "${SCRIPT_DIR}/verify-macos-launch.cjs" "${INSTALLED_APP}" "${DATA_ROOT}" "${ACCEPT_PORT}" "${BI_VERSION}" "${BI_GITSHA}" "${EVIDENCE_DIR}" "${ACTUAL_SHA256}"
+  LAUNCH_RESULT="LOGIN_UI_READY"
+  HEALTH_RESULT="IDENTITY_AND_RUNTIME_READY"
+  SCREENSHOT="${EVIDENCE_DIR}/installed-login.png"
+fi
 
-  SCREENSHOT="${WORK_DIR}/xcagi-acceptance-${STAMP}.png"
-  START_TS="$(python3 -c 'import time; print(time.time())')"
-  open -n "${INSTALLED_APP}"
-
-  LAUNCH_PID=""
-  for _ in $(seq 1 120); do
-    LAUNCH_PID="$(pgrep -f "Applications/acceptance/XCAGI.app/Contents/MacOS/XCAGI" | head -n1 || true)"
-    [[ -n "${LAUNCH_PID}" ]] && break
-    sleep 0.5
-  done
-  if [[ -z "${LAUNCH_PID}" ]]; then
-    fail "120 秒内未检测到验收实例进程（pgrep Applications/acceptance/XCAGI.app）。"
-    LAUNCH_RESULT=FAIL
+# 覆盖升级验收：安装后重采集并比对业务数据（对齐协议 6b / Windows STEP6b）。
+DATA_RETENTION=SKIP
+if [[ "${OVERWRITE_UPGRADE}" -eq 1 && "${SKIP_LAUNCH}" -eq 0 ]]; then
+  AFTER_FILE="${EVIDENCE_DIR}/data-after.json"
+  ok "升级后业务数据：$(capture_data_digest "${AFTER_FILE}")"
+  DIFF_OUT="$(compare_data_digests "${BASELINE_FILE}" "${AFTER_FILE}" || true)"
+  LOST_LINES="$(printf '%s\n' "${DIFF_OUT}" | grep '^LOST ' || true)"
+  GAINED_LINES="$(printf '%s\n' "${DIFF_OUT}" | grep '^GAINED ' || true)"
+  MARKER_KEPT=NO
+  [[ -f "${MARKER_FILE}" ]] && MARKER_KEPT=YES
+  if [[ -n "${LOST_LINES}" ]]; then
+    DATA_RETENTION=FAIL
+    while IFS= read -r line; do fail "业务数据减少：${line#LOST }"; done <<< "${LOST_LINES}"
+  elif [[ "${MARKER_KEPT}" != "YES" ]]; then
+    DATA_RETENTION=FAIL
+    fail "数据保留标记丢失：${MARKER_FILE}（userData 可能被清空）"
   else
-    END_TS="$(python3 -c 'import time; print(time.time())')"
-    ELAPSED="$(python3 -c "print(round(float('${END_TS}') - float('${START_TS}'), 1))")"
-    ok "进程出现耗时：${ELAPSED} 秒（PID ${LAUNCH_PID}）"
-    LAUNCH_RESULT="PID出现 ${ELAPSED}s"
-
-    sleep 8   # 等主窗口与后端就绪
-    if screencapture -x "${SCREENSHOT}" 2>/dev/null; then
-      ok "截图已保存：${SCREENSHOT}"
-    else
-      warn "截图失败（screencapture 需要屏幕录制权限）——请手动 Cmd+Shift+4 截图补证。"
-    fi
-
-    log "健康检查 ${HEALTH_URL}（最多 60 秒）..."
-    HEALTH_OK=0
-    for _ in $(seq 1 60); do
-      if HEALTH_JSON="$(curl -fsS --max-time 3 "${HEALTH_URL}" 2>/dev/null)"; then
-        HEALTH_OK=1
-        break
-      fi
-      sleep 1
-    done
-    if [[ "${HEALTH_OK}" -eq 1 ]]; then
-      ok "健康检查通过：${HEALTH_JSON}"
-      HEALTH_RESULT=PASS
-    else
-      fail "健康检查 60 秒内未通过（curl ${HEALTH_URL}）"
-      HEALTH_RESULT=FAIL
+    DATA_RETENTION=COUNTS_MATCH
+    ok "库/文件计数未减少，保留标记存在；内容及客户业务仍须复验"
+    if [[ -n "${GAINED_LINES}" ]]; then
+      while IFS= read -r line; do ok "新增（正常）：${line#GAINED }"; done <<< "${GAINED_LINES}"
     fi
   fi
+  python3 - "${BASELINE_FILE}" "${AFTER_FILE}" "${EVIDENCE_DIR}/data-retention.json" "${MARKER_FILE}" "${MARKER_KEPT}" "${LOST_LINES}" "${GAINED_LINES}" <<'PY'
+import json, sys
+result = {
+    'before': json.load(open(sys.argv[1])),
+    'after': json.load(open(sys.argv[2])),
+    'marker_file': sys.argv[4],
+    'marker_kept': sys.argv[5] == 'YES',
+    'lost': [l[5:] for l in sys.argv[6].splitlines() if l],
+    'gained': [g[7:] for g in sys.argv[7].splitlines() if g],
+    'result': 'FAIL' if sys.argv[6].strip() or sys.argv[5] != 'YES' else 'COUNTS_MATCH_BUSINESS_RETEST_PENDING',
+}
+with open(sys.argv[3], 'w') as fh:
+    json.dump(result, fh, ensure_ascii=False, indent=1)
+print(f"数据保留结果已写入 {sys.argv[3]}（result={result['result']}）")
+PY
 fi
 
 # -------------------------------------------------------------- [9/9] 清理 + 指引
@@ -362,58 +435,11 @@ log "[9/9] ${STEP_NAME}"
 cleanup_mount
 ok "dmg 已卸载"
 
-echo
-echo "======================================================================="
-echo " 验收结果汇总（版本 ${VERSION} · macOS ${ARCH}）"
-echo "======================================================================="
-echo "  下载文件           : ${DMG_PATH}"
-echo "  实测 SHA256        : ${ACTUAL_SHA256}"
-echo "  manifest SHA256    : ${EXPECTED_SHA256:-（manifest 无本版本基准）}"
-echo "  签名校验           : codesign=${CODESIGN_VERIFY} spctl=${SPCTL_STATUS}"
-echo "  安装位置           : ${INSTALLED_APP}"
-echo "  产品版本（build-info）: ${BI_VERSION:-（未读取）} · gitSha=${BI_GITSHA:-（未读取）}"
-if [[ -n "${GITSHA_MATCH:-}" ]]; then echo "  gitSha vs manifest : ${GITSHA_MATCH}"; fi
-echo "  Info.plist 版本    : ${PLIST_VERSION}"
-echo "  冷启动             : ${LAUNCH_RESULT:-未执行}"
-if [[ -n "${HEALTH_RESULT:-}" ]]; then echo "  健康检查           : ${HEALTH_RESULT}"; fi
-if [[ -n "${SCREENSHOT:-}" ]]; then echo "  截图               : ${SCREENSHOT}"; fi
-echo "----------------------------------------------------------------------"
-
-if [[ "${KEEP_DMG}" -eq 1 ]]; then
-  echo "  dmg 已保留（--keep-dmg）：${DMG_PATH}"
-else
-  echo "  提示：dmg 保留在 ${WORK_DIR}/，确认证据后可删除：rm -rf \"${WORK_DIR}\""
-fi
-echo "  卸载验收实例（验收结束后可选）：rm -rf \"${ACCEPT_DIR}/XCAGI.app\""
-echo "======================================================================="
-echo
-echo "【接下来两步必须人工完成（脚本不代替）】"
-echo
-echo "▶ 步骤三 OTA（在线自动更新）——协议第 4 节："
-echo "  1) 确认更新源有新版本："
-echo "     curl -sS ${BASE_URL}/releases/stable/enterprise/latest-mac.yml"
-echo "  2) 打开 XCAGI → 设置 → 检查更新 → 下载完成后点「立即重启安装」；"
-echo "  3) 观察期（约 5 秒稳定性窗口）内不要强制退出；"
-echo "  4) 复核：cat \"${ACCEPT_DIR}/XCAGI.app/Contents/Resources/build-info.json\""
-echo "     curl -sS ${HEALTH_URL}"
-echo "     cat ~/Library/Application\\ Support/XCAGI/rollback-marker.json 2>/dev/null || echo 'marker 已提交'"
-echo "  ※ 当前线上已是 ${VERSION} 且无更高版本时：本步记 SKIP（无升级目标），"
-echo "    并引用最近一次 OTA 闭环证据（desktop-ota-closed-loop-20260724）。"
-echo
-echo "▶ 步骤四 回滚 ——协议第 5 节："
-echo "  路径 A（观察期自动回滚，需专用验收机构造坏更新）：更新后启动失败会自动还原旧版"
-echo "  并写 rollback-applied.json，用以下命令取证："
-echo "     cat ~/Library/Application\\ Support/XCAGI/rollback-applied.json"
-echo "  路径 B（降级安装）：从 ${BASE_URL}/xcagi-v<旧版本>/enterprise/ 下载上一版本 dmg，"
-echo "  重复安装步骤覆盖后确认版本回到旧版且 /api/health healthy。"
-echo "  ※ 不注入坏更新时：记 PARTIAL，引用 rollback.test.ts + update-rollback.e2e.spec.ts 佐证。"
-echo
-echo "【证据归档】按模板填写：FHD/docs/e2e/templates/desktop-acceptance-template.md"
-echo "  → 复制为 FHD/docs/evidence/e2e/desktop-real-machine-acceptance-${VERSION}-macos.md"
-echo "  → 截图放 FHD/docs/evidence/e2e/assets/"
-echo "======================================================================="
-
-if [[ "${LAUNCH_RESULT:-}" == FAIL || "${HEALTH_RESULT:-}" == FAIL || "${CODESIGN_VERIFY}" == FAIL || "${SPCTL_STATUS}" == FAIL ]]; then
+printf '安装层结果：version=%s sha=%s package_sha256=%s\n' "${BI_VERSION:-UNKNOWN}" "${BI_GITSHA:-UNKNOWN}" "${ACTUAL_SHA256}"
+printf '签名=%s Gatekeeper=%s 启动=%s 数据计数=%s\n' "${CODESIGN_VERIFY}" "${SPCTL_STATUS}" "${LAUNCH_RESULT:-SKIP}" "${DATA_RETENTION:-SKIP}"
+printf '安装=%s 数据=%s 证据=%s 原安装归档=%s\n' "${INSTALLED_APP}" "${DATA_ROOT}" "${EVIDENCE_DIR}" "${WORK_DIR}/previous-XCAGI.app"
+echo "安装层验证不代表客户验收通过；OTA、恢复、Mod权益、数据内容和客户业务仍须同一候选实测。"
+if [[ "${DATA_RETENTION:-}" == FAIL || "${VERSION_MATCH:-}" == FAIL || "${GITSHA_MATCH:-}" == MISMATCH || "${LAUNCH_RESULT:-}" == FAIL || "${HEALTH_RESULT:-}" == FAIL || "${CODESIGN_VERIFY}" == FAIL || "${SPCTL_STATUS}" == FAIL ]]; then
   exit 1
 fi
 exit 0

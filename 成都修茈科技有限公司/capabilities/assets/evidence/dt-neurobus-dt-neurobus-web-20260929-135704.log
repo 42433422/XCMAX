@@ -1,0 +1,8 @@
+[13:57:04] feature=dt-neurobus platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-neurobus
+[13:57:16] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:57:17] case N1: passed - 事件总线运行态真实读取
+[13:57:18] case N2: passed - 处理器注册表真实读取
+[13:57:18] case N3: passed - 真实发布事件到总线
+[13:57:18] case N4: passed - 缺 event_type 的发布被拒（负例/边界）
+[13:57:18] video: dt-neurobus-web-20260929-135704.webm (1074051 bytes)
+[13:57:18] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-neurobus/log/dt-neurobus-web-20260929-135704.log

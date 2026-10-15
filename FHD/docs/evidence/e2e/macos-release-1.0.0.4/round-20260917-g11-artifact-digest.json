@@ -1,0 +1,11 @@
+{
+  "round": "2026-09-17",
+  "gate": "G11 artifact retention (pre-reboot)",
+  "captured_at": "2026-09-17T01:05:33.278433+08:00",
+  "doc_name": "发货单_26-0900001A_20260917_010152.xlsx",
+  "http": 200,
+  "bytes": 5192,
+  "xlsx_magic": true,
+  "sha256": "9b1eae31bf34c55daf646e69d0a63892c9c46ba54ab1458a25bc0573c21c80fb",
+  "matches_g11_run": true
+}

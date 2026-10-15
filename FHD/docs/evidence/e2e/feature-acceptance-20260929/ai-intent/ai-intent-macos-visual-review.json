@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-intent",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "b64dab46c0c90ee16a7b44df6c9cf50a27df60d53bdb9b4b77dfb936f5329725",
+  "visible_content": "意图识别接口对「查库存」「打印标签」「你好」分别给出 materials、print_label、问候判定；界面调试工作台可用。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-intent/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-intent/macos/result.png"
+}

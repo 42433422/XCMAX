@@ -188,6 +188,7 @@ def execute_planner_workflow_tool(
     workspace_root: str | None = None,
     *,
     db_write_token: str | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> str:
     """里程碑 F：优先 Mod 原生 handler，其余委托宿主 workflow。"""
     from app.mod_sdk.planner_native_tools import try_execute_native_planner_tool
@@ -224,6 +225,7 @@ def execute_planner_workflow_tool(
         args,
         workspace_root,
         db_write_token=db_write_token,
+        runtime_context=runtime_context,
     )
     if is_planner_tools_via_mod_enabled():
         logger.debug(

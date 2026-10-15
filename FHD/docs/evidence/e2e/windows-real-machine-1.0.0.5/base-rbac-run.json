@@ -1,0 +1,109 @@
+{
+  "_comment": "Auto-generated from the Windows real-machine evidence run; DO NOT EDIT historical outcomes.",
+  "kind": "feature-acceptance",
+  "platform": "windows",
+  "feature": "base-rbac",
+  "status": "blocked",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-20",
+  "reviewed_at": "2026-09-20",
+  "passed": 0,
+  "failed": 0,
+  "evidence_modality": "product_ui",
+  "visual_review_state": "accepted",
+  "full_feature_acceptance": false,
+  "visible_content": "/api/rbac/roles and /api/rbac/permissions return 401 before login; /api/xcmax/admin/session returns 403 ADMIN_DESKTOP_FORBIDDEN; health component business_route:rbac reports ok=true",
+  "media": [
+    {
+      "feature": "base-rbac",
+      "kind": "screenshot",
+      "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/base-rbac.png",
+      "sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
+      "bytes": 492454,
+      "frame_modality": "product_ui",
+      "visual_review": "accepted",
+      "review_basis": "operator observation of the product UI at capture time",
+      "visible_result": "/api/rbac/roles and /api/rbac/permissions return 401 before login; /api/xcmax/admin/session returns 403 ADMIN_DESKTOP_FORBIDDEN; health component business_route:rbac reports ok=true",
+      "reviewed_at": "2026-09-20"
+    },
+    {
+      "feature": "base-rbac",
+      "kind": "video",
+      "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/base-rbac.mp4",
+      "sha256": "3ec07a3eb50509ef7f39def5724afc61a8f8e189d081f581a1395f9b7aea5e0d",
+      "bytes": 3356866,
+      "frame_modality": "product_ui",
+      "visual_review": "accepted",
+      "review_basis": "operator observation of the product UI at capture time",
+      "visible_result": "/api/rbac/roles and /api/rbac/permissions return 401 before login; /api/xcmax/admin/session returns 403 ADMIN_DESKTOP_FORBIDDEN; health component business_route:rbac reports ok=true",
+      "reviewed_at": "2026-09-20"
+    }
+  ],
+  "cases": [
+    {
+      "input": "Windows real-machine verification of 权限与角色控制（RBAC） (base-rbac)",
+      "actions": "RBAC routes are mounted on the Windows desktop backend and enforce authentication, but role/permission administration requires an admin session which the desktop runtime refuses by design (ADMIN_DESKTOP_FORBIDDEN); verification also still needs an enterprise credential",
+      "expected": "Roles and permissions are enforced for the signed-in desktop user",
+      "observed": "/api/rbac/roles and /api/rbac/permissions return 401 before login; /api/xcmax/admin/session returns 403 ADMIN_DESKTOP_FORBIDDEN; health component business_route:rbac reports ok=true",
+      "result": "blocked"
+    }
+  ],
+  "six_elements": {
+    "screenshot": true,
+    "video": true,
+    "log": true,
+    "product_version": true,
+    "app_sha": true,
+    "verify_time": true
+  },
+  "evidence_kind": "local_api",
+  "machine": {
+    "hostname": "佳诺",
+    "os": "Microsoft Windows 11 家庭版 中文版",
+    "version": "10.0.26200",
+    "arch": "AMD64",
+    "ram_gb": 15.6
+  },
+  "baseline": {
+    "product_version": "1.0.0.5",
+    "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "installer": {
+      "name": "XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+      "bytes": 248514275,
+      "sha256_expected": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+      "sha256_measured": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+      "authenticode": "NotSigned"
+    },
+    "install_root": "C:\\XCAGI-evidence-1.0.0.5",
+    "user_data_dir": "C:\\XCAGI-evidence-data-1.0.0.5\\userData",
+    "clean_baseline": "全新独立安装目录 + 全新空 userData 目录（C:\\XCAGI-evidence-data-1.0.0.5\\userData，取证前为空），安装包从公网 https://xiu-ci.com 下载并校验 SHA256",
+    "installed_at": "2026-09-19 20:31:36",
+    "cold_start_seconds": 41.4,
+    "health": {
+      "status": "healthy",
+      "version": "1.0.0.5",
+      "git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "release_id": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420"
+    },
+    "build_info": {
+      "releaseId": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420",
+      "schema_version": 1,
+      "gitSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "version": "1.0.0.5"
+    },
+    "sku": {
+      "schema_version": 1,
+      "sku": "enterprise"
+    },
+    "app_exe_sha256": "41a272575d43faa7c71d079716078c7539c4078d5133abde9a0839e25217078c",
+    "machine": {
+      "hostname": "佳诺",
+      "os": "Microsoft Windows 11 家庭版 中文版",
+      "version": "10.0.26200",
+      "arch": "AMD64",
+      "ram_gb": 15.6
+    }
+  }
+}

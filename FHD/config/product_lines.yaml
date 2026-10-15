@@ -1,0 +1,139 @@
+# XCMAX 三产品线统一控制面 — 声明式真相源
+#
+# 本文件只声明「哪条线包含哪些路径 / 能力域 / 发布 SSOT」，**不写任何数字**。
+# 所有数字（版本、发布状态、能力分布、覆盖率、门禁结论）由
+# `scripts/dev/product_lines_status.py` 从下列权威源自动统计生成：
+#   - 机器可读：FHD/metrics/product_lines_status.generated.json
+#   - 人读视图：FHD/docs/PRODUCT_LINES_STATUS.md（自动生成，禁止手改）
+# 本域已登记在 FHD/config/ssot.yaml（domain: product-lines），随 `ssot_cli.py gate` 阻断。
+#
+# 权威源分工（不重复维护同一事实）：
+#   - 版本口径唯一出口：FHD/VERSION.md（version 域 SSOT，已被 verify_version_anchors.py 校验）
+#   - 下载/发布清单：FHD/config/download_release.json（version 域派生锚点）
+#   - 发布火车内部流水：FHD/config/release_train.json
+#   - 能力目录：成都修茈科技有限公司/data/capabilities/catalog.json（capability-center 域 SSOT）
+#   - 覆盖率唯一数字：FHD/metrics/coverage-dual-summary.json（coverage 域）
+#   - 平台发布事实快照：FHD/docs/MACOS_RELEASE_SSOT.md / WINDOWS_RELEASE_SSOT.md
+version: 1
+
+generated:
+  json: FHD/metrics/product_lines_status.generated.json
+  doc: FHD/docs/PRODUCT_LINES_STATUS.md
+
+sources:
+  version: FHD/VERSION.md
+  release_train: FHD/config/release_train.json
+  download_release: FHD/config/download_release.json
+  capability_catalog: 成都修茈科技有限公司/data/capabilities/catalog.json
+  coverage: FHD/metrics/coverage-dual-summary.json
+  desktop_platform_parity: FHD/docs/desktop_platform_parity_ssot.md
+
+# 三条主线（+ 冻结线不入控制面数字）。capability_domains 是把能力目录
+# （catalog.json 的 10 个产品域）划归产品线的声明；同一域不得挂在两条线上。
+lines:
+  - id: desktop-erp
+    name: 企业桌面 ERP + AI
+    priority: P0
+    role: 主交付
+    paths:
+      - FHD/
+    exclude_paths:
+      - FHD/mobile-flutter-poc/
+      - FHD/mobile-android/
+      - FHD/mobile-ios/
+    capability_domains:
+      - base
+      - ai
+      - erp
+      - desktop
+      - sec
+      - ops
+    releases:
+      macos: FHD/docs/MACOS_RELEASE_SSOT.md
+      windows: FHD/docs/WINDOWS_RELEASE_SSOT.md
+    entry: FHD/docs/START_HERE.md
+    workflows:
+      - .github/workflows/fhd-ci-cd.yml
+      - .github/workflows/fhd-release-desktop.yml
+      - .github/workflows/fhd-release-desktop-mac-ota.yml
+
+  - id: ai-store
+    name: AI 员工商店
+    priority: P1
+    role: 商业化线
+    paths:
+      - 成都修茈科技有限公司/
+    capability_domains:
+      - mods
+      - pay
+      - industry
+    releases:
+      web: 成都修茈科技有限公司/release/VERSION
+    entry: 成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md
+    workflows:
+      - .github/workflows/modstore-ci-backend-python.yml
+      - .github/workflows/market-ci.yml
+      - .github/workflows/corp-marketing-site.yml
+
+  - id: mobile-app
+    name: 移动 AI 协同 App
+    priority: P2
+    role: 配套线
+    paths:
+      - FHD/mobile-flutter-poc/
+    capability_domains:
+      - channel
+    releases:
+      android: FHD/config/download_release.json
+    entry: FHD/mobile-flutter-poc/README.md
+    workflows:
+      - .github/workflows/fhd-ci-mobile-flutter.yml
+      - .github/workflows/fhd-release-android.yml
+
+# 硬编码版本清理范围：这些「活文档」不得写死与 VERSION.md 不一致的四段产品版本。
+# 平台发布事实快照（MACOS/WINDOWS_RELEASE_SSOT.md）不在此列——其中的历史制品
+# 版本号是发布事实，不是漂移。行内含 allow_markers 之一的视为历史陈述，放行。
+version_scan:
+  allow_markers:
+    - 历史
+    - CHANGELOG
+  files:
+    - FHD/README.md
+    - FHD/docs/START_HERE.md
+    - FHD/docs/PROJECT_STATE.md
+    - FHD/docs/DELIVERABLE_PRODUCT.md
+    - FHD/docs/SSOT_INDEX.md
+    - docs/workmap.md
+    - specs/product-lines-3-plus-2.md
+
+# 发布火车 SSOT 的已知镜像（**长期保留**，非待办事项）。
+# canonical 是仓内唯一 SSOT；mirror 是 MODstore 独立运行时（公网 CVM）的
+# 本地 SSOT 路径 —— `modstore_server/release_train_part01.py::ssot_path()` 在
+# 独立部署时的解析目标，由 `FHD/scripts/dev/align_server_daily_automation.sh`
+# 在每次日更对齐时从 canonical 覆写（远端 `${MODSTORE_ROOT}/../FHD/config/release_train.json`，
+# 并把 `MODSTORE_RELEASE_TRAIN_JSON` 指向它）。
+# 删除 mirror 会让独立运行的 MODstore 找不到 SSOT 而回落到
+# `default_state()`（1.0.0.0 陈旧默认），因此**决定保留**，不是「另开 PR 的遗留」。
+# 门禁是二值的：identity_fields 全部与 canonical 一致 ⇒ 通过（留一条 info 记录核对结果）；
+# 任一项分叉 ⇒ error 阻断；出现未声明的同名副本 ⇒ error 阻断。
+mirrors:
+  - canonical: FHD/config/release_train.json
+    mirror: 成都修茈科技有限公司/FHD/config/release_train.json
+    identity_fields:
+      - epoch
+      - product_version
+      - current
+    reason: >-
+      MODstore 独立运行时的运行时 SSOT 路径，由日更对齐脚本从 canonical 覆写；
+      保留是有意决定，day_index / last_bump_at 为各自运行时状态，不参与身份比对
+
+# 打包/发布脚本写死版本默认值即漂移：应为动态读取（`FHD/scripts/deploy/lib/version.sh`
+# 或读 VERSION.md）。bash 与 PowerShell 两侧均已整改完毕，默认级别即 error：
+# 任一侧再写死四段产品版本默认值（陈旧值或「值正确但仍写死」）都直接阻断 CI。
+# pattern 仍可带 `|级别` 覆盖默认级别，仅在确有分批整改需要时使用。
+script_version_scan:
+  level: error
+  patterns:
+    - 'FHD/scripts/package/*.sh'
+    - 'FHD/scripts/package/*.ps1'
+  remediation: FHD/scripts/deploy/lib/version.sh（bash）/ 读 FHD/VERSION.md（PowerShell）

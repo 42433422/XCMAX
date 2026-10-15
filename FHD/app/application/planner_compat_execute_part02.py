@@ -23,6 +23,26 @@ async def execute_compat_chat(
     _facade().assert_p2_elevated_claim_or_raise(request)
     tier = _facade().resolve_ai_tier(request)
     runtime_context = _facade().runtime_context_with_tier(runtime_context, tier)
+    from app.fastapi_routes.xcagi_compat_chat_stream import (
+        _apply_client_issue_outcome,
+        _classify_and_submit_client_issue_async,
+        _client_issue_reply,
+    )
+
+    issue_receipt = await _classify_and_submit_client_issue_async(
+        request, runtime_context, body.message, ""
+    )
+    if issue_reply := _client_issue_reply(issue_receipt):
+        payload = _apply_client_issue_outcome(
+            _facade()._xcagi_compat_reply_payload(issue_reply), issue_receipt
+        )
+        return _facade()._attach_compat_chat_trace(
+            payload,
+            body,
+            message=body.message,
+            runtime_context=runtime_context,
+            channel="compat_chat_issue",
+        )
     from app.application.chat_business_safety import try_handle_business_chat_action
 
     business_payload = try_handle_business_chat_action(
@@ -46,7 +66,9 @@ async def execute_compat_chat(
         kitten_extra = {}
     from app.application.normal_chat_dispatch import try_normal_slot_read_payload
 
-    slot_payload = try_normal_slot_read_payload(body.message, request=request)
+    slot_payload = try_normal_slot_read_payload(
+        body.message, request=request, user_id=str(body.user_id or "default")
+    )
     if isinstance(slot_payload, dict) and slot_payload.get("response"):
         return _facade()._attach_compat_chat_trace(
             slot_payload,

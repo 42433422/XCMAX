@@ -107,9 +107,28 @@ html.xcagi-electron-mac .main-container {
   overflow: hidden;
 }
 
-html.xcagi-electron-mac .main-content .top-bar {
+/* Windows 隐藏标题栏；工作台和登录页的非交互品牌区可拖动，顶栏为系统按钮留 140px。 */
+html.xcagi-electron-mac .main-content .top-bar,
+html.xcagi-electron-win .sidebar-header,
+html.xcagi-electron-win .main-content .top-bar {
   position: relative;
   z-index: 2;
+}
+
+html.xcagi-electron-win .main-content .top-bar {
+  -webkit-app-region: drag;
+  padding-right: 140px;
+}
+
+html.xcagi-electron-win .login-view .login-brand { -webkit-app-region: drag; }
+
+html.xcagi-electron-win .main-content .top-bar button,
+html.xcagi-electron-win .main-content .top-bar input,
+html.xcagi-electron-win .main-content .top-bar a,
+html.xcagi-electron-win .main-content .top-bar .top-bar-actions,
+html.xcagi-electron-win .main-content .top-bar .top-quick-nav,
+html.xcagi-electron-win .main-content .top-bar .page-account-sub {
+  -webkit-app-region: no-drag;
 }
 
 /* 桌面壳：开屏字标不露出；登录页右下角 .login-panel-logo 保留 64px 角标 */

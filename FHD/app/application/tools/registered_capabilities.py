@@ -1,11 +1,4 @@
-"""Config-driven ERP capability tool for model-facing agents.
-
-The product's workflow registry is the source of truth for user-facing ERP
-capabilities and their risk policies.  This module exposes that registry to an
-LLM through one typed function call, while keeping execution on the existing
-approval-gated workflow path.  It deliberately does *not* expose raw internal
-HTTP endpoints, authentication, or configuration internals as model tools.
-"""
+"""Model-facing ERP capabilities from the approval-gated workflow registry."""
 
 from __future__ import annotations
 
@@ -14,6 +7,7 @@ import uuid
 from typing import Any
 
 from app.application.workflow.types import normalize_workflow_risk
+from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 ERP_CAPABILITY_TOOL_NAME = "execute_erp_capability"
@@ -180,6 +174,20 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
             "action": action,
             "required_params": required,
         }
+    if (tool_id, action) == ("inventory", "stock_in"):
+        from app.application.inventory_inputs import validate_stock_in_request
+
+        try:
+            validate_stock_in_request(params)
+        except ValueError as exc:
+            return {"success": False, "error": str(exc), "tool_id": tool_id, "action": action}
+    if tool_id == "sales" and action in {"quote", "create_order"}:
+        from app.application.sales_quote_inputs import validated_quote_request
+
+        try:
+            validated_quote_request(params)
+        except ValueError as exc:
+            return {"success": False, "error": str(exc), "tool_id": tool_id, "action": action}
     return {
         "success": True,
         "tool_id": tool_id,
@@ -204,6 +212,7 @@ def execute_registered_capability(
     args: dict[str, Any] | None,
     *,
     workspace_root: str | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> str:
     """Execute a registered product operation through risk and approval gates."""
 
@@ -237,15 +246,17 @@ def execute_registered_capability(
         risk_level=normalize_workflow_risk(str(resolved["risk"])),
         metadata={"source": "erp_agent_capability_tool"},
     )
-    runtime_context = {
-        "source": "erp_agent_capability_tool",
-        "workspace_root": workspace_root,
-        "message": str(params.get("user_request") or params.get("message") or ""),
-    }
+    # 合并调用方（已认证会话）传入的上下文，而不是凭空重建，否则审批申请人无法解析。
+    # 安全约束：申请人标识只能来自调用方会话；params 由模型产生，
+    # 因此**不得**从 params 读取 local_user_id / actor_id / user_id。
+    context: dict[str, Any] = dict(runtime_context or {})
+    context["source"] = "erp_agent_capability_tool"
+    context["workspace_root"] = workspace_root
+    context.setdefault("message", str(params.get("user_request") or params.get("message") or ""))
     try:
         decision, run_result = ApprovalGatedEngine(
-            WorkflowEngine(tool_dispatcher=_dispatch_registered_tool)
-        ).run(plan, runtime_context=runtime_context, strategy="interactive")
+            WorkflowEngine(tool_dispatcher=_dispatch_registered_tool), require_persistence=True
+        ).run(plan, runtime_context=context, strategy="interactive")
     except RECOVERABLE_ERRORS:
         return json.dumps(
             {
@@ -260,41 +271,23 @@ def execute_registered_capability(
     capability = {
         key: resolved[key] for key in ("tool_id", "action", "risk", "idempotent", "required_params")
     }
-    approval = decision.to_dict()
+    response = {"success": False, "capability": capability, "approval": decision.to_dict()}
     if decision.pending_approval:
-        return json.dumps(
-            {
-                "success": False,
-                "pending_approval": True,
-                "message": "该 ERP 操作已创建审批请求，审批前不会执行。",
-                "capability": capability,
-                "approval": approval,
-            },
-            ensure_ascii=False,
+        response.update(
+            pending_approval=True,
+            message="该 ERP 操作已创建审批请求，审批前不会执行。",
         )
-    if decision.any_rejected or run_result is None:
-        return json.dumps(
-            {
-                "success": False,
-                "message": "该 ERP 操作未获风险门批准，未执行。",
-                "capability": capability,
-                "approval": approval,
-            },
-            ensure_ascii=False,
+    elif decision.any_rejected or run_result is None:
+        response["message"] = "该 ERP 操作未获风险门批准，未执行。"
+    else:
+        node_result = run_result.node_results[0] if run_result.node_results else None
+        output = dict(getattr(node_result, "output", {}) or {})
+        response.update(
+            success=bool(run_result.success and output.get("success")),
+            message=str(output.get("message") or run_result.message or ""),
+            result=output,
         )
-
-    node_result = run_result.node_results[0] if run_result.node_results else None
-    output = dict(getattr(node_result, "output", {}) or {})
-    return json.dumps(
-        {
-            "success": bool(run_result.success and output.get("success")),
-            "message": str(output.get("message") or run_result.message or ""),
-            "capability": capability,
-            "approval": approval,
-            "result": output,
-        },
-        ensure_ascii=False,
-    )
+    return json.dumps(response, ensure_ascii=False, default=json_safe)
 
 
 __all__ = [

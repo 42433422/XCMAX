@@ -77,16 +77,16 @@ if [[ "$MODE" == "active-peer" ]]; then
   stateful_modstore_port="$PRIMARY_MODSTORE_PORT"
   cat >"$PRIMARY_ROUTES_CONF" <<EOF
 # Services which are not installed on the DR node remain pinned to production.
-location ^~ /api/kellai/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
-location ^~ /kellai/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
-location ^~ /kellai-api/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
-location ^~ /downloads/kellai/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
-location ^~ /sandbox/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
-location ^~ /api/xcmax/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
-location ^~ /api/realtime/ { include proxy_params; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 3600s; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
-location ^~ /api/workbench/voice/ { include proxy_params; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 3600s; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
-location ^~ /api/asr/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
-location ^~ /uploads/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+    location ^~ /api/kellai/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+    location ^~ /kellai/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+    location ^~ /kellai-api/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+    location ^~ /downloads/kellai/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+    location ^~ /sandbox/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+    location ^~ /api/xcmax/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+    location ^~ /api/realtime/ { include proxy_params; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 3600s; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+    location ^~ /api/workbench/voice/ { include proxy_params; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 3600s; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+    location ^~ /api/asr/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+    location ^~ /uploads/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
 EOF
 else
   : >"$PRIMARY_ROUTES_CONF"
@@ -177,6 +177,14 @@ server {
         alias $SOURCE_ROOT/MODstore_deploy/market/dist/;
         try_files \$uri \$uri/ /market/index.html;
     }
+
+    # Public release assets and manifests must return 404 when missing
+    location ~ ^/xcagi-v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/.*\.(exe|dmg|pkg|zip|blockmap)$ { root /var/www; try_files \$uri =404; add_header Cache-Control "public, max-age=31536000, immutable"; }
+    location ~ ^/xcagi-v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/ { root /var/www; try_files \$uri =404; add_header Cache-Control "public, max-age=60"; }
+    location = /download-release.json { root $SOURCE_ROOT; try_files \$uri =404; default_type application/json; add_header Cache-Control "no-cache"; }
+    location = /download-windows-hotfix.json { alias /var/www/update/releases/stable/enterprise/download-windows-hotfix.json; try_files \$uri =404; default_type application/json; add_header Cache-Control "no-cache"; }
+    location /releases/stable/ { root /var/www/update; try_files \$uri =404; add_header Cache-Control "public, max-age=60"; }
+    location /releases/testing/ { root /var/www/update; try_files \$uri =404; add_header Cache-Control "no-cache, no-store, must-revalidate" always; }
 
     root $SOURCE_ROOT;
     index index.html;

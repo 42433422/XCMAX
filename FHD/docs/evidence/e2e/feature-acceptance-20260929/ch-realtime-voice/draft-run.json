@@ -1,0 +1,61 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ch-realtime-voice",
+ "name": "实时语音对话",
+ "platform": "macos",
+ "status": "blocked",
+ "verdict": "BLOCKED",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 0,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "实时语音对话",
+   "actions": "尝试执行：实时语音对话",
+   "expected": "实时语音对话 成功",
+   "observed": "受阻：需要麦克风权限与真人语音；自动化无法提供真实语音输入",
+   "result": "blocked"
+  },
+  {
+   "id": "M2",
+   "input": "语音模型端到端可用性",
+   "actions": "尝试执行：语音模型端到端可用性",
+   "expected": "语音模型端到端可用性 成功",
+   "observed": "受阻：GET /api/voice/health 报 ready=true，但 POST /api/voice/transcribe 返回 503「语音识别模型暂时不可用」，端到端链路不可用",
+   "result": "blocked"
+  },
+  {
+   "id": "M3",
+   "input": "端到端实时链路验证",
+   "actions": "尝试执行：端到端实时链路验证",
+   "expected": "端到端实时链路验证 成功",
+   "observed": "受阻：无麦克风与真人语音，无法验证实时语音对话",
+   "result": "blocked"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ch-realtime-voice",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-realtime-voice/macos/result.png",
+   "sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ch-realtime-voice",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-realtime-voice/macos/operation.webm",
+   "sha256": "39cbe0232d9e98d2609bd4f0925a15541c914e59a96805775faf862a6e179a4e",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-realtime-voice/macos/run.log",
+  "sha256": "06f168e1f682a7bc7db933aa4e5e0faca51f5b8da2aa1b698bb369b9997f6704",
+  "bytes": 863
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

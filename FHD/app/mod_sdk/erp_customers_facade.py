@@ -103,6 +103,37 @@ def customers_get(request: Request, customer_id: int) -> dict | JSONResponse:
     return JSONResponse(result, status_code=404)
 
 
+def customers_export(request: Request, keyword: str | None = None, template_id: str | None = None):
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+
+    from app.infrastructure.auth.db_token import verify_db_read_token_header
+    from app.utils.path_io.path_utils import get_data_dir
+    from app.utils.security.safe_download_path import (
+        UnsafeDownloadPathError,
+        resolve_under_allowed_dirs,
+    )
+
+    verify_db_read_token_header(request)
+    result = _service().export_to_excel(keyword=keyword, template_id=template_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message") or "客户导出失败")
+    try:
+        path = resolve_under_allowed_dirs(
+            str(result.get("file_path") or ""), [Path(get_data_dir())]
+        )
+    except UnsafeDownloadPathError as exc:
+        raise HTTPException(status_code=500, detail="导出文件路径无效") from exc
+    if not path.is_file():
+        raise HTTPException(status_code=500, detail="导出文件不存在")
+    return FileResponse(
+        path,
+        filename=result.get("filename"),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 def customers_create(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     from app.neuro_bus.route_event_publisher import publish_simple_event
 
@@ -150,6 +181,7 @@ def customers_delete(request: Request, customer_id: int) -> dict[str, Any]:
 __all__ = [
     "customers_create",
     "customers_delete",
+    "customers_export",
     "customers_get",
     "customers_list",
     "customers_update",

@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "dt-mac-control",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "6869fe132e83a952cc7c32d3d932c5469d6bd55062d648bd6cf9aab69a4d66bc",
+  "visible_content": "桌面运行时信息与本地路径可读，但没有 RPA 操作、回滚、签名检验、存证或控制结果；底部内容横向截断。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/dt-mac-control.png"
+}

@@ -1,0 +1,6 @@
+2026-09-29T06:42:42+0800 [ai-employee-pack] 开始验收 ai-employee-pack 办公员工包；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:42:45+0800 [ai-employee-pack] M1 passed :: HTTP 200 3501ms；{"success": true, "data": {"collection": "office_employee_pack", "pack_count": 10, "pack_ids": ["excel-generate-employee", "excel-full-read-employee", "csv-generate-employee", "csv-full-read-employee", "pdf-generate-employee", "pdf-full-rea
+2026-09-29T06:42:45+0800 [ai-employee-pack] M2 passed :: HTTP 200 20ms；installed_employee_pack_count=10 tools=10
+2026-09-29T06:42:49+0800 [ai-employee-pack] M3 passed :: 导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 ['工具']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管
+2026-09-29T06:42:50+0800 [ai-employee-pack] screenshot result.png
+2026-09-29T06:42:54+0800 [ai-employee-pack] video operation.webm bytes=578249

@@ -1,0 +1,29 @@
+{
+  "captured_at_utc": "2026-09-18T11:27:35Z",
+  "captured_at_local": "2026-09-18 19:27:35",
+  "boottime": "{ sec = 1789626349, usec = 217651 } Thu Sep 17 14:25:49 2026",
+  "installed_build_info": {
+    "schema_version": 1,
+    "gitSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "version": "1.0.0.5",
+    "releaseId": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420",
+    "builtAt": "2026-09-18T07:39:47.185Z"
+  },
+  "install_origin": "fresh_install_from_public_dmg（陌生客户流程）",
+  "app_owner": "drwxr-xr-x@ 3 a4243342  staff  96  9月 18 15:40 /Applications/XCAGI.app",
+  "app_pid": "96975",
+  "backend_pid": "97022",
+  "shipit_state": "{\"launchAfterInstallation\":true,\"updateBundleURL\":\"file:\\/\\/\\/Users\\/a4243342\\/Library\\/Caches\\/com.xcagi.desktop.enterprise.ShipIt\\/update.iwWTA4S\\/XCAGI.app\\/\",\"useUpdateBundleName\":true,\"bundleIdentifier\":\"com.xcagi.desktop.enterprise\",\"targetBundleURL\":\"file:\\/\\/\\/Applications\\/XCAGI.app\\/\"}",
+  "updater_events_lines": "130",
+  "digest": {
+    "xcagi.db.bytes": 987504640,
+    "excel_vectors.db.bytes": -1,
+    "mod_dbs.files": 1,
+    "uploads.files": 174,
+    "mods.files": 875,
+    "models.files": 0,
+    "backups.files": 4,
+    "backups.latest": "xcagi-unknown-20260918110919.db"
+  },
+  "xcagi_db_quick_check": "ok"
+}

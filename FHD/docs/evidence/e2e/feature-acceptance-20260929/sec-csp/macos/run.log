@@ -1,0 +1,5 @@
+2026-09-29T06:56:03+0800 [sec-csp] 开始验收 sec-csp CSP 与安全策略；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:56:03+0800 [sec-csp] M1 passed :: 响应头 {'csp': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; frame-src 'self' blob:; connect-src 'self' ws: wss:", 'xfo': 'DENY', 'xcto': 'nosniff'}
+2026-09-29T06:56:05+0800 [sec-csp] M2 passed :: 页面内向外部域 fetch 的结果：blocked:TypeError（connect-src 仅允许 self/ws）
+2026-09-29T06:56:06+0800 [sec-csp] screenshot result.png
+2026-09-29T06:56:07+0800 [sec-csp] video operation.webm bytes=148131

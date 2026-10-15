@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ind-custom-delivery",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "c4b416e030063a3c2b32bcebb52bf5c617c0a6ed1f91a499781ed1ca73c24f38",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。客户私有 Mod 生产中心。流程说明制作、测试、验收、交付。正在读取客户私有 Mod，发起定制按钮在。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ind-custom-delivery/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ind-custom-delivery/macos/result.png"
+}

@@ -45,6 +45,10 @@ for mod_id in "${IDS[@]}"; do
   done
   [[ "${skip}" -eq 1 ]] && continue
   src="${MODS_ROOT}/${mod_id}"
+  if [[ ! -d "${src}" && -d "${ROOT}/XCAGI/mods/${mod_id}" ]]; then
+    # EXPORT_ONLY mod（mods_ssot.py）：编辑源不在 mods/，运行时副本 SSOT 在 XCAGI/mods/。
+    src="${ROOT}/XCAGI/mods/${mod_id}"
+  fi
   if [[ ! -d "${src}" ]]; then
     echo "Required profile mod not found: ${mod_id}" >&2
     exit 1
@@ -57,6 +61,7 @@ done
 # marketplace tree, but the built-in Office docking UI directly exposes the
 # packs listed by this bridge. Bundle only that catalog so the visible
 # Excel/CSV/Word/PDF/PPT actions have real local executors in a fresh install.
+# Staged built-in bridges may also declare the executors they call via `bundled_employees`.
 OFFICE_CATALOG="${MODS_ROOT}/xcagi-office-employee-pack-bridge/config/office_pack_catalog.json"
 EMPLOYEE_SOURCE_ROOT="${MODS_ROOT}/_employees"
 EMPLOYEE_STAGE_ROOT="${STAGE_DIR}/_employees"
@@ -75,7 +80,9 @@ while IFS= read -r pack_id; do
   cp -R "${src}" "${EMPLOYEE_STAGE_ROOT}/${pack_id}"
   echo "Staged Office employee: ${pack_id}"
 done < <("${PYTHON}" -c \
-  'import json,sys; print("\n".join(json.load(open(sys.argv[1], encoding="utf-8"))["pack_ids"]))' \
-  "${OFFICE_CATALOG}")
+  'import json,sys,glob; ids=json.load(open(sys.argv[1], encoding="utf-8"))["pack_ids"]
+for m in sorted(glob.glob(sys.argv[2] + "/*/manifest.json")): ids += json.load(open(m, encoding="utf-8")).get("bundled_employees", [])
+print("\n".join(dict.fromkeys(ids)))' \
+  "${OFFICE_CATALOG}" "${STAGE_DIR}")
 
 echo "Staged ${#IDS[@]} mod id(s) for SKU ${SKU} -> ${STAGE_DIR}"

@@ -70,6 +70,29 @@ def build_knowledge_query_response_dict(
     }
 
 
+def build_clarify_response_dict(
+    route_result: dict[str, _facade().Any],
+) -> dict[str, _facade().Any] | None:
+    """LLM 意图闸低置信带：不猜测执行，把候选意图反问给用户确认。"""
+    if route_result.get("intent") != "clarify":
+        return None
+    slots = route_result.get("slots") or {}
+    question = str(slots.get("question") or "").strip()
+    if not question:
+        return None
+    return {
+        "success": True,
+        "response": question,
+        "data": {
+            "intent": "clarify",
+            "text": question,
+            "action": "followup",
+            "data": {"candidates": slots.get("candidates") or [], "llm_routed": True},
+        },
+        "normal_slot_dispatch": True,
+    }
+
+
 def build_sales_query_response_dict(
     route_result: dict[str, _facade().Any],
 ) -> dict[str, _facade().Any] | None:

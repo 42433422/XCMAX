@@ -2,7 +2,7 @@
 # mypy: disable-error-code="no-any-return"
 """巨型文件棘轮（ratchet）：只减不增地收口 FHD/app 大文件债务。
 
-守护两条基线（配合 architecture/REFACTOR_DECOMPOSITION_PLAN.md）：
+守护两条大文件基线：
 
 1. ``app/**/*.py`` 行数 > ``file_lines_soft_cap``（默认 800）的文件 —— 巨型文件**不得新增或增长**。
    新代码应按职责拆分（router 拆 domain、app_service 拆 helper、巨型 schema 拆子模块）。

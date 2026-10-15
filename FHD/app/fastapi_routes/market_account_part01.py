@@ -18,6 +18,22 @@ def _market_base_url() -> str:
     )
 
 
+def _market_api_base_url() -> str:
+    """Origin used for ``/api/*`` calls.
+
+    The packaged desktop may set ``XCAGI_MARKET_BASE_URL`` to the market SPA
+    (``https://xiu-ci.com/market``). That location is static and answers POST
+    with nginx 405. Authentication and the rest of the market API are served
+    from the site origin.
+    """
+    base = _market_base_url()
+    marker = "/market"
+    if base.endswith(marker):
+        origin = base[: -len(marker)]
+        return origin or base
+    return base
+
+
 def _auth_header(raw: str) -> str:
     token = (raw or "").strip()
     if token.lower().startswith("authorization:"):

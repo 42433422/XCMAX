@@ -11,36 +11,6 @@ def _facade():
     return importlib.import_module("modstore_server.market_auth_api")
 
 
-@_facade().router.post("/auth/refresh", summary="用 refresh_token 换取新的 access_token")
-def api_refresh_token(body: RefreshTokenDTO):
-    refresh_token = body.refresh_token
-    if not refresh_token:
-        raise _facade().HTTPException(400, "缺少刷新令牌")
-    payload = _facade().decode_refresh_token(refresh_token)
-    if not payload:
-        raise _facade().HTTPException(401, "刷新令牌无效或已过期")
-    user_id = int(payload["sub"])
-    username = payload["username"]
-    user = _facade().get_user_by_id(user_id)
-    if not user:
-        raise _facade().HTTPException(401, "用户不存在")
-    new_access_token = _facade().create_access_token(
-        user_id, username, is_admin=bool(user.is_admin)
-    )
-    new_refresh_token = _facade().create_refresh_token(user_id, username)
-    return {
-        "ok": True,
-        "access_token": new_access_token,
-        "refresh_token": new_refresh_token,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "is_enterprise": bool(getattr(user, "is_enterprise", False)),
-        },
-    }
-
-
 class SendPhoneCodeDTO(_facade().BaseModel):
     phone: str = _facade().Field(..., min_length=5, max_length=32)
 
@@ -154,21 +124,3 @@ def api_account_export(
         },
         "exported_at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
     }
-
-
-@_facade().router.get(
-    "/admin/status", summary="管理端概要统计（需管理员 JWT）", tags=["auth", "admin"]
-)
-def api_admin_status(
-    user: _facade().User = _facade().Depends(_facade()._require_admin),
-):
-    sf = _facade().get_session_factory()
-    with sf() as session:
-        total_items = session.query(_facade().CatalogItem).count()
-        total_users = session.query(_facade().User).count()
-        return {
-            "ok": True,
-            "is_admin": True,
-            "total_catalog_items": total_items,
-            "total_users": total_users,
-        }

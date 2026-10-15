@@ -1,53 +1,36 @@
 # CI SSOT: generated from 成都修茈科技有限公司/.github/workflows/ci-marketing-site.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
-# 组件级 CI：营销官网静态页（根层 *.html + site/ + new/ + assets 等）
-#
-# 责任边界：仅校验静态营销页改动；无需 Vue 构建或 Playwright。
-# 未拆仓前，此工作流保证营销页变更不会触发 Vue/Python/Java 的全量流水线。
+# 官网静态页与能力视频证据发布门禁；根仓工作流由本文件生成。
 
 name: CI - Marketing Site
 
 on:
   pull_request:
     paths:
-      - '成都修茈科技有限公司/index.html'
-      - '成都修茈科技有限公司/about.html'
-      - '成都修茈科技有限公司/case-*.html'
-      - '成都修茈科技有限公司/cases.html'
-      - '成都修茈科技有限公司/contact.html'
-      - '成都修茈科技有限公司/download*.html'
-      - '成都修茈科技有限公司/honors.html'
-      - '成都修茈科技有限公司/news.html'
-      - '成都修茈科技有限公司/services.html'
-      - '成都修茈科技有限公司/solutions.html'
-      - '成都修茈科技有限公司/excel-to-ai.html'
-      - '成都修茈科技有限公司/baidu_verify_*.html'
+      - '成都修茈科技有限公司/*.html'
+      - '成都修茈科技有限公司/capabilities/**'
+      - '成都修茈科技有限公司/data/capabilities/**'
+      - '成都修茈科技有限公司/scripts/build_capability_center.py'
       - '成都修茈科技有限公司/styles.css'
       - '成都修茈科技有限公司/main.js'
       - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/new/**'
       - '成都修茈科技有限公司/site/**'
+      - 'FHD/docs/evidence/**'
       - '.github/workflows/corp-marketing-site.yml'
   push:
     branches: [main]
     paths:
-      - '成都修茈科技有限公司/index.html'
-      - '成都修茈科技有限公司/about.html'
-      - '成都修茈科技有限公司/case-*.html'
-      - '成都修茈科技有限公司/cases.html'
-      - '成都修茈科技有限公司/contact.html'
-      - '成都修茈科技有限公司/download*.html'
-      - '成都修茈科技有限公司/honors.html'
-      - '成都修茈科技有限公司/news.html'
-      - '成都修茈科技有限公司/services.html'
-      - '成都修茈科技有限公司/solutions.html'
-      - '成都修茈科技有限公司/excel-to-ai.html'
-      - '成都修茈科技有限公司/baidu_verify_*.html'
+      - '成都修茈科技有限公司/*.html'
+      - '成都修茈科技有限公司/capabilities/**'
+      - '成都修茈科技有限公司/data/capabilities/**'
+      - '成都修茈科技有限公司/scripts/build_capability_center.py'
       - '成都修茈科技有限公司/styles.css'
       - '成都修茈科技有限公司/main.js'
       - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/new/**'
       - '成都修茈科技有限公司/site/**'
+      - 'FHD/docs/evidence/**'
       - '.github/workflows/corp-marketing-site.yml'
   workflow_dispatch:
 
@@ -71,6 +54,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 能力中心 --check 需用 git log 重算证据 commit/verified_at，
+          # 浅克隆（默认 1）只能命中 merge commit，必须完整历史（同 ssot-drift-gate）。
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -99,3 +86,51 @@ jobs:
           fi
           echo "Validating ${#files[@]} marketing HTML file(s) with htmlhint..."
           htmlhint "${files[@]}"
+
+      - name: HTML validate (capabilities)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=( capabilities/*.html capabilities/feature/*.html )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No capability HTML files to validate."
+            exit 0
+          fi
+          echo "Validating ${#files[@]} capability HTML file(s) with htmlhint..."
+          htmlhint "${files[@]}"
+
+      - name: Capability acceptance completeness and page integrity gate
+        run: python3 scripts/build_capability_center.py --check
+      - name: Decode every capability evidence video
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+          python3 scripts/build_capability_center.py --check-videos --video-report "$RUNNER_TEMP/capability-video-integrity.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capability-video-integrity
+          path: ${{ runner.temp }}/capability-video-integrity.json
+          if-no-files-found: error
+
+      # 官网「当前版本」只有一个来源：发布清单 /download-release.json（发布流程在 Windows/macOS
+      # 双平台产物通过验证后原子写入）。页面里写死的版本兜底值会与指针冲突，并让本门禁在每次
+      # 发版后持续变红——因此这里直接禁止写死，而不是要求人工跟着每次发版改页面。
+      - name: Current version single-sourced from release manifest
+        run: |
+          set -euo pipefail
+          pub="$(curl -fsS --retry 3 --retry-delay 5 -m 20 https://xiu-ci.com/download-release.json \
+            | python3 -c 'import json,sys;print(json.load(sys.stdin)["download_version"])')" \
+            || { echo "::error::无法从线上发布指针获取已发布版本"; exit 1; }
+          grep -F -q "fetch('/download-release.json'" download.html \
+            || { echo "::error::download.html 未从发布清单读取当前版本"; exit 1; }
+          grep -F -q "fetchJson('/download-release.json')" download-releases.html \
+            || { echo "::error::download-releases.html 未从发布清单读取版本时间线"; exit 1; }
+          if grep -E -q "DEFAULT_VERSION *= *['\"][0-9]" download.html; then
+            echo "::error::download.html 仍写死版本兜底值；当前版本只能来自发布清单"; exit 1
+          fi
+          if grep -E -q 'id="summary-version">[v0-9]' download-releases.html; then
+            echo "::error::download-releases.html 仍写死当前版本；当前版本只能来自发布清单"; exit 1
+          fi
+          next="$(sed -n 's/.*XCAGI 稳定产品版本[^`]*`\([0-9.]*\)`.*/\1/p' ../FHD/VERSION.md | head -1)"
+          [ -z "$next" ] || [ "$next" = "$pub" ] || echo "::warning::VERSION.md 稳定版本 ${next} 尚未对外发布（当前已发布 ${pub}）；官网按已发布版本对齐"
+          echo "官网当前版本单一来源校验通过：已发布 ${pub}"

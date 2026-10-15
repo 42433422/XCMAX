@@ -32,17 +32,6 @@ def _mobile_user_public_dict(user: Any) -> dict[str, Any]:
     }
 
 
-def _relay_admin_fallback_user() -> dict[str, Any]:
-    return {
-        "id": 1,
-        "username": "admin",
-        "display_name": "管理员账号",
-        "email": "",
-        "role": "admin",
-        "is_active": True,
-    }
-
-
 def _relay_mobile_auth_payload(
     user_public: dict[str, Any],
     desktop: dict[str, Any] | None = None,

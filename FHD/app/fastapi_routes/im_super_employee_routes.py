@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Query, Request
+from starlette.concurrency import run_in_threadpool
 
 from app.infrastructure.auth.dependencies import CurrentUser, require_identified_user
 
@@ -41,7 +42,7 @@ def codex_super_employee_messages(
 
 
 @router.post("/api/admin/codex-super-employee/messages")
-def codex_super_employee_invoke(
+async def codex_super_employee_invoke(
     request: Request,
     body: dict = Body(default_factory=dict),
     user: CurrentUser = Depends(require_identified_user),
@@ -53,6 +54,17 @@ def codex_super_employee_invoke(
         denied = _facade()._require_admin_customer_service_session(request, db)
         if denied is not None:
             return denied
+        if isinstance(body.get("durable_request"), dict):
+            from app.application.execution_scope import CapabilityGrant
+            from app.fastapi_routes.mac_control_proxy import proxy
+
+            if not CapabilityGrant.resolve(_facade().factory_context()).is_factory:
+                return _facade().JSONResponse(
+                    {"success": False, "message": "工厂执行能力尚未配置"}, status_code=403
+                )
+            payload = dict(body["durable_request"])
+            payload["message"] = str(body.get("message") or "").strip()
+            return await proxy(request, "POST", "tasks", payload)
         text = str(body.get("message") or body.get("body") or "").strip()
         raw_context = body.get("context")
         context: dict[str, Any] = raw_context if isinstance(raw_context, dict) else {}
@@ -62,8 +74,11 @@ def codex_super_employee_invoke(
             (body or {}).get("workspace_id") or context.get("workspace_id") or "xcmax"
         )
         context = _facade().factory_context(workspace_id=workspace_id, base=context)
-        result = (
-            _facade().CodexSuperEmployeeService().invoke(user_id=uid, message=text, context=context)
+        result = await run_in_threadpool(
+            _facade().CodexSuperEmployeeService().invoke,
+            user_id=uid,
+            message=text,
+            context=context,
         )
         return {"success": True, **result}
     except ValueError as exc:

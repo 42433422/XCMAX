@@ -40,11 +40,15 @@ def api_update_profile(
         if company is not None:
             row.company = company[:256]
         session.commit()
-    return {
-        "ok": True,
-        "username": row.username,
-        "company": getattr(row, "company", "") or "",
-    }
+        # B10 修复（DetachedInstanceError）：commit 使 ORM 属性过期，session 关闭后
+        # 再访问 row.username 会触发 attribute refresh 失败 -> 500。
+        # 必须在 session 关闭前读取返回值；company 为未映射列的内存回显，仅用于契约校验。
+        payload = {
+            "ok": True,
+            "username": row.username,
+            "company": getattr(row, "company", "") or "",
+        }
+    return payload
 
 
 @_facade().router.post("/auth/change-password")

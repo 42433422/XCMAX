@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "dt-process-mgmt",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "448d5f718ae871d01fc2a980e493e11aadb3d220b0b5a2f74f6c9a02c15bcb41",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/dt-process-mgmt/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/dt-process-mgmt/macos/result.png"
+}

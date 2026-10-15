@@ -37,12 +37,15 @@ def _extract_named_slot(message: str, patterns: tuple[str, ...]) -> str:
     for pattern in patterns:
         match = _facade().re.search(pattern, message, flags=_facade().re.I)
         if match:
-            value = _facade()._clean_db_slot_value(match.group(1))
+            value = match.group(1)
+            if (value[:1], value[-1:]) in (("「", "」"), ("“", "”"), ('"', '"'), ("'", "'")):
+                return value[1:-1].strip()
+            value = _facade()._clean_db_slot_value(value)
             if value:
                 return value
     quoted = _facade().re.search("[「“\\\"']([^」”\\\"']+)[」”\\\"']", message)
     if quoted:
-        return _facade()._clean_db_slot_value(quoted.group(1))
+        return quoted.group(1).strip()
     return ""
 
 
@@ -81,14 +84,22 @@ def _extract_business_db_id(message: str) -> int | None:
     return value if value > 0 else None
 
 
-def _extract_marked_value(message: str, labels: tuple[str, ...]) -> str:
+def _extract_marked_value(message: str, labels: tuple[str, ...], *, clean: bool = True) -> str:
     label_pattern = "|".join(_facade().re.escape(label) for label in labels)
+    quoted = _facade().re.search(
+        rf"""(?:{label_pattern})\s*[:：是为]?\s*(?:「([^」]*)」|“([^”]*)”|"([^"]*)"|'([^']*)')""",
+        message,
+        flags=_facade().re.I,
+    )
+    if quoted:
+        return next(value for value in quoted.groups() if value is not None).strip()
     match = _facade().re.search(
         f"""(?:{label_pattern})\\s*[:：是为]?\\s*[「“\\"']?([^，,。；;\\n]+?)[」”\\"']?(?=\\s+(?:联系人|电话|地址|型号|规格|单价|价格|数量|库存|单位|状态|客户|产品|原材料|物料|发货单|ID|id)\\s*[:：是为]?|[，,。；;]|$)""",
         message,
         flags=_facade().re.I,
     )
-    return _facade()._clean_db_slot_value(match.group(1)) if match else ""
+    value = match.group(1) if match else ""
+    return _facade()._clean_db_slot_value(value) if clean else value.strip(" \t\r\n「」“”\"'")
 
 
 def _extract_number(message: str, labels: tuple[str, ...]) -> float | None:
@@ -102,6 +113,20 @@ def _extract_number(message: str, labels: tuple[str, ...]) -> float | None:
         return float(match.group(1))
     except (TypeError, ValueError):
         return None
+
+
+def _extract_shipment_tins(message: str) -> float | None:
+    tins = _facade()._extract_number(message, ("桶数",))
+    if tins is not None:
+        return tins
+    match = _facade().re.search(
+        r"数量\s*[:：是为]?\s*(-?\d+(?:\.\d+)?)\s*(公斤|千克|kg|斤|吨|g)?",
+        message,
+        _facade().re.I,
+    )
+    if match and not match.group(2):
+        return float(match.group(1))
+    return None
 
 
 def _selector_for_business_db_message(entity: str, message: str) -> dict[str, _facade().Any]:
@@ -162,7 +187,7 @@ def _changes_for_business_db_message(entity: str, message: str) -> dict[str, _fa
         if spec:
             changes["specification"] = spec
     elif entity == "shipment_records":
-        tins = _facade()._extract_number(message, ("桶数", "数量"))
+        tins = _extract_shipment_tins(message)
         status = _facade()._extract_marked_value(message, ("状态",))
         price = _facade()._extract_number(message, ("单价", "价格"))
         if tins is not None:
@@ -175,6 +200,9 @@ def _changes_for_business_db_message(entity: str, message: str) -> dict[str, _fa
 
 
 def _extract_business_db_write_node(message: str) -> _facade().WorkflowNode | None:
+    # 双保险：原始 SQL 形态绝不产出写节点（主闸在 plan()/looks_like_business_db_write）。
+    if _facade()._looks_like_raw_sql(message):
+        return None
     entity = _facade()._infer_business_db_entity(message)
     operation = _facade()._infer_business_db_operation(message)
     if operation in {"update", "delete"}:
@@ -309,9 +337,13 @@ def _extract_business_db_write_node(message: str) -> _facade().WorkflowNode | No
             idempotent=False,
         )
     if entity == "shipment_records":
-        unit_name = _facade()._extract_marked_value(message, ("客户", "购买单位"))
-        product_name = _facade()._extract_marked_value(message, ("产品", "商品"))
-        tins = _facade()._extract_number(message, ("桶数", "数量"))
+        unit_name = _facade()._extract_marked_value(
+            message, ("客户名称", "单位名称", "购买单位", "客户", "单位"), clean=False
+        )
+        product_name = _facade()._extract_marked_value(
+            message, ("产品名称", "商品名称", "产品名", "商品名"), clean=False
+        ) or _facade()._extract_marked_value(message, ("产品", "商品"), clean=False)
+        tins = _extract_shipment_tins(message)
         if not unit_name or not product_name or tins is None:
             return None
         item: dict[str, _facade().Any] = {

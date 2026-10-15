@@ -5,12 +5,18 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import unquote
 
-from fastapi import Depends, File, Form, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Depends, File, Form, Request, UploadFile
+from fastapi.responses import JSONResponse
 
+from app.mod_sdk.attendance_artifacts import allocate_file, owner_for_request, serve_output
+from app.mod_sdk.attendance_rules import attendance_rules_payload
 from app.mod_sdk.customer_features import attendance_custom_features, require_attendance_conversion
 from app.mod_sdk.errors import BOUNDARY_ERRORS
-from app.mod_sdk.host_services import workspace_root
+
+try:
+    from .owner_scope import owner_from_request
+except ImportError:  # mod_manager 以顶层模块名加载 backend/*.py
+    from owner_scope import owner_from_request
 
 
 def register(
@@ -23,9 +29,9 @@ def register(
     _resolve_personnel_roster,
 ) -> None:
     """在给定 router 上注册 /attendance/* 转换与规则路由。"""
-    # 考勤转换的实现放在 mod 私有包 ``taiyangniao_attendance/``
+    # 考勤转换的实现放在 mod 私有包 ``attendance_engine/``
     # （被 mod_manager 加到 sys.path 的 ``backend/`` 可直接绝对 import）。
-    from taiyangniao_attendance.convert import convert_attendance_file
+    from attendance_engine.convert import convert_attendance_file
 
     router.add_api_route("/attendance/capabilities", attendance_custom_features, methods=["GET"])
     custom_access = [Depends(require_attendance_conversion)]
@@ -79,54 +85,11 @@ def register(
 
     @router.get("/attendance/rules", dependencies=custom_access)
     async def attendance_rules() -> dict:
-        lines = [
-            "优先读取钉钉「每日统计」，再用「原始记录」补充打卡时间与去重。",
-            "重复打卡按上午/下午/晚上分段去重，优先保留每段的有效边界打卡。",
-            "目标文件会在固定模板基础上回填「明细」工作表。",
-            "周一到周六正班固定为 08:00-12:00、13:30-17:30；周日算加班。",
-        ]
-        config = {
-            "default_header_row": 0,
-            "default_output_relpath": "424/考勤转换输出.xlsx",
-            "accepted_extensions": [".xlsx", ".xlsm", ".xls"],
-            "allow_template_append": True,
-            "default_template_relpath": DEFAULT_TEMPLATE_RELPATH,
-            "default_template_behavior": "固定模板版式；按人员管理名单重排明细，钉钉按名回填，无则空",
-        }
-        schedule_groups = [
-            {
-                "name": "公司-考勤 / 公司正班",
-                "headcount": "按导出表统计",
-                "shift_type": "固定班制",
-                "lines": [
-                    "周一到周六：正班固定 08:00-12:00 / 13:30-17:30",
-                    "晚上：18:00 后按最后一次打卡计加班",
-                    "周日：全部按星期天加班处理",
-                ],
-            },
-            {
-                "name": "惠州工厂-正班 / 工厂正班",
-                "headcount": "按导出表统计",
-                "shift_type": "固定班制",
-                "lines": [
-                    "周一到周六：正班固定 08:00-12:00 / 13:30-17:30",
-                    "晚上：18:00 后按最后一次打卡计加班",
-                    "周日：全部按星期天加班处理",
-                ],
-            },
-        ]
-        return {
-            "success": True,
-            "data": {
-                "lines": lines,
-                "saturday_window_label": "13:30 - 16:00",
-                "config": config,
-                "schedule_groups": schedule_groups,
-            },
-        }
+        return attendance_rules_payload(DEFAULT_TEMPLATE_RELPATH)
 
     @router.post("/attendance/convert-upload", response_model=None, dependencies=custom_access)
     async def attendance_convert_upload(
+        request: Request,
         file: UploadFile = File(...),
         output_relpath: str = Form("424/考勤转换输出.xlsx"),
         template_relpath: str = Form(DEFAULT_TEMPLATE_RELPATH),
@@ -134,6 +97,7 @@ def register(
         header_row: int = Form(0),
         use_llm: str = Form(""),
         use_personnel_roster: str = Form("1"),
+        owner: str = Depends(owner_for_request),
     ):
         if not file.filename:
             return JSONResponse(
@@ -150,14 +114,7 @@ def register(
         _ = output_relpath
 
         try:
-            from app.mod_sdk.workspace import allocate_generated_workspace_file
-
-            upload_kind = {
-                ".xlsx": "attendance-upload-xlsx",
-                ".xlsm": "attendance-upload-xlsm",
-                ".xls": "attendance-upload-xls",
-            }[suffix]
-            src_path = allocate_generated_workspace_file(upload_kind)
+            src_path = allocate_file(owner, "upload", suffix)
             content = await file.read()
             with src_path.open("wb") as f:
                 f.write(content)
@@ -169,10 +126,8 @@ def register(
             )
 
         try:
-            from app.mod_sdk.workspace import allocate_generated_workspace_file
-
-            out_path = allocate_generated_workspace_file("attendance-output")
-            out_rel = out_path.relative_to(workspace_root()).as_posix()
+            out_path = allocate_file(owner, "output")
+            out_rel = out_path.name
         except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
             return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
 
@@ -222,7 +177,7 @@ def register(
         )
         roster: list[tuple[str, str, str]] | None = None
         if use_pr:
-            roster = _resolve_personnel_roster(get_database_path())
+            roster = _resolve_personnel_roster(get_database_path(), owner_from_request(request))
             if not roster:
                 return JSONResponse(
                     {
@@ -303,18 +258,5 @@ def register(
         }
 
     @router.get("/attendance/download", response_model=None, dependencies=custom_access)
-    async def attendance_download(relpath: str):
-        try:
-            rel = _normalize_relpath(relpath, field_name="relpath")
-            from app.mod_sdk.workspace import resolve_existing_workspace_file
-
-            p = resolve_existing_workspace_file(rel)
-        except ValueError:
-            return JSONResponse({"success": False, "error": "下载路径无效"}, status_code=400)
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
-            return JSONResponse({"success": False, "error": "下载路径无效"}, status_code=400)
-
-        if not p.exists() or not p.is_file():
-            return JSONResponse({"success": False, "error": "file not found"}, status_code=404)
-
-        return FileResponse(path=str(p), filename=p.name, media_type="application/octet-stream")
+    async def attendance_download(relpath: str, owner: str = Depends(owner_for_request)):
+        return serve_output(owner, relpath)

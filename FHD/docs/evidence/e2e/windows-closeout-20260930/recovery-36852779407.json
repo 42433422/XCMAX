@@ -1,0 +1,693 @@
+{
+  "run": "36852779407-1",
+  "phase": "faults",
+  "started_at": "2026-10-01T11:04:13.317Z",
+  "marker": "WIN-GUI-36852779407-1-faults",
+  "names": {
+    "customer": "WIN-GUI-36852779407-1-faults-客户",
+    "product": "WIN-GUI-36852779407-1-faults-产品",
+    "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+    "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+    "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+  },
+  "cases": [
+    {
+      "id": "normal_login",
+      "started_at": "2026-10-01T11:04:13.391Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23"
+      },
+      "finished_at": "2026-10-01T11:04:25.468Z"
+    },
+    {
+      "id": "tenant_identity",
+      "started_at": "2026-10-01T11:04:25.468Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23",
+        "workspace_owner_id": "tenant:1"
+      },
+      "finished_at": "2026-10-01T11:04:25.699Z"
+    },
+    {
+      "id": "visible_version",
+      "started_at": "2026-10-01T11:04:25.700Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "expected_version": "1.0.0.5",
+        "visible_version": "1.0.0.5"
+      },
+      "finished_at": "2026-10-01T11:04:26.373Z"
+    },
+    {
+      "id": "customer",
+      "started_at": "2026-10-01T11:04:26.373Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/mod/xcagi-erp-domain-bridge/customers",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1,
+          "customer_name": "WIN-GUI-36852779407-1-faults-客户",
+          "contact_person": "验收员",
+          "contact_phone": "13800000001",
+          "contact_address": "WIN-GUI-36852779407-1-faults隔离验收地址",
+          "created_at": "2026-10-01T11:04:39",
+          "updated_at": "2026-10-01T11:04:39"
+        },
+        "original_fields": {
+          "contact_person": "验收员",
+          "contact_phone": "13800000001",
+          "contact_address": "WIN-GUI-36852779407-1-faults隔离验收地址"
+        },
+        "input_address": "WIN-GUI-36852779407-1-faults隔离验收地址"
+      },
+      "finished_at": "2026-10-01T11:04:46.006Z"
+    },
+    {
+      "id": "product",
+      "started_at": "2026-10-01T11:04:46.006Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/mod/xcagi-erp-domain-bridge/products/add",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1
+        },
+        "original_fields": {
+          "id": 1,
+          "model_number": "WIN-GUI-36852779407-1-faults",
+          "name": "WIN-GUI-36852779407-1-faults-产品",
+          "specification": "10",
+          "price": 12.5,
+          "quantity": 0,
+          "description": "",
+          "category": "",
+          "brand": "",
+          "unit": "个",
+          "is_active": true,
+          "created_at": "2026-10-01T11:05:01.591274",
+          "updated_at": "2026-10-01T11:05:01.591274"
+        }
+      },
+      "finished_at": "2026-10-01T11:05:03.857Z"
+    },
+    {
+      "id": "purchase",
+      "started_at": "2026-10-01T11:05:03.857Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/purchase/orders",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1,
+          "order_no": "PO20261001110506",
+          "supplier_id": 1,
+          "warehouse_id": null,
+          "order_date": "2026-10-01",
+          "delivery_date": null,
+          "total_amount": 125,
+          "paid_amount": 0,
+          "status": "draft",
+          "approver": null,
+          "approve_date": null,
+          "remark": "WIN-GUI-36852779407-1-faults",
+          "created_at": "2026-10-01 11:05:06.043804",
+          "updated_at": "2026-10-01 11:05:06.043804",
+          "tenant_id": 1
+        }
+      },
+      "finished_at": "2026-10-01T11:05:07.524Z"
+    },
+    {
+      "id": "purchase_inbound",
+      "started_at": "2026-10-01T11:05:07.524Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/purchase/inbounds",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1,
+          "inbound_no": "PI20261001110508",
+          "order_id": 1,
+          "supplier_id": 1,
+          "warehouse_id": 1,
+          "inbound_date": "2026-10-01",
+          "total_amount": 125,
+          "status": "completed",
+          "handler": null,
+          "remark": "WIN-GUI-36852779407-1-faults",
+          "created_at": "2026-10-01 11:05:08.665759",
+          "updated_at": "2026-10-01 11:05:08.665759",
+          "tenant_id": 1
+        }
+      },
+      "finished_at": "2026-10-01T11:05:10.798Z"
+    },
+    {
+      "id": "sales_order",
+      "started_at": "2026-10-01T11:05:10.798Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "order_id": 1,
+        "order_number": "26-10-00001A",
+        "output_file": "C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI\\tenants\\1\\shipment_outputs\\发货单_26-10-00001A_20261001_110513.xlsx"
+      },
+      "finished_at": "2026-10-01T11:05:14.582Z"
+    },
+    {
+      "id": "shipping_delivery_export",
+      "started_at": "2026-10-01T11:05:14.582Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "filename": "发货单_26-10-00001A_20261001_110513.xlsx",
+        "bytes": 4798,
+        "sha256": "7ef3a2fa497e101a7412d498c612a970036d4da181d23424aea0c5439f730441"
+      },
+      "finished_at": "2026-10-01T11:05:15.495Z"
+    },
+    {
+      "id": "stock_out",
+      "started_at": "2026-10-01T11:05:15.495Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/inventory/out",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "ledger_id": 1,
+          "quantity": 2,
+          "remaining_quantity": 8
+        },
+        "order_number": "26-10-00001A",
+        "expected_remaining_quantity": 8
+      },
+      "finished_at": "2026-10-01T11:05:17.422Z"
+    },
+    {
+      "id": "ui_readback",
+      "started_at": "2026-10-01T11:05:17.422Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品"
+      },
+      "finished_at": "2026-10-01T11:05:18.981Z"
+    },
+    {
+      "id": "ai_business",
+      "started_at": "2026-10-01T11:05:18.981Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "created_customer": "WIN-GUI-36852779407-1-faults-AI客户",
+        "id": 2,
+        "fields": {
+          "id": 2,
+          "customer_name": "WIN-GUI-36852779407-1-faults-AI客户",
+          "contact_person": "AI验收员",
+          "contact_phone": "13800000002",
+          "contact_address": "",
+          "created_at": "2026-10-01T11:06:03",
+          "updated_at": "2026-10-01T11:06:03"
+        },
+        "approval_request": "e654080497834cfdae56a0fcf82ecfcf",
+        "execution": {
+          "status": "approved",
+          "success": true,
+          "code": "workflow_execution_success",
+          "message": "AI 工作流执行完成",
+          "workflow_executed": true,
+          "nodes_executed": 1,
+          "nodes_total": 1
+        },
+        "receipt": "提示\n\n审批通过！\nAI 工作流：执行完成（节点 1/1），AI 工作流执行完成\n\n确定"
+      },
+      "finished_at": "2026-10-01T11:06:18.813Z"
+    },
+    {
+      "id": "controlled_stock_failure",
+      "started_at": "2026-10-01T11:06:18.813Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "requested_quantity": 999,
+        "rejected": {
+          "success": false,
+          "message": "库存不足或库存记录不存在",
+          "run_id": "run_253c6bf98dad47ca862dc74d1684a6f1",
+          "agent_run_id": "run_253c6bf98dad47ca862dc74d1684a6f1",
+          "agent_status": "failed"
+        },
+        "actual_remaining_quantity": 8,
+        "http_status": 200
+      },
+      "finished_at": "2026-10-01T11:06:23.910Z"
+    },
+    {
+      "id": "authorization_cancel",
+      "started_at": "2026-10-01T11:06:23.910Z",
+      "input": {
+        "customer": "WIN-GUI-36852779407-1-faults-客户",
+        "product": "WIN-GUI-36852779407-1-faults-产品",
+        "supplier": "WIN-GUI-36852779407-1-faults-供应商",
+        "ai": "WIN-GUI-36852779407-1-faults-AI客户",
+        "cancelled": "WIN-GUI-36852779407-1-faults-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "approval_request": "7a0e4c81e76a4c91bcf56cc48f36cc29",
+        "cancelled_customer": "WIN-GUI-36852779407-1-faults-取消客户",
+        "rejection": {
+          "id": 2,
+          "tenant_id": 1,
+          "request_no": "7a0e4c81e76a4c91bcf56cc48f36cc29",
+          "flow_id": 1,
+          "flow_name": "AI 工作流逐笔审批",
+          "business_type": "workflow_tool",
+          "business_id": null,
+          "business_data": {
+            "plan_id": "wp-mupffr4f3uf5py22g58-868ea037:write_business_customer",
+            "node_id": "write_business_customer",
+            "tool_id": "business_db",
+            "action": "write",
+            "params": {
+              "entity": "customers",
+              "operation": "upsert",
+              "payload": {
+                "unit_name": "WIN-GUI-36852779407-1-faults-取消客户",
+                "customer_name": "WIN-GUI-36852779407-1-faults-取消客户",
+                "contact_person": "AI验收员",
+                "contact_phone": "13800000002"
+              }
+            },
+            "durable_workflow_snapshot": {
+              "version": 1,
+              "plan_id": "wp-mupffr4f3uf5py22g58-868ea037:write_business_customer",
+              "tenant_id": 1,
+              "node": {
+                "node_id": "write_business_customer",
+                "tool_id": "business_db",
+                "action": "write",
+                "params": {
+                  "entity": "customers",
+                  "operation": "upsert",
+                  "payload": {
+                    "unit_name": "WIN-GUI-36852779407-1-faults-取消客户",
+                    "customer_name": "WIN-GUI-36852779407-1-faults-取消客户",
+                    "contact_person": "AI验收员",
+                    "contact_phone": "13800000002"
+                  }
+                }
+              },
+              "plan": {
+                "plan_id": "wp-mupffr4f3uf5py22g58-868ea037:write_business_customer",
+                "intent": "business_db_write",
+                "todo_steps": [
+                  "写入客户 WIN-GUI-36852779407-1-faults-取消客户"
+                ],
+                "risk_level": "medium",
+                "metadata": {
+                  "planner": "fallback",
+                  "message": "请创建客户，客户名称“WIN-GUI-36852779407-1-faults-取消客户”，联系人“AI验收员”，电话13800000002。请执行到客户记录保存成功并给出记录编号。",
+                  "memory_recall": {
+                    "user_memory_rag": {
+                      "summary": "【UserMemoryRAG】召回到以下用户记忆片段（用于辅助决策）:\n1. source=normal; intent=; feedback=-; corrected_intent=-; last_used=2026-10-01T11:05:42.075481; slots(-) ; score=0.5548\n   content=[chat_turn] user=请创建客户，客户名称“WIN-GUI-36852779407-1-faults-AI客户”，联系人“AI验收员”，电话13800000002。请执行到客户记录保存成功并给出记录编号。; assistant=我已根据语义生成动态工作流计划：\n工作编排:\n1) 业务目标: 处理当前业务请求\n2) 执行计划: 共 1 个业务步骤\n3) 安全边界: 涉及业务变更，执行前需要确认或审批\n4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n5) 业务步…\n2. source=normal; intent=; feedback=-; corrected_intent=-; last_used=2026-10-01T11:05:57.041710; slots(-) ; score=0.0489\n   content=[chat_turn] user=确认; assistant=已提交审批请求：e654080497834cfdae56a0fcf82ecfcf。请前往审批工作台逐笔处理。\n优先参考以上片段的意图/习惯（不要编造片段中不存在的信息）。",
+                      "hits": [
+                        {
+                          "chunk_id": "822b04fee67940b4820beffa5b7dd2fe",
+                          "content": "[chat_turn] user=请创建客户，客户名称“WIN-GUI-36852779407-1-faults-AI客户”，联系人“AI验收员”，电话13800000002。请执行到客户记录保存成功并给出记录编号。; assistant=我已根据语义生成动态工作流计划：\n工作编排:\n1) 业务目标: 处理当前业务请求\n2) 执行计划: 共 1 个业务步骤\n3) 安全边界: 涉及业务变更，执行前需要确认或审批\n4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n5) 业务步骤:\n- 写入客户 WIN-GUI-36852779407-1-faults-AI客户\n\n- 识别业务实体与写入字段\n- 通过受控业务服务写入数据库\n- 返回写入结果\n\n检测到中高风险步骤（write_business_customer），回复「确认」继续执行，回复「取消」终止。\n以下操作需要审批后执行：business_db.write",
+                          "metadata": {
+                            "source": "normal",
+                            "session_id": "mupffr4f3uf5py22g58",
+                            "user_id": "web_normal_mupffr4f3uf5py22g58",
+                            "user_message_preview": "请创建客户，客户名称“WIN-GUI-36852779407-1-faults-AI客户”，联系人“AI验收员”，电话13800000002。请执行到客户记录保存成功并给出记录编号。",
+                            "assistant_message_preview": "我已根据语义生成动态工作流计划：\n工作编排:\n1) 业务目标: 处理当前业务请求\n2) 执行计划: 共 1 个业务步骤\n3) 安全边界: 涉及业务变更，执行前需要确认或审批\n4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n5) 业务步骤:\n- 写入客户 WIN-GUI-36852779407-1-faults-AI客户\n\n- 识别业务实体与写入字段\n- 通过受控业务服务写入数据库\n- 返回写入结果\n\n检测到中高风险步骤（write_business_customer），回复「确认」继续执行，回复「取消」终止。\n以下操作需要审批后执行：business_db.write",
+                            "last_used": "2026-10-01T11:05:42.075481",
+                            "ts": "2026-10-01T11:05:42.075481"
+                          },
+                          "score": 0.5547664165496826
+                        },
+                        {
+                          "chunk_id": "e70d5bed0cc9476c8070409328c65b37",
+                          "content": "[chat_turn] user=确认; assistant=已提交审批请求：e654080497834cfdae56a0fcf82ecfcf。请前往审批工作台逐笔处理。",
+                          "metadata": {
+                            "source": "normal",
+                            "session_id": "mupffr4f3uf5py22g58",
+                            "user_id": "web_normal_mupffr4f3uf5py22g58",
+                            "user_message_preview": "确认",
+                            "assistant_message_preview": "已提交审批请求：e654080497834cfdae56a0fcf82ecfcf。请前往审批工作台逐笔处理。",
+                            "last_used": "2026-10-01T11:05:57.041710",
+                            "ts": "2026-10-01T11:05:57.041710"
+                          },
+                          "score": 0.04886778071522713
+                        }
+                      ]
+                    }
+                  }
+                },
+                "nodes": [
+                  {
+                    "node_id": "write_business_customer",
+                    "tool_id": "business_db",
+                    "action": "write",
+                    "params": {
+                      "entity": "customers",
+                      "operation": "upsert",
+                      "payload": {
+                        "unit_name": "WIN-GUI-36852779407-1-faults-取消客户",
+                        "customer_name": "WIN-GUI-36852779407-1-faults-取消客户",
+                        "contact_person": "AI验收员",
+                        "contact_phone": "13800000002"
+                      }
+                    },
+                    "risk": "medium",
+                    "idempotent": true,
+                    "description": "写入客户 WIN-GUI-36852779407-1-faults-取消客户",
+                    "depends_on": [],
+                    "next": null,
+                    "branches": []
+                  }
+                ]
+              },
+              "runtime_context": {
+                "user_id": "web_normal_mupffr4f3uf5py22g58",
+                "message": "请创建客户，客户名称“WIN-GUI-36852779407-1-faults-取消客户”，联系人“AI验收员”，电话13800000002。请执行到客户记录保存成功并给出记录编号。",
+                "tenant_id": "1",
+                "session_id": "mupffr4f3uf5py22g58",
+                "conversation_id": "mupffr4f3uf5py22g58",
+                "turn_id": "turn_68b8cecbf06d4b95a10747d1e2b3f55c",
+                "task_id": "task_5984e8a3b5d144a7b095cd23dd3a3f52",
+                "local_user_id": "2",
+                "actor_id": "2",
+                "source": "normal",
+                "workflow_trace_mode": "agent_orchestrator",
+                "dynamic_workflow": true
+              },
+              "agent_run_id": "run_96625efdba574c03a00398fb30f83bf5",
+              "approved_step_id": "write_business_customer"
+            },
+            "agent_run_id": "run_96625efdba574c03a00398fb30f83bf5",
+            "approved_step_id": "write_business_customer"
+          },
+          "applicant_id": 2,
+          "applicant_name": "SUNBIRD",
+          "applicant_department": null,
+          "title": "智能对话写操作：business_db.write",
+          "description": "{\"entity\": \"customers\", \"operation\": \"upsert\", \"payload\": {\"unit_name\": \"WIN-GUI-36852779407-1-faults-取消客户\", \"customer_name\": \"WIN-GUI-36852779407-1-faults-取消客户\", \"contact_person\": \"AI验收员\", \"contact_phone\": \"13800000002\"}}",
+          "current_node_id": null,
+          "current_node_order": 0,
+          "current_node_name": "AI 工作流审批",
+          "current_approvers": [],
+          "status": "rejected",
+          "priority": "normal",
+          "submitted_at": "2026-10-01T11:06:26.694456",
+          "approved_at": null,
+          "rejected_at": "2026-10-01T11:06:29.498971",
+          "approved_by": 2,
+          "approved_by_name": null,
+          "rejection_reason": "WIN-GUI-36852779407-1-faults 取消本次业务授权",
+          "created_at": "2026-10-01T11:06:26.694456",
+          "is_ai_workflow_approval": true,
+          "records": [
+            {
+              "id": 2,
+              "tenant_id": 1,
+              "request_id": 2,
+              "node_id": 1,
+              "node_name": "AI 工作流审批留痕",
+              "node_order": 1,
+              "approver_id": 2,
+              "approver_name": null,
+              "action": "reject",
+              "opinion": "WIN-GUI-36852779407-1-faults 取消本次业务授权",
+              "reject_reason": "WIN-GUI-36852779407-1-faults 取消本次业务授权",
+              "is_passed": false,
+              "action_time": "2026-10-01T11:06:29",
+              "deadline": null
+            }
+          ],
+          "workflow_execution": {
+            "workflow_executed": false,
+            "approval_request_id": "7a0e4c81e76a4c91bcf56cc48f36cc29",
+            "agent_run_id": "run_96625efdba574c03a00398fb30f83bf5",
+            "rejected_in_memory": true,
+            "discarded_pending_workflow": true,
+            "success": false,
+            "code": "approval_rejected",
+            "message": "审批已拒绝，AI 工作流已取消"
+          }
+        },
+        "gui_customer_absent": true
+      },
+      "finished_at": "2026-10-01T11:06:35.499Z"
+    }
+  ],
+  "observations": [
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/customers",
+      "status": 200,
+      "id": 1,
+      "fields": {
+        "id": 1,
+        "customer_name": "WIN-GUI-36852779407-1-faults-客户",
+        "contact_person": "验收员",
+        "contact_phone": "13800000001",
+        "contact_address": "WIN-GUI-36852779407-1-faults隔离验收地址",
+        "created_at": "2026-10-01T11:04:39",
+        "updated_at": "2026-10-01T11:04:39"
+      },
+      "observed_at": "2026-10-01T11:04:39.791Z"
+    },
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/products/add",
+      "status": 200,
+      "id": 1,
+      "fields": {
+        "id": 1
+      },
+      "observed_at": "2026-10-01T11:05:01.650Z"
+    },
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/purchase/suppliers",
+      "status": 200,
+      "id": 1,
+      "fields": {
+        "id": 1,
+        "code": "WIN-GUI-36852779407-1-faults",
+        "name": "WIN-GUI-36852779407-1-faults-供应商",
+        "contact_person": "采购验收员",
+        "contact_phone": "",
+        "contact_email": "",
+        "address": "",
+        "payment_terms": "月结",
+        "credit_limit": 0,
+        "status": "active",
+        "rating": 3,
+        "remark": "",
+        "created_at": "2026-10-01 11:05:05.153266",
+        "updated_at": "2026-10-01 11:05:05.153266",
+        "tenant_id": 1
+      },
+      "observed_at": "2026-10-01T11:05:05.221Z"
+    },
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/purchase/orders",
+      "status": 200,
+      "id": 1,
+      "fields": {
+        "id": 1,
+        "order_no": "PO20261001110506",
+        "supplier_id": 1,
+        "warehouse_id": null,
+        "order_date": "2026-10-01",
+        "delivery_date": null,
+        "total_amount": 125,
+        "paid_amount": 0,
+        "status": "draft",
+        "approver": null,
+        "approve_date": null,
+        "remark": "WIN-GUI-36852779407-1-faults",
+        "created_at": "2026-10-01 11:05:06.043804",
+        "updated_at": "2026-10-01 11:05:06.043804",
+        "tenant_id": 1
+      },
+      "observed_at": "2026-10-01T11:05:06.133Z"
+    },
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/purchase/inbounds",
+      "status": 200,
+      "id": 1,
+      "fields": {
+        "id": 1,
+        "inbound_no": "PI20261001110508",
+        "order_id": 1,
+        "supplier_id": 1,
+        "warehouse_id": 1,
+        "inbound_date": "2026-10-01",
+        "total_amount": 125,
+        "status": "completed",
+        "handler": null,
+        "remark": "WIN-GUI-36852779407-1-faults",
+        "created_at": "2026-10-01 11:05:08.665759",
+        "updated_at": "2026-10-01 11:05:08.665759",
+        "tenant_id": 1
+      },
+      "observed_at": "2026-10-01T11:05:08.798Z"
+    },
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/inventory/out",
+      "status": 200,
+      "id": 1,
+      "fields": {
+        "ledger_id": 1,
+        "quantity": 2,
+        "remaining_quantity": 8
+      },
+      "observed_at": "2026-10-01T11:05:16.800Z"
+    },
+    {
+      "action": "ai_execution_receipt",
+      "approval_request": "e654080497834cfdae56a0fcf82ecfcf",
+      "execution": {
+        "status": "approved",
+        "success": true,
+        "code": "workflow_execution_success",
+        "message": "AI 工作流执行完成",
+        "workflow_executed": true,
+        "nodes_executed": 1,
+        "nodes_total": 1
+      },
+      "receipt": "提示\n\n审批通过！\nAI 工作流：执行完成（节点 1/1），AI 工作流执行完成\n\n确定",
+      "observed_at": "2026-10-01T11:06:04.280Z"
+    },
+    {
+      "action": "normal_ui_reload_before_ai_readback",
+      "observed_at": "2026-10-01T11:06:05.218Z"
+    },
+    {
+      "action": "controlled_stock_failure_response",
+      "http_status": 200,
+      "result": {
+        "success": false,
+        "message": "库存不足或库存记录不存在",
+        "run_id": "run_253c6bf98dad47ca862dc74d1684a6f1",
+        "agent_run_id": "run_253c6bf98dad47ca862dc74d1684a6f1",
+        "agent_status": "failed"
+      },
+      "observed_at": "2026-10-01T11:06:20.913Z"
+    }
+  ],
+  "result": "business_regression_passed",
+  "finished_at": "2026-10-01T11:06:35.499Z",
+  "unfinished": [],
+  "full_customer_acceptance": "not_verified"
+}

@@ -1,0 +1,5 @@
+1. 市场 Web 端登录入口：https://xiu-ci.com/market/login（页面标题「XC AGI 市场」），账号框 + 密码框 +「登录」按钮；退出路径为侧栏账号菜单 →「退出登录」→ 确认框（标题「退出登录」，文案「确定要退出当前账号吗？」，确认按钮「退出」）。
+2. 退出为本机凭据清除（token_cleared_in_storage=true）：退出后浏览器不再持有该会话凭据，重新访问受保护页面被引导回登录页（bounced_to_login_again=true）。
+3. 服务端退出接口 POST /api/auth/logout 返回 403（{"detail":"CSRF token missing"}）：该接口受 CSRF 保护，且不属于本项界面退出路径，仅如实记录。
+4. 异常观察（真实存在，如实记录、不隐藏、不作为本轮用例判定依据）：部署中的市场后端会间歇性突发地对 POST /api/auth/login 与 GET /api/auth/me 返回 500 Internal Server Error。独立测量（纯 curl、合法凭据、与浏览器无关）：10 次里 3 次 500；随后 8 次里 1 次 500；静默 5 分钟后仍 8 次里 1 次；服务端重启后曾观察到约 6 分钟全 200 的干净窗口，随后又出现约 2 分钟的坏窗口（界面登录连续 3 次被 500 挡回）。失败响应只用约 0.08 秒（成功约 0.39 秒，接近一次口令校验耗时），同一时刻不触碰账号库的 /api/market/catalog、/api/payment/plans、无凭据的 /api/auth/me 连续多次全 200，/api/health 始终 200；部署版与主线均已配置 pool_pre_ping=True。症状指向服务侧（部分 worker 的数据库访问路径）瞬时故障，重启只能短暂清除。本轮界面登录按真实用户行为重试并逐次留痕（见 WB2/WB6 的 login_attempts），复核调用同样留痕。建议在服务端 `journalctl -u modstore.service -n 200` 取 500 的 traceback 定位根因。
+5. 证据环境：真实浏览器 Edge（用户代理见 base-login-web-identity.json 的 user_agent），本次运行桌面画面由 ffmpeg 录制；站点自报身份 /api/health 见同一身份文件。

@@ -421,4 +421,8 @@ def find_user_by_email(email: str) -> User | None:
         return None
     sf = get_session_factory()
     with sf() as session:
-        return session.query(User).filter(func.lower(User.email) == norm).first()
+        return (
+            session.query(User)
+            .filter(func.lower(User.email) == norm, User.deleted_at.is_(None))
+            .first()
+        )

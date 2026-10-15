@@ -53,10 +53,9 @@ def api_my_store(
 
 
 def _catalog_files_dir() -> _facade().Path:
-    """市场文件存储目录。"""
-    d = _facade().Path(__file__).resolve().parent / "market_files"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    from modstore_server.catalog_store import files_dir
+
+    return files_dir()
 
 
 def _upload_chunks_dir() -> _facade().Path:
