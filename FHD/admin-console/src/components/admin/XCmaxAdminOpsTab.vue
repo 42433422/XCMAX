@@ -118,7 +118,7 @@ async function refresh() {
     const h = health && typeof health === 'object' ? (health as Record<string, unknown>) : {}
     dutyHealth.value = {
       ok: h.ok === true || h.success === true,
-      plannedCount: Number(h.planned_local_installed_count ?? h.planned_count ?? 0),
+      plannedCount: Array.isArray(h.planned_employee_ids) ? h.planned_employee_ids.length : Number((h.staffing as Record<string, unknown>)?.planned_count ?? h.planned_count ?? 0),
       registeredCount: Number(
         Array.isArray(h.registered_employee_ids) ? h.registered_employee_ids.length : 0,
       ),

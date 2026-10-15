@@ -29,12 +29,12 @@
 
     <div class="admin-card admin-card--wide">
       <div class="card-header">
-        <h3>六线编制概览</h3>
+        <h3>计划编制部门（非运行人数）</h3>
       </div>
       <ul class="dept-list">
-        <li v-for="dept in SIX_LINE_DEPARTMENTS" :key="dept.id">
+        <li v-for="(dept, id) in YUANGON_AREAS" :key="id">
           <strong>{{ dept.label }}</strong>
-          <span class="dept-meta">{{ deptCount(dept.id) }} 个编制包</span>
+          <span class="dept-meta">{{ dept.ids.length }} 个计划编制包</span>
         </li>
       </ul>
     </div>
@@ -45,7 +45,7 @@
 import { onMounted, ref } from 'vue'
 import { xcmaxOpsApi } from '@/api/xcmaxOps'
 import { api } from '@/api'
-import { SIX_LINE_DEPARTMENTS } from '@/constants/sixLineDepartments'
+import { YUANGON_AREAS } from '@/domain/yuangonDutyRoster'
 import { buildDutyRosterRows } from '@/utils/dutyRosterEmployeeList'
 
 const loading = ref(false)
@@ -56,10 +56,6 @@ const localInstalled = ref(0)
 const remoteReachable = ref(false)
 const closureDetail = ref('')
 const rosterRows = ref<ReturnType<typeof buildDutyRosterRows>>([])
-
-function deptCount(_deptId: string) {
-  return Math.ceil(rosterRows.value.length / SIX_LINE_DEPARTMENTS.length)
-}
 
 async function refresh() {
   loading.value = true
@@ -76,7 +72,7 @@ async function refresh() {
         : (closureRes as Record<string, unknown>)
     const health =
       healthRes && typeof healthRes === 'object' ? (healthRes as Record<string, unknown>) : {}
-    rosterRows.value = buildDutyRosterRows(health)
+    rosterRows.value = buildDutyRosterRows({ ...health, ...closureData })
     missingCount.value = rosterRows.value.filter((r) => r.status === 'missing').length
     localInstalled.value = Number(health.planned_local_installed_count ?? 0)
     closureOk.value = missingCount.value === 0 && localInstalled.value > 0
