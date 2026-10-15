@@ -141,6 +141,13 @@ vi.mock('@/components/OtpCells.vue', () => ({
 
 // ── helpers ────────────────────────────────────────────────
 
+function resetLoginMocks(oidcEnabled = false) {
+  vi.clearAllMocks()
+  mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: oidcEnabled } })
+  mockLoadLoginPreferences.mockReturnValue({ rememberPassword: false, autoLogin: false, username: '', password: '' })
+  mockIsAdminConsoleSpa.mockReturnValue(false)
+}
+
 function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
@@ -197,15 +204,7 @@ async function mountLoginView(query: Record<string, string> = {}) {
 
 describe('LoginView functions – selectEnterpriseLogin / selectAdminLogin', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
-    mockLoadLoginPreferences.mockReturnValue({
-      rememberPassword: false,
-      autoLogin: false,
-      username: '',
-      password: '',
-    })
-    mockIsAdminConsoleSpa.mockReturnValue(false)
+    resetLoginMocks()
   })
 
   it('selectEnterpriseLogin sets accountKind to enterprise and clears errors', async () => {
@@ -266,15 +265,7 @@ describe('LoginView functions – selectEnterpriseLogin / selectAdminLogin', () 
 
 describe('LoginView functions – startOidcLogin', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: true } })
-    mockLoadLoginPreferences.mockReturnValue({
-      rememberPassword: false,
-      autoLogin: false,
-      username: '',
-      password: '',
-    })
-    mockIsAdminConsoleSpa.mockReturnValue(false)
+    resetLoginMocks(true)
   })
 
   it('startOidcLogin sets window.location.href to oidc start URL', async () => {
@@ -399,15 +390,7 @@ describe('LoginView functions – pollQrStatus', () => {
 
 describe('LoginView functions – stopQrPoll', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
-    mockLoadLoginPreferences.mockReturnValue({
-      rememberPassword: false,
-      autoLogin: false,
-      username: '',
-      password: '',
-    })
-    mockIsAdminConsoleSpa.mockReturnValue(false)
+    resetLoginMocks()
   })
 
   it('stopQrPoll clears interval and sets timer to null', async () => {
@@ -607,15 +590,7 @@ describe('LoginView functions – switchLoginMode to qr', () => {
 
 describe('LoginView functions – peelNestedLoginRedirect edge cases', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
-    mockLoadLoginPreferences.mockReturnValue({
-      rememberPassword: false,
-      autoLogin: false,
-      username: '',
-      password: '',
-    })
-    mockIsAdminConsoleSpa.mockReturnValue(false)
+    resetLoginMocks()
   })
 
   it('redirectPath returns / for redirect starting with //', async () => {
@@ -661,15 +636,7 @@ describe('LoginView functions – peelNestedLoginRedirect edge cases', () => {
 
 describe('LoginView functions – canSubmit computed', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
-    mockLoadLoginPreferences.mockReturnValue({
-      rememberPassword: false,
-      autoLogin: false,
-      username: '',
-      password: '',
-    })
-    mockIsAdminConsoleSpa.mockReturnValue(false)
+    resetLoginMocks()
   })
 
   it('canSubmit returns false when loading', async () => {
@@ -718,15 +685,7 @@ describe('LoginView functions – canSubmit computed', () => {
 
 describe('LoginView functions – watch rememberPassword/autoLogin', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
-    mockLoadLoginPreferences.mockReturnValue({
-      rememberPassword: false,
-      autoLogin: false,
-      username: '',
-      password: '',
-    })
-    mockIsAdminConsoleSpa.mockReturnValue(false)
+    resetLoginMocks()
   })
 
   it('disabling rememberPassword also disables autoLogin', async () => {
@@ -754,15 +713,7 @@ describe('LoginView functions – watch rememberPassword/autoLogin', () => {
 
 describe('LoginView functions – OIDC callback handling', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
-    mockLoadLoginPreferences.mockReturnValue({
-      rememberPassword: false,
-      autoLogin: false,
-      username: '',
-      password: '',
-    })
-    mockIsAdminConsoleSpa.mockReturnValue(false)
+    resetLoginMocks()
   })
 
   it('oidc=ok query param triggers completeLoginSuccess', async () => {
@@ -792,15 +743,7 @@ describe('LoginView functions – OIDC callback handling', () => {
 
 describe('LoginView functions – formatLoginFailurePayload edge cases', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
-    mockLoadLoginPreferences.mockReturnValue({
-      rememberPassword: false,
-      autoLogin: false,
-      username: '',
-      password: '',
-    })
-    mockIsAdminConsoleSpa.mockReturnValue(false)
+    resetLoginMocks()
   })
 
   it('submitLogin with failed login sets errorMessage from payload message', async () => {
@@ -890,15 +833,7 @@ describe('LoginView functions – formatLoginFailurePayload edge cases', () => {
 
 describe('LoginView functions – sendPhoneCode edge cases', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
-    mockLoadLoginPreferences.mockReturnValue({
-      rememberPassword: false,
-      autoLogin: false,
-      username: '',
-      password: '',
-    })
-    mockIsAdminConsoleSpa.mockReturnValue(false)
+    resetLoginMocks()
   })
 
   it('sendPhoneCode sets error for short phone number', async () => {
@@ -937,15 +872,7 @@ describe('LoginView functions – sendPhoneCode edge cases', () => {
 
 describe('LoginView functions – startQrLogin error handling', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
-    mockLoadLoginPreferences.mockReturnValue({
-      rememberPassword: false,
-      autoLogin: false,
-      username: '',
-      password: '',
-    })
-    mockIsAdminConsoleSpa.mockReturnValue(false)
+    resetLoginMocks()
   })
 
   it('startQrLogin sets errorMessage on failure', async () => {
@@ -970,4 +897,34 @@ describe('LoginView functions – startQrLogin error handling', () => {
     expect(vm.qrId).toBe('direct-qr')
     expect(vm.qrPollSecret).toBe('direct-secret')
   })
+})
+
+it('OTP entry sanitizes input, handles deletion and paste, and preserves its disabled state', async () => {
+  const { default: OtpCells } = await vi.importActual<{ default: import('vue').Component }>('@/components/OtpCells.vue')
+  const wrapper = mount(OtpCells, { props: { modelValue: '', length: 4 } })
+  const input = wrapper.get('input')
+  await input.setValue('a12b345')
+  expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['1234'])
+  await wrapper.setProps({ modelValue: '1x2' })
+  expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['12'])
+  expect(wrapper.findAll('.otp-cells__cell').map((cell) => cell.text())).toEqual(['1', '2', '', ''])
+  await wrapper.setProps({ modelValue: '1234' })
+  await input.trigger('keydown', { key: 'Backspace' })
+  expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['123'])
+  const blur = vi.spyOn(input.element, 'blur')
+  const paste = new Event('paste', { cancelable: true })
+  Object.defineProperty(paste, 'clipboardData', { value: { getData: () => 'a98b765' } })
+  input.element.dispatchEvent(paste)
+  await wrapper.vm.$nextTick()
+  expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['9876'])
+  expect(paste.defaultPrevented).toBe(true)
+  expect(blur).toHaveBeenCalledOnce()
+  await wrapper.setProps({ modelValue: '', disabled: true })
+  const count = wrapper.emitted('update:modelValue')?.length
+  await input.trigger('keydown', { key: 'Backspace' })
+  await input.trigger('keydown', { key: 'Enter' })
+  input.element.dispatchEvent(new Event('paste', { cancelable: true }))
+  expect(wrapper.emitted('update:modelValue')).toHaveLength(count ?? 0)
+  expect(input.attributes('disabled')).toBeDefined()
+  wrapper.unmount()
 })
