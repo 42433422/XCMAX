@@ -63,10 +63,11 @@ describe('Windows full application rollback helper', () => {
     expect(script.indexOf('$rollbackCommitted = $true')).toBeLessThan(script.indexOf('Start-Process -FilePath $appPath'))
   })
 
-  windowsIt.each(['success', 'success-prior', 'success-generated-operation', 'receipt-failure', 'durable-failure', 'durable-failure-prior', 'marker-failure', 'marker-failure-prior', 'retained-failure', 'retained-wal', 'retained-journal'])('keeps app and database consistent after %s', async (scenario) => {
+  windowsIt.each(['success', 'success-long-path', 'success-short-root', 'success-prior', 'success-generated-operation', 'receipt-failure', 'durable-failure', 'durable-failure-prior', 'marker-failure', 'marker-failure-prior', 'retained-failure', 'retained-wal', 'retained-journal'])('keeps app and database consistent after %s', async (scenario) => {
     const failed = !scenario.startsWith('success'), prior = scenario.endsWith('-prior')
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-windows-rollback-'))
+    let root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-windows-rollback-'))
     cleanupRoots.push(root)
+    if (scenario === 'success-short-root') root = (await execFileAsync('cmd.exe', ['/d', '/s', '/c', `for %I in ("${root}") do @echo %~sI`], { windowsVerbatimArguments: true })).stdout.trim()
     const installDir = path.join(root, 'XCAGI')
     const backupRoot = path.join(root, 'rollback', 'windows-app-current')
     const dataDir = path.join(root, 'data')
@@ -86,6 +87,8 @@ describe('Windows full application rollback helper', () => {
     fs.writeFileSync(path.join(installDir, 'build.txt'), 'new-build')
     fs.writeFileSync(path.join(backupRoot, 'XCAGI.exe'), 'old-app')
     fs.writeFileSync(path.join(backupRoot, 'build.txt'), 'old-build')
+    const longFile = path.join('nested-'.repeat(22), 'recovery-'.repeat(12) + '.txt')
+    if (scenario === 'success-long-path') { fs.mkdirSync(path.dirname(path.join(backupRoot, longFile)), { recursive: true }); fs.writeFileSync(path.join(backupRoot, longFile), 'long-path-backup'); expect(path.join(backupRoot, longFile).length).toBeGreaterThan(260) }
     if (scenario.startsWith('marker-failure')) fs.mkdirSync(markerPath)
     fs.writeFileSync(scenario.startsWith('marker-failure') ? path.join(markerPath, 'retained') : markerPath, '{}')
     fs.writeFileSync(databasePath, 'new-database')
@@ -102,14 +105,7 @@ describe('Windows full application rollback helper', () => {
 
     const options: WindowsRollbackLaunchOptions = {
       currentPid: 2_000_000_000,
-      installDir,
-      backupRoot,
-      appPath,
-      markerPath,
-      appliedPath,
-      logPath,
-      databasePath,
-      databaseBackupPath,
+      installDir, backupRoot, appPath, markerPath, appliedPath, logPath, databasePath, databaseBackupPath,
       restartApp: false,
       waitTimeoutSeconds: 5,
       applied: {
@@ -119,6 +115,7 @@ describe('Windows full application rollback helper', () => {
         toVersion: '1.0.0.0-old',
       },
     }
+    if (scenario === 'success-long-path') options.expectedAppFiles = Object.fromEntries(['XCAGI.exe', 'build.txt', longFile].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(backupRoot, file))).digest('hex')]))
     if (scenario === 'success-generated-operation') delete options.applied.operationId
     const script = buildWindowsRollbackScript(options)
     const scriptPath = path.join(dataDir, 'rollback-helper-test.ps1')
@@ -150,6 +147,7 @@ describe('Windows full application rollback helper', () => {
     expect(fs.readFileSync(path.join(installDir, 'build.txt'), 'utf8')).toBe(failed ? 'new-build' : 'old-build')
     expect(fs.readFileSync(databasePath, 'utf8')).toBe(failed ? 'new-database' : 'old-database')
     expect(fs.existsSync(markerPath)).toBe(failed)
+    if (scenario === 'success-long-path') expect(fs.readFileSync(path.join(installDir, longFile), 'utf8')).toBe('long-path-backup')
     for (const [suffix, value] of [['wal', 'new-wal'], ['shm', 'new-shm']]) {
       expect(fs.existsSync(`${databasePath}-${suffix}`)).toBe(failed)
       if (failed) expect(fs.readFileSync(`${databasePath}-${suffix}`, 'utf8')).toBe(value)
@@ -195,7 +193,7 @@ describe('Windows full application rollback helper', () => {
     if (!['missing', 'log-only'].includes(scenario)) fs.writeFileSync(path.join(data, 'rollback-applied.last.json'), JSON.stringify(receipt))
     if (scenario === 'malformed-json') fs.writeFileSync(path.join(data, 'rollback-applied.last.json'), '{bad json')
     if (scenario === 'marker') fs.writeFileSync(path.join(data, 'rollback-marker.json'), '{}')
-    // Run the real collector after consumption; strip inherited PS7 module paths from the PS5.1 child environment below.
+    // Use the checksum-verified product loader, including on hosts that disable -File.
     const source = fs.readFileSync(path.resolve('../scripts/package/accept-windows-candidate.ps1'), 'utf8')
     const start = source.indexOf("    $infoPath = Join-Path $installRoot 'resources\\build-info.json'", source.indexOf('function Invoke-FailedRollback'))
     expect(start).toBeGreaterThan(0)
@@ -208,12 +206,12 @@ describe('Windows full application rollback helper', () => {
       `$installRoot=${quote(install)}; $dataRoot=${quote(data)}; $EvidenceDir=${quote(evidence)}; $db=${quote(database)}; $deadline=Get-Date\n` +
       `$before='${createHash('sha256').update('original').digest('hex')}'; $marker=${quote(JSON.stringify(marker))} | ConvertFrom-Json\n` + `try {\n${body}\n} finally {\n${capture}\n}`
     const scriptPath = path.join(root, 'check.ps1'); fs.writeFileSync(scriptPath, script)
+    const encoded = Buffer.from(buildWindowsRollbackFileLoader(scriptPath, createHash('sha256').update(script).digest('hex')), 'utf16le').toString('base64')
     let error = ''
-    try { await execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-File', scriptPath], { timeout: 10000, env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'PSMODULEPATH')) }) } catch (caught) { error = String(caught) }
+    try { await execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { timeout: 10000, env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'PSMODULEPATH')) }) } catch (caught) { error = String(caught) }
     if (scenario === 'consumed') {
       expect(error).toBe('')
     } else expect(error).toContain(scenario === 'wrong-build' || scenario === 'marker' ? 'rollback.restored_build' : scenario === 'dirty-db' ? 'rollback.database_hash' : 'rollback.applied_record')
     if (!['missing', 'log-only'].includes(scenario)) expect(fs.readFileSync(path.join(evidence, 'rollback-applied.last.json'), 'utf8')).toBe(scenario === 'malformed-json' ? '{bad json' : JSON.stringify(receipt))
   }, 15000)
-
 })
