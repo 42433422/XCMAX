@@ -1,5 +1,4 @@
 // 扁平 (Flat) ESLint 9 配置：Vue 3 + TypeScript + Prettier 协作。
-// 该文件同时被 MODstore_deploy/market 通过 import 复用，避免两个工作区配置漂移。
 import js from '@eslint/js'
 import vue from 'eslint-plugin-vue'
 import vueTsConfig from '@vue/eslint-config-typescript'
@@ -37,8 +36,7 @@ export const ignores = {
     'main.js',
     'app.py',
     '*.html',
-    '**/*.min.js',
-    '**/*.min.css',
+    '**/*.min.{js,css}',
   ],
 }
 
@@ -68,13 +66,9 @@ export const baseRules = {
 }
 
 export const languageOptions = {
-  files: ['**/*.{js,ts,vue}'],
+  files: ['**/*.{js,mjs,cjs,ts,vue}'],
   languageOptions: {
-    globals: {
-      ...globals.browser,
-      ...globals.node,
-      ...globals.es2022,
-    },
+    globals: { ...globals.browser, ...globals.node, ...globals.es2022 },
   },
 }
 
