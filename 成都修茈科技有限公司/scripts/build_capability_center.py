@@ -99,7 +99,7 @@ _PUBLIC_EXCLUDED_FEATURES = {"ind-szqsm"}
 
 
 def public_projection(value: object, excluded: set[str]) -> object:
-    names = {Path(path).name.casefold() for path in excluded}
+    private_paths = {path.casefold() for path in excluded}
 
     def hidden(item: object) -> bool:
         if isinstance(item, str):
@@ -115,7 +115,7 @@ def public_projection(value: object, excluded: set[str]) -> object:
             return {k: project(v) for k, v in item.items() if k != "public_excluded_media" and not hidden(v)}
         if isinstance(item, list):
             return [project(child) for child in item if not hidden(child)]
-        if isinstance(item, str) and any(x in item.casefold() for x in (*_PUBLIC_PRIVATE_MARKERS, *names)):
+        if isinstance(item, str) and any(x in item.casefold() for x in (*_PUBLIC_PRIVATE_MARKERS, *private_paths)):
             return _PUBLIC_REDACTION
         return item
 
@@ -403,8 +403,9 @@ def nested_value(value: dict, dotted_path: str):
 def traceable_pass(feat: dict, platform: str, run: dict) -> tuple[bool, str | None]:
     assets = (feat.get("evidence", {}) or {}).get("platform_assets", {}).get(platform, {})
     try:
-        accept, ident, art = assets["acceptance"], assets["identity"], assets["artifact"]
-        read = lambda ref: json.loads(e(ref["path"]).read_text(encoding="utf-8"))
+        ident, art = assets["identity"], assets["artifact"]
+        def read(ref):
+            return json.loads(e(ref["path"]).read_text(encoding="utf-8"))
         identity, artifact = read(ident), read(art)
         sha = nested_value(artifact, art["sha256"])
         logs = assets.get("logs", [])

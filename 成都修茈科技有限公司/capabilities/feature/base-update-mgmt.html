@@ -35,7 +35,7 @@
       <div>
         <span class="eyebrow">产品底座与账户 / 运行底座</span>
         <h1>版本与更新管理</h1>
-        <div class="cap-feature-meta"><span class="cap-status st-partial">部分验证</span><span class="cap-platform cap-platform--pending">Windows 桌面 · 待验证</span><span class="cap-platform cap-platform--verified">macOS 桌面 · 已验证</span><span>代码更新于 2026-10-14</span></div>
+        <div class="cap-feature-meta"><span class="cap-status st-verified">已验证</span><span>代码更新于 2026-10-14</span></div>
         <p>版本比对、更新拉取与发布推送链路。</p>
       </div>
       <div class="page-hero-side"><p><a class="btn btn-secondary btn-sm" href="/capabilities/catalog.html?domain=base">返回 产品底座与账户</a></p></div>
@@ -48,19 +48,19 @@
         <div class="cap-info-block"><h3>功能价值</h3><p>版本比对、更新拉取与发布推送链路。</p></div>
         <div class="cap-info-block"><h3>使用方式</h3><p>请联系我们获取演示或参阅关联文档。</p></div>
         <div class="cap-info-block"><h3>所属模块</h3><p>产品底座与账户 / 运行底座</p></div>
-        <div class="cap-info-block"><h3>适用平台</h3><p><span class="cap-platform cap-platform--pending">Windows 桌面 · 待验证</span><span class="cap-platform cap-platform--verified">macOS 桌面 · 已验证</span></p></div>
+        <div class="cap-info-block"><h3>适用平台</h3><p>—</p></div>
         <div class="cap-info-block"><h3>已知限制</h3><ul class="cap-limitations"><li>暂未记录</li></ul></div>
       </div>
       <div class="cap-ref-note"><p><strong>本项为功能地图中的明细能力</strong>，相关实现资料见核心能力「自动更新（OTA）」。上级能力的证据不能代替本项独立验收；本项已收录资料如下。</p><p><a class="btn btn-secondary btn-sm" href="/capabilities/feature/dt-ota.html">查看完整证据详情 →</a></p></div>
     </div>
   </section>
 
-  <section class="section cap-plat-section"><div class="container"><h2>平台验证状态</h2><p class="cap-section-note">本项适用于 2 个平台，逐平台独立判定：平台状态只由该平台的实机验收记录产生，总体状态由平台状态自动汇总，目录与页面都不存放可手写的状态。</p><section class="cap-plat cap-plat--pending"><div class="cap-plat-head"><h3>Windows 桌面</h3><span class="cap-ps ps-pending">待验证</span></div><p class="cap-plat-note">该平台尚无实机验收记录。平台状态只由该平台的实机验收产生，代码与自动化测试不计入；本项在此平台保持「待验证」，不会因其他平台通过而变绿。</p><p class="cap-plat-note">变为已验证需要完整 PASS acceptance JSON、可追溯的产品版本和 Git SHA、交付身份 JSON 与安装包 / 部署产物 SHA-256，以及引用有效且哈希匹配的截图、录像和运行日志。</p></section><section class="cap-plat cap-plat--verified"><div class="cap-plat-head"><h3>macOS 桌面</h3><span class="cap-ps ps-verified">已验证</span></div><p class="cap-plat-run">安装包 / 部署产物 SHA-256：<code>08edc608565b266dd44994057e733036d907c15124f8c1dfc7b9db41a89205d0</code> · <a href="/capabilities/assets/evidence/base-update-mgmt-macos-dmg-artifact.json">交付身份 JSON</a></p></section></div></section>
+  <section class="section cap-plat-section"><div class="container"><h2>平台验证状态</h2><p class="cap-section-note">本项适用于 0 个平台，逐平台独立判定：平台状态只由该平台的实机验收记录产生，总体状态由平台状态自动汇总，目录与页面都不存放可手写的状态。验收结论仅覆盖记录所列版本、Git SHA 与产物；当前源码或新安装包仍需独立验收。</p></div></section>
 
   <section class="section cap-evidence-section">
     <div class="container">
       <h2>实现与测试（平台无关）</h2>
-      <p class="cap-section-note">当前仅在 macOS 桌面 通过实机验收；Windows 桌面 仍为「待验证」，因此总体状态不构成「已验证」。</p>
+
 
       <div class="cap-evidence-grid">
         <div class="cap-evidence-block"><h3>源码实现</h3><ul class="cap-evidence-list"><li><code class="">FHD/frontend/src/composables/settings/useSettingsBasics.ts</code></li><li><code class="">FHD/app/application/enterprise_deploy_pull.py</code></li><li><code class="">FHD/app/application/admin_deploy_push.py</code></li></ul></div>

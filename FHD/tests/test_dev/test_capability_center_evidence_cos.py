@@ -102,15 +102,23 @@ def test_public_whitelist_does_not_restore_withdrawn_customer_evidence() -> None
     assert cases == []
 
 
-def test_withdrawn_run_excludes_companion_media_and_platform_identity(tmp_path, monkeypatch) -> None:
+def test_withdrawn_run_excludes_companion_media_and_platform_identity(
+    tmp_path, monkeypatch
+) -> None:
     monkeypatch.setattr(MODULE, "REPO_ROOT", tmp_path)
-    record = {"account": "Sunbird", "media": [{"path": "capture.png"}, {"path": "flow.mp4"}],
-              "log": {"path": "run.log"}}
+    record = {
+        "account": "Sunbird",
+        "media": [{"path": "capture.png"}, {"path": "flow.mp4"}],
+        "log": {"path": "run.log"},
+    }
     (tmp_path / "run.json").write_text(json.dumps(record))
-    evidence = {"runs": ["run.json"], "platform_assets": {
-        "windows": {"acceptance": {"path": "run.json"}, "identity": {"path": "identity.json"}},
-        "macos": {"acceptance": {"path": "public.json"}, "raw": ["public-identity.json"]},
-    }}
+    evidence = {
+        "runs": ["run.json"],
+        "platform_assets": {
+            "windows": {"acceptance": {"path": "run.json"}, "identity": {"path": "identity.json"}},
+            "macos": {"acceptance": {"path": "public.json"}, "raw": ["public-identity.json"]},
+        },
+    }
     excluded = MODULE.privacy_exclusions(evidence, "base-health")
     assert excluded == {"run.json", "capture.png", "flow.mp4", "run.log", "identity.json"}
     projected = MODULE.public_projection({"runs": [record], "media": record["media"]}, excluded)
@@ -121,15 +129,48 @@ def test_withdrawn_run_retains_only_exact_historical_identity(monkeypatch) -> No
     monkeypatch.setattr(MODULE, "traceable_pass", lambda *args: (True, "a" * 64))
     monkeypatch.setattr(MODULE, "platform_observations", lambda *args: [])
     monkeypatch.setattr(MODULE, "path_exists", lambda *args: True)
-    run = {"platform": "windows", "status": "passed", "verdict": "PASS", "passed": 9,
-           "failed": 0, "app_version": "1.0.0.5", "app_git_sha": "b" * 40,
-           "verified_at": "2026-09-29T08:00:00Z", "_acceptance_path": "private.json",
-           "_acceptance_sha256": "c" * 64, "account": "sunbird", "media": []}
-    feature = {"id": "base-health", "platforms": ["windows"], "evidence": {
-        "platform_assets": {"windows": {"acceptance": {"path": "private.json"}}}}}
-    public = MODULE.public_projection(MODULE.platform_verdicts(feature, [run], []), {"private.json"})
+    run = {
+        "platform": "windows",
+        "status": "passed",
+        "verdict": "PASS",
+        "passed": 9,
+        "failed": 0,
+        "app_version": "1.0.0.5",
+        "app_git_sha": "b" * 40,
+        "verified_at": "2026-09-29T08:00:00Z",
+        "_acceptance_path": "private.json",
+        "_acceptance_sha256": "c" * 64,
+        "account": "sunbird",
+        "media": [],
+    }
+    feature = {
+        "id": "base-health",
+        "platforms": ["windows"],
+        "evidence": {"platform_assets": {"windows": {"acceptance": {"path": "private.json"}}}},
+    }
+    public = MODULE.public_projection(
+        MODULE.platform_verdicts(feature, [run], []), {"private.json"}
+    )
     assert public[0]["runs"] == []
-    assert public[0]["run_identities"] == [{k: run[k] for k in (
-        "app_version", "app_git_sha", "verified_at", "verdict", "passed", "failed",
-        "_acceptance_sha256")}]
+    assert public[0]["run_identities"] == [
+        {
+            k: run[k]
+            for k in (
+                "app_version",
+                "app_git_sha",
+                "verified_at",
+                "verdict",
+                "passed",
+                "failed",
+                "_acceptance_sha256",
+            )
+        }
+    ]
     assert "sunbird" not in json.dumps(public).casefold()
+
+
+def test_withdrawn_run_does_not_redact_same_named_public_platform_media() -> None:
+    value = {"media": [{"path": "public/shot.png"}, {"path": "private/shot.png"}]}
+    assert MODULE.public_projection(value, {"private/shot.png"}) == {
+        "media": [{"path": "public/shot.png"}]
+    }

@@ -164,10 +164,10 @@
     {
       "key": "windows",
       "applicable": 98,
-      "verified": 1,
+      "verified": 97,
       "partial": 0,
-      "pending": 97,
-      "last_verified_at": "2026-09-24",
+      "pending": 1,
+      "last_verified_at": "2026-09-29",
       "label": "Windows 桌面",
       "level": "签约级"
     },
@@ -184,9 +184,9 @@
     {
       "key": "web",
       "applicable": 128,
-      "verified": 124,
+      "verified": 127,
       "partial": 0,
-      "pending": 4,
+      "pending": 1,
       "last_verified_at": "2026-09-29",
       "label": "Web / 后端",
       "level": "签约级"
@@ -215,23 +215,23 @@
   "capabilities": {
     "total": 157,
     "by_status": {
-      "verified": 55,
-      "partial": 94,
-      "implemented": 4,
+      "verified": 132,
+      "partial": 18,
+      "implemented": 3,
       "planned": 4
     },
     "domains": 10,
     "modules": 28,
-    "completion": 78,
+    "completion": 93,
     "catalog_version": "2026-09-16",
     "platforms": [
       {
         "key": "windows",
         "applicable": 98,
-        "verified": 1,
+        "verified": 97,
         "partial": 0,
-        "pending": 97,
-        "last_verified_at": "2026-09-24",
+        "pending": 1,
+        "last_verified_at": "2026-09-29",
         "label": "Windows 桌面",
         "level": "签约级"
       },
@@ -248,9 +248,9 @@
       {
         "key": "web",
         "applicable": 128,
-        "verified": 124,
+        "verified": 127,
         "partial": 0,
-        "pending": 4,
+        "pending": 1,
         "last_verified_at": "2026-09-29",
         "label": "Web / 后端",
         "level": "签约级"
@@ -1929,6 +1929,79 @@
         ],
         "run_log": null,
         "source_run": "/capabilities/assets/evidence/ch-notify-ch-notify-web-run.json"
+      },
+      {
+        "feature": "ch-realtime-voice",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "98ab909a4520965091bdda2be90ebf72685924c3",
+        "media": [
+          {
+            "file": "ch-realtime-voice-00-login-form.png",
+            "sha256": "411c7dc2804a0a650a32a922bd2ab2b588e73c0eeb4e61f3816886978e73730f",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-00-login-form.png"
+          },
+          {
+            "file": "ch-realtime-voice-V1-voice-health.png",
+            "sha256": "67dd88ad94bfd8f1f397274e273d91c83fa7a0e1c2ccd06d2f2dfe3aff3a1a08",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示 GET /api/voice/health 本轮真实响应：status=200，data.ready=true、model=small、device_hint=cpu。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-V1-voice-health.png"
+          },
+          {
+            "file": "ch-realtime-voice-V2-voice-synthesize-real.png",
+            "sha256": "2e65ad154d0b47269ecc583c4442b01814972fdaf70b4e0bfabe4d1e12bdcd0e",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示 POST /api/tts 本轮真实响应：status=200、success=true、provider=edge、voice=zh-CN-XiaoxiaoNeural、负载以 data:audio/mpeg;base64 开头；同一浏览器 decodeAudioData 返回 decoded=true、bytes=44064、duration=7.34、sample_rate=48000、channels=1；并附旧兼容路由 /api/tts/synthesize 的硬桩响应。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-V2-voice-synthesize-real.png"
+          },
+          {
+            "file": "ch-realtime-voice-V3-voice-synthesize-en.png",
+            "sha256": "7dfaf5ecd0acad9e5e8639ab7640d7aceec85eb6942956856f3461b1da94020e",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示英文请求 POST /api/tts 返回 200、success=true、voice=zh-CN-XiaoxiaoNeural、provider=edge，decodeAudioData decoded=true（含 bytes/duration），并注明 lang=en 仍用默认中文音色。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-V3-voice-synthesize-en.png"
+          },
+          {
+            "file": "ch-realtime-voice-V4-voice-empty-text.png",
+            "sha256": "976fbe81845156ac11b1c5e6b736b038a496930f4c45caffc2fa0153bc6deb5a",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示 POST /api/tts {text:''} 返回 400，body.success=false、message=text 不能为空。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-V4-voice-empty-text.png"
+          },
+          {
+            "file": "ch-realtime-voice-V5-voice-long-text.png",
+            "sha256": "4e9b32512339a391c874d6ee607c7864cd7306881a1ad4b946599f25d15621d2",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示 1800 字文本 POST /api/tts 返回 200、success=true、近似音频字节数（>=500000）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-V5-voice-long-text.png"
+          },
+          {
+            "file": "ch-realtime-voice-ch-realtime-voice-web-20260929-214433.webm",
+            "sha256": "b12cc8ff3cd6046f4b7b1a0c96a14e751f52aa16047f8ded0e0993e1ea57318d",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，ffmpeg 实测 17.72s，1600x1000 VP8/25fps）：管理员登录 → 语音链路健康 → 中文真实合成与浏览器解码 → 英文合成解码 → 空文本 400 → 长文本合成。",
+            "kind": "video",
+            "size_bytes": 1336732,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ch-realtime-voice-ch-realtime-voice-web-run.json"
       },
       {
         "feature": "ch-task-center",
@@ -3632,6 +3705,71 @@
         ],
         "run_log": null,
         "source_run": "/capabilities/assets/evidence/erp-templates-erp-templates-web-run.json"
+      },
+      {
+        "feature": "erp-uom",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "dcc03e0a549f70c1e47f99c4e9cfc0287673f96a",
+        "media": [
+          {
+            "file": "erp-uom-00-login-form.png",
+            "sha256": "cd07ddef58cf63bc3713468a51ce784481075f24b8409b13785ee4289c1835cc",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-uom-00-login-form.png"
+          },
+          {
+            "file": "erp-uom-UOM1-units-read.png",
+            "sha256": "55467edbc4024bfba35dc3b0f7734e478596655e0c10ab5a83d395b289abd0b5",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示 GET /purchase_units 200（条数、首个 unit_name）与 GET /products/list 200（条数、首个产品 unit 与 model_number）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-uom-UOM1-units-read.png"
+          },
+          {
+            "file": "erp-uom-UOM2-conversion.png",
+            "sha256": "ebeecddf5e697e209efaa059cd2f70e34e25e91908ca2010459fca239290ab8b",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示成单消息、chat 200/action=tool_call，以及发货记录中 quantity_tins=5、tin_spec=20、quantity_kg=100、expected_kg=100、consistent=true。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-uom-UOM2-conversion.png"
+          },
+          {
+            "file": "erp-uom-UOM3-conversion-scales.png",
+            "sha256": "91825308205fa902d91ee4269c644a25cd38639472998d07e8a8fce755dcd328",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示 3 桶同规格的成单消息与记录值（record_tins=3、record_kg=60、expected_kg=60）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-uom-UOM3-conversion-scales.png"
+          },
+          {
+            "file": "erp-uom-UOM4-document.png",
+            "sha256": "9a60bf2bd32507a57c16104b4351f21100a0c6780771ad64950690d1a14757dd",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示发货单 document.success=true、doc_name、file_path，以及服务端文件存在与字节数>0。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-uom-UOM4-document.png"
+          },
+          {
+            "file": "erp-uom-erp-uom-web-20260929-222223.webm",
+            "sha256": "b68d787ce39a7a366e1c8295cae9cdb66d0b0f661901ff9aa37ac9af2f97936b",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，ffmpeg 实测 19.64s，1600x1000 VP8/25fps）：管理员登录 → 单位读面 → 5桶换算一致 → 3桶线性换算 → 换算入单生成文档。",
+            "kind": "video",
+            "size_bytes": 1372342,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/erp-uom-erp-uom-web-run.json"
       },
       {
         "feature": "ind-ai-assistant",
@@ -7181,26 +7319,10 @@
       },
       {
         "feature": "base-rbac",
-        "file": "base-rbac-base-rbac.mp4",
-        "issues": [
-          "原始录像不可追溯"
-        ],
-        "action": "not-published"
-      },
-      {
-        "feature": "base-rbac",
         "file": "base-rbac-base-rbac-web-20260929-135143.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
-          "原始录像不可追溯"
-        ],
-        "action": "not-published"
-      },
-      {
-        "feature": "base-rbac",
-        "file": "base-rbac-base-rbac.mp4",
-        "issues": [
           "原始录像不可追溯"
         ],
         "action": "not-published"
@@ -7298,6 +7420,16 @@
       {
         "feature": "ch-notify",
         "file": "ch-notify-ch-notify-web-20260929-160450.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-realtime-voice",
+        "file": "ch-realtime-voice-ch-realtime-voice-web-20260929-214433.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
@@ -7588,6 +7720,16 @@
       {
         "feature": "erp-templates",
         "file": "erp-templates-erp-templates-web-20260929-152047.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-uom",
+        "file": "erp-uom-erp-uom-web-20260929-222223.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
@@ -8157,8 +8299,8 @@
       }
     ],
     "summary": {
-      "total": 121,
-      "passed": 118,
+      "total": 123,
+      "passed": 120,
       "failed": 0,
       "last_verified_at": "2026-09-29"
     }

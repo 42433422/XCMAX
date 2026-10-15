@@ -6,15 +6,15 @@
   "stats": {
     "total": 157,
     "by_status": {
-      "verified": 55,
-      "partial": 94,
-      "implemented": 4,
+      "verified": 132,
+      "partial": 18,
+      "implemented": 3,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 55,
+    "verified_total": 132,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
       "windows": 98,
@@ -26,10 +26,10 @@
     "platform_coverage": {
       "windows": {
         "applicable": 98,
-        "verified": 1,
+        "verified": 97,
         "partial": 0,
-        "pending": 97,
-        "last_verified_at": "2026-09-24"
+        "pending": 1,
+        "last_verified_at": "2026-09-29"
       },
       "macos": {
         "applicable": 99,
@@ -40,9 +40,9 @@
       },
       "web": {
         "applicable": 128,
-        "verified": 124,
+        "verified": 127,
         "partial": 0,
-        "pending": 4,
+        "pending": 1,
         "last_verified_at": "2026-09-29"
       },
       "android": {
@@ -60,7 +60,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 78
+    "completion": 93
   },
   "product_version": "1.0.0.6",
   "release_ready": false,
@@ -205,7 +205,7 @@
             {
               "id": "base-win-client",
               "name": "Windows 桌面客户端",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "windows"
               ],
@@ -213,10 +213,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "Windows 桌面安装包与客户端外壳。",
@@ -321,7 +321,7 @@
             {
               "id": "base-edition-pack",
               "name": "三档部署形态（minimal / generic / full）",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -331,10 +331,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -361,7 +361,7 @@
             {
               "id": "base-install-guide",
               "name": "安装部署与初始化引导",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -370,10 +370,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -402,10 +402,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -438,7 +438,7 @@
             {
               "id": "base-health",
               "name": "服务健康探针",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -448,10 +448,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -478,7 +478,7 @@
             {
               "id": "base-db",
               "name": "数据库 WAL 与自恢复",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -487,10 +487,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -509,7 +509,7 @@
             {
               "id": "base-config",
               "name": "数据目录与配置管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -518,10 +518,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -540,7 +540,7 @@
             {
               "id": "base-update-mgmt",
               "name": "版本与更新管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -549,10 +549,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -571,7 +571,7 @@
             {
               "id": "base-settings",
               "name": "系统设置与偏好",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -581,10 +581,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -679,10 +679,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -717,7 +717,7 @@
             {
               "id": "ai-intent",
               "name": "意图识别与工具路由",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -727,10 +727,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -767,10 +767,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -869,7 +869,7 @@
             {
               "id": "ai-employees-workflow",
               "name": "工作流员工（数字员工编排）",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -879,10 +879,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -909,7 +909,7 @@
             {
               "id": "ai-employee-pack",
               "name": "办公员工包",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -919,10 +919,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1043,7 +1043,7 @@
             {
               "id": "ai-excel",
               "name": "Excel 生成与解析",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1053,10 +1053,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1083,7 +1083,7 @@
             {
               "id": "ai-tts",
               "name": "语音合成与播报（TTS）",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1093,10 +1093,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1123,7 +1123,7 @@
             {
               "id": "ai-knowledge",
               "name": "知识库与向量检索",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1133,10 +1133,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1163,7 +1163,7 @@
             {
               "id": "ai-csv",
               "name": "CSV 生成与解析",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1173,10 +1173,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1203,7 +1203,7 @@
             {
               "id": "ai-pdf",
               "name": "PDF 生成与解析",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1213,10 +1213,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1243,7 +1243,7 @@
             {
               "id": "ai-ppt",
               "name": "PPT 生成与解析",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1253,10 +1253,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1283,7 +1283,7 @@
             {
               "id": "ai-word",
               "name": "Word 生成与解析",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1293,10 +1293,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1323,7 +1323,7 @@
             {
               "id": "ai-ocr-doc",
               "name": "单据图像识别解析",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1333,10 +1333,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1398,7 +1398,7 @@
             {
               "id": "erp-shipment",
               "name": "发货单与出货管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1408,10 +1408,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1438,7 +1438,7 @@
             {
               "id": "erp-purchase",
               "name": "采购管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1448,10 +1448,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1478,7 +1478,7 @@
             {
               "id": "erp-inventory",
               "name": "库存管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1488,10 +1488,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1518,7 +1518,7 @@
             {
               "id": "erp-master-data",
               "name": "产品 / 客户 / 供应商主数据",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1528,10 +1528,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1558,7 +1558,7 @@
             {
               "id": "erp-sales-order",
               "name": "销售订单管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1568,10 +1568,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1584,10 +1584,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "销售订单创建与流转。",
@@ -1598,7 +1598,7 @@
             {
               "id": "erp-purchase-inbound",
               "name": "采购入库管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1608,10 +1608,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1638,7 +1638,7 @@
             {
               "id": "erp-inventory-warehouse",
               "name": "仓库 / 库位 / 调拨 / 预警",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1648,10 +1648,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1678,7 +1678,7 @@
             {
               "id": "erp-replenishment",
               "name": "库存补货建议",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1688,10 +1688,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1718,7 +1718,7 @@
             {
               "id": "erp-uom",
               "name": "计量单位管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1728,10 +1728,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1744,10 +1744,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "多计量单位与换算。",
@@ -1764,7 +1764,7 @@
             {
               "id": "erp-finance-ledger",
               "name": "财务账本与发票",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1774,10 +1774,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1804,7 +1804,7 @@
             {
               "id": "erp-ar-ap",
               "name": "应收应付与毛利",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1814,10 +1814,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1844,7 +1844,7 @@
             {
               "id": "erp-report",
               "name": "价格表 / 报表 / 统计分析",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1854,10 +1854,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1894,10 +1894,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1924,7 +1924,7 @@
             {
               "id": "erp-reconcile",
               "name": "经营对账与结算",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1934,10 +1934,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -1970,7 +1970,7 @@
             {
               "id": "erp-templates",
               "name": "单据模板与套打",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -1980,10 +1980,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2020,10 +2020,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2050,7 +2050,7 @@
             {
               "id": "erp-excel-io",
               "name": "Excel 导入导出",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -2060,10 +2060,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2090,7 +2090,7 @@
             {
               "id": "erp-contract",
               "name": "合同单据",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -2100,10 +2100,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2139,10 +2139,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2167,7 +2167,7 @@
             {
               "id": "erp-ocr",
               "name": "OCR 单据识别",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -2177,10 +2177,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2207,7 +2207,7 @@
             {
               "id": "erp-ocr-clean",
               "name": "识别结果清洗与入库",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -2217,10 +2217,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2297,7 +2297,7 @@
             {
               "id": "erp-approval",
               "name": "业务审批与流程",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -2307,10 +2307,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2361,10 +2361,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2399,7 +2399,7 @@
             {
               "id": "ch-im-cs",
               "name": "AI 客服与话术协同",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -2409,10 +2409,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2449,10 +2449,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2479,7 +2479,7 @@
             {
               "id": "ch-task-center",
               "name": "任务中心与审批通知",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -2489,10 +2489,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2519,7 +2519,7 @@
             {
               "id": "ch-im-super",
               "name": "超级员工与 AI 群聊",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -2529,10 +2529,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2559,7 +2559,7 @@
             {
               "id": "ch-im-ws",
               "name": "实时通道（WebSocket）",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -2569,10 +2569,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2615,10 +2615,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2655,10 +2655,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2694,10 +2694,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2726,10 +2726,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2897,10 +2897,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2937,10 +2937,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -2953,10 +2953,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "实时语音交互与语音模型源管理。",
@@ -2980,7 +2980,7 @@
             {
               "id": "mods-loader",
               "name": "Mod 加载与清单校验",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -2990,10 +2990,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3020,7 +3020,7 @@
             {
               "id": "mods-store",
               "name": "Mod 市场与一键装包",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3030,10 +3030,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3082,7 +3082,7 @@
             {
               "id": "mods-host-mount",
               "name": "宿主能力接入与路由挂载",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3092,10 +3092,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3188,7 +3188,7 @@
             {
               "id": "mods-shell",
               "name": "平台壳与 edition 包",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3198,10 +3198,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3234,7 +3234,7 @@
             {
               "id": "mods-open-api",
               "name": "开放 API（ai_open）",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3244,10 +3244,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3274,7 +3274,7 @@
             {
               "id": "mods-webhook",
               "name": "业务事件 Webhook",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3284,10 +3284,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3314,7 +3314,7 @@
             {
               "id": "mods-bridge",
               "name": "桥接 Mod 族（ERP / 审批 / 客服 / 总线）",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3324,10 +3324,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3443,10 +3443,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3473,7 +3473,7 @@
             {
               "id": "ind-packaging",
               "name": "饰品/包装行业包",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -3482,10 +3482,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3504,7 +3504,7 @@
             {
               "id": "ind-attendance",
               "name": "考勤行业包",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3514,10 +3514,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3544,7 +3544,7 @@
             {
               "id": "ind-fields",
               "name": "行业字段与规则配置",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3554,10 +3554,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3584,7 +3584,7 @@
             {
               "id": "ind-workspace",
               "name": "行业工作台与报表",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3594,10 +3594,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3634,10 +3634,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3670,7 +3670,7 @@
             {
               "id": "ind-taiyangniao",
               "name": "客户账户及业务数据已脱敏，详细内容不公开。",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -3679,10 +3679,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3701,7 +3701,7 @@
             {
               "id": "ind-custom-delivery",
               "name": "客户定制开发与交付",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3711,10 +3711,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3741,7 +3741,7 @@
             {
               "id": "ind-lan-license",
               "name": "局域网授权桥接 Mod",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -3750,10 +3750,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3772,7 +3772,7 @@
             {
               "id": "ind-modstore-pay",
               "name": "市场支付桥接 Mod",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3782,10 +3782,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3812,7 +3812,7 @@
             {
               "id": "ind-planner",
               "name": "规划器桥接 Mod",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3822,10 +3822,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3852,7 +3852,7 @@
             {
               "id": "ind-workflow-viz",
               "name": "工作流可视化桥接 Mod",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3862,10 +3862,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3938,10 +3938,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -3976,7 +3976,7 @@
             {
               "id": "pay-wallet",
               "name": "Token 钱包与模型计费",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -3986,10 +3986,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4088,7 +4088,7 @@
             {
               "id": "pay-lan",
               "name": "局域网部署与授权网关",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -4097,10 +4097,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4141,7 +4141,7 @@
             {
               "id": "pay-member-plan",
               "name": "支付订单与会员计划",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -4151,10 +4151,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4225,7 +4225,7 @@
             {
               "id": "pay-lan-settings",
               "name": "内网模式与授权设置",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -4234,10 +4234,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4580,7 +4580,7 @@
             {
               "id": "dt-shell",
               "name": "Windows/macOS 桌面壳",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -4589,10 +4589,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4611,7 +4611,7 @@
             {
               "id": "dt-ota",
               "name": "自动更新（OTA）",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "macos",
                 "windows"
@@ -4628,10 +4628,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "桌面端在线检测更新、下载与安装回执，更新流水线与 feed 清单自动发布。",
@@ -4642,7 +4642,7 @@
             {
               "id": "dt-install-sign",
               "name": "安装 · 签名 · 身份校验",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -4651,10 +4651,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4673,7 +4673,7 @@
             {
               "id": "dt-cold-start-rollback",
               "name": "冷启动与回滚",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -4682,10 +4682,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4704,7 +4704,7 @@
             {
               "id": "dt-process-mgmt",
               "name": "进程管理与托底通知",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -4713,10 +4713,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4735,7 +4735,7 @@
             {
               "id": "dt-integrity",
               "name": "运行完整性与健康检查",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -4744,10 +4744,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4772,7 +4772,7 @@
             {
               "id": "dt-rpa",
               "name": "桌面自动化与运行时状态",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -4781,10 +4781,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4812,10 +4812,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4843,10 +4843,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4865,7 +4865,7 @@
             {
               "id": "dt-neurobus",
               "name": "事件总线（NeuroBus）",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -4875,10 +4875,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -4905,7 +4905,7 @@
             {
               "id": "dt-evidence-store",
               "name": "本地 · 服务端存证",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -4915,10 +4915,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -5046,7 +5046,7 @@
             {
               "id": "sec-identity",
               "name": "身份认证与权限控制",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -5056,10 +5056,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -5108,7 +5108,7 @@
             {
               "id": "sec-runtime-gate",
               "name": "运行时安全门控",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -5118,10 +5118,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -5148,7 +5148,7 @@
             {
               "id": "sec-csp",
               "name": "CSP 与安全策略",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -5158,10 +5158,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -5216,7 +5216,7 @@
             {
               "id": "sec-e2e",
               "name": "端到端自动化验收",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -5226,10 +5226,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
@@ -5278,7 +5278,7 @@
             {
               "id": "sec-release-gate",
               "name": "发布门禁与实机验收",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos"
@@ -5287,10 +5287,10 @@
                 {
                   "id": "windows",
                   "name": "Windows 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "macos",
