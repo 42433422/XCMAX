@@ -206,6 +206,7 @@ def _post_para_api_once(
                 "accepted": True,
                 "completed": False,
                 "status": "para_task_accepted",
+                "task_id": task_id,
                 "source": "para_api",
                 "auth": token_info["source"],
                 "para_tier": tier,

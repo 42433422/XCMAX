@@ -4,7 +4,7 @@
      声明式输入：FHD/config/product_lines.yaml；本域登记在 FHD/config/ssot.yaml。
      数字漂移由 CI（ssot_cli.py gate → product-lines 域）阻断。 -->
 
-> 生成时间：2026-10-05 18:00 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
+> 生成时间：2026-10-13 02:30 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
 
 > 本文件是 XCMAX 三产品线状态（版本 / 发布 / 能力 / 三线成熟度）的**单一事实来源**，全部数字自动生成，禁止手改；任何文档引用这些数字都应指向本文件或原始权威源。
 
@@ -14,13 +14,13 @@
 
 | 口径 | 值 | 来源 |
 |------|----|------|
-| 稳定产品版本 | `1.0.0.5` | `FHD/VERSION.md` |
+| 稳定产品版本 | `1.0.0.6` | `FHD/VERSION.md` |
 | 工具链兼容版本 | `1.0.0` | `FHD/VERSION.md` |
-| 发布火车 product_version | `1.0.0.5` | `release_train.json` |
-| 发布火车 current | `1.0.0.5` | `release_train.json` |
-| 下载清单 version_lock | `1.0.0.5` | `download_release.json` |
-| 下载清单 download_version | `1.0.0.5` | `download_release.json` |
-| 下载清单 marketing_version | `1.0.0.5` | `download_release.json` |
+| 发布火车 product_version | `1.0.0.6` | `release_train.json` |
+| 发布火车 current | `1.0.0.6` | `release_train.json` |
+| 下载清单 version_lock | `1.0.0.6` | `download_release.json` |
+| 下载清单 download_version | `1.0.0.6` | `download_release.json` |
+| 下载清单 marketing_version | `1.0.0.6` | `download_release.json` |
 | Android 版本 | `1.0.0.0` | `download_release.json` |
 | release_ready | `false` | `download_release.json` |
 | 活跃 / 冻结 SKU | `enterprise` / `personal` | `download_release.json` |
@@ -31,7 +31,7 @@
 
 | 级别 | 来源 | 事实 |
 |------|------|------|
-| 可见 | `download_release.release_ready=false` | 1.0.0.5 发布面未闭环：下载/更新指针未推进到产品版本 |
+| 可见 | `download_release.release_ready=false` | 1.0.0.6 发布面未闭环：下载/更新指针未推进到产品版本 |
 | 可见 | `成都修茈科技有限公司/FHD/config/release_train.json` | 已声明镜像且版本身份字段与 canonical 一致（epoch, product_version, current）；MODstore 独立运行时的运行时 SSOT 路径，由日更对齐脚本从 canonical 覆写； 保留是有意决定，day_index / last_bump_at 为各自运行时状态，不参与身份比对 |
 
 ## 3. 三线成熟度（只列能力目录自有的证据分级计数 + Release Gate 结论）
@@ -43,7 +43,7 @@
 
 | 产品线 | 优先级 | 定位 | 能力（已验证/总数） | 状态分布 | 平台门禁 | 入口可达 |
 |--------|--------|------|---------------------|----------|----------|----------|
-| **企业桌面 ERP + AI** | P0 | 主交付 | 41/102 | verified 41 / partial 58 / implemented 1 / planned 2 | macos: GREEN 10 / YELLOW 3 / RED 0 / 未复测 0；windows: GREEN 0 / YELLOW 7 / RED 2 / 未复测 4 | 是 |
+| **企业桌面 ERP + AI** | P0 | 主交付 | 41/102 | verified 41 / partial 58 / implemented 1 / planned 2 | macos: GREEN 0 / YELLOW 8 / RED 0 / 未复测 5；windows: GREEN 0 / YELLOW 6 / RED 3 / 未复测 4 | 是 |
 | **AI 员工商店** | P1 | 商业化线 | 14/39 | verified 14 / partial 24 / implemented 0 / planned 1 | — | 是 |
 | **移动 AI 协同 App** | P2 | 配套线 | 0/17 | verified 0 / partial 13 / implemented 3 / planned 1 | — | 是 |
 
@@ -55,8 +55,8 @@
 - 日常入口：`FHD/docs/START_HERE.md`（存在：是）
 - 能力域：`base`、`ai`、`erp`、`desktop`、`sec`、`ops`
 - CI 主 workflow：`.github/workflows/fhd-ci-cd.yml`、`.github/workflows/fhd-release-desktop.yml`、`.github/workflows/fhd-release-desktop-mac-ota.yml`
-- macos Release Gate（来源 `FHD/docs/MACOS_RELEASE_SSOT.md`，小节「6. Release Gate 状态（2026-09-18 实跑 1.0.0.5 @ `54325894c`；证据目录 [evidence/e2e/macos-release-1.0.0.5/](evidence/e2e/macos-release-1.0.0.5/)）」）：G1 YELLOW、G10 GREEN、G11 GREEN、G12 GREEN、G13 GREEN、G2 YELLOW、G3 GREEN、G4 YELLOW、G5 GREEN、G6 GREEN、G7 GREEN、G8 GREEN、G9 GREEN
-- windows Release Gate（来源 `FHD/docs/WINDOWS_RELEASE_SSOT.md`，小节「4. Release Gate 状态」）：G1 YELLOW、G10 UNKNOWN、G11 UNKNOWN、G12 UNKNOWN、G13 UNKNOWN、G2 YELLOW、G3 YELLOW、G4 YELLOW、G5 YELLOW、G6 RED、G7 RED、G8 YELLOW、G9 YELLOW
+- macos Release Gate（来源 `FHD/docs/MACOS_RELEASE_SSOT.md`，小节「6. Release Gate 状态（最终候选待构建；历史 EDF 证据仅作工程组件结果）」）：G1 YELLOW、G10 YELLOW、G11 UNKNOWN、G12 UNKNOWN、G13 YELLOW、G2 YELLOW、G3 YELLOW、G4 YELLOW、G5 UNKNOWN、G6 YELLOW、G7 UNKNOWN、G8 UNKNOWN、G9 YELLOW
+- windows Release Gate（来源 `FHD/docs/WINDOWS_RELEASE_SSOT.md`，小节「4. Release Gate 状态」）：G1 YELLOW、G10 UNKNOWN、G11 UNKNOWN、G12 UNKNOWN、G13 UNKNOWN、G2 YELLOW、G3 YELLOW、G4 RED、G5 YELLOW、G6 RED、G7 RED、G8 YELLOW、G9 YELLOW
 
 #### AI 员工商店（`ai-store` · P1 · 商业化线）
 

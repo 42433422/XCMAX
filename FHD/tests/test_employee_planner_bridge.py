@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -72,13 +73,17 @@ def convert_file(src_path, output_path, *, template_path=None, payload=None, ctx
 def employee_mods_root(tmp_path, monkeypatch):
     mods_root = tmp_path / "mods"
     mods_root.mkdir()
+    catalog = "xcagi-office-employee-pack-bridge"
+    shutil.copytree(Path(__file__).parents[1] / "mods" / catalog, mods_root / catalog)
     monkeypatch.setenv("XCAGI_MODS_ROOT", str(mods_root))
     from app.application.tools.workflow import invalidate_workflow_tool_registry
     from app.infrastructure.mods import employee_registry as er
     from app.infrastructure.mods import mod_manager as mm
+    from app.infrastructure.mods.registry import ModRegistry
 
+    monkeypatch.setattr(ModRegistry, "_instance", None)
     er._registry.clear()
-    mm._mod_manager = None
+    monkeypatch.setattr(mm, "_mod_manager", None)
     mm._employee_pack_routes_registered.clear()
     invalidate_workflow_tool_registry()
     return mods_root
@@ -123,6 +128,11 @@ def test_office_employee_never_reports_success_without_artifact(employee_mods_ro
 
     from app.application.employee_runtime import executor
     from app.mod_sdk import employee_tool_registry as registry
+    from app.mod_sdk.employee_pack_compat import list_office_pack_catalog
+
+    assert pack_id in list_office_pack_catalog()["pack_ids"]
+    missing_output = employee_mods_root / "missing-output.csv"
+    assert not missing_output.exists()
 
     registry.invalidate_employee_tool_cache()
     monkeypatch.setattr(
@@ -135,7 +145,7 @@ def test_office_employee_never_reports_success_without_artifact(employee_mods_ro
                     {
                         "handler": "direct_python",
                         "ok": True,
-                        "output_path": "/tmp/does-not-exist-xcagi.csv",
+                        "output_path": str(missing_output),
                     }
                 ]
             },

@@ -20,9 +20,13 @@ def _client_issue_reply(receipt: dict | None) -> str:
     if not receipt:
         return ""
     shots = receipt.get("screenshots") or {}
+    attachment = "本次诊断附件保存尚未确认，请在原工单继续补报。"
+    if receipt.get("support_bundle_saved") is True and receipt.get("support_bundle_sha256"):
+        attachment = f"支持包 SHA256：{receipt['support_bundle_sha256']}。"
+        if shots:
+            attachment += f"支持包已附截图 {shots.get('included')}/{shots.get('selected')} 张。"
     replies: dict[str, str] = {
-        "ROUTED": f"已向 Owner 提交产品问题，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。支持包 SHA256：{receipt.get('support_bundle_sha256')}。"
-        + (f"支持包已附截图 {shots.get('included')}/{shots.get('selected')} 张。" if shots else ""),
+        "ROUTED": f"产品问题已登记，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。{attachment}",
         "NEEDS_MORE_EVIDENCE": (
             "这看起来是产品缺陷上报，但还缺少必要信息，暂未自动建单。"
             "请按「期望：… 实际：…」补充后重发，我会立即建单并把工单号回给你。"
@@ -114,6 +118,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     runtime_context = _facade()._runtime_context_with_authenticated_actor(request, runtime_context)
     runtime_context = _facade().runtime_context_with_tier(runtime_context, ai_tier)
     from app.application import get_ai_chat_app_service
+    from app.application.ai_chat_app_service_dynamic_workflow_pending_mixin import (
+        CANCEL_WORDS,
+        CONFIRM_WORDS,
+    )
     from app.application.normal_chat_dispatch import route_normal_mode_message
     from app.application.workflow.planner import _looks_like_business_db_write
 
@@ -127,8 +135,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         and isinstance(_sales_route.get("payload"), dict)
         and bool(_sales_route.get("payload"))
     )
+    message_text = str(body.message or "")
     controlled_entity_named = any(
-        token in str(body.message or "")
+        token in message_text
         for token in ("客户", "购买单位", "产品", "商品", "原材料", "物料", "出货", "发货")
     )
     from app.infrastructure.tenant_scope import tenant_scope
@@ -154,13 +163,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         return
     if (
         has_pending_workflow
+        or message_text.strip().lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS
         or sales_closed_loop_route
-        or _sales_route.get("intent") in {"desktop", "workflow"}
+        # #2067：开单与 /api/ai/chat 同一套规则识别（process_chat），不交给 LLM 规划器。
+        or _sales_route.get("intent") in {"desktop", "workflow", "shipment"}
         or (
             controlled_entity_named
-            and _looks_like_business_db_write(
-                str(body.message or ""), str(body.message or "").lower()
-            )
+            and _looks_like_business_db_write(message_text, message_text.lower())
         )
     ):
         with tenant_scope(authenticated_tenant_id):
