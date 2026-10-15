@@ -1,0 +1,46 @@
+{
+  "phase": "G7-retest-10004",
+  "steps": {
+    "health": {
+      "status": 200,
+      "version": "1.0.0.4",
+      "git_sha": "280225ac77ce"
+    },
+    "login": {
+      "status": 200,
+      "success": true
+    },
+    "auth_me": {
+      "status": 200,
+      "user": null
+    },
+    "templates_upload": {
+      "status": 200,
+      "template_id": "db:26",
+      "file_sha256": "be5e1ca38be53b2c7232f399829a1f21bcc80138aa50a94d553df94081f668e6"
+    },
+    "templates_list": {
+      "status": 200,
+      "probe_present": false
+    },
+    "customer_ensure": {
+      "status": 400,
+      "customer_id": null
+    },
+    "shipment_generate": {
+      "status": 200,
+      "success": true,
+      "message": "发货单生成成功",
+      "doc_name": "发货单_26-0900001A_20260917_052123.xlsx",
+      "agent_status": "completed",
+      "run_id": "run_f84e680ed3ea48bcb3f441be6aa3c98c"
+    },
+    "file_download": {
+      "status": 200,
+      "bytes": 5195,
+      "xlsx_magic": true,
+      "sha256": "99d404a690df2c8ee86def0620013afbedebb8211705b349407ec1c874981285",
+      "filename": "发货单_26-0900001A_20260917_052123.xlsx"
+    }
+  }
+}

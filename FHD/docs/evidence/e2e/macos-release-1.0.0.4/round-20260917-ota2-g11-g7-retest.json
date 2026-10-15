@@ -1,0 +1,47 @@
+{
+  "phase": "G11-业务链复测（OTA 后 1.0.0.4 安装）",
+  "date": "2026-09-17T03:16+08:00",
+  "install_under_test": {
+    "version": "1.0.0.4",
+    "gitSha": "280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+    "path": "/Applications/XCAGI.app",
+    "install_mechanism": "manual-zip-replacement（非 ShipIt，G9 未达成）"
+  },
+  "account": "xcagi-enterprise-demo（enterprise）",
+  "chain": {
+    "health": {
+      "status": 200,
+      "version": "1.0.0.4",
+      "git_sha": "280225ac77ce"
+    },
+    "login": {
+      "status": 200,
+      "success": true
+    },
+    "templates_upload": {
+      "status": 200,
+      "template_id": "db:25",
+      "file_sha256": "be5e1ca38be53b2c7232f399829a1f21bcc80138aa50a94d553df94081f668e6"
+    },
+    "shipment_generate": {
+      "status": 200,
+      "success": true,
+      "message": "发货单生成成功",
+      "doc_name": "发货单_26-0900001A_20260917_031605.xlsx",
+      "agent_status": "completed",
+      "run_id": "run_d7d67823f05a491283b5b6133eae9352"
+    },
+    "file_download": {
+      "status": 200,
+      "bytes": 5195,
+      "xlsx_magic": true,
+      "sha256": "f5a0eb248a44cd1f0d058bc50db00f78db864bfa095093e2937d3bb88612c7d7",
+      "filename": "发货单_26-0900001A_20260917_031605.xlsx"
+    }
+  },
+  "known_benign": {
+    "customer_ensure": "400 重复客户名（G7重测客户(勿删) 已存在），与 1.0.0.3 基线同现象",
+    "templates_list.probe_present": "脚本截断响应致 false，非产品缺陷（沿用上轮结论）"
+  },
+  "verdict": "PASS（登录→模板上传→发货单生成→xlsx 下载回读 5195B / PK 魔数 / SHA256 f5a0eb24…）"
+}

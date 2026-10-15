@@ -369,11 +369,14 @@ def install_manifest(path: str, _user=Depends(get_logged_in_user)):
 async def receive_crash_report(request: Request):
     """接收桌面端 Electron 进程崩溃报告（JSON 或 multipart minidump）。
 
-    不要求登录——崩溃可能发生在用户登录之前。存储到数据目录 crash-reports/ 下，
-    供后续诊断分析。
+    不要求登录——崩溃可能发生在用户登录之前。仅接受本机回环调用。存储到数据目录
+    crash-reports/ 下，供后续诊断分析。
     """
     if not is_desktop_mode():
         raise HTTPException(status_code=409, detail="崩溃报告仅在桌面模式下可用")
+    client_host = str(getattr(getattr(request, "client", None), "host", "") or "")
+    if client_host not in {"127.0.0.1", "::1", "testclient"}:
+        raise HTTPException(status_code=403, detail="崩溃报告只接受本机调用")
 
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
     crash_dir = dirs["root"] / "crash-reports"

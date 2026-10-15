@@ -1,6 +1,3 @@
-/**
- * 侧栏主导航 API 回归：门面路径与 Mod 路由约定（手工 Network 清单见计划阶段 7）。
- */
 import { describe, expect, it, afterEach } from 'vitest'
 import { resolveErpApiPath } from './erpDomainPaths'
 import { resolveApprovalApiPath } from './approvalPaths'
@@ -24,6 +21,8 @@ describe('sidebarApiRegression', () => {
       ['/api/products/list', '/api/mod/xcagi-erp-domain-bridge/products/list'],
       ['/api/purchase_units', '/api/mod/xcagi-erp-domain-bridge/purchase_units'],
       ['/api/orders?limit=100', '/api/mod/xcagi-erp-domain-bridge/orders?limit=100'],
+      ['/api/shipment/generate', '/api/mod/xcagi-erp-domain-bridge/shipment/generate'],
+      ['/api/shipment/download/note.xlsx', '/api/mod/xcagi-erp-domain-bridge/shipment/download/note.xlsx'],
       ['/api/materials', '/api/materials'],
       ['/api/print/templates', '/api/print/templates'],
     ]

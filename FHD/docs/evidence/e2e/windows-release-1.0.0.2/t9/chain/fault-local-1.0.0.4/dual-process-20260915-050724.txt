@@ -1,0 +1,1 @@
+second_exited_at=1s exitcode=0; health=degraded; backend_count=1; main=1699840→1699840

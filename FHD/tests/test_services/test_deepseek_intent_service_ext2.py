@@ -335,7 +335,13 @@ class TestHybridRecognizeExtended:
             ),
         ):
             out = await h.recognize("msg")
+        # 置信度纪律：低置信不采纳蒸馏结果，规则也无命中 → unclear + 澄清标记
         assert out["intent_source"] == "distilled_low_confidence"
+        assert out["final_intent"] is None
+        assert out["is_likely_unclear"] is True
+        assert out["low_confidence_clarify"] is True
+        assert out["distilled_low_confidence"] is True
+        assert out["distilled_intent"] == "products"
 
     async def test_distilled_no_intent_no_deepseek(self) -> None:
         h = HybridIntentWithDeepSeek(

@@ -184,6 +184,8 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
                 "template_path": str(template or ""),
                 "result": result,
             }
+        if not out.is_file() and out.suffix.lower() == ".json" and isinstance(result, dict):
+            out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         if not out.is_file():
             return _err(
                 f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}

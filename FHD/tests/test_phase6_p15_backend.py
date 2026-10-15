@@ -1,13 +1,5 @@
 # mypy: disable-error-code="arg-type, index, no-any-return, var-annotated"
-"""COVERAGE_RAMP Phase 6 round 15: backend low-coverage modules.
-
-Targets:
-- ``app/fastapi_routes/market_account.py`` (667 行，未覆盖 81 行，cov 85.4%)
-- ``app/services/skills/label_template_generator/label_template_generator.py`` (359 行，未覆盖 80 行，cov 72.5%)
-- ``app/services/tools_workflow_registered.py`` (399 行，未覆盖 79 行，cov 75.9%)
-- ``app/fastapi_routes/mod_store_routes.py`` (475 行，未覆盖 76 行，cov 79.2%)
-- ``app/infrastructure/mods/catalog_client.py`` (153 行，未覆盖 76 行，cov 40.1%)
-"""
+"""Regression coverage for market, Mod catalog/store, labels, and workflow routers."""
 
 from __future__ import annotations
 
@@ -2935,6 +2927,7 @@ class TestTWRExecuteRegisteredWorkflowTool:
 
     def test_execute_registered_router_dict_contains_keys(self) -> None:
         expected_keys = {
+            "desktop_automation",
             "normal_slot_dispatch",
             "customers",
             "products",
@@ -3247,12 +3240,62 @@ class TestMSRoutesBasic:
         data = resp.json()
         assert data["success"] is False
 
-    def test_updates_route_returns_empty(self, mod_store_client) -> None:
-        resp = mod_store_client.get("/updates")
+    def test_updates_route_returns_empty(self, mod_store_client, monkeypatch) -> None:
+        assert mod_store_client.get("/updates").status_code == 401
+        from fastapi import HTTPException
+
+        def current_user(request):
+            assert request.headers["x-session-id"] == "updates-session"
+            return object()
+
+        async def public_catalog():
+            yield {"id": "mod1", "version": "1.0.0"}
+
+        async def private_library(token):
+            assert token == "synthetic-market-token"
+            return []
+
+        monkeypatch.setattr("app.infrastructure.auth.dependencies.get_logged_in_user", current_user)
+        monkeypatch.setattr(
+            "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
+            lambda request, user: "tenant:7",
+        )
+        monkeypatch.setattr(
+            "app.infrastructure.mods.install_receipts.read_verified_install", lambda mid: None
+        )
+        monkeypatch.setattr(
+            "app.fastapi_routes.private_mod_delivery_context._private_delivery_market_token",
+            AsyncMock(return_value="synthetic-market-token"),
+        )
+        monkeypatch.setattr(
+            "app.application.private_mod_delivery_artifacts.fetch_private_mod_library",
+            private_library,
+        )
+        monkeypatch.setattr(msr, "_installed_by_id", lambda: {"mod1": {"version": "1.0.0"}})
+        monkeypatch.setattr(msr, "iter_catalog_packages", public_catalog)
+        headers = {"x-session-id": "updates-session"}
+        resp = mod_store_client.get("/updates", headers=headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
-        assert data["data"]["count"] == 0
+        assert data["data"] == {
+            "updates_available": [],
+            "count": 0,
+            "complete": True,
+            "source_errors": {},
+        }
+
+        async def unavailable_private(token):
+            raise HTTPException(502, "private source offline")
+
+        monkeypatch.setattr(
+            "app.application.private_mod_delivery_artifacts.fetch_private_mod_library",
+            unavailable_private,
+        )
+        offline = mod_store_client.get("/updates", headers=headers).json()["data"]
+        assert offline["count"] == 0
+        assert offline["complete"] is False
+        assert set(offline["source_errors"]) == {"private_mod_sync"}
 
     def test_dependencies_route_returns_empty(self, mod_store_client) -> None:
         resp = mod_store_client.get("/dependencies")

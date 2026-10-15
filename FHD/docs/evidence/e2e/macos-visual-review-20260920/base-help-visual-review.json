@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "base-help",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "18c407de6c1a7209ea53178f422453a2c57a6f6dfbb1ec5a2b1aebac824e553e",
+  "visible_content": "首次公司名称向导停在第一步，未填写，也未完成初始化；不是教程完成证据。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/base-help.png"
+}

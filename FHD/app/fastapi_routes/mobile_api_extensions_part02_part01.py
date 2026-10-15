@@ -10,6 +10,19 @@ def _facade():
     return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
+def _trusted_desktop_pairing_request(request: _facade().Request) -> bool:
+    from ipaddress import ip_address
+
+    from app.desktop_runtime.paths import is_desktop_mode
+
+    try:
+        peer = ip_address(request.client.host)
+        host = request.url.hostname
+        return is_desktop_mode() and peer.is_loopback and host in {"127.0.0.1", "localhost", "::1"}
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
 @_facade().extension_router.get("/customers")
 async def mobile_customers(
     page: int = _facade().Query(1, ge=1),
@@ -219,22 +232,58 @@ async def mobile_notifications_pending(
 @_facade().extension_router.post("/pairing/issue")
 async def mobile_pairing_issue(body: _facade().PairingIssueBody, request: _facade().Request):
     """桌面或运维签发配对 QR 载荷（开发/内网）。"""
+    if not _trusted_desktop_pairing_request(request):
+        return _facade()._mobile_unauthorized_response()
     host = _facade()._pairing_issue_host(body.host or (request.url.hostname or ""))
     api_port = _facade()._pairing_issue_port(request, int(body.port))
     port = _facade()._pairing_reachable_port(request, api_port)
+    relay = _facade()._register_desktop_relay_for_pairing(host, port)
+    relay_code = str(relay.get("pairing_code") or "").strip() if relay else ""
+    if len(relay_code) != 6 or not relay_code.isdigit():
+        return _facade().JSONResponse(
+            _facade().format_mobile_response(
+                None, "云端设备码暂不可用，请稍后刷新", success=False, code=503
+            ),
+            status_code=503,
+        )
     payload = _facade().issue_pairing_nonce(host, port)
     data = _facade()._enrich_pairing_payload(payload, request)
-    relay = _facade()._register_desktop_relay_for_pairing(host, port)
     if relay:
         data["relay"] = relay
         data["relay_id"] = relay.get("relay_id")
         data["relay_base_url"] = relay.get("relay_base_url")
         data["relay_binding_mode"] = "account_auth"
+        if relay_code:
+            data["shortCode"] = data["code"] = relay_code
+            data["qr_json"] = {
+                "v": 3,
+                "kind": "xcagi_relay_pairing",
+                "relay_id": relay.get("relay_id"),
+                "code": relay_code,
+                "t": relay_code,
+                "relay_base_url": relay.get("relay_base_url"),
+            }
+            data["exp"] = int(relay.get("exp") or data.get("exp") or 0)
+            from urllib.parse import urlencode
+
+            data["deep_link"] = "xcagi://pairing?" + urlencode(
+                {"relay_id": relay.get("relay_id"), "code": relay_code}
+            )
     return _facade().format_mobile_response(data=data)
 
 
 @_facade().extension_router.post("/pairing/lookup")
-async def mobile_pairing_lookup(body: _facade().PairingLookupBody):
+async def mobile_pairing_lookup(
+    body: _facade().PairingLookupBody, user=_facade().Depends(_facade().get_mobile_user)
+):
+    uid, _ = _facade()._mobile_user_identity(user)
+    if uid <= 0 or not getattr(user, "is_active", False):
+        return _facade()._mobile_unauthorized_response()
+    if not _facade()._pairing_rate_allowed(str(uid), "mobile-pairing-lookup", 5, 3600):
+        return _facade().JSONResponse(
+            _facade().format_mobile_response(None, "尝试过多，请稍后重试", success=False, code=429),
+            status_code=429,
+        )
     code = body.code.strip()
     rec = _facade().lookup_by_shortcode(code)
     if not rec:
@@ -259,12 +308,20 @@ async def mobile_pairing_lookup(body: _facade().PairingLookupBody):
 async def mobile_pairing_exchange(
     body: _facade().PairingExchangeBody, user=_facade().Depends(_facade().get_mobile_user)
 ):
+    uid, _ = _facade()._mobile_user_identity(user)
+    if uid <= 0 or not getattr(user, "is_active", False):
+        return _facade()._mobile_unauthorized_response()
     nonce = body.nonce.strip()
     code = body.code.strip()
     if not nonce and (not code):
         return _facade().JSONResponse(
             _facade().format_mobile_response(None, "缺少配对码", success=False, code=400),
             status_code=400,
+        )
+    if not _facade()._pairing_rate_allowed(str(uid), "mobile-pairing-exchange", 5, 3600):
+        return _facade().JSONResponse(
+            _facade().format_mobile_response(None, "尝试过多，请稍后重试", success=False, code=429),
+            status_code=429,
         )
     rec = _facade().consume_by_shortcode(code) if code else _facade().consume_pairing_nonce(nonce)
     if not rec:
@@ -274,7 +331,7 @@ async def mobile_pairing_exchange(
             ),
             status_code=400,
         )
-    user_public = _facade()._resolve_mobile_relay_user(user, prefer_admin=True)
+    user_public = _facade()._mobile_user_public_dict(user)
     data = {
         **_facade()._enrich_pairing_payload(rec),
         **_facade()._relay_mobile_auth_payload(user_public),

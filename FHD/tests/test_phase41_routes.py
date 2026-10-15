@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -58,6 +59,10 @@ def mock_shipment_svc() -> MagicMock:
 
 @pytest.fixture
 def shipment_client(mock_shipment_svc: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_principal.resolve_session_user",
+        lambda _request: SimpleNamespace(id="phase41-user", is_active=True, tenant_id=None),
+    )
     monkeypatch.setattr(
         shipment_routes, "get_shipment_application_service_core", lambda: mock_shipment_svc
     )
@@ -354,13 +359,17 @@ def test_shipment_generate_service_failure(
 def test_shipment_generate_success(
     shipment_client: TestClient, mock_shipment_svc: MagicMock
 ) -> None:
-    r = shipment_client.post(
-        "/api/shipment/generate",
-        json={"unit_name": "甲公司", "products": [{"model_number": "9803"}]},
-    )
+    payload = {
+        "unit_name": "甲公司",
+        "products": [{"model_number": "9803"}],
+        "date": "2026-09-13",
+        "template_id": "db:42",
+        "order_number": "ACCEPT-42",
+    }
+    r = shipment_client.post("/api/shipment/generate", json=payload)
     assert r.status_code == 200
     assert r.json()["file_path"] == "/tmp/p41.xlsx"
-    mock_shipment_svc.generate_shipment_document.assert_called_once()
+    mock_shipment_svc.generate_shipment_document.assert_called_once_with(**payload)
 
 
 def test_shipment_orders_latest_alias(

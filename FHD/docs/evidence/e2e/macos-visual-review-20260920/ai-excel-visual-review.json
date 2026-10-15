@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "ai-excel",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "37c58db3f06e7b9402e45ae81c69034aabae976d50a4479069fa53a305683597",
+  "visible_content": "工具表只列出工具名称与说明，没有文件生成、解析结果或权限验证。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/ai-excel.png"
+}

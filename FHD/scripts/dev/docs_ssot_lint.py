@@ -27,6 +27,8 @@ IGNORE_FILES = {
     FHD_ROOT / "docs" / "PROJECT_STATE.md",
     # 开发工具盘点清单：含大量 ssot 文件名/角色标签，非权威 SSOT 声明文档。
     FHD_ROOT / "docs" / "DEV_TOOLS_INVENTORY.md",
+    # 工作区地图：多域 SSOT 的汇总导航文档，非权威 SSOT 声明文档（同 README 语义）。
+    REPO_ROOT / "docs" / "workmap.md",
 }
 
 CLAIM_PATTERN = re.compile(r"(唯一真相源|SSOT|单一事实来源)", re.IGNORECASE)

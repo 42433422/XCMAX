@@ -94,7 +94,11 @@ scripts/ai_agent_v0/demo.local.env
 # Logs & temporary output
 # ============================================================================
 *.log
+# 例外：SSOT 引用的验收证据 log（evidence 目录内的实测日志必须入仓，链接不得悬空）
+!docs/evidence/**/*.log
 logs/
+# 例外：实测证据的日志目录（日志由 SSOT 引用并做哈希校验，必须入仓）
+!docs/evidence/e2e/**/logs/
 .agent-*.log
 .uvicorn.*.log
 uvicorn-smoke.log
@@ -156,6 +160,8 @@ temp_excel/
 shipment_outputs/
 saved_analyses/
 user_memory/
+!app/domain/user_memory/
+!app/domain/user_memory/*.py
 labels/
 test_labels/
 output/
@@ -179,6 +185,14 @@ resources/ai_assistant/商标导出/
 # Wechat decrypt binary (build artifact)
 wechat-decrypt/bin/
 wechat-decrypt/build/
+
+# 微信同步代理密钥与运行时文件（本机专用，含 token/聊天数据，禁止入库；mutants/ 沙箱整体已忽略）
+tools/wechat_sync/wechat_db_key.json
+tools/wechat_sync/wechat_sync_config.json
+tools/wechat_sync/wechat_sync_state.json
+tools/wechat_sync/wechat_context_cache.json
+tools/wechat_sync/wechat_sync.log
+tools/wechat_sync/wechat_sync.log.1
 
 # ============================================================================
 # Frontend build artifacts
@@ -263,6 +277,9 @@ _archived_removed_mods/
 migration_metrics.json
 migration_status_report.txt
 
+# docs_triage.py report/apply 每次重写的清单（生成物，勿提交）
+metrics/docs-triage.json
+
 # mutmut 3.x 变异测试沙箱与缓存（运行时生成约80M，勿提交）
 mutants/
 .mutmut-cache
@@ -281,3 +298,12 @@ resources/routing_policies/reflection_ledger.jsonl
 # scripts/deploy/lib 由 !scripts/deploy/lib/** 放行，需重新排除缓存
 scripts/deploy/lib/**/__pycache__/
 coverage-behavior.json
+
+# 测试产物（benchmark 运行输出；放行 main 已追踪的 2 个历史产物，避免 source-governance 误报）
+test_reports/*
+!test_reports/junit-full.xml
+!test_reports/pytest-full-last.txt
+
+# .NET build artifacts (IDE-generated; was misdetected as code changes by dispatch pipeline)
+tools/**/obj/
+tools/**/bin/

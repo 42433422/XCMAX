@@ -1,11 +1,4 @@
-"""Legacy planner chat adapter (absorbed).
-
-Phase 4B 从 ``app.legacy.planner`` 吸收实现。``chat`` / ``chat_stream_sse_events``
-两个主入口直接在此承载; xcagi_compat 以及其它应用服务通过本模块调用对话链。
-
-内部工具执行仍走 :mod:`app.application.tools`,LLM 客户端与 runtime context
-分别走 :mod:`app.infrastructure.llm.client` 与 :mod:`app.domain.context.session_context`。
-"""
+"""Absorbed planner chat adapter with request-scoped tool execution."""
 
 from __future__ import annotations
 
@@ -15,7 +8,7 @@ import os
 import threading
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
-from contextvars import ContextVar
+from contextvars import Context, ContextVar, copy_context
 from typing import Any, cast
 
 from app.application.workflow.multimodal_user_content import (
@@ -43,8 +36,6 @@ from app.infrastructure.llm.client import (
     resolve_chat_model,
 )
 
-# 流式 SSE 里展示给用户的中文说明（避免裸 snake_case +「...]」像截断 bug）
-# generate_office_document 的展示文案由 _tool_stream_call_label 按 output_format 细分
 _PLANNER_TOOL_STREAM_LABELS: dict[str, str] = {
     "generate_office_document": "生成可下载文档（Word 或 Excel）",
     "import_excel_to_database": "导入 Excel 到数据库",
@@ -338,12 +329,7 @@ def append_tool_messages(
     execute_tool=None,
     db_write_token: str | None = None,
 ) -> dict[str, Any] | None:
-    """执行工具调用并添加消息;如果需要令牌则返回令牌请求信息。
-
-    同一轮次多个独立工具默认线程并行执行以缩短总耗时;含可能首轮即
-    requires_token 的写入类工具时保持串行,避免破坏「未到令牌则不应执行
-    后续工具」的语义。
-    """
+    """执行工具并记录消息；独立调用并行，令牌敏感调用串行且遇授权请求立即返回。"""
     if not tool_calls:
         return None
 
@@ -380,12 +366,19 @@ def append_tool_messages(
                     dedup_state.add(key)
             if is_dup:
                 payload = {
+                    "success": False,
                     "error": "duplicate_tool_call",
                     "hint": "same tool+arguments already executed",
                 }
             else:
                 payload = json.loads(
-                    execute_tool(name, raw_eff, workspace_root, db_write_token=db_write_token)
+                    execute_tool(
+                        name,
+                        raw_eff,
+                        workspace_root,
+                        runtime_context=runtime_context,
+                        db_write_token=db_write_token,
+                    )
                 )
             _append_last_tool_record(tc, name, raw_eff, payload)
             if payload.get("requires_token"):
@@ -407,6 +400,7 @@ def append_tool_messages(
         for i, (_tc, name, raw_eff, key) in enumerate(parsed):
             if key in dedup_state:
                 payloads[i] = {
+                    "success": False,
                     "error": "duplicate_tool_call",
                     "hint": "same tool+arguments already executed",
                 }
@@ -415,13 +409,26 @@ def append_tool_messages(
                 to_run.append((i, name, raw_eff))
 
     def _execute_idx(idx: int, name: str, raw_eff: str) -> tuple[int, dict[str, Any]]:
-        raw = execute_tool(name, raw_eff, workspace_root, db_write_token=db_write_token)
+        raw = execute_tool(
+            name,
+            raw_eff,
+            workspace_root,
+            runtime_context=runtime_context,
+            db_write_token=db_write_token,
+        )
         return idx, json.loads(raw)
+
+    def _execute_in_context(
+        context: Context, item: tuple[int, str, str]
+    ) -> tuple[int, dict[str, Any]]:
+        return context.run(_execute_idx, *item)
 
     if to_run:
         workers = min(max_workers, len(to_run))
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            for idx, mapped_payload in pool.map(lambda t: _execute_idx(*t), to_run):
+            futures = [pool.submit(_execute_in_context, copy_context(), t) for t in to_run]
+            for future in futures:
+                idx, mapped_payload = future.result()
                 payloads[idx] = mapped_payload
 
     for i, (tc, _name, _raw_eff, _key) in enumerate(parsed):

@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-30 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-word",
+  "platform": "macos",
+  "reviewed_at": "2026-09-30",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+  "screenshot_sha256": "896aa539798c6f5e5786556d5215fbf40a78ef8bab6d8d712bbc35518117aa7c",
+  "visible_content": "工具表列出 Word/Excel 文档工具卡片。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/macos/result.png"
+}

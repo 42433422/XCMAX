@@ -1,0 +1,9 @@
+[06:13:06] feature=ops-admin-console base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-admin-console
+[06:13:18] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:13:18] case W1: passed - 管理员登录并建立管理会话（真实浏览器）
+[06:13:26] case W2: passed - 管理后台总览页真实渲染
+[06:13:30] case W3: passed - 审计日志接口以管理会话身份应答
+[06:13:35] case W4: passed - 未登录会话访问管理接口被拒绝
+[06:13:42] case W5: passed - 企业模块注册表与平台能力清单真实读取
+[06:13:43] video: ops-admin-console-web-20260929-061306.webm (2848606 bytes)
+[06:13:43] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-admin-console/log/ops-admin-console-web-20260929-061306.log

@@ -211,17 +211,18 @@ class TestBackendPathForMod:
 class TestModManagerScanFingerprint:
     """ModManager._mods_scan_fingerprint 分支覆盖。"""
 
-    def test_empty_roots(self) -> None:
-        mm = ModManager(mods_root="/nonexistent")
+    def test_empty_roots(self, tmp_path: Path) -> None:
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
         with patch.object(mm, "all_mods_roots", return_value=[]):
             fp = mm._mods_scan_fingerprint()
             assert fp == ""
 
-    def test_root_not_dir(self) -> None:
-        mm = ModManager(mods_root="/nonexistent")
-        with patch.object(mm, "all_mods_roots", return_value=["/nonexistent/path"]):
+    def test_root_not_dir(self, tmp_path: Path) -> None:
+        mm = ModManager(mods_root=str(tmp_path / "mods"))
+        missing_root = str(tmp_path / "missing")
+        with patch.object(mm, "all_mods_roots", return_value=[missing_root]):
             fp = mm._mods_scan_fingerprint()
-            assert "/nonexistent/path" in fp
+            assert missing_root in fp
 
     def test_root_with_manifest(self, tmp_path: Path) -> None:
         mod_dir = tmp_path / "my-mod"
@@ -402,36 +403,51 @@ class TestRefreshModsRootIfNeeded:
     """ModManager._refresh_mods_root_if_needed 分支覆盖。"""
 
     def test_env_valid_updates_root(self, tmp_path: Path) -> None:
-        mm = ModManager(mods_root="/old/path")
+        with patch(
+            "app.infrastructure.mods.mod_manager._default_mods_root",
+            return_value=str(tmp_path / "old-default"),
+        ):
+            mm = ModManager()
         with patch.dict("os.environ", {"XCAGI_MODS_ROOT": str(tmp_path)}):
             mm._refresh_mods_root_if_needed()
             assert mm.mods_root == str(tmp_path)
 
     def test_env_invalid_keeps_current(self, tmp_path: Path) -> None:
-        mm = ModManager(mods_root=str(tmp_path))
+        with patch(
+            "app.infrastructure.mods.mod_manager._default_mods_root", return_value=str(tmp_path)
+        ):
+            mm = ModManager()
         with patch.dict("os.environ", {"XCAGI_MODS_ROOT": "/nonexistent/path"}):
             mm._refresh_mods_root_if_needed()
             assert mm.mods_root == str(tmp_path)
 
     def test_env_empty_and_current_missing_re_resolves(self, tmp_path: Path) -> None:
-        mm = ModManager(mods_root="/nonexistent/old")
         with (
             patch.dict("os.environ", {}, clear=True),
             patch(
-                "app.infrastructure.mods.mod_manager._default_mods_root", return_value=str(tmp_path)
+                "app.infrastructure.mods.mod_manager._default_mods_root",
+                side_effect=[str(tmp_path / "missing-default"), str(tmp_path)],
             ),
         ):
+            mm = ModManager()
             mm._refresh_mods_root_if_needed()
             assert mm.mods_root == str(tmp_path)
 
     def test_env_empty_and_current_valid_keeps(self, tmp_path: Path) -> None:
-        mm = ModManager(mods_root=str(tmp_path))
+        with patch(
+            "app.infrastructure.mods.mod_manager._default_mods_root", return_value=str(tmp_path)
+        ):
+            mm = ModManager()
         with patch.dict("os.environ", {}, clear=True):
             mm._refresh_mods_root_if_needed()
             assert mm.mods_root == str(tmp_path)
 
     def test_env_xcagi_mods_dir_also_checked(self, tmp_path: Path) -> None:
-        mm = ModManager(mods_root="/old")
+        with patch(
+            "app.infrastructure.mods.mod_manager._default_mods_root",
+            return_value=str(tmp_path / "old-default"),
+        ):
+            mm = ModManager()
         with patch.dict("os.environ", {"XCAGI_MODS_DIR": str(tmp_path)}, clear=True):
             mm._refresh_mods_root_if_needed()
             assert mm.mods_root == str(tmp_path)

@@ -6,12 +6,47 @@ import json
 import threading
 import uuid
 import zipfile
+from pathlib import Path
+
+import pytest
 
 from modstore_server.catalog_store import package_manifest_alignment_errors
 from modstore_server.employee_config_v2 import validate_v2_config
 
 
-def _package(pkg_id: str, version: str = "1.0.0") -> bytes:
+@pytest.fixture
+def signing_key(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "FHD"))
+    from app.infrastructure.mods import trusted_keys
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    key = Ed25519PrivateKey.generate()
+    path = tmp_path / "synthetic-private.pem"
+    path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    monkeypatch.setattr(
+        trusted_keys,
+        "TRUSTED_MOD_PUBLIC_KEYS_PEM",
+        (
+            key.public_key()
+            .public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode(),
+        ),
+    )
+    monkeypatch.delenv("XCAGI_MOD_PUBLIC_KEY", raising=False)
+    return path
+
+
+def _package(pkg_id: str, version: str = "1.0.0", *, signing_key: Path) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as archive:
         archive.writestr(
@@ -22,6 +57,7 @@ def _package(pkg_id: str, version: str = "1.0.0") -> bytes:
                     "name": "Automated Listing",
                     "version": version,
                     "artifact": "mod",
+                    "public_listing": True,
                     "backend": {"entry": "blueprints", "init": "mod_init"},
                     "frontend": {"routes": "routes"},
                 }
@@ -30,6 +66,13 @@ def _package(pkg_id: str, version: str = "1.0.0") -> bytes:
         archive.writestr("backend/blueprints.py", "# route\n")
         archive.writestr("backend/mod_init.py", "def mod_init(): pass\n")
         archive.writestr("frontend/routes.js", "export default []\n")
+    from app.infrastructure.mods.package_signing import sign_members
+
+    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as archive:
+        members = [(name, archive.read(name)) for name in archive.namelist()]
+        manifest = json.loads(archive.read("manifest.json"))
+    with zipfile.ZipFile(buf, "a") as archive:
+        archive.writestr("META-INF/signature.json", sign_members(members, manifest, signing_key))
     return buf.getvalue()
 
 
@@ -42,9 +85,11 @@ async def _review_pass(*_args, **_kwargs):
     }
 
 
-def test_auto_publish_is_public_verified_and_idempotent(client, monkeypatch, tmp_path) -> None:
+def test_auto_publish_is_public_verified_and_idempotent(
+    client, monkeypatch, tmp_path, signing_key
+) -> None:
     pkg_id = f"auto-listing-{uuid.uuid4().hex[:12]}"
-    raw = _package(pkg_id)
+    raw = _package(pkg_id, signing_key=signing_key)
     digest = hashlib.sha256(raw).hexdigest()
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     monkeypatch.setenv("MODSTORE_CATALOG_UPLOAD_TOKEN", "catalog-token-ordinary")
@@ -114,12 +159,83 @@ def test_auto_publish_is_public_verified_and_idempotent(client, monkeypatch, tmp
     assert second.status_code == 200, second.text
     assert second.json()["idempotent"] is True
 
+    archive = tmp_path / "catalog" / "files" / detail.json()["stored_filename"]
+    archive.write_bytes(b"corrupted release package")
+    assert client.get("/api/market/catalog", params={"q": pkg_id}).json() == {
+        "items": [],
+        "total": 0,
+    }
+    assert client.get(f"/api/market/catalog/{matches[0]['id']}").status_code == 404
+    assert client.get("/v1/index.json").json()["packages"] == []
+    assert client.get(f"/v1/packages/{pkg_id}/1.0.0").status_code == 404
+    assert client.get("/v1/packages", params={"q": pkg_id}).json()["total"] == 0
+    assert client.get(f"/v1/packages/by-id/{pkg_id}/versions").json()["versions"] == []
+    assert client.get(f"/v1/packages/{pkg_id}/1.0.0/download").status_code == 404
+    archive.unlink()
+    assert client.get("/api/market/catalog", params={"q": pkg_id}).json()["total"] == 0
+
+
+def test_unlisted_upload_and_draft_remain_private_on_every_v1_read(
+    client, monkeypatch, tmp_path, signing_key
+) -> None:
+    from modstore_server.catalog_store import append_package
+    from modstore_server.models import CatalogItem, get_session_factory
+
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    monkeypatch.setenv("MODSTORE_CATALOG_UPLOAD_TOKEN", "ordinary-test-token")
+    monkeypatch.setattr(
+        "modstore_server.package_sandbox_audit.run_package_audit_async", _review_pass
+    )
+    monkeypatch.setattr(
+        "modstore_server.api.catalog_public_routes.insert_embedding",
+        lambda **_kwargs: "",
+    )
+    pkg_id = f"unlisted-{uuid.uuid4().hex[:10]}"
+    raw = _package(pkg_id, signing_key=signing_key)
+    uploaded = client.post(
+        "/v1/packages",
+        headers={"Authorization": "Bearer ordinary-test-token"},
+        data={"metadata": json.dumps({"id": pkg_id, "version": "1.0.0", "artifact": "mod"})},
+        files={"file": ("unlisted.xcmod", raw, "application/zip")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["package"]["public_listing"] is False
+    draft_id = f"draft-{uuid.uuid4().hex[:10]}"
+    source = tmp_path / "draft.xcmod"
+    source.write_bytes(b"draft bytes")
+    append_package(
+        {
+            "id": draft_id,
+            "version": "draft-1.0.0",
+            "release_channel": "draft",
+            "public_listing": True,
+        },
+        source,
+    )
+    with get_session_factory()() as db:
+        db.add(
+            CatalogItem(
+                pkg_id=draft_id,
+                version="draft-1.0.0",
+                name="Draft",
+                is_public=True,
+                compliance_status="approved",
+            )
+        )
+        db.commit()
+    for hidden_id, version in ((pkg_id, "1.0.0"), (draft_id, "draft-1.0.0")):
+        assert client.get("/v1/packages", params={"q": hidden_id}).json()["total"] == 0
+        assert client.get(f"/v1/packages/{hidden_id}/{version}").status_code == 404
+        assert client.get(f"/v1/packages/by-id/{hidden_id}/versions").json()["versions"] == []
+        assert client.get(f"/v1/packages/{hidden_id}/{version}/download").status_code == 404
+    assert client.get("/v1/index.json").json()["packages"] == []
+
 
 def test_publication_survives_vector_outage_and_idempotent_retry_recovers(
-    client, monkeypatch, tmp_path
+    client, monkeypatch, tmp_path, signing_key
 ) -> None:
     pkg_id = f"vector-outage-{uuid.uuid4().hex[:12]}"
-    raw = _package(pkg_id)
+    raw = _package(pkg_id, signing_key=signing_key)
     digest = hashlib.sha256(raw).hexdigest()
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_TOKEN", "auto-token-dedicated")
@@ -178,9 +294,9 @@ def test_publication_survives_vector_outage_and_idempotent_retry_recovers(
     assert attempts == ["failed", "recovered"]
 
 
-def test_publication_bounds_slow_vector_index(client, monkeypatch, tmp_path) -> None:
+def test_publication_bounds_slow_vector_index(client, monkeypatch, tmp_path, signing_key) -> None:
     pkg_id = f"vector-slow-{uuid.uuid4().hex[:12]}"
-    raw = _package(pkg_id)
+    raw = _package(pkg_id, signing_key=signing_key)
     digest = hashlib.sha256(raw).hexdigest()
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_TOKEN", "auto-token-dedicated")
@@ -233,7 +349,7 @@ def test_publication_bounds_slow_vector_index(client, monkeypatch, tmp_path) -> 
     assert client.get(f"/v1/packages/{pkg_id}/1.0.0").json()["sha256"] == digest
 
     second_id = f"vector-concurrent-{uuid.uuid4().hex[:12]}"
-    second_raw = _package(second_id)
+    second_raw = _package(second_id, signing_key=signing_key)
     second_metadata = dict(metadata)
     second_metadata["id"] = second_id
     second_metadata["automation_provenance"] = {
@@ -283,3 +399,177 @@ def test_root_manifest_is_valid_for_employee_alignment(tmp_path) -> None:
         )
         == []
     )
+
+
+def test_public_upload_is_immutable_and_old_retry_cannot_downgrade_market(
+    client, monkeypatch, tmp_path, signing_key
+):
+    from modstore_server.catalog_store import get_package
+
+    pkg_id = f"immutable-api-{uuid.uuid4().hex[:12]}"
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_TOKEN", "auto-test")
+    monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_REPOSITORY", "owner/repo")
+    monkeypatch.setattr(
+        "modstore_server.package_sandbox_audit.run_package_audit_async", _review_pass
+    )
+    monkeypatch.setattr(
+        "modstore_server.api.catalog_public_routes.insert_embedding",
+        lambda **_kwargs: "",
+    )
+
+    def upload(raw, version="1.0.0", sha="a"):
+        metadata = {
+            "id": pkg_id,
+            "version": version,
+            "artifact": "mod",
+            "public_listing": True,
+            "automation_provenance": {
+                "source_repository": "owner/repo",
+                "source_sha": sha * 40,
+                "workflow_run_id": "123",
+                "package_sha256": hashlib.sha256(raw).hexdigest(),
+            },
+        }
+        return client.post(
+            "/v1/packages",
+            headers={"Authorization": "Bearer auto-test"},
+            data={"metadata": json.dumps(metadata)},
+            files={"file": ("package.xcmod", raw, "application/zip")},
+        )
+
+    raw = _package(pkg_id, signing_key=signing_key)
+    first = upload(raw)
+    assert first.status_code == 200, first.text
+    altered = io.BytesIO(raw)
+    with zipfile.ZipFile(altered, "a") as archive:
+        archive.writestr("new-source.py", "changed")
+    refused = upload(altered.getvalue(), sha="b")
+    assert refused.status_code == 409, refused.text
+    assert client.get(f"/v1/packages/{pkg_id}/1.0.0/download").content == raw
+    newer = upload(_package(pkg_id, "1.2.0", signing_key=signing_key), "1.2.0", "c")
+    assert newer.status_code == 200, newer.text
+    stale = upload(_package(pkg_id, "1.1.0", signing_key=signing_key), "1.1.0", "d")
+    assert stale.status_code == 409, stale.text
+    retry = upload(raw, sha="e")
+    assert retry.status_code == 200 and retry.json()["idempotent"]
+    assert get_package(pkg_id, "1.0.0")["automation_provenance"]["source_sha"] == "a" * 40
+    market = client.get("/api/market/catalog", params={"q": pkg_id, "limit": 200})
+    assert [row["version"] for row in market.json()["items"] if row["pkg_id"] == pkg_id] == [
+        "1.2.0"
+    ]
+
+
+@pytest.mark.parametrize(
+    "classification",
+    [
+        {},
+        {"public_listing": False},
+        {"public_listing": True, "owner_user_id": 42},
+        {"public_listing": True, "artifact": "customer_delivery_seed"},
+        {"public_listing": True, "visibility": "private"},
+    ],
+)
+def test_public_metadata_cannot_disguise_private_archive(
+    client, monkeypatch, tmp_path, classification
+):
+    from modstore_server.catalog_store import load_store
+
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_TOKEN", "auto-test")
+    monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_REPOSITORY", "owner/repo")
+    package = io.BytesIO()
+    with zipfile.ZipFile(package, "w") as archive:
+        archive.writestr(
+            "manifest.json",
+            json.dumps({"id": "private-test", "version": "1.0.0", **classification}),
+        )
+    raw = package.getvalue()
+    metadata = {
+        "id": "private-test",
+        "version": "1.0.0",
+        "artifact": "mod",
+        "public_listing": True,
+        "automation_provenance": {
+            "source_repository": "owner/repo",
+            "source_sha": "a" * 40,
+            "workflow_run_id": "1",
+            "package_sha256": hashlib.sha256(raw).hexdigest(),
+        },
+    }
+    response = client.post(
+        "/v1/packages",
+        headers={"Authorization": "Bearer auto-test"},
+        data={"metadata": json.dumps(metadata)},
+        files={"file": ("package.xcmod", raw, "application/zip")},
+    )
+    assert response.status_code == 403, response.text
+    assert load_store()["packages"] == []
+
+
+@pytest.mark.parametrize(
+    "classification",
+    [
+        {"artifact": "customer_delivery_seed"},
+        {"owner_user_id": 42},
+        {"visibility": "private"},
+        {"public_listing": False},
+    ],
+)
+def test_existing_private_rows_are_not_publicly_readable(
+    client, monkeypatch, tmp_path, classification
+):
+    from modstore_server.catalog_public_index import (
+        package_row_eligible_for_public_index,
+    )
+    from modstore_server.catalog_store import append_package
+
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    package = tmp_path / "private.xcmod"
+    package.write_bytes(b"private customer bytes")
+    saved = append_package(
+        {"id": "private-existing", "version": "1.0.0", **classification}, package
+    )
+    assert not package_row_eligible_for_public_index(saved, public_pkg_ids={"private-existing"})
+    assert client.get("/v1/packages/private-existing/1.0.0").status_code == 404
+    assert client.get("/v1/packages/private-existing/1.0.0/download").status_code == 404
+    assert client.get("/v1/packages/by-id/private-existing/versions").json()["versions"] == []
+    assert client.get("/v1/packages").json()["packages"] == []
+
+
+def test_public_unsigned_archive_is_rejected_even_with_valid_automation_token(
+    client, monkeypatch, tmp_path
+):
+    from modstore_server.catalog_store import load_store
+
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_TOKEN", "auto-test")
+    monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("XCAGI_REQUIRE_SIGNED_MODS", "0")
+    package = io.BytesIO()
+    with zipfile.ZipFile(package, "w") as archive:
+        archive.writestr(
+            "manifest.json",
+            json.dumps({"id": "unsigned-public", "version": "1.0.0", "public_listing": True}),
+        )
+    raw = package.getvalue()
+    metadata = {
+        "id": "unsigned-public",
+        "version": "1.0.0",
+        "artifact": "mod",
+        "public_listing": True,
+        "automation_provenance": {
+            "source_repository": "owner/repo",
+            "source_sha": "a" * 40,
+            "workflow_run_id": "1",
+            "package_sha256": hashlib.sha256(raw).hexdigest(),
+        },
+    }
+    response = client.post(
+        "/v1/packages",
+        headers={"Authorization": "Bearer auto-test"},
+        data={"metadata": json.dumps(metadata)},
+        files={"file": ("package.xcmod", raw, "application/zip")},
+    )
+    assert response.status_code == 400, response.text
+    assert load_store()["packages"] == []

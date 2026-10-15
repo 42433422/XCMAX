@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-sales-order",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "69c56fc26bac8491a1074bc2de88d68170bcc2b59fb11490c290c90c4563d75a",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。新建发货单，订单编号 26-09-00001A，日期 09/29/2026。提示暂无可用发货单模板，没有产品行。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-sales-order/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-sales-order/macos/result.png"
+}

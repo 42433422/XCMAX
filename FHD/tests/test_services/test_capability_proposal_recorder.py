@@ -255,3 +255,51 @@ class TestIntegrationFlow:
         # 4. 再次列举，只剩未处理的 r2
         pending_after = recorder.list_pending_proposals()
         assert [row["dedup_key"] for row in pending_after] == [r2["dedup_key"]]
+
+
+class TestEvidenceRef:
+    """连接件（故障证据包）：evidence_ref 随提案落 JSONL，并经 upsert_candidate 并入工单 context。"""
+
+    @pytest.fixture
+    def isolated_work_order_store(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        from app.services import work_order_ssot as wo
+
+        monkeypatch.setattr(wo, "_STORE_DIR", tmp_path)
+        monkeypatch.setattr(wo, "_EVENTS_FILE", tmp_path / "work_orders.jsonl")
+        return tmp_path
+
+    def test_evidence_ref_lands_in_proposal_jsonl(
+        self, isolated_proposal_file: Path, isolated_work_order_store: Path
+    ) -> None:
+        ref = {"kind": "support_bundle", "path": "/tmp/b.zip", "sha256": "abc", "bytes": 3}
+        result = recorder.record_capability_proposal(
+            raw_input="发货单模板导入失败", reason="skill_proposal", evidence_ref=ref
+        )
+        assert result["recorded"] is True
+        line = isolated_proposal_file.read_text(encoding="utf-8").strip().splitlines()[-1]
+        record = json.loads(line)
+        assert record["evidence_ref"] == ref
+
+    def test_evidence_ref_merged_into_work_order_context(
+        self, isolated_proposal_file: Path, isolated_work_order_store: Path
+    ) -> None:
+        from app.services import work_order_ssot as wo
+
+        ref = {"kind": "support_bundle", "path": "/tmp/b.zip", "sha256": "abc", "bytes": 3}
+        result = recorder.record_capability_proposal(
+            raw_input="客户报故障现象", reason="skill_proposal", evidence_ref=ref
+        )
+        wo_id = wo.derive_wo_id(result["dedup_key"])
+        view = wo.get_work_order(wo_id)
+        assert view is not None
+        created = next(e for e in view["history"] if e.get("event") == "created")
+        assert created["context"]["evidence_ref"] == ref
+
+    def test_no_evidence_ref_keeps_record_shape_unchanged(
+        self, isolated_proposal_file: Path, isolated_work_order_store: Path
+    ) -> None:
+        result = recorder.record_capability_proposal(raw_input="普通提案", reason="r")
+        assert result["recorded"] is True
+        line = isolated_proposal_file.read_text(encoding="utf-8").strip().splitlines()[-1]
+        record = json.loads(line)
+        assert "evidence_ref" not in record

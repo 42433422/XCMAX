@@ -1,0 +1,103 @@
+{
+  "round": "2026-09-17 Mac real-machine acceptance round (installed 1.0.0.4)",
+  "generated_at": "2026-09-17T01:08:41.893238+08:00",
+  "object": {
+    "app": "/Applications/XCAGI.app",
+    "version": "1.0.0.4",
+    "git_sha": "280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+    "owner": "root:wheel",
+    "signature": "Developer ID Application: jialong Li (G26WSH472M) / notarized / spctl accepted"
+  },
+  "gates": [
+    {
+      "gate": "G0 baseline",
+      "status": "PASS",
+      "evidence": [
+        "round-20260917-g0-baseline.json"
+      ]
+    },
+    {
+      "gate": "G8 update discovery",
+      "status": "FAIL",
+      "reason": "本机已装版本 = feed 广播版本，应用内不存在可发现的新版本",
+      "evidence": [
+        "round-20260917-g8-g9-result.json",
+        "round-20260917-g8-update-check.png",
+        "round-20260917-feed-latest-mac.yml"
+      ]
+    },
+    {
+      "gate": "G9 install update",
+      "status": "NOT RUN",
+      "reason": "G8 无更新对象 → 无法点击「安装更新」，无自动退出/ShipIt/自动重启可验证",
+      "evidence": [
+        "round-20260917-g8-g9-result.json"
+      ]
+    },
+    {
+      "gate": "G10 data retention",
+      "status": "NOT RUN",
+      "reason": "本轮无真实升级动作；post 为本轮新鲜 digest，pre 侧为历史证据，不能据此给 PASS",
+      "evidence": [
+        "round-20260917-g10-post-ota-digest.json",
+        "round-20260917-g10-digest-compare.txt"
+      ]
+    },
+    {
+      "gate": "G11 business chain retest",
+      "status": "PASS",
+      "evidence": [
+        "round-20260917-g11-g7-retest.json",
+        "round-20260917-g11-logged-in-window.png",
+        "round-20260917-g11-artifact-digest.json"
+      ]
+    },
+    {
+      "gate": "G12 post-reboot verify",
+      "status": "PASS",
+      "evidence": [
+        "round-20260917-g12-post-reboot.json",
+        "round-20260917-g12-post-reboot-verify.log",
+        "round-20260917-g12-post-reboot-digest.json",
+        "round-20260917-g12-health.json",
+        "round-20260917-g12-g7-retest.json",
+        "round-20260917-g12-onboot.log"
+      ],
+      "reason": "整机重启已发生（kern.boottime=Thu Sep 17 01:31:51）；登录后应用自动恢复，布防 01:37:34 跑完全链"
+    }
+  ],
+  "first_real_breakpoint": {
+    "gate": "G8/G9",
+    "statement": "本机已装 1.0.0.4 / 280225ac7 即 feed 最新广播版本，应用内不存在可安装更新对象；G9 一键安装与「自动退出(isQuitting 修复)」子项必须等 1.0.0.5 才能真正复测。",
+    "proof": [
+      "latest-mac.yml productVersion=1.0.0.4 buildSha=280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+      "/Applications/XCAGI.app/Contents/Resources/build-info.json gitSha=同值",
+      "desktop/updater.ts remoteSha==localSha → isUpdateAvailable=false",
+      "https://xiu-ci.com/xcagi-v1.0.0.5/manifest.json → 404；https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/ → 404",
+      "in-app 「检查更新」仅回「已开始检查更新，如有新版本将提示下载。」，无更新提示"
+    ]
+  },
+  "next_known_risk": {
+    "item": "1.0.0.4→1.0.0.5 OTA 是否需要再次人工授权",
+    "state": "UNKNOWN",
+    "basis": "上一轮证据称「ShipIt helper 授权后常驻、后续 OTA 免密」；本轮独立核对：/Library/PrivilegedHelperTools 与 /Library/LaunchDaemons 均无 xcagi/electron/ShipIt 条目，~/Library/LaunchAgents 亦无 Squirrel/ShipIt 项，仅 app bundle 内有 Squirrel.framework。该「常驻免密」说法在本轮系统状态中找不到对应持久化证据 → 下一次 OTA 仍需现场观察是否弹 SecurityAgent/管理员授权。"
+  },
+  "blocked_on": null,
+  "integrity_notes": [
+    "未修改任何测试标准；未用历史 PASS 冒充本轮；未以代码存在/CI PASS/health=200 替代实机验收",
+    "G11 子项 templates_list.probe_present=false 系脚本把响应截断到 400 字符所致，直接查 /api/templates 原文包含探针 → 非产品缺陷",
+    "G11 子项 customer_ensure 400 = 「客户名称已存在」幂等返回，发货单仍出单成功 → 非产品缺陷"
+  ],
+  "post_reboot_armed": {
+    "plist": "~/Library/LaunchAgents/com.xcagi.t6-postreboot.plist (RunAtLoad)",
+    "runner": "/Users/Shared/xcagi-t6-tools/t6-onboot.sh → macos-release-1.0.0.4/t6-post-reboot-verify.sh",
+    "dry_run_validated": true,
+    "prereq": "登录后 XCAGI 必须在 12 分钟窗口内起来（系统登录项中无 XCAGI；TALLogoutSavesState=1，重启时选「重新打开窗口」可自动恢复）"
+  },
+  "uptime_check": {
+    "previous_boottime": "Mon Sep 14 13:57:35 2026",
+    "current_boottime": "Thu Sep 17 01:31:51 2026 (sec=1789579911)",
+    "reboot_observed": true
+  },
+  "final_verdict": "1.0.0.4 MAC FULL CHAIN PASS 未达成（G8 FAIL / G9 NOT RUN / G10 NOT RUN，前置 G8/G9 缺可安装更新对象）；G0/G11/G12 PASS"
+}

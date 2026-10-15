@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import json
-import logging
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -16,20 +15,21 @@ from sqlalchemy.orm import Session
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     RunEvent,
-    agent_run_from_dict,
     utc_now_iso,
+)
+from app.application.agent_orchestrator.run_record_mapping import (
+    _command_record_to_model,
+    _record_to_run,
+    _task_record_to_model,
 )
 from app.application.agent_orchestrator.task_models import (
     AgentTask,
     TaskControlCommand,
-    agent_task_from_dict,
-    task_control_from_dict,
+    mod_id_of_run,
     task_from_run,
     tenant_id_of_run,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-logger = logging.getLogger(__name__)
 
 
 class SQLAlchemyAgentRunRepository:
@@ -47,6 +47,37 @@ class SQLAlchemyAgentRunRepository:
 
     def save(self, run: AgentRun) -> AgentRun:
         self._ensure_schema()
+        with self._session_scope() as db:
+            self.save_in_session(db, run)
+        return self.get(run.run_id) or copy.deepcopy(run)
+
+    def save_claimed(self, run: AgentRun, *, owner_id: str, execution_count: int) -> AgentRun:
+        from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+        from app.db.models.agent import AgentTaskExecutionRecord
+
+        self._ensure_schema()
+        with self._session_scope() as db:
+            # A conditional write holds the queue-row lock through run persistence.
+            # Checking the lease in a separate SELECT would allow takeover between
+            # the check and save. Execution count also fences reused owner IDs.
+            owned = (
+                db.query(AgentTaskExecutionRecord)
+                .filter(
+                    AgentTaskExecutionRecord.run_id == run.run_id,
+                    AgentTaskExecutionRecord.state == "claimed",
+                    AgentTaskExecutionRecord.lease_owner == owner_id,
+                    AgentTaskExecutionRecord.execution_count == execution_count,
+                    AgentTaskExecutionRecord.lease_expires_at > utc_now_iso(),
+                )
+                .update({AgentTaskExecutionRecord.lease_owner: owner_id}, synchronize_session=False)
+            )
+            if owned != 1:
+                raise WorkerLeaseLost("worker lease expired or replaced")
+            self.save_in_session(db, run)
+        return copy.deepcopy(run)
+
+    def save_in_session(self, db: Session, run: AgentRun) -> None:
+        """Persist into the caller's transaction without committing or closing it."""
         from app.application.agent_orchestrator.business_harness import (
             ensure_terminal_business_result,
         )
@@ -54,48 +85,46 @@ class SQLAlchemyAgentRunRepository:
         ensure_terminal_business_result(run)
         run.touch()
         payload = json.dumps(run.to_dict(), ensure_ascii=False, default=str)
-        with self._session_scope() as db:
-            from app.db.models.agent import AgentRunRecord, AgentTaskRecord
+        from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 
-            record = db.get(AgentRunRecord, run.run_id)
-            if record is None:
-                record = AgentRunRecord(
-                    run_id=run.run_id,
-                    user_id=run.user_id,
-                    status=run.status,
-                    intent=run.intent or None,
-                    plan_id=run.plan_id or None,
-                    message=run.message,
-                    payload_json=payload,
-                    created_at=run.created_at,
-                    updated_at=run.updated_at,
-                )
-                db.add(record)
-            else:
-                record.user_id = run.user_id
-                record.status = run.status
-                record.intent = run.intent or None
-                record.plan_id = run.plan_id or None
-                record.message = run.message
-                record.payload_json = payload
-                record.created_at = run.created_at
-                record.updated_at = run.updated_at
-            existing_task_record = (
-                db.query(AgentTaskRecord)
-                .filter(
-                    AgentTaskRecord.tenant_id == tenant_id_of_run(run),
-                    AgentTaskRecord.user_id == run.user_id,
-                    AgentTaskRecord.task_id == self._run_task_id(run),
-                )
-                .one_or_none()
+        record = db.get(AgentRunRecord, run.run_id)
+        if record is None:
+            record = AgentRunRecord(
+                run_id=run.run_id,
+                user_id=run.user_id,
+                status=run.status,
+                intent=run.intent or None,
+                plan_id=run.plan_id or None,
+                message=run.message,
+                payload_json=payload,
+                created_at=run.created_at,
+                updated_at=run.updated_at,
             )
-            existing_task = (
-                self._task_record_to_model(existing_task_record)
-                if existing_task_record is not None
-                else None
+            db.add(record)
+        else:
+            record.user_id = run.user_id
+            record.status = run.status
+            record.intent = run.intent or None
+            record.plan_id = run.plan_id or None
+            record.message = run.message
+            record.payload_json = payload
+            record.created_at = run.created_at
+            record.updated_at = run.updated_at
+        existing_task_record = (
+            db.query(AgentTaskRecord)
+            .filter(
+                AgentTaskRecord.tenant_id == tenant_id_of_run(run),
+                AgentTaskRecord.user_id == run.user_id,
+                AgentTaskRecord.task_id == self._run_task_id(run),
             )
-            self._save_task_record(db, task_from_run(run, existing=existing_task))
-        return self.get(run.run_id) or copy.deepcopy(run)
+            .one_or_none()
+        )
+        existing_task = (
+            self._task_record_to_model(existing_task_record)
+            if existing_task_record is not None
+            else None
+        )
+        self._save_task_record(db, task_from_run(run, existing=existing_task))
 
     def get(self, run_id: str) -> AgentRun | None:
         self._ensure_schema()
@@ -105,7 +134,14 @@ class SQLAlchemyAgentRunRepository:
             record = db.get(AgentRunRecord, str(run_id or ""))
             return self._record_to_run(record) if record is not None else None
 
-    def list_recent(self, *, user_id: str | None = None, limit: int = 50) -> list[AgentRun]:
+    def list_recent(
+        self,
+        *,
+        user_id: str | None = None,
+        limit: int = 50,
+        tenant_id: str | None = None,
+        mod_id: str | None = None,
+    ) -> list[AgentRun]:
         self._ensure_schema()
         with self._session_scope(read_only=True) as db:
             from app.db.models.agent import AgentRunRecord
@@ -113,10 +149,28 @@ class SQLAlchemyAgentRunRepository:
             query = db.query(AgentRunRecord)
             if user_id is not None:
                 query = query.filter(AgentRunRecord.user_id == str(user_id))
-            records = (
-                query.order_by(AgentRunRecord.updated_at.desc()).limit(max(0, int(limit))).all()
-            )
-            return [run for record in records if (run := self._record_to_run(record)) is not None]
+            query = query.order_by(AgentRunRecord.updated_at.desc())
+            if tenant_id is None and mod_id is None:
+                records = query.limit(max(0, int(limit))).all()
+                return [
+                    run for record in records if (run := self._record_to_run(record)) is not None
+                ]
+            result: list[AgentRun] = []
+            if limit <= 0:
+                return result
+            # Older rows store tenant only in their JSON payload. Filter before
+            # applying the public limit, without loading all rows at once.
+            for record in query.yield_per(100):
+                run = self._record_to_run(record)
+                if (
+                    run is not None
+                    and (tenant_id is None or tenant_id_of_run(run) == tenant_id)
+                    and (mod_id is None or mod_id_of_run(run) == mod_id)
+                ):
+                    result.append(run)
+                    if len(result) >= limit:
+                        break
+            return result
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]:
         """Resolve a durable task without relying on a recent-run window.
@@ -181,6 +235,7 @@ class SQLAlchemyAgentRunRepository:
         tenant_id: str | None = None,
         limit: int = 50,
         include_archived: bool = False,
+        offset: int = 0,
     ) -> list[AgentTask]:
         self._ensure_schema()
         with self._session_scope(read_only=True) as db:
@@ -195,6 +250,7 @@ class SQLAlchemyAgentRunRepository:
                 )
             records = (
                 query.order_by(AgentTaskRecord.updated_at.desc(), AgentTaskRecord.task_id.desc())
+                .offset(max(0, int(offset)))
                 .limit(max(0, int(limit)))
                 .all()
             )
@@ -323,12 +379,24 @@ class SQLAlchemyAgentRunRepository:
             db.query(AgentRunRecord).delete()
 
     @contextmanager
+    def transaction(self, *, read_only: bool = False) -> Iterator[Session]:
+        """Own one initialized storage transaction for cross-repository operations.
+
+        The caller may use session-bound writes but must not commit or close the
+        session. Successful writes commit once on exit; failures roll back.
+        """
+        self._ensure_schema()
+        with self._session_scope(read_only=read_only) as db:
+            yield db
+
+    @contextmanager
     def _session_scope(self, *, read_only: bool = False) -> Iterator[Session]:
         session_factory = self._session_factory
         if session_factory is None:
-            from app.db import SessionLocal
+            from app.db import HostSessionLocal
 
-            session_factory = SessionLocal
+            # Scheduling state must be visible outside the originating Mod request.
+            session_factory = HostSessionLocal
         db = session_factory()
         try:
             yield db
@@ -424,58 +492,9 @@ class SQLAlchemyAgentRunRepository:
         record.created_at = task.created_at
         record.updated_at = task.updated_at
 
-    @staticmethod
-    def _task_record_to_model(record) -> AgentTask:
-        return agent_task_from_dict(
-            {
-                "task_id": record.task_id,
-                "user_id": record.user_id,
-                "tenant_id": record.tenant_id,
-                "title": record.title,
-                "source": record.source,
-                "task_type": record.task_type,
-                "status": record.status,
-                "attention_state": record.attention_state,
-                "active_run_id": record.active_run_id,
-                "root_run_id": record.root_run_id,
-                "conversation_id": record.conversation_id,
-                "workspace_id": record.workspace_id,
-                "workspace_path": record.workspace_path,
-                "workspace_isolation": record.workspace_isolation,
-                "attempt": record.attempt,
-                "run_count": record.run_count,
-                "archived_at": record.archived_at,
-                "metadata": json.loads(record.metadata_json or "{}"),
-                "created_at": record.created_at,
-                "updated_at": record.updated_at,
-            }
-        )
-
-    @staticmethod
-    def _command_record_to_model(record) -> TaskControlCommand:
-        return task_control_from_dict(
-            {
-                "command_id": record.command_id,
-                "task_id": record.task_id,
-                "run_id": record.run_id,
-                "action": record.action,
-                "status": record.status,
-                "requested_by": record.requested_by,
-                "metadata": json.loads(record.metadata_json or "{}"),
-                "created_at": record.created_at,
-                "applied_at": record.applied_at,
-            }
-        )
-
-    @staticmethod
-    def _record_to_run(record) -> AgentRun | None:
-        try:
-            data = json.loads(record.payload_json or "{}")
-            if isinstance(data, dict):
-                return agent_run_from_dict(data)
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("agent run payload invalid: %s", exc)
-        return None
+    _task_record_to_model = staticmethod(_task_record_to_model)
+    _command_record_to_model = staticmethod(_command_record_to_model)
+    _record_to_run = staticmethod(_record_to_run)
 
 
 __all__ = ["SQLAlchemyAgentRunRepository"]

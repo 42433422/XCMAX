@@ -62,12 +62,9 @@ def _constraints_path() -> Path:
     override = (os.environ.get("XCAGI_SOFT_CONSTRAINTS_PATH") or "").strip()
     if override:
         return Path(override)
-    return (
-        Path(__file__).resolve().parents[4]
-        / "resources"
-        / "routing_policies"
-        / "soft_constraints.json"
-    )
+    from app.neuro_bus.routing.policy_paths import resolve_policy_file
+
+    return resolve_policy_file("soft_constraints.json")
 
 
 def load_soft_constraints(path: Path | None = None) -> SoftConstraints:

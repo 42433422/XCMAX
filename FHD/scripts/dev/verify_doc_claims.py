@@ -36,18 +36,19 @@ import sys
 from pathlib import Path
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = FHD_ROOT.parent
 PYPROJECT = FHD_ROOT / "pyproject.toml"
 VITEST_CONFIG = FHD_ROOT / "frontend" / "vitest.config.js"
 BASELINE = FHD_ROOT / "metrics" / "coverage_ratchet_baseline.json"
 DUAL_SUMMARY = FHD_ROOT / "metrics" / "coverage-dual-summary.json"
 
-# workspace 规则（根仓 .trae/rules）与 FHD 文档
+# 覆盖率宣称文档清单（CI_SSOT 在根仓 docs/，非 FHD/docs/）。
+# 不存在的文件由 scan_docs 跳过（如本地 workspace 规则 .trae/rules/ 未纳入 git 跟踪）。
 DEFAULT_DOCS = [
-    FHD_ROOT / "docs" / "CI_SSOT.md",
+    REPO_ROOT / "docs" / "CI_SSOT.md",
     FHD_ROOT / "docs" / "reports" / "COVERAGE_RAMP.md",
-    FHD_ROOT / "reports" / "COVERAGE_RAMP.md",
     FHD_ROOT / "CHANGELOG.md",
-    Path("/Users/a4243342/Desktop/XCMAX/.trae/rules/cicd-e2e-prompt.md"),
+    REPO_ROOT / ".trae" / "rules" / "cicd-e2e-prompt.md",
 ]
 
 FE_KEYS = ("lines", "branches", "functions", "statements")

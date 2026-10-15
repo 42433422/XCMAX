@@ -178,6 +178,43 @@ class TestOpenAICompatibleAdapter:
         a = OpenAICompatibleAdapter(provider="unknownvendor", api_key="k")
         assert a._base_url.endswith("/v1") or "openai.com" in a._base_url
 
+    def test_xcauto_virtual_model_kept_on_gateway(self):
+        """账户虚拟名在修茈网关（默认端点）保持不变。"""
+        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        a = OpenAICompatibleAdapter(provider="xcauto", api_key="k")
+        assert a.model_name == "xcauto-account"
+
+    def test_xcauto_virtual_model_mapped_on_xiaomi_endpoint(self):
+        """base_url 直指小米 token-plan 时，虚拟名映射为小米真实模型（否则端点 400）。"""
+        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        a = OpenAICompatibleAdapter(
+            provider="xcauto", api_key="k", base_url="https://token-plan-cn.xiaomimimo.com/v1"
+        )
+        assert a.model_name == "mimo-v2.5-pro"
+
+    def test_xcauto_substring_host_not_matched(self):
+        """仅子串包含域名的非小米主机不触发映射（精确主机判定，防 CodeQL REDOS/绕过类问题）。"""
+        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        a = OpenAICompatibleAdapter(
+            provider="xcauto", api_key="k", base_url="https://evil.com/?x=xiaomimimo.com"
+        )
+        assert a.model_name == "xcauto-account"
+
+    def test_xcauto_explicit_model_survives_endpoint_switch(self):
+        """显式指定的真实模型不被端点映射覆盖。"""
+        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        a = OpenAICompatibleAdapter(
+            provider="xcauto",
+            api_key="k",
+            model="mimo-v2.5-pro",
+            base_url="https://token-plan-cn.xiaomimimo.com/v1",
+        )
+        assert a.model_name == "mimo-v2.5-pro"
+
     def test_normalize_base_url_already_versioned(self):
         a = self._make_adapter()
         a._base_url = "https://api.example.com/v1"

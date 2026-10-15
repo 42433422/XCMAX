@@ -122,24 +122,26 @@ async def test_execute_compat_chat_attaches_agent_run_id() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_compat_chat_uses_ai_chat_mainline_when_enabled() -> None:
-    body = XcagiCompatChatBody(message="查询产品库", user_id="u42", source="desktop")
+@pytest.mark.parametrize("pending_user", ["u42", "another-conversation"])
+async def test_execute_compat_chat_uses_ai_chat_mainline_when_enabled(pending_user: str) -> None:
+    body = XcagiCompatChatBody(
+        message="查询客户 Mac补参验收客户",
+        user_id="u42",
+        source="normal",
+        context={"use_ai_chat_mainline": True},
+    )
 
     with (
         patch(
-            "app.application.normal_chat_dispatch.try_normal_slot_read_payload", return_value=None
+            "app.application.get_ai_chat_app_service",
+            return_value=MagicMock(_pending_workflows={pending_user: {"kind": "clarification"}}),
         ),
-        patch("app.application.planner_compat_service.set_llm_mode"),
         patch(
-            "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-            return_value=({"use_ai_chat_mainline": True}, []),
-        ),
+            "app.application.normal_chat_dispatch.build_customers_query_response_dict",
+            return_value={"success": True, "response": "query"},
+        ) as mock_query,
         patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
         patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-        patch(
-            "app.application.planner_compat_service.runtime_context_with_tier",
-            return_value={"use_ai_chat_mainline": True, "ai_tier": "p1"},
-        ),
         patch(
             "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
             new_callable=AsyncMock,
@@ -149,22 +151,6 @@ async def test_execute_compat_chat_uses_ai_chat_mainline_when_enabled() -> None:
         patch(
             "app.application.planner_compat_service._ensure_chat_db_read_authorized",
             return_value=(True, None),
-        ),
-        patch(
-            "app.application.planner_compat_service._message_requires_db_read_token",
-            return_value=False,
-        ),
-        patch(
-            "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-            return_value=None,
-        ),
-        patch(
-            "app.application.planner_compat_service._ensure_vector_index_if_needed",
-            return_value=None,
-        ),
-        patch(
-            "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-            return_value=30.0,
         ),
         patch(
             "app.application.planner_compat_service._attach_compat_chat_trace",
@@ -184,8 +170,14 @@ async def test_execute_compat_chat_uses_ai_chat_mainline_when_enabled() -> None:
         result = await execute_compat_chat(_make_request(), body)
 
     assert result["success"] is True
-    assert result["response"] == "mainline"
-    mock_mainline.assert_awaited_once()
+    if pending_user == "u42":
+        assert result["response"] == "mainline"
+        mock_mainline.assert_awaited_once()
+        mock_query.assert_not_called()
+    else:
+        assert result["response"] == "query"
+        mock_mainline.assert_not_called()
+        mock_query.assert_called_once()
     mock_legacy.assert_not_called()
 
 
@@ -368,7 +360,22 @@ async def test_execute_compat_chat_batch_precreates_agent_run_per_message() -> N
         assert runtime_context["agent_run_id"] == run_id
 
 
-def test_stream_done_result_attaches_agent_run_id() -> None:
+@pytest.mark.parametrize("failed_tool", [False, True])
+def test_stream_done_result_attaches_agent_run_id(failed_tool: bool) -> None:
+    records = (
+        [
+            {
+                "tool_name": "execute_erp_capability",
+                "tool_id": "sales",
+                "action": "create_order",
+                "params": {},
+                "success": False,
+                "output": {"success": False, "error": "customer not found"},
+            }
+        ]
+        if failed_tool
+        else []
+    )
     repo = InMemoryAgentRunRepository()
     body = XcagiCompatChatBody(message="hello", user_id="stream-user", source="desktop")
 
@@ -410,7 +417,12 @@ def test_stream_done_result_attaches_agent_run_id() -> None:
         patch.object(
             stream_helpers,
             "_xcagi_guarded_planner_stream_events",
-            return_value=iter([{"type": "token", "text": "hello"}, {"type": "done"}]),
+            return_value=iter(
+                [
+                    {"type": "token", "text": "hello"},
+                    {"type": "done", "result": {"legacy_tool_records": records}},
+                ]
+            ),
         ) as mock_stream,
     ):
         chunks = list(
@@ -430,7 +442,11 @@ def test_stream_done_result_attaches_agent_run_id() -> None:
     assert run is not None
     assert run.user_id == "stream-user"
     assert run.metadata["channel"] == "compat_chat_stream"
-    assert run.metadata["trace_mode"] == "legacy_planner_run"
+    assert run.metadata["trace_mode"] == (
+        "legacy_planner_run_with_tools" if failed_tool else "legacy_planner_run"
+    )
+    assert run.status == ("failed" if failed_tool else "completed")
+    assert len(run.tool_calls) == int(failed_tool)
     assert "planner.started" in [event.event_type for event in run.events]
     assert "planner.completed" in [event.event_type for event in run.events]
     runtime_context = mock_stream.call_args.kwargs["runtime_context"]

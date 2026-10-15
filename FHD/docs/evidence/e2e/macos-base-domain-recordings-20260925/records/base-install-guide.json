@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "feature": "base-install-guide",
+  "platform": "macos",
+  "result": "PARTIAL",
+  "status": "partial",
+  "verified_at": "2026-09-25T00:29:42.010Z",
+  "product_version": "1.0.0.5",
+  "git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+  "source_main_sha": "93b9ad2f68b72103816d4e0b75ff9165f60f9267",
+  "test_method": "ui",
+  "target": "/onboarding",
+  "scope": "初始化引导第一步打开并渲染；未提交向导或验证重启后持久化。",
+  "screenshot": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-install-guide.png",
+  "video": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-install-guide.webm",
+  "log": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-install-guide.log",
+  "media": [
+    {
+      "kind": "screenshot",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-install-guide.png",
+      "sha256": "66a86eb76e67dd57d6a3c00e8e847c1462a4af8001ff18c1376520a8fc80db6f"
+    },
+    {
+      "kind": "video",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-install-guide.webm",
+      "sha256": "438e496afcf4e1fc2a55a0aee66de0fd40d727d279507fa4a41226fb7dc75d75"
+    },
+    {
+      "kind": "log",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-install-guide.log",
+      "sha256": "7f2c6f03e1c661e703a7fa118937a2835d4b4b9dbbc721bf8b3dfcb8ab846454"
+    }
+  ],
+  "limitations": "Supplementary observation only; this record is not an acceptance PASS."
+}

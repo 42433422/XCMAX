@@ -1,0 +1,28 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "G9.download",
+  "platform": "macos",
+  "round": "2026-09-18",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "downloaded_artifact": {
+    "path": "~/Library/Caches/xcagi-desktop-updater/update.zip",
+    "size": 264715517,
+    "sha256": "5d51fbcbe27b8abe211ca51f8cb80c979d13d4c50c7fdb2901d485fe6f32786d"
+  },
+  "official_artifact": {
+    "filename": "XCAGI-Enterprise-1.0.0.5-mac-arm64.zip",
+    "size": 264715517,
+    "sha256": "5d51fbcbe27b8abe211ca51f8cb80c979d13d4c50c7fdb2901d485fe6f32786d"
+  },
+  "byte_identical": true,
+  "retry_history": {
+    "failed_attempts": 4,
+    "failure": "net::ERR_CONNECTION_CLOSED（本机出口 74.207.241.28 海外节点 → 中国 CVM 长连接中断，非产物缺陷）",
+    "successful_attempt": "2026-09-18T10:59:03.340Z download_start → 11:08:33.688Z update_downloaded",
+    "driver": "ota_retry_loop.sh（自动重试真实「下载更新」按钮，MAX=6）",
+    "log": "round-20260918-g9-ota-retry-loop.log"
+  },
+  "verdict": "PASS"
+}

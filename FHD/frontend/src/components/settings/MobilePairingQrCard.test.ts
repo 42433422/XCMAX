@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('qrcode', () => ({
   default: {
@@ -14,18 +14,20 @@ vi.mock('@/utils/apiBase', () => ({
 
 const mockLoadDesktopPairingPayload = vi.fn()
 vi.mock('@/api/mobilePairing', () => ({
+  applyDevProxyReachablePort: (payload: Record<string, unknown>) => payload,
   buildPairingQrText: () => 'qr-text',
-  fetchHostDiscoverHint: vi.fn().mockResolvedValue({}),
+  fetchHostDiscoverHint: vi.fn().mockResolvedValue({ api_port: 5000 }),
   issueMobilePairing: vi.fn().mockResolvedValue({
     host: '127.0.0.1',
     port: 5000,
     nonce: 'n1',
     shortCode: '123456',
     exp: Math.floor(Date.now() / 1000) + 300,
+    qr_json: { kind: 'xcagi_relay_pairing', relay_id: 'relay-1', code: '123456' },
   }),
   loadDesktopPairingPayload: (...args: unknown[]) => mockLoadDesktopPairingPayload(...args),
   resolvePairingHost: () => '127.0.0.1',
-  resolvePairingPortHint: () => 5000,
+  resolveReachablePairingPort: (port: number) => port,
 }))
 
 import MobilePairingQrCard from './MobilePairingQrCard.vue'
@@ -35,6 +37,7 @@ function jsonRes(body: unknown, ok = true) {
 }
 
 describe('MobilePairingQrCard.vue', () => {
+  afterEach(() => vi.unstubAllGlobals())
   beforeEach(() => {
     mockApiFetch.mockReset()
     mockLoadDesktopPairingPayload.mockReset()
@@ -80,5 +83,68 @@ describe('MobilePairingQrCard.vue', () => {
     const wrapper = mount(MobilePairingQrCard)
     await flushPromises()
     expect(wrapper.text()).toContain('尚未绑定手机')
+  })
+
+  it('renders the relay QR code, device code and countdown after pairing succeeds', async () => {
+    const wrapper = mount(MobilePairingQrCard)
+    await flushPromises()
+    // 桌面 IPC 缺省时，后端签发的云中继码仍可在 UI 显示。
+    expect(wrapper.find('img.mobile-pairing__qr').attributes('src')).toBe('data:image/png;base64,fakeqr')
+    expect(wrapper.find('.mobile-pairing__code-value').text()).toBe('123456')
+    expect(wrapper.find('.mobile-pairing__countdown').text()).toContain('秒')
+  })
+
+  it('prefers the relay pairing code from qr_json when present', async () => {
+    mockLoadDesktopPairingPayload.mockResolvedValue({
+      host: '127.0.0.1',
+      port: 5000,
+      nonce: 'n-desktop',
+      shortCode: '000000',
+      exp: Math.floor(Date.now() / 1000) + 300,
+      qr_json: { kind: 'xcagi_relay_pairing', code: '654321' },
+    })
+    const wrapper = mount(MobilePairingQrCard)
+    await flushPromises()
+    expect(wrapper.find('.mobile-pairing__code-value').text()).toBe('654321')
+  })
+
+  it('does not advertise a LAN-only code when cloud registration failed', async () => {
+    vi.stubGlobal('xcagiDesktop', {})
+    mockLoadDesktopPairingPayload.mockResolvedValue({
+      host: '192.168.10.8',
+      port: 17500,
+      nonce: 'lan-nonce',
+      shortCode: '111111',
+      exp: Math.floor(Date.now() / 1000) + 300,
+      qr_json: { kind: 'xcagi_pairing', code: '111111' },
+    })
+    const wrapper = mount(MobilePairingQrCard)
+    await flushPromises()
+    expect(wrapper.find('.mobile-pairing__code-value').exists()).toBe(false)
+    expect(wrapper.find('img.mobile-pairing__qr').exists()).toBe(false)
+    expect(wrapper.text()).toContain('无法生成二维码')
+  })
+
+  it('copies the pairing code to the clipboard and shows the toast', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    const wrapper = mount(MobilePairingQrCard)
+    await flushPromises()
+    await wrapper.find('.mobile-pairing__copy-code').trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith('123456')
+    expect(wrapper.find('.mobile-pairing__copy-toast').exists()).toBe(true)
+  })
+
+  it('clears timers on unmount', async () => {
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+    const wrapper = mount(MobilePairingQrCard)
+    await flushPromises()
+    wrapper.unmount()
+    expect(clearIntervalSpy).toHaveBeenCalled()
+    expect(clearTimeoutSpy).toHaveBeenCalled()
+    clearIntervalSpy.mockRestore()
+    clearTimeoutSpy.mockRestore()
   })
 })

@@ -10,20 +10,13 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-
+from tests.test_application.ai_chat_test_helpers import (
+    _make_svc as _make_service,
+)
 
 # ---------------------------------------------------------------------------
 # Helper: create service with all heavy deps mocked
 # ---------------------------------------------------------------------------
-def _make_service():
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
 
 
 # ========================= _skip_pro_excel_deterministic_import =============
@@ -849,7 +842,7 @@ class TestProcessChat:
         ):
             service = _make_service()
             service.ai_service = mock_ai
-            result = service.process_chat("u1", "你好呀", source=None)
+            result = service.process_chat("u1", "随便说点什么", source=None)
         assert result["success"] is False
         assert "连接失败" in result["message"]
 
@@ -864,7 +857,7 @@ class TestProcessChat:
         ):
             service = _make_service()
             service.ai_service = mock_ai
-            result = service.process_chat("u1", "你好呀", source=None)
+            result = service.process_chat("u1", "随便说点什么", source=None)
         assert result["success"] is False
         assert "超时" in result["message"]
 
@@ -879,7 +872,7 @@ class TestProcessChat:
         ):
             service = _make_service()
             service.ai_service = mock_ai
-            result = service.process_chat("u1", "你好呀", source=None)
+            result = service.process_chat("u1", "随便说点什么", source=None)
         assert result["success"] is False
         assert "AI 服务暂时不可用" in result["message"]
 

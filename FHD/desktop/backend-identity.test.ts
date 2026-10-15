@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   userData: '',
   packaged: true,
   spawn: vi.fn(),
+  lifecycle: [] as string[],
 }))
 
 vi.mock('electron', () => ({
@@ -16,8 +17,11 @@ vi.mock('electron', () => ({
     getPath: () => state.userData,
     getVersion: () => '1.0.0',
     isQuitting: false,
+    quit: vi.fn(),
   },
-  dialog: { showErrorBox: vi.fn() },
+  // 提示必须挂到窗口上：macOS 上无窗口的 showMessageBox 会以 NSAlert.runModal 阻塞主进程。
+  BrowserWindow: { getAllWindows: () => [{ isDestroyed: () => false }] },
+  dialog: { showErrorBox: vi.fn(), showMessageBox: vi.fn(() => Promise.resolve({ response: 0 })) },
 }))
 vi.mock('node:child_process', () => ({ spawn: state.spawn, execFile: vi.fn() }))
 vi.mock('./desktop-config', async importOriginal => ({
@@ -26,6 +30,8 @@ vi.mock('./desktop-config', async importOriginal => ({
 }))
 vi.mock('./rollback', () => ({
   prepareRollback: vi.fn(async () => undefined),
+  markPreparedRollbackRecoveryRequired: vi.fn(() => state.lifecycle.push('intent')),
+  clearPreparedRollbackRecoveryRequired: vi.fn(() => state.lifecycle.push('clear')),
   cancelPreparedRollback: vi.fn(),
   attachDatabaseBackupToRollback: vi.fn(),
   triggerRollback: vi.fn(),
@@ -35,6 +41,7 @@ vi.mock('./desktop-resilience', () => ({ createForceUpgradeHandler: vi.fn() }))
 import { desktopBackendEnv } from './backend-env'
 import { startBackend, runBackendMigrationWithRollback } from './backend-process'
 import { desktopRuntime } from './runtime-state'
+import { markPreparedRollbackRecoveryRequired, clearPreparedRollbackRecoveryRequired } from './rollback'
 
 describe('packaged backend build identity resource handoff', () => {
   let root: string
@@ -46,6 +53,7 @@ describe('packaged backend build identity resource handoff', () => {
     resources = path.join(root, 'XCAGI.app', 'Contents', 'Resources')
     state.userData = path.join(root, 'user-data')
     state.packaged = true
+    state.lifecycle.length = 0
     fs.mkdirSync(path.join(resources, 'backend'), { recursive: true })
     fs.mkdirSync(state.userData)
     fs.writeFileSync(path.join(resources, 'build-info.json'), JSON.stringify({
@@ -63,7 +71,10 @@ describe('packaged backend build identity resource handoff', () => {
       const child = Object.assign(new EventEmitter(), {
         stdout: new EventEmitter(), stderr: new EventEmitter(), kill: vi.fn(),
       })
-      if (args.includes('--migrate-only')) queueMicrotask(() => child.emit('exit', 0))
+      if (args.includes('--migrate-only')) {
+        state.lifecycle.push('spawn')
+        queueMicrotask(() => child.emit('exit', 0))
+      }
       return child
     })
   })
@@ -110,6 +121,15 @@ describe('packaged backend build identity resource handoff', () => {
 
   it('hands the same Resources to the actual migration spawn', async () => {
     await runBackendMigrationWithRollback('1.0.0.1')
+    if (process.platform === 'win32') {
+      expect(markPreparedRollbackRecoveryRequired).toHaveBeenCalledOnce()
+      expect(clearPreparedRollbackRecoveryRequired).toHaveBeenCalledOnce()
+      expect(state.lifecycle).toEqual(['intent', 'spawn', 'clear'])
+    } else {
+      expect(markPreparedRollbackRecoveryRequired).not.toHaveBeenCalled()
+      expect(clearPreparedRollbackRecoveryRequired).not.toHaveBeenCalled()
+      expect(state.lifecycle).toEqual(['spawn'])
+    }
     expect(state.spawn).toHaveBeenCalledTimes(1)
     expect(state.spawn.mock.calls[0][1]).toContain('--migrate-only')
     expect(state.spawn.mock.calls[0][2].env.XCAGI_DESKTOP_RESOURCES).toBe(resources)

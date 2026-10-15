@@ -17,33 +17,32 @@ import importlib
 import logging
 import os
 import re
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.application.facades.query_facade import query_service
 from app.bootstrap import get_shipment_application_service_core
-from app.db.models import ShipmentRecord
 from app.fastapi_routes import shipment_agent_runtime as _shipment_agent_runtime
+from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,
     resolve_under_allowed_dirs,
 )
-from app.utils.security.secure_filename import secure_filename
 
 _agent_node_output = _shipment_agent_runtime.agent_node_output
-_shipment_agent_user_id = _shipment_agent_runtime.shipment_agent_user_id
 _run_shipment_records_agent = _shipment_agent_runtime.run_shipment_records_agent
 _run_shipment_orders_agent = _shipment_agent_runtime.run_shipment_orders_agent
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["shipment-orders-compat"])
+router = APIRouter(
+    tags=["shipment-orders-compat"],
+    dependencies=[Depends(require_scoped_business_permission("shipment.view", "shipment.edit"))],
+)
 
 
 def _svc():
@@ -51,9 +50,9 @@ def _svc():
 
 
 def _resolve_shipment_output_path(file_arg: object) -> Path | None:
-    from app.utils.path_io.path_utils import get_app_data_dir
+    from app.utils.path_io.path_utils import get_shipment_output_dir
 
-    output_dir = Path(get_app_data_dir()).resolve() / "shipment_outputs"
+    output_dir = Path(get_shipment_output_dir()).resolve()
     try:
         candidate = resolve_under_allowed_dirs(str(file_arg or ""), [output_dir])
     except (OSError, UnsafeDownloadPathError):
@@ -80,26 +79,11 @@ def _safe_shipment_export_path(result: dict[str, Any]) -> str | None:
 
 
 def _next_order_number_payload(suffix: str = "A") -> dict[str, Any]:
-    today = datetime.now()
-    year = today.strftime("%y")
-    month = today.strftime("%m")
-    start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    next_month = (start + timedelta(days=32)).replace(day=1)
-    count = query_service.count(
-        ShipmentRecord,
-        created_at__gte=start,
-        created_at__lt=next_month,
-    )
-    next_sequence = int(count) + 1
-    order_number = f"{year}-{month}-{next_sequence:05d}{suffix}"
-    return {
-        "success": True,
-        "data": {
-            "order_number": order_number,
-            "sequence": next_sequence,
-            "year_month": f"{year}-{month}",
-        },
-    }
+    try:
+        return {"success": True, "data": _svc().reserve_order_number(suffix)}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("订单取号失败")
+        raise HTTPException(status_code=503, detail="订单取号失败，请稍后重试") from exc
 
 
 @router.get("/orders/next_number")
@@ -109,11 +93,7 @@ def orders_next_number_root(suffix: str = Query(default="A")):
 
 @router.get("/api/shipment/orders/next_number")
 def orders_next_number_under_shipment(suffix: str = Query(default="A")):
-    # 与归档 ``shipment.get_next_order_number`` 一致：后缀须为单个大写字母，否则回退 A
-    suf = (suffix or "").strip().upper()
-    if not (len(suf) == 1 and re.fullmatch(r"[A-Z]", suf)):
-        suf = "A"
-    return _next_order_number_payload(suf)
+    return _next_order_number_payload(suffix)
 
 
 @router.get("/api/orders/next_number")
@@ -152,7 +132,16 @@ def shipment_generate(request: Request, payload: dict[str, Any] = Body(default_f
         result = _run_shipment_orders_agent(
             request=request,
             action="generate",
-            params={"unit_name": unit_name, "products": products, "date": date},
+            params={
+                "unit_name": unit_name,
+                "products": products,
+                "date": date,
+                **{
+                    key: payload[key]
+                    for key in ("template_id", "template_name", "order_number")
+                    if key in payload
+                },
+            },
             route_path="/api/shipment/generate",
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
@@ -207,24 +196,12 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
 
 @router.get("/api/shipment/download/{filename:path}")
 def shipment_download(filename: str):
-    from app.utils.path_io.path_utils import get_app_data_dir
-
-    output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
-    base_name = os.path.basename(str(filename or "").replace("\\", "/"))
-    safe = secure_filename(base_name)
-    if not safe or safe != base_name:
+    if not filename or "/" in filename or "\\" in filename:
         return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
-    file_path = os.path.join(output_dir, safe)
-    if file_path and os.path.exists(file_path):
-        return FileResponse(
-            file_path,
-            filename=safe,
-            media_type="application/octet-stream",
-        )
-    return JSONResponse(
-        {"success": False, "message": "文件不存在"},
-        status_code=404,
-    )
+    file_path = _resolve_shipment_output_path(filename)
+    if file_path is None:
+        return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
+    return FileResponse(file_path, filename=filename, media_type="application/octet-stream")
 
 
 @router.get("/api/shipment/orders/purchase-units")

@@ -1,0 +1,10 @@
+[07:02:23] feature=pay-author-revenue base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-author-revenue
+[07:02:34] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:02:41] case PA1: passed - 「员工自治」页真实渲染
+[07:02:44] case PA2: passed - 已安装商品作者归属（author）真实读取
+[07:02:44] case PA3: passed - 月度营收趋势口径真实读取
+[07:02:44] case PA4: passed - 生态分润对账员工在册且状态就绪
+[07:02:44] case PA5: passed - 结算应付台账真实读取
+[07:02:45] case PA6: passed - 市场结算钱包视图未绑定市场账号被拒
+[07:02:45] video: pay-author-revenue-web-20260929-070223.webm (1474139 bytes)
+[07:02:45] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-author-revenue/log/pay-author-revenue-web-20260929-070223.log

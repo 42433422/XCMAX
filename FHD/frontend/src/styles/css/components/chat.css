@@ -503,6 +503,12 @@
   flex-wrap: wrap;
 }
 
+/* 价值展示条：快捷按钮行最右（考勤等按钮右边），与按钮同高顶置 */
+.quick-actions .value-stats-bar {
+  margin-left: auto;
+  align-self: center;
+}
+
 .quick-btn {
   padding: 8px 13px;
   border: 1px solid rgba(190, 203, 221, 0.82);

@@ -1,0 +1,67 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。账号仅记录用户名。",
+  "kind": "feature-acceptance",
+  "feature": "ch-task-center",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929b",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "app_version": "1.0.0.5",
+  "account": "SUNBIRD",
+  "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。业务审批工作台。待我审批为 0。我发起的 3、已通过 3。列表含「MAC验收0929通知」2026/9/29 已通过。 各步结果均为通过。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/agent/tasks",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/agent/tasks（写操作自动附带 CSRF）：任务列表",
+      "expected": "任务列表：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 71ms；任务 13",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/approval/requests",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/approval/requests?status=pending（写操作自动附带 CSRF）：审批待办",
+      "expected": "审批待办：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 19ms；{\"page\": 1, \"page_size\": 50, \"total\": 0, \"returned\": 0}",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "界面路由 /approval-hub/workspace",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /approval-hub/workspace，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /approval-hub/workspace，页面可见 审批，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /approval-hub/workspace；命中文本 ['审批']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 业务审批 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 工作台 | 流程管理 | 流程规则 | 审批工作台 |  | 处理待审批事项，跟踪审批进度 |  | 0 | 待审批 | 3 | 我发起的 | 3 | 已通过 | 0 | 已拒绝 | 待我审批",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "ch-task-center",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ch-task-center/macos/result.png",
+      "sha256": "11e3efa8f6b593d741149ff0fb955c969cd04973d563809eb35c1a43bd8464c1",
+      "visual_review": "accepted",
+      "visible_result": "业务审批工作台。待我审批为 0。我发起的 3、已通过 3。列表含「MAC验收0929通知」2026/9/29 已通过。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ch-task-center",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ch-task-center/macos/operation.webm",
+      "sha256": "72c0ae4223029a98da598e66e309d9934c8a35f47ef118606277718a4ad0a6f7",
+      "visual_review": "accepted",
+      "visible_result": "录屏结束停在上述结果画面。业务审批工作台。待我审批为 0。我发起的 3、已通过 3。列表含「MAC验收0929通知」2026/9/29 已通过。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ch-task-center/macos/run.log",
+    "sha256": "cd0d9f194ad1ae8cbb8342fb3bec39a5605e18326ef60d5a99b7b44178b61731",
+    "bytes": 1250
+  }
+}

@@ -1,0 +1,326 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "base-register",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-082459",
+  "generated_at": "2026-09-29 08:25:12",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在管理端页面上下文执行账户注册与找回：真实 POST /api/auth/register 成功创建账号并返回角色/租户 → 空参数注册被拒（400 INVALID_INPUT）→ 找回账号缺少有效邮箱被拒（400）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 25278,
+        "processed": 25278,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.search",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "error.occurred",
+                "evolution.index"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/base-register/base-register-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "base-register",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-register/shot/00-login-form.png",
+      "sha256": "414431fe7c69a21a2a1ef30b66120404bce84b51051110e5dee1c3977f037958",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "base-register",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-register/shot/BR1-register-ok.png",
+      "sha256": "564c79067fb7acd9e0813e060272fb64b419027dde2cd74ff88a81b4cb7234bf",
+      "visual_review": "accepted",
+      "visible_result": "POST /api/auth/register 200 success=true，user.username=qa_reg_…、role=viewer、tenant_id=2、account_kind=personal，并建立 session_id。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "base-register",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-register/shot/BR2-register-missing.png",
+      "sha256": "cd72535366ea86f8ce29e11a39141ebf13043aa8e33da3d8b2839db00e877a54",
+      "visual_review": "accepted",
+      "visible_result": "空 body 注册 → 400、error.code=INVALID_INPUT、message=用户名和密码不能为空。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "base-register",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-register/shot/BR3-forgot-account-negative.png",
+      "sha256": "897c3a1141cc6673be7b4b164d017831cc2ba3cd8cb2132683152e124507c8dc",
+      "visual_review": "accepted",
+      "visible_result": "POST /api/auth/forgot-account 仅给 username → 400、INVALID_INPUT、请填写有效邮箱。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "base-register",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-register/video/base-register-web-20260929-082459.webm",
+      "sha256": "3a3418bb0b7cda21aadafe4da7651e0e9978c269f919eab8ff8087a9dee4064a",
+      "visual_review": "accepted",
+      "visible_result": "录像（webm，11.64s）：页面上下文真实完成 注册成功 / 空参拒绝 / 找回缺邮箱拒绝。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "BR1",
+      "title": "真实注册创建账号",
+      "input": "唯一用户名/密码/邮箱，在已登录页面上下文提交注册。",
+      "actions": "页面上下文 POST /api/auth/register（带 CSRF 双提交）。",
+      "expected": "200、success=true、返回新用户名与角色（viewer）。",
+      "observed": "{\"status\": 200, \"success\": true, \"username\": \"qa_reg_1790641511\", \"role\": \"viewer\", \"tenant_id\": null}",
+      "result": "passed"
+    },
+    {
+      "id": "BR2",
+      "title": "空参数注册被拒（边界/负例）",
+      "input": "空对象。",
+      "actions": "页面上下文 POST /api/auth/register 空 body。",
+      "expected": "400 且错误码 INVALID_INPUT。",
+      "observed": "{\"status\": 400, \"error_code\": \"INVALID_INPUT\", \"message\": \"用户名和密码不能为空\"}",
+      "result": "passed"
+    },
+    {
+      "id": "BR3",
+      "title": "账号找回缺少有效邮箱被拒（负例）",
+      "input": "只给 username、无邮箱。",
+      "actions": "页面上下文 POST /api/auth/forgot-account。",
+      "expected": "400 且错误码 INVALID_INPUT（提示填写有效邮箱）。",
+      "observed": "{\"status\": 400, \"error_code\": \"INVALID_INPUT\", \"message\": \"请填写有效邮箱\"}",
+      "result": "passed"
+    }
+  ]
+}

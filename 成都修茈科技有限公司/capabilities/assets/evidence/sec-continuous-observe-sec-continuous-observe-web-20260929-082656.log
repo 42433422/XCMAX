@@ -1,0 +1,7 @@
+[08:26:56] feature=sec-continuous-observe base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-continuous-observe
+[08:27:08] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:27:08] case O1: passed - 运行健康接口返回组件与版本
+[08:27:08] case O2: passed - 神经总线持续运行计数可观察
+[08:27:08] case O3: passed - 就绪门禁与详情探针（含降级边界）
+[08:27:09] video: sec-continuous-observe-web-20260929-082656.webm (607817 bytes)
+[08:27:09] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-continuous-observe/log/sec-continuous-observe-web-20260929-082656.log

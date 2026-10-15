@@ -58,21 +58,28 @@ def load_legacy_shipment_document_generator(*, caller_file: str) -> LegacyGenera
             f"未找到包含 shipment_document.py 的 AI 助手目录。可能的目录：{possible_dirs}"
         )
 
+    legacy_file = os.path.join(legacy_dir, "shipment_document.py")
+
     # 方法 1：sys.path + 直接导入
     if legacy_dir not in sys.path:
         sys.path.insert(0, legacy_dir)
 
     try:
-        from shipment_document import PurchaseUnitInfo, ShipmentDocumentGenerator
+        import shipment_document
 
+        # 同名模块可能已被其它调用方（或其它测试）导入并缓存，必须确认它确实
+        # 解析到目标旧版目录，否则退回按文件路径加载，避免拿到错误的实现。
+        resolved = os.path.abspath(str(getattr(shipment_document, "__file__", "") or ""))
+        if resolved != os.path.abspath(legacy_file):
+            raise ImportError(f"shipment_document 解析到非预期路径：{resolved}")
         return LegacyGeneratorLoadResult(
-            ShipmentDocumentGenerator=ShipmentDocumentGenerator,
-            PurchaseUnitInfo=PurchaseUnitInfo,
+            ShipmentDocumentGenerator=shipment_document.ShipmentDocumentGenerator,
+            PurchaseUnitInfo=shipment_document.PurchaseUnitInfo,
             legacy_dir=legacy_dir,
         )
     except RECOVERABLE_ERRORS:
         # 方法 2：importlib 动态导入
-        spec_path = os.path.join(legacy_dir, "shipment_document.py")
+        spec_path = legacy_file
         if not os.path.exists(spec_path):
             raise ImportError(f"文件不存在：{spec_path}")
 

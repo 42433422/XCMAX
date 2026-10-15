@@ -15,7 +15,10 @@ web = [
     # that compatibility alias into a deprecation failure under our strict tests.
     "anyio>=4.4,<4.15",
     "socksio>=1.0",
-    "sqlalchemy>=2.0",
+    # 上界不可去掉：sqlalchemy 2.1.0 收紧 Query 类型推断，使 ~30 个既有模块在
+    # mypy 门禁下被判 56 条错误（2026-09-25 事故 WO-0f1b3d12bab4，代码零变更）。
+    # 2.1 的类型迁移单独立项，迁移完成前不得放行。
+    "sqlalchemy>=2.0,<2.1",
     "alembic>=1.16,<2",
     "psycopg2-binary>=2.9",
     "PyJWT>=2.8",
@@ -77,7 +80,10 @@ dev = [
   "black==26.3.1",
   "isort==6.1.0",
   "jsonschema>=4.21",
-  "mypy>=1.8",
+  # 与 black/isort 同规则精确固定，取 2026-09-24 绿灯 run 实测版本。
+  # 不要降到 1.x：1.19.1 会对 modstore_server/rag_service.py:287 报 arg-type，
+  # 在零代码变更下把门禁打红（2026-09-25 事故 WO-0f1b3d12bab4 实测）。
+  "mypy==2.3.1",
   "openpyxl>=3.1",
   "pypdf>=4.0",
   # test_cache_extra imports RedisError directly; keep the release-gate

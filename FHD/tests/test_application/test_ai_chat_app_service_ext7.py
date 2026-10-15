@@ -11,22 +11,13 @@ import pytest
 
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from tests.test_application.ai_chat_test_helpers import (
+    _make_svc,
+)
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_svc():
-    """构造能正常实例化的服务（模拟所有构造依赖）。"""
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +43,7 @@ class TestProcessChatNeuroBusBranches:
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
                 return_value=None,
             ):
-                result = svc.process_chat("u1", "hello")
+                result = svc.process_chat("u1", "随便说点什么")
         assert result.get("success") is True
 
     def test_neuro_completed_exception_ignored(self):
@@ -72,7 +63,7 @@ class TestProcessChatNeuroBusBranches:
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
                 side_effect=RuntimeError("bus down"),
             ):
-                result = svc.process_chat("u1", "hello")
+                result = svc.process_chat("u1", "随便说点什么")
         assert result.get("success") is True
 
 
@@ -82,6 +73,20 @@ class TestProcessChatNeuroBusBranches:
 
 
 class TestProcessChatAIServiceErrors:
+    @pytest.fixture(autouse=True)
+    def isolate_neuro_notifications(self):
+        with (
+            patch(
+                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received",
+                return_value=None,
+            ),
+            patch(
+                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
+                return_value=None,
+            ),
+        ):
+            yield
+
     def _svc_with_no_workflow(self):
         svc = _make_svc()
         svc._try_handle_dynamic_workflow = MagicMock(return_value=None)
@@ -96,69 +101,34 @@ class TestProcessChatAIServiceErrors:
     def test_connection_error(self):
         svc = self._svc_with_no_workflow()
         svc.ai_service.chat = AsyncMock(side_effect=ConnectionError("refused"))
-        with patch(
-            "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received", return_value=None
-        ):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
-                return_value=None,
-            ):
-                result = svc.process_chat("u1", "hello")
+        result = svc.process_chat("u1", "随便说点什么")
         assert "连接失败" in result["message"]
 
     def test_timeout_error(self):
         svc = self._svc_with_no_workflow()
         svc.ai_service.chat = AsyncMock(side_effect=TimeoutError("timed out"))
-        with patch(
-            "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received", return_value=None
-        ):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
-                return_value=None,
-            ):
-                result = svc.process_chat("u1", "hello")
+        result = svc.process_chat("u1", "随便说点什么")
         assert "超时" in result["message"]
 
     def test_recoverable_error_api_key(self):
         svc = self._svc_with_no_workflow()
         # RuntimeError is in RECOVERABLE_ERRORS; message contains "api_key" → special branch
         svc.ai_service.chat = AsyncMock(side_effect=RuntimeError("invalid api_key provided"))
-        with patch(
-            "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received", return_value=None
-        ):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
-                return_value=None,
-            ):
-                result = svc.process_chat("u1", "hello")
+        result = svc.process_chat("u1", "随便说点什么")
         assert "AI 服务暂时不可用" in result["message"]
 
     def test_recoverable_error_connection(self):
         svc = self._svc_with_no_workflow()
         # ValueError is in RECOVERABLE_ERRORS; message contains "connection" → connection branch
         svc.ai_service.chat = AsyncMock(side_effect=ValueError("connection refused by provider"))
-        with patch(
-            "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received", return_value=None
-        ):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
-                return_value=None,
-            ):
-                result = svc.process_chat("u1", "hello")
+        result = svc.process_chat("u1", "随便说点什么")
         assert "AI 服务暂时不可用" in result["message"]
 
     def test_recoverable_error_other(self):
         svc = self._svc_with_no_workflow()
         # RuntimeError is in RECOVERABLE_ERRORS; generic message → else branch
         svc.ai_service.chat = AsyncMock(side_effect=RuntimeError("internal server error"))
-        with patch(
-            "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received", return_value=None
-        ):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
-                return_value=None,
-            ):
-                result = svc.process_chat("u1", "hello")
+        result = svc.process_chat("u1", "随便说点什么")
         assert "暂时不可用" in result["message"]
 
     def test_excel_file_path_in_file_context(self):
@@ -175,19 +145,12 @@ class TestProcessChatAIServiceErrors:
 
         svc.ai_service.chat = _capture_chat
 
-        with patch(
-            "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received", return_value=None
-        ):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
-                return_value=None,
-            ):
-                svc.process_chat(
-                    "u1",
-                    "导入数据",
-                    context={},
-                    file_context={"file_path": "/tmp/data.xlsx"},
-                )
+        svc.process_chat(
+            "u1",
+            "导入数据",
+            context={},
+            file_context={"file_path": "/tmp/data.xlsx"},
+        )
         assert captured_context.get("excel_analysis", {}).get("file_path") == "/tmp/data.xlsx"
 
     def test_excel_file_path_with_sheet_name(self):
@@ -202,18 +165,11 @@ class TestProcessChatAIServiceErrors:
         svc.ai_service.chat = _capture_chat
         svc._inject_excel_vector_context = MagicMock(side_effect=lambda **kw: kw.get("context", {}))
 
-        with patch(
-            "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received", return_value=None
-        ):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
-                return_value=None,
-            ):
-                svc.process_chat(
-                    "u1",
-                    "导入",
-                    file_context={"file_path": "/tmp/d.xlsx", "sheet_name": "Sheet2"},
-                )
+        svc.process_chat(
+            "u1",
+            "导入",
+            file_context={"file_path": "/tmp/d.xlsx", "sheet_name": "Sheet2"},
+        )
         ea = captured_context.get("excel_analysis", {})
         assert ea.get("sheet_name") == "Sheet2"
 

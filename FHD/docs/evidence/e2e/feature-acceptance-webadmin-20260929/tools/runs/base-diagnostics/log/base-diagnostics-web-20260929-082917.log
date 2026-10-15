@@ -1,0 +1,7 @@
+[08:29:17] feature=base-diagnostics base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-diagnostics
+[08:29:28] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:29:28] case BD1: passed - 诊断能力快照真实返回
+[08:29:29] case BD2: passed - 客户端日志上报成功
+[08:29:29] case BD3: passed - 只写接口用 GET 访问被拒（负例）
+[08:29:30] video: base-diagnostics-web-20260929-082917.webm (592761 bytes)
+[08:29:30] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-diagnostics/log/base-diagnostics-web-20260929-082917.log

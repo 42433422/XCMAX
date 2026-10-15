@@ -49,6 +49,8 @@ async function uploadCrashReports(options: CrashReportingOptions): Promise<void>
           `http://127.0.0.1:${options.port}/api/desktop/crash-report`,
           {
             method: 'POST',
+            // 本机桌面调用无浏览器 CSRF Cookie；路由层仍校验桌面模式与回环来源。
+            headers: { 'X-XCAGI-Desktop-Local': '1' },
             body: formData,
             signal: AbortSignal.timeout(10_000),
           },
@@ -72,7 +74,11 @@ async function sendJsCrashReport(
   try {
     await fetch(`http://127.0.0.1:${options.port}/api/desktop/crash-report`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // 本机桌面调用无浏览器 CSRF Cookie；路由层仍校验桌面模式与回环来源。
+        'X-XCAGI-Desktop-Local': '1',
+      },
       body: JSON.stringify({
         ...payload,
         ts: new Date().toISOString(),

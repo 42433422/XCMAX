@@ -1,0 +1,173 @@
+{
+  "run": "36841870956-1",
+  "phase": "seed",
+  "started_at": "2026-10-01T09:29:38.925Z",
+  "marker": "WIN-GUI-36841870956-1-seed",
+  "names": {
+    "customer": "WIN-GUI-36841870956-1-seed-客户",
+    "product": "WIN-GUI-36841870956-1-seed-产品",
+    "supplier": "WIN-GUI-36841870956-1-seed-供应商",
+    "ai": "WIN-GUI-36841870956-1-seed-AI客户",
+    "cancelled": "WIN-GUI-36841870956-1-seed-取消客户"
+  },
+  "cases": [
+    {
+      "id": "normal_login",
+      "started_at": "2026-10-01T09:29:39.000Z",
+      "input": {
+        "customer": "WIN-GUI-36841870956-1-seed-客户",
+        "product": "WIN-GUI-36841870956-1-seed-产品",
+        "supplier": "WIN-GUI-36841870956-1-seed-供应商",
+        "ai": "WIN-GUI-36841870956-1-seed-AI客户",
+        "cancelled": "WIN-GUI-36841870956-1-seed-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23"
+      },
+      "finished_at": "2026-10-01T09:29:50.626Z"
+    },
+    {
+      "id": "tenant_identity",
+      "started_at": "2026-10-01T09:29:50.626Z",
+      "input": {
+        "customer": "WIN-GUI-36841870956-1-seed-客户",
+        "product": "WIN-GUI-36841870956-1-seed-产品",
+        "supplier": "WIN-GUI-36841870956-1-seed-供应商",
+        "ai": "WIN-GUI-36841870956-1-seed-AI客户",
+        "cancelled": "WIN-GUI-36841870956-1-seed-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "workspace_id": null,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23",
+        "workspace_owner_id": "tenant:1"
+      },
+      "finished_at": "2026-10-01T09:29:50.784Z"
+    },
+    {
+      "id": "customer",
+      "started_at": "2026-10-01T09:29:50.784Z",
+      "input": {
+        "customer": "WIN-GUI-36841870956-1-seed-客户",
+        "product": "WIN-GUI-36841870956-1-seed-产品",
+        "supplier": "WIN-GUI-36841870956-1-seed-供应商",
+        "ai": "WIN-GUI-36841870956-1-seed-AI客户",
+        "cancelled": "WIN-GUI-36841870956-1-seed-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/mod/xcagi-erp-domain-bridge/customers",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1,
+          "customer_name": "WIN-GUI-36841870956-1-seed-客户",
+          "contact_person": "验收员",
+          "contact_phone": "13800000001",
+          "contact_address": "WIN-GUI-36841870956-1-seed隔离验收地址",
+          "created_at": "2026-10-01T09:29:54",
+          "updated_at": "2026-10-01T09:29:54"
+        },
+        "original_fields": {
+          "contact_person": "验收员",
+          "contact_phone": "13800000001",
+          "contact_address": "WIN-GUI-36841870956-1-seed隔离验收地址"
+        },
+        "input_address": "WIN-GUI-36841870956-1-seed隔离验收地址"
+      },
+      "finished_at": "2026-10-01T09:29:55.161Z"
+    },
+    {
+      "id": "product",
+      "started_at": "2026-10-01T09:29:55.161Z",
+      "input": {
+        "customer": "WIN-GUI-36841870956-1-seed-客户",
+        "product": "WIN-GUI-36841870956-1-seed-产品",
+        "supplier": "WIN-GUI-36841870956-1-seed-供应商",
+        "ai": "WIN-GUI-36841870956-1-seed-AI客户",
+        "cancelled": "WIN-GUI-36841870956-1-seed-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/mod/xcagi-erp-domain-bridge/products/add",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": null
+        },
+        "original_fields": {
+          "id": 1,
+          "model_number": "WIN-GUI-36841870956-1-seed",
+          "name": "WIN-GUI-36841870956-1-seed-产品",
+          "specification": "10",
+          "price": 12.5,
+          "quantity": 0,
+          "description": "",
+          "category": "",
+          "brand": "",
+          "unit": "个",
+          "is_active": true,
+          "created_at": "2026-10-01T09:29:55.742052",
+          "updated_at": "2026-10-01T09:29:55.742052"
+        }
+      },
+      "finished_at": "2026-10-01T09:29:57.953Z"
+    },
+    {
+      "id": "old_sign_out",
+      "started_at": "2026-10-01T09:29:59.714Z",
+      "input": {
+        "customer": "WIN-GUI-36841870956-1-seed-客户",
+        "product": "WIN-GUI-36841870956-1-seed-产品",
+        "supplier": "WIN-GUI-36841870956-1-seed-供应商",
+        "ai": "WIN-GUI-36841870956-1-seed-AI客户",
+        "cancelled": "WIN-GUI-36841870956-1-seed-取消客户"
+      },
+      "status": "passed",
+      "actual": {
+        "http_status": 200,
+        "login_ui_visible": true
+      },
+      "finished_at": "2026-10-01T09:30:08.641Z"
+    }
+  ],
+  "observations": [
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/customers",
+      "status": 200,
+      "id": 1,
+      "fields": {
+        "id": 1,
+        "customer_name": "WIN-GUI-36841870956-1-seed-客户",
+        "contact_person": "验收员",
+        "contact_phone": "13800000001",
+        "contact_address": "WIN-GUI-36841870956-1-seed隔离验收地址",
+        "created_at": "2026-10-01T09:29:54",
+        "updated_at": "2026-10-01T09:29:54"
+      },
+      "observed_at": "2026-10-01T09:29:54.759Z"
+    },
+    {
+      "action": "normal_ui_save_response",
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/products/add",
+      "status": 200,
+      "fields": {
+        "id": null
+      },
+      "observed_at": "2026-10-01T09:29:55.781Z"
+    }
+  ],
+  "result": "old_ui_seed_passed",
+  "finished_at": "2026-10-01T09:30:08.641Z",
+  "unfinished": [],
+  "full_customer_acceptance": "not_verified"
+}

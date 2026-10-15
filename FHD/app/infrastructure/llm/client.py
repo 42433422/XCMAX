@@ -1,9 +1,5 @@
-"""LLM 客户端 / 配置门面。
-
-OpenAI 兼容客户端与 online/offline（Ollama）模式切换。
-进程内全局状态,供 planner 与路由层共享。
-
-Phase 5B 从 ``app.legacy.llm_config`` 吸收。
+"""LLM mode configuration and clients: authenticated tool scope takes precedence
+over the process-wide client configured through provider credentials.
 """
 
 from __future__ import annotations
@@ -14,6 +10,9 @@ import os
 import threading
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Literal, cast
 
 logger = logging.getLogger(__name__)
@@ -24,6 +23,17 @@ _client_lock = threading.Lock()
 _mode: Literal["online", "offline"]
 _offline_model: str | None = None
 _openai_client: Any | None = None
+_scoped_client: ContextVar[tuple[Any, str] | None] = ContextVar("scoped_llm_client", default=None)
+
+
+@contextmanager
+def llm_client_scope(client: Any, model: str) -> Iterator[None]:
+    """Reuse the authenticated planner client for nested tools without persisting credentials."""
+    token = _scoped_client.set((client, model))
+    try:
+        yield
+    finally:
+        _scoped_client.reset(token)
 
 
 def _env_mode() -> Literal["online", "offline"] | None:
@@ -182,6 +192,8 @@ def get_offline_status() -> dict[str, Any]:
 
 
 def get_openai_compatible_client() -> Any:
+    if scoped := _scoped_client.get():
+        return scoped[0]
     cli = get_llm_client()
     if cli is None:
         raise RuntimeError("offline mode has no OpenAI-compatible client")
@@ -189,6 +201,8 @@ def get_openai_compatible_client() -> Any:
 
 
 def resolve_chat_model() -> str:
+    if scoped := _scoped_client.get():
+        return scoped[1]
     from app.infrastructure.llm.providers.credentials import resolve_default_chat_model
 
     return resolve_default_chat_model()
@@ -196,6 +210,7 @@ def resolve_chat_model() -> str:
 
 __all__ = [
     "resolve_mode",
+    "llm_client_scope",
     "set_mode",
     "require_api_key",
     "get_llm_client",

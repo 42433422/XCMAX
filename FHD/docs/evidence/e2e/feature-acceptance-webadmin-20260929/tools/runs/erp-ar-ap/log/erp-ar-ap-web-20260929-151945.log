@@ -1,0 +1,8 @@
+[15:19:45] feature=erp-ar-ap platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ar-ap
+[15:19:58] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:20:00] case AR1: passed - 应收真实写-读回
+[15:20:00] case AR2: passed - 应付（采购）真实读回
+[15:20:01] case AR3: passed - 毛利与应收应付看板
+[15:20:01] case AR4: passed - 缺金额被拒（负例）
+[15:20:01] video: erp-ar-ap-web-20260929-151945.webm (1296759 bytes)
+[15:20:01] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ar-ap/log/erp-ar-ap-web-20260929-151945.log

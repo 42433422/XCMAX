@@ -1,0 +1,7 @@
+2026-09-29T20:25:58+0800 [mods-loader] 开始验收 mods-loader Mod 加载与清单校验；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
+2026-09-29T20:25:58+0800 [mods-loader] M1 passed :: HTTP 200 18ms；已加载 14，manifest_errors=[]
+2026-09-29T20:25:58+0800 [mods-loader] M2 passed :: HTTP 200 16ms；{"success": true, "message": "清单校验通过", "data": {"mod_id": "xcagi-erp-domain-bridge", "version": "1.0.0.0", "dependencies": {"xcagi": ">=1.0.0.0"}, "dependencies_satisfied": true}}
+2026-09-29T20:25:58+0800 [mods-loader] M3 passed :: HTTP 200 35ms；24 个
+2026-09-29T20:26:01+0800 [mods-loader] M4 passed :: 导航后路径 /mod-store；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 能力库 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 返回 AI 生态 |  | XCAGI · 能力库 |  | AI 员工市场 |  | 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至
+2026-09-29T20:26:03+0800 [mods-loader] screenshot result.png
+2026-09-29T20:26:07+0800 [mods-loader] video operation.webm bytes=338049

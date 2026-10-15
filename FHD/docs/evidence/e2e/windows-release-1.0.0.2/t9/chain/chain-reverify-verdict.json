@@ -1,0 +1,45 @@
+{
+  "verdict": "PASS",
+  "note": "t9-reverify.py summary line printed 'CHECK' because the checker read add_success/partial_failure from the top-level response body, while the actual API nests them under data[]. Verdict below is recomputed from the raw evidence files chain-biz-post-ota.json and chain-db-snapshot-post-ota.json (no re-run; raw evidence untouched).",
+  "recomputed": {
+    "biz_ok": true,
+    "biz_detail": {
+      "add_status": 200,
+      "add_success": true,
+      "add_source": "mod:xcagi-erp-domain-bridge",
+      "list_status": 200,
+      "list_found": 1,
+      "new_product": "SUNBIRD-t9-post-ota-045248"
+    },
+    "mods_ok": true,
+    "mods_detail": {
+      "mods_status": 200,
+      "partial_failure": false,
+      "mods_loaded": 15,
+      "installed_equals_discovered": true,
+      "load_errors": 0,
+      "blueprint_errors": 0,
+      "load_mismatch": false,
+      "manifest_errors_unknown_entry": "pre-existing baseline noise, identical in pre-OTA chain-biz-result.json"
+    },
+    "employees_ok": true,
+    "employees_detail": {
+      "employees_status": 200,
+      "split_mod_entries": 6
+    },
+    "retained": {
+      "sessions": "27 >= 27",
+      "users": "3 >= 3",
+      "products": "12 >= 10",
+      "all_true": true
+    },
+    "new_product_added": true,
+    "screenshot": "chain-post-ota-ui-1.0.0.4.png"
+  },
+  "post_ota_build": {
+    "version": "1.0.0.4",
+    "gitSha": "604b85e1ee82631418002708def18800d7c7f338",
+    "health_after_relaunch": "healthy, backend version 1.0.0.4"
+  },
+  "recomputed_at": "2026-09-15T05:05:00+08:00"
+}

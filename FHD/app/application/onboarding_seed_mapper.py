@@ -220,21 +220,18 @@ def build_product_row(*, tenant_id: int, profile: OnboardingSeedProfile) -> dict
         mapped[key] = _demo_value_for_field(f, ctx=ctx)
 
     name = profile.demo_product_name
-    if mapped.get("name"):
-        name = profile.demo_product_name
-
     return {
         "tenant_id": tenant_id,
         "name": name,
         "model_number": str(mapped.get("model_number") or "DEMO-001"),
-        "specification": str(mapped.get("specification") or f"{profile.industry_id} 首启样例 SKU"),
+        "specification": str(mapped.get("specification") or "1"),
         "price": mapped.get("price")
         if isinstance(mapped.get("price"), Decimal)
         else Decimal("99.00"),
         "quantity": int(mapped.get("quantity") or 10),
         "category": profile.industry_id,
         "brand": "XCAGI",
-        "unit": str(mapped.get("unit") or "个"),
+        "unit": str(mapped.get("unit") or "kg"),
         "is_active": 1,
     }
 

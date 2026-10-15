@@ -1,0 +1,10 @@
+[06:29:19] feature=ai-employee-publish base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-employee-publish
+[06:29:30] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:29:30] case P1: passed - 办公员工包目录真实读取
+[06:29:30] case P2: passed - 本机已安装员工包清单
+[06:29:30] case P3: passed - 员工包配置预览（打包物 manifest）
+[06:29:30] case P4: passed - 不存在的员工包被拒（负例/边界）
+[06:29:30] case P5: passed - 非法员工包编号被拒（负例/边界）
+[06:29:33] case P6: passed - 私有交付生产中心页面真实渲染
+[06:29:33] video: ai-employee-publish-web-20260929-062919.webm (785661 bytes)
+[06:29:33] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-employee-publish/log/ai-employee-publish-web-20260929-062919.log

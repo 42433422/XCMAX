@@ -1,0 +1,59 @@
+# CI SSOT: generated from FHD/.github/workflows/changelog-gate.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Changelog gate
+
+# 产品代码 PR 必须在 FHD/CHANGELOG.md 的 Unreleased 节新增变更说明。
+
+on:
+  pull_request:
+    branches: [main, master, develop]
+    paths:
+      - "FHD/app/**"
+      - "FHD/config/**"
+      - "FHD/frontend/src/**"
+      - "FHD/desktop/**"
+      - "FHD/desktop_runtime/**"
+      - "FHD/mobile-flutter-poc/**"
+      - "FHD/XCAGI/**"
+      - "FHD/docker/**"
+      - "FHD/scripts/package/**"
+      - "FHD/VERSION.md"
+
+permissions:
+  contents: read
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  changelog:
+    name: Changelog updated
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Require CHANGELOG.md entry on product PRs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git -C "${GITHUB_WORKSPACE}" fetch --no-tags --depth=1 origin "${BASE_SHA}" "${HEAD_SHA}"
+          if [[ "${HEAD_REF}" == autonomy/* ]]; then
+            echo "[skip] autonomy/* 分支豁免（AI 自愈链路）"
+            exit 0
+          fi
+          if git -C "${GITHUB_WORKSPACE}" diff --quiet "${BASE_SHA}" "${HEAD_SHA}" -- FHD/CHANGELOG.md; then
+            echo "::error title=缺少更新日志::产品代码 PR 必须更新 FHD/CHANGELOG.md —— 在「## Unreleased」节为本次变更加一条说明（一行即可，写给非技术读者看）"
+            exit 1
+          fi
+          if [ -z "$(git -C "${GITHUB_WORKSPACE}" diff "${BASE_SHA}" "${HEAD_SHA}" -- FHD/CHANGELOG.md | grep -E '^\+[^+]' | grep -E '\S' || true)" ]; then
+            echo "::error title=更新日志无实质内容::FHD/CHANGELOG.md 没有新增行，请在「## Unreleased」节补充本次变更说明"
+            exit 1
+          fi
+          echo "[ok] CHANGELOG.md 已随本 PR 更新"

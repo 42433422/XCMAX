@@ -92,7 +92,7 @@
           <template #cell-contact_phone="{ value }">
             {{ value || '-' }}
           </template>
-          <template #cell-address="{ value }">
+          <template #cell-contact_address="{ value }">
             {{ value || '-' }}
           </template>
           <template #actions="{ row }">

@@ -1,0 +1,8 @@
+[08:02:27] feature=ops-customer-value base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-customer-value
+[08:02:40] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:02:43] case CV1: passed - 「创始人自治驾驶舱」页真实渲染客户状态卡片
+[08:02:45] case CV2: passed - 客户价值 6 项门禁与行动事项真实读取
+[08:02:49] case CV3: passed - 无会话访问客户价值接口被拒（负例）
+[08:02:52] case CV4: passed - 自治审批总览与只追加审计真实读取
+[08:02:53] video: ops-customer-value-web-20260929-080227.webm (1640373 bytes)
+[08:02:53] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-customer-value/log/ops-customer-value-web-20260929-080227.log

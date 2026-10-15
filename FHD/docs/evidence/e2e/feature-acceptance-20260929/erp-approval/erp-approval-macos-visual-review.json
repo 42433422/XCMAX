@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-approval",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "d26330afc94cc9596d1db9763ea9b219130c63ead734a90cb7a4b8fc1b4f4650",
+  "visible_content": "同会话创建流程 → 提交审批单 → 审批通过，审批工作台读回新审批单为已通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-approval/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-approval/macos/result.png"
+}

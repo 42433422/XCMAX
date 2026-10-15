@@ -270,17 +270,12 @@ bootstrap_vendored_langgraph() {
     return 1
   }
   local pth_tmp="$TMP/xcagi_vendored_langgraph.pth"
-  "$service_python" - "$pth_tmp" "${package_dirs[@]}" <<'PY'
-import sys
+  "$service_python" - "$pth_tmp" "$DEPLOY_ROOT" "${package_dirs[@]}" <<'PY'
+import os, sys
 
-target, *paths = sys.argv[1:]
-line = (
-    "import sys; _xcagi_vendored_paths="
-    + repr(paths)
-    + "; sys.path[:0]=[p for p in _xcagi_vendored_paths if p not in sys.path]\n"
-)
-with open(target, "w", encoding="utf-8") as fh:
-    fh.write(line)
+target, deploy_root, *paths = sys.argv[1:]; relative_paths = [os.path.relpath(path, deploy_root) for path in paths]
+line = "import os,sys; _xcagi_root=next((p for p in sys.path if os.path.isfile(os.path.join(p,'packages','xcagi_langgraph_core','PROVENANCE.json'))),None); _xcagi_relative_paths=" + repr(relative_paths) + "; _xcagi_vendored_paths=[os.path.join(_xcagi_root,p) for p in _xcagi_relative_paths] if _xcagi_root else []; sys.path[:]=[p for p in sys.path if '/packages/xcagi_langgraph_' not in p]; sys.path[:0]=[p for p in _xcagi_vendored_paths if os.path.isdir(p)]\n"
+open(target, "w", encoding="utf-8").write(line)
 PY
   install -m 0644 "$pth_tmp" "$purelib/xcagi_vendored_langgraph.pth"
 
@@ -319,6 +314,24 @@ if [[ "${FHD_RUN_MIGRATIONS:-0}" == "1" && -f "$DEPLOY_ROOT/alembic.ini" ]]; the
   fi
   deploy_emit migrate failed "prohibited_by_autonomy_boundary"
   exit 77
+fi
+
+# Managed systemd drop-ins: keep env-critical service settings aligned across releases.
+# Source of truth lives in the release tree (scripts/deploy/systemd/*.conf); copying is
+# idempotent and daemon-reload only happens when something actually changed.
+DROPIN_DIR="/etc/systemd/system/${SERVICE}.d"
+DROPIN_SRC_DIR="$DEPLOY_ROOT/scripts/deploy/systemd"
+if [[ -d "$DROPIN_SRC_DIR" ]]; then
+  mkdir -p "$DROPIN_DIR"
+  for unit_dropin in "$DROPIN_SRC_DIR"/*.conf; do
+    [[ -f "$unit_dropin" ]] || continue
+    dropin_name="$(basename "$unit_dropin")"
+    if ! cmp -s "$unit_dropin" "$DROPIN_DIR/$dropin_name"; then
+      cp "$unit_dropin" "$DROPIN_DIR/$dropin_name"
+      systemctl daemon-reload
+      deploy_emit dropin synced "file=$dropin_name"
+    fi
+  done
 fi
 
 deploy_emit restart started "service=$SERVICE"

@@ -27,45 +27,29 @@ class _ModManagerPart02Mixin:
         """
         try:
             registry = _facade().get_mod_registry()
-            current_metadata = registry.get_mod_metadata(mod_id)
-            if not current_metadata:
+            if not registry.get_mod_metadata(mod_id):
                 return (False, f"MOD {mod_id} 未安装，请先安装", None)
-            new_package = _facade().ModPackage(package_path)
-            new_manifest = new_package.manifest
-            current_version = current_metadata.version
-            new_version = new_manifest.get("version", "unknown")
-            _facade().logger.info(
-                "Updating MOD %s: v%s -> v%s", mod_id, current_version, new_version
+            with _facade().tempfile.TemporaryDirectory() as temporary:
+                _, manifest = _facade().ModPackage.extract_package(
+                    package_path, temporary, verify_signature=verify_signature
+                )
+                if manifest.get("id") != mod_id:
+                    return (False, "更新包身份与目标 MOD 不一致", None)
+            from app.infrastructure.mods.install_receipts import read_verified_install
+
+            current = read_verified_install(mod_id, mods_root=self.mods_root) or {}
+            return self.install_mod_package(
+                package_path,
+                verify_signature=verify_signature,
+                activate=True,
+                owner_scope=str(current.get("owner_scope") or ""),
             )
-            was_loaded = mod_id in self._loaded_mods
-            if was_loaded:
-                self.unload_mod(mod_id)
-            mod_path = _facade().os.path.join(self.mods_root, mod_id)
-            if _facade().os.path.exists(mod_path):
-                _facade().shutil.rmtree(mod_path)
-            with _facade().tempfile.TemporaryDirectory() as temp_dir:
-                try:
-                    (extract_path, _) = _facade().ModPackage.extract_package(
-                        package_path, temp_dir, verify_signature=verify_signature
-                    )
-                    _facade().shutil.copytree(extract_path, mod_path)
-                except _facade().RECOVERABLE_ERRORS as e:
-                    _facade().logger.error("Failed to extract package: %s", e)
-                    if was_loaded:
-                        self.load_mod(mod_id)
-                    return (False, f"更新失败：{e}", None)
-            if was_loaded:
-                if self.load_mod(mod_id):
-                    metadata = _facade().parse_manifest(mod_path)
-                    return (True, f"MOD {mod_id} 更新成功 (v{new_version})", metadata)
-                else:
-                    return (False, "MOD 更新成功但加载失败", None)
-            else:
-                metadata = _facade().parse_manifest(mod_path)
-                return (True, f"MOD {mod_id} 更新成功 (v{new_version})", metadata)
-        except _facade().RECOVERABLE_ERRORS as e:
-            _facade().logger.exception("MOD update failed")
-            return (False, f"更新失败：{e}", None)
+        except (
+            *_facade().RECOVERABLE_ERRORS,
+            _facade().ModPackageError,
+            _facade().ModSignatureError,
+        ) as exc:
+            return (False, f"更新失败：{exc}", None)
 
     def validate_mod_package(self, package_path: str) -> tuple[bool, str, dict[str, _facade().Any]]:
         """
@@ -158,6 +142,7 @@ class _ModManagerPart02Mixin:
             "description": m.description or "",
             "primary": bool(m.primary),
             "artifact": art,
+            "scope": m.scope,
             "industry": dict(m.industry) if isinstance(m.industry, dict) else {},
             "ui_labels": dict(m.ui_labels) if isinstance(m.ui_labels, dict) else {},
             "ui_starter_pack": list(m.ui_starter_pack)
@@ -165,7 +150,8 @@ class _ModManagerPart02Mixin:
             else [],
             "menu": list(m.frontend_menu) if m.frontend_menu else [],
             "frontend": {
-                "pro_entry_path": str(getattr(m, "frontend_pro_entry_path", "") or "").strip()
+                "pro_entry_path": str(getattr(m, "frontend_pro_entry_path", "") or "").strip(),
+                "runtime": dict(m.frontend_runtime),
             },
             "menu_overrides": list(m.frontend_menu_overrides) if m.frontend_menu_overrides else [],
             "workflow_employees": list(m.workflow_employees) if m.workflow_employees else [],
@@ -176,18 +162,11 @@ class _ModManagerPart02Mixin:
         return row
 
     def list_mods(self) -> list[dict[str, _facade().Any]]:
-        """
-        返回磁盘扫描 + 权益过滤后的 Mod 列表（与 list_all_mods 一致）。
-        勿仅用 list_loaded_mods：企业版启动时未 entitlement 的客户 Mod
-        不会进入 _loaded_mods，但登录后仍需按服务端 entitlement 在 /api/mods/ 中可见。
-        """
+        """含未加载包，登录后仍按当前账号权益展示。"""
         return self.list_all_mods()
 
     def list_all_mods(self) -> list[dict[str, _facade().Any]]:
-        """
-        始终返回磁盘扫描的全部 Mod 列表，不受已加载状态影响。
-        供 GET /api/mods/?all=1 使用，返回所有可选的标准扩展包。
-        """
+        """返回已通过账号权益过滤的已安装 Mod，包含尚未加载的包。"""
         if _facade().is_mods_disabled():
             return []
         self._refresh_mods_root_if_needed()
@@ -203,7 +182,7 @@ class _ModManagerPart02Mixin:
 
             rows = filter_mod_rows_for_enterprise(rows)
         except _facade().RECOVERABLE_ERRORS:
-            pass
+            return []
         return rows
 
     def get_routes(self) -> list[dict[str, str]]:
@@ -222,7 +201,7 @@ class _ModManagerPart02Mixin:
                 if not is_mod_visible_for_enterprise(m.id):
                     continue
             except _facade().RECOVERABLE_ERRORS:
-                pass
+                continue
             rp = (m.frontend_routes or "").strip()
             if rp:
                 out.append({"mod_id": m.id, "routes_path": rp})
@@ -245,7 +224,8 @@ class _ModManagerPart02Mixin:
                     )
                     continue
             except _facade().RECOVERABLE_ERRORS:
-                pass
+                self._record_load_failure(metadata.id, "entitlement", "权益校验失败，未加载")
+                continue
             _facade().logger.info("[ModManager] Checking dependencies for mod: %s", metadata.id)
             if metadata.dependencies:
                 deps_satisfied = _facade().validate_dependencies(metadata, loaded)

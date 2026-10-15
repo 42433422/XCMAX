@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ind-taiyangniao",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "42ea2e222aad4c12b5ea5012d89f241d5d1d9ab4f48d6885afdbde1a4bba0ae5",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。考勤表转换。Mod ID taiyangniao-pro。钉钉考勤表选文件，输出「424/考勤转换输出.xlsx」。右侧惠州工厂正班 08:00–12:00 / 13:30–17:30。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ind-taiyangniao/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ind-taiyangniao/macos/result.png"
+}

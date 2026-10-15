@@ -4,8 +4,8 @@
 
 字段分工：
 - ``industry_id`` / ``industry_mod_id``：客户所属行业及行业包——不进生产员工私有交付
-- ``legacy_mod_id``：客户定制权益与进度身份；integrated_feature 不要求独立运行包
-- ``runtime_mod_id``：当前实际运行包（太阳鸟为 attendance-industry）
+- ``legacy_mod_id``：客户定制权益与进度身份
+- ``runtime_mod_id``：当前实际运行包（太阳鸟为 sunbird-attendance-custom）
 - ``tracks.modules[]`` / ``tracks.employees[]``：双轨节点；节点各自有制作进度
   （例：太阳鸟「考勤表转化」= 模块轨节点）
 """

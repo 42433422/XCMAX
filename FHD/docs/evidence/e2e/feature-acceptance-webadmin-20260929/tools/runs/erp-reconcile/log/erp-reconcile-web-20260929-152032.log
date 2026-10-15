@@ -1,0 +1,6 @@
+[15:20:32] feature=erp-reconcile platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-reconcile
+[15:20:45] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:20:46] case RC1: passed - 真实运行经营对账并读取状态
+[15:20:46] case RC2: passed - 对账周期接口缺参被拒（负例）
+[15:20:47] video: erp-reconcile-web-20260929-152032.webm (1109875 bytes)
+[15:20:47] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-reconcile/log/erp-reconcile-web-20260929-152032.log

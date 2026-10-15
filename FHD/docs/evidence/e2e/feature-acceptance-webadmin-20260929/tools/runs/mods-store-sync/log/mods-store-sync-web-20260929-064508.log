@@ -1,0 +1,8 @@
+[06:45:08] feature=mods-store-sync base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-store-sync
+[06:45:20] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:45:28] case S1: passed - 本机 Mod 目录可见性基线真实读取
+[06:45:36] case S2: passed - 客户端 Mod 可见性开关状态真实读取
+[06:45:42] case S3: passed - 平台能力清单中的受保护客户端 Mod 白名单真实读取
+[06:45:48] case S4: passed - 缺少修茈 Developer PAT 的市场库同步被拒绝（负例）
+[06:45:48] video: mods-store-sync-web-20260929-064508.webm (2816600 bytes)
+[06:45:48] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-store-sync/log/mods-store-sync-web-20260929-064508.log

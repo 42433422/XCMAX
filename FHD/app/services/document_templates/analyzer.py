@@ -23,6 +23,7 @@ from app.template_analysis_progress import (
     set_template_analysis_progress,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +97,8 @@ def _analyze_template_with_upload_inner(file, template_name: str, template_scope
             return _j({"success": False, "message": "文件名为空"}, 400)
         file_ext = os.path.splitext(file.filename)[1].lower()
 
-        upload_dir = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "uploads", "templates"
-        )
+        # 打包后 __file__ 位于签名 bundle 内部（只读），上传文件必须落用户数据目录
+        upload_dir = os.path.join(get_upload_dir(), "templates")
         os.makedirs(upload_dir, exist_ok=True)
 
         unique_filename = f"{uuid.uuid4().hex}{file_ext}"

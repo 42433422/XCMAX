@@ -1,0 +1,21 @@
+{
+  "phase": "G9-更新安装（OTA 1.0.0.2→1.0.0.3）",
+  "date": "2026-09-14T04:05+08:00",
+  "chain": {
+    "g8_discovery": "1.0.0.2 应用内检查更新 → update_available 1.0.0.3（updater-events.jsonl 2026-09-13T18:41/19:32Z）",
+    "download": "download_start → update_downloaded（blockmap 增量，二次触发秒下）",
+    "install_mechanism": "install_start → ShipIt 检测 install request → 用户退出应用后 ShipIt 完成替换 → Installation completed successfully (03:45:13)",
+    "version_after": "Info.plist=1.0.0.3, build-info releaseId=xcagi-1.0.0.3-4bfb23365c5e9d2c0e05c5d142fa9183aea9e740（与 release SHA 锚定一致）",
+    "post_install_health": "GET /api/health → version 1.0.0.3 healthy；G7 业务重测全链 2xx"
+  },
+  "defect_found": {
+    "gate": "G9",
+    "severity": "阻断全自动闭环（非阻断数据/安装本身）",
+    "symptom": "应用内点击『安装更新』后应用不退出：install_start 记录后 app 仍存活，ShipIt 无限等待",
+    "root_cause": "installUpdate → autoUpdater.quitAndInstall → Squirrel NSApp terminate 路径下主窗口 close 事件先触发，window-manager.ts `if (!app.isQuitting) { preventDefault; hide }` 拦截导致 terminate 被取消；app.isQuitting 仅在 before-quit 置位，native terminate 路径不触发",
+    "workaround_used_for_this_release": "手动退出应用（用户可完成的操作），ShipIt 随后自动完成替换",
+    "fix": "desktop-install-update.ts 在 quitAndInstall 前预置 app.isQuitting = true（PR 待提交）",
+    "evidence": "ShipIt_stderr.log 14755 行 'Detected this as an install request'（03:41）无后续直至 app 退出；重测时间线见 t4-ota-10003.log"
+  },
+  "conclusion": "YELLOW：安装机制实证可用且版本锚定正确，但『应用内一键安装』因退出拦截需手动退出配合；修复 PR 合入后下版转 GREEN 复测"
+}

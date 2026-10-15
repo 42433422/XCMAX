@@ -1,0 +1,71 @@
+{
+  "step": "ui_login",
+  "actions": [
+    {
+      "initial": {
+        "url": "http://127.0.0.1:17500/login?redirect=/",
+        "workspace": false,
+        "inputs": [
+          {
+            "type": "text",
+            "ph": "XCAGI 账号或邮箱",
+            "name": "username"
+          },
+          {
+            "type": "password",
+            "ph": "密码",
+            "name": "password"
+          },
+          {
+            "type": "checkbox",
+            "ph": "",
+            "name": ""
+          },
+          {
+            "type": "checkbox",
+            "ph": "",
+            "name": ""
+          }
+        ]
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-00-login-entry.png",
+      "bytes": 283097
+    },
+    {
+      "typed": {
+        "input0": "SUNBIRD",
+        "input1": "•••••••••"
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-00-login-filled.png",
+      "bytes": 283235
+    },
+    {
+      "click": "登录",
+      "label": "登录",
+      "rect": {
+        "x": 930,
+        "y": 594.78125,
+        "w": 380,
+        "h": 46,
+        "text": "登 录"
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-00-login-after.png",
+      "bytes": 350416
+    },
+    {
+      "state": {
+        "url": "http://127.0.0.1:17500/mod/xcagi-planner-bridge/chat",
+        "title": "智能对话 - XCAGI",
+        "dialogs": []
+      }
+    }
+  ],
+  "verdict": "PASS",
+  "workspace_visible": true
+}

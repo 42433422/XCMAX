@@ -59,5 +59,12 @@ def test_excel_row_count_fast_path(tmp_path: Path) -> None:
     assert int(out["response"]) >= 1
 
 
+def test_smalltalk_short_circuits() -> None:
+    """「你好」不再落入 generic_workflow 执行业务工具，而是固定话术短路。"""
+    out = try_deterministic_chat_reply("你好")
+    assert out is not None
+    assert out["action"] == "greeting"
+
+
 def test_no_match_returns_none() -> None:
-    assert try_deterministic_chat_reply("你好") is None
+    assert try_deterministic_chat_reply("今天天气真不错啊大家辛苦了哈") is None

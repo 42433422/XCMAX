@@ -1,0 +1,6 @@
+2026-09-29T07:25:33+0800 [sec-runtime-gate] 开始验收 sec-runtime-gate 运行时安全门控；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:25:33+0800 [sec-runtime-gate] M1 passed :: HTTP 403 18ms；{"success": false, "error_code": "http_403", "message": "该旧业务接口尚未提供安全的租户数据隔离", "path": "/api/customers"}
+2026-09-29T07:25:33+0800 [sec-runtime-gate] M2 passed :: HTTP 200 19ms；valid=True
+2026-09-29T07:25:37+0800 [sec-runtime-gate] M3 passed :: 导航后路径 /desktop-runtime；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 桌面运行时 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 桌面运行时 |  | 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 |  | 刷新状态检查桌面更新 | 运行状态 | 桌面
+2026-09-29T07:25:38+0800 [sec-runtime-gate] screenshot result.png
+2026-09-29T07:25:41+0800 [sec-runtime-gate] video operation.webm bytes=333444

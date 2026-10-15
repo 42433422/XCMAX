@@ -1,5 +1,6 @@
 package com.modstore.service;
 
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +28,22 @@ public class SecurityService {
     
     private static final long REPLAY_WINDOW_SECONDS = 300;
     private static final long NOTIFY_IDEMPOTENCY_SECONDS = 86_400;
+    private static final String LEGACY_PLACEHOLDER_SECRET = "default_secret_key";
+
+    @PostConstruct
+    void validatePaymentSecretKey() {
+        // fail-closed：checkout 签名密钥缺失、过短或仍是历史占位值时拒绝启动，
+        // 防止可预测密钥签支付载荷（与 JwtAuthenticationFilter 的弱密钥拦截同口径）。
+        if (paymentSecretKey == null || paymentSecretKey.isBlank()) {
+            throw new IllegalStateException("payment.secret-key / PAYMENT_SECRET_KEY must be set");
+        }
+        if (LEGACY_PLACEHOLDER_SECRET.equals(paymentSecretKey)) {
+            throw new IllegalStateException("PAYMENT_SECRET_KEY must not be the legacy placeholder 'default_secret_key'");
+        }
+        if (paymentSecretKey.getBytes(StandardCharsets.UTF_8).length < 16) {
+            throw new IllegalStateException("payment.secret-key / PAYMENT_SECRET_KEY must be at least 16 bytes");
+        }
+    }
     
     public boolean checkReplayAttack(String requestId, long timestamp) {
         // 检查时间戳是否在有效窗口内

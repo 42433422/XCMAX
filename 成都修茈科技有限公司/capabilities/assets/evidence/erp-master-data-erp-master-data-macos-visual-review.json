@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-30 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-master-data",
+  "platform": "macos",
+  "reviewed_at": "2026-09-30",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+  "screenshot_sha256": "bb76d2fedd5e19ba070969324176d7192666f71deeeb0dd9d02ecd793aa5b65c",
+  "visible_content": "饰品包装品管理表列出 MAC验收产品。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-master-data/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-master-data/macos/result.png"
+}

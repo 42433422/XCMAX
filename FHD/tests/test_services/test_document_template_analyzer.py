@@ -265,8 +265,6 @@ class TestExtractWordPlaceholderFields:
 
 
 class TestAnalyzeTemplateWithUpload:
-    """测试模板分析主入口。"""
-
     def test_no_file_returns_400(self):
         result = analyze_template_with_upload(None, "test")
         assert result.status_code == 400
@@ -274,34 +272,38 @@ class TestAnalyzeTemplateWithUpload:
         assert data["success"] is False
 
     def test_empty_filename_returns_400(self):
-        mock_file = MagicMock()
-        mock_file.filename = ""
+        mock_file = MagicMock(filename="")
         result = analyze_template_with_upload(mock_file, "test")
         assert result.status_code == 400
 
     def test_unsupported_file_type_returns_400(self, tmp_path):
-        mock_file = MagicMock()
-        mock_file.filename = "test.pdf"
-        mock_file.save = MagicMock()
+        mock_file = MagicMock(filename="test.pdf")
         result = analyze_template_with_upload(mock_file, "test")
         assert result.status_code == 400
 
-    def test_excel_file_routes_to_excel_analyzer(self, tmp_path):
-        mock_file = MagicMock()
-        mock_file.filename = "test.xlsx"
-        mock_file.save = MagicMock()
+    def test_excel_file_routes_to_excel_analyzer(self, tmp_path, monkeypatch):
+        bundle = tmp_path / "readonly-bundle"
+        bundle.write_text("cannot create directories inside this file")
+        monkeypatch.setattr(
+            "app.services.document_templates.analyzer.__file__",
+            str(bundle / "services" / "document_templates" / "analyzer.py"),
+        )
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "user-data"))
+        mock_file = MagicMock(filename="test.xlsx")
 
         with patch(
             "app.services.document_templates.analyzer._analyze_excel_template"
         ) as mock_analyze:
             mock_analyze.return_value = _j({"success": True, "template_type": "excel"})
             result = analyze_template_with_upload(mock_file, "test")
+            assert result.status_code == 200
+            assert mock_file.save.call_args.args[0].startswith(
+                str(tmp_path / "user-data" / "uploads" / "templates")
+            )
             mock_analyze.assert_called_once()
 
     def test_docx_file_routes_to_word_analyzer(self, tmp_path):
-        mock_file = MagicMock()
-        mock_file.filename = "test.docx"
-        mock_file.save = MagicMock()
+        mock_file = MagicMock(filename="test.docx")
 
         with patch(
             "app.services.document_templates.analyzer._analyze_word_template"
@@ -311,9 +313,7 @@ class TestAnalyzeTemplateWithUpload:
             mock_analyze.assert_called_once()
 
     def test_image_file_routes_to_label_analyzer(self, tmp_path):
-        mock_file = MagicMock()
-        mock_file.filename = "test.png"
-        mock_file.save = MagicMock()
+        mock_file = MagicMock(filename="test.png")
 
         with patch(
             "app.services.document_templates.analyzer._analyze_label_template"
@@ -323,8 +323,7 @@ class TestAnalyzeTemplateWithUpload:
             mock_analyze.assert_called_once()
 
     def test_recoverable_error_returns_500(self, tmp_path):
-        mock_file = MagicMock()
-        mock_file.filename = "test.xlsx"
+        mock_file = MagicMock(filename="test.xlsx")
         mock_file.save = MagicMock(side_effect=OSError("disk error"))
 
         result = analyze_template_with_upload(mock_file, "test")

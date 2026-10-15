@@ -322,7 +322,7 @@ class TestDeriveEmployeeContacts:
         assert rows["emp-on"]["description"] == "打单"
         assert rows["emp-off"]["source"] == "planned"
         assert rows["emp-off"]["installed"] is False and rows["emp-off"]["runnable"] is False
-        assert rows["emp-off"]["description"] == "编制内但未安装 employee_pack"
+        assert rows["emp-off"]["description"] == "编制内但未安装员工包"
 
     def test_installed_default_description(self, monkeypatch):
         departments = [{"id": "service", "employees": [{"id": "emp-on"}]}]

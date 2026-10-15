@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "ind-fields",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "7af6c392b5ef44e9a6889aaa20e7d53bfbd7e3e7b2664630151162b0a844add7",
+  "visible_content": "个人主页与模型服务设置，没有行业字段、规则配置结果。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/ind-fields.png"
+}

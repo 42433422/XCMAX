@@ -1,0 +1,62 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "base-config",
+ "name": "数据目录与配置管理",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/desktop/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/desktop/status（写操作自动附带 CSRF）：数据目录配置",
+   "expected": "数据目录配置：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 11ms；dataDir=/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer modsDir=/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/mods",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/desktop/deployment",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/desktop/deployment（写操作自动附带 CSRF）：部署形态配置",
+   "expected": "部署形态配置：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 13ms；currentMode=safe 可选 ['absolute_safe', 'safe', 'performance']",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /settings",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /settings，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /settings，页面可见 设置，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /settings；命中文本 ['设置']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "base-config",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-config/macos/result.png",
+   "sha256": "b2441c2e59ef0ededb029e0e11103acc87b0725faddf3c1281d5acdd59dd1424",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "base-config",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-config/macos/operation.webm",
+   "sha256": "fab4e015fec84b35b92ac83f751803fba39db6336dde081fef9d5ee25f6703a6",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-config/macos/run.log",
+  "sha256": "dfabd0ce8e9ef42485bdb183b33991de4fc5aa51963184a3bb15f4cf15e9582e",
+  "bytes": 1310
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

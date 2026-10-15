@@ -81,6 +81,7 @@ export const CLIENT_ERP_SUPPRESSED_MOD_MENU_IDS = new Set([
   'mod-enterprise-customer-service',
   'mod-internal-customer-service',
   'mod-erp-products',
+  'mod-erp-purchase',
   'mod-erp-customers',
   'mod-erp-orders',
   'mod-erp-shipment-records',
@@ -198,6 +199,7 @@ export const MOD_MENU_ID_TO_HOST_NAV_KEY: Readonly<Record<string, string>> = {
   'mod-planner-chat': 'chat',
   'mod-planner-ai-ecosystem': 'ai-ecosystem',
   'mod-erp-products': 'products',
+  'mod-erp-purchase': 'purchase',
   'mod-erp-customers': 'customers',
   'mod-erp-orders': 'orders',
   'mod-erp-shipment-records': 'shipment-records',
@@ -218,6 +220,17 @@ export const MOD_MENU_ID_TO_HOST_NAV_KEY: Readonly<Record<string, string>> = {
 export function normalizeModSidebarNavKey(key: string): string {
   const k = String(key || '').trim()
   return k.replace(/^mod-mod-/, 'mod-')
+}
+
+/**
+ * 通用叠加能力 Mod：与任意行业扩展包共存，不随当前 active 行业被挤掉。
+ * 考勤是「可与任意客户所属行业组合使用」的通用能力（见 mod 描述），
+ * 企业用户无论选中涂料/饰品还是其它行业，侧栏都应常驻考勤工作区入口。
+ */
+export const UNIVERSAL_OVERLAY_MOD_IDS = [CLIENT_PRIMARY_ERP_MOD_ID] as const
+
+export function isUniversalOverlayModId(modId: string): boolean {
+  return (UNIVERSAL_OVERLAY_MOD_IDS as readonly string[]).includes(String(modId || '').trim())
 }
 
 /** 账号定制 Mod（侧栏菜单应在企业端展示）。太阳鸟已归并到 attendance-industry。 */

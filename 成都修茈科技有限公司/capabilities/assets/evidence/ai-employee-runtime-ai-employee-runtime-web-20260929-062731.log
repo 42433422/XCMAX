@@ -1,0 +1,9 @@
+[06:27:31] feature=ai-employee-runtime base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-employee-runtime
+[06:27:42] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:27:42] case R1: passed - Agent 调度运行态真实读取
+[06:27:42] case R2: passed - 员工空间编制与工位目录
+[06:27:42] case R3: passed - 提交执行任务进入调度队列
+[06:27:44] case R4: passed - 无会话访问调度被拒（负例）
+[06:27:47] case R5: passed - 员工空间页面真实渲染
+[06:27:47] video: ai-employee-runtime-web-20260929-062731.webm (1037414 bytes)
+[06:27:47] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-employee-runtime/log/ai-employee-runtime-web-20260929-062731.log

@@ -1,0 +1,175 @@
+{
+  "observed_at": "2026-09-12T21:00:22.386096+00:00",
+  "release_run": {
+    "conclusion": "",
+    "headSha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "jobs": [
+      {
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "databaseId": 103619842328,
+        "name": "macos-ota",
+        "startedAt": "2026-09-12T20:55:23Z",
+        "status": "in_progress",
+        "steps": [
+          {
+            "completedAt": "2026-09-12T20:55:25Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-09-12T20:55:23Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-12T20:55:34Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "startedAt": "2026-09-12T20:55:25Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-12T20:55:35Z",
+            "conclusion": "success",
+            "name": "Download normalized security evidence",
+            "number": 3,
+            "startedAt": "2026-09-12T20:55:34Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-12T20:55:36Z",
+            "conclusion": "success",
+            "name": "Download prior-day normalized security evidence",
+            "number": 4,
+            "startedAt": "2026-09-12T20:55:35Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-12T20:55:36Z",
+            "conclusion": "success",
+            "name": "Enforce exact-SHA two-day security clearance",
+            "number": 5,
+            "startedAt": "2026-09-12T20:55:36Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-12T20:55:36Z",
+            "conclusion": "success",
+            "name": "Preflight macOS OTA secrets",
+            "number": 6,
+            "startedAt": "2026-09-12T20:55:36Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-12T20:55:38Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-python@v5",
+            "number": 7,
+            "startedAt": "2026-09-12T20:55:36Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-12T20:55:44Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-node@v4",
+            "number": 8,
+            "startedAt": "2026-09-12T20:55:38Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-12T20:55:44Z",
+            "conclusion": "success",
+            "name": "Import Developer ID certificate (CSC_LINK p12)",
+            "number": 9,
+            "startedAt": "2026-09-12T20:55:44Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "0001-01-01T00:00:00Z",
+            "conclusion": "",
+            "name": "Build macOS enterprise installer",
+            "number": 10,
+            "startedAt": "2026-09-12T20:55:44Z",
+            "status": "in_progress"
+          },
+          {
+            "completedAt": "0001-01-01T00:00:00Z",
+            "conclusion": "",
+            "name": "Notarize and staple macOS enterprise DMG",
+            "number": 11,
+            "startedAt": "0001-01-01T00:00:00Z",
+            "status": "pending"
+          },
+          {
+            "completedAt": "0001-01-01T00:00:00Z",
+            "conclusion": "",
+            "name": "Verify packaged identity and ZIP feed",
+            "number": 12,
+            "startedAt": "0001-01-01T00:00:00Z",
+            "status": "pending"
+          },
+          {
+            "completedAt": "0001-01-01T00:00:00Z",
+            "conclusion": "",
+            "name": "Upload macOS OTA artifacts for recovery",
+            "number": 13,
+            "startedAt": "0001-01-01T00:00:00Z",
+            "status": "pending"
+          },
+          {
+            "completedAt": "0001-01-01T00:00:00Z",
+            "conclusion": "",
+            "name": "Publish macOS OTA artifacts to CVM (official + stable)",
+            "number": 14,
+            "startedAt": "0001-01-01T00:00:00Z",
+            "status": "pending"
+          },
+          {
+            "completedAt": "0001-01-01T00:00:00Z",
+            "conclusion": "",
+            "name": "Verify public latest-mac.yml identity",
+            "number": 15,
+            "startedAt": "0001-01-01T00:00:00Z",
+            "status": "pending"
+          },
+          {
+            "completedAt": "0001-01-01T00:00:00Z",
+            "conclusion": "",
+            "name": "Publish download center metadata and changelog",
+            "number": 16,
+            "startedAt": "0001-01-01T00:00:00Z",
+            "status": "pending"
+          },
+          {
+            "completedAt": "0001-01-01T00:00:00Z",
+            "conclusion": "",
+            "name": "Post Run actions/setup-node@v4",
+            "number": 30,
+            "startedAt": "0001-01-01T00:00:00Z",
+            "status": "pending"
+          },
+          {
+            "completedAt": "0001-01-01T00:00:00Z",
+            "conclusion": "",
+            "name": "Post Run actions/setup-python@v5",
+            "number": 31,
+            "startedAt": "0001-01-01T00:00:00Z",
+            "status": "pending"
+          },
+          {
+            "completedAt": "0001-01-01T00:00:00Z",
+            "conclusion": "",
+            "name": "Post Run actions/checkout@v4",
+            "number": 32,
+            "startedAt": "0001-01-01T00:00:00Z",
+            "status": "pending"
+          }
+        ],
+        "url": "https://github.com/42433422/XCMAX/actions/runs/34718474818/job/103619842328"
+      }
+    ],
+    "status": "in_progress"
+  },
+  "release_input_sha_verified": false,
+  "note": "Workflow head is not proof of inputs.release_sha; job log is unavailable while running. Build screenshot is progress evidence only."
+}

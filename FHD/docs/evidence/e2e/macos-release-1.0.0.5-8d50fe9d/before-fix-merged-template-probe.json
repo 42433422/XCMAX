@@ -1,0 +1,43 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "customer-chain-real-template",
+  "at_utc": "2026-09-21T07:49:51Z",
+  "steps": {
+    "login": {
+      "status": 200,
+      "success": true
+    },
+    "template": {
+      "file": "real-customer-template-REPRO.xlsx",
+      "bytes": 5292,
+      "sha256": "3d670aec74c8aab57f882a64eaa75dc565e992cbc46ac9d5c7e315824c8d2031",
+      "merged_cells": [
+        "A1:J1",
+        "A2:J2",
+        "A3:C3",
+        "A4:C4",
+        "A15:D15",
+        "B16:G16"
+      ]
+    },
+    "template_upload": {
+      "status": 200,
+      "message": "解析并入库模版库成功",
+      "template_id": "db:1"
+    },
+    "customer": {
+      "status": 200,
+      "success": true,
+      "already_exists": false
+    },
+    "generate": {
+      "status": 500,
+      "success": false,
+      "message": "服务器内部错误",
+      "doc_name": null
+    }
+  },
+  "verdict": "BLOCKED",
+  "first_real_breakpoint": "POST /api/shipment/generate 使用客户自带（含合并单元格）模板返回 500：服务器内部错误",
+  "finished_at_utc": "2026-09-21T07:50:06Z"
+}

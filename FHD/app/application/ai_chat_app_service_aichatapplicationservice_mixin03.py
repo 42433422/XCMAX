@@ -54,32 +54,29 @@ class _AIChatApplicationServicePart03Mixin:
             _facade().logger.exception("workflow 工具调度失败")
             return {"success": False, "message": "工作流工具调度失败"}
 
-    def _hydrate_pending_workflow(self, user_id: str) -> bool:
-        """从 DB 载入用户最近的可续跑计划并水合到内存待确认槽。
-
-        配合 ``WorkflowPlanStore`` 落库的计划，实现进程重启/换会话后仍能恢复长任务。
-        水合成 ``kind="workflow"`` 的待确认记录，进入通用确认分支并用 ``resume`` 续跑。
-        返回是否成功水合。
-        """
+    def _hydrate_pending_workflow(self, user_id: str, session_id: str) -> bool:
+        """仅恢复当前会话的待确认计划；跨会话续跑须从明确的任务入口处理。"""
         try:
             from app.application.workflow.plan_store import WorkflowPlanStore
             from app.application.workflow.types import plan_from_dict
 
-            active = WorkflowPlanStore().list_active(user_id, limit=1)
-            if not active:
+            active = WorkflowPlanStore().list_active(user_id, limit=1, session_id=session_id)
+            if not active or active[0].get("status") != "pending_awaiting":
                 return False
             plan = plan_from_dict(active[0].get("plan") or {})
             if plan is None or not plan.nodes:
                 return False
+            runtime_context = dict(active[0].get("runtime_context") or {})
+            confirmation = runtime_context.pop("pending_confirmation", {})
             self._pending_workflows[user_id] = {
                 "plan": plan,
-                "runtime_context": dict(active[0].get("runtime_context") or {}),
+                "runtime_context": runtime_context,
                 "pending_id": _facade().uuid.uuid4().hex,
                 "thinking_steps": "",
                 "kind": "workflow",
-                "agent_run_id": "",
-                "approval_required": False,
-                "approval_nodes": [],
+                "agent_run_id": str(confirmation.get("agent_run_id") or ""),
+                "approval_required": bool(confirmation.get("approval_required")),
+                "approval_nodes": confirmation.get("approval_nodes") or [],
                 "hydrated_from_db": True,
             }
             return True
@@ -93,11 +90,8 @@ class _AIChatApplicationServicePart03Mixin:
         runtime_context: dict[str, _facade().Any] | None,
         status: str,
         message: str | None = None,
-    ) -> None:
-        """把动态工作流计划（含 runtime_context）落库，供跨会话续跑。
-
-        从 ``runtime_context`` 提取 ``user_id``/``session_id``；保存失败仅告警，不阻断主流程。
-        """
+    ) -> bool:
+        """保存计划快照；成功提交返回 True，失败返回 False，调用方据此决定是否完成操作。"""
         try:
             from app.application.workflow.plan_store import WorkflowPlanStore
 
@@ -106,6 +100,15 @@ class _AIChatApplicationServicePart03Mixin:
             session_id = (
                 str(rc.get("session_id") or rc.get("conversation_id") or "").strip() or None
             )
+            pending = self._pending_workflows.get(user_id or "") or {}
+            if (
+                status == "pending_awaiting"
+                and getattr(pending.get("plan"), "plan_id", None) == plan.plan_id
+            ):
+                rc["pending_confirmation"] = {
+                    key: pending.get(key)
+                    for key in ("agent_run_id", "approval_required", "approval_nodes")
+                }
             WorkflowPlanStore().save(
                 plan=plan,
                 runtime_context=rc,
@@ -113,11 +116,14 @@ class _AIChatApplicationServicePart03Mixin:
                 user_id=user_id,
                 session_id=session_id,
                 message=message,
+                require_commit=status == "cancelled",
             )
+            return True
         except _facade().RECOVERABLE_ERRORS:
             _facade().logger.warning(
                 "计划持久化失败 plan_id=%s status=%s", getattr(plan, "plan_id", "?"), status
             )
+            return False
 
     def _run_workflow_with_state_updates(
         self,
@@ -191,10 +197,18 @@ class _AIChatApplicationServicePart03Mixin:
         thinking_steps: str,
         message: str,
     ) -> dict[str, _facade().Any] | None:
-        """写/高风险操作参数缺失或多候选歧义时：插入反问节点 → 执行暂停 → 记录待确认。
-
-        返回澄清响应；无需澄清则返回 None（继续正常流程）。
-        """
+        """显示独立澄清问题，或暂停缺参数的业务节点。"""
+        for node in plan.nodes or []:
+            if (node.tool_id, node.action) == ("clarify", "ask") and not node.params.get(
+                "target_node_id"
+            ):
+                question = str(node.params.get("question") or "请补充业务操作和参数。")
+                return {
+                    "success": True,
+                    "message": "需要澄清",
+                    "response": question,
+                    "data": {"text": question, "action": "clarification_required", "data": {}},
+                }
         from app.application.workflow.clarification_node import (
             build_clarify_node,
             insert_clarify_node,
@@ -407,6 +421,6 @@ class _AIChatApplicationServicePart03Mixin:
             )
         else:
             response_data = self._execute_normal_mode_tools(
-                response_data, tool_key, parsed_params, ai_result, result_data
+                response_data, tool_key, parsed_params, ai_result, result_data, original_message
             )
         return response_data

@@ -1,0 +1,8 @@
+[14:24:38] feature=mods-shell platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-shell
+[14:24:52] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[14:24:54] case S1: passed - 平台壳能力清单（edition 裁剪）真实读取
+[14:24:58] case S2: passed - 壳化解耦里程碑真实读取
+[14:24:58] case S3: passed - 交付就绪状态真实读取
+[14:24:58] case S4: passed - 缺 intent 的办公确认被校验拒绝（负例/边界）
+[14:24:59] video: mods-shell-web-20260929-142438.webm (1923401 bytes)
+[14:24:59] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-shell/log/mods-shell-web-20260929-142438.log

@@ -1,0 +1,343 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "erp-purchase",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-151551",
+  "generated_at": "2026-09-29 15:16:07",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器在 Web 管理端走通采购域真实写-读回：POST /api/purchase/suppliers 新建供应商 → GET /api/purchase/suppliers 列表读回（含真实 code）→（经 mod 域门面建产品后）POST /api/purchase/orders 新建采购订单 → GET /api/purchase/orders 读回订单号与明细金额 → GET /api/purchase/summary 汇总；并含缺名称供应商与缺产品明细被拒（负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 53848,
+        "processed": 53840,
+        "errors": 0,
+        "dropped": 8,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 10,
+            "max_cache_size": 1000,
+            "hits": 48,
+            "misses": 10,
+            "hit_rate": 0.8275862068965517,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-purchase/erp-purchase-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "erp-purchase",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-purchase/shot/00-login-form.png",
+      "sha256": "f782a97659bbeacbe720a7d66e6eddce163a5439b4cbca11b9cf23e4d8ec29af",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-purchase",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-purchase/shot/PU1-supplier-roundtrip.png",
+      "sha256": "3940b9faafb7e0d348f81e843915d386249db96fc98e2780ae03abf1254cebe8",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染供应商写-读回真实 JSON：create 200、供应商 id/code（SUP...）、列表命中新建名称。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-purchase",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-purchase/shot/PU2-purchase-order.png",
+      "sha256": "2f1d1fad538119fa7694e9876b500e43c158eb17bb1706b4f2c0469be98cf049",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染采购订单写-读回真实 JSON：create 200、order_no（PO...）、total_amount=20.0，列表读回同一 order_no 与明细数。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-purchase",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-purchase/shot/PU3-purchase-summary.png",
+      "sha256": "35a6aad42a3740aa5f7e6687f82e1b787864a8cc6a0d9d46610d0b35dda86f9d",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染采购汇总接口的真实 JSON。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-purchase",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-purchase/shot/PU4-purchase-negative.png",
+      "sha256": "c00fc8d1684cc08a213a505beccf1717cbc5f3ba0f2faf91dc2843d2d3ef9f75",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染缺名称供应商「供应商名称不能为空」与缺产品明细「第 1 行明细未选择产品」的拒绝响应。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-purchase",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-purchase/video/erp-purchase-web-20260929-151551.webm",
+      "sha256": "2042f0a99cb1accc29fa9d685d428b7832e90859c0e61fa7190853ba711a4ddd",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → 供应商写读回 → 采购订单写读回 → 汇总 → 负例。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "PU1",
+      "title": "供应商真实写-读回",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/purchase/suppliers 新建，随后 GET /api/purchase/suppliers 读回。",
+      "expected": "创建 200 返回真实 id/code；列表中能读到本轮新建的供应商名称。",
+      "observed": "{\"create_http\": 200, \"supplier_id\": 2, \"code\": \"SUP20260929151604790051\", \"list_http\": 200, \"created_name_in_list\": true}",
+      "result": "passed"
+    },
+    {
+      "id": "PU2",
+      "title": "采购订单真实写-读回（含明细与金额）",
+      "input": "已建立的管理员会话；先经 mod 域门面建一个产品。",
+      "actions": "POST /api/purchase/orders（关联供应商与产品），随后 GET /api/purchase/orders 读回。",
+      "expected": "创建 200、success=true；列表读回同一 order_no、金额 20.0 且含明细。",
+      "observed": "{\"create_http\": 200, \"order_id\": 5, \"order_no\": \"PO20260929151606\", \"total_amount\": 20, \"readback_total\": 20, \"item_count\": 1}",
+      "result": "passed"
+    },
+    {
+      "id": "PU3",
+      "title": "采购汇总真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "GET /api/purchase/summary 与 /api/purchase/suppliers/summary。",
+      "expected": "两者均 200。",
+      "observed": "{\"summary_http\": 200, \"summary\": \"{'success': True, 'data': {'draft': {'count': 5, 'amount': 100}}}\", \"supplier_summary_http\": 200}",
+      "result": "passed"
+    },
+    {
+      "id": "PU4",
+      "title": "缺名称供应商 / 缺产品明细被拒（负例）",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/purchase/suppliers（空 body）；POST /api/purchase/orders（items=[{}]）。",
+      "expected": "均被拒（success=false，含明确校验提示），不发生落库。",
+      "observed": "{\"supplier_without_name\": {\"success\": false, \"message\": \"供应商名称不能为空\"}, \"order_without_product\": {\"success\": false, \"message\": \"第 1 行明细未选择产品\"}}",
+      "result": "passed"
+    }
+  ]
+}

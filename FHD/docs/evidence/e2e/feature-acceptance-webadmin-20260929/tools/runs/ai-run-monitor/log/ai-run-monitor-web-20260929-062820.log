@@ -1,0 +1,9 @@
+[06:28:20] feature=ai-run-monitor base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-run-monitor
+[06:28:32] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:28:32] case RM1: passed - 任务运行历史列表
+[06:28:32] case RM2: passed - 真实提交一次运行
+[06:28:35] case RM3: passed - 运行回执与事件流 + 独立工作区界面
+[06:28:35] case RM4: passed - 任务队列历史
+[06:28:39] case RM5: passed - 无会话访问运行历史被拒（负例）
+[06:28:39] video: ai-run-monitor-web-20260929-062820.webm (1170006 bytes)
+[06:28:39] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-run-monitor/log/ai-run-monitor-web-20260929-062820.log

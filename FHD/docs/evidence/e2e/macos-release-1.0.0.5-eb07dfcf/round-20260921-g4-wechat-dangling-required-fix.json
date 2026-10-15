@@ -1,0 +1,66 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "g4-account-custom-preparation",
+  "platform": "macos",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "release_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+  "date": "2026-09-21",
+  "defect": {
+    "summary": "wechat 域已于 095db9831「彻底移除 wechat 域」删除源码，但 AUX 宿主种子包清单与 industry_baseline 账号定制扩展清单未同步清理，导致 `wechat-contacts-ai-employee` 仍被当作「必需项」参与严格装包门。该 Mod 既不在安装包 mods/ 种子（/Applications/XCAGI.app/Contents/Resources/backend/_internal/mods 无该目录）、也不在 industry-seeds/、更不在修茈市场 catalog（packages.json 无记录），因此任何带客户交付权益的账号都无法满足该必需项，严格装包门永远无法通过。",
+    "customer_impact": "阻断：真实客户在「进入工作空间」时收到 `仍缺必需项：…wechat-contacts-ai-employee` 且无法装齐；这是客户端自身造成的不可满足条件，与市场交付无关。",
+    "root_cause_evidence": [
+      "095db9831 删除了 FHD/XCAGI/mods/wechat-contacts-ai-employee 与 xcagi-wechat-bridge 源码，并同步把前端 AUX_EMPLOYEE_PACK_MOD_IDS 收敛为 ['lan-gate-ai-employee']（FHD/frontend/src/constants/genericModPack.ts:352）。",
+      "后端未同步：FHD/app/mod_sdk/host_foundation.py:70-73 与 FHD/app/mod_sdk/aux_employee_store.py:16-19 仍声明 wechat-contacts-ai-employee 为仓库种子 AUX 包。",
+      "FHD/config/industry_baseline.json 仍在 7 个行业的 custom_employee_extension_mod_ids 中要求该 Mod。",
+      "FHD/mods/ 与 FHD/XCAGI/mods/ 均无 wechat-contacts-ai-employee 目录（仅 lan-gate-ai-employee 存在）。",
+      "修茈市场 catalog packages.json（31 条）无 wechat-contacts-ai-employee 记录。"
+    ],
+    "files_changed": [
+      "FHD/app/mod_sdk/host_foundation.py",
+      "FHD/app/mod_sdk/aux_employee_store.py",
+      "FHD/config/industry_baseline.json",
+      "FHD/config/host_profiles/_base.json",
+      "FHD/tests/test_industry_baseline.py",
+      "FHD/tests/test_infrastructure/test_aux_employee_store_branch_cov2.py",
+      "FHD/tests/test_mod_sdk/test_aux_employee_store.py",
+      "FHD/tests/test_decoupling_mods.py"
+    ]
+  },
+  "regression": {
+    "method": "对同一账号（SUNBIRD，entitled={taiyangniao-pro}）与同一行业（饰品包装）调用 build_industry_baseline_plan，比较修复前后的必需项集合；并在仓库测试套件中回归。",
+    "before": {
+      "missing_required_mod_ids": [
+        "taiyangniao-pro",
+        "xcagi-core-workflow-employees",
+        "xcagi-office-employee-pack-bridge",
+        "wechat-contacts-ai-employee"
+      ],
+      "account_custom_mod_ids": [
+        "taiyangniao-pro",
+        "xcagi-core-workflow-employees",
+        "xcagi-office-employee-pack-bridge",
+        "wechat-contacts-ai-employee"
+      ]
+    },
+    "after": {
+      "missing_required_mod_ids": ["taiyangniao-pro"],
+      "account_custom_mod_ids": [
+        "taiyangniao-pro",
+        "xcagi-core-workflow-employees",
+        "xcagi-office-employee-pack-bridge"
+      ],
+      "note": "wechat 已从必需项消失；xcagi-core-workflow-employees 与 xcagi-office-employee-pack-bridge 已随安装包 mods/ 种子预装。剩余唯一缺失项 taiyangniao-pro 为市场侧私有交付，属外部依赖。"
+    },
+    "tests": {
+      "command": "python -m pytest tests/test_mod_sdk tests/test_infrastructure tests/test_industry_baseline.py tests/test_decoupling_mods.py tests/test_phase6_p8_backend.py tests/test_phase6_p22_backend.py -q",
+      "result": "4832 passed, 4 skipped（另有 1 项 test_mod_sdk → test_industry_baseline 顺序相关的既有缓存污染失败，已用 git stash 验证与本修复无关）"
+    },
+    "net_deletion_gate": {
+      "command": "python3 scripts/dev/check_net_deletion.py --update",
+      "result": "净删除 16 行；基线 2303638 → 2303622"
+    }
+  },
+  "release_freeze_note": "已发布产物 eb07dfcf（DMG 已签名+公证+官网分发）不含本修复；本修复进入 main，供下一次构建携带。",
+  "verdict": "PASS"
+}

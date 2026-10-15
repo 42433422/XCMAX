@@ -35,20 +35,11 @@ from app.infrastructure.persistence.compat_db.writes import (
 
 @contextmanager
 def _patch_norm_model(return_value="M1"):
-    """Temporarily inject _norm_model into app.application.excel_imports.
-
-    The real module raises ImportError via __getattr__ (lost legacy symbol),
-    so we must inject a mock before products_pg_insert_row can run.
-    """
+    """Patch normalization without removing the real symbol after the test."""
     import app.application.excel_imports as _ei
 
-    mock_fn = MagicMock(return_value=return_value)
-    _ei._norm_model = mock_fn
-    try:
+    with patch.object(_ei, "_norm_model", return_value=return_value) as mock_fn:
         yield mock_fn
-    finally:
-        if hasattr(_ei, "_norm_model"):
-            delattr(_ei, "_norm_model")
 
 
 # ---------------------------------------------------------------------------

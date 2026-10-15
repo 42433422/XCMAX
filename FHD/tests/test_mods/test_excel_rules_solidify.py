@@ -373,7 +373,7 @@ def test_solidified_example_passes_golden_gate(tmp_path: Path) -> None:
 
     if str(SUNBIRD_VENDOR) not in sys.path:
         sys.path.insert(0, str(SUNBIRD_VENDOR))
-    from taiyangniao_attendance.convert import convert_attendance_file
+    from attendance_engine.convert import convert_attendance_file
 
     golden_xlsx = tmp_path / "golden.xlsx"
     assert convert_attendance_file(
@@ -419,7 +419,7 @@ def test_solidify_reproduces_sunbird_conversion(tmp_path: Path) -> None:
     # 1) 金样：太阳鸟单体（参考实现）跑真实钉钉表 + 模板
     if str(SUNBIRD_VENDOR) not in sys.path:
         sys.path.insert(0, str(SUNBIRD_VENDOR))
-    from taiyangniao_attendance.convert import convert_attendance_file
+    from attendance_engine.convert import convert_attendance_file
 
     golden_xlsx = tmp_path / "golden.xlsx"
     golden_result = convert_attendance_file(
@@ -451,9 +451,9 @@ import sys
 
 def produce_records(source_workbook: dict, rules: dict) -> list[dict]:
     sys.path.insert(0, {str(SUNBIRD_VENDOR)!r})
-    from taiyangniao_attendance.convert import _aggregate_employee_records, _filter_records_to_template_roster
-    from taiyangniao_attendance.mapper import build_template_profiles
-    from taiyangniao_attendance.parser import parse_attendance_workbook
+    from attendance_engine.convert import _aggregate_employee_records, _filter_records_to_template_roster
+    from attendance_engine.mapper import build_template_profiles
+    from attendance_engine.parser import parse_attendance_workbook
     from openpyxl import load_workbook
 
     parsed = parse_attendance_workbook({str(SUNBIRD_SOURCE)!r})

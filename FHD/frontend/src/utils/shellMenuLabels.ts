@@ -59,7 +59,7 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   'business-docking': '数据对接中心',
   orders: '业务单据',
   'orders-create': '新建业务单据',
-  purchase: '耗材申领',
+  purchase: '采购管理',
   'shipment-records': '业务记录',
   customers: '组织管理',
   'data-sources': '数据来源',

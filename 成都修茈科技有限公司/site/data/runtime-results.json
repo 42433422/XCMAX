@@ -1,0 +1,160 @@
+{
+  "base": "http://127.0.0.1:8139",
+  "started_at": "2026-09-26T10:58:40.727Z",
+  "checks": [
+    {
+      "name": "desktop: hero H1 存在",
+      "pass": true,
+      "detail": "load=716ms h1=把重复业务交给 XCAGI，让团队把时间用在经营"
+    },
+    {
+      "name": "desktop: 首屏加载 ≤5s",
+      "pass": true,
+      "detail": "716ms"
+    },
+    {
+      "name": "desktop: hero 实机截图渲染",
+      "pass": true,
+      "detail": "真实产品界面截图"
+    },
+    {
+      "name": "desktop: hero CTA 价格来自 SSOT",
+      "pass": true,
+      "detail": "¥99 体验 30 天"
+    },
+    {
+      "name": "desktop: 平台状态槽位被 SSOT 校验",
+      "pass": true,
+      "detail": "签约级"
+    },
+    {
+      "name": "desktop: 定价含 SSOT 试用价",
+      "pass": true,
+      "detail": "expect ¥99"
+    },
+    {
+      "name": "desktop: 首页价格区仅 3 档",
+      "pass": true,
+      "detail": "集团/旗舰档下沉 pricing.html"
+    },
+    {
+      "name": "desktop: 首页不含集团/旗舰档价格",
+      "pass": true,
+      "detail": "¥499,999 不在首页"
+    },
+    {
+      "name": "desktop: 数据更新时间戳注入",
+      "pass": true,
+      "detail": "数据更新：2026-09-24 · 来源：XCAGI 发布 SSOT · 随正式"
+    },
+    {
+      "name": "desktop: 合规录像块已展示",
+      "pass": true,
+      "detail": "≤60s 连续无剪辑录屏"
+    },
+    {
+      "name": "desktop: 首页→客户案例 1 次点击",
+      "pass": true,
+      "detail": "/cases.html"
+    },
+    {
+      "name": "desktop: 首页→下载 1 次点击",
+      "pass": true,
+      "detail": "/download"
+    },
+    {
+      "name": "desktop: 首页→价格 1 次点击",
+      "pass": true,
+      "detail": "/pricing.html"
+    },
+    {
+      "name": "desktop: 首页→验证中心 1 次点击",
+      "pass": true,
+      "detail": "/verify.html"
+    },
+    {
+      "name": "desktop: 技术与透明度下拉可用",
+      "pass": true,
+      "detail": "开发者中心入口可见"
+    },
+    {
+      "name": "desktop: 案例页有完整证据入口",
+      "pass": true,
+      "detail": "/verify.html"
+    },
+    {
+      "name": "desktop: 验证中心平台卡=SSOT 平台数",
+      "pass": true,
+      "detail": "count=5"
+    },
+    {
+      "name": "desktop: 验证中心功能记录=SSOT 功能数",
+      "pass": true,
+      "detail": "count=9"
+    },
+    {
+      "name": "desktop: 完整技术证据含 Git SHA",
+      "pass": true,
+      "detail": "展开层可见"
+    },
+    {
+      "name": "desktop: 价格页含全部 5 档 SSOT 价格",
+      "pass": true,
+      "detail": "missing=none"
+    },
+    {
+      "name": "desktop: 证据视频可播 + preload=metadata + poster",
+      "pass": true,
+      "detail": "played=true in 537ms preload=metadata poster=yes"
+    },
+    {
+      "name": "mobile: 390px 无横向滚动",
+      "pass": true,
+      "detail": "scrollWidth=390"
+    },
+    {
+      "name": "mobile: 视频宽度 100%",
+      "pass": true,
+      "detail": "{\"w\":362,\"cw\":362}"
+    },
+    {
+      "name": "mobile: 抽屉导航可用",
+      "pass": true,
+      "detail": "open=true"
+    },
+    {
+      "name": "mobile: 步骤卡片单列",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: hero CTA 可见且高度 ≥40px",
+      "pass": true,
+      "detail": "{\"x\":14,\"y\":496.59375,\"width\":148.671875,\"height\":48}"
+    },
+    {
+      "name": "mobile: 案例页无横向滚动",
+      "pass": true,
+      "detail": "scrollWidth=390"
+    },
+    {
+      "name": "mobile: 验证中心无横向滚动",
+      "pass": true,
+      "detail": "scrollWidth=390"
+    },
+    {
+      "name": "range: 206 Partial Content + Accept-Ranges",
+      "pass": true,
+      "detail": "{\"status\":206,\"accept\":\"bytes\",\"length\":1024}"
+    }
+  ],
+  "desktop_test": "pass",
+  "mobile_test": "pass",
+  "range_test": "pass",
+  "video_runtime_test": "pass",
+  "finished_at": "2026-09-26T10:59:20.872Z",
+  "summary": {
+    "total": 29,
+    "failed": 0
+  }
+}

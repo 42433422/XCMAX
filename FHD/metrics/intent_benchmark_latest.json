@@ -1,7 +1,144 @@
 {
-  "total": 12,
-  "correct": 12,
-  "accuracy": 1.0,
-  "min_required": 0.95,
-  "failures": []
+  "total": 97,
+  "source_sha": "fd0891498d89d0478928afdf69ee42f7fec96fbd",
+  "dataset_sha256": "afb0b3fb77280e73facfd206f462fb6c943383b886009d900cdd2d7ff6b472a5",
+  "measured_at": "2026-10-10T14:07:47.934285+00:00",
+  "rule": {
+    "layer": "rule",
+    "counts": {
+      "core": {
+        "correct": 24,
+        "total": 24
+      },
+      "semantic": {
+        "correct": 60,
+        "total": 73
+      }
+    },
+    "accuracy": {
+      "core": 1.0,
+      "semantic": 0.8219
+    },
+    "failures": {
+      "semantic": [
+        {
+          "text": "老规矩给七彩乐园出一单",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "客户催着要货，先把单子做出来",
+          "got": {
+            "tool_key": "customers",
+            "primary_intent": "customers"
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "帮我给李总那边安排20L的5桶",
+          "got": {
+            "tool_key": "products",
+            "primary_intent": "products"
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "木工部那批货该出库了",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "上次买过9803的那家是谁",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "customers",
+          "expected_primary": "customers"
+        },
+        {
+          "text": "谁订了太阳鸟的货",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "customers",
+          "expected_primary": "customers"
+        },
+        {
+          "text": "王总那家公司的电话是多少",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "customers",
+          "expected_primary": "customers"
+        },
+        {
+          "text": "咱们卖得最贵的是哪款",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "products",
+          "expected_primary": "products"
+        },
+        {
+          "text": "一桶酒吧零三是什么东西",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "products",
+          "expected_primary": "products"
+        },
+        {
+          "text": "上个月发了多少货",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "shipments",
+          "expected_primary": "shipments"
+        },
+        {
+          "text": "太阳鸟那批走了没有",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "shipments",
+          "expected_primary": "shipments"
+        },
+        {
+          "text": "昨天开的那张单子还在吗",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "shipments",
+          "expected_primary": "shipments"
+        },
+        {
+          "text": "你现在都能干哪些活",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "tools_table",
+          "expected_primary": "tools_table"
+        }
+      ]
+    }
+  }
 }

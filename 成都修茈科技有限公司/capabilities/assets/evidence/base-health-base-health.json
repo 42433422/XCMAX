@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "feature": "base-health",
+  "platform": "macos",
+  "result": "PARTIAL",
+  "status": "partial",
+  "verified_at": "2026-09-25T00:29:50.700Z",
+  "product_version": "1.0.0.5",
+  "git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+  "source_main_sha": "93b9ad2f68b72103816d4e0b75ff9165f60f9267",
+  "test_method": "api",
+  "target": "GET /api/health",
+  "scope": "健康接口返回 HTTP 200；公开记录仅保留状态与版本，不包含内部组件响应。",
+  "screenshot": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-health.png",
+  "video": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-health.webm",
+  "log": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-health.log",
+  "media": [
+    {
+      "kind": "screenshot",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-health.png",
+      "sha256": "0589bbbf74f8ed6ece5b298b1368084e8bcdfd2b8cf33dd193c8c1a422fca9c6"
+    },
+    {
+      "kind": "video",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-health.webm",
+      "sha256": "58a7caed7278093a0f3b23d6a0d669004c2eaac71366091eb3ffe25c2871e00b"
+    },
+    {
+      "kind": "log",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-health.log",
+      "sha256": "89859842bb9118963e278bfea0485f4dea0c7e35bff39781c7957a271987b339"
+    }
+  ],
+  "limitations": "Supplementary observation only; this record is not an acceptance PASS."
+}

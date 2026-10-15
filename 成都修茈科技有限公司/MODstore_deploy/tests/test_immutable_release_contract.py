@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 try:
@@ -17,6 +20,107 @@ REPO_ROOT = ROOT.parents[1]
 RELEASE_SCRIPT = ROOT / "scripts/xcmax-immutable-release.sh"
 UPGRADE_DATABASE_SCRIPT = ROOT / "scripts/upgrade_database.py"
 PYPROJECT = ROOT / "pyproject.toml"
+
+
+def _compiler_probe(release: Path, node: str) -> subprocess.CompletedProcess[str]:
+    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    start = script.index("verify_runtime_mod_compiler() {")
+    end = script.index('\n[[ "$TARGET_SHA"', start)
+    probe = script[start:end] + '\nverify_runtime_mod_compiler "$1" "$2"\n'
+    env = dict(os.environ)
+    for name in ("NODE_PATH", "NODE_OPTIONS", "ESBUILD_BINARY_PATH"):
+        env.pop(name, None)
+    return subprocess.run(
+        ["bash", "-c", probe, "compiler-probe", str(release), node],
+        capture_output=True,
+        text=True,
+        cwd=release,
+        env=env,
+        timeout=30,
+    )
+
+
+@pytest.fixture
+def compiler_release(tmp_path: Path) -> tuple[Path, str, Path]:
+    node = shutil.which("node")
+    assert node, "the release contract requires Node.js and locked frontend dependencies"
+    node = str(Path(node).resolve())
+    platform = subprocess.run(
+        [node, "-p", 'process.platform + "-" + process.arch'],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    source = REPO_ROOT / "FHD/frontend"
+    frontend = tmp_path / "release/FHD/frontend"
+    frontend.mkdir(parents=True)
+    for name in ("package.json", "package-lock.json"):
+        shutil.copy2(source / name, frontend / name)
+    # Copy the real locked JS loader and this machine's native binary. No install,
+    # stubs, writes to shared node_modules, or execution of deployment actions.
+    for name in ("esbuild", f"@esbuild/{platform}"):
+        shutil.copytree(source / "node_modules" / name, frontend / "node_modules" / name)
+    return tmp_path / "release", node, frontend / "node_modules/@esbuild" / platform
+
+
+def test_runtime_mod_compiler_executes_locked_native_bundle_without_outputs(
+    compiler_release: tuple[Path, str, Path],
+) -> None:
+    release, node, _ = compiler_release
+    before = sorted(str(path.relative_to(release)) for path in release.rglob("*"))
+    result = _compiler_probe(release, node)
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads(result.stdout)
+    lock = json.loads((release / "FHD/frontend/package-lock.json").read_text())
+    assert receipt["runtime_mod_compiler"] == "ready"
+    assert receipt["esbuild"] == lock["packages"]["node_modules/esbuild"]["version"]
+    assert sorted(str(path.relative_to(release)) for path in release.rglob("*")) == before
+
+
+@pytest.mark.parametrize("fault", ["missing_optional", "invalid_native", "wrong_lock"])
+def test_runtime_mod_compiler_rejects_unusable_release(
+    compiler_release: tuple[Path, str, Path], fault: str
+) -> None:
+    release, node, native_package = compiler_release
+    if fault == "missing_optional":
+        shutil.rmtree(native_package)
+    elif fault == "invalid_native":
+        binary = native_package / "bin/esbuild"
+        binary.write_bytes(b"this is not an executable for this platform\n")
+        binary.chmod(0o755)
+    else:
+        lock_path = release / "FHD/frontend/package-lock.json"
+        lock = json.loads(lock_path.read_text())
+        lock["packages"]["node_modules/esbuild"]["version"] = "0.0.0"
+        lock_path.write_text(json.dumps(lock))
+    result = _compiler_probe(release, node)
+    assert result.returncode != 0
+    assert '"runtime_mod_compiler":"ready"' not in result.stdout
+    expected_error = {
+        "missing_optional": "MODULE_NOT_FOUND",
+        "invalid_native": "esbuild",
+        "wrong_lock": "esbuild must match the frontend lock",
+    }[fault]
+    assert expected_error in result.stderr
+
+
+def test_private_mod_compiler_is_retained_and_verified_before_release_promotion() -> None:
+    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    install = script.index('npm ci --prefix "$BUILD_ROOT/FHD/frontend"')
+    prepared_probe = script.index('verify_runtime_mod_compiler "$BUILD_ROOT"')
+    promoted_probe = script.index('verify_runtime_mod_compiler "$FINAL_ROOT"')
+    assert "--include=dev --include=optional" in script[install:prepared_probe]
+    assert "--ignore-scripts" in script[install:prepared_probe]
+    assert install < prepared_probe < script.index('chmod -R a-w "$BUILD_ROOT"')
+    assert promoted_probe < script.index("applying database migrations")
+    assert promoted_probe < script.index('ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"')
+    assert 'RUNTIME_NODE_BIN="$(readlink -f "$RUNTIME_NODE_BIN")"' in script
+    assert '[[ "$RUNTIME_NODE_BIN" == /* && -x "$RUNTIME_NODE_BIN" ]]' in script
+    assert "MODSTORE_NODE_EXECUTABLE=%s\\n" in script
+    assert script.index("MODSTORE_NODE_EXECUTABLE=%s\\n") < script.index(
+        'mv -f "${release_env}.tmp" "$release_env"'
+    )
+    assert "EnvironmentFile=-${release_env}" in script
 
 
 def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
@@ -82,6 +186,22 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert 'RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"' in script
     assert '[[ "$RUNTIME_DIR" == /* ]]' in script
     assert 'install -d -m 700 "$RUNTIME_DIR"' in script
+    assert 'CATALOG_DIR="${MODSTORE_CATALOG_DIR:-${RUNTIME_DIR%/}/catalog}"' in script
+    assert "MODSTORE_CATALOG_DIR=%s" in script
+    assert "verify_catalog_runtime_dir modstore.service" in script
+    assert "verify_catalog_runtime_dir modstore-scheduler.service" in script
+    assert script.index(
+        "systemctl stop modstore.service modstore-scheduler.service"
+    ) < script.index('cp -a "$CATALOG_SOURCE/."')
+    assert script.index('cp -a "$CATALOG_SOURCE/."') < script.index(
+        'ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"'
+    )
+    assert 'modstore_server/market_files" "$CATALOG_STAGE/market_files"' in script
+    assert "inactive catalog differs from live snapshot" in script
+    assert 'rm -rf -- "$CATALOG_STAGE" || log' in script
+    assert script.index(
+        'CATALOG_STAGE=""', script.index('mv "$CATALOG_STAGE" "$CATALOG_DIR"')
+    ) < script.index('python3 - "$CATALOG_DIR/packages.json"')
     assert "MODSTORE_RUNTIME_DIR=%s" in script
     assert "MODSTORE_REPO_ROOT=%s" in script
     assert "XCMAX_MONOREPO_ROOT=%s" in script
@@ -93,7 +213,7 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "verify_cli_identity" in script
     assert "xcmax-terminal exact-SHA identity verification failed" in script
     assert "JAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080" in script
-    assert '"$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK"' in script
+    assert '"$RUNTIME_DIR" "$CATALOG_DIR" "$CURRENT_LINK" "$CURRENT_LINK"' in script
     assert "verify_customer_value_reconciler" in script
     assert "customer value reconciler did not prove" in script
     reconciler_gate = script[
@@ -140,6 +260,24 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     )
 
 
+def test_stopped_service_resolves_current_release_catalog(tmp_path: Path) -> None:
+    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    start = script.index('ACTIVE_CATALOG_DIR="$(python3 -')
+    start = script.index("<<'PY'\n", start) + len("<<'PY'\n")
+    probe = script[start : script.index("\nPY", start)]
+    fallback = tmp_path / "old-release/catalog_data"
+    persistent = tmp_path / "runtime/catalog"
+    release_env = tmp_path / "modstore-release.env"
+    sha = "a" * 40
+    release_env.write_text(f"MODSTORE_GIT_SHA={sha}\nMODSTORE_CATALOG_DIR={persistent}\n")
+    command = [sys.executable, "-", "0", str(fallback), str(release_env), sha]
+    result = subprocess.run(command, input=probe, text=True, capture_output=True, check=True)
+    assert result.stdout.strip() == str(persistent)
+    command[-1] = "b" * 40
+    stale = subprocess.run(command, input=probe, text=True, capture_output=True, check=True)
+    assert stale.stdout.strip() == str(fallback)
+
+
 def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) -> None:
     source_root = tmp_path / "source"
     release_base = tmp_path / "xcmax"
@@ -177,11 +315,14 @@ def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) 
 
     result = subprocess.run(
         ["bash", str(RELEASE_SCRIPT)],
-        check=True,
         capture_output=True,
         text=True,
+        # Apple Bash 3.2 falls back to cwd for heredoc temporary files when its
+        # system temp directory is denied; keep that fallback inside this test.
+        cwd=tmp_path,
         env={
             **os.environ,
+            "TMPDIR": str(tmp_path),
             "PATH": f"{fake_bin}:{os.environ['PATH']}",
             "XCMAX_ALLOW_CUSTOM_RELEASE_BASE": "1",
             "XCMAX_CURRENT_LINK": str(current_link),
@@ -197,6 +338,7 @@ def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) 
         },
     )
 
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     remaining = {item.name for item in releases.iterdir()}
     assert remaining.intersection(shas) == {shas[0], shas[1], shas[-1]}
     assert malformed_sha in remaining

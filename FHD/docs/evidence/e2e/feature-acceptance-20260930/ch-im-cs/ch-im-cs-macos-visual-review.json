@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-30 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ch-im-cs",
+  "platform": "macos",
+  "reviewed_at": "2026-09-30",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+  "screenshot_sha256": "89ab327cbba1cf7cb687c81d1ec45d7415ce55744420f8aff6ff8dd3a04831f7",
+  "visible_content": "信息页列出客户消息和员工会话，用户客服员工一行仍显示未安装。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260930/ch-im-cs/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ch-im-cs/macos/result.png"
+}

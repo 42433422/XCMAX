@@ -1,0 +1,62 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ai-employee-pack",
+ "name": "办公员工包",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/mod/xcagi-office-employee-pack-bridge/catalog",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-office-employee-pack-bridge/catalog（写操作自动附带 CSRF）：办公员工包目录",
+   "expected": "办公员工包目录：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 41ms；{\"success\": true, \"data\": {\"collection\": \"office_employee_pack\", \"pack_count\": 10, \"pack_ids\": [\"excel-generate-employee\", \"excel-full-read-employee\", \"csv-generate-employee\", \"csv-full-read-employee\", \"pdf-generate-employee\", \"pdf-full-rea",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/platform-shell/employee-tools",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/platform-shell/employee-tools（写操作自动附带 CSRF）：已装员工包数量",
+   "expected": "已装员工包数量：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 8ms；installed_employee_pack_count=10 tools=10",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /mod/xcagi-office-employee-pack-bridge/tools",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-office-employee-pack-bridge/tools，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-office-employee-pack-bridge/tools，页面可见 工具，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 ['工具']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管理 | 系统设",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ai-employee-pack",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-employee-pack/macos/result.png",
+   "sha256": "f03fb0c52adc5260b1e6ce32597403d4c31bb5222b7b45294dc690fc1e291d07",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ai-employee-pack",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-employee-pack/macos/operation.webm",
+   "sha256": "2f14e2e40dc7426d0c552b2d12730a82888440de314238c6715afc60681a067d",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-employee-pack/macos/run.log",
+  "sha256": "f4ac8bdf6394a198f283d1e29339eb49d87cab5697db4dd528d95df7d292c9ab",
+  "bytes": 1461
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

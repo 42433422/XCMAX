@@ -157,7 +157,8 @@ def price_list_word_response(
             detail=business_data_hidden_reason() or "扩展 Mod 未就绪，无法导出价格表。",
         )
     template_path, template_relative = resolve_price_list_docx_template(template_slug)
-    if not template_path.is_file():
+    builtin = not template_path.is_file() and template_slug in (None, "", "price_list_default")
+    if not template_path.is_file() and not builtin:
         raise HTTPException(
             status_code=404,
             detail=(
@@ -166,12 +167,13 @@ def price_list_word_response(
                 "或在「模板预览」中登记，或设置环境变量 FHD_PRICE_LIST_DOCX_TEMPLATE。"
             ),
         )
-    rows = load_products(keyword, unit)
     customer = (unit or "").strip()
     quote_date = (export_date or "").strip() or date.today().strftime("%Y-%m-%d")
     try:
+        rows = load_products(keyword, unit)
         body = build_price_list_docx_bytes(
-            template_path,
+            None if builtin else template_path,
+            builtin_default=builtin,
             customer_name=customer,
             quote_date=quote_date,
             products=rows,

@@ -186,7 +186,7 @@ class TestQueryEndpoint:
     def test_query_success(self, mock_rag: MagicMock, mock_index: MagicMock) -> None:
         mock_index.query.return_value = []
         req = QueryRequest(query="test")
-        result = query(req)
+        result = query(req, request=MagicMock())
         assert result.success is True
         assert result.rag_enabled is True
 

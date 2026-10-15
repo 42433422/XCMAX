@@ -11,6 +11,7 @@ on:
     paths:
       - "FHD/mobile-flutter-poc/**"
       - ".github/workflows/fhd-ci-mobile-flutter.yml"
+  workflow_dispatch:
 
 concurrency:
   group: ci-mobile-flutter-${{ github.ref }}

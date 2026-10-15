@@ -30,6 +30,7 @@ from app.fastapi_app.asset_install_lifecycle import (
     start_paid_asset_installs,
     stop_paid_asset_installs,
 )
+from app.fastapi_app.event_loop_noise import install_proactor_reset_filter
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .node_role import passive_node_enabled
@@ -48,9 +49,7 @@ def _desktop_fast_start_enabled() -> bool:
 def _start_agent_tasks(app: FastAPI) -> None:
     if passive_node_enabled():
         return
-    from app.application.agent_orchestrator.task_dispatcher import (
-        start_agent_task_dispatcher,
-    )
+    from app.application.agent_orchestrator.task_dispatcher import start_agent_task_dispatcher
 
     app.state.agent_task_dispatcher = start_agent_task_dispatcher()
 
@@ -72,6 +71,8 @@ async def lifespan(app: FastAPI):
     from app.fastapi_app.startup_timing import mark_startup
 
     mark_startup("lifespan_begin")
+
+    install_proactor_reset_filter()
 
     from app.neuro_async_bridge import set_neuro_main_loop
 
@@ -132,9 +133,7 @@ async def lifespan(app: FastAPI):
             except RECOVERABLE_ERRORS as exc:
                 logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
             try:
-                from app.desktop_runtime.sync_outbox_scheduler import (
-                    start_sync_outbox_scheduler,
-                )
+                from app.desktop_runtime.sync_outbox_scheduler import start_sync_outbox_scheduler
 
                 start_sync_outbox_scheduler()
             except RECOVERABLE_ERRORS as exc:
@@ -262,6 +261,10 @@ def _initialize_databases_sync(app: FastAPI):
         from app.db.init_db import ensure_runtime_auth_bootstrap
 
         ensure_runtime_auth_bootstrap(engine, database_url=cfg_db_url or None)
+        from app.db import get_host_engine
+        from app.db.tenant_rbac_bootstrap import ensure_tenant_rbac_schema
+
+        ensure_tenant_rbac_schema(get_host_engine())
         ensure_sessions_market_access_token_column(engine, database_url=cfg_db_url or None)
         ensure_sessions_market_refresh_token_column(engine, database_url=cfg_db_url or None)
         ensure_sessions_enterprise_entitlement_columns(engine, database_url=cfg_db_url or None)

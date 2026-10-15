@@ -1,0 +1,66 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "ind-ai-assistant",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "blocked",
+  "verdict": "BLOCKED",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 0,
+  "failed": 0,
+  "visible_content": "阻塞：能力目录标注为「占位，尚未有已合入实现」，客户端 openapi 无对应行业 AI 助手接口，本机无可验证的 macOS 面。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "行业 AI 助手能力",
+      "actions": "尝试执行：行业 AI 助手能力",
+      "expected": "行业 AI 助手能力 成功",
+      "observed": "受阻：能力目录标注为「占位，尚未有已合入实现」；客户端 openapi 无对应行业 AI 助手接口，本机无可验证的 macOS 面",
+      "result": "blocked"
+    },
+    {
+      "id": "M2",
+      "input": "行业助手员工上岗",
+      "actions": "尝试执行：行业助手员工上岗",
+      "expected": "行业助手员工上岗 成功",
+      "observed": "受阻：平台壳员工目录与能力清单中无该行业 AI 助手实现，无法在本机验证",
+      "result": "blocked"
+    },
+    {
+      "id": "M3",
+      "input": "端到端验证",
+      "actions": "尝试执行：端到端验证",
+      "expected": "端到端验证 成功",
+      "observed": "受阻：功能未实现（占位），无法验证",
+      "result": "blocked"
+    }
+  ],
+  "media": [
+    {
+      "feature": "ind-ai-assistant",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-ai-assistant/macos/result.png",
+      "sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+      "visual_review": "accepted",
+      "visible_result": "「智能对话」默认页；本项全部用例受阻。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-ai-assistant",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-ai-assistant/macos/operation.webm",
+      "sha256": "eeeb021572a9e85b93245a1d57eca4e06c91752ded2c5b90a65bd9808b5dfa63",
+      "visual_review": "accepted",
+      "visible_result": "2.38s 录屏为默认对话页。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-ai-assistant/macos/run.log",
+    "sha256": "c268200f9de8d02fb6ab8b25251c431cdf31047bbadbe963301d2fd451f67a24",
+    "bytes": 861
+  }
+}

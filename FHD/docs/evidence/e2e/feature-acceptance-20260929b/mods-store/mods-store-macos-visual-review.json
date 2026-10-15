@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "mods-store",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "c6e22d054e5d2b236b3d098efcd4496deafbbccc1ba5dcfdd089f579651acf20",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。AI 员工市场，宿主基础能力分类下共 0 件，写暂无商品。分类菜单已打开。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/mods-store/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/mods-store/macos/result.png"
+}

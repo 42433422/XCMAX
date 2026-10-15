@@ -1,0 +1,8 @@
+[13:52:43] feature=ai-chat-core platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-chat-core
+[13:52:55] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:52:56] case C1: passed - 真实一轮对话得到助手回复与 run_id
+[13:52:56] case C2: passed - 兼容入口 chat-unified 同上应答
+[13:52:56] case C3: passed - SSE 流式入口真实下发事件流
+[13:52:57] case C4: passed - 空消息被拒（负例/边界）
+[13:52:57] video: ai-chat-core-web-20260929-135243.webm (1052158 bytes)
+[13:52:57] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-chat-core/log/ai-chat-core-web-20260929-135243.log
