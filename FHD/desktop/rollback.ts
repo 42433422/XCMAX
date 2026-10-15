@@ -16,6 +16,7 @@ const ROLLBACK_APPLIED = 'rollback-applied.json'
 let preservePreparedRollback = false
 
 export interface RollbackMarker {
+  operationId?: string
   mode?: 'backend' | 'windows-full' | 'macos-full'
   fromVersion: string
   toVersion: string
@@ -38,6 +39,7 @@ export interface RollbackMarker {
 }
 
 export interface RollbackApplied {
+  operationId?: string
   appliedAt: string
   reason: string
   fromVersion: string
@@ -416,6 +418,7 @@ export async function prepareRollback(toVersion: string): Promise<void> {
       backupRelPath: path.relative(dir, backupRoot),
     }
   }
+  if (process.platform === 'win32') marker.operationId = randomUUID()
   fs.writeFileSync(markerPath(), JSON.stringify(marker, null, 2), 'utf8')
 
   try { fs.unlinkSync(appliedPath()) } catch {}
@@ -548,6 +551,7 @@ export async function triggerRollback(reason: string): Promise<RollbackTriggerRe
     throw new Error('完整旧版应用备份不足：Mac 回滚标记不完整或来自其他平台；保留当前应用、数据库和标记')
   }
   const applied: RollbackApplied & WindowsRollbackAppliedRecord = {
+    ...(process.platform === 'win32' ? { operationId: marker.operationId || randomUUID() } : {}),
     appliedAt: new Date().toISOString(),
     reason,
     fromVersion: marker.toVersion,

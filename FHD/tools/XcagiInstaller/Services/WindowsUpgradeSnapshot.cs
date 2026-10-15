@@ -103,7 +103,7 @@ internal sealed class WindowsUpgradeSnapshot
         var drive = new DriveInfo(Path.GetPathRoot(userData)!); var reserve = Math.Max(1024L * 1024 * 1024, byteCount / 10);
         if (drive.AvailableFreeSpace < checked(byteCount + reserve)) throw new IOException("可用磁盘空间不足以安全保留已授权 Mod 与数据库快照，未开始安装。");
     }
-    public static WindowsUpgradeSnapshot? Prepare(string install, string? userData, CancellationToken token)
+    public static WindowsUpgradeSnapshot? Prepare(string install, string? userData, CancellationToken token, bool updaterHandoff = false)
     {
         install = Path.GetFullPath(install).TrimEnd(Path.DirectorySeparatorChar);
         if (!File.Exists(Path.Combine(install, "XCAGI.exe"))) return null;
@@ -116,10 +116,25 @@ internal sealed class WindowsUpgradeSnapshot
         long ownedBytes = 0; List<string> ownedSources = [];
         if (userData != null && Directory.Exists(userData)) ValidateOwnedState(userData, out ownedBytes, out ownedSources);
         var root = Path.Combine(userData ?? Path.GetTempPath(), "rollback", "manual-" + Guid.NewGuid());
-        if (Path.Combine(root, "restore.ps1").Length >= 260 || Directory.GetFiles(install, "*", SearchOption.AllDirectories).Any(file => Path.Combine(root, "app", Path.GetRelativePath(install, file)).Length >= 260)) throw new IOException("恢复备份路径超过 Windows 恢复组件限制，未开始更新；请使用较短的用户数据路径。");
+        if (Path.Combine(root, "restore.ps1").Length >= 260) throw new IOException("恢复加载器路径过长，未开始更新；请使用较短的用户数据路径。");
         var snapshot = new WindowsUpgradeSnapshot(install, root, userData);
         if (userData != null && Directory.Exists(userData)) snapshot._ownedDirectories.AddRange(EnumerateOwnedDirectories(userData).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase));
-        if (File.Exists(snapshot._marker)) throw new IOException("上次更新尚未确认完成，请先恢复或正常启动原程序。");
+        string? handoffHash = null;
+        if (File.Exists(snapshot._marker))
+        {
+            using var handoff = JsonDocument.Parse(File.ReadAllText(snapshot._marker)); var pending = handoff.RootElement;
+            var target = pending.GetProperty("toVersion").GetString()!.Split('+'); var candidate = snapshot._candidateIdentity.Split('+');
+            var from = pending.GetProperty("fromVersion").GetString()!.Split('+');
+            if (!updaterHandoff || pending.GetProperty("mode").GetString() != "windows-full"
+                || target.Length != 2 || candidate.Length != 2 || from.Length != 2
+                || target[0] != candidate[0] || target[1].Length < 12 || !candidate[1].StartsWith(target[1], StringComparison.OrdinalIgnoreCase)
+                || from[1].Length < 12 || !snapshot._fromVersion.Split('+').Last().StartsWith(from[1], StringComparison.OrdinalIgnoreCase)
+                || !DateTimeOffset.TryParse(pending.GetProperty("preparedAt").GetString(), out var prepared) || DateTimeOffset.UtcNow - prepared is var age && (age < TimeSpan.Zero || age > TimeSpan.FromMinutes(15))
+                || !Path.GetFullPath(pending.GetProperty("appPath").GetString()!).Equals(Path.Combine(install, "XCAGI.exe"), StringComparison.OrdinalIgnoreCase)
+                || !Path.GetFullPath(pending.GetProperty("databasePath").GetString()!).Equals(snapshot._db, StringComparison.OrdinalIgnoreCase))
+                throw new IOException("上次更新尚未确认完成，请先恢复或正常启动原程序。");
+            handoffHash = Hash(snapshot._marker);
+        }
         foreach (var retained in new[] { install + ".xcagi-rollback-staging", install + ".xcagi-failed", snapshot._db + ".xcagi-rollback-staging", snapshot._db + ".xcagi-failed" })
             if (retained.Length > install.Length && (Directory.Exists(retained) || File.Exists(retained))) throw new IOException("发现上次恢复暂存或失败现场，未开始更新；请先保留并恢复该现场：" + retained);
         foreach (var owned in ownedSources)
@@ -156,9 +171,15 @@ internal sealed class WindowsUpgradeSnapshot
         }
         EnsureStopped(install);
         if (snapshot._dbBackup != "" && Hash(snapshot._dbBackup) != snapshot._dbHash) throw new IOException("数据库备份校验失败，未开始更新。");
-        using (var marker = new FileStream(snapshot._marker, FileMode.CreateNew, FileAccess.Write, FileShare.None)) JsonSerializer.Serialize(marker, new { mode = "windows-full", fromVersion = snapshot._fromVersion, toVersion = snapshot._candidateIdentity, preparedAt = DateTimeOffset.UtcNow.ToString("O"), appPath = Path.Combine(install, "XCAGI.exe"), backendPath = Path.Combine(install, "resources", "backend", "xcagi-backend.exe"), appBackupRelPath = Path.GetRelativePath(Path.GetDirectoryName(root)!, snapshot._backup), databasePath = snapshot._db, databaseBackupPath = snapshot._dbBackup, databaseOriginallyAbsent = snapshot._db != "" && snapshot._dbBackup == "", expectedAppFiles = snapshot._files, expectedDatabaseSha256 = snapshot._dbHash, ownedUserDataRoot = snapshot._userData, ownedBackupRoot = snapshot._ownedBackup, expectedOwnedFiles = snapshot._ownedFiles, expectedOwnedDirectories = snapshot._ownedDirectories });
+        var markerPath = handoffHash == null ? snapshot._marker : Path.Combine(root, "handoff-marker.json");
+        using (var marker = new FileStream(markerPath, FileMode.CreateNew, FileAccess.Write, FileShare.None)) JsonSerializer.Serialize(marker, new { mode = "windows-full", fromVersion = snapshot._fromVersion, toVersion = snapshot._candidateIdentity, preparedAt = DateTimeOffset.UtcNow.ToString("O"), appPath = Path.Combine(install, "XCAGI.exe"), backendPath = Path.Combine(install, "resources", "backend", "xcagi-backend.exe"), appBackupRelPath = Path.GetRelativePath(Path.GetDirectoryName(root)!, snapshot._backup), databasePath = snapshot._db, databaseBackupPath = snapshot._dbBackup, databaseOriginallyAbsent = snapshot._db != "" && snapshot._dbBackup == "", expectedAppFiles = snapshot._files, expectedDatabaseSha256 = snapshot._dbHash, ownedUserDataRoot = snapshot._userData, ownedBackupRoot = snapshot._ownedBackup, expectedOwnedFiles = snapshot._ownedFiles, expectedOwnedDirectories = snapshot._ownedDirectories });
         File.WriteAllText(Path.Combine(root, "snapshot-manifest.json"), JsonSerializer.Serialize(new { appFiles = snapshot._files, databaseSha256 = snapshot._dbHash, ownedFiles = snapshot._ownedFiles, ownedDirectories = snapshot._ownedDirectories }), new UTF8Encoding(false));
         snapshot._manifestHash = Hash(Path.Combine(root, "snapshot-manifest.json"));
+        if (handoffHash != null)
+        {
+            if (Hash(snapshot._marker) != handoffHash) throw new IOException("更新交接记录已改变，未开始安装。");
+            File.Replace(markerPath, snapshot._marker, Path.Combine(root, "desktop-marker.previous.json"));
+        }
         return snapshot;
     }
     public async Task RestoreAsync(int exitedInstallerPid)

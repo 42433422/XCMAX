@@ -6,7 +6,6 @@
   [Parameter(Mandatory = $true)]
   [ValidateSet('personal', 'enterprise')]
   [string]$ProductSku,
-  [switch]$SkipUiInstaller,
   [string]$SunbirdSeedZipPath = '',
   [string]$InstallerOutputSubdir = '',
   [string]$InstallerFileName = ''
@@ -244,24 +243,11 @@ Assert-FileExists (Join-Path $outDir "win-unpacked\resources\app.asar") "Electro
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\backend\xcagi-backend.exe") "Packaged backend executable"
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\product-sku.json") "Packaged product-sku.json"
 
-$nsisExe = Get-ChildItem $outDir -Filter "XCAGI-$label-Setup-*.exe" -File -ErrorAction SilentlyContinue |
-  Sort-Object LastWriteTime -Descending |
-  Select-Object -First 1
-if (-not $nsisExe) {
-  $nsisExe = Get-ChildItem $outDir -Filter "XCAGI-*-Setup-*.exe" -File -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-}
+$nsisExe = Get-Item -LiteralPath (Join-Path $outDir "XCAGI-$label-Setup-$Version-x64.exe")
 
-if ($nsisExe) {
-  & (Join-Path $PSScriptRoot 'assert-nsis-7z-filter.ps1') -PayloadPath $nsisExe.FullName
-  if ($LASTEXITCODE -ne 0) { throw "NSIS payload uses a 7z filter the installer cannot extract" }
-}
-if (-not $SkipUiInstaller) {
-  if (-not $nsisExe) {
-    throw "NSIS artifact not found in $outDir; cannot build single-file installer."
-  }
-
+& (Join-Path $PSScriptRoot 'assert-nsis-7z-filter.ps1') -PayloadPath $nsisExe.FullName
+if ($LASTEXITCODE -ne 0) { throw "NSIS payload uses a 7z filter the installer cannot extract" }
+& {
   $stagingNsis = Join-Path $outDir 'nsis-payload.tmp.exe'
   Copy-Item $nsisExe.FullName $stagingNsis -Force
 
@@ -322,10 +308,6 @@ if (-not $SkipUiInstaller) {
   $env:XCAGI_BUILD_SHA = $buildSha
   $env:XCAGI_PRODUCT_VERSION = $Version
   node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $finalSetupPath $ToolchainVersion win
-} elseif ($nsisExe) {
-  $env:XCAGI_BUILD_SHA = $buildSha
-  $env:XCAGI_PRODUCT_VERSION = $Version
-  node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $nsisExe.FullName $ToolchainVersion win
 }
 
 $dlProj = Join-Path $Root "tools\XcagiDownloader\XcagiDownloader.csproj"

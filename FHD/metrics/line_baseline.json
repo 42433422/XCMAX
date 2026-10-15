@@ -1,5 +1,5 @@
 {
-  "lines": 2301771,
-  "updated": "2026-10-14",
-  "note": "User approved only PR #2330 +36 at 2026-10-13 19:42 UTC; main 98ea6012 baseline 2301735 -> exact reviewed tree 07013eef 2301771; tests +47, implementation -12, changelog +1. Full GitHub CI and identical official-policy Git-byte count agree; no counting rules or exclusions changed. No other PR or login/rollback +365 allowance included."
+  "lines": 2303068,
+  "updated": "2026-10-16",
+  "note": "Preserve user-approved PR #2330 +36 only (2026-10-13 19:42 UTC) after main cd00b33855; official full indexed-source count 2303032 -> 2303068, tests +47, implementation -12, changelog +1; no additional allowance or counting rule changes."
 }

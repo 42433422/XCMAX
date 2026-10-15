@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 from sqlalchemy.engine import make_url
 
+import app.services.database_service as db_mod
 from app.services.database_service import DatabaseService
 
 
@@ -315,10 +316,7 @@ class TestRestoreDatabase:
         if case == "concurrent-write":
             monkeypatch.setattr(service, "_stage_restore", stage_then_write)
         if case == "slow-copy":
-            monkeypatch.setattr(
-                "app.services.database_service.time",
-                SimpleNamespace(monotonic=Mock(side_effect=[0, 3])),
-            )
+            monkeypatch.setattr(db_mod, "time", SimpleNamespace(monotonic=Mock(side_effect=[0, 3])))
         result = service.restore_database(str(backup))
         restored = case != "concurrent-write"
         assert result["success"] is restored
@@ -362,14 +360,25 @@ class TestRestoreDatabase:
         assert message in result["message"]
 
     @pytest.mark.parametrize("absolute", [False, True])
-    def test_restore_success_with_live_wal_connection(self, tmp_path, service, absolute):
-        db_file = tmp_path / "live.db"
+    def test_restore_success_with_live_wal_connection(
+        self, tmp_path, service, absolute, monkeypatch
+    ):
+        root = tmp_path / "userdata"
+        db_file = root / "data" / "xcagi.db"
+        db_file.parent.mkdir(parents=True)
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir()
         backup_file = backup_dir / "test.db.20240101_000000.bak"
         with sqlite3.connect(backup_file) as snapshot:
             snapshot.execute("create table products(price real)")
             snapshot.execute("insert into products values (12.50)")
+        marker = root / "config" / "database-recovery-required"
+        marker.parent.mkdir(parents=True)
+        marker.write_text("corrupt_no_backup\n", encoding="utf-8")
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(root))
+        monkeypatch.setenv("XCAGI_DESKTOP_DB_RECOVERY", "corrupt_no_backup")
+        monkeypatch.setattr(service, "_get_db_path", lambda: str(db_file))
         live = sqlite3.connect(db_file)
         try:
             live.execute("pragma journal_mode=wal")
@@ -378,6 +387,8 @@ class TestRestoreDatabase:
             live.commit()
             result = service.restore_database(str(backup_file) if absolute else backup_file.name)
             assert result["success"] is True
+            assert not marker.exists()
+            assert os.environ["XCAGI_DESKTOP_DB_RECOVERY"] == f"restored:{backup_file.name}"
             assert live.execute("select price from products").fetchone()[0] == 12.50
             assert live.execute("pragma integrity_check").fetchone()[0] == "ok"
         finally:
