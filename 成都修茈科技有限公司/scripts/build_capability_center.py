@@ -122,6 +122,16 @@ def public_projection(value: object, excluded: set[str]) -> object:
     return project(value)
 
 
+def evidence_paths(value: object) -> set[str]:
+    if isinstance(value, dict):
+        return set().union(*(evidence_paths(v) for v in value.values()))
+    if isinstance(value, list):
+        return set().union(*(evidence_paths(v) for v in value))
+    return {value} if isinstance(value, str) and Path(value).suffix.lower() in {
+        ".json", ".log", ".txt", ".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".mov",
+    } else set()
+
+
 def privacy_exclusions(evidence: dict, feature_id: str = "") -> set[str]:
     excluded = set(evidence.get("public_excluded_media") or [])
     sensitive = feature_id in _PRIVATE_EVIDENCE_FEATURES
@@ -139,11 +149,21 @@ def privacy_exclusions(evidence: dict, feature_id: str = "") -> set[str]:
                 excluded.add(value)
             elif ext in {".json", ".log", ".txt"}:
                 try:
-                    body = e(value).read_text(encoding="utf-8").casefold()
+                    body = e(value).read_text(encoding="utf-8")
                 except (OSError, UnicodeError):
                     continue
-                if sensitive or any(marker in body for marker in _PUBLIC_PRIVATE_MARKERS):
+                if sensitive or any(marker in body.casefold() for marker in _PUBLIC_PRIVATE_MARKERS):
                     excluded.add(value)
+                    if ext == ".json":
+                        try:
+                            excluded.update(evidence_paths(json.loads(body)))
+                        except ValueError:
+                            pass
+    # A private acceptance record also withdraws its companion identity, log and media.
+    for profile in (evidence.get("platform_assets") or {}).values():
+        paths = evidence_paths(profile)
+        if paths & excluded:
+            excluded.update(paths)
     return excluded
 
 
@@ -429,6 +449,9 @@ def platform_verdicts(feat: dict, runs: list[dict], warnings: list[str], head: s
             "name": PLATFORM_META.get(p, p),
             "status": status,
             "runs": p_runs,
+            "run_identities": [{k: r.get(k) for k in (
+                "app_version", "app_git_sha", "verified_at", "verdict", "passed", "failed",
+                "_acceptance_sha256")} for r in p_runs],
             "accepted": [latest] if complete and passed else [],
             "media": [m for r in p_runs for m in r.get("media", [])],
             "logs": [x["path"] for x in (assets.get("logs") or []) if path_exists(x.get("path", ""))],
@@ -1255,7 +1278,14 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             "passed": "通过", "failed": "失败", "blocked": "阻塞",
         }.get(r.get("status"), "未通过")} for _, r in pairs for m in r.get("media", [])]
         run_paths = {path for path, _ in pairs}
-        return (run_lines(pairs, v["id"]) + media_figs(media, v["id"])
+        visible_hashes = {r.get("_acceptance_sha256") for _, r in pairs}
+        private_identities = "".join(
+            f'<p class="cap-plat-run">历史验收：{esc(r.get("verdict"))}；产品版本 '
+            f'{esc(r.get("app_version"))}；Git SHA <code>{esc(r.get("app_git_sha"))}</code>；'
+            f'验证时间 {esc(r.get("verified_at"))}；记录 SHA-256 '
+            f'<code>{esc(r.get("_acceptance_sha256"))}</code>。客户资料不公开。</p>'
+            for r in v.get("run_identities", []) if r.get("_acceptance_sha256") not in visible_hashes)
+        return (private_identities + run_lines(pairs, v["id"]) + media_figs(media, v["id"])
                 + (log_blocks(v.get("logs", []), v["id"]) if pairs else "")
                 + raw_block([p for p in v.get("raw", []) if pairs and p not in run_paths and p != v.get("identity_path")], v["id"]))
 
@@ -1329,14 +1359,15 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         '<h2>平台验证状态</h2>'
         '<p class="cap-section-note">本项适用于 ' 
         f'{len(verdicts)} 个平台，逐平台独立判定：平台状态只由该平台的实机验收记录产生，'
-        '总体状态由平台状态自动汇总，目录与页面都不存放可手写的状态。</p>'
+        '总体状态由平台状态自动汇总，目录与页面都不存放可手写的状态。'
+        '验收结论仅覆盖记录所列版本、Git SHA 与产物；当前源码或新安装包仍需独立验收。</p>'
         + "".join(plat_sections) + "</div></section>"
     )
 
     remarks = []
     if verified_plats and pending_plats:
         remarks.append(
-            f'当前仅在 {esc("、".join(verified_plats))} 通过实机验收；'
+            f'所列构建仅在 {esc("、".join(verified_plats))} 有通过的实机验收记录；'
             f'{esc("、".join(pending_plats))} 仍为「待验证」，因此总体状态不构成「已验证」。')
     elif pending_plats and not verified_plats:
         has_attempts = any(v["runs"] or v["observations"] for v in verdicts)
@@ -1479,6 +1510,15 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
 
 def private_generated_assets(remove: bool = False) -> list[Path]:
     sensitive_prefixes = ("base-login-", "ind-attendance-", "erp-sales-order-", "ind-szqsm-")
+    private_names = set()
+    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    for domain in catalog["domains"]:
+        for module in domain["modules"]:
+            for feature in module["features"]:
+                for rel in privacy_exclusions(feature.get("evidence") or {}, feature["id"]):
+                    private_names.add(evidence_asset_name(feature["id"], rel))
+                    for platform in feature.get("platforms", []):
+                        private_names.add(evidence_asset_name(feature["id"], rel, platform, {Path(rel).name}))
     private = []
     for path in EVIDENCE_ASSET_DIR.iterdir():
         if not path.is_file():
@@ -1487,7 +1527,8 @@ def private_generated_assets(remove: bool = False) -> list[Path]:
             body = path.read_text(encoding="utf-8").casefold() if path.suffix.lower() in {".json", ".log", ".txt"} else ""
         except (OSError, UnicodeError):
             continue
-        if path.name.startswith(sensitive_prefixes) or any(marker in body for marker in _PUBLIC_PRIVATE_MARKERS):
+        if (path.name in private_names or path.name.startswith(sensitive_prefixes)
+                or any(marker in body for marker in _PUBLIC_PRIVATE_MARKERS)):
             private.append(path)
             if remove:
                 path.unlink()
