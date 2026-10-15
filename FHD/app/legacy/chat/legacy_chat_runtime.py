@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable
 from types import SimpleNamespace
 from typing import Any
 
+from app.application.document_employee_routing import forced_document_tool_choice
 from app.infrastructure.llm.client import llm_client_scope
 
 
@@ -24,6 +26,71 @@ def _approval_wait_text() -> str:
     return ""
 
 
+_BACKUP_KEY = ("execute_erp_capability", "system_maintenance", "backup_database")
+_BACKUP_NOT_EXECUTED = "数据库备份未执行，未创建备份或提交审批；请重试。"
+
+
+def _backup_reply() -> dict[str, Any] | None:
+    for row in _facade().get_last_tool_records():
+        params, output = row.get("params") or {}, row.get("output") or {}
+        tool_id = params.get("tool_id") or params.get("capability_id")
+        if (row.get("tool_name"), tool_id, params.get("action")) != _BACKUP_KEY:
+            continue
+        if output.get("success") is True or output.get("pending_approval") is True:
+            text = str(output.get("message") or json.dumps(output, ensure_ascii=False))
+            reply: dict[str, Any] = {"response": text, "text": text}
+            reply["pending_approval"] = output.get("pending_approval") is True
+            _facade()._attach_last_tool_records(reply)
+            return reply
+    return None
+
+
+def _format_tool_calls(tool_calls: list[Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": str(getattr(tc, "id", "") or ""),
+            "type": "function",
+            "function": {
+                "name": str(getattr(getattr(tc, "function", None), "name", "") or ""),
+                "arguments": str(getattr(getattr(tc, "function", None), "arguments", "") or ""),
+            },
+        }
+        for tc in tool_calls
+    ]
+
+
+def _prepare_chat(user_message, runtime_context, system_prompt, client, model):
+    facade = _facade()
+    sys = facade.merge_system_prompt(system_prompt, runtime_context)
+    content = facade.build_openai_user_content(user_message, runtime_context)
+    messages = [{"role": "user", "content": content}]
+    if sys:
+        messages.insert(0, {"role": "system", "content": sys})
+    has_image_input = facade.messages_have_image_parts(messages)
+    cli = client
+    if cli is None:
+        facade.require_api_key()
+        cli = facade.get_openai_compatible_client()
+    mdl = facade._resolve_chat_model_for_client(cli, model)
+    tools = facade._get_workflow_tool_registry()
+
+    backup_required = re.search(
+        r"(?:请|帮我|立即|手动|现在|执行|生成|创建|做一次).{0,60}(?:备份.{0,12}数据库|数据库.{0,12}备份)",
+        user_message,
+    ) and not re.search(
+        r"(?:不要|勿|别|无需|不需要|禁止).{0,8}备份|(?:如何|怎么|解释|介绍|查看|列出|查询|检查|读取|打开|下载|删除|恢复).{0,12}备份|备份(?:文件)?(?:进行)?(?:删除|恢复)",
+        user_message,
+    )
+    tool_choice = forced_document_tool_choice(user_message, tools, runtime_context) or "auto"
+    if backup_required:
+        if not any(
+            (tool.get("function") or {}).get("name") == "execute_erp_capability" for tool in tools
+        ):
+            raise RuntimeError("数据库备份工具不可用，未执行备份或提交审批。")
+        tool_choice = {"type": "function", "function": {"name": "execute_erp_capability"}}
+    return messages, has_image_input, cli, mdl, tools, tool_choice, backup_required
+
+
 def chat(
     user_message: str,
     *,
@@ -36,29 +103,10 @@ def chat(
     client: Any | None = None,
 ) -> Any:
     _facade().reset_planner_tool_dedup_state()
-    if max_iterations is None:
-        max_iterations = 8
-    sys = _facade().merge_system_prompt(system_prompt, runtime_context)
-    messages: list[dict[str, Any]] = []
-    if sys:
-        messages.append({"role": "system", "content": sys})
-    messages.append(
-        {
-            "role": "user",
-            "content": _facade().build_openai_user_content(user_message, runtime_context),
-        }
+    max_iterations = 8 if max_iterations is None else max_iterations
+    messages, has_image_input, cli, mdl, tools, tool_choice, backup_required = _prepare_chat(
+        user_message, runtime_context, system_prompt, client, model
     )
-    has_image_input = _facade().messages_have_image_parts(messages)
-    if client is None:
-        _facade().require_api_key()
-        cli = _facade().get_openai_compatible_client()
-    else:
-        cli = client
-    mdl = _facade()._resolve_chat_model_for_client(cli, model)
-    tools = _facade()._get_workflow_tool_registry()
-    from app.application.document_employee_routing import forced_document_tool_choice
-
-    tool_choice = forced_document_tool_choice(user_message, tools, runtime_context) or "auto"
     tool_outputs: list[str] = []
     for _ in range(max_iterations):
         c = cli.chat.completions.create(
@@ -69,21 +117,7 @@ def chat(
         )
         msg = c.choices[0].message
         tcs = getattr(msg, "tool_calls", None) or []
-        formatted_tool_calls = None
-        if tcs:
-            formatted_tool_calls = [
-                {
-                    "id": str(getattr(tc, "id", "") or ""),
-                    "type": "function",
-                    "function": {
-                        "name": str(getattr(getattr(tc, "function", None), "name", "") or ""),
-                        "arguments": str(
-                            getattr(getattr(tc, "function", None), "arguments", "") or ""
-                        ),
-                    },
-                }
-                for tc in tcs
-            ]
+        formatted_tool_calls = _format_tool_calls(tcs) if tcs else None
         messages.append(
             {"role": "assistant", "content": msg.content or "", "tool_calls": formatted_tool_calls}
         )
@@ -114,12 +148,18 @@ def chat(
                     ),
                     ensure_ascii=False,
                 )
+            if backup_required:
+                if reply := _backup_reply():
+                    return reply
+                raise RuntimeError(_BACKUP_NOT_EXECUTED)
             if waiting := _approval_wait_text():
                 return _facade()._attach_last_tool_records(
                     {"response": waiting, "text": waiting, "pending_approval": True}
                 )
             tool_choice = "auto"
             continue
+        if backup_required:
+            raise RuntimeError(_BACKUP_NOT_EXECUTED)
         result = str(msg.content or "").strip()
         if has_image_input and (not result):
             raise _facade().EmptyMultimodalResponseError(
@@ -156,29 +196,10 @@ def chat_stream_text(
     client: Any | None = None,
 ) -> Iterable[str | dict[str, Any]]:
     _facade().reset_planner_tool_dedup_state()
-    if max_iterations is None:
-        max_iterations = 8
-    sys = _facade().merge_system_prompt(system_prompt, runtime_context)
-    messages: list[dict[str, Any]] = []
-    if sys:
-        messages.append({"role": "system", "content": sys})
-    messages.append(
-        {
-            "role": "user",
-            "content": _facade().build_openai_user_content(user_message, runtime_context),
-        }
+    max_iterations = 8 if max_iterations is None else max_iterations
+    messages, has_image_input, cli, mdl, tools, tool_choice, backup_required = _prepare_chat(
+        user_message, runtime_context, system_prompt, client, model
     )
-    has_image_input = _facade().messages_have_image_parts(messages)
-    if client is None:
-        _facade().require_api_key()
-        cli = _facade().get_openai_compatible_client()
-    else:
-        cli = client
-    mdl = _facade()._resolve_chat_model_for_client(cli, model)
-    tools = _facade()._get_workflow_tool_registry()
-    from app.application.document_employee_routing import forced_document_tool_choice
-
-    tool_choice = forced_document_tool_choice(user_message, tools, runtime_context) or "auto"
     for _ in range(max_iterations):
         stream = cli.chat.completions.create(
             model=mdl,
@@ -199,28 +220,23 @@ def chat_stream_text(
             content = getattr(delta, "content", None)
             if content:
                 text_parts.append(str(content))
-                yield str(content)
+                if not backup_required:
+                    yield str(content)
             tc_list = getattr(delta, "tool_calls", None) or []
             for position, tc in enumerate(tc_list):
                 index = getattr(tc, "index", None)
                 idx = position if index is None else int(index)
-                cur = tool_calls_by_idx.get(idx)
-                if cur is None:
-                    cur = {
+                cur = tool_calls_by_idx.setdefault(
+                    idx,
+                    {
                         "id": getattr(tc, "id", None),
-                        "function": {
-                            "name": getattr(getattr(tc, "function", None), "name", None),
-                            "arguments": getattr(getattr(tc, "function", None), "arguments", "")
-                            or "",
-                        },
-                    }
-                    tool_calls_by_idx[idx] = cur
-                else:
-                    fn = getattr(tc, "function", None)
-                    fn_name = getattr(fn, "name", None)
-                    if fn_name:
-                        cur["function"]["name"] = fn_name
-                    cur["function"]["arguments"] += str(getattr(fn, "arguments", "") or "")
+                        "function": {"name": None, "arguments": ""},
+                    },
+                )
+                fn = getattr(tc, "function", None)
+                if fn_name := getattr(fn, "name", None):
+                    cur["function"]["name"] = fn_name
+                cur["function"]["arguments"] += str(getattr(fn, "arguments", "") or "")
         if tool_calls_by_idx:
             for v in tool_calls_by_idx.values():
                 tool_name = str(v.get("function", {}).get("name", "") or "")
@@ -239,14 +255,7 @@ def chat_stream_text(
                 )
                 for v in tool_calls_by_idx.values()
             ]
-            formatted_tool_calls = [
-                {
-                    "id": t.id,
-                    "type": "function",
-                    "function": {"name": t.function.name, "arguments": t.function.arguments},
-                }
-                for t in tcs
-            ]
+            formatted_tool_calls = _format_tool_calls(tcs)
             messages.append(
                 {"role": "assistant", "content": "", "tool_calls": formatted_tool_calls}
             )
@@ -268,6 +277,14 @@ def chat_stream_text(
                     "message": token_request.get("message"),
                 }
                 return
+            if backup_required:
+                reply = _backup_reply()
+                yield (
+                    reply["text"]
+                    if reply
+                    else {"_planner_sse": "error", "message": _BACKUP_NOT_EXECUTED}
+                )
+                return
             if waiting := _approval_wait_text():
                 yield waiting
                 return
@@ -286,6 +303,9 @@ def chat_stream_text(
             yield _facade()._post_tool_round_hint(tcs, tool_payloads)
             tool_choice = "auto"
             continue
+        if backup_required:
+            yield {"_planner_sse": "error", "message": _BACKUP_NOT_EXECUTED}
+            return
         if text_parts:
             return
         if has_image_input:

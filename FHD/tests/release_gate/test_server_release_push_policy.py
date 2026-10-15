@@ -10,6 +10,36 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = FHD_ROOT.parent
 
 
+def _run_bash(*args: str, env: dict[str, str], cwd: Path | None = None):
+    return subprocess.run(
+        ["bash", *args],
+        cwd=cwd,
+        env={**os.environ, **env},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _tarball_release(tmp_path: Path, git_sha: str, **metadata: str):
+    out_dir = tmp_path / "dist"
+    out_dir.mkdir()
+    artifact = out_dir / "fhd-full-1.0.0.0-test.tar.gz"
+    artifact.write_bytes(b"server-release")
+    artifact_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    manifest = {
+        "artifact": artifact.name,
+        "sha256": artifact_sha,
+        "version": "1.0.0.0",
+        "git_sha": git_sha,
+        "deploy_mode": "tarball",
+        "admin_console_sha256": "a" * 64,
+        **metadata,
+    }
+    (out_dir / "fhd-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return out_dir, artifact, artifact_sha
+
+
 def test_server_release_bundles_and_bootstraps_vendored_langgraph() -> None:
     pack = (FHD_ROOT / "scripts/deploy/fhd-pack-release.sh").read_text(encoding="utf-8")
     apply = (FHD_ROOT / "scripts/deploy/fhd-apply-release.sh").read_text(encoding="utf-8")
@@ -61,24 +91,8 @@ def test_cvm_upload_prefers_resumable_rsync_and_retains_partial() -> None:
 
 
 def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> None:
-    out_dir = tmp_path / "dist"
-    out_dir.mkdir()
-    artifact = out_dir / "fhd-full-1.0.0.0-test.tar.gz"
-    artifact.write_bytes(b"server-release")
+    out_dir, artifact, _ = _tarball_release(tmp_path, "a" * 40)
     (out_dir / "fhd-api-image.tar.gz").write_bytes(b"optional-image")
-    (out_dir / "fhd-manifest.json").write_text(
-        json.dumps(
-            {
-                "artifact": artifact.name,
-                "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
-                "version": "1.0.0.0",
-                "git_sha": "a" * 40,
-                "deploy_mode": "tarball",
-                "admin_console_sha256": "a" * 64,
-            }
-        ),
-        encoding="utf-8",
-    )
 
     calls = tmp_path / "calls.log"
     mock_bin = tmp_path / "bin"
@@ -94,11 +108,10 @@ def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> Non
         executable.write_text(body, encoding="utf-8")
         executable.chmod(0o755)
 
-    result = subprocess.run(
-        ["bash", str(FHD_ROOT / "scripts/deploy/fhd-push-release.sh")],
+    result = _run_bash(
+        str(FHD_ROOT / "scripts/deploy/fhd-push-release.sh"),
         cwd=FHD_ROOT,
         env={
-            **os.environ,
             "PATH": f"{mock_bin}:{os.environ['PATH']}",
             "CALLS_LOG": str(calls),
             "FHD_SKIP_PACK": "1",
@@ -107,9 +120,6 @@ def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> Non
             "FHD_PUSH_IMAGE_TAR": "0",
             "FHD_PUSH_APPLY_NOW": "0",
         },
-        check=False,
-        capture_output=True,
-        text=True,
     )
 
     assert result.returncode == 0, result.stderr
@@ -152,25 +162,12 @@ def test_server_release_is_retained_by_version_and_full_sha_before_pointer_switc
 def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
     tmp_path: Path,
 ) -> None:
-    out_dir = tmp_path / "dist"
-    out_dir.mkdir()
-    artifact = out_dir / "fhd-full-1.0.0.0-test.tar.gz"
-    artifact.write_bytes(b"server-release")
-    artifact_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
-    (out_dir / "fhd-manifest.json").write_text(
-        json.dumps(
-            {
-                "artifact": artifact.name,
-                "sha256": artifact_sha,
-                "version": "1.0.0.0",
-                "git_sha": "b" * 40,
-                "deploy_mode": "tarball",
-                "image": "ghcr.io/example/fhd-api",
-                "image_digest": "sha256:" + "c" * 64,
-                "admin_console_sha256": "d" * 64,
-            }
-        ),
-        encoding="utf-8",
+    out_dir, _, artifact_sha = _tarball_release(
+        tmp_path,
+        "b" * 40,
+        image="ghcr.io/example/fhd-api",
+        image_digest="sha256:" + "c" * 64,
+        admin_console_sha256="d" * 64,
     )
 
     mock_bin = tmp_path / "bin"
@@ -209,11 +206,10 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
     )
     health_attempts = tmp_path / "health-attempts"
 
-    result = subprocess.run(
-        ["bash", str(FHD_ROOT / "scripts/deploy/fhd-push-release.sh")],
+    result = _run_bash(
+        str(FHD_ROOT / "scripts/deploy/fhd-push-release.sh"),
         cwd=FHD_ROOT,
         env={
-            **os.environ,
             "PATH": f"{mock_bin}:{os.environ['PATH']}",
             "HEALTH_PAYLOAD": health_payload,
             "HEALTH_ATTEMPTS": str(health_attempts),
@@ -225,9 +221,6 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
             "FHD_PUSH_HEALTH_RETRIES": "3",
             "FHD_PUSH_HEALTH_INTERVAL": "0",
         },
-        check=False,
-        capture_output=True,
-        text=True,
     )
 
     assert result.returncode == 0, result.stderr
@@ -252,20 +245,8 @@ def test_release_identity_verifier_requires_artifact_when_supplied() -> None:
         'verify_release_identity_payload "$PAYLOAD" '
         f"{'b' * 40} sha256:{'c' * 64} {'a' * 64}"
     )
-    passed = subprocess.run(
-        ["bash", "-c", command],
-        env={**os.environ, "PAYLOAD": payload},
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    failed = subprocess.run(
-        ["bash", "-c", command.replace("a" * 64, "d" * 64)],
-        env={**os.environ, "PAYLOAD": payload},
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    passed = _run_bash("-c", command, env={"PAYLOAD": payload})
+    failed = _run_bash("-c", command.replace("a" * 64, "d" * 64), env={"PAYLOAD": payload})
 
     assert passed.returncode == 0, passed.stderr
     assert failed.returncode != 0
@@ -313,7 +294,19 @@ def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:
     )
 
     for workflow in (source, published):
+        events = workflow.get("on", workflow.get(True))
+        dispatch_input = events["workflow_dispatch"]["inputs"]["dispatch_evolution"]
+        assert dispatch_input["type"] == "boolean"
+        assert dispatch_input["default"] is True
         job = workflow["jobs"]["dispatch-evolution-after-cvm"]
+        assert job["needs"] == ["cvm-push-release"]
+        assert job["if"].split(" && ") == [
+            "github.event_name == 'workflow_dispatch'",
+            "github.ref == 'refs/heads/main'",
+            "inputs.push_to_cvm == true",
+            "inputs.dispatch_evolution == true",
+            "needs.cvm-push-release.result == 'success'",
+        ]
         assert job["steps"][0]["working-directory"] == "."
         assert "actions/checkout" not in str(job["steps"])
 
@@ -335,16 +328,53 @@ def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
             assert "environment" not in job, f"{path}:{job_name} still has an approval gate"
 
 
-def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:
-    workflow = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(encoding="utf-8")
-
-    sync_step = workflow.split("- name: Sync autonomy runtime configuration", 1)[1].split(
-        "- name: SSH rolling restart / apply", 1
-    )[0]
-    assert "systemctl restart fhd-full.service" in sync_step
-    assert "for attempt in $(seq 1 30)" in sync_step
-    assert ('curl --noproxy "*" -sf --max-time 5 http://127.0.0.1:5100/api/health') in sync_step
-    assert "did not become HTTP-ready after autonomy config sync" in sync_step
+def test_deploy_validates_autonomy_without_rewriting_server_configuration(tmp_path: Path) -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text())
+    steps = workflow["jobs"]["cvm-rolling"]["steps"]
+    check = next(
+        s for s in steps if s["name"] == "Validate existing autonomy runtime configuration"
+    )
+    assert "production" in check["if"] and "apply-latest" in check["if"]
+    remote = tmp_path / "fhd-full.env"
+    original = (
+        "AUTONOMY_WEBHOOK_TOKEN=server-only\nXCAGI_AUTONOMY_MEDIUM_RISK_POLICY=require_human\n"
+    )
+    remote.write_text(original)
+    for name, body in {
+        "ssh": 'bash -c "${@: -1}"',
+        "systemctl": 'test "$*" = "is-active --quiet fhd-full.service"',
+        "curl": 'exit "${HEALTH_EXIT:-0}"',
+    }.items():
+        executable = tmp_path / name
+        executable.write_text("#!/bin/bash\n" + body + "\n")
+        executable.chmod(0o700)
+    script = check["run"].replace("/root/fhd-full.env", str(remote))
+    env = {
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "RUNNER_TEMP": str(tmp_path),
+        "FHD_PUSH_SSH_KEY_RAW": "test-only",
+        "AUTONOMY_WEBHOOK_TOKEN": "callback-only",
+    }
+    for token, health, expected in (
+        ("callback-only", "0", 0),
+        ("", "0", 1),
+        ("callback-only", "1", 1),
+    ):
+        result = _run_bash(
+            "-c",
+            script,
+            env={**env, "AUTONOMY_WEBHOOK_TOKEN": token, "HEALTH_EXIT": health},
+        )
+        assert result.returncode == expected
+        assert remote.read_text() == original
+        assert "server-only" not in result.stdout + result.stderr
+    remote.unlink()
+    assert _run_bash("-c", script, env=env).returncode != 0
+    assert steps.index(check) < next(
+        i
+        for i, s in enumerate(steps)
+        if s["name"] == "Authorize exact production release in autonomy ledger"
+    )
 
 
 def test_production_deploy_requires_human_environment_approval() -> None:
@@ -363,7 +393,7 @@ def test_production_deploy_requires_human_environment_approval() -> None:
     assert "\n    environment:\n      name: ${{ inputs.environment }}" in deploy
     assert "actions/runs/${GITHUB_RUN_ID}/approvals" not in deploy
     assert "Resume approved autonomy action" not in deploy
-    assert "XCAGI_AUTONOMY_MEDIUM_RISK_POLICY=auto_approve" in deploy
+    assert "XCAGI_AUTONOMY_MEDIUM_RISK_POLICY=auto_approve" not in deploy
     assert "Authorize exact production release in autonomy ledger" in deploy
     assert "action_id=release:<40-char git sha>" in deploy
     assert 'decision:"approved",defer_execution:true' in deploy

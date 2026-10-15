@@ -1,23 +1,23 @@
 {
-  "run_id": "TICKET-<SHA8>-<YYYYMMDD>-001",
+  "run_id": "TICKET-12aa243c-20261011-001",
   "scope": "工单真实闭环：真实客户在已安装的冻结包上经 AI 对话报障 → 管理端收到 → AI 处理 → 结果回到桌面 → 客户已解决关单；另提一单验证重新打开；第二个客户账号验证租户隔离；断网重试不产生重复工单；AI 失败可转人工",
   "result_values": ["PASS", "FAIL", "UNKNOWN"],
   "gate_values": ["GREEN", "YELLOW", "RED", "UNKNOWN"],
-  "created_at": null,
+  "created_at": "2026-10-11T10:53:22+08:00",
   "final_acceptance": true,
   "release_frozen": false,
   "published": false,
   "stable_ota": false,
   "prerequisites": ["冻结 SHA 已部署到当前生产服务节点：/api/health 与 /fhd-api/api/health 的 git_sha 都等于 source_sha", "MODstore /api/health 的 scheduler_running=true，否则工单派发与 AI 处理会停滞", "两个真实客户账号属于不同企业/租户，且都不是开发环境专用账号"],
   "server": {
-    "modstore_git_sha": null,
-    "fhd_git_sha": null,
-    "scheduler_running": null,
-    "checked_at": null,
-    "note": "2026-10-11 00:41（UTC+8）生产 nginx（/etc/nginx/conf.d/xiu-ci.com.conf，不在仓库）把 /fhd-api/api/health 从 2026-06-30 写死的 {\"status\":\"ok\"} 改为反代 fhd-full 127.0.0.1:5100/api/health?lite=true，外网可读 git_sha/release_id，fhd 宕机时返回 502/504；备份 xiu-ci.com.conf.bak-20261011004028-before-fhd-health-proxy。当时 fhd_git_sha=e5b2412、modstore_git_sha=df452b7，尚不一致，仅为环境记录，不是验收结果。"
+    "modstore_git_sha": "12aa243c1750cabb40632f541b59f841309bfb44",
+    "fhd_git_sha": "e5b2412ace0c7b202a6f60c41472b1deef83d8d8",
+    "scheduler_running": true,
+    "checked_at": "2026-10-11T10:52:00+08:00",
+    "note": "2026-10-11 00:41（UTC+8）生产 nginx（/etc/nginx/conf.d/xiu-ci.com.conf，不在仓库）把 /fhd-api/api/health 从 2026-06-30 写死的 {\"status\":\"ok\"} 改为反代 fhd-full 127.0.0.1:5100/api/health?lite=true，外网可读 git_sha/release_id，fhd 宕机时返回 502/504；备份 xiu-ci.com.conf.bak-20261011004028-before-fhd-health-proxy。当时 fhd_git_sha=e5b2412、modstore_git_sha=df452b7，尚不一致，仅为环境记录，不是验收结果。 2026-10-11 10:48–10:51（UTC+8）MODstore 用 xcmax-immutable-release.sh 从 df452b7bcc18 不可变发布到 12aa243c1750（回滚点 /opt/xcmax/releases/df452b7bcc1879587090bc849fe78ed2c29c79f8），外网 /api/health git_sha=12aa243c1750、scheduler_running=true；fhd-full 未部署（正式路径须经 stable/server 渠道，按用户要求待双端安装包验收通过后再推），/fhd-api/api/health 仍为 e5b2412——前提『两个 git_sha 都等于 source_sha』未满足。"
   },
   "candidate": {
-    "source_sha": null,
+    "source_sha": "12aa243c1750cabb40632f541b59f841309bfb44",
     "version": "1.0.0.5",
     "build_run_id": null,
     "installer_name": null,
@@ -34,17 +34,19 @@
       "gitSha": null,
       "releaseId": null
     },
-    "platform": null
+    "platform": null,
+    "note": "冻结 main SHA；冻结安装包（installer_*）尚未产出/实机验收，本轮只做了服务端 API 层闭环。"
   },
   "accounts": {
     "customer_a": {
-      "alias": null,
-      "tenant": null
+      "alias": "TEST-TICKET-LOOP-A",
+      "tenant": "modstore-user-77"
     },
     "customer_b": {
-      "alias": null,
-      "tenant": null
-    }
+      "alias": "TEST-TICKET-LOOP-B",
+      "tenant": "modstore-user-78"
+    },
+    "note": "生产正式注册接口建的验收专用测试客户（非真实客户），MODstore users 表无租户列，租户即账号本身；FHD 桌面租户在安装包首次登录时生成，待安装包验收补录。密码不入库。"
   },
   "processor_policy": {
     "rule": "发版解决问题必须走 Para：AI 处理相关条目判 PASS 时，每张已填工单的 processing 必须含一次 para_delegate 成功完成（accepted、completed、ok 均为 true 且有 Para 任务号），且不得出现任何本地大模型/本地执行回退；检测到回退即判 FAIL，不算通过。由 FHD/scripts/release/ticket_loop_ledger_check.py 校验。",
@@ -55,24 +57,28 @@
   },
   "tickets": {
     "resolved": {
-      "ticket_id": null,
+      "ticket_id": 37,
       "work_order_id": null,
       "processing": {
-        "para_task_id": null,
-        "para_device_id": null,
+        "para_task_id": "2bcca61a-0f4e-4882-b4c0-868f85c4d054",
+        "para_device_id": "48acf8c9-3549-442d-8838-0849ee2dc50d",
         "handler_outputs_evidence": null,
-        "handlers_attempted": []
-      }
+        "handlers_attempted": [],
+        "note": "【未通过的闭环】客户在 API 上点了已解决（closed_at 03:17:39Z），但事故小组 team_ok=false、修复 PR #2277 尚未合入，本单不算通过。事故小组 scout/fix/verify 三步都在 Para（cursor）执行完成（见 ticket-loop-20261011/para-tasks.json），但服务端判 scout/verify ok=false status=unknown、team_ok=false；逐 handler 输出未落库，拿不到 para_delegate accepted/completed/ok 记录，故 AI 处理相关条目不能判 PASS。另经 AI Issue Implement→Para（task 1199e95b-e2de-46a3-958c-dbbf1029886f）对应测试 issue #2234 产出 PR #2277。 只读排查：team 行 status=unknown 是正常现象（execute_employee_task 成功返回体本来就没有 status 字段）；ok=false 来自 customer_issue_delivery_contract.execution_succeeded 对 result.outputs 逐行判定，但逐 handler 输出未落库，暂无法确认是哪一行失败，根因待补日志后复现。fix 的 llm_tokens=7867 来自 MODstore 服务端员工『认知』步骤（employee_executor 在执行 handler 前经 chat_dispatch_via_session 直接调用大模型；scout/verify 走 direct_only 跳过认知所以为 0），不是 Para 内 Cursor 用量——即本单修复的规划步骤有一次绕开 Para 的服务端大模型调用，代码改动本身由 Para 完成。"
+      },
+      "ticket_no": "CI54d2a3df461aab10dd1451ef2667823cd7ce31c21b13ec25"
     },
     "reopened": {
-      "ticket_id": null,
+      "ticket_id": 38,
       "work_order_id": null,
       "processing": {
         "para_task_id": null,
-        "para_device_id": null,
+        "para_device_id": "48acf8c9-3549-442d-8838-0849ee2dc50d",
         "handler_outputs_evidence": null,
-        "handlers_attempted": []
-      }
+        "handlers_attempted": [],
+        "note": "首轮 scout 3c021b84（前两次 claude_code 未登录、trae 缺模型失败）、fix 44290311 failed（120s 无代码变更）、verify 226b6d60 completed；服务端 team_ok=false，state=repair_failed；客户重开后 state=reopened 并重新投递（outbox 96）。"
+      },
+      "ticket_no": "CIc5eb4b108e9092ec90c0c0bfb45e1f22ae2802c9b978281d"
     }
   },
   "items": [
@@ -83,10 +89,10 @@
       "criteria": ["官网能访问。", "API 能访问。", "不能出现 HTTP 000、502、504 等异常。", "通过标准：连续多次外部访问正常。", "证据：时间、URL、状态码、截图/日志。"],
       "final_gates": [1, 2],
       "owner": "cloud-agent",
-      "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": ["../production-availability-20261006/run.json"],
-      "note": "2026-10-06 生产恢复后 89 分钟内首页逐分钟可达（16:55Z 前为灾备，之后为旧主），核心接口 356 次采样 1 次超时（闸门 1/2 YELLOW）；DNS 于 16:50:16Z 回切未隔离的旧主，灾备仍为可写主库，接管期间写入待并回；国内复测与发布产物待补，正式闭环时须在冻结 SHA 部署后重测。"
+      "result": "PASS",
+      "observed_at": "2026-10-11T11:22:00+08:00",
+      "evidence": ["ticket-loop-20261011/item01-availability-12aa243.log", "ticket-loop-20261011/item01-modstore-health-12aa243.log", "ticket-loop-20261011/item01-fhd-health-12aa243.log"],
+      "note": "冻结 SHA 部署后外网首页、/api/health、/fhd-api/api/health 各 10 次共 30/30 HTTP200。注意 fhd 仍是 e5b2412。"
     },
     {
       "no": 2,
@@ -96,9 +102,9 @@
       "final_gates": [2, 17],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket1-intake-A.json"],
+      "note": "本轮用 API 直接调用 https://xiu-ci.com/api/customer-service/issues/intake（200，返回 JSON），安装版请求地址待冻结包验收确认。"
     },
     {
       "no": 3,
@@ -107,10 +113,10 @@
       "criteria": ["客户账号能正常登录。", "有正确企业/租户身份。", "权限正常。", "不能使用只在开发环境存在的假账号替代最终验收。"],
       "final_gates": [17],
       "owner": "field",
-      "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "result": "PASS",
+      "observed_at": "2026-10-11T11:26:23+08:00",
+      "evidence": ["ticket-loop-20261011/item03-accounts-12aa243.json"],
+      "note": "A=user77、B=user78 在 12aa243 上 /api/auth/me 均 200，非管理员，企业授权、desktop_access=true。生产测试客户，非开发环境假账号。"
     },
     {
       "no": 4,
@@ -167,9 +173,9 @@
       "final_gates": [17],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket1-intake-A.json", "ticket-loop-20261011/ticket2-intake-A.json"],
+      "note": "API 提交返回唯一工单号（37：CI54d2a3df…；38：CIc5eb4b10…）；桌面端『提交成功』展示待安装包验证。"
     },
     {
       "no": 9,
@@ -179,9 +185,9 @@
       "final_gates": [17],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket2-duplicate-submit-A.json"],
+      "note": "API 层同内容重复提交 2 次均 replayed=true、同一 ticket_id=38，未产生新单；桌面端快速连点待安装包验证。"
     },
     {
       "no": 10,
@@ -191,9 +197,9 @@
       "final_gates": [18],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket37-db-after-team.json", "ticket-loop-20261011/ticket38-db-after-team.json"],
+      "note": "没有管理员凭据，未在管理端界面核对；只读查库确认工单 37/38 落库、outbox 已 dispatched、incident_events 85174/85176 已建。"
     },
     {
       "no": 11,
@@ -227,9 +233,9 @@
       "final_gates": [18],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket37-tenant-isolation-B.txt"],
+      "note": "客户B 读取 A 的工单 37 返回 404，B 的列表为空（API 层隔离成立）；因冻结安装包身份未填，按校验规则暂不判 PASS。"
     },
     {
       "no": 14,
@@ -319,9 +325,9 @@
       "final_gates": [19],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket1-intake-A.json"],
+      "note": "提交后 status=processing、lifecycle=处理中；但 AI 处理条目受 Para 证据规则约束，handler 输出未落库，不判 PASS。"
     },
     {
       "no": 22,
@@ -355,9 +361,9 @@
       "final_gates": [19],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/para-tasks.json", "ticket-loop-20261011/issue2234-ai-implement-run38106926635.log"],
+      "note": "软件 Bug（#2234 同款）经 AI Issue Implement→Para 形成 PR #2277（1 文件 -1 行）；事故小组 fix 也在分支 devfleet/cursor/sub-1-c4d054 做了同样改动但没开 PR。"
     },
     {
       "no": 25,
@@ -391,9 +397,9 @@
       "final_gates": [19],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket37-customer-view-A.json", "ticket-loop-20261011/ticket38-db-after-team.json"],
+      "note": "两张单 team_ok=false 都显示 repair_failed/未完成，没有自动关单（符合不伪装成功）；但受 Para 证据规则约束不判 PASS。"
     },
     {
       "no": 28,
@@ -402,10 +408,10 @@
       "criteria": ["问题原因。", "做了什么。", "当前是否修复。", "客户下一步怎么做。"],
       "final_gates": [20],
       "owner": "field",
-      "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "result": "FAIL",
+      "observed_at": "2026-10-11T11:30:49+08:00",
+      "evidence": ["ticket-loop-20261011/ticket37-customer-view-A.json", "ticket-loop-20261011/ticket38-db-after-team.json"],
+      "note": "两张单客户看到的结果只有『排查/修复/验证 未完成（unknown）』，没有问题原因、做了什么、下一步怎么做；37 的实际修复（PR #2277）没有回写到工单。"
     },
     {
       "no": 29,
@@ -426,9 +432,9 @@
       "final_gates": [20],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket37-customer-view-A.json"],
+      "note": "客户A 经 /issues/mine 能看到处理结果（API 层）；桌面端展示待安装包验证。"
     },
     {
       "no": 31,
@@ -460,9 +466,9 @@
       "final_gates": [21],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket37-decision-resolved-A.json"],
+      "note": "客户A 经 API 对 37 提交 resolved：status=resolved、closed_at=2026-10-11T03:17:39Z；但 AI 处理 team_ok=false、修复未合入，不算通过的闭环；桌面端点击待安装包验证。"
     },
     {
       "no": 34,
@@ -471,9 +477,9 @@
       "final_gates": [21],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket37-decision-resolved-A.json"],
+      "note": "closed_at 记录为 2026-10-11T03:17:39Z（11:17:39 UTC+8），与操作时间一致；界面核对待安装包。"
     },
     {
       "no": 35,
@@ -493,9 +499,9 @@
       "final_gates": [22],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket38-decision-reopen-A.json"],
+      "note": "客户A 经 API 对 38 提交 reopen 成功（HTTP200）；桌面端按钮待安装包验证。"
     },
     {
       "no": 37,
@@ -505,9 +511,9 @@
       "final_gates": [22],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket38-decision-reopen-A.json", "ticket-loop-20261011/ticket38-db-after-reopen.json"],
+      "note": "重开后 state=reopened、status=processing、reopen_count=1，之前结果与 reopen_history 保留，并重新投递 outbox 96。"
     },
     {
       "no": 38,
@@ -553,9 +559,9 @@
       "final_gates": [19],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/para-tasks.json", "ticket-loop-20261011/ticket38-db-after-team.json"],
+      "note": "38 的 fix 在 Para 上失败（120s 无代码变更），服务端如实记 repair_failed；未观察到自动重试/转人工。"
     },
     {
       "no": 42,
@@ -597,9 +603,9 @@
       "final_gates": [23],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket1-intake-A.json", "ticket-loop-20261011/ticket2-intake-A.json"],
+      "note": "resolved=37（CI54d2a3df…），reopened=38（CIc5eb4b10…）。"
     },
     {
       "no": 46,
@@ -608,9 +614,9 @@
       "final_gates": [23],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket1-intake-A.json", "ticket-loop-20261011/ticket2-intake-A.json", "ticket-loop-20261011/ticket37-decision-resolved-A.json", "ticket-loop-20261011/ticket38-decision-reopen-A.json"],
+      "note": "intake/decision 接口 HTTP200 响应已存档。"
     },
     {
       "no": 47,
@@ -630,9 +636,9 @@
       "final_gates": [23],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/para-tasks.json"],
+      "note": "Para 开始/完成时间见 para-tasks.json（37：02:54:15Z 起）；handler 输出未落库。"
     },
     {
       "no": 49,
@@ -641,9 +647,9 @@
       "final_gates": [23],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket37-db-after-team.json", "ticket-loop-20261011/para-tasks.json"],
+      "note": "处理结果见 employee_reports（team_ok=false）与 PR #2277。"
     },
     {
       "no": 50,
@@ -674,9 +680,9 @@
       "final_gates": [23],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket38-decision-reopen-A.json", "ticket-loop-20261011/ticket38-db-after-reopen.json"],
+      "note": "重开验证（API 层）见 37 项。"
     },
     {
       "no": 53,
@@ -685,9 +691,9 @@
       "final_gates": [23],
       "owner": "field",
       "result": "UNKNOWN",
-      "observed_at": null,
-      "evidence": [],
-      "note": ""
+      "observed_at": "2026-10-11T11:35:00+08:00",
+      "evidence": ["ticket-loop-20261011/ticket37-db-after-team.json", "ticket-loop-20261011/ticket37-employee-metrics.txt", "ticket-loop-20261011/ticket38-db-after-reopen.json"],
+      "note": "只读查库导出的工单、outbox、员工执行记录。"
     }
   ]
 }

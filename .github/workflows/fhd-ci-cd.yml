@@ -30,6 +30,11 @@ on:
         required: false
         default: false
         type: boolean
+      dispatch_evolution:
+        description: "Run the independent Evolution workflow after CVM upload"
+        required: false
+        default: true
+        type: boolean
       push_image_tar:
         description: "Also push the optional 600MB+ offline image archive"
         required: false
@@ -50,6 +55,12 @@ on:
         required: false
         default: ""
         type: string
+
+# CI 加速：同一 PR 的旧提交自动取消（P1-4）；push/tag/schedule/dispatch 每次
+# 独立分组且 cancel-in-progress=false —— 正式发布、主线、夜间全量永不误取消。
+concurrency:
+  group: ci-cd-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PYTHON_VERSION: "3.11"
@@ -153,120 +164,28 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-          fetch-depth: 0
+          # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
+          fetch-depth: 1
       - name: Classify changed paths (macOS)
         id: c
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category macos \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
       - name: Classify changed paths (Windows)
         id: w
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category windows \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
 
-  # backend-test 拆 4 片（pytest-split，按 FHD/.test_durations 均衡）。每片只跑 pytest 并上传
-  # .coverage 分片；ruff/mypy/各棘轮与覆盖率合并都在下方汇总 job（名字仍是 backend-test，
-  # required check 与下游 needs/outputs.skip 不变）。
-  backend-test-shard:
-    name: backend-test-shard (${{ matrix.group }}/4)
-    needs: guard-temp-scripts
-    # 同 #2256：本仓库自己的分支（push，或 head 仓库 == 本仓库的 PR）走自托管 runner
-    # box-linux-1..3（标签 xcmax-backend；每台独立 rootless docker 网络命名空间，redis 6379 互不冲突；
-    # 低权限用户 ghrunner）。fork PR、schedule、workflow_dispatch 走 GitHub 托管 ubuntu-latest。
-    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","xcmax-backend"]') || 'ubuntu-latest' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        group: [1, 2, 3, 4]
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.release_sha || github.sha }}
-          fetch-depth: 0
-
-      - name: Classify changed paths (unified classifier)
-        id: paths
-        if: github.event_name == 'pull_request'
-        run: |
-          python ../scripts/dev/change_classifier.py --category backend \
-            --base "${{ github.event.pull_request.base.sha }}" \
-            --head "${{ github.event.pull_request.head.sha }}"
-
-      - name: Skip notice (no backend-relevant changes)
-        if: steps.paths.outputs.skip == 'true'
-        run: echo "No backend-relevant path changes; backend-test satisfied without running the suite."
-
-      - name: Set up Python ${{ env.PYTHON_VERSION }}
-        if: steps.paths.outputs.skip != 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: "pip"
-
-      - name: Install dependencies
-        if: steps.paths.outputs.skip != 'true'
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-server-api.txt
-          pip install -r deploy/requirements-dev.txt
-
-      - name: Set up the real private Mod frontend compiler
-        if: steps.paths.outputs.skip != 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: FHD/frontend/package-lock.json
-
-      - name: Install runtime Mod compiler dependencies
-        if: steps.paths.outputs.skip != 'true'
-        working-directory: FHD/frontend
-        run: npm ci --no-audit --no-fund
-
-      - name: Run tests with coverage (shard ${{ matrix.group }}/4)
-        if: steps.paths.outputs.skip != 'true'
-        env:
-          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
-          INTENT_BENCHMARK_RUN: "1"
-          COVERAGE_FILE: .coverage.shard${{ matrix.group }}
-        run: |
-          python -m pytest tests/ -v \
-            --splits 4 --group ${{ matrix.group }} \
-            --splitting-algorithm least_duration --durations-path .test_durations \
-            --cov --cov-branch --cov-fail-under=0 --cov-report=
-
-      - name: Upload shard coverage data
-        if: steps.paths.outputs.skip != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-coverage-shard-${{ matrix.group }}
-          path: FHD/.coverage.shard${{ matrix.group }}
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 3
-
-  backend-test:
-    needs: [guard-temp-scripts, backend-test-shard]
-    # 分片失败/被跳过时本 job 仍运行并显式失败（required check 不会“跳过即绿”）；
-    # 用 !cancelled() 而非 always()：整次运行被取消（新提交顶掉旧运行）时不再空跑。
-    if: ${{ !cancelled() }}
-    # 同 #2256：本仓库自己的分支（push，或 head 仓库 == 本仓库的 PR）走自托管 runner
-    # box-linux-1..3（标签 xcmax-backend；每台独立 rootless docker 网络命名空间，redis 6379 互不冲突；
-    # 低权限用户 ghrunner）。fork PR、schedule、workflow_dispatch 走 GitHub 托管 ubuntu-latest。
-    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","xcmax-backend"]') || 'ubuntu-latest' }}
+  backend-quality:
+    # P0 快速失败（2026-10-12）：SSOT 门禁 ~53s 出结论，未过不启动 27 分钟重测试。
+    # SSOT 失败时本 job 为 skipped；SSOT 本身是 required check，PR 依旧被阻断，结论不丢失。
+    needs: [guard-temp-scripts, ssot-drift-gate]
+    runs-on: ubuntu-latest
     outputs:
       skip: ${{ steps.paths.outputs.skip }}
     services:
@@ -279,22 +198,19 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    steps:
-      - name: All shards must succeed
-        working-directory: .
-        run: |
-          echo "backend-test-shard result: ${{ needs.backend-test-shard.result }}"
-          test "${{ needs.backend-test-shard.result }}" = "success"
 
+    steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-          fetch-depth: 0
+          # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
+          fetch-depth: 1
 
       - name: Classify changed paths (unified classifier)
         id: paths
         if: github.event_name == 'pull_request'
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category backend \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
@@ -378,36 +294,6 @@ jobs:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/intent_benchmark.py --check
 
-      - name: Download shard coverage data
-        if: steps.paths.outputs.skip != 'true'
-        uses: actions/download-artifact@v4
-        with:
-          pattern: backend-coverage-shard-*
-          path: FHD
-          merge-multiple: true
-
-      - name: Combine shard coverage (same source=[app] + branch 口径)
-        if: steps.paths.outputs.skip != 'true'
-        run: |
-          ls -la .coverage.shard*
-          test "$(ls .coverage.shard* | wc -l)" = "4"
-          # 各分片可能跑在不同 runner（工作区绝对路径不同），按 FHD/app 后缀重映射到本地 app/。
-          cat > .coveragerc-combine <<EOF
-          [run]
-          branch = True
-          [paths]
-          source =
-              $PWD/app/
-              */FHD/app/
-          EOF
-          python -m coverage combine --rcfile=.coveragerc-combine .coverage.shard1 .coverage.shard2 .coverage.shard3 .coverage.shard4
-          rm -f .coveragerc-combine
-          mkdir -p coverage
-          python -m coverage xml --fail-under=0
-          python -m coverage json -o coverage.json --fail-under=0
-          python -m coverage html --fail-under=0
-          python -m coverage report -m --fail-under=0 | tail -n 3
-
       - name: Coverage floor guard (下调必须有 ADR)
         if: github.event_name == 'pull_request' && steps.paths.outputs.skip != 'true'
         run: |
@@ -423,50 +309,165 @@ jobs:
         if: steps.paths.outputs.skip != 'true'
         run: python scripts/dev/test_bloat_report.py --check
 
+
+  backend-test-shard:
+    needs: backend-quality
+    if: needs.backend-quality.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      BACKEND_SHARD_INDEX: ${{ matrix.shard }}
+      BACKEND_SHARD_TOTAL: "4"
+      BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
+      BACKEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
+      XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+      INTENT_BENCHMARK_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 1
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-server-api.txt
+          pip install -r deploy/requirements-dev.txt
+
+      - name: Set up the real private Mod frontend compiler
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+
+      - name: Install runtime Mod compiler dependencies
+        working-directory: FHD/frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Run complete suite in isolated module shard
+        run: |
+          test "$(git rev-parse HEAD)" = "$BACKEND_SOURCE_SHA"
+          mkdir -p shard-evidence
+          export BACKEND_SHARD_MANIFEST=shard-evidence/full.json
+          rc=0
+          python -m pytest tests/ -v -p scripts.ci.backend_shards \
+            --cov --cov-branch --cov-fail-under=0 --cov-report= \
+            --junitxml=shard-evidence/full.xml || rc=$?
+          if [ -f .coverage ]; then cp .coverage shard-evidence/.coverage.full; fi
+          test "$rc" -eq 0
+          if find tests -name 'test_coverage_ramp_*.py' -not -path '*/__pycache__/*' | grep -q .; then
+            export BACKEND_SHARD_MODE=behavior BACKEND_SHARD_MANIFEST=shard-evidence/behavior.json
+            python -m pytest tests/ -q -m 'not coverage_ramp' -p scripts.ci.backend_shards \
+              --cov --cov-branch --cov-fail-under=0 --cov-report= \
+              --junitxml=shard-evidence/behavior.xml
+            cp .coverage shard-evidence/.coverage.behavior
+          else
+            cp shard-evidence/.coverage.full shard-evidence/.coverage.behavior
+            cp shard-evidence/full.xml shard-evidence/behavior.xml
+            python -c 'import json,pathlib; p=pathlib.Path("shard-evidence"); d=json.loads((p/"full.json").read_text()); d["mode"]="behavior"; (p/"behavior.json").write_text(json.dumps(d))'
+          fi
+          python scripts/ci/backend_shards.py seal shard-evidence
+      - name: Preserve shard evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-shard-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: FHD/shard-evidence/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  backend-test:
+    # Preserve the required check and downstream skip contract. Missing shards fail closed.
+    needs: [backend-quality, backend-test-shard]
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ needs.backend-quality.outputs.skip }}
+    env:
+      BACKEND_SHARD_TOTAL: "4"
+      BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
+      BACKEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
+    steps:
+      - name: Validate prerequisites and skip semantics
+        working-directory: .
+        env:
+          QUALITY: ${{ needs.backend-quality.result }}
+          SHARDS: ${{ needs.backend-test-shard.result }}
+          SKIP: ${{ needs.backend-quality.outputs.skip }}
+        run: |
+          test "$QUALITY" = success
+          if [ "$SKIP" = true ]; then test "$SHARDS" = skipped; else test "$SHARDS" = success; fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        if: needs.backend-quality.outputs.skip != 'true'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install report dependencies
+        if: needs.backend-quality.outputs.skip != 'true'
+        run: pip install -r deploy/requirements-dev.txt
+      - uses: actions/download-artifact@v4
+        if: needs.backend-quality.outputs.skip != 'true'
+        with:
+          pattern: backend-shard-${{ github.run_attempt }}-*
+          path: FHD/shards
+      - name: Verify complete same-SHA evidence and combine coverage
+        if: needs.backend-quality.outputs.skip != 'true'
+        run: |
+          test "$(git rev-parse HEAD)" = "$BACKEND_SOURCE_SHA"
+          for n in 1 2 3 4; do mv "shards/backend-shard-${{ github.run_attempt }}-$n" "shards/shard-$n"; done
+          python scripts/ci/backend_shards.py verify shards > shard-summary.json
+          python -m coverage combine --keep shards/shard-*/.coverage.full
+          python -m coverage json -o coverage.json --fail-under=0
+          python -m coverage xml --fail-under=0
+          python -m coverage html --fail-under=0
+          cp .coverage .coverage.full-combined
+          python -m coverage combine --keep shards/shard-*/.coverage.behavior
+          python -m coverage json -o coverage-behavior.json --fail-under=0
       - name: Coverage ratchet check (行/分支只升不降)
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.backend-quality.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/coverage_ratchet.py --check --require-backend --record
-        # 注意：暂不追加 --peak-floor —— 历史峰值与当前实测差距 > 0.5pt，启用即全红；
-        # 启用条件见 scripts/dev/guard_coverage_floor.py docstring。
-
-      # Codecov policy: optional until CODECOV_TOKEN is in repo secrets
-      # (Settings → Secrets and variables → Actions). Without token this step is
-      # best-effort (continue-on-error); coverage.xml + htmlcov/ remain local SSOT.
-      - name: Upload coverage report
-        if: steps.paths.outputs.skip != 'true'
-        continue-on-error: true
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
-          flags: backend
-          name: xcagi-backend
-          fail_ci_if_error: false
-
-      # 行为覆盖率诚实化（Delta A）：排除 coverage_ramp 注水 stub 后的真实行为口径。
-      # 这是后端覆盖率门禁的唯一硬 gate（--behavior --require-backend），回退即阻断。
       - name: Behavior coverage gate (排除 coverage_ramp stub，硬门禁)
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.backend-quality.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
-        run: |
-          # 行为口径 = 全量用例去掉 coverage_ramp 标记的用例；conftest 只按文件名
-          # test_coverage_ramp_*.py 打标。没有这类文件时 -m 'not coverage_ramp' 不剔除任何用例，
-          # 与上一步是同一套测试，直接从同一份 .coverage 数据导出行为 json，省掉重复的全量 pytest。
-          # 一旦出现 ramp 文件，回退为原来的独立测量（口径不变）。
-          if find tests -name 'test_coverage_ramp_*.py' -not -path '*/__pycache__/*' | grep -q .; then
-            python -m pytest tests/ -q -m 'not coverage_ramp' \
-              --cov --cov-branch --cov-report=json:coverage-behavior.json \
-              --cov-fail-under=0
-          else
-            python -m coverage json -o coverage-behavior.json --fail-under=0
-          fi
-          python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
+        run: python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
+      - uses: actions/upload-artifact@v4
+        if: always() && needs.backend-quality.outputs.skip != 'true'
+        with:
+          name: backend-combined-${{ github.run_attempt }}
+          path: |
+            FHD/shard-summary.json
+            FHD/coverage.json
+            FHD/coverage-behavior.json
+            FHD/coverage.xml
+          if-no-files-found: error
+          retention-days: 7
 
   frontend-test:
-    needs: guard-temp-scripts
+    # P0 快速失败（2026-10-12）：SSOT 门禁 ~53s 出结论，未过不启动 27 分钟重测试。
+    # SSOT 失败时本 job 为 skipped；SSOT 本身是 required check，PR 依旧被阻断，结论不丢失。
+    needs: [guard-temp-scripts, ssot-drift-gate]
     runs-on: ubuntu-latest
     outputs:
       skip: ${{ steps.paths.outputs.skip }}
@@ -474,12 +475,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-          fetch-depth: 0
+          # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
+          fetch-depth: 1
 
       - name: Classify changed paths (unified classifier)
         id: paths
         if: github.event_name == 'pull_request'
         run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
           python ../scripts/dev/change_classifier.py --category frontend \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
@@ -506,11 +509,8 @@ jobs:
         working-directory: FHD/frontend
         run: npm run lint
 
-      - name: Run unit tests
-        if: steps.paths.outputs.skip != 'true'
-        working-directory: FHD/frontend
-        run: npm run test
-
+      # 2026-10-12 CI 加速：与 test:coverage 同一测试集合（run 38164763655 实测两次均
+      # 641 test files），只跑带覆盖率的一次，省 ~240s；覆盖率只升不降语义不变。
       - name: Run unit tests with coverage
         if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
@@ -1082,6 +1082,7 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
       inputs.push_to_cvm == true &&
+      inputs.dispatch_evolution == true &&
       needs.cvm-push-release.result == 'success'
     runs-on: ubuntu-latest
     permissions:

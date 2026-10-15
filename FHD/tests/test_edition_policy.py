@@ -18,6 +18,11 @@ from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_ID
 @pytest.fixture(autouse=True)
 def _isolate_edition_and_sku_env(monkeypatch):
     """全量套件中其它用例可能写入 SKU/EDITION，导致本文件断言 full。"""
+    from app.infrastructure.mods import mod_manager as mm
+    from app.infrastructure.mods.registry import ModRegistry
+
+    monkeypatch.setattr(mm, "_mod_manager", None)
+    monkeypatch.setattr(ModRegistry, "_instance", None)
     for key in (
         "XCAGI_PRODUCT_SKU",
         "XCAGI_EDITION",
@@ -258,11 +263,7 @@ async def test_bootstrap_edition_pack_smoke(monkeypatch, tmp_path):
     monkeypatch.setenv("XCAGI_MINIMAL_EDITION", "1")
 
     from app.infrastructure.mods.mod_manager import ModManager
-    from app.infrastructure.mods.registry import ModRegistry
 
-    # load_all_mods() 会把 tmp_path 下仅含 manifest 的 bridge 写进进程级 ModRegistry 单例；
-    # 用独立实例隔离，测试结束由 monkeypatch 还原，避免污染后续用例（如 office pack catalog）。
-    monkeypatch.setattr(ModRegistry, "_instance", ModRegistry())
     mm = ModManager(mods_root=str(target))
     monkeypatch.setattr(
         "app.infrastructure.mods.mod_manager.get_mod_manager",
