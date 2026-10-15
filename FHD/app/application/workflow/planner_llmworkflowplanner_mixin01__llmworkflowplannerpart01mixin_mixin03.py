@@ -217,6 +217,7 @@ class __LLMWorkflowPlannerPart01MixinPart03Mixin:
                     "business_db 只能访问 customers/products/materials/shipment_records；禁止生成 sql/raw_sql/query_sql 或任意 SQL。",
                     "对 products.query：必须在 params 填入 keyword 或 model_number 等检索词；对 customers.query：列表/计数问法可不填 keyword（空=全部客户）；指名查询再填 keyword，从用户话中提取（如「七彩乐园的9803」→ keyword 含单位+型号），禁止留空对象 {}。",
                     "如果 context 中包含 tool_probe_outputs 且其中 success=true，请优先使用其中 data_preview 的信息来补全 nodes.params。",
+                    'params 里的 ID 必须是具体值；确实要用前序步骤结果时只写 {{node_id.data.id}}（node_id 须在 depends_on 中，且该查询只返回一条），运行时无法唯一解析会拒绝执行；不知道仓库时写 warehouse_id="默认仓库"，禁止编造其他符号 ID。',
                     "如果 context 中包含 memory_v2.summary，只能把其中已确认 active 记忆用于补全偏好、客户别名、产品习惯或任务上下文；禁止使用未确认候选或编造记忆。",
                     "若 context 中 tool_execution_profile 为 normal 或 ui_surface 为 normal 且 intent_channel 为 pro：仅可使用 availability 为 shared 或 normal_only 的工具；产品查询优先 normal_slot_dispatch.product_query 或 products.query。",
                     "若 context 为全专业链路（未带上述混合标记）：仅使用 shared 或 pro_only，勿选 normal_only。",

@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -155,6 +156,30 @@ def git(*args: str, cwd: Path = REPO_ROOT) -> str | None:
         return None
 
 
+def _evidence_head() -> str:
+    head = git("rev-parse", "--verify", "HEAD")
+    if not head or not re.fullmatch(r"[0-9a-f]{40}", head):
+        raise RuntimeError("Cannot resolve HEAD for acceptance evidence")
+    return head
+
+
+@lru_cache(maxsize=512)
+def _is_ancestor(commit: str, head: str, cwd: Path = REPO_ROOT) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", commit, head], cwd=cwd,
+            capture_output=True, timeout=30, check=False, encoding="utf-8", errors="replace",
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        raise RuntimeError(f"Cannot verify acceptance ancestry {commit} -> {head}: {exc}") from exc
+    if result.returncode not in (0, 1):
+        raise RuntimeError(
+            f"Cannot verify acceptance ancestry {commit} -> {head}: "
+            f"git exit {result.returncode}: {result.stderr.strip()}"
+        )
+    return result.returncode == 0
+
+
 def project_code_date(commit_time: str | None) -> str | None:
     """Render commit instants in the product timezone so merge metadata is stable."""
     if not commit_time:
@@ -170,7 +195,7 @@ def project_code_date(commit_time: str | None) -> str | None:
     return parsed.astimezone(PROJECT_TIMEZONE).date().isoformat()
 
 
-def reviewed_runs(feat: dict) -> list[dict]:
+def reviewed_runs(feat: dict, head: str | None = None) -> list[dict]:
     """只接受覆盖 registry 全部必需用例的完整 acceptance。"""
     accepted = []
     for rel in feat.get("evidence", {}).get("runs", []):
@@ -186,7 +211,7 @@ def reviewed_runs(feat: dict) -> list[dict]:
             if (run.get("kind") != "feature-acceptance" or run.get("feature") != feat["id"]
                     or run.get("status") not in {"passed", "failed", "blocked"} or not run.get("verified_at")
                     or not re.fullmatch(r"[0-9a-f]{40}", run.get("app_git_sha", ""))
-                    or git("merge-base", "--is-ancestor", run["app_git_sha"], "HEAD") is None
+                    or not _is_ancestor(run["app_git_sha"], head or _evidence_head())
                     or not run.get("app_version") or run.get("platform") not in feat.get("platforms", [])
                     or acceptance.get("path") != rel
                     or hashlib.sha256(raw).hexdigest() != acceptance.get("sha256")
@@ -259,7 +284,7 @@ def traceable_pass(feat: dict, platform: str, run: dict) -> tuple[bool, str | No
         return False, None
 
 
-def platform_verdicts(feat: dict, runs: list[dict], warnings: list[str]) -> list[dict]:
+def platform_verdicts(feat: dict, runs: list[dict], warnings: list[str], head: str | None = None) -> list[dict]:
     """固定列出目录声明的平台；状态必须由本平台有效运行记录派生。"""
     applicable = feat.get("platforms", []) or []
     declared = (feat.get("evidence", {}) or {}).get("platform_assets", {}) or {}
@@ -286,7 +311,7 @@ def platform_verdicts(feat: dict, runs: list[dict], warnings: list[str]) -> list
             "verified_at": latest.get("verified_at") if complete and passed else None,
             "artifact_sha256": artifact_sha if complete else None,
             "artifact_path": artifact_path,
-            "observations": platform_observations(feat, p, warnings),
+            "observations": platform_observations(feat, p, warnings, head),
         })
     for r in runs:
         if r.get("platform") not in applicable:
@@ -295,7 +320,7 @@ def platform_verdicts(feat: dict, runs: list[dict], warnings: list[str]) -> list
     return out
 
 
-def platform_observations(feat: dict, platform: str, warnings: list[str]) -> list[dict]:
+def platform_observations(feat: dict, platform: str, warnings: list[str], head: str | None = None) -> list[dict]:
     """Read supplemental real-device records for display only; they never verify a platform."""
     declared = (feat.get("evidence", {}) or {}).get("platform_assets", {}).get(platform, {}) or {}
     out = []
@@ -339,7 +364,7 @@ def platform_observations(feat: dict, platform: str, warnings: list[str]) -> lis
             isinstance(version, str) and version and version == record_version
             and re.fullmatch(r"[0-9a-f]{40}", str(git_sha or ""))
             and git_sha == record_git_sha
-            and git("merge-base", "--is-ancestor", str(git_sha), "HEAD") is not None
+            and _is_ancestor(str(git_sha), head or _evidence_head())
             and re.fullmatch(r"[0-9a-f]{64}", str(artifact_sha or ""))
             and identity_sha_valid
         )
@@ -400,52 +425,33 @@ def contains_key(value, key: str) -> bool:
     return isinstance(value, list) and any(contains_key(item, key) for item in value)
 
 
-def validate_feature(feat: dict, warnings: list[str]) -> dict:
+def validate_feature(feat: dict, warnings: list[str], head: str | None = None) -> dict:
     """校验单个功能的证据，返回最终状态与证据明细。No Evidence, No Claim。"""
     ev = feat.get("evidence", {}) or {}
     if ("status" in feat or "platform_status" in feat
             or contains_key(ev.get("platform_assets") or {}, "status")):
         raise ValueError(f"[{feat['id']}] capability and platform status must be evidence-derived")
-    impl = ev.get("impl", []) or []
-    tests = ev.get("tests", []) or []
-    ci = ev.get("ci", []) or []
-    docs = ev.get("docs", []) or []
-    shots = ev.get("screenshots", []) or []
-    videos = ev.get("videos", []) or []
-    logs = ev.get("logs", []) or []
-    raw = ev.get("raw", []) or []
+    declared = {k: ev.get(k, []) or [] for k in
+                ("impl", "tests", "ci", "docs", "screenshots", "videos", "logs", "raw", "runs")}
+    present = {k: [p for p in paths if path_exists(p.split(":")[0] if k == "ci" else p)]
+               for k, paths in declared.items()}
+    for kind, label in (("impl", "实现"), ("tests", "测试"), ("screenshots", "截图"),
+                        ("videos", "录像"), ("logs", "日志"), ("raw", "原始抓取")):
+        warnings.extend(f"[{feat['id']}] {label}路径不存在: {p}" for p in declared[kind] if p not in present[kind])
 
-    impl_ok = [p for p in impl if path_exists(p)]
-    tests_ok = [p for p in tests if path_exists(p)]
-    ci_ok = [p for p in ci if path_exists(p.split(":")[0])]
-    docs_ok = [p for p in docs if path_exists(p)]
-    shots_ok = [p for p in shots if path_exists(p)]
-    videos_ok = [p for p in videos if path_exists(p)]
-    logs_ok = [p for p in logs if path_exists(p)]
-    raw_ok = [p for p in raw if path_exists(p)]
-
-    for paths, present, label in ((impl, impl_ok, "实现"), (tests, tests_ok, "测试"),
-                                  (shots, shots_ok, "截图"), (videos, videos_ok, "录像"),
-                                  (logs, logs_ok, "日志"), (raw, raw_ok, "原始抓取")):
-        warnings.extend(f"[{feat['id']}] {label}路径不存在: {p}" for p in paths if p not in present)
-
-    runs = reviewed_runs(feat)
-    verdicts = platform_verdicts(feat, runs, warnings)
-    final = aggregate_status(feat, verdicts, impl_ok)
+    runs = reviewed_runs(feat, head)
+    verdicts = platform_verdicts(feat, runs, warnings, head)
+    final = aggregate_status(feat, verdicts, present["impl"])
     if not feat.get("platforms"):
         warnings.append(f"[{feat['id']}] 未声明适用平台，平台状态无法汇总")
 
     attributed = {m["path"] for v in verdicts for m in v["media"]}
     attributed |= {x for v in verdicts for x in (v["logs"] + v["raw"])}
     attributed |= {a["path"] for v in verdicts for o in v.get("observations", []) for a in o.get("assets", []) if a.get("exists")}
-    unattributed = {
-        "screenshots": [p for p in shots_ok if p not in attributed],
-        "videos": [p for p in videos_ok if p not in attributed],
-        "logs": [p for p in logs_ok if p not in attributed],
-        "raw": [p for p in raw_ok if p not in attributed],
-    }
+    unattributed = {k: [p for p in present[k] if p not in attributed]
+                    for k in ("screenshots", "videos", "logs", "raw")}
 
-    paths = impl_ok + tests_ok
+    paths = present["impl"] + present["tests"]
     base = (git("rev-parse", "--verify", "HEAD^1") if git("rev-parse", "--verify", "HEAD^2") else git("rev-parse", "--verify", "origin/main")) if paths else None
     ref = [base] if base and all(git("rev-parse", f"HEAD:{p}") == git("rev-parse", f"{base}:{p}") for p in paths) else []
     commit_time = git("log", "-1", "--format=%cI", *ref, "--", *paths) if paths else None
@@ -463,17 +469,9 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
         "accepted_at": accepted_at,
         "unattributed": unattributed,
         "evidence": {
-            "runs": [p for p in ev.get("runs", []) if path_exists(p)],
+            **present,
             "review": ev.get("review"),
-            "impl": impl_ok,
             "api": ev.get("api", []) or [],
-            "tests": tests_ok,
-            "ci": ci_ok,
-            "docs": docs_ok,
-            "screenshots": shots_ok,
-            "videos": videos_ok,
-            "logs": logs_ok,
-            "raw": raw_ok,
         },
         "verified_at": verified_at,
     }
@@ -529,6 +527,7 @@ def public_feature(feature: dict) -> dict:
 
 def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    head = _evidence_head()
     warnings: list[str] = []
     domains_out: list[dict] = []
     feature_index: list[dict] = []
@@ -550,7 +549,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                     raise SystemExit(
                         f"目录 {feat['id']} 仍声明 status={feat['status']!r}；"
                         "能力状态必须由平台实机验收记录自动汇总，禁止手写。")
-                enriched = validate_feature(feat, warnings)
+                enriched = validate_feature(feat, warnings, head)
                 featured = feat.get("featured", True) is not False
                 evidence_ref = feat.get("evidence_ref") or None
                 enriched = {
@@ -580,6 +579,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
         "principle": "No Evidence, No Claim：总体状态由各平台实机验收记录自动汇总，目录不存放可手写的状态；缺证据的平台固定显示「待验证」。",
         "stats": stats,
         "product_version": load_product_version(),
+        "release_ready": json.loads((REPO_ROOT / "FHD/config/download_release.json").read_text())["release_ready"],
         "platform_levels": load_platform_levels(),
         "deployment_modes": catalog.get("deployment_modes", []) or [],
         "next_plan": catalog.get("next_plan", []) or [],
@@ -736,7 +736,8 @@ def windows_delivery_panel() -> str:
 def render_index(data: dict, domains_full: list[dict]) -> str:
     s = data["stats"]
     version = data.get("product_version") or ""
-    ver_html = f' <span class="capm-ver">v{esc(version)}</span>' if version else ""
+    label = "" if data.get("release_ready") is True else "（候选，尚未发布；历史证据不代表本版验收）"
+    ver_html = f' <span class="capm-ver">v{esc(version)}{label}</span>' if version else ""
     last_verified = s["last_verified_at"] or "—"
 
     cards = []

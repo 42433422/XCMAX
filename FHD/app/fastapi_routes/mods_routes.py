@@ -116,7 +116,7 @@ def _register_mods_endpoints(router) -> None:
 
                 discovered_mod_ids = filter_mod_id_list_for_enterprise(discovered_mod_ids)
             except RECOVERABLE_ERRORS:
-                pass
+                discovered_mod_ids = []
 
             loaded_mods = mm.list_loaded_mods()
             mods_loaded = len(loaded_mods)

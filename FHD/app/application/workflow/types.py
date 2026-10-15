@@ -292,13 +292,20 @@ class WorkflowRunResult:
     message: str = ""
 
 
+def database_restore_error(plan: PlanGraph) -> str | None:
+    operations = [(node.tool_id, node.action) for node in plan.nodes]
+    if operations.count(("system_maintenance", "restore_database")) > 1:
+        return "数据库恢复只能包含一个 restore_database 节点；审批由正常风险门控处理，不能作为第二次恢复。"
+    return None
+
+
 def validate_plan_graph(plan: PlanGraph) -> str | None:
-    if not plan.plan_id:
-        return "plan_id 不能为空"
-    if not plan.intent:
-        return "intent 不能为空"
-    if not plan.nodes:
-        return "nodes 不能为空"
+    for field_name in ("plan_id", "intent", "nodes"):
+        if not getattr(plan, field_name):
+            return f"{field_name} 不能为空"
+
+    if error := database_restore_error(plan):
+        return error
 
     node_ids = {node.node_id for node in plan.nodes}
     if len(node_ids) != len(plan.nodes):
@@ -332,11 +339,7 @@ def validate_plan_graph(plan: PlanGraph) -> str | None:
             if branch.target == node.node_id:
                 return f"节点 {node.node_id} 的 branch 不能指向自身"
 
-    cycle = _find_conditional_cycle(plan.nodes, node_ids)
-    if cycle is not None:
-        return cycle
-
-    return None
+    return _find_conditional_cycle(plan.nodes, node_ids)
 
 
 def _find_conditional_cycle(nodes: list[WorkflowNode], node_ids: set[str]) -> str | None:
