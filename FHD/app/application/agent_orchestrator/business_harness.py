@@ -216,6 +216,8 @@ def mark_unexecuted_order_run(run: Any, message: str) -> bool:
         return False
     if list(getattr(run, "artifacts", []) or []):
         return False
+    if _pending_approval_signal(_iter_result_payloads(run)):
+        return False
     run.status = "failed"
     run.error = UNEXECUTED_ORDER_ERROR
     return True

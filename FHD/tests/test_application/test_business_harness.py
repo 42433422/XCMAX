@@ -156,6 +156,32 @@ def test_explicit_order_request_forces_the_registered_erp_tool() -> None:
     assert forced_order_tool_choice("请开一张测试订单", []) is None
 
 
+def test_legacy_order_preparation_uses_forced_tool_choice() -> None:
+    from app.legacy.chat import legacy_chat_runtime as runtime
+
+    facade = Mock()
+    facade.merge_system_prompt.return_value = ""
+    facade.build_openai_user_content.return_value = "请开一张测试订单"
+    facade.messages_have_image_parts.return_value = False
+    facade._get_workflow_tool_registry.return_value = [
+        {"type": "function", "function": {"name": "execute_erp_capability"}}
+    ]
+    with (
+        patch.object(runtime, "_facade", return_value=facade),
+        patch.object(runtime, "forced_document_tool_choice", return_value=None),
+    ):
+        prepared = runtime._prepare_chat("请开一张测试订单", None, None, Mock(), "test")
+    assert prepared[5] == {"type": "function", "function": {"name": "execute_erp_capability"}}
+
+
+def test_order_awaiting_approval_is_not_marked_unexecuted() -> None:
+    run = AgentRun(user_id="2", message="请开一张测试订单", status="completed")
+    run.final_output = {"chat_payload": {"pending_approval": True, "message": "请审批"}}
+    result = ensure_terminal_business_result(run)
+    assert run.status != "failed"
+    assert result["status"] == "pending_approval" and result["success"] is False
+
+
 def test_conversation_message_envelope_restores_whitelisted_harness_ui() -> None:
     row = _message_to_dict(
         (
