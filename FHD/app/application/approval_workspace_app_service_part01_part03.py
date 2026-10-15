@@ -157,8 +157,11 @@ def _approve_ai_workflow_request_without_node(
     data = _facade()._request_to_dict(req, include_records=True)
     data["workflow_execution"] = bounded_outcome
     if not _execution_success:
+        failure_message = "审批通过后 AI 工作流执行失败，审批已取消"
+        if safe_code in _facade().SETUP_GUIDANCE_CODES:
+            failure_message = f"{failure_message}：{safe_message}"
         return _facade().JSONResponse(
-            {"success": False, "data": data, "message": "审批通过后 AI 工作流执行失败，审批已取消"},
+            {"success": False, "data": data, "message": failure_message},
             status_code=409,
         )
     return {"success": True, "data": data}

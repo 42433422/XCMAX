@@ -1,0 +1,137 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M09.backup-and-restore-executed",
+ "platform": "macos",
+ "architecture": "arm64",
+ "release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "product_version": "1.0.0.5",
+ "supersedes": "同目录早先一版因增量写入被当成查询，不能证明回滚，已作废",
+ "backup_file": "xcagi.db.20261012_191321.bak",
+ "backup_bytes": 2056192,
+ "backup": {
+  "open": {
+   "success": true,
+   "action": "workflow_confirmation_required",
+   "response": "我已根据语义生成动态工作流计划：\n工作编排:\n1) 业务目标: 处理当前业务请求\n2) 执行计划: 共 1 个业务步骤\n3) 安全边界: 涉及业务变更，执行前需要确认或审批\n4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n5) 业务步骤:\n- 通过正常审批执行一次数据库维护操作\n\n\n\n检测到需确认步骤（backup_database），回复「确认」继续执行，回复「取消」终止。",
+   "plan_id": "wp-c44b3064fab34d94aa324d2c02412e37",
+   "intent": "database_backup",
+   "approval_required": false,
+   "blocking_nodes": [
+    "backup_database"
+   ],
+   "run_id": "run_9d2d19ab704d411ab1c0a22e089289cc"
+  },
+  "confirm": {
+   "success": true,
+   "action": "workflow_done",
+   "response": "工作流: database_backup\n计划ID: wp-c44b3064fab34d94aa324d2c02412e37\nRunID: run_9d2d19ab704d411ab1c0a22e089289cc\n工作编排:\n1) 业务目标: 处理当前业务请求\n2) 执行计划: 共 1 个业务步骤\n3) 安全边界: 涉及业务变更，执行前需要确认或审批\n4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n5) 业务步骤:\n- 通过正常审批执行一次数据库维护操作\n执行结果:\n- backup_database: 成功（数据库备份成功）\n工具调用: 1 次，成本单位: 2",
+   "plan_id": "wp-c44b3064fab34d94aa324d2c02412e37",
+   "intent": "database_backup",
+   "approval_required": null,
+   "blocking_nodes": null,
+   "run_id": "run_9d2d19ab704d411ab1c0a22e089289cc"
+  }
+ },
+ "delta": {
+  "open": {
+   "success": true,
+   "action": "workflow_confirmation_required",
+   "response": "我已根据语义生成动态工作流计划：\n工作编排:\n1) 业务目标: 处理当前业务请求\n2) 执行计划: 共 1 个业务步骤\n3) 安全边界: 涉及业务变更，执行前需要确认或审批\n4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n5) 业务步骤:\n- 写入产品 M09增量品\n\n- 识别业务实体与写入字段\n- 通过受控业务服务写入数据库\n- 返回写入结果\n\n检测到中高风险步骤（write_business_product），回复「确认」继续执行，回复「取消」终止。\n以下操作需要审批后执行：business_db.write",
+   "plan_id": "wp-1fceb11017714dcf83a5445d1c3e4d97",
+   "intent": "business_db_write",
+   "approval_required": true,
+   "blocking_nodes": [
+    "write_business_product"
+   ],
+   "run_id": "run_1c98e0af09b54be29dd966ed3bc43dd5"
+  },
+  "approval": {
+   "confirmed": {
+    "success": true,
+    "action": "approval_pending",
+    "response": "已提交审批请求：1f98c0933b184219b8f34394f2890e48。请前往审批工作台逐笔处理。",
+    "plan_id": "wp-1fceb11017714dcf83a5445d1c3e4d97",
+    "intent": null,
+    "approval_required": true,
+    "blocking_nodes": null,
+    "run_id": "run_5566547a76344d1a98858e797193d8af"
+   },
+   "pending_count": 1,
+   "request_id": 3,
+   "request_no": "1f98c0933b184219b8f34394f2890e48",
+   "business_action": {
+    "tool_id": "business_db",
+    "action": "write",
+    "params": {
+     "entity": "products",
+     "operation": "create",
+     "payload": {
+      "name_or_model": "M09增量品",
+      "product_name": "M09增量品",
+      "price": 1.5
+     }
+    }
+   },
+   "approve_http": 200,
+   "approve_success": true,
+   "approve_message": null
+  },
+  "products_mid": {
+   "http": 200,
+   "message": null,
+   "rows": [
+    {
+     "id": 2,
+     "name": "M09增量品",
+     "price": 1.5
+    },
+    {
+     "id": 1,
+     "name": "M07确认品",
+     "price": 8.8
+    }
+   ]
+  }
+ },
+ "restore": {
+  "open": {
+   "success": true,
+   "action": "workflow_confirmation_required",
+   "response": "我已根据语义生成动态工作流计划：\n工作编排:\n1) 业务目标: 处理当前业务请求\n2) 执行计划: 共 1 个业务步骤\n3) 安全边界: 涉及业务变更，执行前需要确认或审批\n4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n5) 业务步骤:\n- 通过正常审批执行一次数据库维护操作\n\n\n\n检测到中高风险步骤（restore_database），回复「确认」继续执行，回复「取消」终止。\n以下操作需要审批后执行：system_maintenance.restore_database",
+   "plan_id": "wp-69ebcc83b28c4939aaf4648d6d7a3a2e",
+   "intent": "database_restore",
+   "approval_required": true,
+   "blocking_nodes": [
+    "restore_database"
+   ],
+   "run_id": "run_bbce773356694594856810e3608fbd42"
+  },
+  "approval": {
+   "confirmed": {
+    "success": true,
+    "action": "approval_pending",
+    "response": "已提交审批请求：e1c08e6481904e2db30f4741832fbe40。请前往审批工作台逐笔处理。",
+    "plan_id": "wp-69ebcc83b28c4939aaf4648d6d7a3a2e",
+    "intent": null,
+    "approval_required": true,
+    "blocking_nodes": null,
+    "run_id": "run_09755bb054194da4965e9e0556ca50bd"
+   },
+   "pending_count": 1,
+   "request_id": 4,
+   "request_no": "e1c08e6481904e2db30f4741832fbe40",
+   "business_action": {
+    "tool_id": "system_maintenance",
+    "action": "restore_database",
+    "params": {
+     "backup_file": "xcagi.db.20261012_191321.bak"
+    }
+   },
+   "approve_http": 200,
+   "approve_success": true,
+   "approve_message": null
+  }
+ },
+ "verdict": "PASS",
+ "captured_at_utc": "2026-10-12T11:13:23Z"
+}

@@ -245,7 +245,7 @@ const mockAccountProfileStore = {
   isImpersonating: false,
   refresh: vi.fn().mockResolvedValue(undefined),
   refreshFromServer: vi.fn().mockResolvedValue(undefined),
-  applyFromMeData: vi.fn(),
+  applyFromMeData: vi.fn().mockResolvedValue(undefined),
   clear: vi.fn(),
 }
 

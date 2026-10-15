@@ -18,6 +18,8 @@ import { desktopRuntime } from './runtime-state'
 import {
   attachDatabaseBackupToRollback,
   cancelPreparedRollback,
+  clearPreparedRollbackRecoveryRequired,
+  markPreparedRollbackRecoveryRequired,
   prepareRollback,
   triggerRollback,
   type RollbackTriggerResult,
@@ -27,8 +29,11 @@ import { desktopBackendEnv } from './backend-env'
 import { sanitizeBackendProxyEnv } from './backend-env-utils'
 import { createForceUpgradeHandler } from './desktop-resilience'
 import { loopbackHttpGet } from './backend-loopback-http'
+import { clearBackendStopRequest, markBackendStopRequested, shouldRestartBackendAfterExit } from './backend-process-stop-guard'
 
 export const POST_UPDATE_STABILITY_MS = 5_000
+let backendRestartTimer: NodeJS.Timeout | null = null
+let migrationStopInProgress = false
 
 function rotateBackendLogIfNeeded(logPath: string): void {
   const maxBytes = 8 * 1024 * 1024
@@ -274,6 +279,7 @@ export async function showDbRecoveryDialogIfNeeded(status: Record<string, unknow
 export const BACKEND_STABLE_WINDOW_MS = 60_000
 
 export async function startBackend(): Promise<void> {
+  if (migrationStopInProgress) return
   if (desktopRuntime.backendProcess) {
     return
   }
@@ -333,8 +339,8 @@ export async function startBackend(): Promise<void> {
   child.on('exit', code => {
     const uptimeMs = Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? Date.now())
     writeBackendLog(`[exit] backend process exited code=${code} uptime=${uptimeMs}ms\n`)
-    desktopRuntime.backendProcess = null
-    if (app.isQuitting) {
+    if (desktopRuntime.backendProcess === child) desktopRuntime.backendProcess = null
+    if (!shouldRestartBackendAfterExit(child, app.isQuitting === true, migrationStopInProgress === true)) {
       return
     }
     // 通知自治控制器 backend 退出（控制器据此追踪崩溃频率，5min ≥3 次则自动回滚）
@@ -361,7 +367,11 @@ export async function startBackend(): Promise<void> {
     }
     desktopRuntime.restartCount += 1
     if (desktopRuntime.restartCount <= 3) {
-      setTimeout(() => void startBackend(), 1500)
+      if (backendRestartTimer) clearTimeout(backendRestartTimer)
+      backendRestartTimer = setTimeout(() => {
+        backendRestartTimer = null
+        if (!migrationStopInProgress) void startBackend()
+      }, 1500)
       return
     }
     showBackendErrorBox('后端服务已退出', `后端服务已退出（code=${code}），请重启 XCAGI。`)
@@ -369,12 +379,45 @@ export async function startBackend(): Promise<void> {
 }
 
 export async function runBackendMigrationWithRollback(toVersion: string): Promise<void> {
+  const resumeBackendAfterPrepareFailure = process.platform === 'win32' && (desktopRuntime.backendProcess !== null || backendRestartTimer !== null)
+  if (resumeBackendAfterPrepareFailure) {
+    migrationStopInProgress = true
+    if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null }
+    try { await stopBackend() } catch (error) { migrationStopInProgress = false; throw error }
+  }
+  let prepared = false
+  let migrationStarted = false
   try {
     await prepareRollback(toVersion)
+    prepared = true
+    if (process.platform === 'win32') markPreparedRollbackRecoveryRequired()
+    migrationStarted = true
     await runBackendMigration()
+    if (process.platform === 'win32') clearPreparedRollbackRecoveryRequired()
   } catch (error) {
+    if (process.platform === 'win32' && prepared) {
+      if (!migrationStarted) {
+        writeBackendLog(`[rollback] Windows 数据迁移尚未启动：无法持久化恢复意图，因此未启动迁移子进程。恢复快照保留。\n`)
+      } else {
+        writeBackendLog('[rollback] Windows 数据迁移失败，迁移前持久化的恢复意图仍有效；保留完整恢复记录。\n')
+      }
+      app.quit()
+      migrationStopInProgress = false
+      throw new Error(migrationStarted
+        ? `Windows 后端迁移失败，已保留迁移前持久化的恢复记录并安排下次启动恢复：${error instanceof Error ? error.message : String(error)}`
+        : `Windows 后端迁移未启动，恢复意图无法持久化；未启动迁移子进程。恢复快照已保留：${error instanceof Error ? error.message : String(error)}`)
+    }
+    if (process.platform === 'win32') {
+      migrationStopInProgress = false
+      if (resumeBackendAfterPrepareFailure) {
+        try { await startBackend() } catch (restartError) { writeBackendLog(`[rollback] 快照准备失败后恢复后端失败：${restartError instanceof Error ? restartError.message : restartError}\n`) }
+      }
+      throw error
+    }
     cancelPreparedRollback()
     throw error
+  } finally {
+    migrationStopInProgress = false
   }
 }
 
@@ -449,9 +492,11 @@ function runBackendMigration(): Promise<string> {
 export async function stopBackend(): Promise<void> {
   const child = desktopRuntime.backendProcess
   desktopRuntime.backendProcess = null
+  if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null }
   if (!child) {
     return
   }
+  markBackendStopRequested(child)
   writeBackendLog(`[${new Date().toISOString()}] backend stop requested\n`)
   let result = 'already-exited'
   if (process.platform === 'win32' && child.pid) {
@@ -459,7 +504,13 @@ export async function stopBackend(): Promise<void> {
     await new Promise<void>(resolve => {
       execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => resolve())
     })
-    result = (await exited) ? 'killed' : 'kill-timeout'
+    const hasExited = await exited
+    result = hasExited ? 'killed' : 'kill-timeout'
+    if (!hasExited) {
+      clearBackendStopRequest(child)
+      if (desktopRuntime.backendProcess === null) desktopRuntime.backendProcess = child
+      throw new Error('Windows 后端未能在 2.5 秒内退出，已中止更新快照和数据库迁移。')
+    }
   } else {
     result = await terminateChildProcess(child)
   }

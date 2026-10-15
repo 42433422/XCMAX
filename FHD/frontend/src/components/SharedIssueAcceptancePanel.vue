@@ -8,6 +8,7 @@ interface Repair {
   can_resolve?: boolean; can_reopen?: boolean; latest_result?: { team_ok?: boolean; progress?: string } | null
 }
 type Decision = 'resolved' | 'reopen'
+interface RequestAttempt { id: number; url: string; payload: Record<string, unknown>; message?: string }
 const STATE_TEXT: Record<string, string> = {
   received: '已收到，等待 AI 处理。', reopened: '已重新打开，AI 正在重新处理。',
   dispatch_failed: '派发处理失败，系统会自动重试。', awaiting_delivery: 'AI 已提交处理结果，等待正式发布。',
@@ -18,6 +19,7 @@ const repairs = ref<Repair[]>([])
 const notes = ref<Record<number, string>>({})
 const error = ref('')
 const busy = ref<number | null>(null)
+const failed = ref<RequestAttempt | null>(null)
 let attempts: Record<number, { decision: Decision; note: string; key: string }> = {}
 let generation = 0
 let pending: AbortController | undefined
@@ -39,10 +41,8 @@ async function refresh() {
   const controller = new AbortController()
   pending = controller
   repairs.value = []
-  notes.value = {}
-  attempts = {}
   busy.value = null
-  error.value = ''
+  if (!failed.value) error.value = ''
   if (account.marketUserId === null) return
   try {
     const response = await apiFetch('/api/mod-store/issue-runtime', { signal: controller.signal })
@@ -58,7 +58,6 @@ async function refresh() {
 async function submit(repair: Repair, decision?: Decision) {
   const note = (notes.value[repair.id] || '').trim()
   if (note.length < 4 || busy.value !== null) return
-  const current = generation
   let url = `/api/mod-store/issue-runtime/${repair.id}`
   let payload: Record<string, unknown> = { confirmed: true, note }
   if (decision) {
@@ -68,30 +67,47 @@ async function submit(repair: Repair, decision?: Decision) {
     url += '/decision'
     payload = { decision, note, idempotency_key: key }
   }
-  busy.value = repair.id
+  await send({ id: repair.id, url, payload })
+}
+
+async function send(request: RequestAttempt) {
+  if (busy.value !== null) return
+  const current = generation
+  busy.value = request.id
   error.value = ''
   try {
-    const response = await apiFetch(url, {
+    const response = await apiFetch(request.url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload), signal: pending?.signal,
+      body: JSON.stringify(request.payload), signal: pending?.signal,
     })
     const body = await response.json()
     if (!response.ok || body.success !== true) throw new Error(typeof body.detail === 'string' ? body.detail : '操作未成功保存，请重试')
-    if (current === generation) await refresh()
+    if (current === generation) {
+      if (failed.value?.id === request.id) failed.value = null
+      delete attempts[request.id]
+      delete notes.value[request.id]
+      await refresh()
+    }
   } catch (cause) {
-    if (current === generation && !pending?.signal.aborted) error.value = cause instanceof Error ? cause.message : '操作未成功保存'
+    if (current === generation && !pending?.signal.aborted) {
+      error.value = cause instanceof Error ? cause.message : '操作未成功保存'
+      failed.value = { ...request, message: error.value }
+    }
   } finally {
     if (current === generation) busy.value = null
   }
 }
 
-watch(() => [account.tenantId, account.marketUserId, account.localUserId, account.impersonatingMarketUserId], refresh, { immediate: true })
+function retry() { return failed.value ? send(failed.value) : refresh() }
+watch(() => [account.tenantId, account.marketUserId, account.localUserId, account.impersonatingMarketUserId], () => {
+  failed.value = null; attempts = {}; notes.value = {}; return refresh()
+}, { immediate: true })
 onBeforeUnmount(() => { generation++; pending?.abort() })
 </script>
 
 <template>
-  <section v-if="repairs.length || error" class="repair-acceptance" aria-label="问题工单处理结果">
-    <p v-if="error" role="alert">{{ error }} <button type="button" @click="refresh">重试</button></p>
+  <section v-if="repairs.length || error || failed" class="repair-acceptance" aria-label="问题工单处理结果">
+    <p v-if="error || failed" role="alert">{{ error || failed?.message }} <button type="button" :disabled="busy !== null" @click="retry">重试</button></p>
     <article v-for="repair in repairs" :key="repair.id">
       <strong>{{ repair.ticket_no }} · {{ repair.summary }}</strong>
       <p>{{ stateText(repair) }}</p>

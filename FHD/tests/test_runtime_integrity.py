@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -14,7 +15,8 @@ from app.runtime_integrity import (
 )
 
 
-def test_required_runtime_failure_degrades_health_and_blocks_delivery(monkeypatch):
+@pytest.mark.parametrize("lite", [True, False])
+def test_required_runtime_failure_degrades_health_and_blocks_delivery(monkeypatch, lite):
     app = FastAPI(version="1.0.0")
     record_runtime_component(
         app,
@@ -23,11 +25,15 @@ def test_required_runtime_failure_degrades_health_and_blocks_delivery(monkeypatc
         required=True,
         detail="module missing",
     )
+    monkeypatch.setitem(
+        register_health_routes.__globals__, "neuro_degraded_reasons", lambda _: ["offline"]
+    )
     register_health_routes(app)
 
-    body = TestClient(app).get("/api/health", params={"lite": True}).json()
+    body = TestClient(app).get("/api/health", params={"lite": lite}).json()
     assert body["status"] == "unhealthy"
     assert "module missing" in body["degradedReasons"]
+    assert ("offline" in body["degradedReasons"]) is (not lite)
 
     monkeypatch.setattr("app.mod_sdk.deliverable_status._mods_routes_loaded", lambda _app: True)
     data = build_deliverable_status([], app=app)
