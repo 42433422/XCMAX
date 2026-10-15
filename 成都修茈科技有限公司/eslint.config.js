@@ -66,13 +66,9 @@ export const baseRules = {
 }
 
 export const languageOptions = {
-  files: ['**/*.{js,ts,vue}'],
+  files: ['**/*.{js,mjs,cjs,ts,vue}'],
   languageOptions: {
-    globals: {
-      ...globals.browser,
-      ...globals.node,
-      ...globals.es2022,
-    },
+    globals: { ...globals.browser, ...globals.node, ...globals.es2022 },
   },
 }
 
