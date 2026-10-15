@@ -156,6 +156,8 @@ function Invoke-AppUpdate {
   } while ((-not $complete -or $complete.Current.IsOffscreen) -and (Get-Date) -lt $deadline)
   Check ($complete -and -not $complete.Current.IsOffscreen) 'app_update.install_completed' 'real updater-launched installer finished without manual uninstall'
   (Control 'NextButton').GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $installed = Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw | ConvertFrom-Json
+  Check ($installed.gitSha -eq $CandidateSha -and $installed.version -eq $productVersion) 'app_update.candidate_build' "sha=$($installed.gitSha); version=$($installed.version)"
   $markerPath = Join-Path $dataRoot 'rollback-marker.json'
   Check (Test-Path -LiteralPath $markerPath) 'app_update.natural_marker' 'application/installer produced rollback marker; harness never writes rollback state'
   $script:naturalMarker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
@@ -169,6 +171,21 @@ function Invoke-AppUpdate {
   $script:databaseBefore = (Get-FileHash -LiteralPath $naturalMarker.databaseBackupPath -Algorithm SHA256).Hash.ToLowerInvariant()
   Check ((Get-FileHash -LiteralPath (Join-Path $dataRoot 'data/xcagi.db') -Algorithm SHA256).Hash.ToLowerInvariant() -eq $databaseBefore) 'app_update.natural_database_backup' "sha256=$databaseBefore"
 }
+function Assert-RollbackEvidence {
+  $appliedPath = Join-Path $dataRoot 'rollback-applied.last.json'
+  try {
+    Check (Test-Path -LiteralPath $appliedPath -PathType Leaf) 'rollback.applied_record' 'persistent automatic rollback receipt exists'
+    try { $applied = Get-Content -LiteralPath $appliedPath -Raw | ConvertFrom-Json } catch { Check $false 'rollback.applied_record' 'persistent receipt is unreadable' }
+    $restored = Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw | ConvertFrom-Json
+    Check ($restored.gitSha -eq '83939363ca2ccf7776c97f5c7895e29c1e5bc453' -and -not (Test-Path (Join-Path $dataRoot 'rollback-marker.json'))) 'rollback.restored_build' 'original build restored and natural pending marker consumed'
+    Check ((Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant() -eq $databaseBefore) 'rollback.database_hash' "sha256=$databaseBefore"
+    $validTimes = $false
+    try { $appliedAt = [DateTimeOffset]$applied.appliedAt; $completedAt = [DateTimeOffset]$applied.completedAt; $validTimes = $true } catch {}
+    Check ($validTimes -and $applied.operationId -and (-not $naturalMarker.operationId -or $applied.operationId -eq $naturalMarker.operationId) -and $applied.reason -and $applied.fromVersion -eq $naturalMarker.toVersion -and $applied.toVersion -eq $naturalMarker.fromVersion -and $appliedAt -ge [DateTimeOffset]$naturalMarker.preparedAt -and $completedAt -ge $appliedAt -and $completedAt -le [DateTimeOffset]::UtcNow) 'rollback.applied_record' "operation=$($applied.operationId); from=$($applied.fromVersion); to=$($applied.toVersion); completed=$($applied.completedAt)"
+  } finally {
+    if ($appliedPath -and (Test-Path -LiteralPath $appliedPath -PathType Leaf)) { Copy-Item -LiteralPath $appliedPath -Destination (Join-Path $EvidenceDir 'rollback-applied.last.json') -Force }
+  }
+}
 function Invoke-FailedRollback([string]$tenant, [string]$seed) {
   Fixture 'dirty'
   $db = Join-Path $dataRoot 'data/xcagi.db'; Check ((Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant() -ne $databaseBefore) 'rollback.database_changed' 'controlled isolated database write differs from natural snapshot'
@@ -180,15 +197,10 @@ function Invoke-FailedRollback([string]$tenant, [string]$seed) {
       Start-Sleep -Seconds 2
       if (Test-Path -LiteralPath $appliedPath) { try { $applied = Get-Content -LiteralPath $appliedPath -Raw | ConvertFrom-Json } catch {} }
     } while (($applied.fromVersion -ne $naturalMarker.toVersion -or $applied.toVersion -ne $naturalMarker.fromVersion -or -not $applied.completedAt) -and (Get-Date) -lt $deadline)
-    Check ($applied.operationId -and (-not $naturalMarker.operationId -or $applied.operationId -eq $naturalMarker.operationId) -and $applied.reason -and $applied.completedAt) 'rollback.automatic_receipt' "operation=$($applied.operationId); reason=$($applied.reason); completed=$($applied.completedAt)"
-    Copy-Item -LiteralPath $appliedPath -Destination (Join-Path $EvidenceDir 'rollback-applied.last.json')
-    Check ((Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant() -eq $databaseBefore) 'rollback.database_hash' "sha256=$databaseBefore"
+    Assert-RollbackEvidence
     Fixture 'verify'
     & python (Join-Path $PSScriptRoot 'windows-lifecycle-fixtures.py') app-verify $installRoot $EvidenceDir
     Check ($LASTEXITCODE -eq 0) 'rollback.app_file_hashes' 'all original app files restored with no extra files'
-    Check (-not (Test-Path (Join-Path $dataRoot 'rollback-marker.json'))) 'rollback.marker_consumed' 'natural pending marker consumed after completed restoration'
-    $appliedAt = [DateTimeOffset]$applied.appliedAt; $completedAt = [DateTimeOffset]$applied.completedAt
-    Check ($applied.fromVersion -eq $naturalMarker.toVersion -and $applied.toVersion -eq $naturalMarker.fromVersion -and $appliedAt -ge [DateTimeOffset]$naturalMarker.preparedAt -and $completedAt -ge $appliedAt -and $completedAt -le [DateTimeOffset]::UtcNow) 'rollback.receipt_identity' 'receipt identity and timestamps match the app-generated operation'
   } finally { $listener.Stop() }
   Stop-App; Start-App 'old'; Run-Gui 'readback' (Join-Path $EvidenceDir 'rollback-gui') $seed | Out-Null
   $back = Login 'old'; Check ($back.tenant -eq $tenant) 'rollback.same_enterprise' "tenant_sha256=$(Digest $back.tenant)"

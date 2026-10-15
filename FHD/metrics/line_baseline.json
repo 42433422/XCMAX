@@ -1,5 +1,5 @@
 {
-  "lines": 2303326,
+  "lines": 2303338,
   "updated": "2026-10-14",
-  "note": "Owner approved isolated Windows lifecycle acceptance and regression guard updates: actual +294 maintained lines versus main, within +350 cap; no product runtime changes"
+  "note": "Owner approved isolated Windows lifecycle and shared receipt-validation regression tests: actual +306 maintained lines versus main, within +350 cap; no product runtime changes"
 }
