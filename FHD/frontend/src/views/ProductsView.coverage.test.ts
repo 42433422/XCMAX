@@ -4,6 +4,7 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { isRef, isReadonly } from 'vue'
 import ProductsView from './ProductsView.vue'
+import { useIndustryStore } from '@/stores/industry'
 
 const {
   mockFetchProducts,
@@ -141,7 +142,9 @@ async function mountProducts() {
           name: 'DataTable',
           props: ['data', 'columns', 'selectedIds', 'selectable', 'loading', 'hasMore', 'height', 'rowKey', 'emptyText'],
           emits: ['update:selectedIds', 'loadMore'],
-          template: `<div class="data-table-stub" />`,
+          template: `<div class="data-table-stub"><div v-for="row in data" :key="row.id" class="test-product-row">
+            <span v-for="column in columns" :key="column.key" :class="'test-cell-' + column.key"><slot :name="'cell-' + column.key" :value="row[column.key]" /></span>
+            <slot name="actions" :row="row" /></div></div>`,
         },
         ConfirmDialog: {
           name: 'ConfirmDialog',
@@ -229,28 +232,24 @@ describe('ProductsView.coverage', () => {
   describe('loadUnits 加载产品单位', () => {
     it('成功加载单位列表（unit_name + customer_name）', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'units')).toEqual(['单位A', '客户B'])
     })
 
     it('返回 success=false 时抛错并清空单位', async () => {
       mockGetCustomers.mockResolvedValue({ success: false, message: '权限不足' })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'units')).toEqual([])
     })
 
     it('返回非数组 data 时清空单位', async () => {
       mockGetCustomers.mockResolvedValue({ success: true, data: null })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'units')).toEqual([])
     })
 
     it('请求异常时清空单位', async () => {
       mockGetCustomers.mockRejectedValue(new Error('网络错误'))
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'units')).toEqual([])
     })
   })
@@ -264,7 +263,6 @@ describe('ProductsView.coverage', () => {
         total: 1,
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       await state.loadProducts(true)
       await flushPromises()
@@ -278,7 +276,6 @@ describe('ProductsView.coverage', () => {
         total: 1,
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'products', [{ id: 1, name: 'P1' }])
       await state.loadProducts(false)
@@ -288,7 +285,6 @@ describe('ProductsView.coverage', () => {
 
     it('带搜索关键字和单位时传递参数', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'searchQuery', 'A001')
       setSetupValue(wrapper, 'selectedUnit', '单位A')
@@ -300,7 +296,6 @@ describe('ProductsView.coverage', () => {
     it('result 为 null 时不更新列表', async () => {
       mockFetchProducts.mockResolvedValue(null)
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'products', [{ id: 1, name: 'existing' }])
       await state.loadProducts(true)
@@ -311,7 +306,6 @@ describe('ProductsView.coverage', () => {
     it('store 将成功但无 data 的响应视为空列表', async () => {
       mockFetchProducts.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'products', [{ id: 1, name: 'existing' }])
       await state.loadProducts(true)
@@ -324,7 +318,6 @@ describe('ProductsView.coverage', () => {
   describe('loadMoreProducts 加载更多', () => {
     it('hasMore=false 时不加载', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'hasMore', false)
       setSetupValue(wrapper, 'loading', false)
@@ -336,7 +329,6 @@ describe('ProductsView.coverage', () => {
 
     it('loading=true 时不加载', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'hasMore', true)
       setSetupValue(wrapper, 'loading', true)
@@ -353,7 +345,6 @@ describe('ProductsView.coverage', () => {
         total: 1,
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'hasMore', true)
       setSetupValue(wrapper, 'loading', false)
@@ -366,7 +357,6 @@ describe('ProductsView.coverage', () => {
   describe('showAddModal / editProduct 模态框', () => {
     it('showAddModal 打开添加模态框并重置表单', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       state.showAddModal()
       await flushPromises()
@@ -384,7 +374,6 @@ describe('ProductsView.coverage', () => {
 
     it('editProduct 打开编辑模态框并填充表单', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       const product = { id: 5, model_number: 'M5', name: 'P5', specification: 'spec', price: 99 }
       state.editProduct(product)
@@ -399,7 +388,6 @@ describe('ProductsView.coverage', () => {
     it.each([[10, 10], ['', 0], [0, 0]])('新建产品价格 %s 正常化为 %s 并保留客户', async (price, expectedPrice) => {
       mockCreateProduct.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'isEdit', false)
       setSetupValue(wrapper, 'formData', {
@@ -420,7 +408,6 @@ describe('ProductsView.coverage', () => {
     it('新建产品失败时弹出告警', async () => {
       mockCreateProduct.mockResolvedValue({ success: false, message: '型号已存在' })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'isEdit', false)
       setSetupValue(wrapper, 'formData', {
@@ -440,7 +427,6 @@ describe('ProductsView.coverage', () => {
     it.each([[10, 10], ['', 0], [0, 0]])('编辑产品价格 %s 正常化为 %s', async (price, expectedPrice) => {
       mockUpdateProduct.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'isEdit', true)
       setSetupValue(wrapper, 'formData', {
@@ -460,7 +446,6 @@ describe('ProductsView.coverage', () => {
     it('编辑产品失败时弹出告警', async () => {
       mockUpdateProduct.mockResolvedValue({ success: false, message: '更新失败' })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'isEdit', true)
       setSetupValue(wrapper, 'formData', {
@@ -480,7 +465,6 @@ describe('ProductsView.coverage', () => {
   describe('handleDelete / confirmDelete 删除', () => {
     it('handleDelete 设置待删除项并显示确认框', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       const product = { id: 10, name: 'del' }
       state.handleDelete(product)
@@ -492,7 +476,6 @@ describe('ProductsView.coverage', () => {
     it('confirmDelete 删除成功时不弹告警', async () => {
       mockDeleteProduct.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'itemToDelete', { id: 10, name: 'del' })
       setSetupValue(wrapper, 'showDeleteConfirm', true)
@@ -506,7 +489,6 @@ describe('ProductsView.coverage', () => {
     it('confirmDelete 删除失败时弹告警', async () => {
       mockDeleteProduct.mockResolvedValue({ success: false, message: '权限不足' })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'itemToDelete', { id: 10, name: 'del' })
       await state.confirmDelete()
@@ -516,7 +498,6 @@ describe('ProductsView.coverage', () => {
 
     it('confirmDelete 无待删除项时直接返回', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'itemToDelete', null)
       await state.confirmDelete()
@@ -529,7 +510,6 @@ describe('ProductsView.coverage', () => {
   describe('batchDelete / confirmBatchDelete 批量删除', () => {
     it('batchDelete 显示批量删除确认框', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       state.batchDelete()
       await flushPromises()
@@ -539,7 +519,6 @@ describe('ProductsView.coverage', () => {
     it('confirmBatchDelete 成功时清空选中并刷新', async () => {
       mockBatchDelete.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'selectedIds', [1, 2, 3])
       setSetupValue(wrapper, 'selectAll', true)
@@ -553,7 +532,6 @@ describe('ProductsView.coverage', () => {
     it('confirmBatchDelete 失败时弹告警', async () => {
       mockBatchDelete.mockResolvedValue({ success: false, message: '部分失败' })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'selectedIds', [1, 2])
       await state.confirmBatchDelete()
@@ -570,7 +548,6 @@ describe('ProductsView.coverage', () => {
         templates: [{ id: 't1', name: '价目表A', filename: 'price_list_a.docx', category: 'word' }],
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toEqual([{ id: 'price_list_a', name: '价目表A（Word）' }])
     })
 
@@ -580,7 +557,6 @@ describe('ProductsView.coverage', () => {
         templates: [{ id: 'fs:price_list_b.docx', name: '价目表B', filename: '', category: 'word' }],
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toEqual([{ id: 'price_list_b', name: '价目表B（Word）' }])
     })
 
@@ -598,7 +574,6 @@ describe('ProductsView.coverage', () => {
         ],
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toEqual([{ id: 'price_c', name: '价格表C（Word）' }])
     })
 
@@ -617,7 +592,6 @@ describe('ProductsView.coverage', () => {
         ],
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       const opts = getSetupRefValue(wrapper, 'wordTemplateOptions')
       expect(opts).toHaveLength(1)
       expect(opts[0].id).toBe('price_list_b')
@@ -629,7 +603,6 @@ describe('ProductsView.coverage', () => {
         templates: [{ id: 't1', name: '价目A', filename: 'price_list_a.docx', category: 'excel' }],
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toEqual([
         { id: 'price_list_default', name: '产品价格表（Word 价目，默认）' },
       ])
@@ -641,7 +614,6 @@ describe('ProductsView.coverage', () => {
         templates: [{ id: 't1', name: '普通模板', filename: 'normal.docx', category: 'word' }],
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toEqual([
         { id: 'price_list_default', name: '产品价格表（Word 价目，默认）' },
       ])
@@ -653,7 +625,6 @@ describe('ProductsView.coverage', () => {
         templates: [{ id: 't1', name: '客户价目表', filename: 'cust.docx', category: 'word' }],
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toHaveLength(1)
     })
 
@@ -663,7 +634,6 @@ describe('ProductsView.coverage', () => {
         templates: [{ id: 'price_list_special', name: '特殊', filename: 'special.docx', category: 'word' }],
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toHaveLength(1)
     })
 
@@ -676,7 +646,6 @@ describe('ProductsView.coverage', () => {
         ],
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toHaveLength(1)
     })
 
@@ -686,7 +655,6 @@ describe('ProductsView.coverage', () => {
         templates: [{ id: '', name: '价目A', filename: '', slug: '', category: 'word' }],
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toEqual([
         { id: 'price_list_default', name: '产品价格表（Word 价目，默认）' },
       ])
@@ -698,7 +666,6 @@ describe('ProductsView.coverage', () => {
         templates: [{ id: 't1', name: '价目A', filename: 'price_list_a.docx', category: 'word' }],
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       setSetupValue(wrapper, 'selectedWordTemplateSlug', 'old_slug')
       const state = getSetupState(wrapper)
       await state.loadWordTemplateOptions()
@@ -709,21 +676,18 @@ describe('ProductsView.coverage', () => {
     it('listTemplates 返回 success=false 时不更新', async () => {
       mockListTemplates.mockResolvedValue({ success: false })
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toEqual([])
     })
 
     it('listTemplates 异常时不抛错', async () => {
       mockListTemplates.mockRejectedValue(new Error('网络错误'))
       const wrapper = await mountProducts()
-      await flushPromises()
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toEqual([])
     })
 
     it('templates 非数组时使用默认模板', async () => {
       mockListTemplates.mockResolvedValue({ success: true, templates: null })
       const wrapper = await mountProducts()
-      await flushPromises()
       // templates 为 null 时被当作空数组，无匹配 → 使用默认模板
       expect(getSetupRefValue(wrapper, 'wordTemplateOptions')).toEqual([
         { id: 'price_list_default', name: '产品价格表（Word 价目，默认）' },
@@ -731,123 +695,35 @@ describe('ProductsView.coverage', () => {
     })
   })
 
-  // ===== exportPriceList 导出 Word 价格表 =====
-  describe('exportPriceList 导出 Word 价格表', () => {
+  describe.each([
+    ['Word', 'exportPriceList', mockExportUnitProductsDocx, 'docx', '单位A', 'kw', '导出失败: 导出超时'],
+    ['Excel', 'exportPriceListExcel', mockExportUnitProductsXlsx, 'xlsx', '单位B', 'q1', 'Excel 导出失败: Excel 导出失败'],
+  ] as const)('%s 价格表导出', (_format, action, request, extension, unit, keyword, errorMessage) => {
     it('成功导出并解析 UTF-8 文件名', async () => {
-      const utf8Name = encodeURIComponent('自定义价目表.docx')
-      mockExportUnitProductsDocx.mockResolvedValue(makeResponse({ disposition: `attachment; filename*=UTF-8''${utf8Name}` }))
+      request.mockResolvedValue(makeResponse({ disposition: `attachment; filename*=UTF-8''${encodeURIComponent('自定义价目表.' + extension)}` }))
       const wrapper = await mountProducts()
-      await flushPromises()
-      const state = getSetupState(wrapper)
-      setSetupValue(wrapper, 'selectedUnit', '单位A')
-      setSetupValue(wrapper, 'searchQuery', 'kw')
+      setSetupValue(wrapper, 'selectedUnit', unit)
+      setSetupValue(wrapper, 'searchQuery', keyword)
       setSetupValue(wrapper, 'selectedWordTemplateSlug', 'tpl1')
-      await state.exportPriceList()
+      await getSetupState(wrapper)[action]()
       await flushPromises()
-      expect(mockExportUnitProductsDocx).toHaveBeenCalledWith({
-        unit: '单位A',
-        keyword: 'kw',
-        template_id: 'tpl1',
-      })
+      expect(request).toHaveBeenCalledWith({ unit, keyword, ...(extension === 'docx' ? { template_id: 'tpl1' } : {}) })
     })
-
-    it('UTF-8 文件名解码失败时使用原始值', async () => {
-      mockExportUnitProductsDocx.mockResolvedValue(makeResponse({ disposition: `attachment; filename*=UTF-8''%E9%94%99%E8%AF%AF%` }))
+    it.each(['invalid', 'plain', 'absent'])('处理 %s 文件名', async (kind) => {
+      const disposition = kind === 'invalid' ? "attachment; filename*=UTF-8''%invalid%"
+        : kind === 'plain' ? `attachment; filename="plain_name.${extension}"` : ''
+      request.mockResolvedValue(makeResponse({ disposition }))
       const wrapper = await mountProducts()
+      await getSetupState(wrapper)[action]()
       await flushPromises()
-      const state = getSetupState(wrapper)
-      await state.exportPriceList()
-      await flushPromises()
-      expect(mockExportUnitProductsDocx).toHaveBeenCalled()
+      expect(request).toHaveBeenCalled()
     })
-
-    it('使用普通 filename 头', async () => {
-      mockExportUnitProductsDocx.mockResolvedValue(makeResponse({ disposition: 'attachment; filename="plain_name.docx"' }))
-      const wrapper = await mountProducts()
-      await flushPromises()
-      const state = getSetupState(wrapper)
-      await state.exportPriceList()
-      await flushPromises()
-      expect(mockExportUnitProductsDocx).toHaveBeenCalled()
-    })
-
-    it('无 content-disposition 时使用默认文件名', async () => {
-      mockExportUnitProductsDocx.mockResolvedValue(makeResponse({ disposition: '' }))
-      const wrapper = await mountProducts()
-      await flushPromises()
-      const state = getSetupState(wrapper)
-      await state.exportPriceList()
-      await flushPromises()
-      expect(mockExportUnitProductsDocx).toHaveBeenCalled()
-    })
-
     it('导出异常时弹告警', async () => {
-      mockExportUnitProductsDocx.mockRejectedValue(new Error('导出超时'))
+      request.mockRejectedValue(new Error(errorMessage.split(': ')[1]))
       const wrapper = await mountProducts()
+      await getSetupState(wrapper)[action]()
       await flushPromises()
-      const state = getSetupState(wrapper)
-      await state.exportPriceList()
-      await flushPromises()
-      expect(mockAppAlert).toHaveBeenCalledWith('导出失败: 导出超时')
-    })
-  })
-
-  // ===== exportPriceListExcel 导出 Excel 价格表 =====
-  describe('exportPriceListExcel 导出 Excel 价格表', () => {
-    it('成功导出并解析 UTF-8 文件名', async () => {
-      const utf8Name = encodeURIComponent('Excel价目.xlsx')
-      mockExportUnitProductsXlsx.mockResolvedValue(makeResponse({ disposition: `attachment; filename*=UTF-8''${utf8Name}` }))
-      const wrapper = await mountProducts()
-      await flushPromises()
-      const state = getSetupState(wrapper)
-      setSetupValue(wrapper, 'selectedUnit', '单位B')
-      setSetupValue(wrapper, 'searchQuery', 'q1')
-      await state.exportPriceListExcel()
-      await flushPromises()
-      expect(mockExportUnitProductsXlsx).toHaveBeenCalledWith({
-        unit: '单位B',
-        keyword: 'q1',
-      })
-    })
-
-    it('UTF-8 文件名解码失败时使用原始值', async () => {
-      mockExportUnitProductsXlsx.mockResolvedValue(makeResponse({ disposition: `attachment; filename*=UTF-8''%invalid%` }))
-      const wrapper = await mountProducts()
-      await flushPromises()
-      const state = getSetupState(wrapper)
-      await state.exportPriceListExcel()
-      await flushPromises()
-      expect(mockExportUnitProductsXlsx).toHaveBeenCalled()
-    })
-
-    it('使用普通 filename 头', async () => {
-      mockExportUnitProductsXlsx.mockResolvedValue(makeResponse({ disposition: 'attachment; filename=plain.xlsx' }))
-      const wrapper = await mountProducts()
-      await flushPromises()
-      const state = getSetupState(wrapper)
-      await state.exportPriceListExcel()
-      await flushPromises()
-      expect(mockExportUnitProductsXlsx).toHaveBeenCalled()
-    })
-
-    it('无 content-disposition 时使用默认文件名', async () => {
-      mockExportUnitProductsXlsx.mockResolvedValue(makeResponse({ disposition: '' }))
-      const wrapper = await mountProducts()
-      await flushPromises()
-      const state = getSetupState(wrapper)
-      await state.exportPriceListExcel()
-      await flushPromises()
-      expect(mockExportUnitProductsXlsx).toHaveBeenCalled()
-    })
-
-    it('导出异常时弹告警', async () => {
-      mockExportUnitProductsXlsx.mockRejectedValue(new Error('Excel 导出失败'))
-      const wrapper = await mountProducts()
-      await flushPromises()
-      const state = getSetupState(wrapper)
-      await state.exportPriceListExcel()
-      await flushPromises()
-      expect(mockAppAlert).toHaveBeenCalledWith('Excel 导出失败: Excel 导出失败')
+      expect(mockAppAlert).toHaveBeenCalledWith(errorMessage)
     })
   })
 
@@ -855,7 +731,6 @@ describe('ProductsView.coverage', () => {
   describe('triggerImportExcel 触发导入', () => {
     it('调用 importExcelInput 的 click 方法', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const raw = getRawState(wrapper)
       const clickSpy = vi.fn()
       raw.importExcelInput.value = { click: clickSpy }
@@ -865,7 +740,6 @@ describe('ProductsView.coverage', () => {
 
     it('importExcelInput 为 null 时不报错', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const raw = getRawState(wrapper)
       raw.importExcelInput.value = null
       expect(() => raw.triggerImportExcel()).not.toThrow()
@@ -876,7 +750,6 @@ describe('ProductsView.coverage', () => {
   describe('handleImport 处理 Excel 导入', () => {
     it('无文件时直接返回', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       const event = { target: { files: [], value: '' } }
       await state.handleImport(event)
@@ -887,7 +760,6 @@ describe('ProductsView.coverage', () => {
     it('解析失败时弹告警', async () => {
       mockApiPost.mockResolvedValueOnce({ success: false, message: '格式错误' })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       const file = new File(['content'], 'test.xlsx', { type: 'application/vnd.ms-excel' })
       const event = { target: { files: [file], value: 'test.xlsx' } }
@@ -899,7 +771,6 @@ describe('ProductsView.coverage', () => {
     it('解析成功但无数据行时弹告警（普通模式）', async () => {
       mockApiPost.mockResolvedValueOnce({ success: true, rows: [], headers: [] })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       const file = new File(['content'], 'test.xlsx')
       const event = { target: { files: [file], value: 'test.xlsx' } }
@@ -911,7 +782,6 @@ describe('ProductsView.coverage', () => {
     it('解析成功但无数据行时弹告警（考勤明细模式）', async () => {
       mockApiPost.mockResolvedValueOnce({ success: true, rows: [], headers: [] })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'useAttendanceDetailImport', true)
       const file = new File(['content'], 'test.xlsx')
@@ -933,7 +803,6 @@ describe('ProductsView.coverage', () => {
         skipped: 2,
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       const file = new File(['content'], 'test.xlsx')
       const event = { target: { files: [file], value: 'test.xlsx' } }
@@ -954,7 +823,6 @@ describe('ProductsView.coverage', () => {
         skipped: 0,
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       const file = new File(['content'], 'test.xlsx')
       const event = { target: { files: [file], value: 'test.xlsx' } }
@@ -974,7 +842,6 @@ describe('ProductsView.coverage', () => {
         message: '字段映射错误',
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       const file = new File(['content'], 'test.xlsx')
       const event = { target: { files: [file], value: 'test.xlsx' } }
@@ -986,7 +853,6 @@ describe('ProductsView.coverage', () => {
     it('导入过程抛异常时弹告警', async () => {
       mockApiPost.mockRejectedValue(new Error('网络中断'))
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       const file = new File(['content'], 'test.xlsx')
       const event = { target: { files: [file], value: 'test.xlsx' } }
@@ -1007,7 +873,6 @@ describe('ProductsView.coverage', () => {
         skipped: 0,
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       setSetupValue(wrapper, 'useAttendanceDetailImport', true)
       setSetupValue(wrapper, 'replaceTaggedAttendancePersonnel', true)
@@ -1031,7 +896,6 @@ describe('ProductsView.coverage', () => {
       })
       mockApiPost.mockResolvedValueOnce({ success: true, imported: 1, skipped: 0 })
       const wrapper = await mountProducts()
-      await flushPromises()
       const state = getSetupState(wrapper)
       const file = new File(['content'], 'test.xlsx')
       const event = { target: { files: [file], value: 'test.xlsx' } }
@@ -1046,7 +910,6 @@ describe('ProductsView.coverage', () => {
     it('点击导出价格表 按钮触发 exportPriceList', async () => {
       mockExportUnitProductsDocx.mockResolvedValue(makeResponse({ disposition: '' }))
       const wrapper = await mountProducts()
-      await flushPromises()
       const btn = wrapper.findAll('button').find((b) => b.text().includes('导出价格表'))
       expect(btn).toBeTruthy()
       await btn!.trigger('click')
@@ -1057,7 +920,6 @@ describe('ProductsView.coverage', () => {
     it('点击导出Excel 按钮触发 exportPriceListExcel', async () => {
       mockExportUnitProductsXlsx.mockResolvedValue(makeResponse({ disposition: '' }))
       const wrapper = await mountProducts()
-      await flushPromises()
       const btn = wrapper.findAll('button').find((b) => b.text().includes('导出Excel'))
       expect(btn).toBeTruthy()
       await btn!.trigger('click')
@@ -1067,7 +929,6 @@ describe('ProductsView.coverage', () => {
 
     it('点击添加产品 按钮打开模态框', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const btn = wrapper.findAll('button').find((b) => b.text().includes('添加产品'))
       expect(btn).toBeTruthy()
       await btn!.trigger('click')
@@ -1077,7 +938,6 @@ describe('ProductsView.coverage', () => {
 
     it('搜索框输入时触发 loadProducts', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const input = wrapper.find('input[type="text"]')
       expect(input.exists()).toBe(true)
       await input.setValue('A001')
@@ -1087,7 +947,6 @@ describe('ProductsView.coverage', () => {
 
     it('单位选择变更时触发 loadProducts', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const selects = wrapper.findAll('select')
       expect(selects.length).toBeGreaterThanOrEqual(1)
       await selects[0].setValue('单位A')
@@ -1097,7 +956,6 @@ describe('ProductsView.coverage', () => {
 
     it('模态框取消按钮关闭模态框', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       setSetupValue(wrapper, 'showModal', true)
       await flushPromises()
       const cancelBtn = wrapper.findAll('button').find((b) => b.text().includes('取消'))
@@ -1110,7 +968,6 @@ describe('ProductsView.coverage', () => {
     it('模态框保存按钮触发 saveProduct', async () => {
       mockCreateProduct.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
-      await flushPromises()
       setSetupValue(wrapper, 'showModal', true)
       setSetupValue(wrapper, 'isEdit', false)
       setSetupValue(wrapper, 'formData', {
@@ -1134,7 +991,6 @@ describe('ProductsView.coverage', () => {
     it('删除确认框 confirm 事件触发 confirmDelete', async () => {
       mockDeleteProduct.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
-      await flushPromises()
       setSetupValue(wrapper, 'itemToDelete', { id: 10, name: 'del' })
       setSetupValue(wrapper, 'showDeleteConfirm', true)
       await flushPromises()
@@ -1150,7 +1006,6 @@ describe('ProductsView.coverage', () => {
   describe('DataTable 事件', () => {
     it('update:selectedIds 事件更新 selectedIds', async () => {
       const wrapper = await mountProducts()
-      await flushPromises()
       const dt = wrapper.findComponent({ name: 'DataTable' })
       dt.vm.$emit('update:selectedIds', [1, 2, 3])
       await flushPromises()
@@ -1164,7 +1019,6 @@ describe('ProductsView.coverage', () => {
         total: 1,
       })
       const wrapper = await mountProducts()
-      await flushPromises()
       setSetupValue(wrapper, 'hasMore', true)
       setSetupValue(wrapper, 'loading', false)
       await flushPromises()
@@ -1174,4 +1028,55 @@ describe('ProductsView.coverage', () => {
       expect(getSetupRefValue(wrapper, 'products').some((p: any) => p.id === 99)).toBe(true)
     })
   })
+
+  it('renders product cells and routes row editing and deletion through their controls', async () => {
+    mockFetchProducts.mockResolvedValue({ success: true, data: [
+      { id: 1, model_number: 'A1', name: '组件', specification: 'M', price: 12.5 },
+      { id: 2, model_number: '', name: '', specification: '', price: 0 },
+    ] })
+    mockUpdateProduct.mockResolvedValue({ success: true })
+    const wrapper = await mountProducts()
+    const rows = wrapper.findAll('.test-product-row')
+    expect(rows[0].text()).toContain('A1组件M¥12.50')
+    for (const column of ['model_number', 'name', 'specification', 'price']) expect(rows[1].get('.test-cell-' + column).text()).toBe('-')
+    await rows[0].findAll('button')[0].trigger('click')
+    await wrapper.get('[data-tutorial-id="product-model"]').setValue('A2')
+    await wrapper.get('[data-tutorial-id="product-name"]').setValue('新组件')
+    await wrapper.get('input[placeholder="规格描述"]').setValue('L')
+    await wrapper.get('[data-tutorial-id="product-price"]').setValue('19.5')
+    await wrapper.get('[data-tutorial-id="product-save"]').trigger('click')
+    await flushPromises()
+    expect(mockUpdateProduct).toHaveBeenCalledWith(1, expect.objectContaining({ model_number: 'A2', name: '新组件', specification: 'L', price: 19.5 }))
+    await rows[0].findAll('button')[1].trigger('click')
+    const dialogs = wrapper.findAllComponents({ name: 'ConfirmDialog' })
+    expect(dialogs[0].props('modelValue')).toBe(true)
+    dialogs[0].vm.$emit('update:modelValue', false)
+    dialogs[1].vm.$emit('update:modelValue', false)
+    await flushPromises()
+    expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
+    expect(mockDeleteProduct).not.toHaveBeenCalled()
+  })
+
+  it('uses industry field types and validates required fields before creating inventory', async () => {
+    useIndustryStore().currentConfig = { subsystems: { products: { entity: '人员', fields: [
+      { key: 'name', label: '姓名', required: true },
+      { key: 'specification', validators: [{ type: 'oneOf', params: ['早班', '晚班'] }] },
+      { key: 'start_date', label: '入职日', type: 'date' }, { key: 'hours', label: '工时', type: 'number' }, { key: 'note', label: '备注', type: 'text' },
+    ] } } }
+    mockCreateProduct.mockResolvedValue({ success: true })
+    const wrapper = await mountProducts()
+    await wrapper.get('[data-tutorial-id="product-create"]').trigger('click')
+    expect(wrapper.get('.modal-header').text()).toBe('添加人员')
+    await wrapper.get('[data-tutorial-id="product-save"]').trigger('click')
+    expect(mockAppAlert).toHaveBeenCalledWith('姓名不能为空')
+    expect(mockCreateProduct).not.toHaveBeenCalled()
+    await wrapper.get('[data-tutorial-id="product-name"]').setValue('小王')
+    await wrapper.get('.modal select').setValue('晚班')
+    await wrapper.get('[data-tutorial-id="product-inventory"]').setValue('4')
+    for (const [placeholder, value] of [['入职日', '2026-10-15'], ['工时', '8'], ['备注', '临时']]) await wrapper.get(`input[placeholder="${placeholder}"]`).setValue(value)
+    await wrapper.get('[data-tutorial-id="product-save"]').trigger('click')
+    await flushPromises()
+    expect(mockCreateProduct).toHaveBeenCalledWith(expect.objectContaining({ name: '小王', specification: '晚班', quantity: 4, start_date: '2026-10-15', hours: 8, note: '临时' }))
+  })
+
 })

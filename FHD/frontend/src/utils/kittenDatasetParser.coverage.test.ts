@@ -1,361 +1,161 @@
-import { describe, it, expect, vi } from 'vitest'
-import { parseDatasetFile, KITTEN_DATASET_SAMPLE_LIMIT } from './kittenDatasetParser'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as XLSX from 'xlsx'
+import type { ParsedDatasetFile } from './kittenDatasetParser'
 
-// 辅助：创建带 text() 方法的 File 对象（jsdom 的 File 可能不支持 text/arrayBuffer）
-function createFile(content: string, name: string, type: string): File {
-  const file = new File([content], name, { type })
-  // 确保 text() 方法可用
-  if (typeof file.text !== 'function') {
-    Object.defineProperty(file, 'text', {
-      value: () => Promise.resolve(content),
-      configurable: true,
-    })
-  }
-  // 确保 arrayBuffer() 方法可用
-  if (typeof file.arrayBuffer !== 'function') {
-    Object.defineProperty(file, 'arrayBuffer', {
-      value: () => Promise.resolve(new TextEncoder().encode(content).buffer),
-      configurable: true,
-    })
-  }
+function createFile(content: string, name: string): File {
+  const file = new File([content], name)
+  Object.defineProperties(file, {
+    text: { value: async () => content, configurable: true },
+    arrayBuffer: { value: async () => new TextEncoder().encode(content).buffer, configurable: true },
+  })
   return file
 }
+const empty = { rows: 0, columns: [], preview: [], sampleRows: [], fieldProfiles: [] }
+let parse: typeof import('./kittenDatasetParser').parseDatasetFile
+let sampleLimit: number
+let workers: ParserWorker[]
+class ParserWorker extends EventTarget {
+  postMessage = vi.fn()
+  removeEventListener = vi.fn(super.removeEventListener.bind(this))
+  constructor(public url: URL, public options: WorkerOptions) { super(); workers.push(this) }
+  respond(data: unknown) { this.dispatchEvent(new MessageEvent('message', { data })) }
+}
+beforeEach(async () => {
+  vi.resetModules()
+  workers = []
+  vi.stubGlobal('Worker', ParserWorker)
+  const api = await import('./kittenDatasetParser')
+  parse = api.parseDatasetFile
+  sampleLimit = api.KITTEN_DATASET_SAMPLE_LIMIT
+})
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
-// Mock xlsx 模块（根据输入内容动态解析）
-vi.mock('xlsx', () => {
-  const parseText = (text: string): unknown[][] => {
-    const lines = text.split('\n').filter((l) => l.trim())
-    return lines.map((line) => line.split(','))
-  }
-  const mockRead = vi.fn((input: string | ArrayBuffer) => {
-    const text = typeof input === 'string' ? input : new TextDecoder().decode(input)
-    const rows = parseText(text)
-    const sheet: Record<string, { t: string; v: unknown }> = {}
-    rows.forEach((row, rIdx) => {
-      row.forEach((val, cIdx) => {
-        const cell = String.fromCharCode(65 + cIdx) + (rIdx + 1)
-        sheet[cell] = { t: 's', v: val }
-      })
-    })
-    return { Sheets: { Sheet1: sheet }, SheetNames: ['Sheet1'] }
+describe('dataset parsing and profiles', () => {
+  it('uses a bounded 1000-row sample', async () => {
+    expect(sampleLimit).toBe(1000)
+    const result = await parse(createFile('name\n' + Array.from({ length: 1500 }, (_, i) => `user${i}`).join('\n'), 'large.csv'))
+    expect(result.rows).toBe(1500)
+    expect(result.sampleRows).toHaveLength(sampleLimit)
+    expect(result.sampleRows.at(-1)).toEqual({ name: 'user999' })
   })
-  const mockSheetToJson = vi.fn((sheet, opts) => {
-    // 从 sheet 对象重建 rows
-    const cells = Object.keys(sheet || {})
-    if (cells.length === 0) return []
-    const maxRow = Math.max(...cells.map((c) => parseInt(c.slice(1))))
-    const maxCol = Math.max(...cells.map((c) => c.charCodeAt(0) - 64))
-    const rows: unknown[][] = []
-    for (let r = 1; r <= maxRow; r++) {
-      const row: unknown[] = []
-      for (let c = 1; c <= maxCol; c++) {
-        const cell = String.fromCharCode(64 + c) + r
-        row.push(sheet[cell]?.v ?? '')
-      }
-      rows.push(row)
-    }
-    if (opts && opts.header === 1) {
-      return rows
-    }
-    const headers = rows[0] || []
-    return rows.slice(1).map((row) => {
-      const obj: Record<string, unknown> = {}
-      headers.forEach((h, i) => {
-        obj[String(h)] = row[i] ?? ''
-      })
-      return obj
+  it('parses CSV rows, headers, preview and complete field profiles', async () => {
+    const result = await parse(createFile('name,age\nAlice,30\nBob,25\nCharlie,35', 'people.csv'))
+    expect(result).toEqual({
+      rows: 3, columns: ['name', 'age'],
+      preview: [['name', 'age'], ['Alice', 30], ['Bob', 25]],
+      sampleRows: [{ name: 'Alice', age: 30 }, { name: 'Bob', age: 25 }, { name: 'Charlie', age: 35 }],
+      fieldProfiles: [{ name: 'name', type: 'category', nonEmpty: 3, uniqueCount: 3 }, { name: 'age', type: 'number', nonEmpty: 3, uniqueCount: 3 }],
     })
   })
-  return {
-    read: mockRead,
-    utils: { sheet_to_json: mockSheetToJson },
-    default: { read: mockRead, utils: { sheet_to_json: mockSheetToJson } },
-  }
+  it.each(['txt', 'CSV'])('parses %s using CSV normalization', async (ext) => {
+    expect((await parse(createFile('name,age\nAlice,30', `test.${ext}`))).columns).toEqual(['name', 'age'])
+  })
+  it.each([
+    ['objects', [{ name: 'Alice', age: 30 }, { name: 'Bob', age: 25 }], 2, ['name', 'age']],
+    ['values', [1, 2, 3], 3, ['value']],
+    ['mixed values', [1, null, false, ['x']], 4, ['value']],
+    ['object', { name: 'Alice', age: 30 }, 1, ['name', 'age']],
+    ['wrapped', { data: [{ name: 'Alice' }, { name: 'Bob' }] }, 2, ['name']],
+  ])('normalizes JSON %s', async (_label, payload, rows, columns) => {
+    const result = await parse(createFile(JSON.stringify(payload), 'data.json'))
+    expect(result.rows).toBe(rows)
+    expect(result.columns).toEqual(columns)
+    expect(result.sampleRows).toHaveLength(rows as number)
+    expect(result.preview).toEqual(result.sampleRows.slice(0, 3))
+  })
+  it('normalizes empty JSON arrays and the blank header of an empty CSV', async () => {
+    expect(await parse(createFile('[]', 'empty.json'))).toEqual(empty)
+    expect(await parse(createFile('', 'empty.csv'))).toEqual({ ...empty, columns: [''], preview: [['']], fieldProfiles: [{ name: '', type: 'category', nonEmpty: 0, uniqueCount: 0 }] })
+  })
+  it.each(['not valid json', '"just a string"', '123', 'true', 'null'])('rejects unsupported JSON %s', async (text) => {
+    await expect(parse(createFile(text, 'bad.json'))).rejects.toThrow('JSON 解析失败，请检查文件格式是否正确。')
+  })
+  it.each(['xlsx', 'xls'] as const)('reads genuine %s workbook bytes', async (bookType) => {
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([{ name: 'Alice', age: 30 }]), 'People')
+    const buffer = XLSX.write(workbook, { type: 'array', bookType }) as ArrayBuffer
+    const file = { name: `people.${bookType}`, size: buffer.byteLength, arrayBuffer: async () => buffer } as File
+    expect(await parse(file)).toMatchObject({ rows: 1, columns: ['name', 'age'], sampleRows: [{ name: 'Alice', age: 30 }] })
+  })
+  it.each(['test.pdf', 'noext', 'test.doc'])('rejects unsupported file %s', async (name) => {
+    await expect(parse(createFile('x', name))).rejects.toThrow(`暂不支持该文件类型: .${name.includes('.') ? name.split('.').at(-1) : 'unknown'}`)
+  })
+  it.each([
+    ['number', [30, 25, 35]], ['number', ['￥1,000', '20%', ' 30 ']],
+    ['date', ['2024-01-01', '2024-02-01', '2024-03-01']],
+    ['text', Array.from({ length: 25 }, (_, i) => `user${i}`)],
+    ['category', Array.from({ length: 20 }, (_, i) => i < 10 ? 'active' : 'inactive')],
+    ['category', [null, '', '   ']], ['category', [false, {}, 'not-a-date', '¥ %']],
+  ])('profiles %s fields from %j', async (type, values) => {
+    const result = await parse(createFile(JSON.stringify((values as unknown[]).map((value) => ({ value }))), 'profile.json'))
+    expect(result.fieldProfiles[0].type).toBe(type)
+  })
+  it('limits previews and discovers columns across differently shaped objects', async () => {
+    const rows = Array.from({ length: 1001 }, (_, i) => i === 49 ? { name: `n${i}`, extra: 'yes' } : { name: `n${i}` })
+    const result = await parse(createFile(JSON.stringify(rows), 'rows.json'))
+    expect(result.columns).toEqual(['name', 'extra'])
+    expect(result.preview).toHaveLength(3)
+    expect(result.sampleRows).toHaveLength(1000)
+    expect(result.fieldProfiles[1]).toEqual({ name: 'extra', type: 'category', nonEmpty: 1, uniqueCount: 1 })
+  })
+  it('preserves Chinese headers and fills missing CSV cells', async () => {
+    const result = await parse(createFile('姓名,年龄\n张三,30\n李四', 'chinese.csv'))
+    expect(result.columns).toEqual(['姓名', '年龄'])
+    expect(result.sampleRows[1]).toEqual({ 姓名: '李四', 年龄: '' })
+  })
+  it('decodes UTF-8 when File.text is unavailable', async () => {
+    const file = createFile('[{"姓名":"张三"}]', 'fallback.json')
+    Reflect.deleteProperty(file, 'text')
+    expect((await parse(file)).sampleRows).toEqual([{ 姓名: '张三' }])
+  })
 })
 
-// Mock Worker
-vi.stubGlobal(
-  'Worker',
-  class {
-    postMessage() {}
-    addEventListener() {}
-    removeEventListener() {}
-    terminate() {}
-  },
-)
-
-describe('kittenDatasetParser', () => {
-  describe('KITTEN_DATASET_SAMPLE_LIMIT', () => {
-    it('导出为 1000', () => {
-      expect(KITTEN_DATASET_SAMPLE_LIMIT).toBe(1000)
-    })
+describe('large-file Worker lifecycle', () => {
+  const largeFile = () => createFile(JSON.stringify([{ value: 'x'.repeat(100_000) }]), 'large.json')
+  const payload: ParsedDatasetFile = { rows: 1, columns: ['value'], preview: [{ value: 7 }], sampleRows: [{ value: 7 }], fieldProfiles: [{ name: 'value', type: 'number', nonEmpty: 1, uniqueCount: 1 }] }
+  it('matches response IDs, cleans listeners and reuses its worker for later requests', async () => {
+    const file = largeFile()
+    const pending = parse(file)
+    const worker = workers[0]
+    expect(worker.options).toEqual({ type: 'module' })
+    expect(worker.url.pathname).toContain('datasetParser.worker.ts')
+    expect(worker.postMessage).toHaveBeenCalledWith({ requestId: 1, file, ext: 'json' })
+    worker.respond(null)
+    worker.respond({ requestId: 99, ok: true, payload: empty })
+    expect(worker.removeEventListener).not.toHaveBeenCalled()
+    worker.respond({ requestId: 1, ok: true, payload })
+    expect(await pending).toEqual(payload)
+    expect(worker.removeEventListener).toHaveBeenCalledWith('message', expect.any(Function))
+    const again = parse(file)
+    expect(workers).toHaveLength(1)
+    worker.respond({ requestId: 2, ok: true, payload: empty })
+    expect(await again).toEqual(empty)
   })
-
-  describe('parseDatasetFile - CSV', () => {
-    it('解析 CSV 文件返回正确结构', async () => {
-      const content = 'name,age\nAlice,30\nBob,25'
-      const file = createFile(content, 'test.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      expect(result).toHaveProperty('rows')
-      expect(result).toHaveProperty('columns')
-      expect(result).toHaveProperty('preview')
-      expect(result).toHaveProperty('sampleRows')
-      expect(result).toHaveProperty('fieldProfiles')
-    })
-
-    it('CSV 列名正确提取', async () => {
-      const content = 'name,age\nAlice,30'
-      const file = createFile(content, 'test.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      expect(result.columns).toEqual(['name', 'age'])
-    })
-
-    it('CSV 行数正确', async () => {
-      const content = 'name,age\nAlice,30\nBob,25\nCharlie,35'
-      const file = createFile(content, 'test.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      expect(result.rows).toBe(3)
-    })
-
-    it('CSV preview 包含原始行', async () => {
-      const content = 'name,age\nAlice,30'
-      const file = createFile(content, 'test.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      expect(Array.isArray(result.preview)).toBe(true)
-    })
-
-    it('CSV fieldProfiles 包含字段类型', async () => {
-      const content = 'name,age\nAlice,30\nBob,25'
-      const file = createFile(content, 'test.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      expect(result.fieldProfiles.length).toBe(2)
-      expect(result.fieldProfiles[0]).toHaveProperty('name')
-      expect(result.fieldProfiles[0]).toHaveProperty('type')
-      expect(result.fieldProfiles[0]).toHaveProperty('nonEmpty')
-      expect(result.fieldProfiles[0]).toHaveProperty('uniqueCount')
-    })
+  it.each([{ ok: false, error: 'invalid worker result' }, { ok: false }, { ok: true }])('falls back to parsing file content for %j', async (failure) => {
+    const pending = parse(largeFile())
+    workers[0].respond({ requestId: 1, ...failure })
+    expect((await pending).sampleRows).toEqual([{ value: 'x'.repeat(100_000) }])
+    expect(workers[0].removeEventListener).toHaveBeenCalledOnce()
   })
-
-  describe('parseDatasetFile - TXT', () => {
-    it('解析 TXT 文件（与 CSV 相同逻辑）', async () => {
-      const content = 'name,age\nAlice,30'
-      const file = createFile(content, 'test.txt', { type: 'text/plain' })
-      const result = await parseDatasetFile(file)
-      expect(result.columns).toEqual(['name', 'age'])
-    })
+  it('falls back after the worker timeout and replaces a worker after its error event', async () => {
+    vi.useFakeTimers()
+    const pending = parse(largeFile())
+    workers[0].dispatchEvent(new Event('error'))
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect((await pending).rows).toBe(1)
+    expect(workers[0].removeEventListener).toHaveBeenCalledOnce()
+    expect(vi.getTimerCount()).toBe(0)
+    const next = parse(largeFile())
+    expect(workers).toHaveLength(2)
+    workers[1].respond({ requestId: 2, ok: true, payload })
+    expect(await next).toEqual(payload)
   })
-
-  describe('parseDatasetFile - JSON', () => {
-    it('解析对象数组 JSON', async () => {
-      const content = JSON.stringify([
-        { name: 'Alice', age: 30 },
-        { name: 'Bob', age: 25 },
-      ])
-      const file = createFile(content, 'test.json', { type: 'application/json' })
-      const result = await parseDatasetFile(file)
-      expect(result.rows).toBe(2)
-      expect(result.columns).toContain('name')
-      expect(result.columns).toContain('age')
-    })
-
-    it('解析空数组 JSON 返回空结构', async () => {
-      const content = JSON.stringify([])
-      const file = createFile(content, 'empty.json', { type: 'application/json' })
-      const result = await parseDatasetFile(file)
-      expect(result.rows).toBe(0)
-      expect(result.columns).toEqual([])
-      expect(result.preview).toEqual([])
-      expect(result.sampleRows).toEqual([])
-      expect(result.fieldProfiles).toEqual([])
-    })
-
-    it('解析原始值数组 JSON', async () => {
-      const content = JSON.stringify([1, 2, 3])
-      const file = createFile(content, 'values.json', { type: 'application/json' })
-      const result = await parseDatasetFile(file)
-      expect(result.rows).toBe(3)
-      expect(result.columns).toEqual(['value'])
-    })
-
-    it('解析对象 JSON（单行）', async () => {
-      const content = JSON.stringify({ name: 'Alice', age: 30 })
-      const file = createFile(content, 'obj.json', { type: 'application/json' })
-      const result = await parseDatasetFile(file)
-      expect(result.rows).toBe(1)
-      expect(result.columns).toContain('name')
-    })
-
-    it('解析 { data: [] } 结构 JSON', async () => {
-      const content = JSON.stringify({ data: [{ name: 'Alice' }, { name: 'Bob' }] })
-      const file = createFile(content, 'wrapped.json', { type: 'application/json' })
-      const result = await parseDatasetFile(file)
-      expect(result.rows).toBe(2)
-    })
-
-    it('无效 JSON 抛错', async () => {
-      const content = 'not valid json'
-      const file = createFile(content, 'invalid.json', { type: 'application/json' })
-      await expect(parseDatasetFile(file)).rejects.toThrow(/JSON 解析失败/)
-    })
-
-    it('不支持的 JSON 结构抛错', async () => {
-      const content = JSON.stringify('just a string')
-      const file = createFile(content, 'string.json', { type: 'application/json' })
-      // normalizeJsonPayload 抛出 "JSON 文件结构不支持"，但 parseJson 的 try/catch 会包装为 "JSON 解析失败"
-      await expect(parseDatasetFile(file)).rejects.toThrow(/JSON/)
-    })
-
-    it('数字类型 JSON 抛错', async () => {
-      const content = JSON.stringify(123)
-      const file = createFile(content, 'number.json', { type: 'application/json' })
-      await expect(parseDatasetFile(file)).rejects.toThrow(/JSON/)
-    })
-
-    it('布尔值 JSON 抛错', async () => {
-      const content = JSON.stringify(true)
-      const file = createFile(content, 'bool.json', { type: 'application/json' })
-      await expect(parseDatasetFile(file)).rejects.toThrow(/JSON/)
-    })
-
-    it('null JSON 抛错', async () => {
-      const content = JSON.stringify(null)
-      const file = createFile(content, 'null.json', { type: 'application/json' })
-      await expect(parseDatasetFile(file)).rejects.toThrow(/JSON/)
-    })
-  })
-
-  describe('parseDatasetFile - Excel', () => {
-    it('解析 XLSX 文件', async () => {
-      const content = 'fake xlsx content'
-      const file = createFile(content, 'test.xlsx', {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      })
-      const result = await parseDatasetFile(file)
-      expect(result).toHaveProperty('rows')
-      expect(result).toHaveProperty('columns')
-    })
-
-    it('解析 XLS 文件', async () => {
-      const content = 'fake xls content'
-      const file = createFile(content, 'test.xls', { type: 'application/vnd.ms-excel' })
-      const result = await parseDatasetFile(file)
-      expect(result).toHaveProperty('rows')
-    })
-  })
-
-  describe('parseDatasetFile - 不支持的类型', () => {
-    it('PDF 文件抛错', async () => {
-      const file = createFile('x', 'test.pdf', { type: 'application/pdf' })
-      await expect(parseDatasetFile(file)).rejects.toThrow(/暂不支持该文件类型/)
-    })
-
-    it('无扩展名文件抛错', async () => {
-      const file = createFile('x', 'noext', { type: 'application/octet-stream' })
-      await expect(parseDatasetFile(file)).rejects.toThrow(/暂不支持该文件类型/)
-    })
-
-    it('DOC 文件抛错', async () => {
-      const file = createFile('x', 'test.doc', { type: 'application/msword' })
-      await expect(parseDatasetFile(file)).rejects.toThrow(/暂不支持该文件类型/)
-    })
-  })
-
-  describe('parseDatasetFile - fieldProfiles 类型推断', () => {
-    it('数字列被识别为 number 类型', async () => {
-      const content = 'name,age\nAlice,30\nBob,25\nCharlie,35'
-      const file = createFile(content, 'numeric.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      const ageProfile = result.fieldProfiles.find((p) => p.name === 'age')
-      expect(ageProfile?.type).toBe('number')
-    })
-
-    it('文本列被识别为 text 类型', async () => {
-      // 使用足够多的唯一值（>20）以避免被识别为 category
-      const names = Array.from({ length: 25 }, (_, i) => `user${i}`)
-      const content = 'name\n' + names.join('\n')
-      const file = createFile(content, 'text.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      const nameProfile = result.fieldProfiles.find((p) => p.name === 'name')
-      expect(nameProfile?.type).toBe('text')
-    })
-
-    it('日期列被识别为 date 类型', async () => {
-      const content = 'date\n2024-01-01\n2024-02-01\n2024-03-01\n2024-04-01'
-      const file = createFile(content, 'dates.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      const dateProfile = result.fieldProfiles.find((p) => p.name === 'date')
-      expect(dateProfile?.type).toBe('date')
-    })
-
-    it('category 类型（少量唯一值）', async () => {
-      // 重复值多的列会被识别为 category
-      const rows = ['status']
-      for (let i = 0; i < 20; i++) {
-        rows.push(i < 10 ? 'active' : 'inactive')
-      }
-      const content = rows.join('\n')
-      const file = createFile(content, 'category.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      const statusProfile = result.fieldProfiles.find((p) => p.name === 'status')
-      expect(['category', 'text']).toContain(statusProfile?.type)
-    })
-  })
-
-  describe('parseDatasetFile - sampleRows 限制', () => {
-    it('sampleRows 不超过 KITTEN_DATASET_SAMPLE_LIMIT', async () => {
-      const rows = ['name']
-      for (let i = 0; i < 1500; i++) {
-        rows.push(`user${i}`)
-      }
-      const content = rows.join('\n')
-      const file = createFile(content, 'large.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      expect(result.sampleRows.length).toBeLessThanOrEqual(KITTEN_DATASET_SAMPLE_LIMIT)
-    })
-  })
-
-  describe('parseDatasetFile - preview 限制', () => {
-    it('preview 最多 3 行', async () => {
-      const content = 'name\nA\nB\nC\nD\nE'
-      const file = createFile(content, 'preview.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      expect(result.preview.length).toBeLessThanOrEqual(3)
-    })
-  })
-
-  describe('parseDatasetFile - 空文件', () => {
-    it('空 CSV 文件', async () => {
-      const content = ''
-      const file = createFile(content, 'empty.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      expect(result).toBeDefined()
-    })
-  })
-
-  describe('parseDatasetFile - 特殊字符', () => {
-    it('CSV 含中文', async () => {
-      const content = '姓名,年龄\n张三,30\n李四,25'
-      const file = createFile(content, 'chinese.csv', { type: 'text/csv' })
-      const result = await parseDatasetFile(file)
-      expect(result.columns).toContain('姓名')
-      expect(result.columns).toContain('年龄')
-    })
-  })
-
-  describe('parseDatasetFile - 大文件 Worker 路径', () => {
-    it('大 CSV 文件尝试 Worker 解析（失败回退主线程）', async () => {
-      // 创建大于 96KB 的文件
-      const bigContent = 'name,age\n' + Array.from({ length: 5000 }, (_, i) => `user${i},${i}`).join('\n')
-      const file = createFile(bigContent, 'big.csv', { type: 'text/csv' })
-      // 确保 arrayBuffer 可用（大文件可能走 arrayBuffer 路径）
-      Object.defineProperty(file, 'arrayBuffer', {
-        value: () => Promise.resolve(new TextEncoder().encode(bigContent).buffer),
-        configurable: true,
-      })
-      // Worker 会创建但消息处理可能失败，应回退到主线程解析
-      const result = await parseDatasetFile(file)
-      expect(result).toBeDefined()
-      expect(result.rows).toBeGreaterThan(0)
-    })
+  it('falls back to CSV parsing when worker construction is unavailable', async () => {
+    vi.stubGlobal('Worker', class { constructor() { throw new Error('Worker disabled') } })
+    const file = createFile('name,age\n' + Array.from({ length: 9000 }, (_, i) => `user${i},${i}`).join('\n'), 'big.csv')
+    expect(file.size).toBeGreaterThanOrEqual(96 * 1024)
+    const result = await parse(file)
+    expect(result.rows).toBe(9000)
+    expect(result.sampleRows).toHaveLength(1000)
   })
 })

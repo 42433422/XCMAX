@@ -116,3 +116,17 @@ describe('Sidebar customer navigation and runtime status', () => {
     expect(api.getCurrentEntitlementsSyncStatus).toHaveBeenCalledTimes(2)
   })
 })
+
+it('expands a selected child route and routes parent and leaf clicks through the visible navigation', async () => {
+  const view = await openSidebar('workflow-employee-space')
+  const parent = view.get('button[data-view="employee-workflow"]')
+  const child = view.get('button[data-view="workflow-employee-space"]')
+  expect(parent.attributes('aria-expanded')).toBe('true')
+  expect(parent.classes()).toContain('active'); expect(child.attributes('aria-current')).toBe('page')
+  await parent.trigger('click'); await child.trigger('click')
+  expect(view.emitted('change-view')).toEqual([['employee-workflow'], ['workflow-employee-space']])
+  await view.setProps({ activeView: 'chat' }); await view.get('button[data-view="chat"]').trigger('click')
+  expect(view.emitted('change-view')!.at(-1)).toEqual(['chat'])
+  await view.get('button[data-view="chat"]').trigger('keydown', { key: 'Tab' })
+  expect(view.emitted('change-view')).toHaveLength(3)
+})

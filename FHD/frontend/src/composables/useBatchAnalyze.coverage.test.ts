@@ -89,159 +89,119 @@ describe('useBatchAnalyze - coverage ramp', () => {
       expect(calculateFieldSimilarity(['型号'], ['型号'])).toBe(1)
     })
 
-    it('returns 0 for completely disjoint fields', () => {
+    it.each([
+      { name: 'returns 0 for completely disjoint fields', left: ['型号'], right: ['客户名称'], expected: 0 },
+      { name: 'handles full-width characters via equivalents', left: ['产品型号'], right: ['产品型号'], expected: 1 },
+      { name: 'handles terms with /mg unit (regex matches /m first, source behavior)', left: ['重量/mg'], right: ['重量'], expected: 0 },
+      { name: 'handles equivalent aliases (数量/件 ↔ 数量/件)', left: ['数量/件'], right: ['数量/件'], expected: 1 },
+      { name: 'handles equivalent aliases (月份 ↔ 月份)', left: ['月份'], right: ['月份'], expected: 1 },
+      { name: 'handles equivalent aliases (规格型号 ↔ 型号) - source bug: 规格 intercepts', left: ['规格型号'], right: ['型号'], expected: 0 },
+      { name: 'handles unknown term (no equivalents) returns self only', left: ['未知字段XYZ'], right: ['未知字段XYZ'], expected: 1 },
+      { name: 'handles whitespace-only term', left: ['   '], right: ['   '], expected: 1 },
+      { name: 'handles zero-width characters in term', left: ['型号\u200B'], right: ['型号'], expected: 1 },
+      { name: 'handles full-width to half-width conversion', left: ['\uFF21'], right: ['A'], expected: 1 },
+      { name: 'handles full-width digits', left: ['\uFF11'], right: ['1'], expected: 1 },
+    ])('$name', ({ left, right, expected }) => {
       const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['型号'], ['客户名称'])
-      expect(score).toBe(0)
+      expect(calculateFieldSimilarity(left, right)).toBe(expected)
     })
 
-    it('handles full-width characters via equivalents', () => {
+    it.each([
+      { name: 'handles terms with units via extractBaseField', left: ['数量/KG'], right: ['数量/kg'], expected: 0 },
+      { name: 'handles terms with /元 unit', left: ['金额/元'], right: ['金额'], expected: 0 },
+      { name: 'handles terms with /件 unit', left: ['数量/件'], right: ['数量'], expected: 0 },
+      { name: 'handles terms with _kg suffix', left: ['数量_kg'], right: ['数量'], expected: 0 },
+      { name: 'handles terms with _piece suffix', left: ['数量_piece'], right: ['数量'], expected: 0 },
+      { name: 'handles terms with _unit suffix', left: ['数量_unit'], right: ['数量'], expected: 0 },
+      { name: 'handles terms with /桶 unit', left: ['数量/桶'], right: ['数量'], expected: 0 },
+      { name: 'handles terms with /米 unit', left: ['长度/米'], right: ['长度'], expected: 0 },
+      { name: 'handles terms with /吨 unit', left: ['重量/吨'], right: ['重量'], expected: 0 },
+      { name: 'handles terms with /g unit', left: ['重量/g'], right: ['重量'], expected: 0 },
+      { name: 'handles terms with /克 unit', left: ['重量/克'], right: ['重量'], expected: 0 },
+      { name: 'handles terms with /箱 unit', left: ['数量/箱'], right: ['数量'], expected: 0 },
+      { name: 'handles terms with /包 unit', left: ['数量/包'], right: ['数量'], expected: 0 },
+      { name: 'handles terms with /张 unit', left: ['数量/张'], right: ['数量'], expected: 0 },
+      { name: 'handles terms with /份 unit', left: ['数量/份'], right: ['数量'], expected: 0 },
+      { name: 'handles terms with /批 unit', left: ['数量/批'], right: ['数量'], expected: 0 },
+      { name: 'handles terms with /cm unit', left: ['长度/cm'], right: ['长度'], expected: 0 },
+      { name: 'handles terms with /mm unit', left: ['长度/mm'], right: ['长度'], expected: 0 },
+      { name: 'handles terms with /m unit', left: ['长度/m'], right: ['长度'], expected: 0 },
+      { name: 'handles terms with /个 unit', left: ['数量/个'], right: ['数量'], expected: 0 },
+      { name: 'handles terms with /t unit', left: ['重量/t'], right: ['重量'], expected: 0 },
+      { name: 'handles terms with /厘米 unit', left: ['长度/厘米'], right: ['长度'], expected: 0 },
+      { name: 'handles equivalent aliases (单价 ↔ 价格)', left: ['单价'], right: ['价格'], expected: 0 },
+      { name: 'handles equivalent aliases (金额 ↔ 合计)', left: ['金额'], right: ['合计'], expected: 0 },
+      { name: 'handles equivalent aliases (电话 ↔ 手机号)', left: ['电话'], right: ['手机号'], expected: 0 },
+      { name: 'handles equivalent aliases (购买单位 ↔ 客户)', left: ['购买单位'], right: ['客户'], expected: 0 },
+      { name: 'handles equivalent aliases (产品名称 ↔ 品名)', left: ['产品名称'], right: ['品名'], expected: 0 },
+      { name: 'handles equivalent aliases (联系人 ↔ 收货人)', left: ['联系人'], right: ['收货人'], expected: 0 },
+      { name: 'handles equivalent aliases (地址 ↔ 收货地址)', left: ['地址'], right: ['收货地址'], expected: 0 },
+      { name: 'handles equivalent aliases (日期 ↔ 订单日期)', left: ['日期'], right: ['订单日期'], expected: 0 },
+      { name: 'handles equivalent aliases (单号 ↔ 订单号)', left: ['单号'], right: ['订单号'], expected: 0 },
+      { name: 'handles equivalent aliases (备注 ↔ 说明)', left: ['备注'], right: ['说明'], expected: 0 },
+      { name: 'handles equivalent aliases (规格 ↔ 规格型号)', left: ['规格'], right: ['规格型号'], expected: 0 },
+      { name: 'handles equivalent aliases (单位 ↔ 单位名称)', left: ['单位'], right: ['单位名称'], expected: 0 },
+      { name: 'handles equivalent aliases (仓库 ↔ 仓库名称)', left: ['仓库'], right: ['仓库名称'], expected: 0 },
+      { name: 'handles equivalent aliases (经手人 ↔ 经办人)', left: ['经手人'], right: ['经办人'], expected: 0 },
+      { name: 'handles equivalent aliases (税前单价 ↔ 不含税单价)', left: ['税前单价'], right: ['不含税单价'], expected: 0 },
+      { name: 'handles equivalent aliases (税后单价 ↔ 含税单价)', left: ['税后单价'], right: ['含税单价'], expected: 0 },
+      { name: 'handles equivalent aliases (税率 ↔ 税点)', left: ['税率'], right: ['税点'], expected: 0 },
+      { name: 'handles equivalent aliases (税额 ↔ 税额/元)', left: ['税额'], right: ['税额/元'], expected: 0 },
+      { name: 'handles equivalent aliases (折扣 ↔ 折后价)', left: ['折扣'], right: ['折后价'], expected: 0 },
+      { name: 'handles equivalent aliases (包装 ↔ 件装)', left: ['包装'], right: ['件装'], expected: 0 },
+      { name: 'handles equivalent aliases (颜色 ↔ 色号)', left: ['颜色'], right: ['色号'], expected: 0 },
+      { name: 'handles equivalent aliases (等级 ↔ 品质)', left: ['等级'], right: ['品质'], expected: 0 },
+      { name: 'handles equivalent aliases (品牌 ↔ 商标)', left: ['品牌'], right: ['商标'], expected: 0 },
+      { name: 'handles equivalent aliases (销售金额 ↔ 销售额)', left: ['销售金额'], right: ['销售额'], expected: 0 },
+      { name: 'handles equivalent aliases (实收款 ↔ 已收款)', left: ['实收款'], right: ['已收款'], expected: 0 },
+      { name: 'handles equivalent aliases (下欠款金额 ↔ 欠款)', left: ['下欠款金额'], right: ['欠款'], expected: 0 },
+      { name: 'handles equivalent aliases (内 ↔ 内部)', left: ['内'], right: ['内部'], expected: 0 },
+      { name: 'handles equivalent aliases (外 ↔ 外部)', left: ['外'], right: ['外部'], expected: 0 },
+      { name: 'handles equivalent aliases (数量/KG ↔ 数量/kg)', left: ['数量/KG'], right: ['数量/kg'], expected: 0 },
+      { name: 'handles equivalent aliases (规格/kg ↔ 规格)', left: ['规格/kg'], right: ['规格'], expected: 0 },
+      { name: 'handles equivalent aliases (规格/KG ↔ 规格)', left: ['规格/KG'], right: ['规格'], expected: 0 },
+      { name: 'handles equivalent aliases (单价/元 ↔ 价格)', left: ['单价/元'], right: ['价格'], expected: 0 },
+      { name: 'handles equivalent aliases (金额/元 ↔ 合计)', left: ['金额/元'], right: ['合计'], expected: 0 },
+      { name: 'handles equivalent aliases (数量/kg ↔ 数量)', left: ['数量/kg'], right: ['数量'], expected: 0 },
+      { name: 'handles equivalent aliases (数量/件 ↔ 数量)', left: ['数量/件'], right: ['数量'], expected: 0 },
+      { name: 'handles equivalent aliases (数量/桶 ↔ 数量)', left: ['数量/桶'], right: ['数量'], expected: 0 },
+      { name: 'handles equivalent aliases (库存数量 ↔ 库存)', left: ['库存数量'], right: ['库存'], expected: 0 },
+      { name: 'handles equivalent aliases (联系电话 ↔ 手机)', left: ['联系电话'], right: ['手机'], expected: 0 },
+      { name: 'handles equivalent aliases (单位名称 ↔ 厂名)', left: ['单位名称'], right: ['厂名'], expected: 0 },
+      { name: 'handles equivalent aliases (客户名称 ↔ 客户名)', left: ['客户名称'], right: ['客户名'], expected: 0 },
+      { name: 'handles equivalent aliases (产品名称 ↔ 商品名称)', left: ['产品名称'], right: ['商品名称'], expected: 0 },
+      { name: 'handles equivalent aliases (地址 ↔ 送货地址)', left: ['地址'], right: ['送货地址'], expected: 0 },
+      { name: 'handles equivalent aliases (日期 ↔ 出货日期)', left: ['日期'], right: ['出货日期'], expected: 0 },
+      { name: 'handles equivalent aliases (单号 ↔ 订单编号)', left: ['单号'], right: ['订单编号'], expected: 0 },
+      { name: 'handles equivalent aliases (备注 ↔ 附注)', left: ['备注'], right: ['附注'], expected: 0 },
+      { name: 'handles equivalent aliases (备注 ↔ 备注说明)', left: ['备注'], right: ['备注说明'], expected: 0 },
+      { name: 'handles equivalent aliases (单位 ↔ 计量单位)', left: ['单位'], right: ['计量单位'], expected: 0 },
+      { name: 'handles equivalent aliases (仓库 ↔ 库房)', left: ['仓库'], right: ['库房'], expected: 0 },
+      { name: 'handles equivalent aliases (经手人 ↔ 操作员)', left: ['经手人'], right: ['操作员'], expected: 0 },
+      { name: 'handles equivalent aliases (税前单价 ↔ 净单价)', left: ['税前单价'], right: ['净单价'], expected: 0 },
+      { name: 'handles equivalent aliases (税后单价 ↔ 单价)', left: ['税后单价'], right: ['单价'], expected: 0 },
+      { name: 'handles equivalent aliases (税率 ↔ 税率%)', left: ['税率'], right: ['税率%'], expected: 0 },
+      { name: 'handles equivalent aliases (折扣 ↔ 折扣率)', left: ['折扣'], right: ['折扣率'], expected: 0 },
+      { name: 'handles equivalent aliases (包装 ↔ 包装形式)', left: ['包装'], right: ['包装形式'], expected: 0 },
+      { name: 'handles equivalent aliases (颜色 ↔ 色彩)', left: ['颜色'], right: ['色彩'], expected: 0 },
+      { name: 'handles equivalent aliases (等级 ↔ 档次)', left: ['等级'], right: ['档次'], expected: 0 },
+      { name: 'handles equivalent aliases (品牌 ↔ 牌子)', left: ['品牌'], right: ['牌子'], expected: 0 },
+      { name: 'handles equivalent aliases (实收款 ↔ 已付款)', left: ['实收款'], right: ['已付款'], expected: 0 },
+      { name: 'handles equivalent aliases (下欠款金额 ↔ 下欠款)', left: ['下欠款金额'], right: ['下欠款'], expected: 0 },
+      { name: 'handles equivalent aliases (产品编码 ↔ 品名)', left: ['产品编码'], right: ['品名'], expected: 0 },
+      { name: 'handles equivalent aliases (产 品 型 号 ↔ 产品型号)', left: ['产 品 型 号'], right: ['产品型号'], expected: 0 },
+      { name: 'handles equivalent aliases (产 品 名 称 ↔ 产品名称)', left: ['产 品 名 称'], right: ['产品名称'], expected: 0 },
+      { name: 'handles equivalent aliases (备 注 ↔ 备注)', left: ['备 注'], right: ['备注'], expected: 0 },
+      { name: 'handles equivalent aliases (家具厂金额 ↔ 金额)', left: ['家具厂金额'], right: ['金额'], expected: 0 },
+      { name: 'handles equivalent aliases (金额合计 ↔ 金额)', left: ['金额合计'], right: ['金额'], expected: 0 },
+      { name: 'handles equivalent aliases (金额总计 ↔ 金额)', left: ['金额总计'], right: ['金额'], expected: 0 },
+      { name: 'handles equivalent aliases (总金额 ↔ 金额)', left: ['总金额'], right: ['金额'], expected: 0 },
+      { name: 'handles equivalent aliases (现金价 ↔ 价格)', left: ['现金价'], right: ['价格'], expected: 0 },
+      { name: 'handles equivalent aliases (售价 ↔ 价格)', left: ['售价'], right: ['价格'], expected: 0 },
+      { name: 'handles equivalent aliases (数量(kg) ↔ 数量)', left: ['数量(kg)'], right: ['数量'], expected: 0 },
+    ])('$name', ({ left, right, expected }) => {
       const { calculateFieldSimilarity } = useBatchAnalyze()
-      // 全角字符经 normalize 后应等价
-      const score = calculateFieldSimilarity(['产品型号'], ['产品型号'])
-      expect(score).toBe(1)
-    })
-
-    it('handles terms with units via extractBaseField', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      // 数量/KG 与 数量/kg 应通过 base field 等价
-      const score = calculateFieldSimilarity(['数量/KG'], ['数量/kg'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /元 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['金额/元'], ['金额'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /件 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/件'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with _kg suffix', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量_kg'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with _piece suffix', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量_piece'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with _unit suffix', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量_unit'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /桶 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/桶'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /米 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['长度/米'], ['长度'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /吨 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['重量/吨'], ['重量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /g unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['重量/g'], ['重量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /克 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['重量/克'], ['重量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /mg unit (regex matches /m first, source behavior)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      // 源码正则 /(kg|件|元|桶|米|厘米|mm|cm|m|...|mg)/i 中 m 在 mg 之前，
-      // 所以 /mg 会被 /m 匹配，extractBaseField('重量/mg') 返回 '重量g' 而非 '重量'
-      // 这是源码的已知行为，测试验证该行为
-      const score = calculateFieldSimilarity(['重量/mg'], ['重量'])
-      expect(score).toBe(0)
-    })
-
-    it('handles terms with /箱 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/箱'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /包 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/包'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /张 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/张'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /份 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/份'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /批 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/批'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /cm unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['长度/cm'], ['长度'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /mm unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['长度/mm'], ['长度'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /m unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['长度/m'], ['长度'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /个 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/个'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /t unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['重量/t'], ['重量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles terms with /厘米 unit', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['长度/厘米'], ['长度'])
-      expect(score).toBeGreaterThan(0)
+      expect(calculateFieldSimilarity(left, right)).toBeGreaterThan(expected)
     })
 
     it('returns partial score for overlapping fields', () => {
@@ -249,399 +209,6 @@ describe('useBatchAnalyze - coverage ramp', () => {
       const score = calculateFieldSimilarity(['型号', '价格', '数量'], ['型号', '价格', '客户'])
       expect(score).toBeGreaterThan(0)
       expect(score).toBeLessThan(1)
-    })
-
-    it('handles equivalent aliases (单价 ↔ 价格)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['单价'], ['价格'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (金额 ↔ 合计)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['金额'], ['合计'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (电话 ↔ 手机号)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['电话'], ['手机号'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (购买单位 ↔ 客户)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['购买单位'], ['客户'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (产品名称 ↔ 品名)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['产品名称'], ['品名'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (联系人 ↔ 收货人)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['联系人'], ['收货人'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (地址 ↔ 收货地址)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['地址'], ['收货地址'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (日期 ↔ 订单日期)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['日期'], ['订单日期'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (单号 ↔ 订单号)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['单号'], ['订单号'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (备注 ↔ 说明)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['备注'], ['说明'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (规格 ↔ 规格型号)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['规格'], ['规格型号'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (单位 ↔ 单位名称)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['单位'], ['单位名称'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (仓库 ↔ 仓库名称)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['仓库'], ['仓库名称'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (经手人 ↔ 经办人)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['经手人'], ['经办人'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (税前单价 ↔ 不含税单价)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['税前单价'], ['不含税单价'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (税后单价 ↔ 含税单价)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['税后单价'], ['含税单价'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (税率 ↔ 税点)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['税率'], ['税点'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (税额 ↔ 税额/元)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['税额'], ['税额/元'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (折扣 ↔ 折后价)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['折扣'], ['折后价'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (包装 ↔ 件装)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['包装'], ['件装'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (颜色 ↔ 色号)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['颜色'], ['色号'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (等级 ↔ 品质)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['等级'], ['品质'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (品牌 ↔ 商标)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['品牌'], ['商标'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (销售金额 ↔ 销售额)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['销售金额'], ['销售额'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (实收款 ↔ 已收款)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['实收款'], ['已收款'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (下欠款金额 ↔ 欠款)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['下欠款金额'], ['欠款'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (内 ↔ 内部)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['内'], ['内部'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (外 ↔ 外部)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['外'], ['外部'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (数量/KG ↔ 数量/kg)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/KG'], ['数量/kg'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (数量/件 ↔ 数量/件)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/件'], ['数量/件'])
-      expect(score).toBe(1)
-    })
-
-    it('handles equivalent aliases (月份 ↔ 月份)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['月份'], ['月份'])
-      expect(score).toBe(1)
-    })
-
-    it('handles equivalent aliases (规格/kg ↔ 规格)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['规格/kg'], ['规格'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (规格/KG ↔ 规格)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['规格/KG'], ['规格'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (单价/元 ↔ 价格)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['单价/元'], ['价格'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (金额/元 ↔ 合计)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['金额/元'], ['合计'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (数量/kg ↔ 数量)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/kg'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (数量/件 ↔ 数量)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/件'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (数量/桶 ↔ 数量)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量/桶'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (库存数量 ↔ 库存)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['库存数量'], ['库存'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (联系电话 ↔ 手机)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['联系电话'], ['手机'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (单位名称 ↔ 厂名)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['单位名称'], ['厂名'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (客户名称 ↔ 客户名)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['客户名称'], ['客户名'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (产品名称 ↔ 商品名称)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['产品名称'], ['商品名称'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (地址 ↔ 送货地址)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['地址'], ['送货地址'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (日期 ↔ 出货日期)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['日期'], ['出货日期'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (单号 ↔ 订单编号)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['单号'], ['订单编号'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (备注 ↔ 附注)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['备注'], ['附注'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (备注 ↔ 备注说明)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['备注'], ['备注说明'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (规格型号 ↔ 型号) - source bug: 规格 intercepts', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      // 源码 TERM_EQUIVALENTS 中 '规格' 的 aliases 包含 '规格型号'，
-      // 导致 getEquivalentTerms('规格型号') 在遍历到 '规格' 条目时就提前返回，
-      // 返回的等价集不含 '型号'。因此 规格型号 与 型号 实际不等价（源码 bug）。
-      const score = calculateFieldSimilarity(['规格型号'], ['型号'])
-      expect(score).toBe(0)
-    })
-
-    it('handles equivalent aliases (单位 ↔ 计量单位)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['单位'], ['计量单位'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (仓库 ↔ 库房)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['仓库'], ['库房'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (经手人 ↔ 操作员)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['经手人'], ['操作员'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (税前单价 ↔ 净单价)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['税前单价'], ['净单价'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (税后单价 ↔ 单价)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['税后单价'], ['单价'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (税率 ↔ 税率%)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['税率'], ['税率%'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (折扣 ↔ 折扣率)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['折扣'], ['折扣率'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (包装 ↔ 包装形式)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['包装'], ['包装形式'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (颜色 ↔ 色彩)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['颜色'], ['色彩'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (等级 ↔ 档次)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['等级'], ['档次'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (品牌 ↔ 牌子)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['品牌'], ['牌子'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (实收款 ↔ 已付款)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['实收款'], ['已付款'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (下欠款金额 ↔ 下欠款)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['下欠款金额'], ['下欠款'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (产品编码 ↔ 品名)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['产品编码'], ['品名'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (产 品 型 号 ↔ 产品型号)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['产 品 型 号'], ['产品型号'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (产 品 名 称 ↔ 产品名称)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['产 品 名 称'], ['产品名称'])
-      expect(score).toBeGreaterThan(0)
     })
 
     it('handles equivalent aliases (备  注 ↔ 备注)', () => {
@@ -652,60 +219,6 @@ describe('useBatchAnalyze - coverage ramp', () => {
       expect(score).toBeGreaterThanOrEqual(0)
     })
 
-    it('handles equivalent aliases (备 注 ↔ 备注)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['备 注'], ['备注'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (家具厂金额 ↔ 金额)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['家具厂金额'], ['金额'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (金额合计 ↔ 金额)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['金额合计'], ['金额'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (金额总计 ↔ 金额)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['金额总计'], ['金额'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (总金额 ↔ 金额)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['总金额'], ['金额'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (现金价 ↔ 价格)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['现金价'], ['价格'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (售价 ↔ 价格)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['售价'], ['价格'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles equivalent aliases (数量(kg) ↔ 数量)', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['数量(kg)'], ['数量'])
-      expect(score).toBeGreaterThan(0)
-    })
-
-    it('handles unknown term (no equivalents) returns self only', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['未知字段XYZ'], ['未知字段XYZ'])
-      expect(score).toBe(1)
-    })
-
     it('handles empty string term', () => {
       const { calculateFieldSimilarity } = useBatchAnalyze()
       const score = calculateFieldSimilarity([''], [''])
@@ -713,32 +226,6 @@ describe('useBatchAnalyze - coverage ramp', () => {
       expect(score).toBe(1)
     })
 
-    it('handles whitespace-only term', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      const score = calculateFieldSimilarity(['   '], ['   '])
-      expect(score).toBe(1)
-    })
-
-    it('handles zero-width characters in term', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      // \u200B 是零宽空格
-      const score = calculateFieldSimilarity(['型号\u200B'], ['型号'])
-      expect(score).toBe(1)
-    })
-
-    it('handles full-width to half-width conversion', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      // 全角字母 A（\uFF21）转半角 A
-      const score = calculateFieldSimilarity(['\uFF21'], ['A'])
-      expect(score).toBe(1)
-    })
-
-    it('handles full-width digits', () => {
-      const { calculateFieldSimilarity } = useBatchAnalyze()
-      // 全角 1（\uFF11）转半角 1
-      const score = calculateFieldSimilarity(['\uFF11'], ['1'])
-      expect(score).toBe(1)
-    })
   })
 
   // -------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PersyKnowledgeGraph from './PersyKnowledgeGraph.vue'
 import type { KnowledgeGraphResponse } from '@/api/knowledgeBase'
 
@@ -26,7 +26,9 @@ vi.mock('echarts/charts', () => ({ GraphChart: {} }))
 vi.mock('echarts/components', () => ({ TooltipComponent: {} }))
 vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }))
 
+let resizeObserved: () => void
 class ResizeObserverStub {
+  constructor(callback: () => void) { resizeObserved = callback }
   observe = vi.fn()
   disconnect = vi.fn()
 }
@@ -62,16 +64,12 @@ const graph: KnowledgeGraphResponse = {
   ],
 }
 
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+  vi.clearAllMocks()
+})
+
 describe('PersyKnowledgeGraph', () => {
-  beforeEach(() => {
-    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
-    mocks.init.mockClear()
-    mocks.chart.setOption.mockClear()
-    mocks.chart.resize.mockClear()
-    mocks.chart.on.mockClear()
-    mocks.chart.off.mockClear()
-    mocks.chart.dispose.mockClear()
-  })
 
   it('renders real graph nodes and recall edges', async () => {
     const wrapper = mount(PersyKnowledgeGraph, {
@@ -94,6 +92,8 @@ describe('PersyKnowledgeGraph', () => {
 
     expect(mocks.init).toHaveBeenCalledTimes(1)
     const option = mocks.chart.setOption.mock.calls.at(-1)?.[0]
+    const escaped = option.tooltip.formatter({ dataType: 'edge', data: { value: `<&"'> <&"'>` } })
+    expect(escaped).toBe('&lt;&amp;&quot;&#039;&gt; &lt;&amp;&quot;&#039;&gt;')
     const series = option.series[0]
     expect(series.type).toBe('graph')
     expect(series.data.map((node: { id: string }) => node.id)).toEqual(
@@ -185,4 +185,49 @@ describe('PersyKnowledgeGraph', () => {
     expect(recallLink).toBeTruthy()
     wrapper.unmount()
   })
+})
+
+
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
+it('caps dense graphs by strength, keeps sticky nodes, escapes tooltips and refreshes selected nodes', async () => {
+  vi.useFakeTimers()
+  const nodes = Array.from({ length: 70 }, (_, index) => ({ id: `k${index}`, type: 'knowledge',
+    label: `Knowledge ${index} with a very long name`, strength: index / 100, chunk_index: index, source: 'guide.md' }))
+  const special = [{ id: 'pending', type: 'memory', label: '待确认记忆', metadata: { status: 'pending' } },
+    { id: 'topic', type: 'topic', label: '主题' }, { id: 'custom', type: 'custom', label: '<unsafe>', summary: '<script>' }]
+  const wrapper = mount(PersyKnowledgeGraph, { props: { graph: { success: true, dataset_id: 'large', nodes: [...nodes, ...special],
+    edges: [{ id: 'valid', source: 'k69', target: 'topic', type: 'related', weight: 0.9 },
+      { id: 'missing', source: 'k0', target: 'missing', type: 'related' }] },
+    selectedNodeId: 'k69', recall: { query: 'An unmatched question with more than twenty eight letters', chunks: [{ source: 'guide.md+rerank', chunk_index: 68 }] } } })
+  await flushPromises()
+  const option = () => mocks.chart.setOption.mock.calls.at(-1)![0]
+  expect(option().series[0].data).toHaveLength(56)
+  expect(option().animation).toBe(false)
+  expect(option().series[0].force.layoutAnimation).toBe(false)
+  expect(option().series[0].data.find((x: any) => x.id === 'k69').itemStyle.borderWidth).toBe(3)
+  expect(option().series[0].data.find((x: any) => x.id === 'pending').itemStyle.opacity).toBe(0.72)
+  expect(option().series[0].links.map((x: any) => x.id)).not.toContain('missing')
+  expect(option().series[0].links.some((x: any) => x.target === 'k68' && x.source === 'recall:current-query')).toBe(true)
+  expect(option().tooltip.formatter({ data: { rawNode: special[2] } })).toContain('&lt;script&gt;')
+  expect(option().tooltip.formatter({ data: { rawNode: nodes[69] } })).not.toContain('<br/><br/>')
+  expect(option().tooltip.formatter({ dataType: 'edge' })).toBe('关系')
+  expect(option().tooltip.formatter({})).toBe('')
+  const click = mocks.chart.on.mock.calls.find(x => x[0] === 'click')![1]
+  for (const payload of [{ dataType: 'edge' }, { dataType: 'node' }, { dataType: 'node', data: { rawNode: { type: 'onboarding' } } }]) click(payload)
+  expect(wrapper.emitted('selectNode')).toBeUndefined()
+  resizeObserved(); window.dispatchEvent(new Event('resize'))
+  expect(mocks.chart.resize).toHaveBeenCalledTimes(2)
+  wrapper.vm.resetView(); expect(mocks.chart.resize).toHaveBeenCalledTimes(3)
+  await wrapper.setProps({ graph: null, selectedNodeId: '', loading: true, recall: null })
+  await vi.advanceTimersByTimeAsync(16)
+  expect(wrapper.get('[role="status"]').text()).toContain('正在整理知识关系')
+  expect(option().series[0].data).toHaveLength(1)
+  await wrapper.setProps({ loading: false, recall: { query: 'No match', chunks: [] } })
+  await vi.advanceTimersByTimeAsync(16)
+  expect(option().series[0].links.some((x: any) => x.source === 'recall:current-query' && x.target === 'persy:persy-knowledge')).toBe(true)
+  for (const node of option().series[0].data.filter((x: any) => x.id.startsWith('onboarding:'))) click({ dataType: 'node', data: node })
+  expect(wrapper.emitted('onboardingAction')).toEqual([['upload'], ['paste'], ['chat']])
+  await wrapper.setProps({ loading: true }); wrapper.unmount()
+  await vi.advanceTimersByTimeAsync(16)
+  expect(mocks.chart.off).toHaveBeenCalledWith('click', click)
 })

@@ -15,7 +15,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { nextTick } from 'vue'
+import { nextTick, toRaw } from 'vue'
 import LabelVisualEditor from './LabelVisualEditor.vue'
 
 // ---- mock useResizablePane ----
@@ -921,7 +921,7 @@ describe('LabelVisualEditor.vue - 覆盖率补齐', () => {
       const wrapper = mountEditor()
       await nextTick()
 
-      expect(wrapper.vm.ctx).toBe(mockCtx)
+      expect(toRaw(wrapper.vm.ctx)).toBe(mockCtx)
       // drawCanvas 被调用（通过 mounted 或 watch）
       expect(mockCtx.clearRect).toHaveBeenCalled()
     })

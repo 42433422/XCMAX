@@ -140,8 +140,8 @@ describe('kept-alive product freshness', () => {
     expect(rowPrice()).toBe('109')
   })
 
-  it('refresh failure keeps the known price visible but blocks editing until a successful retry', async () => {
-    const { store } = await setup()
+  it.each([['shipped Mod', ModProductsView], ['host', HostProductsView]] as const)('%s refresh failure keeps the known price visible but blocks editing until a successful retry', async (_label, view) => {
+    const { store } = await setup(view)
     api.getProducts.mockRejectedValueOnce(new Error('无法读取'))
     store.invalidateProducts(); await flushPromises()
     expect(rowPrice()).toBe('99'); expect(wrapper!.get('[role="status"]').text()).toContain('产品读取失败')
@@ -152,8 +152,8 @@ describe('kept-alive product freshness', () => {
     expect(rowPrice()).toBe('109'); expect(editButton().attributes('disabled')).toBeUndefined()
   })
 
-  it('account switching clears an open edit form and prevents old rows remaining on a kept-alive page', async () => {
-    const { store } = await setup()
+  it.each([['shipped Mod', ModProductsView], ['host', HostProductsView]] as const)('%s account switching clears an open edit form and prevents old rows remaining on a kept-alive page', async (_label, view) => {
+    const { store } = await setup(view)
     await editButton().trigger('click'); expect(wrapper!.find('.modal').exists()).toBe(true)
     price = 88
     updateProductReadAccountScope({ tenantId: 2, marketUserId: 22 })
@@ -162,8 +162,8 @@ describe('kept-alive product freshness', () => {
     expect(wrapper!.find('.modal').exists()).toBe(false); expect(rowPrice()).toBe('88')
   })
 
-  it('returning to a retained page retires its old edit form before reading the latest price', async () => {
-    const { router } = await setup()
+  it.each([['shipped Mod', ModProductsView], ['host', HostProductsView]] as const)('%s returning to a retained page retires its old edit form before reading the latest price', async (_label, view) => {
+    const { router } = await setup(view)
     await editButton().trigger('click')
     await router.push('/business-docking'); await flushPromises()
     price = 109
@@ -171,8 +171,8 @@ describe('kept-alive product freshness', () => {
     expect(wrapper!.find('.modal').exists()).toBe(false); expect(rowPrice()).toBe('109')
   })
 
-  it('external data invalidation closes an old-price edit form instead of silently making it writable after refresh', async () => {
-    const { store } = await setup()
+  it.each([['shipped Mod', ModProductsView], ['host', HostProductsView]] as const)('%s external data invalidation closes an old-price edit form instead of silently making it writable after refresh', async (_label, view) => {
+    const { store } = await setup(view)
     await editButton().trigger('click'); expect(wrapper!.find('.modal').exists()).toBe(true)
     price = 109; store.invalidateProducts(); await flushPromises()
     expect(wrapper!.find('.modal').exists()).toBe(false)

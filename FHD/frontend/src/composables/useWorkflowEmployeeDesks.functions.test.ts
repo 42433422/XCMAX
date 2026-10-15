@@ -67,90 +67,22 @@ beforeEach(() => {
   resetMocks()
 })
 
-describe('formatWorkDurationShort - additional edge cases', () => {
-  it('非有限值返回 0m', () => {
-    expect(formatWorkDurationShort(NaN)).toBe('0m')
-    expect(formatWorkDurationShort(Infinity)).toBe('0m')
-    expect(formatWorkDurationShort(-Infinity)).toBe('0m')
+describe('duration formatting and accumulated work', () => {
+  it.each([
+    ...[NaN, Infinity, -Infinity, -1, -1000, 0].map((input) => [input, '0m']),
+    [1, '0s'], [999, '0s'], [1000, '1s'], [59000, '59s'], [60000, '1m'], [3540000, '59m'],
+    [3600000, '1h'], [7200000, '2h'], [9000000, '2h 30m'], [86400000, '1d'],
+    [172800000, '2d'], [126000000, '1d 11h'],
+  ])('formats %s milliseconds as %s', (input, expected) => {
+    expect(formatWorkDurationShort(input as number)).toBe(expected)
   })
-
-  it('负数返回 0m', () => {
-    expect(formatWorkDurationShort(-1)).toBe('0m')
-    expect(formatWorkDurationShort(-1000)).toBe('0m')
-  })
-
-  it('0 返回 0m', () => {
-    expect(formatWorkDurationShort(0)).toBe('0m')
-  })
-
-  it('小于 60 秒返回秒', () => {
-    expect(formatWorkDurationShort(1)).toBe('0s')
-    expect(formatWorkDurationShort(999)).toBe('0s')
-    expect(formatWorkDurationShort(1000)).toBe('1s')
-    expect(formatWorkDurationShort(59000)).toBe('59s')
-  })
-
-  it('小于 60 分钟返回分钟', () => {
-    expect(formatWorkDurationShort(60000)).toBe('1m')
-    expect(formatWorkDurationShort(3540000)).toBe('59m')
-  })
-
-  it('小于 24 小时返回小时（无余分钟）', () => {
-    expect(formatWorkDurationShort(3600000)).toBe('1h')
-    expect(formatWorkDurationShort(7200000)).toBe('2h')
-  })
-
-  it('小于 24 小时返回小时 + 分钟', () => {
-    expect(formatWorkDurationShort(9000000)).toBe('2h 30m')
-  })
-
-  it('大于等于 24 小时返回天', () => {
-    expect(formatWorkDurationShort(86400000)).toBe('1d')
-    expect(formatWorkDurationShort(172800000)).toBe('2d')
-  })
-
-  it('大于等于 24 小时返回天 + 小时', () => {
-    expect(formatWorkDurationShort(126000000)).toBe('1d 11h')
-  })
-})
-
-describe('totalWorkMs - additional edge cases', () => {
-  it('undefined session 返回 0', () => {
-    expect(totalWorkMs(undefined, Date.now())).toBe(0)
-  })
-
-  it('null session 返回 0', () => {
-    expect(totalWorkMs(null as any, Date.now())).toBe(0)
-  })
-
-  it('enabledAt 为 null 时只返回 lifetimeMs', () => {
-    expect(totalWorkMs({ lifetimeMs: 5000, enabledAt: null } as any, Date.now())).toBe(5000)
-  })
-
-  it('enabledAt 存在时累加实时时长', () => {
-    const now = Date.now()
-    const enabledAt = now - 10000
-    expect(totalWorkMs({ lifetimeMs: 5000, enabledAt } as any, now)).toBe(15000)
-  })
-
-  it('enabledAt 在未来时 live 为 0', () => {
-    const now = Date.now()
-    const enabledAt = now + 10000
-    expect(totalWorkMs({ lifetimeMs: 5000, enabledAt } as any, now)).toBe(5000)
-  })
-
-  it('lifetimeMs 为负数时被 clamp 到 0', () => {
-    expect(totalWorkMs({ lifetimeMs: -100, enabledAt: null } as any, Date.now())).toBe(0)
-  })
-
-  it('lifetimeMs 为 0 且 enabledAt 为 null 时返回 0', () => {
-    expect(totalWorkMs({ lifetimeMs: 0, enabledAt: null } as any, Date.now())).toBe(0)
-  })
-
-  it('lifetimeMs 为 0 但 enabledAt 存在时返回 live 时长', () => {
-    const now = Date.now()
-    const enabledAt = now - 5000
-    expect(totalWorkMs({ lifetimeMs: 0, enabledAt } as any, now)).toBe(5000)
+  it.each([
+    [undefined, 0], [null, 0], [{ lifetimeMs: 5000, enabledAt: null }, 5000],
+    [{ lifetimeMs: 5000, enabledAt: 10000 }, 15000], [{ lifetimeMs: 5000, enabledAt: 30000 }, 5000],
+    [{ lifetimeMs: -100, enabledAt: null }, 0], [{ lifetimeMs: 0, enabledAt: null }, 0],
+    [{ lifetimeMs: 0, enabledAt: 15000 }, 5000],
+  ])('accumulates session %j as %s milliseconds', (session, expected) => {
+    expect(totalWorkMs(session as WorkflowEmployeeSession, 20000)).toBe(expected)
   })
 })
 
@@ -450,320 +382,51 @@ describe('useWorkflowEmployeeDesks', () => {
     })
   })
 
-  describe('statusLine', () => {
-    it('未启用时返回"副窗未启用"', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: false,
-      }
-      expect(captured.statusLine(row)).toBe('副窗未启用')
-      wrapper.unmount()
-    })
-
-    it('无快照时返回"暂无快照"', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: true,
-      }
-      expect(captured.statusLine(row)).toBe('暂无快照')
-      wrapper.unmount()
-    })
-
-    it('快照有 stage 时返回 stage', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: true,
-        snapshot: {
-          empId: 'emp1',
-          panelTitle: '',
-          shortName: '',
-          stage: '处理中',
-          progressPct: 0,
-          progressLabel: '',
-          hintLine: '',
-          idle: false,
-          visuallyBusy: false,
-          lastActivityAt: 0,
-        },
-      }
-      expect(captured.statusLine(row)).toBe('处理中')
-      wrapper.unmount()
-    })
-
-    it('stage 为空时回退到 progressLabel', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: true,
-        snapshot: {
-          empId: 'emp1',
-          panelTitle: '',
-          shortName: '',
-          stage: '',
-          progressPct: 0,
-          progressLabel: '50% 完成',
-          hintLine: '',
-          idle: false,
-          visuallyBusy: false,
-          lastActivityAt: 0,
-        },
-      }
-      expect(captured.statusLine(row)).toBe('50% 完成')
-      wrapper.unmount()
-    })
-
-    it('stage 和 progressLabel 为空时回退到 hintLine', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: true,
-        snapshot: {
-          empId: 'emp1',
-          panelTitle: '',
-          shortName: '',
-          stage: '',
-          progressPct: 0,
-          progressLabel: '',
-          hintLine: '提示信息',
-          idle: false,
-          visuallyBusy: false,
-          lastActivityAt: 0,
-        },
-      }
-      expect(captured.statusLine(row)).toBe('提示信息')
-      wrapper.unmount()
-    })
-
-    it('stage、progressLabel、hintLine 均为空时返回"待命"', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: true,
-        snapshot: {
-          empId: 'emp1',
-          panelTitle: '',
-          shortName: '',
-          stage: '',
-          progressPct: 0,
-          progressLabel: '',
-          hintLine: '',
-          idle: false,
-          visuallyBusy: false,
-          lastActivityAt: 0,
-        },
-      }
-      expect(captured.statusLine(row)).toBe('待命')
-      wrapper.unmount()
-    })
+  function desk(overrides: Partial<WorkflowEmployeeDeskRow> = {}): WorkflowEmployeeDeskRow {
+    return { empId: 'emp1', panelTitle: '工作流 · 员工1', shortName: '员工1', enabled: true, ...overrides }
+  }
+  function snapshot(overrides: Partial<WorkflowEmployeeSpaceSnapshot> = {}): WorkflowEmployeeSpaceSnapshot {
+    return { empId: 'emp1', panelTitle: '', shortName: '', stage: '', progressPct: 0, progressLabel: '',
+      hintLine: '', idle: false, visuallyBusy: false, lastActivityAt: 0, ...overrides }
+  }
+  it.each([
+    [desk({ enabled: false }), '副窗未启用'], [desk(), '暂无快照'],
+    [desk({ snapshot: snapshot({ stage: '处理中' }) }), '处理中'],
+    [desk({ snapshot: snapshot({ progressLabel: '50% 完成' }) }), '50% 完成'],
+    [desk({ snapshot: snapshot({ hintLine: '提示信息' }) }), '提示信息'],
+    [desk({ snapshot: snapshot() }), '待命'],
+  ])('statusLine prioritizes the displayed state for %j', async (row, expected) => {
+    const { captured, wrapper } = setupComposable()
+    await nextTick()
+    expect(captured.statusLine(row as WorkflowEmployeeDeskRow)).toBe(expected)
+    wrapper.unmount()
   })
-
-  describe('ariaLabel', () => {
-    it('未启用时返回"副窗未启用"状态', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '张三',
-        enabled: false,
-      }
-      expect(captured.ariaLabel(row)).toBe('员工 张三。副窗未启用')
-      wrapper.unmount()
-    })
-
-    it('启用但无快照时返回"等待活动"', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '张三',
-        enabled: true,
-      }
-      expect(captured.ariaLabel(row)).toBe('员工 张三。等待活动')
-      wrapper.unmount()
-    })
-
-    it('启用且有快照时返回 statusLine 内容', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '张三',
-        enabled: true,
-        snapshot: {
-          empId: 'emp1',
-          panelTitle: '',
-          shortName: '',
-          stage: '忙碌中',
-          progressPct: 0,
-          progressLabel: '',
-          hintLine: '',
-          idle: false,
-          visuallyBusy: false,
-          lastActivityAt: 0,
-        },
-      }
-      expect(captured.ariaLabel(row)).toBe('员工 张三。忙碌中')
-      wrapper.unmount()
-    })
+  it.each([
+    [desk({ shortName: '张三', enabled: false }), '员工 张三。副窗未启用'],
+    [desk({ shortName: '张三' }), '员工 张三。等待活动'],
+    [desk({ shortName: '张三', snapshot: snapshot({ stage: '忙碌中' }) }), '员工 张三。忙碌中'],
+  ])('ariaLabel describes %j accessibly', async (row, expected) => {
+    const { captured, wrapper } = setupComposable()
+    await nextTick()
+    expect(captured.ariaLabel(row as WorkflowEmployeeDeskRow)).toBe(expected)
+    wrapper.unmount()
   })
-
-  describe('isBusy', () => {
-    it('未启用时返回 false', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: false,
-      }
-      expect(captured.isBusy(row)).toBe(false)
-      wrapper.unmount()
-    })
-
-    it('启用但无快照时返回 false', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: true,
-      }
-      expect(captured.isBusy(row)).toBe(false)
-      wrapper.unmount()
-    })
-
-    it('快照 visuallyBusy 为 true 时返回 true', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: true,
-        snapshot: {
-          empId: 'emp1',
-          panelTitle: '',
-          shortName: '',
-          stage: '',
-          progressPct: 0,
-          progressLabel: '',
-          hintLine: '',
-          idle: false,
-          visuallyBusy: true,
-          lastActivityAt: 0,
-        },
-      }
-      expect(captured.isBusy(row)).toBe(true)
-      wrapper.unmount()
-    })
-
-    it('快照 visuallyBusy 为 false 时返回 false', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: true,
-        snapshot: {
-          empId: 'emp1',
-          panelTitle: '',
-          shortName: '',
-          stage: '',
-          progressPct: 0,
-          progressLabel: '',
-          hintLine: '',
-          idle: false,
-          visuallyBusy: false,
-          lastActivityAt: 0,
-        },
-      }
-      expect(captured.isBusy(row)).toBe(false)
-      wrapper.unmount()
-    })
+  it.each([
+    [desk({ enabled: false }), false], [desk(), false],
+    [desk({ snapshot: snapshot({ visuallyBusy: true }) }), true], [desk({ snapshot: snapshot() }), false],
+  ])('isBusy reflects enabled activity for %j', async (row, expected) => {
+    const { captured, wrapper } = setupComposable()
+    await nextTick()
+    expect(captured.isBusy(row as WorkflowEmployeeDeskRow)).toBe(expected)
+    wrapper.unmount()
   })
-
-  describe('processedCount', () => {
-    it('session 不存在时返回 0', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: true,
-      }
-      expect(captured.processedCount(row)).toBe(0)
-      wrapper.unmount()
-    })
-
-    it('session 存在时返回 processedCount', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: true,
-        session: {
-          empId: 'emp1',
-          enabledAt: null,
-          firstActivityAt: null,
-          lastActivityAt: null,
-          processedCount: 42,
-          lifetimeMs: 0,
-        },
-      }
-      expect(captured.processedCount(row)).toBe(42)
-      wrapper.unmount()
-    })
-
-    it('session.processedCount 为 0 时返回 0', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      const row: WorkflowEmployeeDeskRow = {
-        empId: 'emp1',
-        panelTitle: '工作流 · 员工1',
-        shortName: '员工1',
-        enabled: true,
-        session: {
-          empId: 'emp1',
-          enabledAt: null,
-          firstActivityAt: null,
-          lastActivityAt: null,
-          processedCount: 0,
-          lifetimeMs: 0,
-        },
-      }
-      expect(captured.processedCount(row)).toBe(0)
-      wrapper.unmount()
-    })
+  it.each([undefined, 42, 0])('processedCount reads session count %s', async (count) => {
+    const { captured, wrapper } = setupComposable()
+    await nextTick()
+    const session = count === undefined ? undefined : { empId: 'emp1', enabledAt: null, firstActivityAt: null,
+      lastActivityAt: null, processedCount: count, lifetimeMs: 0 }
+    expect(captured.processedCount(desk({ session }))).toBe(count ?? 0)
+    wrapper.unmount()
   })
 
   describe('resolvePanelTitle（通过 desks 间接测试）', () => {

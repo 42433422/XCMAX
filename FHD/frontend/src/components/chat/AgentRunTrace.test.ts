@@ -189,3 +189,44 @@ describe('AgentRunTrace', () => {
     expect(wrapper.get('.mermaid-host').html()).toContain('data-testid="rendered-plan"')
   })
 })
+
+it.each([
+  ['inventory', 'read', '业务资料', 'fa-database'], ['search', 'search', '搜索', 'fa-search'],
+  ['spreadsheet', 'export', '表格', 'fa-table'], ['document', 'create', '文档', 'fa-file-text-o'],
+  ['message', 'send', '消息', 'fa-envelope-o'], ['approval', 'approve', '审批中心', 'fa-check-square-o'],
+  ['attachment', 'import', 'attachment', 'fa-upload'], ['custom_tool', 'custom_action', 'custom tool', 'fa-wrench'],
+])('labels %s actions and keeps empty phase rows non-interactive', async (tool, action, label, icon) => {
+  const trace = makeTrace('running'); trace.intent = ''; trace.run_id = 'run_short'
+  Object.assign(trace.phases[1], { tool_id: tool, action, params_json: '', status: 'blocked' })
+  const wrapper = mount(AgentRunTrace, { props: { trace } })
+  expect(wrapper.get('.art-task-title').text()).toContain(label)
+  expect(wrapper.find(`.${icon}`).exists()).toBe(true)
+  expect(wrapper.find('.fa-ban').exists()).toBe(true)
+  const summary = wrapper.get('.is-tool .art-step-summary')
+  const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+  summary.element.dispatchEvent(event)
+  expect(event.defaultPrevented).toBe(true)
+  expect(summary.attributes('aria-disabled')).toBe('true')
+  expect(wrapper.text()).toContain('Run · short')
+  wrapper.unmount()
+})
+
+it('rerenders an opened execution graph when new steps arrive and reports renderer failures', async () => {
+  const trace = makeTrace('success')
+  trace.phases.push({ ...trace.phases[1], started_event_id: 'event-3', node_id: 'notify', tool_id: 'message_sender' } as any)
+  const wrapper = mount(AgentRunTrace, { props: { trace } })
+  const graph = wrapper.get('details.art-plan-graph')
+  await graph.trigger('toggle'); expect(mermaidRender).not.toHaveBeenCalled()
+  ;(graph.element as HTMLDetailsElement).open = true
+  await graph.trigger('toggle'); await flushPromises()
+  expect(mermaidRender).toHaveBeenCalledOnce()
+  await graph.trigger('toggle'); await flushPromises()
+  expect(mermaidRender).toHaveBeenCalledOnce()
+  mermaidRender.mockRejectedValueOnce(new Error('图格式不正确'))
+  await wrapper.setProps({ trace: { ...trace, phases: [...trace.phases, { kind: 'run', status: 'failed', title: '', started_event_id: 'end' }] } })
+  await flushPromises()
+  expect(mermaidRender).toHaveBeenCalledTimes(2)
+  expect(wrapper.get('.mermaid-fail').text()).toContain('图格式不正确')
+  expect(wrapper.text()).toContain('任务结束')
+  wrapper.unmount(); mermaidRender.mockClear()
+})

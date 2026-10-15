@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { defineComponent, nextTick } from 'vue'
-import { mount, flushPromises } from '@vue/test-utils'
+import { enableAutoUnmount, mount, flushPromises } from '@vue/test-utils'
 
 const updateListeners: Array<(event: unknown) => void> = []
 
@@ -33,6 +33,7 @@ vi.mock('@/components/Modal.vue', () => ({
 }))
 
 import DesktopAppUpdatePrompt from './DesktopAppUpdatePrompt.vue'
+enableAutoUnmount(afterEach)
 import { __resetDesktopAppUpdaterForTest } from '@/composables/useDesktopAppUpdater'
 
 function emitUpdate(type: string, data: unknown = {}) {
@@ -356,4 +357,31 @@ describe('DesktopAppUpdatePrompt', () => {
     expect(wrapper.text()).toContain('新版本 1.0.0.1 可用')
     expect(wrapper.text()).toContain('版本 1.0.0.1')
   })
+  it.each(['playback rejection', 'media event'])('recovers from %s and resets video state across carousel and modal navigation', async failure => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    const wrapper = mountPrompt(); await flushPromises()
+    emitUpdate('update-available', { version: '1.0.0', releaseMedia: [
+      { posterUrl: 'https://cdn.example.com/a.webp', videoUrl: 'https://cdn.example.com/a.mp4', caption: '演示' },
+      { posterUrl: 'https://cdn.example.com/b.webp', caption: '详情' },
+    ] })
+    await nextTick(); await wrapper.get('.desktop-update-chip').trigger('click')
+    if (failure === 'playback rejection') play.mockRejectedValueOnce(new Error('unsupported'))
+    await wrapper.get('.desktop-update-media__play').trigger('click'); await flushPromises()
+    if (failure === 'media event') await wrapper.get('video').trigger('error')
+    expect(wrapper.find('video').exists()).toBe(false)
+    expect(wrapper.find('.desktop-update-media__play').exists()).toBe(false)
+    await wrapper.get('[aria-label="下一张"]').trigger('click')
+    expect(wrapper.get('.desktop-update-media__poster').attributes('src')).toContain('b.webp')
+    await wrapper.get('[aria-label="上一张"]').trigger('click')
+    await wrapper.get('.desktop-update-media__play').trigger('click'); await flushPromises()
+    expect(wrapper.find('video').exists()).toBe(true)
+    await wrapper.findAll('button').find(button => button.text() === '稍后')!.trigger('click')
+    expect(pause).toHaveBeenCalled()
+    expect(wrapper.find('.modal-stub').exists()).toBe(false)
+    await wrapper.get('.desktop-update-chip').trigger('click')
+    expect(wrapper.get('.desktop-update-media__poster').attributes('src')).toContain('a.webp')
+    wrapper.unmount(); play.mockRestore(); pause.mockRestore()
+  })
+
 })

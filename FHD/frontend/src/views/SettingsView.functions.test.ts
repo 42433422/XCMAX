@@ -5,7 +5,7 @@
  * hydrateUserFromSessionValidate、downloadAuditCsv、errorMessage 等未覆盖函数
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { ref, type Ref, nextTick } from 'vue'
@@ -350,6 +350,20 @@ async function mountSettings(routeQuery: Record<string, string> = {}) {
   return wrapper
 }
 
+async function mountMemory(record: Record<string, unknown> = {}) {
+  mockMemoryV2List.mockResolvedValue({ success: true, memories: [{ memory_id: 'm1', memory_type: 'preference', key: 'k', value: 'v', status: 'pending', ...record }] })
+  const wrapper = await mountSettings()
+  await flushPromises()
+  return wrapper
+}
+
+async function clickMemoryAction(wrapper: Awaited<ReturnType<typeof mountSettings>>, label: string) {
+  const button = wrapper.findAll('.memory-v2-actions button').find((item) => item.text() === label)
+  expect(button, label).toBeTruthy()
+  await button!.trigger('click')
+  await flushPromises()
+}
+
 function resetStores() {
   mockIndustryStore.industries = []
   mockIndustryStore.currentIndustry = null
@@ -422,321 +436,61 @@ function resetApiMocks() {
  * memoryV2 工具函数
  * ══════════════════════════════════════════════════════════════════ */
 
-describe('SettingsView functions – memoryV2TypeLabel', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+function resetSettingsTest() {
+  setActivePinia(createPinia())
+  localStorage.clear()
+  resetApiMocks()
+  resetStores()
+}
 
-  it('返回已知类型的中文标签', async () => {
+describe('SettingsView memory value helpers', () => {
+  beforeEach(resetSettingsTest)
+  it.each([
+    ['memoryV2TypeLabel', [
+      ['preference', '偏好'], ['entity', '实体'], ['episodic', '任务'], ['unknown', 'unknown'],
+      ['', '未知'], [null, '未知'], [undefined, '未知'],
+    ]],
+    ['memoryV2StatusLabel', [
+      ['pending', '待确认'], ['active', '已确认'], ['rejected', '已拒绝'], ['deleted', '已删除'],
+      ['all', '全部'], ['unknown', 'unknown'], ['', '未知'], [null, '未知'],
+    ]],
+    ['memoryV2EditableValue', [
+      ['hello', 'hello'], [null, 'null'], [undefined, undefined], [42, '42'],
+      [{ a: 1, b: 'x' }, JSON.stringify({ a: 1, b: 'x' }, null, 2)],
+      [[1, 2, 3], JSON.stringify([1, 2, 3], null, 2)],
+    ]],
+    ['memoryV2DisplayValue', [
+      ['short text', 'short text'], ['x'.repeat(200), 'x'.repeat(160) + '…'],
+      ['x'.repeat(160), 'x'.repeat(160)], [null, 'null'],
+    ]],
+    ['parseMemoryV2InputValue', [
+      ['', ''], ['   ', ''], ['{"a":1}', { a: 1 }], ['[1,2,3]', [1, 2, 3]],
+      ['"hello"', 'hello'], ['42', 42], ['-3.14', -3.14], ['true', true], ['false', false],
+      ['null', null], ['{"invalid"', '{"invalid"'], ['hello world', 'hello world'],
+    ]],
+    ['memoryV2Time', [['', ''], [null, ''], [undefined, ''], ['not-a-date', 'not-a-date']]],
+    ['canEditMemoryV2', [
+      [{ status: 'pending' }, true], [{ status: 'active' }, true],
+      [{ status: 'rejected' }, false], [{ status: 'deleted' }, false],
+    ]],
+  ] as Array<[string, Array<[unknown, unknown]>]>)('%s retains its value and boundary cases', async (method, cases) => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    expect(vm.memoryV2TypeLabel('preference')).toBe('偏好')
-    expect(vm.memoryV2TypeLabel('entity')).toBe('实体')
-    expect(vm.memoryV2TypeLabel('episodic')).toBe('任务')
+    for (const [input, expected] of cases) expect(vm[method](input)).toEqual(expected)
     wrapper.unmount()
   })
 
-  it('未知类型返回类型字符串', async () => {
+  it('formats a valid memory timestamp as nonempty text', async () => {
     const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2TypeLabel('unknown')).toBe('unknown')
-    wrapper.unmount()
-  })
-
-  it('空值返回 未知', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2TypeLabel('')).toBe('未知')
-    expect(vm.memoryV2TypeLabel(null)).toBe('未知')
-    expect(vm.memoryV2TypeLabel(undefined)).toBe('未知')
-    wrapper.unmount()
-  })
-})
-
-describe('SettingsView functions – memoryV2StatusLabel', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
-
-  it('返回已知状态的中文标签', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2StatusLabel('pending')).toBe('待确认')
-    expect(vm.memoryV2StatusLabel('active')).toBe('已确认')
-    expect(vm.memoryV2StatusLabel('rejected')).toBe('已拒绝')
-    expect(vm.memoryV2StatusLabel('deleted')).toBe('已删除')
-    expect(vm.memoryV2StatusLabel('all')).toBe('全部')
-    wrapper.unmount()
-  })
-
-  it('未知状态返回状态字符串', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2StatusLabel('unknown')).toBe('unknown')
-    wrapper.unmount()
-  })
-
-  it('空值返回 未知', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2StatusLabel('')).toBe('未知')
-    expect(vm.memoryV2StatusLabel(null)).toBe('未知')
-    wrapper.unmount()
-  })
-})
-
-describe('SettingsView functions – memoryV2EditableValue', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
-
-  it('字符串原样返回', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2EditableValue('hello')).toBe('hello')
-    wrapper.unmount()
-  })
-
-  it('对象 JSON 序列化', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    const result = vm.memoryV2EditableValue({ a: 1, b: 'x' })
-    expect(result).toContain('"a": 1')
-    expect(result).toContain('"b": "x"')
-    wrapper.unmount()
-  })
-
-  it('数组 JSON 序列化', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    const result = vm.memoryV2EditableValue([1, 2, 3])
-    expect(result).toContain('1')
-    expect(result).toContain('2')
-    wrapper.unmount()
-  })
-
-  it('null 返回字符串 null（JSON.stringify 行为）', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2EditableValue(null)).toBe('null')
-    wrapper.unmount()
-  })
-
-  it('undefined 返回 undefined（JSON.stringify 行为）', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2EditableValue(undefined)).toBeUndefined()
-    wrapper.unmount()
-  })
-
-  it('数字转字符串', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2EditableValue(42)).toBe('42')
-    wrapper.unmount()
-  })
-})
-
-describe('SettingsView functions – memoryV2DisplayValue', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
-
-  it('短字符串原样返回', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2DisplayValue('short text')).toBe('short text')
-    wrapper.unmount()
-  })
-
-  it('长字符串截断并加省略号', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    const long = 'x'.repeat(200)
-    const result = vm.memoryV2DisplayValue(long)
-    expect(result.length).toBeLessThan(long.length)
-    expect(result.endsWith('…')).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('刚好 160 字符不加省略号', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    const exact = 'x'.repeat(160)
-    expect(vm.memoryV2DisplayValue(exact)).toBe(exact)
-    wrapper.unmount()
-  })
-
-  it('null 返回字符串 null（JSON.stringify 行为）', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2DisplayValue(null)).toBe('null')
-    wrapper.unmount()
-  })
-})
-
-describe('SettingsView functions – parseMemoryV2InputValue', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
-
-  it('空字符串返回空字符串', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.parseMemoryV2InputValue('')).toBe('')
-    expect(vm.parseMemoryV2InputValue('   ')).toBe('')
-    wrapper.unmount()
-  })
-
-  it('JSON 对象解析为对象', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    const result = vm.parseMemoryV2InputValue('{"a":1}')
-    expect(result).toEqual({ a: 1 })
-    wrapper.unmount()
-  })
-
-  it('JSON 数组解析为数组', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    const result = vm.parseMemoryV2InputValue('[1,2,3]')
-    expect(result).toEqual([1, 2, 3])
-    wrapper.unmount()
-  })
-
-  it('JSON 字符串解析为字符串', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    const result = vm.parseMemoryV2InputValue('"hello"')
-    expect(result).toBe('hello')
-    wrapper.unmount()
-  })
-
-  it('数字字符串解析为数字', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.parseMemoryV2InputValue('42')).toBe(42)
-    expect(vm.parseMemoryV2InputValue('-3.14')).toBe(-3.14)
-    wrapper.unmount()
-  })
-
-  it('true/false/null 解析为对应类型', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.parseMemoryV2InputValue('true')).toBe(true)
-    expect(vm.parseMemoryV2InputValue('false')).toBe(false)
-    expect(vm.parseMemoryV2InputValue('null')).toBe(null)
-    wrapper.unmount()
-  })
-
-  it('无效 JSON 返回原字符串', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.parseMemoryV2InputValue('{"invalid"')).toBe('{"invalid"')
-    wrapper.unmount()
-  })
-
-  it('普通文本返回原字符串', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.parseMemoryV2InputValue('hello world')).toBe('hello world')
-    wrapper.unmount()
-  })
-})
-
-describe('SettingsView functions – memoryV2Time', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
-
-  it('空值返回空字符串', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2Time('')).toBe('')
-    expect(vm.memoryV2Time(null)).toBe('')
-    expect(vm.memoryV2Time(undefined)).toBe('')
-    wrapper.unmount()
-  })
-
-  it('有效日期返回格式化字符串', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    const result = vm.memoryV2Time('2026-06-25T10:30:00Z')
+    const result = (wrapper.vm as any).memoryV2Time('2026-06-25T10:30:00Z')
     expect(result).toBeTruthy()
     expect(typeof result).toBe('string')
-    wrapper.unmount()
-  })
-
-  it('无效日期返回原字符串', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2Time('not-a-date')).toBe('not-a-date')
-    wrapper.unmount()
-  })
-})
-
-describe('SettingsView functions – canEditMemoryV2', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
-
-  it('pending 状态可编辑', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.canEditMemoryV2({ status: 'pending' })).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('active 状态可编辑', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.canEditMemoryV2({ status: 'active' })).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('rejected 状态不可编辑', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.canEditMemoryV2({ status: 'rejected' })).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('deleted 状态不可编辑', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.canEditMemoryV2({ status: 'deleted' })).toBe(false)
     wrapper.unmount()
   })
 })
 
 describe('SettingsView functions – memoryV2FoldMeta computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('初始状态返回 0 计数', async () => {
     const wrapper = await mountSettings()
@@ -774,12 +528,7 @@ describe('SettingsView functions – memoryV2FoldMeta computed', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView functions – loadMemoryV2', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('成功加载记忆列表', async () => {
     const records = [{ memory_id: 'm1', memory_type: 'preference', key: 'k1', value: 'v1', status: 'active' }]
@@ -798,7 +547,9 @@ describe('SettingsView functions – loadMemoryV2', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    await vm.loadMemoryV2()
+    await flushPromises()
+    await wrapper.get('.memory-v2-toolbar button').trigger('click')
+    await flushPromises()
     expect(vm.memoryV2Records.length).toBe(1)
     expect(vm.memoryV2PlannerContext).toBe('ctx')
     expect(vm.memoryV2Loading).toBe(false)
@@ -856,12 +607,7 @@ describe('SettingsView functions – loadMemoryV2', () => {
 })
 
 describe('SettingsView functions – createMemoryV2Candidate', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('键或值为空时提示', async () => {
     const wrapper = await mountSettings()
@@ -878,10 +624,14 @@ describe('SettingsView functions – createMemoryV2Candidate', () => {
     mockMemoryV2CreateCandidate.mockResolvedValue({ success: true })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    vm.memoryV2Draft.key = 'testKey'
-    vm.memoryV2Draft.value = 'testValue'
-    await vm.createMemoryV2Candidate()
-    expect(mockMemoryV2CreateCandidate).toHaveBeenCalled()
+    await wrapper.get('.memory-v2-form__type').setValue('entity')
+    const fields = wrapper.findAll('.memory-v2-form__input')
+    await fields[0].setValue('testKey')
+    await fields[1].setValue('testValue')
+    await wrapper.get('.memory-v2-form__confidence').setValue('0.85')
+    await wrapper.get('.memory-v2-form').trigger('submit')
+    await flushPromises()
+    expect(mockMemoryV2CreateCandidate).toHaveBeenCalledWith(expect.objectContaining({ key: 'testKey', value: 'testValue', memoryType: 'entity', confidence: 0.85 }))
     expect(vm.memoryV2Draft.key).toBe('')
     expect(vm.memoryV2Draft.value).toBe('')
     wrapper.unmount()
@@ -912,19 +662,13 @@ describe('SettingsView functions – createMemoryV2Candidate', () => {
 })
 
 describe('SettingsView functions – confirmMemoryV2', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('成功确认记忆', async () => {
     mockMemoryV2Confirm.mockResolvedValue({ success: true })
-    const wrapper = await mountSettings()
+    const wrapper = await mountMemory({ key: 'k1', value: 'v1' })
     const vm = wrapper.vm as any
-    const record = { memory_id: 'm1', key: 'k1', value: 'v1', status: 'pending' }
-    await vm.confirmMemoryV2(record)
+    await clickMemoryAction(wrapper, settingsI18nT('settings.confirm'))
     expect(mockMemoryV2Confirm).toHaveBeenCalledWith('m1', expect.any(String))
     expect(vm.memoryV2BusyId).toBe('')
     wrapper.unmount()
@@ -952,12 +696,7 @@ describe('SettingsView functions – confirmMemoryV2', () => {
 })
 
 describe('SettingsView functions – rejectMemoryV2', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('用户取消确认时不执行拒绝', async () => {
     mockAppConfirm.mockResolvedValue(false)
@@ -971,9 +710,9 @@ describe('SettingsView functions – rejectMemoryV2', () => {
   it('成功拒绝记忆', async () => {
     mockAppConfirm.mockResolvedValue(true)
     mockMemoryV2Reject.mockResolvedValue({ success: true })
-    const wrapper = await mountSettings()
+    const wrapper = await mountMemory()
     const vm = wrapper.vm as any
-    await vm.rejectMemoryV2({ memory_id: 'm1', key: 'k', value: 'v', status: 'pending' })
+    await clickMemoryAction(wrapper, settingsI18nT('settings.reject'))
     expect(mockMemoryV2Reject).toHaveBeenCalled()
     expect(vm.memoryV2BusyId).toBe('')
     wrapper.unmount()
@@ -1002,18 +741,12 @@ describe('SettingsView functions – rejectMemoryV2', () => {
 })
 
 describe('SettingsView functions – startMemoryV2Edit / cancelMemoryV2Edit', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('startMemoryV2Edit 设置编辑状态', async () => {
-    const wrapper = await mountSettings()
+    const wrapper = await mountMemory({ key: 'testKey', value: { a: 1 }, status: 'active' })
     const vm = wrapper.vm as any
-    const record = { memory_id: 'm1', key: 'testKey', value: { a: 1 }, status: 'active' }
-    vm.startMemoryV2Edit(record)
+    await clickMemoryAction(wrapper, settingsI18nT('settings.revise'))
     expect(vm.memoryV2Edit.memoryId).toBe('m1')
     expect(vm.memoryV2Edit.key).toBe('testKey')
     expect(vm.memoryV2Edit.value).toContain('"a": 1')
@@ -1029,12 +762,11 @@ describe('SettingsView functions – startMemoryV2Edit / cancelMemoryV2Edit', ()
   })
 
   it('cancelMemoryV2Edit 清空编辑状态', async () => {
-    const wrapper = await mountSettings()
+    const wrapper = await mountMemory({ status: 'active' })
     const vm = wrapper.vm as any
-    vm.memoryV2Edit.memoryId = 'm1'
-    vm.memoryV2Edit.key = 'k'
-    vm.memoryV2Edit.value = 'v'
-    vm.cancelMemoryV2Edit()
+    await clickMemoryAction(wrapper, settingsI18nT('settings.revise'))
+    await clickMemoryAction(wrapper, settingsI18nT('settings.cancel'))
+    expect(wrapper.find('.memory-v2-edit').exists()).toBe(false)
     expect(vm.memoryV2Edit.memoryId).toBe('')
     expect(vm.memoryV2Edit.key).toBe('')
     expect(vm.memoryV2Edit.value).toBe('')
@@ -1043,12 +775,7 @@ describe('SettingsView functions – startMemoryV2Edit / cancelMemoryV2Edit', ()
 })
 
 describe('SettingsView functions – saveMemoryV2Edit', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('key 为空时提示', async () => {
     const wrapper = await mountSettings()
@@ -1062,11 +789,12 @@ describe('SettingsView functions – saveMemoryV2Edit', () => {
 
   it('成功保存修正', async () => {
     mockMemoryV2Correct.mockResolvedValue({ success: true })
-    const wrapper = await mountSettings()
+    const wrapper = await mountMemory({ status: 'active' })
     const vm = wrapper.vm as any
-    vm.memoryV2Edit.key = 'newKey'
-    vm.memoryV2Edit.value = 'newValue'
-    await vm.saveMemoryV2Edit({ memory_id: 'm1', key: 'k', value: 'v', status: 'active' })
+    await clickMemoryAction(wrapper, settingsI18nT('settings.revise'))
+    await wrapper.get('.memory-v2-edit__input').setValue('newKey')
+    await wrapper.get('.memory-v2-edit__textarea').setValue('newValue')
+    await clickMemoryAction(wrapper, settingsI18nT('settings.save'))
     expect(mockMemoryV2Correct).toHaveBeenCalled()
     expect(vm.memoryV2Edit.memoryId).toBe('')
     expect(vm.memoryV2BusyId).toBe('')
@@ -1098,12 +826,7 @@ describe('SettingsView functions – saveMemoryV2Edit', () => {
 })
 
 describe('SettingsView functions – deleteMemoryV2', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('用户取消确认时不执行删除', async () => {
     mockAppConfirm.mockResolvedValue(false)
@@ -1117,9 +840,9 @@ describe('SettingsView functions – deleteMemoryV2', () => {
   it('成功删除记忆', async () => {
     mockAppConfirm.mockResolvedValue(true)
     mockMemoryV2Remove.mockResolvedValue({ success: true })
-    const wrapper = await mountSettings()
+    const wrapper = await mountMemory({ status: 'active' })
     const vm = wrapper.vm as any
-    await vm.deleteMemoryV2({ memory_id: 'm1', key: 'k', value: 'v', status: 'active' })
+    await clickMemoryAction(wrapper, settingsI18nT('settings.delete'))
     expect(mockMemoryV2Remove).toHaveBeenCalled()
     expect(vm.memoryV2BusyId).toBe('')
     wrapper.unmount()
@@ -1165,12 +888,7 @@ describe('SettingsView functions – deleteMemoryV2', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView functions – persyFoldMeta computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('无 profile 时返回待确认 0', async () => {
     const wrapper = await mountSettings()
@@ -1229,12 +947,7 @@ describe('SettingsView functions – persyFoldMeta computed', () => {
 })
 
 describe('SettingsView functions – loadPersyProfile', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('成功加载 profile', async () => {
     const profile = {
@@ -1278,12 +991,7 @@ describe('SettingsView functions – loadPersyProfile', () => {
 })
 
 describe('SettingsView functions – runPersyInfer', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('成功推断并更新 profile', async () => {
     const profile = {
@@ -1306,9 +1014,12 @@ describe('SettingsView functions – runPersyInfer', () => {
         reasons: ['原因1', '原因2'],
       },
     })
+    mockButlerProfileGet.mockResolvedValue({ success: true, profile: { ...profile, identity_primary: '原身份' } })
     const wrapper = await mountSettings()
+    await flushPromises()
     const vm = wrapper.vm as any
-    await vm.runPersyInfer()
+    await wrapper.get('.persy-profile__footer button').trigger('click')
+    await flushPromises()
     expect(vm.persyProfile).toEqual(profile)
     expect(vm.persyLastReason).toBe('原因2')
     expect(vm.persyInferring).toBe(false)
@@ -1352,12 +1063,7 @@ describe('SettingsView functions – runPersyInfer', () => {
 })
 
 describe('SettingsView functions – persyUserId computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('无聊天会话时返回普通模式默认会话键', async () => {
     const wrapper = await mountSettings()
@@ -1441,19 +1147,15 @@ describe('SettingsView functions – persyUserId computed', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView functions – retryModRoutesLoad', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('refresh 成功且有 loadError 时提示错误', async () => {
     mockModsStore.refresh.mockResolvedValue(undefined)
     mockModsStore.loadError = '加载错误'
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    await vm.retryModRoutesLoad()
+    await wrapper.get('.mod-routes-status + button').trigger('click')
+    await flushPromises()
     expect(mockAppAlert).toHaveBeenCalledWith('加载错误')
     expect(vm.modRoutesRetrying).toBe(false)
     wrapper.unmount()
@@ -1485,12 +1187,7 @@ describe('SettingsView functions – retryModRoutesLoad', () => {
 })
 
 describe('SettingsView functions – onActiveModChange', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
   afterEach(() => {
     delete (window as any).location
   })
@@ -1526,28 +1223,24 @@ describe('SettingsView functions – onActiveModChange', () => {
   })
 
   it('有效 modId 时设置并刷新页面', async () => {
+    mockModsStore.mods = [{ id: 'ext-new', name: 'New extension' }]
     const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
     const reloadSpy = vi.fn()
     Object.defineProperty(window, 'location', {
       writable: true,
       configurable: true,
       value: { reload: reloadSpy, href: '' },
     })
-    await vm.onActiveModChange('new-mod')
-    expect(mockModsStore.setActiveModId).toHaveBeenCalledWith('new-mod')
+    await wrapper.get('input[name="active-mod-id"]').setValue(true)
+    await flushPromises()
+    expect(mockModsStore.setActiveModId).toHaveBeenCalledWith('ext-new')
     expect(reloadSpy).toHaveBeenCalled()
     wrapper.unmount()
   })
 })
 
 describe('SettingsView functions – onUninstallMod', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
   afterEach(() => {
     delete (window as any).location
   })
@@ -1581,11 +1274,11 @@ describe('SettingsView functions – onUninstallMod', () => {
     wrapper.unmount()
   })
 
-  it('卸载成功时刷新页面', async () => {
+  it.each(['host-bridge-1', 'ext-1'])('卸载 %s 成功时刷新页面', async (modId) => {
     mockIsProtectedClientModId.mockReturnValue(false)
     mockAppConfirm.mockResolvedValue(true)
     mockApiDelete.mockResolvedValue({ success: true, message: '已卸载' })
-    mockModsStore.mods = [{ id: 'm1', name: 'Mod 1' }]
+    mockModsStore.mods = [{ id: modId, name: 'Mod 1' }]
     const reloadSpy = vi.fn()
     Object.defineProperty(window, 'location', {
       writable: true,
@@ -1594,7 +1287,9 @@ describe('SettingsView functions – onUninstallMod', () => {
     })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    await vm.onUninstallMod('m1')
+    if (modId.startsWith('host-bridge')) await wrapper.get('.mod-host-pack-bar .btn-secondary').trigger('click')
+    await wrapper.get('.mod-single-uninstall').trigger('click')
+    await flushPromises()
     expect(mockApiDelete).toHaveBeenCalled()
     expect(reloadSpy).toHaveBeenCalled()
     expect(vm.uninstallingModId).toBe('')
@@ -1670,12 +1365,7 @@ describe('SettingsView functions – onUninstallMod', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView functions – syncProfileDraftsFromUser', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('null user 时清空草稿', async () => {
     const wrapper = await mountSettings()
@@ -1740,12 +1430,7 @@ describe('SettingsView functions – syncProfileDraftsFromUser', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView functions – modSettingsFoldMeta computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('无 mods 时返回 0 个行业包（selectableExtensionMods 为空时仍输出 0）', async () => {
     const wrapper = await mountSettings()
@@ -1779,12 +1464,7 @@ describe('SettingsView functions – modSettingsFoldMeta computed', () => {
 })
 
 describe('SettingsView functions – basicSettingsSummary computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('online 模式返回助手名与在线模式', async () => {
     const wrapper = await mountSettings()
@@ -1808,12 +1488,7 @@ describe('SettingsView functions – basicSettingsSummary computed', () => {
 })
 
 describe('SettingsView functions – showModRoutesRetry computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('有 loadError 时返回 true', async () => {
     mockModsStore.loadError = '加载错误'
@@ -1851,12 +1526,7 @@ describe('SettingsView functions – showModRoutesRetry computed', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView functions – hostBridgeMods computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('过滤并排序 host bridge mods', async () => {
     mockModsStore.mods = [
@@ -1887,12 +1557,7 @@ describe('SettingsView functions – hostBridgeMods computed', () => {
 })
 
 describe('SettingsView functions – hostBridgeInstalledCount / hostBridgeExpectedCount', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('计算已安装的 host bridge 数量', async () => {
     mockModsStore.mods = [
@@ -1919,12 +1584,7 @@ describe('SettingsView functions – hostBridgeInstalledCount / hostBridgeExpect
 })
 
 describe('SettingsView functions – selectableExtensionMods / workflowEmployeeMods', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('过滤 selectable extension mods', async () => {
     mockModsStore.mods = [
@@ -1959,12 +1619,7 @@ describe('SettingsView functions – selectableExtensionMods / workflowEmployeeM
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView functions – deliveryBrandName computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('无 custom mod 且无 brand 时返回空', async () => {
     const wrapper = await mountSettings()
@@ -1993,12 +1648,7 @@ describe('SettingsView functions – deliveryBrandName computed', () => {
 })
 
 describe('SettingsView functions – systemDisplayName computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('有 brand 时返回品牌工作台', async () => {
     mockAccountProfileStore.displayBrand = '企业品牌'
@@ -2019,12 +1669,7 @@ describe('SettingsView functions – systemDisplayName computed', () => {
 })
 
 describe('SettingsView functions – aboutDisplayLine computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('有 brand 时返回完整交付线', async () => {
     mockAccountProfileStore.displayBrand = '企业品牌'
@@ -2046,12 +1691,7 @@ describe('SettingsView functions – aboutDisplayLine computed', () => {
 })
 
 describe('SettingsView functions – selectedSidebarAccent computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('匹配主题时返回对应 accent', async () => {
     const wrapper = await mountSettings()
@@ -2073,12 +1713,7 @@ describe('SettingsView functions – selectedSidebarAccent computed', () => {
 })
 
 describe('SettingsView functions – intentPackageEntries computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('返回排序后的意图包列表', async () => {
     const wrapper = await mountSettings()
@@ -2106,12 +1741,7 @@ describe('SettingsView functions – intentPackageEntries computed', () => {
 })
 
 describe('SettingsView functions – currentIntentIndustryLabel computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('industryStore 有 name 时返回 name', async () => {
     mockIndustryStore.industries = [{ id: 'mfg', name: '制造业', code: 'MFG' }]
@@ -2136,12 +1766,7 @@ describe('SettingsView functions – currentIntentIndustryLabel computed', () =>
 })
 
 describe('SettingsView functions – installedAccountCustomMod computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('找到 account custom mod 时返回该 mod', async () => {
     mockModsStore.mods = [{ id: 'taiyangniao-pro', name: '太阳鸟' }]
@@ -2164,12 +1789,7 @@ describe('SettingsView functions – installedAccountCustomMod computed', () => 
 })
 
 describe('SettingsView functions – showModelPaymentBridge computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('非 admin console 且未安装 bridge 时返回 false', async () => {
     const wrapper = await mountSettings()
@@ -2189,12 +1809,7 @@ describe('SettingsView functions – showModelPaymentBridge computed', () => {
 })
 
 describe('SettingsView functions – isLocalAdmin computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('role 为 admin 时返回 true', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
@@ -2267,12 +1882,7 @@ describe('SettingsView functions – isLocalAdmin computed', () => {
 })
 
 describe('SettingsView functions – memoryV2UserId computed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('无 user 时返回 default', async () => {
     const wrapper = await mountSettings()
@@ -2349,6 +1959,22 @@ describe('SettingsView functions – memoryV2UserId computed', () => {
     await nextTick()
     const vm = wrapper.vm as any
     expect(vm.memoryV2UserId).toBe('default')
+    wrapper.unmount()
+  })
+})
+
+
+describe('SettingsView memory filters', () => {
+  beforeEach(resetSettingsTest)
+  it('loads the selected status and type through the card controls', async () => {
+    const wrapper = await mountMemory()
+    const filters = wrapper.findAll('.memory-v2-toolbar select')
+    await filters[0].setValue('active')
+    await flushPromises()
+    expect(mockMemoryV2List).toHaveBeenLastCalledWith({ userId: 'default', status: 'active', memoryType: undefined })
+    await filters[1].setValue('entity')
+    await flushPromises()
+    expect(mockMemoryV2List).toHaveBeenLastCalledWith({ userId: 'default', status: 'active', memoryType: 'entity' })
     wrapper.unmount()
   })
 })

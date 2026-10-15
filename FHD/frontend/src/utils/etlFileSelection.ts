@@ -17,7 +17,7 @@ export type EtlIgnoredSourceFile = {
 
 function normalizedRelativePath(file: File): string {
   const relativePath = String((file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name)
-    .replaceAll('\\', '/')
+    .replace(/\\/g, '/')
     .replace(/^\/+/, '')
     .split('/')
     .filter((part) => part && part !== '.' && part !== '..')

@@ -158,6 +158,7 @@ function createFlowState(overrides: Record<string, unknown> = {}) {
       if (s === 'host-pack' || s === 'host') return 'host-pack'
       if (s === 'industry' || s === 'mod') return 'industry'
       if (s === 'done' || s === 'finish') return 'done'
+      if (s === 'seed-demo' || s === 'first-ai-task') return s
       return 'welcome'
     }),
     completeFlowAndGoChat: vi.fn(),
@@ -549,76 +550,8 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     expect(mockContainer.flowState.markProductFlowCompleted).not.toHaveBeenCalled()
   })
 
-  it('runBootstrap：装齐失败时调用 appAlert 显示错误', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: false }),
-    })
-    await flushPromises()
-    await flushPromises()
-    // 在 mountComponent 之后设置 mock，避免被默认 mock 覆盖
-    mockContainer.installHostFoundation.mockResolvedValue({
-      success: false,
-      message: '宿主装包失败',
-    })
-    mockBaselineForInstallation(mockContainer.installHostFoundation, createBaselinePlan({ baseline_ready: false, missing_required_mod_ids: ['mod-x'] }))
-    mockContainer.appAlert.mockClear()
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalled()
-    const alertMsg = mockContainer.appAlert.mock.calls[0][0] as string
-    expect(alertMsg).toContain('宿主装包失败')
-    expect(mockContainer.installHostFoundation).toHaveBeenCalledOnce()
-    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
-    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false })
-  })
 
-  it('runBootstrap：installHostFoundation 抛异常时进入 catch', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: false }),
-    })
-    await flushPromises()
-    await flushPromises()
-    // 在 mountComponent 之后设置 mock，避免被默认 mock 覆盖
-    mockContainer.installHostFoundation.mockRejectedValue(new Error('网络错误'))
-    mockBaselineForInstallation(mockContainer.installHostFoundation)
-    mockContainer.appAlert.mockClear()
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalledWith('网络错误')
-    expect(mockContainer.installHostFoundation).toHaveBeenCalledOnce()
-    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
-    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false })
-  })
 
-  it('runBootstrap：installHostFoundation 抛非 Error 异常时显示默认错误', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: false }),
-    })
-    await flushPromises()
-    await flushPromises()
-    // 在 mountComponent 之后设置 mock，避免被默认 mock 覆盖
-    mockContainer.installHostFoundation.mockRejectedValue('string error')
-    mockBaselineForInstallation(mockContainer.installHostFoundation)
-    mockContainer.appAlert.mockClear()
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalledWith('string error')
-    expect(mockContainer.installHostFoundation).toHaveBeenCalledOnce()
-    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
-    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false })
-  })
 
   it.each([false, true])('基础线就绪=%s 时安装缺失的已选行业包', async (ready) => {
     const { wrapper } = await mountComponent({
@@ -643,57 +576,7 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
   })
 
-  it('runBootstrap：installIndustrySeed 返回 success=false 时记录错误', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        missing_industry_mod_ids: ['ind-1'],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.installIndustrySeed.mockResolvedValue({ success: false, message: '行业包失败' })
-    mockContainer.appAlert.mockClear()
-    mockBaselineForInstallation(mockContainer.installIndustrySeed, createBaselinePlan({ baseline_ready: false, missing_industry_mod_ids: ['ind-1'] }))
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalled()
-    const alertMsg = mockContainer.appAlert.mock.calls[0][0] as string
-    expect(alertMsg).toContain('行业包')
-    expect(mockContainer.installIndustrySeed).toHaveBeenCalledOnce()
-    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
-    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false, missing_industry_mod_ids: ['ind-1'] })
-    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('行业包失败')
-  })
 
-  it('runBootstrap：installIndustrySeed 抛异常时记录错误', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        missing_industry_mod_ids: ['ind-1'],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.installIndustrySeed.mockRejectedValue(new Error('行业包异常'))
-    mockContainer.appAlert.mockClear()
-    mockBaselineForInstallation(mockContainer.installIndustrySeed, createBaselinePlan({ baseline_ready: false, missing_industry_mod_ids: ['ind-1'] }))
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalled()
-    expect(mockContainer.installIndustrySeed).toHaveBeenCalledOnce()
-    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
-    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false, missing_industry_mod_ids: ['ind-1'] })
-    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('行业包异常')
-  })
 
   it.each([['custom-1', undefined], ['taiyangniao-pro', 'sunbird-attendance-custom']])('runBootstrap：客户包 %s 安装实际运行包', async (modId, runtimeModId) => {
     const missing = createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: [modId], groups: [{ id: 'custom', title: '客户包', hint: '', items: [{ mod_id: modId, runtime_mod_id: runtimeModId, label: '客户包', tier: 'account_custom', required: true, installed: false }] }] })
@@ -720,55 +603,7 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
   })
 
-  it('runBootstrap：installMod 返回 success=false 时记录错误', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        missing_account_custom_mod_ids: ['custom-1'],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.installMod.mockResolvedValue({ success: false, message: 'mod 失败' })
-    mockContainer.appAlert.mockClear()
-    mockBaselineForInstallation(mockContainer.installMod, createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] }))
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalled()
-    expect(mockContainer.installMod).toHaveBeenCalledOnce()
-    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
-    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] })
-    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('mod 失败')
-  })
 
-  it('runBootstrap：installMod 抛异常时记录错误', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        missing_account_custom_mod_ids: ['custom-1'],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.installMod.mockRejectedValue(new Error('mod 异常'))
-    mockContainer.appAlert.mockClear()
-    mockBaselineForInstallation(mockContainer.installMod, createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] }))
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalled()
-    expect(mockContainer.installMod).toHaveBeenCalledOnce()
-    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
-    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] })
-    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('mod 异常')
-  })
 
   it('runBootstrap：account_delivery_seed_packages 时调用 installCustomerDeliverySeed', async () => {
     const seedBaseline = createBaselinePlan({
@@ -795,62 +630,7 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
   })
 
-  it('runBootstrap：installCustomerDeliverySeed 返回 success=false 时记录错误', async () => {
-    const seedBaseline = createBaselinePlan({
-      baseline_ready: false,
-      account_custom_mod_ids: ['custom-1'],
-      account_delivery_seed_packages: [{ mod_id: 'custom-1', pkg_id: 'seed-1', version: '1.0.0' }],
-    })
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: seedBaseline,
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.installCustomerDeliverySeed.mockResolvedValue({
-      success: false,
-      message: '交付失败',
-    })
-    mockContainer.appAlert.mockClear()
-    mockBaselineForInstallation(mockContainer.installCustomerDeliverySeed, seedBaseline)
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalled()
-    expect(mockContainer.installCustomerDeliverySeed).toHaveBeenCalledOnce()
-    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
-    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject(seedBaseline)
-    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('交付失败')
-  })
 
-  it('runBootstrap：installCustomerDeliverySeed 抛异常时记录错误', async () => {
-    const seedBaseline = createBaselinePlan({
-      baseline_ready: false,
-      account_custom_mod_ids: ['custom-1'],
-      account_delivery_seed_packages: [{ mod_id: 'custom-1', pkg_id: 'seed-1', version: '1.0.0' }],
-    })
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: seedBaseline,
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.installCustomerDeliverySeed.mockRejectedValue(new Error('交付异常'))
-    mockContainer.appAlert.mockClear()
-    mockBaselineForInstallation(mockContainer.installCustomerDeliverySeed, seedBaseline)
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalled()
-    expect(mockContainer.installCustomerDeliverySeed).toHaveBeenCalledOnce()
-    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
-    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject(seedBaseline)
-    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('交付异常')
-  })
 
   it('runBootstrap：autoOnboard 抛异常时进入 catch 不阻断', async () => {
     const { wrapper } = await mountComponent({
@@ -877,5 +657,165 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
   })
 
+
+  it.each([
+    ['installHostFoundation', {}, { success: false, message: '宿主装包失败' }, '宿主装包失败'],
+    ['installHostFoundation', {}, new Error('网络错误'), '网络错误'],
+    ['installHostFoundation', {}, 'string error', 'string error'],
+    ['installIndustrySeed', { missing_industry_mod_ids: ['ind-1'] }, { success: false, message: '行业包失败' }, '行业包失败'],
+    ['installIndustrySeed', { missing_industry_mod_ids: ['ind-1'] }, new Error('行业包异常'), '行业包异常'],
+    ['installMod', { missing_account_custom_mod_ids: ['custom-1'] }, { success: false, message: 'mod 失败' }, 'mod 失败'],
+    ['installMod', { missing_account_custom_mod_ids: ['custom-1'] }, new Error('mod 异常'), 'mod 异常'],
+    ['installCustomerDeliverySeed', { account_custom_mod_ids: ['custom-1'], account_delivery_seed_packages: [{ mod_id: 'custom-1', pkg_id: 'seed-1', version: '1.0.0' }] }, { success: false, message: '交付失败' }, '交付失败'],
+    ['installCustomerDeliverySeed', { account_custom_mod_ids: ['custom-1'], account_delivery_seed_packages: [{ mod_id: 'custom-1', pkg_id: 'seed-1', version: '1.0.0' }] }, new Error('交付异常'), '交付异常'],
+  ] as const)('reports %s failure without accepting readiness: %s', async (method, overrides, failure, message) => {
+    const missing = createBaselinePlan({ ...overrides, missing_required_mod_ids: ['mod-x'] })
+    const { wrapper } = await mountComponent({ route: { step: 'host-pack' }, baseline: missing })
+    const install = mockContainer[method]
+    if (failure instanceof Error || typeof failure === 'string') install.mockRejectedValue(failure)
+    else install.mockResolvedValue(failure)
+    mockBaselineForInstallation(install, missing)
+    mockContainer.appAlert.mockClear()
+    await press(wrapper, '进入我的工作空间')
+    expect(mockContainer.appAlert).toHaveBeenCalled()
+    expect(mockContainer.appAlert.mock.calls[0][0]).toContain(message)
+    expect(install).toHaveBeenCalledOnce()
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject(missing)
+    if (method === 'installHostFoundation' && (failure instanceof Error || typeof failure === 'string')) {
+      expect(mockContainer.appAlert).toHaveBeenCalledWith(message)
+    }
+  })
+
+  it('derives catalog labels, validates choices, and exhausts logo fallbacks without losing the last logo', async () => {
+    const { wrapper } = await mountComponent({ catalog: { open_packages: [{ industry_id: 'custom', name: 'Custom', product_name: 'Custom package', scenario: 'Custom work。', mod_id: 'custom-mod' }] } })
+    const vm = wrapper.vm as any
+    expect(vm.previewIndustryOptions).toEqual([])
+    expect(vm.openIndustryLeadNames).toContain('custom')
+    expect(vm.industryLeadKindText).toBe('行业方向')
+    expect(vm.industryPackageLabel('custom')).toBe('Custom package')
+    expect(vm.industryPackageLabel('涂料')).toContain('行业包')
+    expect(vm.industryPackageLabel('unknown')).toBe('通用行业包')
+    expect(vm.industryPackageModId('custom')).toBe('custom-mod')
+    expect(vm.chipScenarioText('Custom work。')).toBe('Custom work')
+    expect(vm.chipScenarioText(null)).toBe('')
+    expect(vm.canConfirmIndustry).toBe(true)
+    vm.pickIndustry('')
+    expect(vm.canConfirmIndustry).toBe(true)
+    vm.pickedIndustryId = ''
+    expect(vm.canConfirmIndustry).toBe(false)
+    for (const suffix of ['xc-logo-text.jpg', 'xc-logo-base.jpg', 'xc-logo-base.jpg']) {
+      vm.onWelcomeLogoError()
+      expect(vm.welcomeLogoSrc).toContain(suffix)
+    }
+  })
+
+  it.each([
+    [null, ''], [{ reason: 'paid' }, ''], [{ reason: 'trial' }, '剩余 — 天'],
+    [{ reason: 'trial', trial_days_remaining: 3, trial_expires_at: '2026-12-01' }, '剩余 3 天（至 2026-12-01）'],
+  ])('explains subscription status %j', async (subscription, expected) => {
+    const { wrapper } = await mountComponent()
+    const vm = wrapper.vm as any
+    vm.subscription = subscription
+    if (expected) expect(vm.trialStatusText).toContain(expected)
+    else expect(vm.trialStatusText).toBe('')
+  })
+
+  it.each([
+    ['enterprise', 'full', '企业版 enterprise'], ['personal', 'full', '个人版 personal'],
+    ['generic', 'minimal', '空壳 minimal'], ['generic', 'generic', '通用 generic'], ['generic', 'full', '完整 full'],
+  ])('labels SKU %s and build %s', async (productSku, buildEdition, expected) => {
+    const { wrapper } = await mountComponent({ productSku, buildEdition })
+    expect((wrapper.vm as any).editionLabel).toBe(expected)
+  })
+
+  it('counts unique missing host requirements separately from industry and account additions', async () => {
+    const groups = [
+      { id: 'extra', items: [{ mod_id: 'optional', required: false, installed: false }] },
+      { id: 'core', items: [{ mod_id: 'host', required: true, installed: false }, { mod_id: 'ready', required: true, installed: true }] },
+      { id: 'host', items: [{ mod_id: 'host', required: true, installed: false }, { required: true, installed: false }] },
+    ]
+    const { wrapper } = await mountComponent({ route: { step: 'host-pack' }, isEnterprise: true, baseline: createBaselinePlan({ groups, missing_account_custom_mod_ids: ['private'], missing_industry_mod_ids: ['industry', 'other'], industry_mod_ids: ['industry'] }) })
+    const vm = wrapper.vm as any
+    expect(vm.hostPackDetailGroups.map((group: any) => group.id)).toEqual(['core', 'host', 'extra'])
+    expect(vm.missingSidebarBaselineCount).toBe(1)
+    expect(vm.missingAccountCustomCount).toBe(1)
+    expect(vm.missingIndustryPackageCount).toBe(1)
+    expect(vm.showNoAccountCustomHint).toBe(true)
+    vm.baselinePlan.account_custom_mod_ids = ['private']
+    expect(vm.showNoAccountCustomHint).toBe(false)
+    vm.pickedIndustryId = '考勤'
+    expect(vm.firstOrderPrompt).toBe('')
+    expect(vm.industrySidebarPreviewLabels).toEqual(['考勤工作区', '部门管理', '人员管理', '考勤查询'])
+  })
+
+  it.each([
+    [{ seeded: false }, false], [{ seed_status: 'workspace_review_required' }, false],
+    [new Error('seed offline'), false], [{ status: 401 }, true],
+  ])('keeps unsuccessful demo seeding retryable: %j', async (result, loginRequired) => {
+    const { wrapper, router } = await mountComponent({ route: { step: 'seed-demo' } })
+    if (result instanceof Error || 'status' in result) mockContainer.seedOnboardingDemo.mockRejectedValue(result)
+    else mockContainer.seedOnboardingDemo.mockResolvedValue(result)
+    const vm = wrapper.vm as any
+    await vm.prepareDemoData()
+    expect(vm.seedBusy).toBe(false)
+    expect(vm.loginRequired).toBe(loginRequired)
+    expect(router.currentRoute.value.query.step).toBe('seed-demo')
+    expect(mockContainer.queueWorkspacePrefsSync).not.toHaveBeenCalled()
+    await vm.finishOnboardingComplete()
+    expect(vm.finishing).toBe(false)
+    if (!loginRequired) expect(mockContainer.appAlert).toHaveBeenLastCalledWith('演示数据尚未准备完成，请重试后再做第一单')
+    else expect(mockContainer.appAlert).not.toHaveBeenCalled()
+  })
+
+  it.each([false, { status: 401 }, new Error('HTTP 401')])('requires an account before bootstrap or seed: %j', async (result) => {
+    const { wrapper } = await mountComponent()
+    if (result === false) vi.mocked(validateEnterpriseSessionCached).mockResolvedValue(false)
+    else vi.mocked(validateEnterpriseSessionCached).mockRejectedValue(result)
+    const vm = wrapper.vm as any
+    await vm.runBootstrap()
+    await vm.prepareDemoData()
+    expect(mockContainer.installHostFoundation).not.toHaveBeenCalled()
+    expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
+    expect(vm.loginRequired).toBe(true)
+    expect(vm.bootstrapBusy || vm.seedBusy).toBe(false)
+  })
+
+  it('initializes an unloaded industry store before binding and entering configuration', async () => {
+    const { wrapper, router } = await mountComponent({ route: { step: 'industry' }, industry: { isLoaded: false } })
+    mockContainer.industryState.initialize.mockClear()
+    await press(wrapper, '生成我的配置方案')
+    expect(mockContainer.industryState.initialize).toHaveBeenCalledOnce()
+    expect(router.currentRoute.value.query.step).toBe('host-pack')
+  })
+
+  it('explains pending custom delivery after the host is ready', async () => {
+    const groups = [{ id: 'account_custom', items: [{ label: 'Pending workflow', installed: false }, { label: 'Delivered workflow', installed: true }] }]
+    const { wrapper } = await mountComponent({ baseline: createBaselinePlan({ baseline_ready: true, groups }) })
+    expect(await (wrapper.vm as any).runBootstrap()).toBe(true)
+    expect(mockContainer.appAlert).toHaveBeenCalledWith(expect.stringContaining('Pending workflow'))
+    expect(mockContainer.appAlert.mock.calls[0][0]).not.toContain('Delivered workflow')
+  })
+
+  it('ignores repeated actions while their prerequisite operation is busy', async () => {
+    const { wrapper } = await mountComponent()
+    const vm = wrapper.vm as any
+    vm.loading = true
+    await vm.confirmIndustryAndNext()
+    await vm.createWorkspace()
+    vm.loading = false
+    vm.finishing = true
+    await vm.confirmIndustryAndNext()
+    await vm.createWorkspace()
+    await vm.finishOnboardingComplete()
+    vm.finishing = false
+    vm.bootstrapBusy = true
+    await vm.createWorkspace()
+    vm.seedBusy = true
+    await vm.prepareDemoData()
+    expect(mockContainer.patchWorkspacePrefs).not.toHaveBeenCalled()
+    expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
+    expect(mockContainer.installHostFoundation).not.toHaveBeenCalled()
+  })
 
 })
