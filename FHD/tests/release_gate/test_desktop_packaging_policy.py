@@ -49,7 +49,8 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     assert "personal   = 'minimal'" in ps_sync
     assert "enterprise = 'full'" in ps_sync
 
-    for script in (sh_windows, sh_thin):
+    assert "build-installer.ps1" in sh_windows and "-ProductSku" in sh_windows
+    for script in (sh_thin,):
         assert (
             "VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full"
         ) in script
@@ -105,9 +106,8 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     assert "return 17500" in desktop_runtime
     assert "process.platform === 'darwin' ? 17500 : 5000" not in desktop_runtime
     assert '"return 17500"' in ps_installer
-    assert '"return 17500"' in sh_installer
+    assert "build-installer.ps1" in sh_installer
     assert '"backendHealthMs"' in ps_installer
-    assert '"backendHealthMs"' in sh_installer
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in smoke
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in acceptance
     assert "isDesktopShell" in router
@@ -123,6 +123,8 @@ def test_windows_release_requires_sslcom_signing_and_system_authenticode() -> No
         encoding="utf-8"
     )
     build = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(encoding="utf-8")
+    assert "SkipUiInstaller" not in build
+    assert "XcagiInstaller.csproj" in build
     signer = (REPO_ROOT / "desktop" / "build" / "windows-sign.cjs").read_text(encoding="utf-8")
     post_gate = (REPO_ROOT / "scripts" / "package" / "pre-release-security.ps1").read_text(
         encoding="utf-8"
@@ -264,7 +266,7 @@ def test_windows_builders_pass_four_part_product_version_metadata() -> None:
 
     assert '"--config.buildVersion=$Version"' in ps_installer
     assert '"--config.extraMetadata.shortVersionWindows=$Version"' in ps_installer
-    for sh_name in ("build-windows-installer.sh", "build-windows-electron-only.sh"):
+    for sh_name in ("build-windows-electron-only.sh",):
         sh_installer = (scripts / sh_name).read_text(encoding="utf-8")
         assert '"--config.buildVersion=${VERSION}"' in sh_installer
         assert '"--config.extraMetadata.shortVersionWindows=${VERSION}"' in sh_installer
