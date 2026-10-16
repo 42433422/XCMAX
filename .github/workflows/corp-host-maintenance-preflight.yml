@@ -23,6 +23,10 @@ jobs:
             timeout --kill-after=5s 180s python3 - <<'PY'
             import datetime
             import json
+            import fcntl
+            import hashlib
+            import os
+            import shutil
             import re
             import stat
             import subprocess
@@ -69,6 +73,81 @@ jobs:
                     errors.append(str(path))
                     emit(str(path), "unreadable_or_invalid")
 
+            def verify_latest_backup():
+                names = ("fhd_pg.dump", "modstore_pg.dump", "payment_pg.dump",
+                         "modstore_sqlite.db.gz", "configs.tar.gz")
+                root = Path("/var/backups/xcmax/daily")
+                status = {"status": "unknown", "reason": "not_checked"}
+                try:
+                    # Share the writer's existing lock without creating or truncating it.
+                    with open(Path("/tmp/xcmax-backup.lock"), "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW)) as lock:
+                        if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
+                            raise ValueError("unsafe_lock")
+                        fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                        if root.resolve() != root:
+                            raise ValueError("unsafe_backup_root")
+                        directories = sorted((p for p in root.iterdir() if re.fullmatch(r"\d{8}", p.name)
+                                              and not p.is_symlink() and p.is_dir()), reverse=True)
+                        completed = [p for p in directories if (p / "MANIFEST.txt").exists()]
+                        if not completed:
+                            raise ValueError("no_completed_snapshot")
+                        directory = completed[0]
+                        status["snapshot"] = directory.name
+                        paths = [directory / name for name in ("MANIFEST.txt",) + names]
+                        before = {}
+                        for path in paths:
+                            info = path.lstat()
+                            if not stat.S_ISREG(info.st_mode) or info.st_size == 0:
+                                raise ValueError("unsafe_or_empty_backup_file")
+                            before[path.name] = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+                        manifest = paths[0]
+                        age = datetime.datetime.now(datetime.timezone.utc).timestamp() - manifest.stat().st_mtime
+                        if not -300 <= age <= 26 * 3600 or manifest.stat().st_size > 16384:
+                            raise ValueError("stale_or_invalid_manifest")
+                        expected = {}
+                        for line in manifest.read_text().splitlines():
+                            match = re.fullmatch(r"([0-9a-f]{64}) [ *](?:\./)?([a-z_]+\.(?:dump|db\.gz|tar\.gz))", line)
+                            if not match or match[2] not in names or match[2] in expected:
+                                raise ValueError("invalid_manifest_entries")
+                            expected[match[2]] = match[1]
+                        if set(expected) != set(names):
+                            raise ValueError("incomplete_manifest")
+                        for name in names:
+                            digest = hashlib.sha256()
+                            with open(directory / name, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW)) as stream:
+                                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                                    digest.update(chunk)
+                            if digest.hexdigest() != expected[name]:
+                                raise ValueError("checksum_mismatch")
+                        commands = [("pg_restore", "--list", name) for name in names[:3]]
+                        commands += [("gzip", "-t", names[3]), ("tar", "-tzf", names[4])]
+                        for tool, option, name in commands:
+                            binary = shutil.which(tool, path="/usr/pgsql-16/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+                            if not binary:
+                                raise ValueError("missing_validation_tool")
+                            result = subprocess.run([binary, option, str(directory / name)],
+                                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                                    timeout=15, env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+                            if result.returncode:
+                                raise ValueError("validator_failed_or_incompatible")
+                        for path in paths:
+                            info = path.lstat()
+                            after = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+                            if not stat.S_ISREG(info.st_mode) or after != before[path.name]:
+                                raise ValueError("snapshot_changed_during_check")
+                        status.update(status="verified", reason="hashes_and_archive_readability_only")
+                except BlockingIOError:
+                    status["reason"] = "backup_writer_busy"
+                except FileNotFoundError:
+                    status["reason"] = "required_file_or_lock_missing"
+                except (OSError, UnicodeError, subprocess.TimeoutExpired):
+                    status["reason"] = "read_or_validation_error"
+                except ValueError as exc:
+                    status["reason"] = str(exc)
+                if status["status"] != "verified":
+                    errors.append("backup_integrity")
+                emit("backup_integrity", status)
+
             emit("snapshot_started", datetime.datetime.now(datetime.timezone.utc).isoformat())
             command("running_kernel", ["uname", "-r"])
             command("installed_kernels", ["rpm", "-q", "kernel", "kernel-core", "--qf", "%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n"])
@@ -99,6 +178,7 @@ jobs:
             fixed_value(Path("/etc/xcmax-dr-auto-failover.env"), r"^OPS_DR_AUTO_FAILOVER_ENABLED=([01])\s*$")
             for unit in ("fhd-full", "modstore", "postgresql", "nginx", "xcmax-dr-failover-guard.timer"):
                 command("unit_" + unit, ["systemctl", "show", unit, "--property=LoadState,ActiveState,SubState"])
+            verify_latest_backup()
             emit("limits", "Metadata only; file presence is not integrity or restore proof. Remote DR state, cloud snapshots and rescue console remain unverified. This is not maintenance clearance.")
             emit("failed_checks", errors)
             raise SystemExit(bool(errors))
