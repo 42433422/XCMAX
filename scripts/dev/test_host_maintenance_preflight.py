@@ -2,17 +2,17 @@
 import contextlib
 import io
 import json
+import runpy
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
 
-WORKFLOW = Path(__file__).resolve().parents[2] / '.github/workflows/fhd-host-maintenance-preflight.yml'
+WORKFLOW = Path(__file__).resolve().parents[2] / '.github/workflows/corp-host-maintenance-preflight.yml'
 TEXT = WORKFLOW.read_text()
 SHELL = '\n'.join(line[12:] for line in TEXT.split('          script: |\n', 1)[1].splitlines()) + '\n'
 PROBE = SHELL.split("python3 - <<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
-
 
 class PreflightTest(unittest.TestCase):
     def run_probe(self, setup=None, fail=None):
@@ -35,7 +35,8 @@ class PreflightTest(unittest.TestCase):
             stream = io.StringIO()
             with patch('pathlib.Path', mapped), patch('subprocess.run', command), contextlib.redirect_stdout(stream):
                 with self.assertRaises(SystemExit) as result:
-                    exec(compile(PROBE, str(WORKFLOW), 'exec'), {})
+                    (root / 'probe.py').write_text(PROBE)
+                    runpy.run_path(str(root / 'probe.py'))
             return result.exception.code, [json.loads(line) for line in stream.getvalue().splitlines()], calls
 
     def test_missing_is_unknown_not_clearance(self):
@@ -102,7 +103,6 @@ class PreflightTest(unittest.TestCase):
         self.assertNotIn('inputs.', TEXT)
         self.assertNotIn('StrictHostKeyChecking', TEXT)
         self.assertNotIn('source ', SHELL)
-
 
 if __name__ == '__main__':
     unittest.main()
