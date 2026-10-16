@@ -1,0 +1,105 @@
+name: FHD host maintenance preflight (read only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fhd-host-maintenance-preflight
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Collect fixed production metadata without maintenance actions
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.FHD_PUSH_HOST }}
+          username: root
+          key: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            set -eu
+            timeout --kill-after=5s 180s python3 - <<'PY'
+            import datetime
+            import json
+            import re
+            import stat
+            import subprocess
+            from pathlib import Path
+
+            errors = []
+            def emit(label, value):
+                print(json.dumps({"check": label, "value": value}, ensure_ascii=True), flush=True)
+
+            def command(label, args, accepted=(0,)):
+                try:
+                    result = subprocess.run(args, capture_output=True, text=True, timeout=15,
+                                            env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+                    if result.returncode not in accepted:
+                        raise ValueError("command_failed")
+                    emit(label, result.stdout.strip())
+                except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+                    errors.append(label)
+                    emit(label, {"error": type(exc).__name__})
+
+            def metadata(path):
+                try:
+                    item = path.lstat()
+                    if not stat.S_ISREG(item.st_mode):
+                        return {"status": "not_regular_file"}
+                    return {"bytes": item.st_size, "mtime_utc": datetime.datetime.fromtimestamp(
+                        item.st_mtime, datetime.timezone.utc).isoformat()}
+                except FileNotFoundError:
+                    return {"status": "missing"}
+                except OSError:
+                    errors.append(str(path))
+                    return {"status": "unreadable"}
+
+            def fixed_value(path, pattern):
+                try:
+                    if path.is_symlink() or not stat.S_ISREG(path.stat().st_mode) or path.stat().st_size > 16384:
+                        raise ValueError("unsafe_metadata")
+                    value = path.read_text()
+                    match = re.search(pattern, value, re.MULTILINE)
+                    emit(str(path), match.group(1) if match else "unknown_format")
+                except FileNotFoundError:
+                    emit(str(path), "missing")
+                except (OSError, UnicodeError, ValueError):
+                    errors.append(str(path))
+                    emit(str(path), "unreadable_or_invalid")
+
+            emit("snapshot_started", datetime.datetime.now(datetime.timezone.utc).isoformat())
+            command("running_kernel", ["uname", "-r"])
+            command("installed_kernels", ["rpm", "-q", "kernel", "kernel-core", "--qf", "%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n"])
+            command("default_kernel", ["grubby", "--default-kernel"])
+            command("disk_bytes", ["df", "-B1", "--output=target,size,used,avail,pcent", "/", "/boot"])
+            command("disk_inodes", ["df", "--output=target,itotal,iused,iavail,ipcent", "/", "/boot"])
+            for root in (Path("/var/backups/xcmax/daily"), Path("/var/backups/fhd")):
+                try:
+                    if root.is_symlink():
+                        raise ValueError("symlink_backup_root")
+                    dates = sorted((p for p in root.iterdir() if re.fullmatch(r"\d{8}(?:-\d{6})?", p.name)
+                                    and not p.is_symlink() and p.is_dir()), reverse=True)[:3]
+                    emit(str(root), {"recent_directories": [p.name for p in dates]})
+                    for directory in dates:
+                        for name in ("MANIFEST.txt", "manifest.json", "fhd_pg.dump", "modstore_pg.dump",
+                                     "payment_pg.dump", "modstore_sqlite.db.gz", "fhd_sqlite.db.gz",
+                                     "xcagi.dump", "configs.tar.gz", "config.tar.gz"):
+                            emit(str(directory / name), metadata(directory / name))
+                except FileNotFoundError:
+                    emit(str(root), "missing")
+                except (OSError, ValueError):
+                    errors.append(str(root))
+                    emit(str(root), "unreadable_or_unsafe")
+            for name in ("backup_last_success", "offsite_ssh_last_success"):
+                fixed_value(Path("/var/lib/xcmax-ops/state") / name, r"\A([0-9]{1,12})\s*\Z")
+            fixed_value(Path("/etc/xcmax-dr-runtime-role.env"),
+                        r"^XCMAX_DR_SAVED_RUNTIME_MODE=(standby|active-peer|primary)\s*$")
+            fixed_value(Path("/etc/xcmax-dr-auto-failover.env"), r"^OPS_DR_AUTO_FAILOVER_ENABLED=([01])\s*$")
+            for unit in ("fhd-full", "modstore", "postgresql", "nginx", "xcmax-dr-failover-guard.timer"):
+                command("unit_" + unit, ["systemctl", "show", unit, "--property=LoadState,ActiveState,SubState"])
+            emit("limits", "Metadata only; file presence is not integrity or restore proof. Remote DR state, cloud snapshots and rescue console remain unverified. This is not maintenance clearance.")
+            emit("failed_checks", errors)
+            raise SystemExit(bool(errors))
+            PY
