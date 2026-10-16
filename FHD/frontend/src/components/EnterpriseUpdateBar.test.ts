@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { enableAutoUnmount, mount, flushPromises } from '@vue/test-utils'
 
 const mocks = vi.hoisted(() => ({
   checkEnterpriseUpdates: vi.fn(),
@@ -31,6 +31,8 @@ vi.mock('@/components/Modal.vue', () => ({
 
 import EnterpriseUpdateBar from './EnterpriseUpdateBar.vue'
 
+enableAutoUnmount(afterEach)
+const updateAvailable = () => ({ data: { flags: { needs_update: true }, update_hub: { sha256: 'newsha', version: '1.0', git_sha: '' }, enterprise: { deployed_sha256: 'old' } } })
 const checkEnterpriseUpdates = mocks.checkEnterpriseUpdates
 const getEnterpriseJob = mocks.getEnterpriseJob
 const applyEnterpriseUpdate = mocks.applyEnterpriseUpdate
@@ -110,13 +112,7 @@ describe('EnterpriseUpdateBar', () => {
   })
 
   it('dismisses bar when dismiss button is clicked', async () => {
-    checkEnterpriseUpdates.mockResolvedValue({
-      data: {
-        flags: { needs_update: true },
-        update_hub: { sha256: 'newsha', version: '1.0', git_sha: '' },
-        enterprise: { deployed_sha256: 'old' },
-      },
-    })
+    checkEnterpriseUpdates.mockResolvedValue(updateAvailable())
     const wrapper = mountBar()
     await flushPromises()
     await wrapper.find('.enterprise-update-bar__dismiss').trigger('click')
@@ -125,13 +121,7 @@ describe('EnterpriseUpdateBar', () => {
   })
 
   it('opens modal when check and update button is clicked', async () => {
-    checkEnterpriseUpdates.mockResolvedValue({
-      data: {
-        flags: { needs_update: true },
-        update_hub: { sha256: 'newsha', version: '1.0', git_sha: '' },
-        enterprise: { deployed_sha256: 'old' },
-      },
-    })
+    checkEnterpriseUpdates.mockResolvedValue(updateAvailable())
     const wrapper = mountBar()
     await flushPromises()
     expect(wrapper.find('.modal-stub').exists()).toBe(false)
@@ -156,13 +146,7 @@ describe('EnterpriseUpdateBar', () => {
   })
 
   it('applies update when runApply is triggered', async () => {
-    checkEnterpriseUpdates.mockResolvedValue({
-      data: {
-        flags: { needs_update: true },
-        update_hub: { sha256: 'newsha', version: '1.0', git_sha: '' },
-        enterprise: { deployed_sha256: 'old' },
-      },
-    })
+    checkEnterpriseUpdates.mockResolvedValue(updateAvailable())
     applyEnterpriseUpdate.mockResolvedValue({
       data: { job_id: 'job1', steps: [{ id: 's1', label: '拉取', status: 'running' }] },
     })
@@ -180,13 +164,7 @@ describe('EnterpriseUpdateBar', () => {
 
   it('shows job steps when polling returns them', async () => {
     vi.useFakeTimers()
-    checkEnterpriseUpdates.mockResolvedValue({
-      data: {
-        flags: { needs_update: true },
-        update_hub: { sha256: 'newsha', version: '1.0', git_sha: '' },
-        enterprise: { deployed_sha256: 'old' },
-      },
-    })
+    checkEnterpriseUpdates.mockResolvedValue(updateAvailable())
     applyEnterpriseUpdate.mockResolvedValue({
       data: { job_id: 'job1', steps: [{ id: 's1', label: '拉取制品', status: 'running' }] },
     })
@@ -212,13 +190,7 @@ describe('EnterpriseUpdateBar', () => {
   })
 
   it('shows error when applyEnterpriseUpdate throws', async () => {
-    checkEnterpriseUpdates.mockResolvedValue({
-      data: {
-        flags: { needs_update: true },
-        update_hub: { sha256: 'newsha', version: '1.0', git_sha: '' },
-        enterprise: { deployed_sha256: 'old' },
-      },
-    })
+    checkEnterpriseUpdates.mockResolvedValue(updateAvailable())
     applyEnterpriseUpdate.mockRejectedValue(new Error('apply failed'))
     const wrapper = mountBar()
     await flushPromises()
@@ -230,13 +202,7 @@ describe('EnterpriseUpdateBar', () => {
   })
 
   it('shows error when applyEnterpriseUpdate returns no job_id', async () => {
-    checkEnterpriseUpdates.mockResolvedValue({
-      data: {
-        flags: { needs_update: true },
-        update_hub: { sha256: 'newsha', version: '1.0', git_sha: '' },
-        enterprise: { deployed_sha256: 'old' },
-      },
-    })
+    checkEnterpriseUpdates.mockResolvedValue(updateAvailable())
     applyEnterpriseUpdate.mockResolvedValue({ data: {}, message: '未收到任务' })
     const wrapper = mountBar()
     await flushPromises()
@@ -248,13 +214,7 @@ describe('EnterpriseUpdateBar', () => {
   })
 
   it('shows "更新中…" text when applying', async () => {
-    checkEnterpriseUpdates.mockResolvedValue({
-      data: {
-        flags: { needs_update: true },
-        update_hub: { sha256: 'newsha', version: '1.0', git_sha: '' },
-        enterprise: { deployed_sha256: 'old' },
-      },
-    })
+    checkEnterpriseUpdates.mockResolvedValue(updateAvailable())
     let resolveApply: (v: unknown) => void
     applyEnterpriseUpdate.mockReturnValue(
       new Promise((resolve) => {
@@ -299,4 +259,29 @@ describe('EnterpriseUpdateBar', () => {
     await flushPromises()
     expect(wrapper.find('.enterprise-update-bar').exists()).toBe(true)
   })
+})
+
+
+it.each(['done', 'error', 'network', 'empty'])('polls an accepted update through %s and stops safely on terminal results', async status => {
+  vi.useFakeTimers(); vi.clearAllMocks(); sessionStorage.clear(); isAdminConsoleSpa.mockReturnValue(false)
+  checkEnterpriseUpdates.mockResolvedValue(updateAvailable())
+  applyEnterpriseUpdate.mockResolvedValue({ data: { job_id: 'job-terminal' } })
+  const wrapper = mount(EnterpriseUpdateBar); await flushPromises()
+  await wrapper.get('.enterprise-update-bar .btn-primary').trigger('click')
+  getEnterpriseJob.mockResolvedValue(status === 'empty' ? {} : { data: { status } })
+  if (status === 'network') getEnterpriseJob.mockRejectedValue('连接已断开')
+  await wrapper.findAll('.modal-stub button').at(-1)!.trigger('click'); await flushPromises()
+  expect(wrapper.get('.enterprise-update-bar .btn-primary').attributes('disabled')).toBeDefined()
+  if (status === 'done') checkEnterpriseUpdates.mockResolvedValue({ data: { ...updateAvailable().data, flags: { needs_update: false } } })
+  await vi.advanceTimersByTimeAsync(1200)
+  expect(getEnterpriseJob).toHaveBeenCalledWith('job-terminal')
+  if (status === 'error' || status === 'network') expect(wrapper.get('.enterprise-update-error').text()).toBe(status === 'error' ? '更新失败' : '连接已断开')
+  if (status === 'done') expect(wrapper.find('.enterprise-update-bar').exists()).toBe(false)
+  if (status !== 'empty') {
+    expect(wrapper.findAll('.modal-stub button').every(button => button.attributes('disabled') === undefined)).toBe(true)
+    await vi.advanceTimersByTimeAsync(3600); expect(getEnterpriseJob).toHaveBeenCalledOnce()
+  }
+  wrapper.unmount(); const calls = getEnterpriseJob.mock.calls.length
+  await vi.advanceTimersByTimeAsync(3600); expect(getEnterpriseJob).toHaveBeenCalledTimes(calls)
+  vi.useRealTimers()
 })

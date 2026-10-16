@@ -1,380 +1,158 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { swManager, initServiceWorker, unregisterStaleServiceWorkers } from './serviceWorker'
 
-// 辅助：设置 navigator.serviceWorker
-function setupServiceWorkerSupport(controller?: object) {
-  const mockRegistration = {
-    addEventListener: vi.fn(),
-    update: vi.fn().mockResolvedValue(undefined),
-    unregister: vi.fn().mockResolvedValue(true),
-  }
-  Object.defineProperty(navigator, 'serviceWorker', {
-    configurable: true,
-    value: {
-      register: vi.fn().mockResolvedValue(mockRegistration),
-      getRegistrations: vi.fn().mockResolvedValue([mockRegistration]),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      controller: controller || { postMessage: vi.fn() },
-    },
+let api: typeof import('./serviceWorker')
+let sw: EventTarget & { controller: { postMessage: ReturnType<typeof vi.fn> } | null; register: ReturnType<typeof vi.fn>; getRegistrations: ReturnType<typeof vi.fn> }
+let worker: EventTarget & { state: string }
+let registration: EventTarget & { installing: typeof worker | null; update: ReturnType<typeof vi.fn>; unregister: ReturnType<typeof vi.fn> }
+let channel: { port1: { onmessage: ((event: { data: object }) => void) | null }; port2: object }
+const reload = vi.fn()
+const originalLocation = Object.getOwnPropertyDescriptor(window, 'location')!
+const originalSw = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker')
+
+beforeEach(async () => {
+  vi.resetModules()
+  vi.useFakeTimers()
+  vi.stubEnv('DEV', false)
+  vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '0')
+  Object.defineProperty(window, 'location', { configurable: true, value: { hostname: 'app.example.com', reload } })
+  worker = Object.assign(new EventTarget(), { state: 'installing' })
+  registration = Object.assign(new EventTarget(), { installing: worker, update: vi.fn().mockResolvedValue(undefined), unregister: vi.fn().mockResolvedValue(true) })
+  sw = Object.assign(new EventTarget(), { controller: { postMessage: vi.fn() }, register: vi.fn().mockResolvedValue(registration), getRegistrations: vi.fn().mockResolvedValue([registration]) })
+  Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: sw })
+  vi.stubGlobal('MessageChannel', class {
+    port1 = { onmessage: null }
+    port2 = {}
+    constructor() { channel = { port1: this.port1, port2: this.port2 } }
   })
-  return { mockRegistration }
-}
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  vi.spyOn(console, 'log').mockImplementation(() => {})
+  api = await import('./serviceWorker')
+})
+afterEach(() => {
+  api.swManager.destroy()
+  vi.clearAllTimers()
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
+  Object.defineProperty(window, 'location', originalLocation)
+  if (originalSw) Object.defineProperty(navigator, 'serviceWorker', originalSw)
+  else Reflect.deleteProperty(navigator, 'serviceWorker')
+})
 
-describe('serviceWorker coverage', () => {
-  afterEach(() => {
-    swManager.destroy()
-    vi.restoreAllMocks()
-    vi.unstubAllEnvs()
+describe('service worker public lifecycle', () => {
+  it('registers, publishes immutable status, observes installation and checks hourly until destroyed', async () => {
+    const listener = vi.fn()
+    const off = api.swManager.onChange(listener)
+    expect(typeof off).toBe('function')
+    expect(await api.swManager.checkForUpdate()).toBe(false)
+    const status = await api.initServiceWorker()
+    expect(status).toMatchObject({ registered: true, supported: true, controller: true })
+    expect(status.lastUpdate).toBe(Date.now())
+    expect(sw.register).toHaveBeenCalledWith('/sw.js', { scope: '/', updateViaCache: 'all' })
+    status.registered = false
+    expect(api.swManager.status.registered).toBe(true)
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ registered: true }))
+    sw.dispatchEvent(new Event('controllerchange'))
+    expect(api.swManager.status.controller).toBe(true)
+    registration.dispatchEvent(new Event('updatefound'))
+    listener.mockClear()
+    worker.dispatchEvent(new Event('statechange'))
+    expect(listener).not.toHaveBeenCalled()
+    worker.state = 'installed'
+    worker.dispatchEvent(new Event('statechange'))
+    expect(listener).toHaveBeenCalledOnce()
+    sw.controller = null
+    worker.dispatchEvent(new Event('statechange'))
+    expect(listener).toHaveBeenCalledOnce()
+    registration.installing = null
+    registration.dispatchEvent(new Event('updatefound'))
+    await vi.advanceTimersByTimeAsync(3_600_000)
+    expect(registration.update).toHaveBeenCalledOnce()
+    expect(await api.swManager.checkForUpdate()).toBe(true)
+    registration.update.mockRejectedValue(new Error('update fail'))
+    expect(await api.swManager.checkForUpdate()).toBe(false)
+    expect(console.warn).toHaveBeenCalledWith('[SW Manager] Update check failed:', expect.any(Error))
+    api.swManager.destroy()
+    await vi.advanceTimersByTimeAsync(3_600_000)
+    expect(registration.update).toHaveBeenCalledTimes(3)
+    listener.mockClear()
+    window.dispatchEvent(new Event('offline'))
+    expect(listener).not.toHaveBeenCalled()
   })
-
-  describe('unregisterStaleServiceWorkers', () => {
-    it('支持时注销所有注册', async () => {
-      const { mockRegistration } = setupServiceWorkerSupport()
-      await unregisterStaleServiceWorkers()
-      expect(mockRegistration.unregister).toHaveBeenCalled()
-    })
-
-    it('getRegistrations 抛错时捕获并 warn', async () => {
-      setupServiceWorkerSupport()
-      vi.spyOn(navigator.serviceWorker, 'getRegistrations').mockRejectedValue(new Error('fail'))
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-      await unregisterStaleServiceWorkers()
-      expect(warnSpy).toHaveBeenCalled()
-    })
-
-    it('不支持时直接返回', async () => {
-      Object.defineProperty(navigator, 'serviceWorker', {
-        configurable: true,
-        value: undefined,
-      })
-      await expect(unregisterStaleServiceWorkers()).resolves.toBeUndefined()
-    })
+  it.each(['DEV', 'admin', 'localhost', '127.0.0.1'])('unregisters stale workers for %s without claiming control', async (mode) => {
+    if (mode === 'DEV') vi.stubEnv('DEV', true)
+    else if (mode === 'admin') vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
+    else window.location.hostname = mode
+    expect(await api.swManager.register()).toBe(false)
+    expect(sw.register).not.toHaveBeenCalled()
+    expect(registration.unregister).toHaveBeenCalledOnce()
   })
-
-  describe('ServiceWorkerManager 基础', () => {
-    it('status 返回副本（修改不影响内部状态）', () => {
-      const status1 = swManager.status
-      status1.registered = true
-      const status2 = swManager.status
-      expect(status2.registered).not.toBe(status1.registered)
-    })
-
-    it('onChange 返回取消订阅函数', () => {
-      const listener = vi.fn()
-      const off = swManager.onChange(listener)
-      expect(typeof off).toBe('function')
-      off()
-    })
-
-    it('isOffline 返回当前离线状态', () => {
-      ;(swManager as unknown as { _status: { offline: boolean } })._status.offline = true
-      expect(swManager.isOffline()).toBe(true)
-      ;(swManager as unknown as { _status: { offline: boolean } })._status.offline = false
-      expect(swManager.isOffline()).toBe(false)
-    })
-
-    it('checkForUpdate 无 registration 时返回 false', async () => {
-      ;(swManager as unknown as { _registration: unknown })._registration = null
-      expect(await swManager.checkForUpdate()).toBe(false)
-    })
-
-    it('clearCache 不支持时返回 false', async () => {
-      ;(swManager as unknown as { _status: { supported: boolean } })._status.supported = false
-      expect(await swManager.clearCache()).toBe(false)
-    })
-
-    it('getCacheStatus 不支持时返回 null', async () => {
-      ;(swManager as unknown as { _status: { supported: boolean } })._status.supported = false
-      expect(await swManager.getCacheStatus()).toBeNull()
-    })
-
-    it('activateUpdate 无 controller 时直接返回', async () => {
-      ;(swManager as unknown as { _status: { controller: boolean } })._status.controller = false
-      Object.defineProperty(navigator, 'serviceWorker', {
-        configurable: true,
-        value: { controller: undefined },
-      })
-      await expect(swManager.activateUpdate()).resolves.toBeUndefined()
-    })
+  it('reports registration and stale-unregister failures without rejecting', async () => {
+    sw.register.mockRejectedValue(new Error('registration failed'))
+    expect(await api.initServiceWorker()).toMatchObject({ supported: true, registered: false })
+    expect(console.error).toHaveBeenCalledWith('[SW Manager] Registration failed:', expect.any(Error))
+    expect(console.warn).toHaveBeenCalledWith('[SW Init] Service Worker initialization skipped or failed')
+    sw.getRegistrations.mockRejectedValue(new Error('permission denied'))
+    await expect(api.unregisterStaleServiceWorkers()).resolves.toBeUndefined()
+    expect(console.warn).toHaveBeenCalledWith('[SW Manager] Failed to unregister stale workers:', expect.any(Error))
   })
-
-  describe('ServiceWorkerManager - checkForUpdate 有 registration', () => {
-    it('update 成功时返回 true', async () => {
-      const updateSpy = vi.fn().mockResolvedValue(undefined)
-      ;(swManager as unknown as { _registration: unknown })._registration = { update: updateSpy }
-      const result = await swManager.checkForUpdate()
-      expect(result).toBe(true)
-      expect(updateSpy).toHaveBeenCalled()
-    })
-
-    it('update 抛错时返回 false 并 warn', async () => {
-      const updateSpy = vi.fn().mockRejectedValue(new Error('update fail'))
-      ;(swManager as unknown as { _registration: unknown })._registration = { update: updateSpy }
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-      const result = await swManager.checkForUpdate()
-      expect(result).toBe(false)
-      expect(warnSpy).toHaveBeenCalled()
-    })
+  it('handles unsupported browsers without trying registration or messaging', async () => {
+    api.swManager.destroy()
+    Reflect.deleteProperty(navigator, 'serviceWorker')
+    vi.resetModules()
+    api = await import('./serviceWorker')
+    expect(api.swManager.status.supported).toBe(false)
+    expect(await api.swManager.register()).toBe(false)
+    expect(await api.swManager.clearCache()).toBe(false)
+    expect(await api.swManager.getCacheStatus()).toBeNull()
+    await expect(api.swManager.activateUpdate()).resolves.toBeUndefined()
+    await expect(api.unregisterStaleServiceWorkers()).resolves.toBeUndefined()
   })
-
-  describe('ServiceWorkerManager - activateUpdate 有 controller', () => {
-    it('发送 SKIP_WAITING 并等待 controllerchange', async () => {
-      const postMessageSpy = vi.fn()
-      ;(swManager as unknown as { _status: { controller: boolean } })._status.controller = true
-      Object.defineProperty(navigator, 'serviceWorker', {
-        configurable: true,
-        value: {
-          controller: { postMessage: postMessageSpy },
-          addEventListener: vi.fn((event: string, cb: (ev: Event) => void) => {
-            if (event === 'controllerchange') {
-              setTimeout(() => cb(new Event('controllerchange')), 0)
-            }
-          }),
-        },
-      })
-      const reloadSpy = vi.fn()
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: { reload: reloadSpy },
-      })
-      await swManager.activateUpdate()
-      expect(postMessageSpy).toHaveBeenCalledWith({ type: 'SKIP_WAITING' })
-      expect(reloadSpy).toHaveBeenCalled()
-    })
+  it('publishes offline and online transitions, isolates faulty listeners and supports unsubscribe', () => {
+    const listener = vi.fn()
+    api.swManager.onChange(() => { throw new Error('listener error') })
+    const off = api.swManager.onChange(listener)
+    window.dispatchEvent(new Event('offline'))
+    expect(api.swManager.isOffline()).toBe(true)
+    expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({ offline: true }))
+    window.dispatchEvent(new Event('online'))
+    expect(api.swManager.isOffline()).toBe(false)
+    expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({ offline: false }))
+    expect(console.error).toHaveBeenCalledWith('[SW Manager] Listener error:', expect.any(Error))
+    off()
+    listener.mockClear()
+    window.dispatchEvent(new Event('offline'))
+    expect(listener).not.toHaveBeenCalled()
   })
-
-  describe('ServiceWorkerManager - clearCache 有 controller', () => {
-    beforeEach(() => {
-      ;(swManager as unknown as { _status: { supported: boolean; controller: boolean } })._status.supported = true
-      ;(swManager as unknown as { _status: { controller: boolean } })._status.controller = true
-    })
-
-    it('收到 CACHE_CLEARED 响应返回 true', async () => {
-      const postMessageSpy = vi.fn()
-      Object.defineProperty(navigator, 'serviceWorker', {
-        configurable: true,
-        value: { controller: { postMessage: postMessageSpy } },
-      })
-      const originalMessageChannel = globalThis.MessageChannel
-      let port1OnMessage: ((ev: MessageEvent) => void) | null = null
-      globalThis.MessageChannel = class {
-        port1 = {
-          set onmessage(cb: (ev: MessageEvent) => void) {
-            port1OnMessage = cb
-          },
-          get onmessage() {
-            return port1OnMessage as never
-          },
-        }
-        port2 = {}
-      } as never
-      const promise = swManager.clearCache()
-      setTimeout(() => {
-        if (port1OnMessage) {
-          port1OnMessage(new MessageEvent('message', { data: { type: 'CACHE_CLEARED' } }))
-        }
-      }, 0)
-      const result = await promise
-      expect(result).toBe(true)
-      expect(postMessageSpy).toHaveBeenCalledWith({ type: 'CLEAR_CACHE' }, expect.anything())
-      globalThis.MessageChannel = originalMessageChannel
-    })
-
-    it('收到非 CACHE_CLEARED 响应返回 false', async () => {
-      Object.defineProperty(navigator, 'serviceWorker', {
-        configurable: true,
-        value: { controller: { postMessage: vi.fn() } },
-      })
-      const originalMessageChannel = globalThis.MessageChannel
-      let port1OnMessage: ((ev: MessageEvent) => void) | null = null
-      globalThis.MessageChannel = class {
-        port1 = {
-          set onmessage(cb: (ev: MessageEvent) => void) {
-            port1OnMessage = cb
-          },
-          get onmessage() {
-            return port1OnMessage as never
-          },
-        }
-        port2 = {}
-      } as never
-      const promise = swManager.clearCache()
-      setTimeout(() => {
-        if (port1OnMessage) {
-          port1OnMessage(new MessageEvent('message', { data: { type: 'OTHER' } }))
-        }
-      }, 0)
-      const result = await promise
-      expect(result).toBe(false)
-      globalThis.MessageChannel = originalMessageChannel
-    })
-
-    it('5 秒超时返回 false', async () => {
-      vi.useFakeTimers()
-      Object.defineProperty(navigator, 'serviceWorker', {
-        configurable: true,
-        value: { controller: { postMessage: vi.fn() } },
-      })
-      const originalMessageChannel = globalThis.MessageChannel
-      globalThis.MessageChannel = class {
-        port1 = { onmessage: null as never }
-        port2 = {}
-      } as never
-      const promise = swManager.clearCache()
-      vi.advanceTimersByTime(5000)
-      const result = await promise
-      expect(result).toBe(false)
-      globalThis.MessageChannel = originalMessageChannel
-      vi.useRealTimers()
-    })
+  it('waits for controller replacement before reloading', async () => {
+    const pending = api.swManager.activateUpdate()
+    expect(sw.controller!.postMessage).toHaveBeenCalledWith({ type: 'SKIP_WAITING' })
+    expect(reload).not.toHaveBeenCalled()
+    sw.dispatchEvent(new Event('controllerchange'))
+    await pending
+    expect(reload).toHaveBeenCalledOnce()
+    reload.mockClear()
+    sw.controller = null
+    await api.swManager.activateUpdate()
+    expect(reload).not.toHaveBeenCalled()
   })
-
-  describe('ServiceWorkerManager - getCacheStatus 有 controller', () => {
-    beforeEach(() => {
-      ;(swManager as unknown as { _status: { supported: boolean; controller: boolean } })._status.supported = true
-      ;(swManager as unknown as { _status: { controller: boolean } })._status.controller = true
-    })
-
-    it('收到 STATUS 响应返回数据', async () => {
-      Object.defineProperty(navigator, 'serviceWorker', {
-        configurable: true,
-        value: { controller: { postMessage: vi.fn() } },
-      })
-      const originalMessageChannel = globalThis.MessageChannel
-      let port1OnMessage: ((ev: MessageEvent) => void) | null = null
-      globalThis.MessageChannel = class {
-        port1 = {
-          set onmessage(cb: (ev: MessageEvent) => void) {
-            port1OnMessage = cb
-          },
-          get onmessage() {
-            return port1OnMessage as never
-          },
-        }
-        port2 = {}
-      } as never
-      const promise = swManager.getCacheStatus()
-      setTimeout(() => {
-        if (port1OnMessage) {
-          port1OnMessage(new MessageEvent('message', { data: { type: 'STATUS', size: 100 } }))
-        }
-      }, 0)
-      const result = await promise
-      expect(result).toEqual({ type: 'STATUS', size: 100 })
-      globalThis.MessageChannel = originalMessageChannel
-    })
-
-    it('收到非 STATUS 响应返回 null', async () => {
-      Object.defineProperty(navigator, 'serviceWorker', {
-        configurable: true,
-        value: { controller: { postMessage: vi.fn() } },
-      })
-      const originalMessageChannel = globalThis.MessageChannel
-      let port1OnMessage: ((ev: MessageEvent) => void) | null = null
-      globalThis.MessageChannel = class {
-        port1 = {
-          set onmessage(cb: (ev: MessageEvent) => void) {
-            port1OnMessage = cb
-          },
-          get onmessage() {
-            return port1OnMessage as never
-          },
-        }
-        port2 = {}
-      } as never
-      const promise = swManager.getCacheStatus()
-      setTimeout(() => {
-        if (port1OnMessage) {
-          port1OnMessage(new MessageEvent('message', { data: { type: 'OTHER' } }))
-        }
-      }, 0)
-      const result = await promise
-      expect(result).toBeNull()
-      globalThis.MessageChannel = originalMessageChannel
-    })
-
-    it('3 秒超时返回 null', async () => {
-      vi.useFakeTimers()
-      Object.defineProperty(navigator, 'serviceWorker', {
-        configurable: true,
-        value: { controller: { postMessage: vi.fn() } },
-      })
-      const originalMessageChannel = globalThis.MessageChannel
-      globalThis.MessageChannel = class {
-        port1 = { onmessage: null as never }
-        port2 = {}
-      } as never
-      const promise = swManager.getCacheStatus()
-      vi.advanceTimersByTime(3000)
-      const result = await promise
-      expect(result).toBeNull()
-      globalThis.MessageChannel = originalMessageChannel
-      vi.useRealTimers()
-    })
-  })
-
-  describe('ServiceWorkerManager - onChange', () => {
-    it('监听器在 _notifyListeners 调用时被触发', () => {
-      const listener = vi.fn()
-      swManager.onChange(listener)
-      ;(swManager as unknown as { _notifyListeners: () => void })._notifyListeners()
-      expect(listener).toHaveBeenCalled()
-    })
-
-    it('监听器抛错时被捕获并 error', () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-      const listener = vi.fn(() => {
-        throw new Error('listener error')
-      })
-      swManager.onChange(listener)
-      ;(swManager as unknown as { _notifyListeners: () => void })._notifyListeners()
-      expect(errorSpy).toHaveBeenCalled()
-    })
-
-    it('取消订阅后监听器不再被触发', () => {
-      const listener = vi.fn()
-      const off = swManager.onChange(listener)
-      off()
-      ;(swManager as unknown as { _notifyListeners: () => void })._notifyListeners()
-      expect(listener).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('initServiceWorker', () => {
-    it('返回 status 对象', async () => {
-      const status = await initServiceWorker()
-      expect(status).toBeDefined()
-      expect(typeof status.registered).toBe('boolean')
-      expect(typeof status.supported).toBe('boolean')
-    })
-
-    it('注册失败时 warn 警告', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-      await initServiceWorker()
-      // DEV 环境下 register 返回 false，会 warn
-      expect(warnSpy).toHaveBeenCalled()
-    })
-
-    it('管理端注销历史 worker 且不注册根路径 worker', async () => {
-      vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
-      const { mockRegistration } = setupServiceWorkerSupport()
-      const registerSpy = vi.spyOn(navigator.serviceWorker, 'register')
-
-      await initServiceWorker()
-
-      expect(registerSpy).not.toHaveBeenCalled()
-      expect(mockRegistration.unregister).toHaveBeenCalled()
-    })
-  })
-
-  describe('destroy', () => {
-    it('调用 destroy 后清空监听器', () => {
-      const listener = vi.fn()
-      swManager.onChange(listener)
-      swManager.destroy()
-      ;(swManager as unknown as { _notifyListeners: () => void })._notifyListeners()
-      expect(listener).not.toHaveBeenCalled()
-    })
+  it.each([
+    ['clearCache', 'CLEAR_CACHE', { type: 'CACHE_CLEARED' }, true, 5000, false],
+    ['getCacheStatus', 'GET_STATUS', { type: 'STATUS', size: 100 }, { type: 'STATUS', size: 100 }, 3000, null],
+  ] as const)('%s validates replies and times out safely', async (method, request, reply, expected, timeout, fallback) => {
+    const pending = api.swManager[method]()
+    expect(sw.controller!.postMessage).toHaveBeenCalledWith({ type: request }, [channel.port2])
+    channel.port1.onmessage!({ data: reply })
+    expect(await pending).toEqual(expected)
+    const invalid = api.swManager[method]()
+    channel.port1.onmessage!({ data: { type: 'OTHER' } })
+    expect(await invalid).toEqual(fallback)
+    const expired = api.swManager[method]()
+    await vi.advanceTimersByTimeAsync(timeout)
+    expect(await expired).toEqual(fallback)
+    sw.controller = null
+    expect(await api.swManager[method]()).toEqual(fallback)
   })
 })

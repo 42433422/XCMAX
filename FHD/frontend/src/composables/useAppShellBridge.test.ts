@@ -87,3 +87,71 @@ describe('navigateByDeepLink', () => {
     await vi.waitFor(() => expect(navigateFromSidebarKey).toHaveBeenCalledWith(router, 'chat'))
   })
 })
+
+describe('desktop and legacy event lifecycle', () => {
+  type DesktopWindow = Window & { xcagiDesktop?: { onDeepLink?: (cb: (url: string) => void) => () => void;
+    consumeDeepLink?: () => Promise<string | null>; onVoiceInvoke?: (cb: () => void) => () => void }; openImportWindow?: () => void }
+  const desktop = window as DesktopWindow
+  afterEach(() => { delete desktop.xcagiDesktop; delete desktop.openImportWindow; vi.useRealTimers(); vi.restoreAllMocks(); document.body.replaceChildren() })
+  it('consumes a pending link, handles live links and voice, then releases both listeners', async () => {
+    vi.useFakeTimers()
+    let deepLink!: (url: string) => void, voice!: () => void
+    const stopLink = vi.fn(), stopVoice = vi.fn(), router = makeRouter(), bridge = useAppShellBridge(router)
+    const input = document.createElement('textarea'); input.id = 'messageInput'; document.body.append(input)
+    const change = vi.fn(); input.addEventListener('input', change)
+    desktop.xcagiDesktop = { consumeDeepLink: vi.fn().mockResolvedValue('xcagi://chat?q=pending'),
+      onDeepLink: (cb) => { deepLink = cb; return stopLink }, onVoiceInvoke: (cb) => { voice = cb; return stopVoice } }
+    bridge.installDesktopShellIntegrations()
+    await Promise.resolve()
+    expect(input.value).toBe('pending')
+    deepLink(`xcagi://message?q=${'a'.repeat(600)}`)
+    expect(input.value).toHaveLength(500)
+    expect(change).toHaveBeenCalledTimes(2)
+    deepLink('https://invalid.example'); input.blur(); voice(); await vi.runAllTimersAsync()
+    expect(document.activeElement).toBe(input)
+    expect(navigateFromSidebarKey).toHaveBeenCalledWith(router, 'chat')
+    bridge.uninstall(); bridge.uninstall()
+    expect(stopLink).toHaveBeenCalledOnce(); expect(stopVoice).toHaveBeenCalledOnce()
+  })
+  it.each([null, 'https://invalid.example'])('ignores a non-actionable pending desktop link %s', async (pending) => {
+    vi.mocked(navigateFromSidebarKey).mockClear()
+    desktop.xcagiDesktop = { consumeDeepLink: vi.fn().mockResolvedValue(pending) }
+    const bridge = useAppShellBridge(makeRouter()); bridge.installDesktopShellIntegrations(); await Promise.resolve()
+    expect(navigateFromSidebarKey).not.toHaveBeenCalled(); bridge.uninstall()
+  })
+  it('contains optional desktop registration and cleanup failures', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const fail = () => { throw new Error('shell unavailable') }
+    desktop.xcagiDesktop = { onDeepLink: fail, onVoiceInvoke: fail }
+    const bridge = useAppShellBridge(makeRouter()); bridge.installDesktopShellIntegrations()
+    expect(warn).toHaveBeenCalledTimes(2)
+    desktop.xcagiDesktop = { onDeepLink: () => fail }; bridge.installDesktopShellIntegrations()
+    expect(() => bridge.uninstall()).not.toThrow()
+    expect(parseDesktopDeepLinkv2('xcagi://[bad')).toBeNull()
+  })
+  it('limits sandbox navigation to typed requests and uninstalls event handlers', () => {
+    const router = makeRouter(), bridge = useAppShellBridge(router), post = vi.spyOn(window.parent, 'postMessage').mockImplementation(() => {})
+    bridge.installSandboxBridge(false); expect(post).not.toHaveBeenCalled()
+    bridge.installSandboxBridge(true); expect(post).toHaveBeenCalledWith({ type: 'sandbox:ready' }, '*')
+    for (const data of [{ type: 'other', path: '/ignored' }, { type: 'sandbox:navigate', path: 42 }, { type: 'sandbox:navigate', path: '/settings' }]) window.dispatchEvent(new MessageEvent('message', { data }))
+    expect(router.push).toHaveBeenCalledExactlyOnceWith('/settings')
+    bridge.uninstall(); window.dispatchEvent(new MessageEvent('message', { data: { type: 'sandbox:navigate', path: '/later' } }))
+    expect(router.push).toHaveBeenCalledOnce()
+  })
+  it('binds upload entries once, handles absent and failing import hooks, and forwards the file picker click', () => {
+    document.body.replaceChildren(
+      ...['fileUploadEntry', 'chooseFileBtn'].map(id => Object.assign(document.createElement('button'), { id })),
+      Object.assign(document.createElement('input'), { id: 'fileInput', type: 'file' }),
+    )
+    const bridge = useAppShellBridge(makeRouter()), entry = document.getElementById('fileUploadEntry')!, picker = document.getElementById('fileInput')!
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {}), click = vi.spyOn(picker, 'click').mockImplementation(() => {})
+    bridge.bindLegacyUploadHooks('settings'); expect(entry.hasAttribute('data-xcagi-bound')).toBe(false)
+    bridge.bindLegacyUploadHooks(''); bridge.bindLegacyUploadHooks('chat')
+    entry.click(); expect(warn).toHaveBeenCalledWith('[AppShellBridge] openImportWindow not found on window')
+    desktop.openImportWindow = () => { throw new Error('import failed') }; entry.click()
+    expect(warn).toHaveBeenCalledTimes(2)
+    document.getElementById('chooseFileBtn')!.click(); expect(click).toHaveBeenCalledOnce()
+    picker.remove(); expect(() => document.getElementById('chooseFileBtn')!.click()).not.toThrow()
+    bridge.uninstall()
+  })
+})

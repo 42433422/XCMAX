@@ -31,8 +31,8 @@ describe('selectEtlSourceFiles', () => {
     expect(selection.ignored.map((item) => item.reason)).toEqual(['duplicate', 'unsupported', 'too_large'])
   })
 
-  it('removes traversal segments from display-only relative paths', () => {
-    const selection = selectEtlSourceFiles([folderFile('a', 'data.csv', '../unsafe/./data.csv')], 1024)
+  it.each(['../unsafe/./data.csv', '..\\unsafe\\.\\data.csv'])('normalizes path separators and traversal segments: %s', (path) => {
+    const selection = selectEtlSourceFiles([folderFile('a', 'data.csv', path)], 1024)
 
     expect(selection.accepted[0]?.relativePath).toBe('unsafe/data.csv')
   })

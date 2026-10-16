@@ -50,6 +50,8 @@ abstract class _RepoRootBase {
   MobileApiClient get client => _client;
   bool get imWebSocketConnected => _imWebSocket.connected;
   Stream<Map<String, Object?>> get imWebSocketEvents => _imWebSocket.events;
+  ImWsConnectionState get imWebSocketState => _imWebSocket.state;
+  Stream<ImWsConnectionState> get imWebSocketStates => _imWebSocket.states;
 
   /// See [MobileApiClient.preferCloudIfLanUnreachable].
   Future<bool> preferCloudIfLanUnreachable() =>

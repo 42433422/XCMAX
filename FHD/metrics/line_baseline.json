@@ -1,5 +1,5 @@
 {
-  "lines": 2304656,
+  "lines": 2304907,
   "updated": "2026-10-15",
-  "note": "User-approved bounded PR2160 contribution: current main05e4e52f 2303367 +1289 =2304656 maintained lines. This1289 includes the prior #2330 allowance36, not an additional charge. Main already includes the approved Windows #2341 allowance354; it is not counted again. Exact merged source count verified with unchanged counter/path/banner rules; no new deployment or acceptance claim."
+  "note": "Bounded final19: measured actual main3f394a3e count2304656 plus unique251 (approved mobile682, desktop-8, frontend-417, Modstore/CI-6) =2304907. Prior Windows354 and #2160 total1289 are already included, never charged twice. Full official counter, paths, banners and gates unchanged; all19 frozen source heads retained as ancestors."
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -29,6 +29,8 @@ vi.mock('@/utils/xcagiStorageKeys', () => ({
 }))
 
 import FloatingChatAssistant from '@/components/FloatingChatAssistant.vue'
+import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
+enableAutoUnmount(afterEach)
 
 function mountAssistant(propsOverrides = {}) {
   return mount(FloatingChatAssistant, {
@@ -38,6 +40,12 @@ function mountAssistant(propsOverrides = {}) {
     },
     attachTo: document.body,
   })
+}
+
+async function openAssistant() {
+  const wrapper = mountAssistant()
+  await wrapper.get('.floating-chat-toggle').trigger('click')
+  return wrapper
 }
 
 describe('FloatingChatAssistant', () => {
@@ -54,55 +62,30 @@ describe('FloatingChatAssistant', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders root element when visible', () => {
-    const wrapper = mountAssistant()
-    expect(wrapper.find('.floating-chat-root').exists()).toBe(true)
+  it.each([
+    ['.floating-chat-root', {}], ['.floating-chat-toggle', {}],
+    ['.floating-chat-toggle-label', { text: '小C助理' }],
+    ['.floating-chat-toggle', { 'aria-label': '小C助理' }],
+    ['.floating-chat-toggle-avatar img', { src: '/ai-butler-female-avatar-v1.png', draggable: 'false' }],
+  ])('renders %s with its accessible defaults', (selector, expected) => {
+    const element = mountAssistant().get(selector)
+    for (const [attribute, value] of Object.entries(expected)) {
+      expect(attribute === 'text' ? element.text() : element.attributes(attribute)).toBe(value)
+    }
   })
-
-  it('does not render when visible is false', () => {
-    const wrapper = mountAssistant({ visible: false })
-    expect(wrapper.find('.floating-chat-root').exists()).toBe(false)
-  })
-
-  it('renders toggle button with label', () => {
-    const wrapper = mountAssistant()
-    expect(wrapper.find('.floating-chat-toggle').exists()).toBe(true)
-    expect(wrapper.find('.floating-chat-toggle-label').text()).toBe('小C助理')
-  })
-
-  it('renders the female avatar in the standalone round toggle by default', () => {
-    const wrapper = mountAssistant()
-    const avatar = wrapper.find('.floating-chat-toggle-avatar img')
-    expect(avatar.exists()).toBe(true)
-    expect(avatar.attributes('src')).toBe('/ai-butler-female-avatar-v1.png')
-    expect(avatar.attributes('draggable')).toBe('false')
-  })
-
-  it('renders the male avatar in the standalone round toggle for administration', () => {
-    const wrapper = mountAssistant({ maleAvatar: true })
-    const avatar = wrapper.find('.floating-chat-toggle-avatar img')
-    expect(avatar.attributes('src')).toBe('/ai-butler-male-avatar-v1.jpg')
-  })
-
-  it('toggle button has correct aria-label', () => {
-    const wrapper = mountAssistant()
-    expect(wrapper.find('.floating-chat-toggle').attributes('aria-label')).toBe('小C助理')
-  })
-
-  it('panel is hidden by default', () => {
-    const wrapper = mountAssistant()
-    expect(wrapper.find('.floating-chat-panel').exists()).toBe(false)
+  it('hides the root when disabled, the panel initially, and uses the admin avatar when requested', () => {
+    expect(mountAssistant({ visible: false }).find('.floating-chat-root').exists()).toBe(false)
+    expect(mountAssistant().find('.floating-chat-panel').exists()).toBe(false)
+    expect(mountAssistant({ maleAvatar: true }).get('img').attributes('src')).toBe('/ai-butler-male-avatar-v1.jpg')
   })
 
   it('clicking toggle opens panel', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     expect(wrapper.find('.floating-chat-panel').exists()).toBe(true)
   })
 
   it('clicking toggle again closes panel', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     expect(wrapper.find('.floating-chat-panel').exists()).toBe(true)
     await wrapper.find('.floating-chat-toggle').trigger('click')
     expect(wrapper.find('.floating-chat-panel').exists()).toBe(false)
@@ -116,43 +99,37 @@ describe('FloatingChatAssistant', () => {
   })
 
   it('clicking close button closes panel', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     expect(wrapper.find('.floating-chat-panel').exists()).toBe(true)
     await wrapper.find('.floating-chat-close').trigger('click')
     expect(wrapper.find('.floating-chat-panel').exists()).toBe(false)
   })
 
   it('renders panel header with title', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     expect(wrapper.find('.floating-chat-title').text()).toBe('小C助理')
     expect(wrapper.find('.floating-chat-subtitle').exists()).toBe(false)
   })
 
   it('renders textarea input with placeholder', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     const textarea = wrapper.find('.floating-chat-input')
     expect(textarea.attributes('placeholder')).toBe('输入消息...')
   })
 
   it('send button is disabled when draft is empty', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     expect(wrapper.find('.floating-chat-send').attributes('disabled')).toBeDefined()
   })
 
   it('send button is enabled when draft has text', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     await wrapper.find('.floating-chat-input').setValue('测试消息')
     expect(wrapper.find('.floating-chat-send').attributes('disabled')).toBeUndefined()
   })
 
   it('send button is disabled when loading', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     await wrapper.find('.floating-chat-input').setValue('测试')
     isLoadingMock.value = true
     await wrapper.vm.$nextTick()
@@ -160,8 +137,7 @@ describe('FloatingChatAssistant', () => {
   })
 
   it('textarea is disabled when loading', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     isLoadingMock.value = true
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.floating-chat-input').attributes('disabled')).toBeDefined()
@@ -169,23 +145,20 @@ describe('FloatingChatAssistant', () => {
 
   it('submitMessage sends message and clears draft', async () => {
     sendMessageMock.mockResolvedValue(undefined)
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     await wrapper.find('.floating-chat-input').setValue('你好')
     await wrapper.find('form').trigger('submit.prevent')
     expect(sendMessageMock).toHaveBeenCalledWith('你好')
   })
 
   it('submitMessage does not send empty text', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     await wrapper.find('form').trigger('submit.prevent')
     expect(sendMessageMock).not.toHaveBeenCalled()
   })
 
   it('submitMessage does not send when loading', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     await wrapper.find('.floating-chat-input').setValue('测试')
     isLoadingMock.value = true
     await wrapper.vm.$nextTick()
@@ -195,8 +168,7 @@ describe('FloatingChatAssistant', () => {
 
   it('Enter key submits message', async () => {
     sendMessageMock.mockResolvedValue(undefined)
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     await wrapper.find('.floating-chat-input').setValue('回车发送')
     await wrapper.find('.floating-chat-input').trigger('keydown.enter')
     expect(sendMessageMock).toHaveBeenCalledWith('回车发送')
@@ -207,8 +179,7 @@ describe('FloatingChatAssistant', () => {
       { role: 'user', content: '你好', time: '10:00' },
       { role: 'ai', content: '你好！', time: '10:01' },
     ]
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     const msgs = wrapper.findAll('.floating-chat-message')
     expect(msgs).toHaveLength(2)
     expect(msgs[0].classes()).toContain('user')
@@ -219,8 +190,7 @@ describe('FloatingChatAssistant', () => {
     isLoadingMock.value = true
     isStreamingReplyMock.value = false
     loadingProgressTextMock.value = '正在思考...'
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     await wrapper.vm.$nextTick()
     const loadingMsg = wrapper.findAll('.floating-chat-message.ai')
     const lastMsg = loadingMsg[loadingMsg.length - 1]
@@ -230,8 +200,7 @@ describe('FloatingChatAssistant', () => {
   it('does not show loading message when streaming', async () => {
     isLoadingMock.value = true
     isStreamingReplyMock.value = true
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     await wrapper.vm.$nextTick()
     // No extra loading message should be added
     const msgs = wrapper.findAll('.floating-chat-message')
@@ -245,8 +214,7 @@ describe('FloatingChatAssistant', () => {
       time: '10:00',
     }))
     messagesMock.value = manyMessages
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     expect(wrapper.findAll('.floating-chat-message')).toHaveLength(20)
   })
 
@@ -258,8 +226,7 @@ describe('FloatingChatAssistant', () => {
   })
 
   it.each(['xcagi:close-floating-chat', 'xcagi:close-assistant-float'])('responds to %s', async (event) => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     expect(wrapper.find('.floating-chat-panel').exists()).toBe(true)
     window.dispatchEvent(new Event(event))
     await wrapper.vm.$nextTick()
@@ -267,8 +234,7 @@ describe('FloatingChatAssistant', () => {
   })
 
   it('responds to xcagi:suppress-floating-chat event', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     window.dispatchEvent(new Event('xcagi:suppress-floating-chat'))
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
@@ -289,13 +255,68 @@ describe('FloatingChatAssistant', () => {
 
   it('renders message time', async () => {
     messagesMock.value = [{ role: 'user', content: '测试', time: '14:30' }]
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
+    const wrapper = await openAssistant()
     expect(wrapper.find('.floating-chat-time').text()).toBe('14:30')
   })
 
-  it('applies dragging class during drag', async () => {
+  it('generates and persists a session when storage is empty', () => {
+    vi.mocked(readAiSessionIdFromStorage).mockReturnValueOnce('')
+    mountAssistant()
+    expect(writeAiSessionIdToStorage).toHaveBeenCalledWith(expect.stringMatching(/^[a-z0-9]+$/))
+  })
+
+  it('drags only the active primary pointer, clamps to the viewport and suppresses one post-drag click', async () => {
     const wrapper = mountAssistant()
-    expect(wrapper.find('.floating-chat-root').classes()).not.toContain('dragging')
+    await flushPromises()
+    const toggle = wrapper.get('.floating-chat-toggle')
+    const root = wrapper.get('.floating-chat-root')
+    const el = toggle.element as HTMLElement
+    const capture = vi.fn(), release = vi.fn()
+    Object.assign(el, { setPointerCapture: capture, hasPointerCapture: () => true, releasePointerCapture: release })
+    const pointer = (kind: string, properties = {}) => toggle.trigger(kind, { button: 0, pointerId: 7, clientX: 100, clientY: 100, ...properties })
+    await pointer('pointerdown', { button: 2 })
+    expect(capture).not.toHaveBeenCalled()
+    await pointer('pointerdown')
+    expect(capture).toHaveBeenCalledWith(7)
+    const initial = root.attributes('style')
+    await pointer('pointermove', { pointerId: 8, clientX: 200 })
+    await pointer('pointermove', { clientX: 102 })
+    expect(root.attributes('style')).toBe(initial)
+    expect(root.classes()).not.toContain('dragging')
+    await pointer('pointermove', { clientX: -5000, clientY: -5000 })
+    expect(root.classes()).toContain('dragging')
+    expect(root.attributes('style')).toContain('left: 8px; top: 8px')
+    await pointer('pointermove', { clientX: 5000, clientY: 5000 })
+    expect(root.attributes('style')).toContain(`left: ${window.innerWidth - 8}px`)
+    await pointer('pointerup')
+    expect(release).toHaveBeenCalledWith(7)
+    expect(root.classes()).not.toContain('dragging')
+    await toggle.trigger('click')
+    expect(wrapper.find('.floating-chat-panel').exists()).toBe(false)
+    await toggle.trigger('click')
+    expect(wrapper.find('.floating-chat-panel').exists()).toBe(true)
+    await pointer('pointerdown')
+    await pointer('pointercancel')
+    await toggle.trigger('click')
+    expect(wrapper.find('.floating-chat-panel').exists()).toBe(false)
+  })
+
+  it('repositions after visibility changes, scrolls new messages and removes window handlers on unmount', async () => {
+    const wrapper = await openAssistant()
+    const list = wrapper.get('.floating-chat-messages').element as HTMLElement
+    Object.defineProperty(list, 'scrollHeight', { value: 240 })
+    messagesMock.value = [{ role: 'ai', content: '新回复', time: '12:00' }]
+    await flushPromises()
+    expect(list.scrollTop).toBe(240)
+    const remove = vi.spyOn(window, 'removeEventListener')
+    await wrapper.setProps({ visible: false })
+    window.dispatchEvent(new Event('resize'))
+    await wrapper.setProps({ visible: true })
+    await flushPromises()
+    expect(wrapper.get('.floating-chat-root').attributes('style')).toContain(`left: ${window.innerWidth - 22}px`)
+    wrapper.unmount()
+    for (const event of ['resize', 'xcagi:close-floating-chat', 'xcagi:close-assistant-float', 'xcagi:suppress-floating-chat', 'xcagi:restore-floating-chat']) {
+      expect(remove).toHaveBeenCalledWith(event, expect.any(Function))
+    }
   })
 })

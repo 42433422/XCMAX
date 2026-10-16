@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -22,6 +22,7 @@ vi.mock('vue-router', () => ({
 
 import { useTutorialV2Store } from '@/stores/tutorialV2'
 import TutorialTrainingCoach from './TutorialTrainingCoach.vue'
+enableAutoUnmount(afterEach)
 
 const step = {
   id: 'create-customer',
@@ -86,6 +87,14 @@ const course = {
   progress: 0,
 }
 
+function mountCoach() {
+  return mount(TutorialTrainingCoach, { attachTo: document.body, global: { stubs: { Teleport: true } } })
+}
+async function click(wrapper: ReturnType<typeof mountCoach>, label: string) {
+  await wrapper.findAll('button').find(item => item.text() === label)!.trigger('click')
+  await flushPromises()
+}
+
 describe('TutorialTrainingCoach', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -105,10 +114,7 @@ describe('TutorialTrainingCoach', () => {
   it('shows one beginner action first and keeps explanations folded away', async () => {
     const store = useTutorialV2Store()
     store.currentRun = activeRun
-    const wrapper = mount(TutorialTrainingCoach, {
-      attachTo: document.body,
-      global: { stubs: { Teleport: true } },
-    })
+    const wrapper = mountCoach()
     await flushPromises()
 
     expect(wrapper.text()).toContain('教学空间')
@@ -129,16 +135,10 @@ describe('TutorialTrainingCoach', () => {
     document.body.appendChild(target)
     const store = useTutorialV2Store()
     store.currentRun = activeRun
-    const wrapper = mount(TutorialTrainingCoach, {
-      attachTo: document.body,
-      global: { stubs: { Teleport: true } },
-    })
+    const wrapper = mountCoach()
     await flushPromises()
 
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '打开操作页面')!
-      .trigger('click')
+    await click(wrapper, '打开操作页面')
     await vi.advanceTimersByTimeAsync(100)
 
     expect(routerPush).toHaveBeenCalledWith({ name: 'customers' })
@@ -169,16 +169,10 @@ describe('TutorialTrainingCoach', () => {
     document.body.appendChild(target)
     const store = useTutorialV2Store()
     store.currentRun = activeRun
-    const wrapper = mount(TutorialTrainingCoach, {
-      attachTo: document.body,
-      global: { stubs: { Teleport: true } },
-    })
+    const wrapper = mountCoach()
     await flushPromises()
 
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '打开操作页面')!
-      .trigger('click')
+    await click(wrapper, '打开操作页面')
     await vi.advanceTimersByTimeAsync(100)
 
     expect(target.classList.contains('xcagi-tutorial-target-highlight')).toBe(true)
@@ -200,21 +194,12 @@ describe('TutorialTrainingCoach', () => {
     document.body.append(create, name)
     const store = useTutorialV2Store()
     store.currentRun = activeRun
-    const wrapper = mount(TutorialTrainingCoach, {
-      attachTo: document.body,
-      global: { stubs: { Teleport: true } },
-    })
+    const wrapper = mountCoach()
     await flushPromises()
 
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '打开操作页面')!
-      .trigger('click')
+    await click(wrapper, '打开操作页面')
     await vi.advanceTimersByTimeAsync(100)
-    await wrapper
-      .findAll('button')
-      .find((item) => item.text() === '我做完了，下一条')!
-      .trigger('click')
+    await click(wrapper, '我做完了，下一条')
     await vi.advanceTimersByTimeAsync(60)
 
     expect(createClicks).toBe(0)
@@ -247,10 +232,7 @@ describe('TutorialTrainingCoach', () => {
     apiMock.current.mockResolvedValue(failedRun)
     store.currentRun = failedRun
     store.verificationHint = '请确认教学空间中只有一条名称精确为“客户B”的客户。'
-    const wrapper = mount(TutorialTrainingCoach, {
-      attachTo: document.body,
-      global: { stubs: { Teleport: true } },
-    })
+    const wrapper = mountCoach()
     await flushPromises()
 
     expect(wrapper.text()).toContain('还差一点')
@@ -268,10 +250,7 @@ describe('TutorialTrainingCoach', () => {
     store.currentRun = completedRun
     apiMock.current.mockResolvedValue(completedRun)
     apiMock.leave.mockResolvedValue(completedRun)
-    const wrapper = mount(TutorialTrainingCoach, {
-      attachTo: document.body,
-      global: { stubs: { Teleport: true } },
-    })
+    const wrapper = mountCoach()
     await flushPromises()
 
     await wrapper.get('button.btn-secondary').trigger('click')
@@ -281,4 +260,96 @@ describe('TutorialTrainingCoach', () => {
     expect(routerPush).toHaveBeenCalledWith({ name: 'chat' })
     wrapper.unmount()
   })
+
+  it('copies required input with success and failure feedback, navigates backward and verifies only on request', async () => {
+    const store = useTutorialV2Store()
+    store.currentRun = activeRun
+    const clipboard = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'))
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: clipboard } })
+    const wrapper = mountCoach()
+    await flushPromises()
+    await click(wrapper, '移到左侧')
+    expect(wrapper.get('.tutorial-coach').classes()).toContain('is-left')
+    await click(wrapper, '移到右侧')
+    await click(wrapper, '收起')
+    expect(wrapper.find('.tutorial-coach__focus').exists()).toBe(false)
+    await click(wrapper, '展开教练')
+    await click(wrapper, '打开操作页面')
+    await vi.advanceTimersByTimeAsync(80)
+    await click(wrapper, '我做完了，下一条')
+    await click(wrapper, '复制')
+    expect(clipboard).toHaveBeenCalledWith('客户B')
+    expect(wrapper.text()).toContain('已复制')
+    await click(wrapper, '已复制')
+    expect(wrapper.text()).toContain('请手动复制')
+    await vi.advanceTimersByTimeAsync(1800)
+    expect(wrapper.text()).not.toContain('请手动复制')
+    await click(wrapper, '上一条')
+    expect(wrapper.text()).toContain('照着做 · 1 / 3')
+    await click(wrapper, '指给我看')
+    const target = document.createElement('button'); target.id = 'tutorial-customer-target'
+    document.body.append(target); await flushPromises()
+    expect(target.classList.contains('xcagi-tutorial-target-highlight')).toBe(true)
+    await click(wrapper, '我做完了，下一条')
+    await click(wrapper, '我做完了，下一条')
+    const verify = vi.spyOn(store, 'verifyCurrent').mockResolvedValue({ evidence: { status: 'passed' } } as any)
+    await click(wrapper, '我做完了，检查一下')
+    expect(verify).toHaveBeenCalledWith('customers', false)
+    expect(target.classList.contains('xcagi-tutorial-target-highlight')).toBe(false)
+  })
+
+  it.each(['checklist', 'instruction'])('resumes a saved course with %s fallback guidance and resets on step change', async kind => {
+    const fallbackStep = { ...step, guide_actions: [], action_checklist: kind === 'checklist' ? ['第一条', '第二条'] : [],
+      location_label: '', completion_cue: '', target_selector: '[' }
+    const paused = { ...activeRun, status: 'paused' as const, steps: [fallbackStep] }
+    const resumed = { ...paused, status: 'active' as const }
+    apiMock.current.mockResolvedValue(paused); apiMock.enter.mockResolvedValue(resumed)
+    const store = useTutorialV2Store(); store.currentRun = paused
+    const wrapper = mountCoach(); await flushPromises()
+    expect(wrapper.text()).toContain('练习已保存')
+    await click(wrapper, '继续当前步骤'); await vi.advanceTimersByTimeAsync(80)
+    expect(apiMock.enter).toHaveBeenCalledWith('run-1')
+    expect(wrapper.text()).toContain(kind === 'checklist' ? '第一条' : step.instruction)
+    expect(wrapper.text()).toContain('当前业务页面')
+    expect(wrapper.text()).toContain(step.success_criteria)
+    store.currentRun = { ...resumed, current_step_id: 'import-preview', steps: [{ ...fallbackStep, id: 'import-preview' }] }
+    await flushPromises()
+    expect(wrapper.text()).toContain('现在只做这一件事')
+    expect(wrapper.get('a[download]').attributes('href')).toContain('/api/tutorial/v2/assets/business-import.xlsx')
+    await click(wrapper, '保存并退出')
+    expect(apiMock.leave).toHaveBeenCalledWith('run-1')
+  })
+
+  it.each(['step', 'run', 'course', 'missing'])('reviews approval evidence from %s without leaking internal identifiers', async origin => {
+    const approvalRef = { type: 'approval_request', id: 17 }
+    const evidence = { step_id: step.id, status: 'passed', result_code: 'verification_passed', counts: {}, entity_refs: [approvalRef] }
+    const review = { ...step, route_name: 'approval-workspace', evidence: origin === 'step' ? evidence : null }
+    const extra = { ...step, id: 'evidence', evidence }
+    const completed = { ...activeRun, status: 'completed' as const, steps: origin === 'run' ? [review, extra] : [review] }
+    apiMock.current.mockResolvedValue(completed)
+    apiMock.courses.mockResolvedValue(origin === 'course' ? [{ ...course, run: { ...activeRun, steps: [extra] } }] : [])
+    const store = useTutorialV2Store(); store.currentRun = completed as any
+    const wrapper = mountCoach(); await flushPromises()
+    await wrapper.get('.tutorial-coach__review-list button').trigger('click')
+    expect(routerPush).toHaveBeenCalledWith(origin === 'missing' ? { name: 'approval-workspace' }
+      : { name: 'approval-workspace', query: { request_id: '17' } })
+    expect(wrapper.text()).toContain('已检查通过')
+  })
+
+  it('renders human-readable evidence values, references and fallback result labels', async () => {
+    const failed = { ...step, status: 'failed', evidence: { step_id: step.id, status: 'failed', result_code: 'not-ready',
+      counts: { payment_state: 'paid', approval_detail_opened: 1, unexpected: 3 },
+      entity_refs: [{ type: 'customer', id: 9 }, { type: 'other', id: 10 }] } }
+    const run = { ...activeRun, steps: [failed] }
+    apiMock.current.mockResolvedValue(run)
+    const store = useTutorialV2Store(); store.currentRun = run as any
+    const wrapper = mountCoach(); await flushPromises()
+    for (const label of ['收款状态：已收款', '审批详情已打开：是', '检查项：3', '客户 #9', '业务记录 #10']) expect(wrapper.text()).toContain(label)
+    store.currentRun = { ...run, steps: [{ ...failed, evidence: { ...failed.evidence, counts: {}, entity_refs: [] } }] } as any
+    await flushPromises()
+    expect(wrapper.text()).toContain('还没有达到要求')
+    store.currentRun = null; await flushPromises()
+    expect(wrapper.find('.tutorial-coach').exists()).toBe(false)
+  })
+
 })

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useExcelAnalysis } from './useExcelAnalysis'
 
 const addMessage = vi.fn()
@@ -323,5 +323,64 @@ describe('useExcelAnalysis - extended', () => {
     const event = { target: input } as unknown as Event
     await api.onExcelAnalyzeFileChange(event)
     expect(cb).toHaveBeenCalledWith(event)
+  })
+})
+
+describe('workbook detail fallback and response deadlines', () => {
+  const file = new File(['workbook'], 'details.xlsx')
+  const event = () => ({ target: { files: [file], value: 'selected' } }) as unknown as Event
+  const response = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 500, text: async () => JSON.stringify(body) }) as Response
+  beforeEach(() => { vi.clearAllMocks(); document.cookie = 'csrf_token=test-csrf'; global.fetch = vi.fn() })
+  afterEach(() => vi.useRealTimers())
+  it('fetches each missing sheet detail, preserves successful sheets and tolerates individual failures', async () => {
+    const onAnalyzed = vi.fn(), progress = vi.fn(), done = vi.fn()
+    const api = useExcelAnalysis(makeMessages(), { onAnalyzed, onAnalyzeProgress: progress, onAnalyzeDone: done })
+    vi.mocked(fetch).mockResolvedValueOnce(response({ success: true, fields: [' Product '], preview_data: { sheet_names: ['Sales', ' ', 'Empty', 'Unavailable', 'Offline'] } }))
+      .mockResolvedValueOnce(response({ success: true, fields: [{ label: 'Product' }], preview_data: { sample_rows: [{ Product: 'A' }], grid_preview: { rows: [['A']] }, grid_style_cache: { cell_style_refs: { A1: 'bold' } }, tables: [{ fields: ['Product'] }] } }))
+      .mockResolvedValueOnce(response({ success: true }))
+      .mockResolvedValueOnce(response({ success: false }, false))
+      .mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'))
+    await api.onExcelAnalyzeFileChange(event())
+    expect(fetch).toHaveBeenCalledTimes(6)
+    expect(vi.mocked(fetch).mock.calls.slice(1).map(([, init]) => (init!.body as FormData).get('sheet_name'))).toEqual(['Sales', 'Empty', 'Unavailable', 'Offline', 'Offline'])
+    expect((vi.mocked(fetch).mock.calls[1][1]!.body as FormData).get('analyze_all_sheets')).toBe('false')
+    const result = onAnalyzed.mock.calls[0][0]
+    expect(result.result.sheets).toHaveLength(2)
+    expect(result.result.preview_data.all_sheets).toEqual(result.result.sheets)
+    expect(result.result.sheets[1]).toMatchObject({ sheet_index: 3, sheet_name: 'Empty', fields: [], sample_rows: [], tables: [] })
+    expect(result.summary).toContain('样式缓存单元格：1')
+    expect(result.summary).toContain('词条：Product')
+    expect(progress).toHaveBeenCalledWith(expect.objectContaining({ step: '补全分表详情 5/5', progress: 100 }))
+    expect(done).toHaveBeenCalledWith({ fileName: file.name, success: true })
+    expect(api.excelAnalyzeUploading.value).toBe(false)
+  })
+  it.each(['', '{invalid'])('treats an empty or malformed response as a failed analysis: %j', async (body) => {
+    const done = vi.fn(), api = useExcelAnalysis(makeMessages(), { onAnalyzeDone: done })
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: true, status: 200, text: async () => body } as Response)
+    await api.onExcelAnalyzeFileChange(event())
+    expect(done).toHaveBeenCalledWith({ fileName: file.name, success: false, message: 'Excel 分析失败：HTTP 200' })
+    expect(api.excelAnalyzeUploading.value).toBe(false)
+  })
+  it('releases the uploading state if response-body reading stalls after a successful connection', async () => {
+    vi.useFakeTimers()
+    const done = vi.fn(), api = useExcelAnalysis(makeMessages(), { onAnalyzeDone: done })
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: true, text: () => new Promise(() => {}) } as unknown as Response)
+    const pending = api.onExcelAnalyzeFileChange(event())
+    await vi.advanceTimersByTimeAsync(120000); await pending
+    expect(done).toHaveBeenCalledWith({ fileName: file.name, success: false, message: expect.stringContaining('响应读取超时（120 秒）') })
+    expect(api.excelAnalyzeUploading.value).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('aborts a stalled sheet extraction without discarding the valid workbook summary', async () => {
+    vi.useFakeTimers()
+    const analyzed = vi.fn(), api = useExcelAnalysis(makeMessages(), { onAnalyzed: analyzed })
+    vi.mocked(fetch).mockResolvedValueOnce(response({ success: true, preview_data: { sheet_names: ['Slow', ' '] } }))
+      .mockImplementationOnce((_url, init) => new Promise((_resolve, reject) => { init!.signal!.addEventListener('abort', () => reject(new DOMException('timeout', 'AbortError'))) }))
+    const pending = api.onExcelAnalyzeFileChange(event())
+    await vi.advanceTimersByTimeAsync(90000); await pending
+    expect(analyzed).toHaveBeenCalledOnce()
+    expect(analyzed.mock.calls[0][0].result.sheets).toBeUndefined()
+    expect(api.excelAnalyzeUploading.value).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

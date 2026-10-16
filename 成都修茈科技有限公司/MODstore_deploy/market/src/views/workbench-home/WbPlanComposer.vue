@@ -12,7 +12,7 @@ const {
   makeVoiceAria, makeVoiceStatusText, makeVoiceCanCancel, directFileChipTitle, directAttachmentKind, directAttachmentKindLabel,
   removeDirectAttachedFile, isFileEmployeePurposeToggle, isFileAutoReadEmployee, setFilePurpose, onComposerFocus, llmCatalog,
   llmCatalogError, selectedProvider, selectedModel, modelMode, llmDdOpen, llmMobileSheetOpen,
-  intentRepoPickShow, showIntentGuide, makeHasActiveTask, hasWorkflow, placeholder, makeComposerInput,
+  intentRepoPickShow, showIntentGuide, intentGuideCollapsed, makeHasActiveTask, hasWorkflow, placeholder, makeComposerInput,
   makeComposerPlaceholder, composerSendDisabled, currentProviderLabel, modelModeHint, modelPickerEnabled, categoryLabel,
   modelsForWorkbenchCategory, toggleLlmDd, pickProvider, pickModel, cancelInlineVoice, toggleMakeVoice,
   openKnowledgeFilePicker, onKnowledgeFileChange, onComposerSendClick, onComposerKeydown,
@@ -242,7 +242,7 @@ const {
               :class="{ 'wb-scene-toolbar-btn--on': showIntentGuide }"
               :aria-expanded="showIntentGuide"
               aria-label="展开说明"
-              @click="showIntentGuide = !showIntentGuide"
+              @click="intentGuideCollapsed = !intentGuideCollapsed"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
             </button>

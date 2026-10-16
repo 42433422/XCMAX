@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('qrcode', () => ({
@@ -31,6 +31,7 @@ vi.mock('@/api/mobilePairing', () => ({
 }))
 
 import MobilePairingQrCard from './MobilePairingQrCard.vue'
+enableAutoUnmount(afterEach)
 
 function jsonRes(body: unknown, ok = true) {
   return { ok, json: async () => body } as Response
@@ -147,4 +148,31 @@ describe('MobilePairingQrCard.vue', () => {
     clearIntervalSpy.mockRestore()
     clearTimeoutSpy.mockRestore()
   })
+  it('copies a relay code through the legacy fallback, expires feedback and renews/polls only while mounted', async () => {
+    vi.useFakeTimers()
+    const payload = () => ({ nonce: 'relay-nonce', exp: Math.floor(Date.now() / 1000) + 20,
+      qr_json: { kind: 'xcagi_relay_pairing', relay_id: 'relay-1', code: '765432' } })
+    mockLoadDesktopPairingPayload.mockImplementation(async () => payload())
+    mockApiFetch.mockResolvedValue(jsonRes({ paired: true }))
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } })
+    const oldCopy = document.execCommand
+    document.execCommand = vi.fn(() => true)
+    const wrapper = mount(MobilePairingQrCard); await flushPromises()
+    expect(wrapper.get('.mobile-pairing__status--stale').text()).toContain('已连接手机')
+    await wrapper.get('.mobile-pairing__copy-code').trigger('click'); await flushPromises()
+    expect(document.execCommand).toHaveBeenCalledWith('copy')
+    expect(document.querySelector('textarea')).toBeNull()
+    expect(wrapper.find('.mobile-pairing__copy-toast').exists()).toBe(true)
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(wrapper.find('.mobile-pairing__copy-toast').exists()).toBe(false)
+    await vi.advanceTimersByTimeAsync(13_500)
+    expect(mockLoadDesktopPairingPayload.mock.calls.length).toBeGreaterThan(1)
+    expect(mockApiFetch).toHaveBeenCalledTimes(2)
+    wrapper.unmount(); const requests = mockLoadDesktopPairingPayload.mock.calls.length
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(mockLoadDesktopPairingPayload).toHaveBeenCalledTimes(requests)
+    expect(mockApiFetch).toHaveBeenCalledTimes(2)
+    document.execCommand = oldCopy; vi.useRealTimers()
+  })
+
 })

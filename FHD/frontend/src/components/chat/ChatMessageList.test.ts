@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
+import { ref } from 'vue'
+import { afterEach } from 'vitest'
+enableAutoUnmount(afterEach)
 import ChatMessageList from './ChatMessageList.vue'
 
+const defaultProps = {
+  isLoading: false, isStreamingReply: false, loadingProgressText: '',
+  messageHeights: new Map<number, number>(), latestAiMessageIndex: 0, playingMsgIdx: -1,
+  isMessageCollapsed: () => false, getCollapsedPreview: () => '', canSpeakMessage: () => false,
+}
 function mountList(showDiagnosticMetadata = false) {
   return mount(ChatMessageList, {
     props: {
@@ -89,15 +97,7 @@ describe('ChatMessageList', () => {
             },
           },
         ],
-        isLoading: false,
-        isStreamingReply: false,
-        loadingProgressText: '',
-        messageHeights: new Map<number, number>(),
-        latestAiMessageIndex: 0,
-        playingMsgIdx: -1,
-        isMessageCollapsed: () => false,
-        getCollapsedPreview: () => '',
-        canSpeakMessage: () => false,
+        ...defaultProps,
       },
     })
 
@@ -112,15 +112,7 @@ describe('ChatMessageList', () => {
     const wrapper = mount(ChatMessageList, {
       props: {
         messages: [{ role: 'ai' as const, content: '等待确认', time: '12:00', agentRunTrace: trace }],
-        isLoading: false,
-        isStreamingReply: false,
-        loadingProgressText: '',
-        messageHeights: new Map<number, number>(),
-        latestAiMessageIndex: 0,
-        playingMsgIdx: -1,
-        isMessageCollapsed: () => false,
-        getCollapsedPreview: () => '',
-        canSpeakMessage: () => false,
+        ...defaultProps,
       },
     })
     await wrapper.get('[data-testid="chat-run-approve"]').trigger('click')
@@ -148,15 +140,7 @@ describe('ChatMessageList', () => {
             },
           },
         ],
-        isLoading: false,
-        isStreamingReply: false,
-        loadingProgressText: '',
-        messageHeights: new Map<number, number>(),
-        latestAiMessageIndex: 0,
-        playingMsgIdx: -1,
-        isMessageCollapsed: () => false,
-        getCollapsedPreview: () => '',
-        canSpeakMessage: () => false,
+        ...defaultProps,
       },
     })
 
@@ -193,4 +177,42 @@ describe('ChatMessageList', () => {
     await wrapper.get('.msg-fold__action').trigger('click')
     expect(wrapper.emitted('expand-message')).toEqual([[0]])
   })
+})
+
+
+it('renders execution progress, safe user text, diagnostic errors and forwards message actions', async () => {
+  const host = ref<HTMLElement | null>(null)
+  const message = { role: 'ai' as const, content: '已导出', time: '12:00', streamingShell: true,
+    shipmentDownloadUrl: '/export.xlsx', todoSteps: ['检查库存'],
+    executionProgress: ['success', 'failed', 'cancelled', 'waiting', 'retrying', 'running'].map((status, at) => ({ status, at, label: `步骤${at}` })),
+    nodeResults: [{ node_id: 'node', tool_id: 'export', action: 'write', success: false,
+      retries: 2, duration_ms: 150, error: '暂时不可用', recovery_hint: '重新导出' }],
+  }
+  const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [message,
+    { role: 'user', content: '<b>谢谢</b><script>bad()</script>', time: '12:01' }], latestAiMessageIndex: 2,
+    chatMessagesRef: host, showDiagnosticMetadata: true, canSpeakMessage: () => true, playingMsgIdx: 0,
+    messageHeights: new Map([[0, 200]]), isLoading: true, loadingProgressText: '正在导出' } })
+  await wrapper.vm.$nextTick()
+  expect(host.value).toBe(wrapper.get('#chatMessages').element)
+  expect(wrapper.findAll('.execution-timeline__marker').map(x => x.text())).toEqual(['✓', '×', '■', 'Ⅱ', '↻', '●'])
+  expect(wrapper.get('.execution-timeline__current').text()).toBe('步骤5')
+  expect(wrapper.get('.execution-timeline').attributes('open')).toBeDefined()
+  expect(wrapper.get('.todo-panel').text()).toContain('检查库存')
+  expect(wrapper.get('.trace-node-meta').text()).toContain('重试 2 次 · 150ms')
+  expect(wrapper.get('.trace-node-error').text()).toContain('暂时不可用')
+  expect(wrapper.get('.trace-node-hint').text()).toContain('重新导出')
+  expect(wrapper.find('script').exists()).toBe(false)
+  expect(wrapper.findAll('.message')[0].attributes('style')).toContain('min-height: 200px')
+  expect(wrapper.get('.chat-loading-row').text()).toContain('正在导出')
+  wrapper.get('.message-shipment-actions a').element.addEventListener('click', event => event.preventDefault())
+  await wrapper.get('.message-shipment-actions a').trigger('click')
+  await wrapper.get('.message-tts-btn').trigger('click')
+  await wrapper.get('.msg-fold__action--collapse').trigger('click')
+  expect(wrapper.emitted('shipment-download-click')).toEqual([[]])
+  expect(wrapper.emitted('toggle-message-tts')).toEqual([[0, '已导出']])
+  expect(wrapper.emitted('collapse-message')).toEqual([[0]])
+  await wrapper.setProps({ playingMsgIdx: -1, isStreamingReply: true, messages: [{ ...message, streamingShell: false, toolProgressLabel: '自定义步骤' }] })
+  expect(wrapper.get('.message-tts-btn .fa-volume-up').exists()).toBe(true)
+  expect(wrapper.get('.execution-timeline__current').text()).toBe('自定义步骤')
+  expect(wrapper.find('.chat-loading-row').exists()).toBe(false)
 })

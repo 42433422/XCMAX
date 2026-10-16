@@ -268,3 +268,37 @@ it('selects the existing main Sunbird Mod for rework on the original ticket', as
   expect(wrapper.find('.private-mod-request__delivered').exists()).toBe(false)
   wrapper.unmount()
 })
+
+it.each(['request', 'decision', 'install', 'stage', 'version'])('retains actionable %s controls when the backend returns invalid JSON', async action => {
+  vi.mocked(apiFetch).mockResolvedValueOnce(centerResponse({ projects: [privateProject()], requests: [action === 'install' ? ticket : acceptanceTicket()] }))
+  const { wrapper } = await setup()
+  if (action === 'request') await fillRequest(wrapper)
+  vi.mocked(apiFetch).mockResolvedValueOnce(new Response('gateway unavailable', { status: 502 }))
+  const control = action === 'request' ? wrapper.get('.private-mod-intake__form')
+    : action === 'decision' ? wrapper.get('.private-mod-request__actions .private-mod-center__update')
+    : action === 'install' ? wrapper.findAll('.private-mod-request__delivery button')[0]
+    : action === 'stage' ? wrapper.findAll('.private-mod-node__actions button')[0]
+    : wrapper.get('.private-mod-project__update button')
+  await control.trigger(action === 'request' ? 'submit' : 'click'); await flushPromises()
+  expect(wrapper.get('[role="alert"]').text()).toContain('HTTP 502')
+  expect(control.attributes('disabled')).toBeUndefined()
+  expect(wrapper.get('.private-mod-project__meta').text()).toContain('当前 v1.0.0')
+  wrapper.unmount()
+})
+
+it('polls delivery state while idle and leaves no timer or stale response after unmount', async () => {
+  vi.useFakeTimers()
+  const { wrapper } = await setup()
+  await vi.advanceTimersByTimeAsync(15_000)
+  expect(apiFetch).toHaveBeenCalledTimes(2)
+  let finish!: (value: Response) => void
+  vi.mocked(apiFetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  await vi.advanceTimersByTimeAsync(15_000)
+  await vi.advanceTimersByTimeAsync(15_000)
+  expect(apiFetch).toHaveBeenCalledTimes(3)
+  const signal = vi.mocked(apiFetch).mock.calls[2][1]!.signal!
+  wrapper.unmount(); expect(signal.aborted).toBe(true)
+  finish(response()); await flushPromises(); await vi.advanceTimersByTimeAsync(30_000)
+  expect(apiFetch).toHaveBeenCalledTimes(3)
+  vi.useRealTimers()
+})

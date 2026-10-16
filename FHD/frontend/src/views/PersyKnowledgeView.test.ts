@@ -1,6 +1,6 @@
 import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import PersyKnowledgeView from './PersyKnowledgeView.vue'
 
@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   deleteDocument: vi.fn(),
   ingestDocument: vi.fn(),
   uploadDocument: vi.fn(),
+  rebuildIndex: vi.fn(),
+  resetGraphView: vi.fn(),
 }))
 
 vi.mock('@/api/knowledgeBase', () => ({
@@ -37,7 +39,7 @@ vi.mock('@/components/persy/PersyKnowledgeGraph.vue', () => ({
     emits: ['selectNode', 'onboardingAction'],
     expose: ['resetView'],
     template: '<div data-testid="graph-stub"></div>',
-    methods: { resetView: vi.fn() },
+    methods: { resetView: () => mocks.resetGraphView() },
   }),
 }))
 
@@ -61,6 +63,24 @@ const pendingMemory = {
   evidence: [{ source: 'chat', session_id: 'session-1' }],
   updated_at: '2026-07-15T10:00:00Z',
 }
+
+const wrappers: ReturnType<typeof mount>[] = []
+async function mountKnowledge() {
+  const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
+  wrappers.push(wrapper)
+  await flushPromises()
+  return wrapper
+}
+async function clickLabel(wrapper: ReturnType<typeof mount>, selector: string, text: string) {
+  const button = wrapper.findAll(selector).find((item) => item.text().includes(text))
+  expect(button, text).toBeTruthy()
+  await button!.trigger('click')
+  await flushPromises()
+}
+afterEach(() => {
+  wrappers.splice(0).forEach((wrapper) => wrapper.unmount())
+  vi.restoreAllMocks()
+})
 
 describe('PersyKnowledgeView', () => {
   beforeEach(async () => {
@@ -103,6 +123,8 @@ describe('PersyKnowledgeView', () => {
       success: true,
       memory: { ...pendingMemory, status: 'active' },
     })
+    for (const action of ['rejectMemory', 'updateMemory', 'deleteMemory', 'deleteDocument', 'rebuildIndex'] as const) mocks[action].mockResolvedValue({ success: true })
+    mocks.ingestDocument.mockResolvedValue({ success: true, chunk_count: 2 })
     mocks.query.mockResolvedValue({
       success: true,
       dataset_id: 'persy-knowledge',
@@ -143,8 +165,7 @@ describe('PersyKnowledgeView', () => {
   })
 
   it('shows pending memories and confirms them from the governance list', async () => {
-    const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
-    await flushPromises()
+    const wrapper = await mountKnowledge()
 
     const memoryTab = wrapper.findAll('.view-switch button').find((button) => button.text().includes('记忆'))
     expect(memoryTab).toBeTruthy()
@@ -159,8 +180,7 @@ describe('PersyKnowledgeView', () => {
   })
 
   it('merges governed memory and document evidence in one recall trace', async () => {
-    const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
-    await flushPromises()
+    const wrapper = await mountKnowledge()
 
     await wrapper.get('input[aria-label="向 Persy 提问"]').setValue('什么时候联系并如何续约？')
     await wrapper.get('form.ask-dock').trigger('submit')
@@ -224,8 +244,7 @@ describe('PersyKnowledgeView', () => {
       })
     mocks.memories.mockResolvedValue({ success: true, memories: [] })
 
-    const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
-    await flushPromises()
+    const wrapper = await mountKnowledge()
 
     expect(mocks.omniscient).toHaveBeenCalled()
     expect(mocks.status).toHaveBeenCalledWith('user_tenant-a', { includeDocuments: false })
@@ -235,4 +254,144 @@ describe('PersyKnowledgeView', () => {
     expect(wrapper.text()).toContain('496')
     expect(wrapper.text()).toMatch(/内容/)
   })
+
+  it('opens pending review, cancels a correction, and saves edited memory fields', async () => {
+    const wrapper = await mountKnowledge()
+    await wrapper.get('.memory-review-button').trigger('click')
+    expect(wrapper.get('.brain-inspector').classes()).toContain('is-open')
+    expect(wrapper.get('.fact-list').text()).toContain('召回次数')
+    await clickLabel(wrapper, '.memory-detail-actions button', '纠正')
+    await clickLabel(wrapper, '.memory-editor button', '取消')
+    expect(wrapper.find('.memory-editor').exists()).toBe(false)
+    expect(mocks.updateMemory).not.toHaveBeenCalled()
+    await clickLabel(wrapper, '.memory-detail-actions button', '纠正')
+    const fields = wrapper.findAll('.memory-editor input')
+    await fields[0].setValue(' 客户 ')
+    await fields[1].setValue(' 联系时间 ')
+    await wrapper.get('.memory-editor textarea').setValue(' 上午 ')
+    await wrapper.get('.memory-editor').trigger('submit')
+    await flushPromises()
+    expect(mocks.updateMemory).toHaveBeenCalledWith('persy-knowledge', 'mem-1', expect.objectContaining({
+      key: '客户.联系时间', value: expect.objectContaining({ subject: '客户', predicate: '联系时间', object: '上午' }),
+    }))
+    expect(wrapper.get('.memory-message').text()).toBe('记忆已纠正')
+    expect(wrapper.find('.memory-editor').exists()).toBe(false)
+  })
+
+  it.each([['确认记忆', 'confirmMemory'], ['忽略', 'rejectMemory']] as const)('reports an unsuccessful %s action in the inspector', async (label, action) => {
+    mocks[action].mockResolvedValue({ success: false, message: '审核服务离线' })
+    const wrapper = await mountKnowledge()
+    await wrapper.get('.memory-review-button').trigger('click')
+    await clickLabel(wrapper, '.memory-detail-actions button', label)
+    expect(mocks[action]).toHaveBeenCalledWith('persy-knowledge', 'mem-1', ...(action === 'rejectMemory' ? ['user_rejected_from_persy'] : []))
+    expect(wrapper.get('.memory-message').text()).toBe('审核服务离线')
+    expect(wrapper.get('.memory-primary-button').attributes('disabled')).toBeUndefined()
+  })
+
+  it('requires confirmation before deleting an active memory and shows the result', async () => {
+    mocks.memories.mockResolvedValue({ success: true, memories: [{ ...pendingMemory, status: 'active' }] })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const wrapper = await mountKnowledge()
+    await clickLabel(wrapper, '.view-switch button', '记忆')
+    wrapper.findComponent({ name: 'PersyMemoryList' }).vm.$emit('select', { ...pendingMemory, status: 'active' })
+    await flushPromises()
+    await wrapper.get('button[title="删除记忆"]').trigger('click')
+    expect(mocks.deleteMemory).not.toHaveBeenCalled()
+    confirm.mockReturnValue(true)
+    await wrapper.get('button[title="删除记忆"]').trigger('click')
+    await flushPromises()
+    expect(mocks.deleteMemory).toHaveBeenCalledWith('persy-knowledge', 'mem-1', 'user_deleted_from_persy')
+    expect(wrapper.get('.memory-message').text()).toBe('记忆已删除')
+  })
+
+  it('loads source details on demand, asks about a source, and reports deletion failures', async () => {
+    const doc = { document_id: 'doc-1', source: '续约制度', chunk_count: 3, parser: 'markdown', version_label: 'v2' }
+    const node = { id: 'document:doc-1', type: 'source', label: doc.source, source: '续约.md', document_id: doc.document_id,
+      chunk_index: 0, metadata: { ...doc, mention_count: 2 } }
+    mocks.graph.mockResolvedValue({ success: true, nodes: [node], edges: [] })
+    const wrapper = await mountKnowledge()
+    mocks.status.mockResolvedValue({ success: true, document_count: 1, documents: [doc] })
+    await clickLabel(wrapper, '.view-switch button', '来源')
+    expect(mocks.status).toHaveBeenLastCalledWith('persy-knowledge', { includeDocuments: true })
+    await wrapper.get('.source-row__select').trigger('click')
+    for (const value of ['续约.md', 'v2', '知识节点', '关联知识', 'K1']) expect(wrapper.get('.fact-list').text()).toContain(value)
+    await wrapper.get('.node-question-button').trigger('click')
+    expect((wrapper.get('input[aria-label="向 Persy 提问"]').element as HTMLInputElement).value).toContain('续约制度')
+    expect(wrapper.get('.brain-inspector').classes()).not.toContain('is-open')
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mocks.deleteDocument.mockRejectedValueOnce(new Error('资料正在使用'))
+    await wrapper.get('button[aria-label="删除资料"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.page-alert').text()).toBe('资料正在使用')
+    await wrapper.get('button[aria-label="删除资料"]').trigger('click')
+    await flushPromises()
+    expect(mocks.deleteDocument).toHaveBeenLastCalledWith('persy-knowledge', 'doc-1')
+    expect(wrapper.get('.page-toast').text()).toContain('已删除')
+  })
+
+  it('filters cards and imports pasted knowledge into a switched dataset', async () => {
+    const wrapper = await mountKnowledge()
+    await clickLabel(wrapper, '.view-switch button', '卡片')
+    await wrapper.get('input[placeholder="筛选节点"]').setValue('下午')
+    expect(wrapper.findAll('.node-card')).toHaveLength(1)
+    await wrapper.get('.node-card').trigger('click')
+    expect(wrapper.get('.node-detail__heading').text()).toContain(pendingMemory.statement)
+    await wrapper.get('input[placeholder="筛选节点"]').setValue('无匹配')
+    expect(wrapper.findAll('.node-card')).toHaveLength(0)
+    await clickLabel(wrapper, '.view-empty button', '导入')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
+    await clickLabel(wrapper, '.import-tabs button', '文本')
+    await wrapper.get('input[aria-label="数据集"]').setValue(' team ')
+    await clickLabel(wrapper, '.advanced-settings button', '切换')
+    expect(mocks.graph).toHaveBeenLastCalledWith('team')
+    await wrapper.get('#persy-source').setValue('制度')
+    await wrapper.get('#persy-text').setValue('需要财务审批。')
+    await wrapper.get('.drawer-submit').trigger('click')
+    await flushPromises()
+    expect(mocks.ingestDocument).toHaveBeenCalledWith(expect.objectContaining({ datasetId: 'team', source: '制度', text: '需要财务审批。' }))
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.get('.page-toast').text()).toContain('2')
+    expect(wrapper.find('[data-testid="graph-stub"]').exists()).toBe(true)
+    await wrapper.get('button[aria-label="导入知识"]').trigger('click')
+    expect(wrapper.find('.page-toast').exists()).toBe(false)
+  })
+
+  it('routes graph onboarding, reset, refresh and inspector controls to visible state', async () => {
+    const wrapper = await mountKnowledge()
+    const graph = wrapper.findComponent({ name: 'PersyKnowledgeGraphStub' })
+    await wrapper.get('button[aria-label="复位图谱"]').trigger('click')
+    expect(mocks.resetGraphView).toHaveBeenCalledOnce()
+    await wrapper.get('button[aria-label="刷新知识网络"]').trigger('click')
+    await flushPromises()
+    expect(mocks.graph).toHaveBeenCalledTimes(2)
+    graph.vm.$emit('onboardingAction', 'paste')
+    await flushPromises()
+    expect(wrapper.find('#persy-text').exists()).toBe(true)
+    await wrapper.get('button[aria-label="关闭"]').trigger('click')
+    graph.vm.$emit('selectNode', { id: 'topic:1', type: 'topic', label: '主题' })
+    await flushPromises()
+    expect(wrapper.get('.node-detail__summary').text()).toBe('暂无摘要')
+    await clickLabel(wrapper, '.inspector-tabs button', '召回')
+    expect(wrapper.text()).toContain('尚无召回轨迹')
+    await clickLabel(wrapper, '.inspector-tabs button', '节点')
+    expect(wrapper.get('.node-detail__heading').text()).toContain('主题')
+    await wrapper.get('button[aria-label="关闭详情"]').trigger('click')
+    expect(wrapper.get('.brain-inspector').classes()).not.toContain('is-open')
+  })
+
+
+  it('changes the admin knowledge space and rebuilds its index', async () => {
+    const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
+    vi.mocked(isAdminConsoleSpa).mockReturnValue(true)
+    mocks.omniscient.mockResolvedValue({ success: true, datasets: { 'persy-knowledge': {}, team: {} } })
+    const wrapper = await mountKnowledge()
+    await wrapper.get('.dataset-switch select').setValue('team')
+    await flushPromises()
+    expect(mocks.status).toHaveBeenLastCalledWith('team', { includeDocuments: false })
+    await wrapper.get('button[aria-label="重建索引"]').trigger('click')
+    await flushPromises()
+    expect(mocks.rebuildIndex).toHaveBeenCalledWith('team')
+    expect(wrapper.get('button[aria-label="重建索引"]').attributes('disabled')).toBeUndefined()
+  })
+
 })

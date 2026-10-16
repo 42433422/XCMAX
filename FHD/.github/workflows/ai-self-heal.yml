@@ -4,13 +4,7 @@ name: AI Self-Heal
 
 on:
   workflow_run:
-    # workflow_run matches the target workflow's `name:`, not its file path.
-    # Keep this inline so the monorepo workflow publisher does not path-prefix
-    # these display names while rewriting path-list entries.
-    # Display names must match each workflow's `name:` exactly (not file path).
-    # MUST stay a single-line inline list: publish_ci_workflows_to_root.py path-prefixes
-    # YAML sequence items under workflows: and would break workflow_run matching.
-    # Broaden coverage beyond the original 6 names so Employee Smoke / MODstore tests etc. can heal.
+    # Match display names in one inline list; the publisher path-prefixes sequence items.
     workflows: ["CI/CD Pipeline", "CI - Backend Python", "Source Governance", "Smoke Tests", "Employee Smoke Gate", "MODstore tests", "cvm-autonomy-watcher", "Deploy MODstore Production", "fhd-deploy", "Release gate CI", "Capacity staging monthly", "desktop-macos-smoke", "ci-mobile-flutter", "ci-mobile-ios", "Deploy corp site (xiu-ci.com)"]
     types: [completed]
   workflow_dispatch:
@@ -32,9 +26,11 @@ on:
         required: false
         default: ""
 
+# Keep the latest failed source run; isolate manual, deploy and monitoring runs.
 concurrency:
-  group: ai-self-heal-${{ github.repository_id }}
-  cancel-in-progress: false
+  group: >-
+    ai-self-heal-${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' && !contains(fromJSON('["cvm-autonomy-watcher", "Deploy MODstore Production", "fhd-deploy", "Capacity staging monthly", "Deploy corp site (xiu-ci.com)"]'), github.event.workflow_run.name)) && format('src-{0}-{1}', github.event.workflow_run.name, github.event.workflow_run.head_branch) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: true
 
 permissions:
   contents: write

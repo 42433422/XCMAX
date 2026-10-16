@@ -82,6 +82,28 @@ async function mountAIOpenPanel() {
   return wrapper
 }
 
+function beforeEachPanelScenario1() {
+    vi.clearAllMocks()
+    mockSafeJsonRequest.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        wechat_open: false,
+        routes: [],
+        openclaw_base: '',
+        remote_control_enabled: false,
+        keys: [],
+      },
+      status: 200,
+    })
+
+}
+
+function beforeEachPanelScenario3() {
+    vi.clearAllMocks()
+
+}
+
 describe('AIOpenPanel.vue – component structure', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -154,21 +176,7 @@ describe('AIOpenPanel.vue – component structure', () => {
 })
 
 describe('AIOpenPanel.vue – readyStatus computed', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({
-      ok: true,
-      data: {
-        success: true,
-        wechat_open: false,
-        routes: [],
-        openclaw_base: '',
-        remote_control_enabled: false,
-        keys: [],
-      },
-      status: 200,
-    })
-  })
+  beforeEach(beforeEachPanelScenario1)
 
   it('readyStatus is off when nothing enabled', async () => {
     const wrapper = await mountAIOpenPanel()
@@ -184,21 +192,7 @@ describe('AIOpenPanel.vue – readyStatus computed', () => {
 })
 
 describe('AIOpenPanel.vue – primary action button', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({
-      ok: true,
-      data: {
-        success: true,
-        wechat_open: false,
-        routes: [],
-        openclaw_base: '',
-        remote_control_enabled: false,
-        keys: [],
-      },
-      status: 200,
-    })
-  })
+  beforeEach(beforeEachPanelScenario1)
 
   it('shows "一键开启" when not active', async () => {
     const wrapper = await mountAIOpenPanel()
@@ -299,21 +293,7 @@ describe('AIOpenPanel.vue – client handling', () => {
 })
 
 describe('AIOpenPanel.vue – copy functions', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({
-      ok: true,
-      data: {
-        success: true,
-        wechat_open: false,
-        routes: [],
-        openclaw_base: '',
-        remote_control_enabled: false,
-        keys: [],
-      },
-      status: 200,
-    })
-  })
+  beforeEach(beforeEachPanelScenario1)
 
   it('copyOneLiner copies text and marks as installed', async () => {
     const wrapper = await mountAIOpenPanel()
@@ -349,9 +329,7 @@ describe('AIOpenPanel.vue – copy functions', () => {
 })
 
 describe('AIOpenPanel.vue – panel loading', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
+  beforeEach(beforeEachPanelScenario3)
 
   it('loads panel data on mount', async () => {
     mockSafeJsonRequest.mockResolvedValue({
@@ -391,58 +369,23 @@ describe('AIOpenPanel.vue – panel loading', () => {
 })
 
 describe('AIOpenPanel.vue – formatPanelError', () => {
-  it('formats 404 error', async () => {
+  it.each([
+    ['404', { status: 404 }, '后端未就绪', false],
+    ['502', { status: 502 }, '后端未启动', false],
+    ['500', { status: 500 }, '后端未启动', false],
+    ['non-JSON', { message: '未返回JSON' }, '后端未启动', false],
+    ['generic', { message: '自定义错误' }, '自定义错误', true],
+  ])('formats %s error', async (_name, input, expected, exact) => {
     const wrapper = await mountAIOpenPanel()
-    const result = wrapper.vm.formatPanelError({ status: 404 })
-    expect(result).toContain('后端未就绪')
-    wrapper.unmount()
-  })
-
-  it('formats 502 error', async () => {
-    const wrapper = await mountAIOpenPanel()
-    const result = wrapper.vm.formatPanelError({ status: 502 })
-    expect(result).toContain('后端未启动')
-    wrapper.unmount()
-  })
-
-  it('formats 500 error', async () => {
-    const wrapper = await mountAIOpenPanel()
-    const result = wrapper.vm.formatPanelError({ status: 500 })
-    expect(result).toContain('后端未启动')
-    wrapper.unmount()
-  })
-
-  it('formats non-JSON error', async () => {
-    const wrapper = await mountAIOpenPanel()
-    const result = wrapper.vm.formatPanelError({ message: '未返回JSON' })
-    expect(result).toContain('后端未启动')
-    wrapper.unmount()
-  })
-
-  it('formats generic error', async () => {
-    const wrapper = await mountAIOpenPanel()
-    const result = wrapper.vm.formatPanelError({ message: '自定义错误' })
-    expect(result).toBe('自定义错误')
+    const result = wrapper.vm.formatPanelError(input)
+    if (exact) expect(result).toBe(expected)
+    else expect(result).toContain(expected)
     wrapper.unmount()
   })
 })
 
 describe('AIOpenPanel.vue – createKey', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({
-      ok: true,
-      data: {
-        success: true,
-        wechat_open: false,
-        routes: [],
-        openclaw_base: '',
-        remote_control_enabled: false,
-        keys: [],
-      },
-      status: 200,
-    })
-  })
+  beforeEach(beforeEachPanelScenario1)
 
   it('creates key successfully', async () => {
     mockSafeJsonRequest.mockImplementation((url: string) => {
@@ -538,21 +481,7 @@ describe('AIOpenPanel.vue – toggle controls', () => {
 })
 
 describe('AIOpenPanel.vue – OpenClaw', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({
-      ok: true,
-      data: {
-        success: true,
-        wechat_open: false,
-        routes: [],
-        openclaw_base: '',
-        remote_control_enabled: false,
-        keys: [],
-      },
-      status: 200,
-    })
-  })
+  beforeEach(beforeEachPanelScenario1)
 
   it('saveOpenclawBase saves when panel available', async () => {
     const wrapper = await mountAIOpenPanel()
@@ -599,21 +528,7 @@ describe('AIOpenPanel.vue – OpenClaw', () => {
 })
 
 describe('AIOpenPanel.vue – computed properties', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({
-      ok: true,
-      data: {
-        success: true,
-        wechat_open: false,
-        routes: [],
-        openclaw_base: '',
-        remote_control_enabled: false,
-        keys: [],
-      },
-      status: 200,
-    })
-  })
+  beforeEach(beforeEachPanelScenario1)
 
   it('mcpUrl is computed from backendOrigin', async () => {
     const wrapper = await mountAIOpenPanel()
@@ -696,21 +611,7 @@ describe('AIOpenPanel.vue – computed properties', () => {
 })
 
 describe('AIOpenPanel.vue – back emit', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({
-      ok: true,
-      data: {
-        success: true,
-        wechat_open: false,
-        routes: [],
-        openclaw_base: '',
-        remote_control_enabled: false,
-        keys: [],
-      },
-      status: 200,
-    })
-  })
+  beforeEach(beforeEachPanelScenario1)
 
   it('emits back on header click', async () => {
     const wrapper = await mountAIOpenPanel()
@@ -721,9 +622,7 @@ describe('AIOpenPanel.vue – back emit', () => {
 })
 
 describe('AIOpenPanel.vue – MCP health probe', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
+  beforeEach(beforeEachPanelScenario3)
 
   it('sets mcpHealthy when manifest is valid', async () => {
     mockSafeJsonRequest.mockImplementation((url: string) => {
@@ -808,9 +707,7 @@ describe('AIOpenPanel.vue – MCP health probe', () => {
 })
 
 describe('AIOpenPanel.vue – loadPanel refresh', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
+  beforeEach(beforeEachPanelScenario3)
 
   it('loadPanel refreshes all data', async () => {
     mockSafeJsonRequest.mockImplementation((url: string) => {
@@ -846,4 +743,94 @@ describe('AIOpenPanel.vue – loadPanel refresh', () => {
     expect(wrapper.vm.remoteControlEnabled).toBe(true)
     wrapper.unmount()
   })
+})
+
+
+describe('AIOpenPanel backend capability controls', () => {
+  beforeEach(() => { vi.clearAllMocks(); mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true } }) })
+  it('updates only the requested whitelist route and sends explicit screen, remote and WeChat choices', async () => {
+    const wrapper = await mountAIOpenPanel(), vm = wrapper.vm as any
+    vm.routes = [{ path: '/orders', enabled: false }, { path: '/products', enabled: true }]
+    await vm.toggleWhitelist('/orders', { target: { checked: true } })
+    expect(vm.routes).toEqual([{ path: '/orders', enabled: true }, { path: '/products', enabled: true }])
+    expect(mockSafeJsonRequest).toHaveBeenLastCalledWith('/api/aiopen/whitelist', expect.objectContaining({ body: JSON.stringify({ path: '/orders', enabled: true }) }))
+    for (const [action, path, field] of [['toggleWechat', '/api/ai/qclaw/wechat-gateway', 'wechatOpen'], ['toggleRemoteControl', '/api/aiopen/control', 'remoteControlEnabled']]) {
+      await vm[action]({ target: { checked: true } })
+      expect(vm[field]).toBe(true)
+      expect(mockSafeJsonRequest).toHaveBeenLastCalledWith(path, expect.objectContaining({ body: '{"enabled":true}' }))
+      vm.panelAvailable = false; mockSafeJsonRequest.mockClear()
+      await vm[action]({ target: null })
+      expect(vm[field]).toBe(false); expect(mockSafeJsonRequest).not.toHaveBeenCalled()
+      vm.panelAvailable = true
+    }
+    wrapper.unmount()
+  })
+  it.each([
+    ['seedFullWhitelist', { ok: true, data: { routes: [{ path: '/orders', enabled: true }], enabled_count: 1 } }, '已开启全业务白名单（1 条）'],
+    ['seedFullWhitelist', { ok: false }, '白名单写入失败'],
+    ['verifyCapabilityLoop', { ok: true, data: { closed_loop: true } }, '全调用闭环通过'],
+    ['verifyCapabilityLoop', { ok: true, data: { success: false } }, '闭环未通过'],
+    ['verifyCapabilityLoop', { ok: true, data: { hint: '权限不足' } }, '权限不足'],
+    ['verifyCapabilityLoop', { ok: false }, '闭环检测失败'],
+  ])('%s reports backend results and always releases busy state', async (action, result, text) => {
+    const wrapper = await mountAIOpenPanel(), vm = wrapper.vm as any
+    mockSafeJsonRequest.mockResolvedValueOnce(result)
+    await vm[action]()
+    expect(vm.loopResultText).toBe(text)
+    expect(vm.seedRunning).toBe(false); expect(vm.loopRunning).toBe(false)
+    mockSafeJsonRequest.mockRejectedValueOnce(new Error('network'))
+    await expect(vm[action]()).rejects.toThrow('network')
+    expect(vm.seedRunning).toBe(false); expect(vm.loopRunning).toBe(false)
+    vm.panelAvailable = false; mockSafeJsonRequest.mockClear(); await vm[action]()
+    expect(mockSafeJsonRequest).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('uses the real installation mode, schedules the visible-page fallback and can cancel installation', async () => {
+    const wrapper = await mountAIOpenPanel(), vm = wrapper.vm as any
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    vi.useFakeTimers()
+    const client = { id: 'cursor', name: 'Cursor', installMode: 'deeplink', installUrl: '#install', installFallbackUrl: 'https://example.com/setup' }
+    await vm.handleClientClick(client)
+    expect(window.location.hash).toBe('#install')
+    expect(mockMarkAiopenClientInstalled).toHaveBeenCalledWith('cursor')
+    await vi.advanceTimersByTimeAsync(1200)
+    expect(open).toHaveBeenCalledWith(client.installFallbackUrl, '_blank', 'noopener,noreferrer')
+    vm.installedClientIds = ['cursor']
+    await vm.handleClientClick(client)
+    expect(mockUnmarkAiopenClientInstalled).toHaveBeenCalledWith('cursor')
+    expect(vm.accessResult).toContain('已取消')
+    vm.installedClientIds = []
+    await vm.handleClientClick({ ...client, id: 'vscode', installMode: 'vscode', installUrl: '#vscode' })
+    expect(window.location.hash).toBe('#vscode')
+    expect(vm.accessResult).toContain('VS Code 安装')
+    vi.useRealTimers(); open.mockRestore(); wrapper.unmount()
+  })
+})
+
+it.each(['token', 'password'])('authenticates the OpenClaw WebSocket using %s and handles lifecycle errors', async mode => {
+  const sockets: any[] = []
+  class Socket {
+    send = vi.fn(); close = vi.fn()
+    constructor(public url: string) { sockets.push(this) }
+  }
+  vi.stubGlobal('WebSocket', Socket)
+  const wrapper = await mountAIOpenPanel(), vm = wrapper.vm as any
+  vm.openclawWsUrl = ' ws://localhost:28789/ws '; vm.openclawWsAuthMode = mode
+  vm.connectOpenclawWs(); vm.connectOpenclawWs()
+  expect(sockets).toHaveLength(1); expect(sockets[0].url).toBe('ws://localhost:28789/ws')
+  const socket = sockets[0]
+  socket.onopen(); expect(vm.wsConnecting).toBe(false); expect(vm.wsStatusText).toBe('WS 已连接')
+  for (const data of ['invalid-json', 'null', '{"event":"connect.challenge"}']) socket.onmessage({ data })
+  expect(socket.send).not.toHaveBeenCalled()
+  vm.openclawGatewayToken = ' local-test-secret '
+  socket.onmessage({ data: '{"event":"connect.challenge"}' })
+  expect(JSON.parse(socket.send.mock.calls[0][0])).toMatchObject({ type: 'req', method: 'connect', params: {
+    minProtocol: 3, maxProtocol: 3, role: 'operator', scopes: ['operator.read', 'operator.write'], auth: { [mode]: 'local-test-secret' },
+  } })
+  socket.onmessage({ data: '{"type":"res","payload":{"type":"hello-ok"}}' })
+  expect(vm.wsConnected).toBe(true); vm.connectOpenclawWs(); expect(sockets).toHaveLength(1)
+  socket.onerror(); expect(vm.wsStatusText).toBe('WS 失败')
+  socket.onclose(); expect(vm.wsConnected).toBe(false); expect(vm.wsConnecting).toBe(false)
+  vm.connectOpenclawWs(); wrapper.unmount(); expect(sockets[1].close).toHaveBeenCalledOnce()
+  vi.unstubAllGlobals()
 })

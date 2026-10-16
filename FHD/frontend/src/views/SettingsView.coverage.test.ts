@@ -4,7 +4,7 @@
  * 重点覆盖：未覆盖的函数、分支、错误路径、事件处理
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { ref, type Ref, nextTick } from 'vue'
@@ -385,13 +385,15 @@ function resetApiMocks() {
  * 用户会话与本地用户加载
  * ══════════════════════════════════════════════════════════════════ */
 
+function resetSettingsTest() {
+  setActivePinia(createPinia())
+  localStorage.clear()
+  resetApiMocks()
+  resetStores()
+}
+
 describe('SettingsView – loadLocalUser 各种路径', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('getCurrentUser 成功返回用户时设置 sessionValid', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
@@ -511,12 +513,7 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – profileBrandTitle 计算属性', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('有 brand 时返回 brand', async () => {
     mockAccountProfileStore.displayBrand = '我的公司'
@@ -562,12 +559,7 @@ describe('SettingsView – profileBrandTitle 计算属性', () => {
 })
 
 describe('SettingsView – profileSubline 计算属性', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('无 user 时返回登录提示', async () => {
     const wrapper = await mountSettings()
@@ -676,12 +668,7 @@ describe('SettingsView – profileSubline 计算属性', () => {
 })
 
 describe('SettingsView – avatarInitial 与 profileAvatarUrl', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('无 user 时 avatarInitial 为空', async () => {
     const wrapper = await mountSettings()
@@ -791,12 +778,7 @@ describe('SettingsView – avatarInitial 与 profileAvatarUrl', () => {
 })
 
 describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('无 user 时 profileFormDirty 为 false', async () => {
     const wrapper = await mountSettings()
@@ -955,10 +937,9 @@ describe('SettingsView – saveCompanyBrand', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    const vm = wrapper.vm as any
-    vm.companyBrandDraft = '新品牌'
-    await nextTick()
-    await vm.saveCompanyBrand()
+    await wrapper.get('#settings-company-brand').setValue('新品牌')
+    await wrapper.get('.settings-item__save-btn').trigger('click')
+    await flushPromises()
     expect(mockAuthApiUpdateCompanyBrand).toHaveBeenCalledWith('新品牌')
     expect(mockAccountProfileStore.companyBrand).toBe('新品牌')
     wrapper.unmount()
@@ -1049,10 +1030,11 @@ describe('SettingsView – saveProfile', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    vm.profileDisplayNameDraft = 'Alice New'
-    vm.profileEmailDraft = 'new@a.com'
-    await nextTick()
-    await vm.saveProfile()
+    const fields = wrapper.findAll('.settings-profile-form__input')
+    await fields[0].setValue('Alice New')
+    await fields[1].setValue('new@a.com')
+    await wrapper.get('#settings-profile-home .settings-profile-form__submit').trigger('click')
+    await flushPromises()
     expect(mockAuthApiUpdateProfile).toHaveBeenCalled()
     expect(vm.localUser.display_name).toBe('Alice New')
     wrapper.unmount()
@@ -1079,12 +1061,7 @@ describe('SettingsView – saveProfile', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – 头像交互', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('未登录时点击头像不触发 input click', async () => {
     const wrapper = await mountSettings()
@@ -1109,10 +1086,8 @@ describe('SettingsView – 头像交互', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    const vm = wrapper.vm as any
-    const clickSpy = vi.fn()
-    vm.avatarInputRef = { click: clickSpy }
-    await vm.onAvatarClick()
+    const clickSpy = vi.spyOn(wrapper.get('.settings-profile__avatar-input').element as HTMLInputElement, 'click')
+    await wrapper.get('.settings-profile__avatar').trigger('click')
     expect(clickSpy).toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -1191,7 +1166,11 @@ describe('SettingsView – 头像交互', () => {
     await nextTick()
     const vm = wrapper.vm as any
     const file = new File(['x'], 'a.png', { type: 'image/png' })
-    await vm.onAvatarFileChange({ target: { value: 'x', files: [file] } })
+    const input = wrapper.get('.settings-profile__avatar-input')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+    expect(mockAuthApiUploadAvatar).toHaveBeenCalledWith(file)
     expect(vm.localUser.avatar_url).toBe('/new-avatar.png')
     wrapper.unmount()
   })
@@ -1255,7 +1234,8 @@ describe('SettingsView – onLogout', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    await vm.onLogout()
+    await wrapper.get('.settings-profile__btn--ghost').trigger('click')
+    await flushPromises()
     expect(mockAuthApiLogout).toHaveBeenCalled()
     expect(mockAccountProfileStore.clear).toHaveBeenCalled()
     expect(vm.localUser).toBeNull()
@@ -1320,7 +1300,8 @@ describe('SettingsView – 审计日志', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    await vm.loadAuditLogs()
+    await wrapper.get('[data-tutorial-id="settings-audit-logs"] button').trigger('click')
+    await flushPromises()
     expect(vm.auditLogs.length).toBe(2)
     expect(vm.auditLogsTotal).toBe(2)
     wrapper.unmount()
@@ -1344,8 +1325,7 @@ describe('SettingsView – 审计日志', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    const vm = wrapper.vm as any
-    vm.downloadAuditCsv()
+    await wrapper.get('[data-tutorial-id="settings-audit-logs"] .settings-profile-form__submit--ghost').trigger('click')
     expect(openSpy).toHaveBeenCalledWith('/api/admin/audit.csv', '_blank', 'noopener,noreferrer')
     wrapper.unmount()
   })
@@ -1381,12 +1361,7 @@ describe('SettingsView – 审计日志', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadDesktopDatabaseStatus', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('desktopMode 为 false 时隐藏数据库信息', async () => {
     mockApiGet.mockImplementation(async (url: string) => {
@@ -1466,12 +1441,7 @@ describe('SettingsView – loadDesktopDatabaseStatus', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadIndustries', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('返回数组时直接赋值', async () => {
     mockSystemApiGetIndustries.mockResolvedValueOnce({
@@ -1517,12 +1487,7 @@ describe('SettingsView – loadIndustries', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadCurrentIndustryDetail', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('成功时从 response.data.units.primary 设置主单位', async () => {
     mockSystemApiGetCurrentIndustry.mockResolvedValueOnce({
@@ -1588,12 +1553,7 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadIntentPackages', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('返回 packages 对象时更新 intentPackages', async () => {
     mockIntentPackagesApiGetPackages.mockResolvedValueOnce({
@@ -1645,12 +1605,7 @@ describe('SettingsView – loadIntentPackages', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadPreferences', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('从 prefs 读取 assistantName 与 aiMode', async () => {
     mockApiGet.mockImplementation(async (url: string) => {
@@ -1753,12 +1708,7 @@ describe('SettingsView – loadPreferences', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – saveSettings', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('保存成功时派发 assistant-name-updated 事件', async () => {
     mockApiPost.mockResolvedValue({ success: true })
@@ -1767,10 +1717,10 @@ describe('SettingsView – saveSettings', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    const vm = wrapper.vm as any
-    vm.assistantName = '新助手'
-    await nextTick()
-    await vm.saveSettings()
+    await flushPromises()
+    await wrapper.get('#settings-assistant-name').setValue('新助手')
+    await wrapper.get('.settings-primary-btn').trigger('click')
+    await flushPromises()
     expect(mockApiPost).toHaveBeenCalledTimes(2)
     const event = dispatchSpy.mock.calls[0][0]
     expect(event.type).toBe('assistant-name-updated')
@@ -1810,12 +1760,7 @@ describe('SettingsView – saveSettings', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadDistillationVersions', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('成功时填充 versions 与 sampleCount', async () => {
     mockApiGet.mockImplementation(async (url: string) => {
@@ -1921,7 +1866,8 @@ describe('SettingsView – onCheckForUpdates', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    await vm.onCheckForUpdates()
+    await wrapper.get('.settings-about-actions button').trigger('click')
+    await flushPromises()
     expect(checkSpy).toHaveBeenCalled()
     expect(vm.aboutUpdateMessage).toBe('已开始检查更新，如有新版本将提示下载。')
     expect(vm.aboutUpdateError).toBe(false)
@@ -1949,12 +1895,7 @@ describe('SettingsView – onCheckForUpdates', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – 主题与语言切换', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('onSidebarThemeChange 调用 persistSidebarTheme', async () => {
     const { persistSidebarTheme } = await import('@/utils/sidebarTheme')
@@ -1984,12 +1925,7 @@ describe('SettingsView – 主题与语言切换', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – openSettingsExtensions', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -2029,12 +1965,7 @@ describe('SettingsView – openSettingsExtensions', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – 路由跳转方法', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('goHostPackOnboarding 跳转到 onboarding', async () => {
     const wrapper = await mountSettings()
@@ -2060,12 +1991,7 @@ describe('SettingsView – 路由跳转方法', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – retryModRoutesLoad', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('刷新后仍有 loadError 时提示', async () => {
     mockModsStore.refresh.mockResolvedValueOnce(undefined)
@@ -2113,12 +2039,7 @@ describe('SettingsView – retryModRoutesLoad', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – onActiveModChange', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -2176,12 +2097,7 @@ describe('SettingsView – onActiveModChange', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – onUninstallMod', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('空 modId 时不执行', async () => {
     const wrapper = await mountSettings()
@@ -2294,12 +2210,7 @@ describe('SettingsView – onUninstallMod', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – scrollToSettingsSection', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -2353,12 +2264,7 @@ describe('SettingsView – scrollToSettingsSection', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – mod 相关计算属性', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('modelPaymentBridgeInstalled 检测 bridge mod', async () => {
     mockModsStore.mods = [{ id: 'xcagi-model-payment-bridge', name: 'Bridge' }]
@@ -2487,12 +2393,7 @@ describe('SettingsView – mod 相关计算属性', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – 行业与品牌计算属性', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('currentIndustryLabel 从 mod industry 获取', async () => {
     mockModsStore.mods = [{ id: 'ext-1', name: 'Ext1', industry: { id: 'ind1', name: '制造业' } }]
@@ -2648,12 +2549,7 @@ describe('SettingsView – 行业与品牌计算属性', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – intentPackageEntries', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('返回所有 intent package 条目', async () => {
     const wrapper = await mountSettings()
@@ -2701,12 +2597,7 @@ describe('SettingsView – intentPackageEntries', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – updateIndustryKeywords', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('从 mod manifest.intent_keywords 更新', async () => {
     mockModsStore.mods = [
@@ -2774,12 +2665,7 @@ describe('SettingsView – updateIndustryKeywords', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – applyAccountMetaFromAuthPayload', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('handles rejected optional settings hydration without an unhandled task', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: true, data: { user: { id: 1, username: 'a' } } })
@@ -2838,12 +2724,7 @@ describe('SettingsView – applyAccountMetaFromAuthPayload', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – UI 事件交互', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -2853,9 +2734,9 @@ describe('SettingsView – UI 事件交互', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    const vm = wrapper.vm as any
-    // 直接调用 saveSettings 验证按钮绑定
-    await vm.saveSettings()
+    await flushPromises()
+    await wrapper.get('.settings-primary-btn').trigger('click')
+    await flushPromises()
     expect(mockApiPost).toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -2887,7 +2768,7 @@ describe('SettingsView – UI 事件交互', () => {
     // 直接调用方法验证
     const querySpy = vi.spyOn(document, 'querySelector').mockReturnValue(null)
     const pushSpy = vi.spyOn(vm.$router, 'push')
-    vm.openSettingsExtensions()
+    await wrapper.get('.settings-model-service-empty__actions button').trigger('click')
     expect(pushSpy).toHaveBeenCalledWith({ name: 'mod-store' })
     querySpy.mockRestore()
     wrapper.unmount()
@@ -2923,12 +2804,7 @@ describe('SettingsView – UI 事件交互', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – watch activeModIndustry', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('activeModIndustry 变化时触发 updateIndustryKeywords', async () => {
     mockModsStore.mods = [
@@ -2947,6 +2823,48 @@ describe('SettingsView – watch activeModIndustry', () => {
     vm.updateIndustryKeywords()
     await nextTick()
     expect(vm.intentPackages.industry.keywords).toContain('创建')
+    wrapper.unmount()
+  })
+})
+
+
+describe('SettingsView deployment and navigation controls', () => {
+  beforeEach(resetSettingsTest)
+  afterEach(() => { delete (window as any).xcagiDesktop })
+  it('keeps a PostgreSQL draft while switching deployment modes', async () => {
+    const wrapper = await mountSettings()
+    await flushPromises()
+    await wrapper.get('#settings-ai-mode').setValue('performance')
+    await wrapper.get('#settings-postgres-url').setValue('postgresql://localhost/workspace')
+    expect((wrapper.vm as any).postgresUrlDraft).toBe('postgresql://localhost/workspace')
+    expect((wrapper.vm as any).deploymentStatusMessage).toBe(settingsI18nT('settings.performanceNeedsPg'))
+    await wrapper.get('#settings-ai-mode').setValue('absolute_safe')
+    expect(wrapper.find('#settings-postgres-url').exists()).toBe(false)
+    expect((wrapper.vm as any).aiMode).toBe('offline')
+    await wrapper.get('#settings-ai-mode').setValue('performance')
+    expect((wrapper.get('#settings-postgres-url').element as HTMLInputElement).value).toBe('postgresql://localhost/workspace')
+    wrapper.unmount()
+  })
+
+  it.each(['workflow', 'industry'])('opens the store from the %s section', async (section) => {
+    mockModsStore.mods = [{ id: 'wf-example', name: 'Workflow' }]
+    const wrapper = await mountSettings()
+    const selector = section === 'workflow' ? '.mod-fold-section--inline .btn-link' : '.mod-fold-section-head .btn-link'
+    await wrapper.get(selector).trigger('click')
+    await flushPromises()
+    expect((wrapper.vm as any).$route.name).toBe('mod-store')
+    wrapper.unmount()
+  })
+
+  it('saves desktop auto-launch from its checkbox', async () => {
+    const setAutoLaunch = vi.fn().mockResolvedValue({ ok: true })
+    ;(window as any).xcagiDesktop = { getAutoLaunch: vi.fn().mockResolvedValue(false), setAutoLaunch }
+    const wrapper = await mountSettings()
+    await flushPromises()
+    await wrapper.get('.settings-about-autolaunch input').setValue(true)
+    await flushPromises()
+    expect(setAutoLaunch).toHaveBeenCalledWith(true)
+    expect((wrapper.vm as any).autoLaunch).toBe(true)
     wrapper.unmount()
   })
 })

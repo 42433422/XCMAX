@@ -1122,4 +1122,130 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).not.toContain('能力加载失败')
     wrapper.unmount()
   })
+  it('clears stale row data and ignores run actions when no run is selected', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.runRows = previewRows()
+    vm.rowTotal = 3
+    vm.runsApi.syncDraft()
+    await vm.loadRows()
+    await vm.overrideRow(previewRows()[0], { target: { value: 'skip' } })
+    await vm.bulkOverride('new')
+    await vm.executeCurrentRun()
+    await vm.retryRun()
+    await vm.rollbackRun()
+    expect(vm.runRows).toEqual([])
+    expect(vm.rowTotal).toBe(0)
+    for (const method of ['rows', 'patchDraft', 'execute', 'retry', 'rollback']) expect(etlApiMock[method]).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['overrideRow', 'patchDraft', '逐行动作保存失败'], ['bulkOverride', 'patchDraft', '批量动作保存失败'],
+    ['executeCurrentRun', 'execute', '执行失败'], ['retryRun', 'retry', '重试失败'],
+  ])('keeps %s retryable after API failures', async (action, method, fallback) => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    const run = previewRun()
+    vm.currentRun = run
+    vm.validRowsOnly = true
+    vm.runRows = previewRows()
+    etlApiMock.run.mockRejectedValue(new Error('readback offline'))
+    for (const error of [new Error('operation offline'), 'offline']) {
+      etlApiMock[method].mockRejectedValueOnce(error)
+      await vm[action](...(action === 'overrideRow' ? [previewRows()[0], { target: { value: 'skip' } }] : action === 'bulkOverride' ? ['new'] : []))
+      expect(vm.pageError).toBe(error instanceof Error ? 'operation offline' : fallback)
+      expect(vm.busy).toBe(false)
+      expect(vm.currentRun.id).toBe(run.id)
+    }
+    wrapper.unmount()
+  })
+
+  it.each([new Error('automatic write offline'), 'offline'])('returns a failed automatic write to review: %s', async (error) => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    const run = previewRun()
+    etlApiMock.execute.mockRejectedValueOnce(error)
+    etlApiMock.run.mockRejectedValueOnce(new Error('readback offline'))
+    vm.runsApi.markAutoWrite(run.id)
+    await vm.runsApi.tryAutoWrite(run)
+    expect(vm.pageError).toBe(error instanceof Error ? error.message : '自动写入失败')
+    expect(vm.currentRun.id).toBe(run.id)
+    expect(vm.activeTab).toBe('preview')
+    expect(vm.runRows).toHaveLength(3)
+    expect(vm.busy).toBe(false)
+    expect(vm.state.autoWriteInFlight.size).toBe(0)
+    expect(vm.state.pendingAutoWriteIds.value.has(run.id)).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('does not auto-write disabled, unrequested, unfinished, or already-running previews', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    const run = previewRun()
+    vm.state.autoWriteEnabled.value = false
+    await vm.runsApi.tryAutoWrite(run)
+    vm.state.autoWriteEnabled.value = true
+    await vm.runsApi.tryAutoWrite(run)
+    vm.runsApi.markAutoWrite(run.id)
+    await vm.runsApi.tryAutoWrite({ ...run, status: 'previewing' })
+    vm.state.autoWriteInFlight.add(run.id)
+    await vm.runsApi.tryAutoWrite(run)
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    expect(vm.state.pendingAutoWriteIds.value.has(run.id)).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('does not write empty bulk selections, reread an unchanged filter, or execute an invalid preview', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.currentRun = previewRun()
+    await vm.bulkOverride('new')
+    await vm.bulkOverride('skip')
+    await vm.setRowActionFilter('')
+    await vm.executeCurrentRun()
+    expect(etlApiMock.patchDraft).not.toHaveBeenCalled()
+    expect(etlApiMock.rows).not.toHaveBeenCalled()
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    vm.currentRun.total_rows = 0
+    await vm.loadRows()
+    expect(vm.rowTotal).toBe(0)
+    vm.targetType = 'removed-target'
+    await vm.bootstrap()
+    expect(vm.targetType).toBe('auto')
+    wrapper.unmount()
+  })
+
+  it.each([true, false])('stops rollback when permission or confirmation is missing: permission=%s', async (permitted) => {
+    if (!permitted) currentUserMock.mockResolvedValue({ success: true, data: { permissions: ['etl.read'] } })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.currentRun = completedRun()
+    await vm.rollbackRun()
+    expect(etlApiMock.rollback).not.toHaveBeenCalled()
+    expect(confirm).toHaveBeenCalledTimes(permitted ? 1 : 0)
+    if (!permitted) expect(vm.pageError).toContain('没有撤销权限')
+    wrapper.unmount()
+  })
+
+  it('stops an obsolete poll and keeps read failures visible until retried', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.currentRun = queuedRun('poll', 'data.csv')
+    vm.runsApi.schedulePoll()
+    vm.currentRun = null
+    await vi.advanceTimersByTimeAsync(1200)
+    expect(etlApiMock.run).not.toHaveBeenCalled()
+    for (const error of [new Error('read offline'), 'offline']) {
+      vm.currentRun = queuedRun('poll', 'data.csv')
+      etlApiMock.run.mockRejectedValueOnce(error)
+      vm.runsApi.schedulePoll()
+      await vi.advanceTimersByTimeAsync(1200)
+      expect(vm.pageError).toBe(error instanceof Error ? error.message : '读取运行进度失败')
+    }
+    wrapper.unmount()
+  })
+
 })
