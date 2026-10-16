@@ -171,7 +171,7 @@ jobs:
           name: xcagi-enterprise-mobile-release-packages
           path: artifacts
       - name: Upload mobile packages to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           files: artifacts/**/*
