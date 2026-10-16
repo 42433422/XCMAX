@@ -57,7 +57,7 @@ evolution-metrics = [
     # operating-metrics module uses pandas.  Keep the runtime extra complete
     # so daily 30/90-day snapshots cannot silently degrade to stale evidence.
     "pandas>=2.0",
-    "pytest>=7.4",
+    "pytest>=9.1.1",
     "pytest-cov>=4.1",
     "pytest-asyncio>=0.23",
 ]
@@ -73,7 +73,7 @@ vibe = [
     "vibe-coding[web]>=0.1.0",
 ]
 dev = [
-  "pytest>=7.4",
+  "pytest>=9.1.1",
   "pytest-cov>=4.1",
   "pytest-asyncio>=0.23",
   "PyYAML>=6.0",
