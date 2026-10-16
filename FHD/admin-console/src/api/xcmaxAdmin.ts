@@ -467,9 +467,14 @@ export const xcmaxAdminApi = {
       '/api/ops/autonomy/work-orders', { limit },
     );
   },
+  fetchCustomerTickets(search = '', offset = 0) {
+    return api.get<{ items: Record<string, unknown>[]; total: number }>(
+      '/api/xcmax/admin/customer-service/tickets', { search, offset, limit: 50 },
+    );
+  },
   fetchCustomerTicket(ticketId: number) {
-    return api.get<{ ticket?: Record<string, unknown>; audit_logs?: Record<string, unknown>[] }>(
-      `/api/xcmax/market-proxy/customer-service/tickets/${ticketId}`,
+    return api.get<{ ticket?: Record<string, unknown>; audit_logs?: Record<string, unknown>[]; actions?: Record<string, unknown>[]; decisions?: Record<string, unknown>[] }>(
+      `/api/xcmax/admin/customer-service/tickets/${ticketId}`,
     );
   },
   decideOwnerWorkOrder(woId: string, decision: 'approved' | 'rejected' | 'held', note = '') {

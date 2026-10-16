@@ -40,6 +40,7 @@ export const SIDEBAR_ROUTE_NAME_MAP: Record<string, string> = {
   '/approval-hub/flows': 'approval-hub',
   '/approval-hub/rules': 'approval-hub',
   '/inventory': 'inventory',
+  '/customer-service-tickets': 'customer-service-tickets',
   '/xcmax-admin': 'xcmax-admin',
   '/automation-policy': 'automation-policy',
   '/duty-time-architecture': 'duty-time-architecture',
