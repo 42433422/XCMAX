@@ -35,6 +35,16 @@ fi
 
 mkdir -p "$STATE_DIR"
 
+git_step() {
+  local dir="$1" stage="$2" limit="$3" rc=0
+  shift 3
+  echo "[stage] updater ${stage} begin (${limit} limit)" >&2
+  timeout --kill-after=15s "$limit" env GIT_TERMINAL_PROMPT=0 git -C "$dir" \
+    -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=30 "$@" >>"$LOG" 2>&1 || rc=$?
+  echo "[stage] updater ${stage} exit=${rc}" >&2
+  return "$rc"
+}
+
 git_sync_repo() {
   local dir="$1"
   local label="$2"
@@ -42,24 +52,29 @@ git_sync_repo() {
     log "WARN: $label 不是 git 仓库: $dir"
     return 1
   fi
-  git -C "$dir" fetch origin "$BRANCH" >>"$LOG" 2>&1 || {
-    log "ERROR: $label git fetch 失败"
-    return 1
-  }
+  git_step "$dir" fetch 180s fetch --progress origin "$BRANCH" || return $?
   local remote_sha local_sha
-  remote_sha="$(git -C "$dir" rev-parse "origin/${BRANCH}")"
-  local_sha="$(git -C "$dir" rev-parse HEAD)"
+  remote_sha="$(git -C "$dir" rev-parse "origin/${BRANCH}")" || return $?
+  local_sha="$(git -C "$dir" rev-parse HEAD)" || return $?
+  if [[ ! "$remote_sha" =~ ^[0-9a-f]{40}$ || ! "$local_sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "[err] updater identity missing or invalid; stopping sync" >&2
+    return 1
+  fi
   if [[ "$remote_sha" == "$local_sha" ]]; then
     log "$label 已是最新 sha=${local_sha:0:12}"
     echo "$local_sha"
     return 0
   fi
   log "$label 发现更新 ${local_sha:0:12} -> ${remote_sha:0:12}"
-  if git -C "$dir" merge --ff-only "origin/${BRANCH}" >>"$LOG" 2>&1; then
+  local merge_status=0
+  git_step "$dir" merge 120s merge --ff-only "origin/${BRANCH}" || merge_status=$?
+  if [[ "$merge_status" == 0 ]]; then
     log "$label fast-forward 成功"
+  elif [[ "$merge_status" == 124 || "$merge_status" == 137 ]]; then
+    return "$merge_status"  # A timed-out merge is not a reason to force-reset.
   elif [[ "${XCMAX_GIT_RESET_HARD:-0}" == "1" ]]; then
     log "$label ff-only 失败，执行 reset --hard origin/${BRANCH}"
-    git -C "$dir" reset --hard "origin/${BRANCH}" >>"$LOG" 2>&1
+    git_step "$dir" reset 120s reset --hard "origin/${BRANCH}" || return $?
   else
     log "ERROR: $label 无法 fast-forward（工作区脏？设 XCMAX_GIT_RESET_HARD=1 强制对齐）"
     return 1

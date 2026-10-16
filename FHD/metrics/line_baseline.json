@@ -1,5 +1,5 @@
 {
-  "lines": 2304959,
+  "lines": 2305096,
   "updated": "2026-10-16",
-  "note": "Approved release-notes regression exception: physical patch +51 lines (HTML -1, test +52); official counter +52 because HTML is excluded. Base main 9f7bcb72 tree 45b76c631ccc478f1f046939e3d5b39ebd3bd547 fully measured 2304907 across 11392 SHA-verified countable paths; exact test increment 52 gives 2304959. This is verified base plus exact delta, not a fresh full-tree local measurement; CI must verify the full tree. Counter and gates unchanged."
+  "note": "Approved bounded corp-site sync exception: base main 9d4d88f42215b03641523944c4234a48487f5501 baseline 2304959 plus exact maintained-line delta 137 (workflow +9, updater +15, regression +113); changelog and baseline edits are line-neutral. This is existing baseline plus audited patch delta, not a fresh full-tree local measurement; CI must verify the full tree. Counter and all gates unchanged."
 }
