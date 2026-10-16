@@ -17,7 +17,7 @@
     "test": "npm run test:unit",
     "install:native": "node scripts/install-native-bindings.mjs",
     "postinstall": "node scripts/install-native-bindings.mjs",
-    "test:unit": "vitest run --config vitest.config.ts",
+    "test:unit": "node --test compat-resource-glob/index.test.mjs && vitest run --config vitest.config.ts",
     "smoke:voice": "node scripts/smoke-voice-endpoint.mjs",
     "smoke:voice:pipeline": "python ../tools/smoke_voice_pipeline.py --asr-only",
     "test:watch": "vitest",
@@ -61,7 +61,8 @@
     "uuid": "11.1.1",
     "ws": "8.21.0",
     "adm-zip": "0.6.1",
-    "source-map-js": "1.2.2"
+    "source-map-js": "1.2.2",
+    "fast-glob": "$fast-glob"
   },
   "devDependencies": {
     "@eslint/js": "^9.16.0",
@@ -80,6 +81,7 @@
     "typescript": "^6.0.3",
     "vite": "^8.3.3",
     "vitest": "^4.1.11",
-    "vue-tsc": "^3.3.12"
+    "vue-tsc": "^3.3.12",
+    "fast-glob": "file:./compat-resource-glob"
   }
 }
