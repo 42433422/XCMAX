@@ -59,7 +59,7 @@ evolution-metrics = [
     "pandas>=2.0",
     "pytest>=7.4",
     "pytest-cov>=4.1",
-    "pytest-asyncio>=0.23",
+    "pytest-asyncio>=1.4.0",
 ]
 aliyun-tts = [
     "dashscope>=1.14",
@@ -75,7 +75,7 @@ vibe = [
 dev = [
   "pytest>=7.4",
   "pytest-cov>=4.1",
-  "pytest-asyncio>=0.23",
+  "pytest-asyncio>=1.4.0",
   "PyYAML>=6.0",
   "black==26.10.0",
   "isort==6.1.0",
