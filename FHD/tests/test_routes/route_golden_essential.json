@@ -335,6 +335,8 @@
   "/api/xcmax/admin/autonomy/self-maintenance/run",
   "/api/xcmax/admin/customer-deliveries/standard",
   "/api/xcmax/admin/customer-deliveries/trial",
+  "/api/xcmax/admin/customer-service/tickets",
+  "/api/xcmax/admin/customer-service/tickets/{ticket_id}",
   "/api/xcmax/admin/daily-digests",
   "/api/xcmax/admin/daily-digests/{record_id}",
   "/api/xcmax/admin/daily-digests/{record_id}/artifacts",

@@ -1,5 +1,5 @@
 {
-  "lines": 2304959,
+  "lines": 2305456,
   "updated": "2026-10-16",
-  "note": "Approved release-notes regression exception: physical patch +51 lines (HTML -1, test +52); official counter +52 because HTML is excluded. Base main 9f7bcb72 tree 45b76c631ccc478f1f046939e3d5b39ebd3bd547 fully measured 2304907 across 11392 SHA-verified countable paths; exact test increment 52 gives 2304959. This is verified base plus exact delta, not a fresh full-tree local measurement; CI must verify the full tree. Counter and gates unchanged."
+  "note": "Approved customer-ticket management exception: Approved maximum +503 counted lines; after Black 26.10.0 formatting, 13 implementation/test/snapshot files +500/-3, actual net +497 (172 product, 325 tests/snapshots). Verified baseline 2304959 at cb643fcafb42c6b770e9f48ffe259db37a354ea1 remains unchanged at 9d4d88f42215b03641523944c4234a48487f5501; exact counted delta gives 2305456. Scope: read-only CS discovery, strict current-session identity, owner-preserving search/pagination, original evidence, and regression tests. This is verified base plus exact delta, not a sparse full-tree measurement. CI must verify full tree; counter and gates unchanged. No allowance for additional growth."
 }

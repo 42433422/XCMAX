@@ -350,6 +350,7 @@ class TestButlerSystemPrompt:
             id=9,
             session_id=1,
             ticket_no="T-1",
+            assigned_admin_id=None,
             title="本人工单",
             intent="general",
             subject_type="",

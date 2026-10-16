@@ -1148,3 +1148,77 @@ def test_admin_can_manage_customer_service_standard(client):
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
         app.dependency_overrides.pop(customer_service_api._require_admin, None)
+
+
+def test_ticket_search_preserves_ownership_identity_and_pagination(client):
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
+
+    owner, other, admin = (
+        _make_user("search_owner"),
+        _make_user("search_other"),
+        _make_user("search_admin", admin=True),
+    )
+    marker = f"SEARCH-{uuid.uuid4().hex}"
+    ids = []
+    with get_session_factory()() as db:
+        for user, suffix in [(owner, "290063"), (other, "290063"), (owner, "other")]:
+            session = CustomerServiceSession(user_id=user.id)
+            db.add(session)
+            db.flush()
+            ticket = CustomerServiceTicket(
+                user_id=user.id,
+                session_id=session.id,
+                ticket_no=f"{marker}-{user.id}-{suffix}",
+                summary=f"{marker} original 100%_text",
+                assigned_admin_id=None,
+            )
+            db.add(ticket)
+            db.flush()
+            ids.append(ticket.id)
+        db.commit()
+    try:
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: owner
+        response = client.get(
+            "/api/customer-service/tickets", params={"search": marker, "limit": 1}
+        )
+        assert response.status_code == 200
+        assert response.json()["total"] == 2
+        first = response.json()["items"][0]
+        second = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "limit": 1, "offset": 1},
+        ).json()["items"][0]
+        assert {first["id"], second["id"]} == {ids[0], ids[2]}
+        assert ids[1] not in {
+            row["id"]
+            for row in client.get(
+                "/api/customer-service/tickets", params={"search": str(ids[1])}
+            ).json()["items"]
+        }
+        assert client.get(f"/api/customer-service/tickets/{ids[1]}").status_code == 404
+        own = client.get(f"/api/customer-service/tickets/{ids[0]}").json()
+        assert own["ticket"]["ticket_no"] == f"{marker}-{owner.id}-290063"
+        assert own["ticket"]["assigned_admin_id"] is None
+        assert own["ticket"]["summary"] == f"{marker} original 100%_text"
+        assert own["actions"] == own["audit_logs"] == []
+        assert (
+            client.get("/api/customer-service/tickets", params={"search": marker + "%"}).json()[
+                "items"
+            ]
+            == []
+        )
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+        result = client.get("/api/customer-service/tickets", params={"search": marker}).json()
+        assert result["total"] == 3
+        assert {row["id"] for row in result["items"]} == set(ids)
+        result = client.get(
+            "/api/customer-service/tickets",
+            params={"search": f"{marker}-{other.id}-290063"},
+        ).json()
+        assert result["items"][0]["id"] == ids[1]
+        assert client.get("/api/customer-service/tickets", params={"offset": -1}).status_code == 422
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)

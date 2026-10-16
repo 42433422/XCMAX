@@ -132,3 +132,162 @@ class TestReleaseTrainSnapshot:
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
             out = admin_routes._release_train_snapshot()
         assert out["current"] == "1.0.0.1"
+
+
+@pytest.mark.parametrize(
+    "meta, sid, expected",
+    [
+        ({}, None, 401),
+        ({"account_kind": "user", "market_is_admin": False}, "session", 403),
+        ({"account_kind": "admin", "market_is_admin": False}, "session", 403),
+    ],
+)
+@pytest.mark.parametrize("suffix", ["", "/42"])
+def test_customer_ticket_list_requires_bound_market_admin(client, meta, sid, expected, suffix):
+    from unittest.mock import AsyncMock
+
+    with (
+        patch("app.fastapi_routes.domains.misc.helpers._session_id_from_request", return_value=sid),
+        patch("app.application.session_account_meta.load_session_account_meta", return_value=meta),
+        patch("app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock) as proxy,
+    ):
+        response = client.get(f"/api/xcmax/admin/customer-service/tickets{suffix}?search=290063")
+    assert response.status_code == expected
+    proxy.assert_not_awaited()
+
+
+@pytest.fixture
+def customer_ticket_identity(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.application import desktop_admin_gate, session_account_meta
+    from app.application.facades import session_facade
+    from app.db import session as db_session
+    from app.fastapi_routes import market_account
+
+    service = MagicMock()
+    service.validate_session.return_value = SimpleNamespace(id=7, is_active=True)
+    monkeypatch.setattr(session_facade, "get_session_service", lambda: service)
+    monkeypatch.setattr(
+        session_account_meta,
+        "load_session_account_meta",
+        lambda _sid: {"account_kind": "admin", "market_is_admin": True},
+    )
+    monkeypatch.setattr(desktop_admin_gate, "is_desktop_runtime", lambda: False)
+    monkeypatch.setattr(
+        market_account, "_MARKET_SESSION_TOKENS", {"current-session": "test-bound-market-identity"}
+    )
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    context = MagicMock()
+    context.__enter__.return_value = db
+    monkeypatch.setattr(db_session, "get_db", lambda: context)
+
+    forbidden = MagicMock(
+        side_effect=AssertionError("CS must never use latest-session or browser-token fallback")
+    )
+    monkeypatch.setattr(market_account, "latest_session_market_token", forbidden)
+    monkeypatch.setattr(market_account, "_authorization_from_request_resolved", forbidden)
+    yield service, market_account
+    forbidden.assert_not_called()
+
+
+def test_customer_ticket_proxy_preserves_search_and_market_identity(
+    client, customer_ticket_identity
+):
+    from unittest.mock import AsyncMock
+    from urllib.parse import parse_qs, urlsplit
+
+    with patch(
+        "app.fastapi_routes.market_account._proxy_json",
+        new_callable=AsyncMock,
+        return_value={"items": [], "total": 0},
+    ) as proxy:
+        response = client.get(
+            "/api/xcmax/admin/customer-service/tickets",
+            params={"search": "290063 & 原文", "offset": 50, "limit": 50},
+            headers={
+                "X-Session-ID": "current-session",
+                "Authorization": "Bearer unrelated-browser-identity",
+            },
+        )
+        assert response.status_code == 200
+        args, kwargs = proxy.await_args
+        assert args[0] == "GET"
+        assert urlsplit(args[1]).path == "/api/customer-service/tickets"
+        assert parse_qs(urlsplit(args[1]).query) == {
+            "search": ["290063 & 原文"],
+            "offset": ["50"],
+            "limit": ["50"],
+        }
+        assert kwargs["authorization"] == "Bearer test-bound-market-identity"
+        assert kwargs["json_body"] is None
+        assert client.get("/api/xcmax/admin/customer-service/tickets?offset=-1").status_code == 422
+        assert client.get("/api/xcmax/admin/customer-service/tickets?limit=101").status_code == 422
+        assert proxy.await_count == 1
+        assert (
+            client.get(
+                "/api/xcmax/admin/customer-service/tickets/42",
+                headers={"X-Session-ID": "current-session"},
+            ).status_code
+            == 200
+        )
+        assert proxy.await_args.args == ("GET", "/api/customer-service/tickets/42")
+        assert proxy.await_args.kwargs["authorization"] == "Bearer test-bound-market-identity"
+        service, _ = customer_ticket_identity
+        service.validate_session.assert_called_with("current-session")
+
+
+@pytest.mark.parametrize("suffix", ["", "/42"])
+@pytest.mark.parametrize("failure", ["no_user", "resolver_error", "inactive", "no_bound_token"])
+def test_customer_ticket_identity_failures_never_use_another_session(
+    client, customer_ticket_identity, suffix, failure
+):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    service, market = customer_ticket_identity
+    if failure == "no_user":
+        service.validate_session.return_value = None
+    elif failure == "resolver_error":
+        service.validate_session.side_effect = RuntimeError("identity unavailable")
+    elif failure == "inactive":
+        service.validate_session.return_value = SimpleNamespace(id=7, is_active=False)
+    else:
+        market._MARKET_SESSION_TOKENS.clear()
+    with patch("app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock) as proxy:
+        response = client.get(
+            f"/api/xcmax/admin/customer-service/tickets{suffix}",
+            headers={
+                "X-Session-ID": "current-session",
+                "Authorization": "Bearer unrelated-browser-identity",
+            },
+        )
+    assert response.status_code == 401
+    assert "items" not in response.json()
+    proxy.assert_not_awaited()
+
+
+@pytest.mark.parametrize("suffix", ["", "/42"])
+@pytest.mark.parametrize("status", [401, 403, 503])
+def test_customer_ticket_proxy_preserves_upstream_failure(
+    client, customer_ticket_identity, suffix, status
+):
+    from unittest.mock import AsyncMock
+
+    with patch(
+        "app.fastapi_routes.market_account._proxy_json",
+        new_callable=AsyncMock,
+        return_value={
+            "__proxy_error__": True,
+            "status_code": status,
+            "payload": {"detail": "unavailable"},
+        },
+    ) as proxy:
+        response = client.get(
+            f"/api/xcmax/admin/customer-service/tickets{suffix}",
+            headers={"X-Session-ID": "current-session"},
+        )
+    assert response.status_code == status
+    assert "items" not in response.json()
+    assert proxy.await_args.kwargs["authorization"] == "Bearer test-bound-market-identity"
