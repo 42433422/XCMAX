@@ -1,5 +1,5 @@
 {
-  "lines": 2304907,
-  "updated": "2026-10-15",
-  "note": "Bounded final19: measured actual main3f394a3e count2304656 plus unique251 (approved mobile682, desktop-8, frontend-417, Modstore/CI-6) =2304907. Prior Windows354 and #2160 total1289 are already included, never charged twice. Full official counter, paths, banners and gates unchanged; all19 frozen source heads retained as ancestors."
+  "lines": 2304959,
+  "updated": "2026-10-16",
+  "note": "Approved release-notes regression exception: physical patch +51 lines (HTML -1, test +52); official counter +52 because HTML is excluded. Base main 9f7bcb72 tree 45b76c631ccc478f1f046939e3d5b39ebd3bd547 fully measured 2304907 across 11392 SHA-verified countable paths; exact test increment 52 gives 2304959. This is verified base plus exact delta, not a fresh full-tree local measurement; CI must verify the full tree. Counter and gates unchanged."
 }
