@@ -1205,15 +1205,13 @@ def test_ticket_search_preserves_ownership_identity_and_pagination(client):
         assert own["ticket"]["summary"] == f"{marker} original 100%_text"
         assert own["actions"] == own["audit_logs"] == []
         assert (
-            client.get(
-                "/api/customer-service/tickets", params={"search": marker + "%"}
-            ).json()["items"]
+            client.get("/api/customer-service/tickets", params={"search": marker + "%"}).json()[
+                "items"
+            ]
             == []
         )
         app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
-        result = client.get(
-            "/api/customer-service/tickets", params={"search": marker}
-        ).json()
+        result = client.get("/api/customer-service/tickets", params={"search": marker}).json()
         assert result["total"] == 3
         assert {row["id"] for row in result["items"]} == set(ids)
         result = client.get(
@@ -1221,11 +1219,6 @@ def test_ticket_search_preserves_ownership_identity_and_pagination(client):
             params={"search": f"{marker}-{other.id}-290063"},
         ).json()
         assert result["items"][0]["id"] == ids[1]
-        assert (
-            client.get(
-                "/api/customer-service/tickets", params={"offset": -1}
-            ).status_code
-            == 422
-        )
+        assert client.get("/api/customer-service/tickets", params={"offset": -1}).status_code == 422
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)

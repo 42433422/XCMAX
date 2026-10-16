@@ -220,9 +220,7 @@ async def list_tickets(
         q = q.filter(or_(*matches))
     total = q.count()
     rows = (
-        q.order_by(
-            CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc()
-        )
+        q.order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc())
         .offset(offset)
         .limit(limit)
         .all()

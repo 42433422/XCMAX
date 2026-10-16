@@ -1,5 +1,5 @@
 {
-  "lines": 2305462,
+  "lines": 2305453,
   "updated": "2026-10-16",
-  "note": "Approved customer-ticket management exception: 11 implementation/test files +507/-4, net +503 counted lines (174 product, 329 tests). Verified baseline 2304959 at cb643fcafb42c6b770e9f48ffe259db37a354ea1 remains unchanged at 9d4d88f42215b03641523944c4234a48487f5501; exact counted delta gives 2305462. Scope: read-only CS discovery, strict current-session identity, owner-preserving search/pagination, original evidence, and regression tests. This is verified base plus exact delta, not a sparse full-tree measurement. CI must verify full tree; counter and gates unchanged. No allowance for additional growth."
+  "note": "Approved customer-ticket management exception: Approved maximum +503 counted lines; after Black 26.10.0 formatting, 11 implementation/test files +498/-4, actual net +494 (172 product, 322 tests). Verified baseline 2304959 at cb643fcafb42c6b770e9f48ffe259db37a354ea1 remains unchanged at 9d4d88f42215b03641523944c4234a48487f5501; exact counted delta gives 2305453. Scope: read-only CS discovery, strict current-session identity, owner-preserving search/pagination, original evidence, and regression tests. This is verified base plus exact delta, not a sparse full-tree measurement. CI must verify full tree; counter and gates unchanged. No allowance for additional growth."
 }
