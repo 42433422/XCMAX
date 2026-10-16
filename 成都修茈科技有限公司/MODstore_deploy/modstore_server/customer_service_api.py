@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db, require_admin
@@ -193,6 +194,8 @@ async def session_detail(
 @router.get("/tickets")
 async def list_tickets(
     status: str = "",
+    search: str = Query("", max_length=200),
+    offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
@@ -202,12 +205,33 @@ async def list_tickets(
         q = q.filter(CustomerServiceTicket.user_id == user.id)
     if status:
         q = q.filter(CustomerServiceTicket.status == status)
+    term = search.strip()
+    if term:
+        matches = [
+            column.contains(term, autoescape=True)
+            for column in (
+                CustomerServiceTicket.ticket_no,
+                CustomerServiceTicket.title,
+                CustomerServiceTicket.summary,
+            )
+        ]
+        if term.isascii() and term.isdigit() and len(term) <= 18:
+            matches.append(CustomerServiceTicket.id == int(term))
+        q = q.filter(or_(*matches))
+    total = q.count()
     rows = (
-        q.order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc())
+        q.order_by(
+            CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc()
+        )
+        .offset(offset)
         .limit(limit)
         .all()
     )
-    return {"items": [ticket_payload(r) for r in rows]}
+    return {
+        "items": [ticket_payload(r) for r in rows],
+        "total": total,
+        "offset": offset,
+    }
 
 
 @router.get("/tickets/{ticket_id}")

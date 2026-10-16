@@ -9,6 +9,12 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     meta: { title: '服务器后台总览', requiresAdminAccount: true, hostAdmin: true },
   },
   {
+    path: '/customer-service-tickets',
+    name: 'customer-service-tickets',
+    component: () => import('./views/CustomerServiceTicketsView.vue'),
+    meta: { title: '客服工单 · 客户反馈', requiresAdminAccount: true, hostAdmin: true },
+  },
+  {
     path: '/delivery-center',
     name: 'delivery-center',
     component: () => import('./views/DeliveryCenterView.vue'),

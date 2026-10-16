@@ -103,6 +103,50 @@ async def sync_stream(request: _facade().Request, since_cursor: int = _facade().
     )
 
 
+async def _customer_ticket_proxy(request: _facade().Request, path: str):
+    from app.fastapi_routes.market_account import session_market_token
+    from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request
+
+    gate = _facade()._require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    try:
+        user = resolve_session_user(request)
+        sid = session_id_from_request(request)
+        token = (
+            session_market_token(sid)
+            if sid and getattr(user, "id", None) and getattr(user, "is_active", True)
+            else ""
+        )
+    except _facade().RECOVERABLE_ERRORS:
+        token = ""
+    if not token:
+        return _facade().JSONResponse(
+            {"success": False, "message": "当前会话未绑定可验证的市场身份，请重新登录"},
+            status_code=401,
+        )
+    # Strictly use this session's identity; never fall back to another session or a browser token.
+    return await _facade()._market_admin_proxy(request, "GET", path, authorization_override=token)
+
+
+@_facade().router.get("/admin/customer-service/tickets", response_model=None)
+async def admin_customer_service_tickets(
+    request: _facade().Request,
+    search: str = _facade().Query("", max_length=200),
+    offset: int = _facade().Query(0, ge=0),
+    limit: int = _facade().Query(50, ge=1, le=100),
+):
+    from urllib.parse import urlencode
+
+    query = urlencode({"search": search, "offset": offset, "limit": limit})
+    return await _customer_ticket_proxy(request, f"/api/customer-service/tickets?{query}")
+
+
+@_facade().router.get("/admin/customer-service/tickets/{ticket_id}", response_model=None)
+async def admin_customer_service_ticket(request: _facade().Request, ticket_id: int):
+    return await _customer_ticket_proxy(request, f"/api/customer-service/tickets/{ticket_id}")
+
+
 async def _xcmax_market_proxy_impl(request: _facade().Request, subpath: str):
     """编制图 LLM / 员工执行等：经会话市场 token 转发至 MODstore ``/api/...``。"""
     method = request.method.upper()
