@@ -1,0 +1,10 @@
+feature=dt-neurobus
+at=2026-09-29T11:13:34.551Z
+route=/desktop-runtime
+landed=/desktop-runtime
+title=桌面运行时 - XCAGI
+heading=桌面运行时
+redirected=false
+navError=
+apis=[{"api":"/api/health","status":200,"body":"{\"status\":\"healthy\",\"version\":\"1.0.0.5\",\"service\":\"xcagi-fastapi\",\"runtime\":{\"status\":\"healthy\",\"components\":{\"desktop_runtime_routes\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"desktop_automation_routes\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"gdpr_routes\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"platform_shell_routes\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:xcmax_admin\":{\"ok\":tr"}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 桌面运行时 SUNBIRD 副窗 ◈ 工作区 桌面运行时 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 刷新状态检查桌面更新 运行状态 桌面模式 是 数据目录 C:\Users\97088\AppData\Roaming\XCAGI 数据库 C:\Users\97088\AppData\Roaming\XCAGI\data\xcagi.db 存储模式 本地 SQLite 连接（脱敏） sqlite:///C:/Users/97088/AppData/Roaming/XCAGI/data/xcagi.db Mod 目录 C:\Users\97088\AppData\Roaming\XCAGI\mods 模型目录 C:\Users\97088\AppData\Roaming\XCAGI\models 本地模型 暂无已安装模型。桌面版会在首次使用对应能力时按需下载。 小C助理

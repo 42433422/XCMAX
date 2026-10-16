@@ -8,6 +8,11 @@ ROOT = Path(__file__).resolve().parents[3]
 def test_mod_auto_publish_is_real_and_fail_closed() -> None:
     source = (ROOT / "FHD/.github/workflows/mod-auto-publish.yml").read_text(encoding="utf-8")
     workflow = yaml.safe_load(source)
+    event = workflow.get("on", workflow.get(True))
+    release = event["workflow_dispatch"]["inputs"]["publish_release"]
+    assert release["type"] == "boolean"
+    assert release["required"] is True
+    assert release["default"] is False
     prepare = workflow["jobs"]["prepare"]
     plan = next(step for step in prepare["steps"] if step.get("id") == "plan")
     assert "python FHD/scripts/dev/mod_publish_plan.py" in plan["run"]
@@ -16,7 +21,10 @@ def test_mod_auto_publish_is_real_and_fail_closed() -> None:
 
     publish_job = workflow["jobs"]["package-and-publish"]
     assert publish_job["needs"] == "prepare"
-    assert publish_job["if"] == "needs.prepare.outputs.count != '0'"
+    assert publish_job["if"] == (
+        "github.event_name == 'workflow_dispatch' && inputs.publish_release "
+        "&& needs.prepare.outputs.count != '0'"
+    )
     publish = next(
         step for step in publish_job["steps"] if "publish_modstore.py" in step.get("run", "")
     )

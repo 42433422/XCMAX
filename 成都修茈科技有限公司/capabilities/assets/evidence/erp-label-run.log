@@ -1,5 +1,0 @@
-2026-09-30T04:19:29+0800 [erp-label] 开始验收 erp-label 标签打印；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:19:29+0800 [erp-label] M1 passed :: HTTP 200 40ms；产品 4 个
-2026-09-30T04:19:29+0800 [erp-label] M2 failed :: 受阻：需要连接并选择实体标签打印机，本机未连接打印机
-2026-09-30T04:19:30+0800 [erp-label] screenshot result.png
-2026-09-30T04:19:31+0800 [erp-label] video operation.webm bytes=120101

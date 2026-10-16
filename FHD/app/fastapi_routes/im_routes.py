@@ -42,6 +42,7 @@ from app.infrastructure.auth.dependencies import (
     get_current_user,
     require_identified_user,
 )
+from app.infrastructure.im.message_fanout import push_im_message_to_members
 from app.infrastructure.im.ws_hub import im_ws_hub
 from app.mod_sdk import assistant_ssot as assistant_ssot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -360,22 +361,7 @@ async def im_send_message(
             record_sync=not is_enterprise_cs,
         )
         emp_peer_id = svc.employee_id_for_conversation(conversation_id, uid)
-        legacy_payload = {
-            "type": "message",
-            "conversation_id": conversation_id,
-            "message": result["message"],
-        }
-        sync_payload = {
-            "type": "im.message",
-            "conversation_id": conversation_id,
-            "message": result["message"],
-            "updated_at_ms": result.get("updated_at_ms"),
-        }
-        member_ids = [int(mid) for mid in (result.get("member_user_ids") or [])]
-        for member_id in member_ids:
-            if member_id != uid:
-                await im_ws_hub.send_to_user(member_id, legacy_payload)
-                await im_ws_hub.send_to_user(member_id, sync_payload)
+        member_ids = await push_im_message_to_members(uid, conversation_id, result, hub=im_ws_hub)
         await _notify_offline_im_members(member_ids, uid, text)
         # 入站回流（与手机端 internal_im.im_post_message 对齐）：老板在桌面/Web 给某 AI 员工
         # 发消息 → 回流 MODstore（答 pending 问题或转 boss_im 新任务），员工才有下文。

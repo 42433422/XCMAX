@@ -1,7 +1,0 @@
-2026-09-29T20:20:07+0800 [base-device-bind] 开始验收 base-device-bind 设备绑定与配对授权；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
-2026-09-29T20:20:08+0800 [base-device-bind] M1 passed :: HTTP 200 48ms；{"paired": false, "mobileUsername": "", "lastRelaySyncAt": 1790684407}
-2026-09-29T20:20:12+0800 [base-device-bind] M2 passed :: HTTP 200 4908ms；{"code": 200, "message": "success", "success": true, "data": {"host": "198.18.0.1", "port": 17500, "nonce": "9Fa7sPcTcv7l0haUi5aQXA", "shortCode": "177681", "exp": 1790770812, "api_base_url": "http://198.18.0.1:17500/", "base_url": "http://
-2026-09-29T20:20:12+0800 [base-device-bind] M3 failed :: 受阻：需要安装 XCAGI 移动端的 Android/iOS 真机在同网段扫码，本轮只有 macOS 单机
-2026-09-29T20:20:16+0800 [base-device-bind] M4 passed :: 导航后路径 /settings；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 3 |  | SUNBIRD |  | 登录后同步修茈市场 |  | 登录 | 系统设置 | 角色与权限 | 管理本企业的角色、权限和用户分配 | 模型服务 | 钱包 · 套餐 | A
-2026-09-29T20:20:17+0800 [base-device-bind] screenshot result.png
-2026-09-29T20:20:22+0800 [base-device-bind] video operation.webm bytes=350912

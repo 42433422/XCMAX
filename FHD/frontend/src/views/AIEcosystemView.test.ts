@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
@@ -57,8 +57,10 @@ async function mountView(includeDeliveryCenter = true) {
 }
 
 describe('AIEcosystemView.vue', () => {
+  afterEach(() => vi.unstubAllEnvs())
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '')
     vi.mocked(resolvePlannerPageRedirectForRouteName).mockReturnValue(null)
   })
 
@@ -66,38 +68,29 @@ describe('AIEcosystemView.vue', () => {
     const { wrapper } = await mountView()
     expect(wrapper.find('.ecosystem-home').exists()).toBe(true)
     expect(wrapper.find('.ecosystem-home-title').text()).toBe('AI生态应用')
-  })
-
-  it('renders four launcher buttons', async () => {
-    const { wrapper } = await mountView()
     const launchers = wrapper.findAll('.app-launcher')
     expect(launchers).toHaveLength(4)
     expect(wrapper.find('.app-launcher--kitten').exists()).toBe(true)
     expect(wrapper.find('.app-launcher--aiopen').exists()).toBe(true)
     expect(wrapper.find('.app-launcher--production').exists()).toBe(true)
     expect(wrapper.find('.app-launcher--modstore').exists()).toBe(true)
-  })
-
-  it('renders launcher descriptions', async () => {
-    const { wrapper } = await mountView()
     const descs = wrapper.findAll('.app-launcher-desc')
     expect(descs).toHaveLength(4)
     expect(descs[0].text()).toContain('可视化 AI 员工')
     expect(descs[1].text()).toContain('MCP/API')
     expect(descs[2].text()).toContain('客户交付中心')
     expect(descs[3].text()).toContain('MOD 扩展')
-  })
-
-  it('renders launcher names', async () => {
-    const { wrapper } = await mountView()
     const names = wrapper.findAll('.app-launcher-name')
     expect(names.map((n) => n.text())).toEqual(['智慧分析', 'AIOPEN 开放智控', '生产员工', '员工商店'])
-  })
-
-  it('modstore launcher has data-tour attribute', async () => {
-    const { wrapper } = await mountView()
     const modstore = wrapper.find('[data-tour="ecosystem-launcher-modstore"]')
     expect(modstore.exists()).toBe(true)
+  })
+
+  it('hides the forbidden modstore launcher in the admin console', async () => {
+    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
+    const { wrapper } = await mountView()
+    expect(wrapper.findAll('.app-launcher')).toHaveLength(3)
+    expect(wrapper.find('[data-tour="ecosystem-launcher-modstore"]').exists()).toBe(false)
   })
 
   it('hides ecosystem home after entering kitten analyzer', async () => {

@@ -6,6 +6,8 @@ import { DesktopAutonomyAdapter } from '../desktop-adapter.js'
 import type { DesktopAdapterContext } from '../desktop-adapter.js'
 import type { Action, BackendRuntimeInfo } from '../types.js'
 
+vi.mock('electron', () => ({ app: { getPath: vi.fn() } }))
+
 let tmpDir: string
 
 beforeEach(() => {

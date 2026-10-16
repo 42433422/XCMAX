@@ -1,6 +1,0 @@
-2026-09-30T04:29:56+0800 [erp-replenishment] 开始验收 erp-replenishment 库存补货建议；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:30:00+0800 [erp-replenishment] M1 passed :: 已发送「根据当前库存给我补货建议」，回复片段： | 07:07 |  | 当前没有低库存原材料，库存状态正常。 |  | 展开详情 | 07:07 | [071059] 你好，请用一句话介绍你能帮我做什么 | 07:11 |  | 帮你管产品、客户、订单和库存，数据查询、Excel导入导出、生成文档这些杂活也都能搞定，有事直接说就行。 |  | 展开详情 | 07:11 | [071059] 刚才你说的第一项能力再展开一句 | 07:11 |  | 产品管理就是把你所有产品的信息——比如名称、型号、规格、价格、计量单位这些——全都录到系统里统一管着。平时你要新增产品、改个价格、查某个型号的详情，或者手头有一大批产品资料想一次性
-2026-09-30T04:30:00+0800 [erp-replenishment] M2 passed :: HTTP 200 32ms；{"success": true, "inventory_alerts": [], "material_low_stock": [], "total_alerts": 0}
-2026-09-30T04:30:04+0800 [erp-replenishment] M3 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/inventory；命中文本 ['库存']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 库存管理 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 库存管理 | 导出 Excel入库出库 |  | 按当前筛选导出全部库存明细，单次最多 50,000 条。 |  | 全部仓库 | MAC验收0929仓 | M
-2026-09-30T04:30:05+0800 [erp-replenishment] screenshot result.png
-2026-09-30T04:30:07+0800 [erp-replenishment] video operation.webm bytes=405421

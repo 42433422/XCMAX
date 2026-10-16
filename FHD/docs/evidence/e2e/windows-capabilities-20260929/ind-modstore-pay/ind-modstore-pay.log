@@ -1,0 +1,10 @@
+feature=ind-modstore-pay
+at=2026-09-29T11:11:18.832Z
+route=/model-payment
+landed=/settings
+title=设置 - XCAGI
+heading=系统设置
+redirected=true
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 权益同步中 通用考勤模块 v1.0.0.5 SUNBIRD 系统设置 SUNBIRD 副窗 ◈ 工作区 SUNBIRD 登录后同步修茈市场 登录 系统设置 角色与权限 管理本企业的角色、权限和用户分配 模型服务 钱包 · 套餐 模型服务 余额与充值走修茈市场；本页汇总展示，支付在 钱包 / 套餐 完成。 打开修茈钱包 会员套餐 刷新 账户余额 ¥ 账户余额（本机汇总） 修茈钱包 已同步修茈市场钱包与会员信息（11 分钟前更新） ¥ 97.06 CNY 会员 普通用户 累计权益参考 — 经验 99 BYOK 未开通 快捷充值（跳转修茈钱包） 修茈会员套餐（3 档，点击跳转购买） 模型支持 21 家供应商 语言大模型124 · 视觉7 · 图像生成8 · 视频生成11 · 语音4 · 向量嵌入8 AI 意图能力 通用 · 天 当前行业未加载，请刷新或检查后端行业配置 拟人 Persy 系统 待确认 0 · 已确认 0 暂无人设数据 全部 待确认 已确认 已拒绝 已删除 全部类型 偏好 实体 任务 刷新 偏好 实体 任务 写入候选 暂无记忆 基本设置 修茈 · 安全模式 侧栏样式 Office（浅色顶栏与底栏） 深海军蓝 深岩灰 深靛紫 深冷灰 企业品牌名 保存 助手名称 界面语言 简体中文 English 系统名称 SUNBIRD 交付工作台 AI 部署模式 绝对安全模式（1级） 安全模式（2级） 性能模式（3级） 网络与性能 2级 · 解放 AI 能力，业务数据仍保留在本机 SQLite。 移动端连接 App 扫码配对 使用 XCAGI App「探索 → 识别」扫描下方二维码，手机将与本机宿主绑定并互通。 正在查询连接状态… 正在生成二维码… 刷新二维码 手机先登录账号，扫描二维码后可通过服务器中继跨网络连接。 登录 App 后，扫描二维码或输入上方 6 位设备码即可绑定。 登录确认请使用 App 扫描登录页的「App 扫码登录」二维码（非本设备码）。 扩展与 Mod 核心 9/9 · 2 个行业包 保存设置 蒸馏模型版本 训练产物 关于 — 小C助理

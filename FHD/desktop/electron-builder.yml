@@ -67,6 +67,7 @@ nsis:
   license: ../LICENSE
   warningsAsErrors: false
 mac:
+  minimumSystemVersion: "13.0"
   target:
     - dmg
     - pkg

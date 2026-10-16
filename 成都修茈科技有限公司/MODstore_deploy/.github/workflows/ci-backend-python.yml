@@ -13,6 +13,9 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   release-gate:
@@ -53,7 +56,7 @@ jobs:
           pip install -e ".[web,dev]"
 
       - name: Set up the real private Mod frontend compiler
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -73,28 +76,21 @@ jobs:
 
       - name: Run mypy type checking
         run: |
-          # mypy 必须精确固定，取 2026-09-24 绿灯 run 实测版本；浮动会让工具换版在
-          # 零代码变更的 main 上改变判定（2026-09-25 事故 WO-0f1b3d12bab4）。
-          # 不要降到 1.x：1.19.1 会对 modstore_server/rag_service.py:287 报 arg-type。
-          pip install mypy==2.3.1 types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
+          # 与 pyproject.toml 的开发工具版本一致。
+          pip install mypy==2.4.0 types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
           mypy --no-error-summary
 
       - name: Run tests with coverage (global floor — ratchet)
         env:
-          # 诚实 floor。本地无法实测(xcagi_common 要求 Python>=3.11,沙箱仅 3.9),
-          # 取 pyproject 自承的"全量 tree 约 40%+"作保守值。这是棘轮:能挡回归、
-          # 不可下调;实测出真实数字后只能上调,不能降。必须与
-          # 成都修茈科技有限公司/.github/workflows/ci-backend-python.yml 的
-          # MODSTORE_PY_COVERAGE_FLOOR 保持一致(见 docs/coverage-gates.md)。
+          # Ratchet floor; keep aligned with the site backend workflow and coverage-gates.md.
           MODSTORE_PY_COVERAGE_FLOOR: '40'
           MODSTORE_EMAIL_DEBUG: '1'
         run: |
           python -m pytest tests/ -v --cov=modman --cov=modstore_server \
             --cov-report=term-missing --cov-report=xml \
             --cov-fail-under=${MODSTORE_PY_COVERAGE_FLOOR}
-
       - name: Upload coverage report
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml
           flags: backend
@@ -111,7 +107,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"

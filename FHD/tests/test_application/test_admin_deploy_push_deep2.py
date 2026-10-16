@@ -88,7 +88,7 @@ class TestLocalVersionDeep:
         ):
             result = _local_version(tmp_path)
 
-        assert result == "1.0.0.1"
+        assert result == ""
 
 
 # ── _read_local_manifest deep ────────────────────────────────────────────────
@@ -530,10 +530,8 @@ class TestExecuteDeployJobDeep:
         verify_step = next(s for s in job.steps if s.id == "verify")
         assert verify_step.status == "done"
 
-    async def test_execute_verify_step_empty_local_sha(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Test verify step when local_sha is empty - should not error."""
+    @pytest.mark.parametrize("local_sha", ["", "local"])
+    async def test_execute_verify_step_unknown_local_sha(self, monkeypatch, local_sha) -> None:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
 
@@ -554,15 +552,14 @@ class TestExecuteDeployJobDeep:
             patch(
                 "app.application.admin_deploy_push.check_deploy_updates",
                 return_value={
-                    "admin_local": {"git_sha": ""},
-                    "update_hub": {"git_sha": "different"},
+                    "admin_local": {"git_sha": local_sha},
+                    "update_hub": {"git_sha": local_sha},
                 },
             ),
             patch("asyncio.sleep", new=AsyncMock()),
         ):
             await _execute_deploy_job(job)
-        # Empty local_sha → not error (condition: hub_sha == local_sha or not local_sha)
-        assert job.status == "done"
+        assert job.status == "error"
 
     async def test_execute_sets_ssh_key_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that ssh_key option is set in deploy env."""

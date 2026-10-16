@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "erp-inventory",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 erp-inventory 对应的 Windows 客户端页面 /mod/xcagi-erp-domain-bridge/inventory",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「库存管理 - XCAGI」，主标题「库存管理」，地址 /mod/xcagi-erp-domain-bridge/inventory。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 库存管理 SUNBIRD 副窗 ◈ 工作区 库存管理 导出 Excel入库出库 按当前筛选导出全部库存明细，单次最多 50,000 条。 全部仓库 产品名称 型号 仓库 ",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=718850 mp4=137135 title=库存管理 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-inventory/erp-inventory.log",
+    "sha256": "aca35013187b9a26f223a8ec5e2a0c17d7694113bdfcb311d75e27c621c348f8",
+    "bytes": 1285
+  },
+  "media": [
+    {
+      "feature": "erp-inventory",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-inventory/erp-inventory.png",
+      "sha256": "4f096734ea6e1e49ff292a374df374bbb643091f375efb87ff251e79a24ac0ef",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「库存管理 - XCAGI」，主标题「库存管理」，地址 /mod/xcagi-erp-domain-bridge/inventory。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 库存管理 SUNBIRD 副窗 ◈ 工作区 库存管理 导出 Excel入库出库 按当前筛选导出全部库存明细，单次最多 50,000 条。 全部仓库 产品名称 型号 仓库 ",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-inventory",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-inventory/erp-inventory.mp4",
+      "sha256": "deada7d8d13da687b462a52e42620881a9cd99a77f102161ab21b924fc8dc80d",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「库存管理 - XCAGI」，主标题「库存管理」，地址 /mod/xcagi-erp-domain-bridge/inventory。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 库存管理 SUNBIRD 副窗 ◈ 工作区 库存管理 导出 Excel入库出库 按当前筛选导出全部库存明细，单次最多 50,000 条。 全部仓库 产品名称 型号 仓库 ",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

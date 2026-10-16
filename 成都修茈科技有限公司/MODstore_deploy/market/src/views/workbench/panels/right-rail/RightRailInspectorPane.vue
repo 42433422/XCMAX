@@ -66,6 +66,12 @@ const {
   ttsLoading,
   previewTts,
 } = props.actions
+
+function updateModuleJson(event: Event) {
+  try {
+    if (selectedNodeData.value) setPath(MODULE_META[selectedNodeData.value.moduleKind].paths[0], JSON.parse((event.target as HTMLTextAreaElement).value))
+  } catch { /* keep the previous configuration while JSON is incomplete */ }
+}
 </script>
 
 <template>
@@ -274,13 +280,7 @@ const {
           class="field-textarea field-json"
           rows="10"
           :value="JSON.stringify(selectedNodeData.slice, null, 2)"
-          @change="(e) => {
-            try {
-              const val = JSON.parse((e.target as HTMLTextAreaElement).value)
-              const path = MODULE_META[selectedNodeData!.moduleKind].paths[0]
-              setPath(path, val)
-            } catch { /* ignore parse error */ }
-          }"
+          @change="updateModuleJson"
         />
       </details>
     </div>

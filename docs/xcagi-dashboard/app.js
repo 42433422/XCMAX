@@ -172,7 +172,6 @@ const Router = (() => {
  * ========================================================================== */
 const Ops = (() => {
   const TAG_LABEL = { done: '已做', partial: '部分', blocked: '待补' };
-  const STEP_WEIGHTS = { O1: 1, O2: 0.95, O3: 0.82, O4: 0.95, O5: 1, O6: 1, O7: 0.95, O8: 0.95, O9: 0.95, O10: 0.9 };
 
   function modstoreBase() {
     if (window.XCAGI_MODSTORE_URL) {
@@ -197,14 +196,9 @@ const Ops = (() => {
 
   function applyStepStatus(steps) {
     if (!steps || typeof steps !== 'object') return;
-    let totalPct = 0;
     for (let i = 1; i <= 10; i++) {
       const sid = 'O' + i;
       const st = (steps[sid] && steps[sid].status) || 'partial';
-      const w = STEP_WEIGHTS[sid] || 0.5;
-      if (st === 'done') totalPct += 1;
-      else if (st === 'blocked') totalPct += 0;
-      else totalPct += w;
       const node = document.querySelector('.ops-step-node[data-ops-step="' + sid + '"]');
       if (!node) continue;
       const dot = node.querySelector('.node-dot');
@@ -220,8 +214,6 @@ const Ops = (() => {
         Utils.safeText(tag, TAG_LABEL[st] || '部分');
       }
     }
-    const el = document.getElementById('ops-loop-progress-num');
-    if (el) Utils.safeText(el, Math.round((totalPct / 10) * 100) + '%');
   }
 
   function buildHealthUrls() {
@@ -1297,7 +1289,7 @@ const LineCoverage = (() => {
         '<div class="pe-binding-stat"><strong>' + fmtPct(audit.roster_step_coverage_pct) + '%</strong>编制落步</div>' +
         '<div class="pe-binding-stat"><strong>' + (audit.workflow_mod_count || 0) + '</strong>流程 Mod</div>' +
         '</div>' +
-        '<div class="pe-binding-note">每个流程节点下方 <code>node-dept-staff</code> 由 <code>six_line_employee_map.json</code> 加载时同步；编制 52 人 + 6 个 workflow Mod 协作岗。</div>' +
+        '<div class="pe-binding-note">流程节点编制由 <code>six_line_employee_map.json</code> 加载；计划编制不代表实际运行人数。</div>' +
         (rosterGap
           ? '<div class="pe-binding-gaps">编制未出现在任一步骤（可接受：质检/访谈岗）：' +
             Utils.escapeHtml(audit.roster_not_in_steps.join('、')) + '</div>'
@@ -1877,7 +1869,7 @@ const EmployeeWorkflow = (() => {
     const stepPctEl = document.getElementById('emp-wf-step-pct');
     const pathPctEl = document.getElementById('emp-wf-path-pct');
 
-    const roster = stepAudit && stepAudit.roster_count != null ? stepAudit.roster_count : 52;
+    const roster = stepAudit && stepAudit.roster_count != null ? stepAudit.roster_count : '—';
     if (rosterEl) rosterEl.textContent = String(roster);
     if (stepPctEl && stepAudit) stepPctEl.textContent = fmtPct(stepAudit.step_coverage_pct) + '%';
     if (pathPctEl && pathPe && pathPe.fully_bound_count != null) {
@@ -1893,7 +1885,7 @@ const EmployeeWorkflow = (() => {
         (pathPe ? pathPe.fully_bound_count + '/' + pathPe.roster_count + ' 路径三元绑定' : '路径绑定见目录结构页') +
         ' · 手动重跑与 08:15 自动派发共用同一执行器';
     } else if (tag) {
-      tag.textContent = '编制 52 人 · 清单驱动 vibe-coding · 运维面板可手动触发';
+      tag.textContent = '编制报告未加载 · 清单驱动 vibe-coding · 运维面板可手动触发';
     }
   }
 

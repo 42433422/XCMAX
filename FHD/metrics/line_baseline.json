@@ -1,5 +1,5 @@
 {
-  "lines": 2303032,
+  "lines": 2304907,
   "updated": "2026-10-15",
-  "note": "棘轮下调"
+  "note": "Bounded final19: measured actual main3f394a3e count2304656 plus unique251 (approved mobile682, desktop-8, frontend-417, Modstore/CI-6) =2304907. Prior Windows354 and #2160 total1289 are already included, never charged twice. Full official counter, paths, banners and gates unchanged; all19 frozen source heads retained as ancestors."
 }

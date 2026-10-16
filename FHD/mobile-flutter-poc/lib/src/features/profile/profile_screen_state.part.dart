@@ -11,6 +11,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   var _serverModeLabel = '远程同步可用';
   var _profilePage = const MobileProfilePageConfig.disabled();
   var _syncing = false;
+  var _syncSummary = '';
+  var _syncConflicts = const <Map<String, Object?>>[];
   var _hasLocalDisplayName = false;
   var _hasLocalAvatar = false;
   var _hasLocalAccountKind = false;
@@ -55,9 +57,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         serverModeLabel: _serverModeLabel,
                         profilePage: _profilePage.enabled ? _profilePage : null,
                         syncing: _syncing,
+                        syncStatusText: _syncSummary,
                         onEdit: _showProfileEditor,
                         onSync: _refreshProfileState,
                       ),
+                      if (_syncConflicts.isNotEmpty)
+                        WeCellGroup(
+                          children: [
+                            WeCell(
+                              title: '同步冲突 ${_syncConflicts.length} 条',
+                              subtitle: _syncConflicts
+                                  .map(
+                                    (c) =>
+                                        '${c['entity_type']} #${c['entity_id']} ${c['conflict_note'] ?? ''}',
+                                  )
+                                  .join('\n'),
+                              icon: Icons.sync_problem,
+                              showArrow: false,
+                              showDivider: false,
+                            ),
+                          ],
+                        ),
                       const SizedBox(height: 8),
                       _WalletBalanceCard(
                         wallet: wallet,
@@ -290,12 +310,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _loadCachedProfile(),
         _refreshAppConfig(),
         _refreshMe(),
+        _runDataSync(),
       ]);
     } finally {
       if (mounted) {
         setState(() => _syncing = false);
       }
     }
+  }
+
+  Future<void> _runDataSync() async {
+    var text = '';
+    try {
+      final result = await runMobileSync(_api);
+      _syncConflicts = result.conflicts;
+      text = result.summary;
+    } catch (error) {
+      text = '同步失败，点「同步」重试';
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)
+            ?.showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+    if (mounted) setState(() => _syncSummary = text);
   }
 
   void _openConnectPc() {

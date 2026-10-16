@@ -1,0 +1,10 @@
+feature=erp-print-agent
+at=2026-09-29T11:22:59.464Z
+route=/mod/xcagi-erp-domain-bridge/printer-list
+landed=/mod/xcagi-erp-domain-bridge/printer-list
+title=打印机列表 - XCAGI
+heading=打印机列表
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 打印机列表 SUNBIRD 副窗 ◈ 工作区 打印机列表 刷新 打印机分类 发货单打印机 未设置（自动识别） 状态：- 标签打印机 未设置（自动识别） 状态：- 保存自定义选择 恢复自动识别 全部打印机 打印机名称 类型 状态 默认 暂无打印机 加载失败: 该旧业务接口尚未提供安全的租户数据隔离 小C助理

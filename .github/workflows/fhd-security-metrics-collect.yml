@@ -72,7 +72,7 @@ jobs:
       # Trivy: 容器/依赖漏洞扫描（JSON 格式）
       - name: Run Trivy dependency scan
         id: trivy
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
           scan-type: fs

@@ -261,13 +261,13 @@
     if (rendered.patch && !force) return;
     if (force) rendered.patch = false;
     rendered.patch = true;
-    renderBoard({ kind: 'patch', sectionId: 's-gaps', boardId: 'ai-patch-board', title: '🤖 今日 AI 补丁清单 · 自动驱动断点闭环', groupBy: 'priority' });
+    renderBoard({ kind: 'patch', sectionId: 's-gaps', boardId: 'ai-patch-board', title: '🤖 最新有数据日 AI 补丁清单 · 自动驱动断点闭环', groupBy: 'priority' });
   }
   function renderUpdates(force) {
     if (rendered.update && !force) return;
     if (force) rendered.update = false;
     rendered.update = true;
-    renderBoard({ kind: 'update', sectionId: 's-roadmap', boardId: 'ai-update-board', title: '🤖 今日 AI 更新清单 · 自动推进路线图', groupBy: 'line' });
+    renderBoard({ kind: 'update', sectionId: 's-roadmap', boardId: 'ai-update-board', title: '🤖 最新有数据日 AI 更新清单 · 自动推进路线图', groupBy: 'line' });
   }
 
   /** 清理旧版静态面板（多来源遗留：s-deep-closure / 手写 gap-grid / 旧计数盒） */

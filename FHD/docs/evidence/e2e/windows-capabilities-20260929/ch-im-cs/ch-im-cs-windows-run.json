@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "ch-im-cs",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 ch-im-cs 对应的 Windows 客户端页面 /im",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「信息 - XCAGI」，主标题「信息」，地址 /im。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 信息 SUNBIRD 副窗 ◈ 工作区 信息 实时已连接 客 客户消息 · 客来来在 XCMAX 内只读查看客户会话 💬 用户客服员工 O-A 获客部 · 未安装 🧭 需",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=236256 mp4=170355 title=信息 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-im-cs/ch-im-cs.log",
+    "sha256": "569efc12c3eaad6baf1d2914b134a29c5126f7a3816b477821e7c79457441962",
+    "bytes": 1500
+  },
+  "media": [
+    {
+      "feature": "ch-im-cs",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-im-cs/ch-im-cs.png",
+      "sha256": "4aef6b428d5449b2a72a195013213db80885ef94ae82316e28468dfaa6a7111e",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「信息 - XCAGI」，主标题「信息」，地址 /im。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 信息 SUNBIRD 副窗 ◈ 工作区 信息 实时已连接 客 客户消息 · 客来来在 XCMAX 内只读查看客户会话 💬 用户客服员工 O-A 获客部 · 未安装 🧭 需",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ch-im-cs",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-im-cs/ch-im-cs.mp4",
+      "sha256": "3f872244b4e1833128dbcef1bc9febc762f8588c126d73e00f1df9ce12295b7d",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「信息 - XCAGI」，主标题「信息」，地址 /im。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 信息 SUNBIRD 副窗 ◈ 工作区 信息 实时已连接 客 客户消息 · 客来来在 XCMAX 内只读查看客户会话 💬 用户客服员工 O-A 获客部 · 未安装 🧭 需",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

@@ -1,8 +1,0 @@
-2026-09-30T04:19:45+0800 [mods-webhook] 开始验收 mods-webhook 业务事件 Webhook；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:19:45+0800 [mods-webhook] M1 passed :: HTTP 200 16ms；{"published": true, "event_type": "mac.acc.webhook", "domain": "global", "source": "mod:xcagi-neuro-bus-bridge", "execution_path": "mod_event_facade"}
-2026-09-30T04:19:45+0800 [mods-webhook] M2 passed :: HTTP 200 18ms；published=5843 processed=5837 handlers=39
-2026-09-30T04:19:45+0800 [mods-webhook] M3 passed :: HTTP 200 16ms；端点 0 个（本机未注册外部 Webhook 端点）
-2026-09-30T04:19:45+0800 [mods-webhook] M4 passed :: HTTP 200 28ms；{"success": true, "data": [], "tenant_id": 1}
-2026-09-30T04:19:48+0800 [mods-webhook] M5 passed :: 导航后路径 /mod-store；命中文本 ['能力库']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 能力库 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 返回 AI 生态 |  | XCAGI · 能力库 |  | AI 员工市场 |  | 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至
-2026-09-30T04:19:49+0800 [mods-webhook] screenshot result.png
-2026-09-30T04:19:52+0800 [mods-webhook] video operation.webm bytes=267431
