@@ -77,7 +77,7 @@ dev = [
   "pytest-cov>=4.1",
   "pytest-asyncio>=0.23",
   "PyYAML>=6.0",
-  "black==26.10.0",
+  "black==26.10.1",
   "isort==6.1.0",
   "jsonschema>=4.21",
   # 工具精确固定；升级必须同时验证格式和类型检查。
