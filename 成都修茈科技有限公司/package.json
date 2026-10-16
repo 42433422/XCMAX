@@ -34,7 +34,7 @@
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.63.0",
     "@types/node": "^22.19.17",
-    "@vitejs/plugin-vue": "^5.2.4",
+    "@vitejs/plugin-vue": "^6.0.10",
     "@vitest/coverage-v8": "^5.0.3",
     "@vue/eslint-config-prettier": "^10.1.0",
     "@vue/eslint-config-typescript": "^14.9.0",
