@@ -9,7 +9,6 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
-
 WORKFLOW = Path(__file__).resolve().parents[2] / '.github/workflows/corp-host-maintenance-preflight.yml'
 TEXT = WORKFLOW.read_text()
 SHELL = '\n'.join(line[12:] for line in TEXT.split('          script: |\n', 1)[1].splitlines()) + '\n'
@@ -36,7 +35,7 @@ class PreflightTest(unittest.TestCase):
                     return subprocess.CompletedProcess(args, 9, 'SECRET_STDOUT', 'SECRET_STDERR')
                 return subprocess.CompletedProcess(args, 0, 'fixed metadata', '')
             stream = io.StringIO()
-            with patch('pathlib.Path', mapped), patch('subprocess.run', command), patch('shutil.which', return_value=None if tool_missing else '/usr/bin/validator'), contextlib.redirect_stdout(stream):
+            with patch('pathlib.Path', mapped), patch('subprocess.run', command), patch('shutil.which', side_effect=lambda tool, **kw: None if tool_missing else '/usr/bin/' + tool), contextlib.redirect_stdout(stream):
                 with self.assertRaises(SystemExit) as result:
                     (root / 'probe.py').write_text(PROBE)
                     runpy.run_path(str(root / 'probe.py'))
@@ -116,7 +115,7 @@ class PreflightTest(unittest.TestCase):
         self.assertEqual(integrity['status'], 'verified')
         self.assertEqual(integrity['reason'], 'hashes_and_archive_readability_only')
         self.assertNotIn('PRIVATE_BACKUP_CONTENT', str(records))
-        self.assertEqual(sum(c[0] == '/usr/bin/validator' for c in calls), 5)
+        self.assertEqual(sum(Path(c[0]).name in ('pg_restore', 'gzip', 'tar') for c in calls), 5)
 
     def test_invalid_backup_is_never_verified(self):
         for case in ('checksum', 'extra_path', 'duplicate', 'missing', 'symlink', 'stale'):
@@ -144,11 +143,12 @@ class PreflightTest(unittest.TestCase):
                 self.assertNotIn('PRIVATE_BACKUP_CONTENT', str(records))
 
     def test_missing_or_failed_validator_is_unknown(self):
-        for missing, fail in ((True, None), (False, 'validator')):
+        for missing, fail in ((True, None), (False, 'pg_restore'), (False, 'gzip'), (False, 'tar')):
             code, records, _ = self.run_probe(self.backup_fixture, fail=fail, tool_missing=missing)
             self.assertEqual(code, 1)
             integrity = next(r['value'] for r in records if r['check'] == 'backup_integrity')
             self.assertEqual(integrity['status'], 'unknown')
+            self.assertEqual(integrity['reason'], 'pg_restore_missing' if missing else f'{fail}_exit_9')
             self.assertNotIn('SECRET', str(records))
 
     def test_writer_busy_or_changed_snapshot_is_unknown(self):
@@ -157,7 +157,7 @@ class PreflightTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn('backup_writer_busy', str(records))
         def change_snapshot(args):
-            if args[0] == '/usr/bin/validator':
+            if Path(args[0]).name in ('pg_restore', 'gzip', 'tar'):
                 manifest = Path(args[-1]).parent / 'MANIFEST.txt'
                 manifest.write_text('CHANGED_DURING_CHECK')
         code, records, _ = self.run_probe(self.backup_fixture, command_hook=change_snapshot)
