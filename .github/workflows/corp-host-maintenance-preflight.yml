@@ -30,6 +30,8 @@ jobs:
             import re
             import stat
             import subprocess
+            import selectors
+            import time
             from pathlib import Path
 
             errors = []
@@ -72,6 +74,66 @@ jobs:
                 except (OSError, UnicodeError, ValueError):
                     errors.append(str(path))
                     emit(str(path), "unreadable_or_invalid")
+
+            def validator_version(tool, search_path):
+                binary = shutil.which(tool, path=search_path)
+                result = {"path": binary, "version": "unknown"}
+                if binary:
+                    try:
+                        completed = subprocess.run([binary, "--version"], capture_output=True, text=True,
+                                                   timeout=15, env={"PATH": search_path, "LC_ALL": "C"})
+                        match = re.fullmatch(re.escape(tool) + r" \(PostgreSQL\) ([0-9]+(?:\.[0-9]+){0,2})(?: [^\r\n]*)?\s*", completed.stdout)
+                        if completed.returncode == 0 and match:
+                            result["version"] = match[1]
+                    except (OSError, UnicodeError, subprocess.TimeoutExpired):
+                        pass
+                emit(tool + "_host_candidate", result)
+                return binary
+
+            def run_validator(args):
+                detail = bytearray()
+                with subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                      env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}) as process:
+                    try:
+                        deadline = time.monotonic() + 15
+                        with selectors.DefaultSelector() as selector:
+                            selector.register(process.stderr, selectors.EVENT_READ)
+                            while True:
+                                if time.monotonic() >= deadline:
+                                    raise subprocess.TimeoutExpired(args, 15)
+                                if selector.select(timeout=0.1):
+                                    chunk = os.read(process.stderr.fileno(), 4096)
+                                    if not chunk:
+                                        break
+                                    detail.extend(chunk[:max(0, 4096 - len(detail))])
+                        return process.wait(timeout=max(0.01, deadline - time.monotonic())), bytes(detail)
+                    finally:
+                        if process.poll() is None:
+                            process.kill()
+                            process.wait()
+
+            def validate_archive(binary, option, path):
+                result = {"file": path.name, "exitcode": None, "category": "missing_tool"}
+                if not binary:
+                    return result
+                try:
+                    exitcode, detail = run_validator([binary, option, str(path)])
+                    result["exitcode"] = exitcode
+                    result["category"] = "ok" if exitcode == 0 else "other"
+                    if exitcode:
+                        # Classify locally; never publish raw stderr, untrusted names or SQL.
+                        detail = detail.lower()
+                        for phrase, category in ((b"unsupported version", "unsupported_version"),
+                                                 (b"magic string", "bad_magic"),
+                                                 (b"permission denied", "permission")):
+                            if phrase in detail:
+                                result["category"] = category
+                                break
+                except subprocess.TimeoutExpired:
+                    result["category"] = "timeout"
+                except OSError:
+                    result["category"] = "execution_error"
+                return result
 
             def verify_latest_backup():
                 names = ("fhd_pg.dump", "modstore_pg.dump", "payment_pg.dump",
@@ -119,22 +181,32 @@ jobs:
                                     digest.update(chunk)
                             if digest.hexdigest() != expected[name]:
                                 raise ValueError("checksum_mismatch")
+                        restore = validator_version("pg_restore", "/usr/pgsql-16/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+                        validator_version("pg_dump", "/usr/sbin:/usr/bin:/sbin:/bin")
+                        emit("writer_version_limit", "Host candidates only; configured container writer and actual dump producer remain unverified.")
+                        for name in names[:3]:
+                            with open(directory / name, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW)) as stream:
+                                header = stream.read(8)
+                            valid = len(header) == 8 and header[:5] == b"PGDMP"
+                            version = [header[5], header[6], 0 if header[5:7] == b"\x01\x00" else header[7]] if valid else None
+                            emit("archive_format", {"file": name, "magic": "PGDMP" if valid else "unknown", "version": version})
                         commands = [("pg_restore", "--list", name) for name in names[:3]]
                         commands += [("gzip", "-t", names[3]), ("tar", "-tzf", names[4])]
+                        results = []
                         for tool, option, name in commands:
-                            binary = shutil.which(tool, path="/usr/pgsql-16/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-                            if not binary:
-                                raise ValueError(f"{tool}_missing")
-                            result = subprocess.run([binary, option, str(directory / name)],
-                                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                                    timeout=15, env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
-                            if result.returncode:
-                                raise ValueError(f"{tool}_exit_{result.returncode}")
+                            binary = restore if tool == "pg_restore" else shutil.which(tool, path="/usr/sbin:/usr/bin:/sbin:/bin")
+                            result = validate_archive(binary, option, directory / name)
+                            result["tool"] = tool
+                            results.append(result)
+                            emit("archive_validator", result)
                         for path in paths:
                             info = path.lstat()
                             after = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
                             if not stat.S_ISREG(info.st_mode) or after != before[path.name]:
                                 raise ValueError("snapshot_changed_during_check")
+                        failed = [r for r in results if r["category"] != "ok"]
+                        if failed:
+                            raise ValueError("archive_validator_failed_or_unknown")
                         status.update(status="verified", reason="hashes_and_archive_readability_only")
                 except BlockingIOError:
                     status["reason"] = "backup_writer_busy"
