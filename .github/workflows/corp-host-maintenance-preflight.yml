@@ -124,12 +124,12 @@ jobs:
                         for tool, option, name in commands:
                             binary = shutil.which(tool, path="/usr/pgsql-16/bin:/usr/sbin:/usr/bin:/sbin:/bin")
                             if not binary:
-                                raise ValueError("missing_validation_tool")
+                                raise ValueError(f"{tool}_missing")
                             result = subprocess.run([binary, option, str(directory / name)],
                                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                                     timeout=15, env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
                             if result.returncode:
-                                raise ValueError("validator_failed_or_incompatible")
+                                raise ValueError(f"{tool}_exit_{result.returncode}")
                         for path in paths:
                             info = path.lstat()
                             after = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
