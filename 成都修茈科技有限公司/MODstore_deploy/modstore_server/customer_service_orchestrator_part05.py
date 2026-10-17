@@ -89,11 +89,13 @@ def apply_customer_ticket_incident_progress(
     team_ok: bool = False,
     team_rows: _facade().Optional[list[_facade().Dict[str, _facade().Any]]] = None,
     summary_hint: str = "",
+    executor: str = "incident_team",
 ) -> _facade().Dict[str, _facade().Any]:
     """把 AI 员工 / incident team 执行结果回写到已有客服工单。
 
     复用现有 ``CustomerServiceMessage`` / ``CustomerServiceAction`` / ``audit``，
     不新建旁路表：员工结果只推进到待正式交付，终态由客户运行回执判定。
+    ``executor`` 标明重派或外部执行器（如 grok_bot），每次派单各记一条执行动作。
     """
     ticket = (
         db.query(_facade().CustomerServiceTicket)
@@ -159,22 +161,38 @@ def apply_customer_ticket_incident_progress(
             else "继续排查或转人工处理，请保留原工单。"
         )
     )
+    outputs = [o for r in rows for o in (r.get("handler_outputs") or {}).get("outputs") or []]
+    outputs = [o for o in outputs if isinstance(o, dict)]
+    tasks = sorted({str(o.get("para_task_id") or o.get("task_id") or "") for o in outputs} - {""})
+    request = {
+        "event_id": int(event_id or 0),
+        "team_ok": bool(team_ok),
+        "roles": resolution["team"][:8],
+        "para_task_ids": tasks[:8],
+        "tools": sorted({str(o.get("tool_name") or "") for o in outputs} - {""}),
+        "executor": executor,
+    }
+    # 同一派单（同一组 Para 任务）待定→终态更新同一条；重派/外部执行是新任务，另记一条。
     action = _facade().build_action(
         db,
         ticket_id=int(ticket.id),
         user_id=int(ticket.user_id or 0),
         action_type="employee.dispatch",
         target_type="incident_team",
-        target_id=str(event_id or "")[:240],
-        request={
-            "event_id": int(event_id or 0),
-            "team_ok": bool(team_ok),
-            "roles": resolution["team"][:8],
-        },
+        target_id=f"{event_id or ''}:{','.join(tasks) or progress_digest[:16]}"[:240],
+        request=request,
     )
-    action.status = "completed"
-    action.result_json = _facade().json_dumps({"ok": team_ok, **progress_record})
-    action.error = ""
+    bad = [r for r in rows if not r.get("ok")]
+    seen = {str(r.get("status")) for r in bad}
+    failed = [
+        str(r.get("role")) for r in bad if r.get("status") not in ("pending", "manual_review")
+    ]
+    # 动作状态必须与角色结果一致：角色失败不能标 completed。
+    waiting = next((state for state in ("manual_review", "pending") if state in seen), "partial")
+    action.status = "completed" if team_ok else "failed" if failed or not rows else waiting
+    action.request_json = _facade().json_dumps(request)
+    action.result_json = _facade().json_dumps({"ok": team_ok, **progress_record, **request})
+    action.error = f"未成功角色：{'、'.join(failed)}" if failed else ""
     db.flush()
     _facade().delivery_policy.apply_ticket_outcome(ticket, team_ok, delivery_managed)
     if resolution["state"] == "processing":

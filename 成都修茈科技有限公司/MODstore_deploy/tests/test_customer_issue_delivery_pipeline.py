@@ -881,12 +881,51 @@ def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client,
         verified = (resolution["repair_verified"], resolution["repair_verified_by"])
         assert verified == (True, "customer_decision")  # 已验证关单不能 repair_verified=false
         assert resolution["handled_by"] == ["fix", "scout", "verify"]
-        audits = {
-            row.event_type
+        audits = {  # 客户接口发起的操作记成客户本人，不记成 AI 代办（#2388）
+            row.event_type: (row.actor_type, row.actor_user_id)
             for row in db.query(CustomerServiceAuditLog).filter_by(ticket_id=tid).all()
         }
-        assert {"customer_issue_reopen", "customer_issue_resolved"} <= audits
+        assert {
+            audits[k] for k in ("customer_issue_reopen", "customer_issue_resolved", "issue_intake")
+        } == {("user", user.id)}
     stranger = _make_user("decision_stranger")
     monkeypatch.setitem(app.dependency_overrides, get_current_user, lambda: stranger)
     assert decide("reopen", "冒充客户重开工单", "stranger-1").status_code == 404
     assert client.get("/api/customer-service/issues/mine").json()["items"] == []
+
+
+def test_dispatch_action_matches_role_results_and_records_redispatch(client, monkeypatch):
+    from modstore_server.customer_service_orchestrator import (
+        apply_customer_ticket_incident_progress,
+    )
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceAction as Action
+
+    _, tid = make_ticket(client, monkeypatch)
+
+    def run(task, ok, roles="scout fix verify", status="failed", executor="incident_team"):
+        out = {"handler": "para_delegate", "task_id": task, "tool_name": executor}
+        team = [
+            {"role": r, "ok": ok, "status": status, "handler_outputs": {"outputs": [out]}}
+            for r in roles.split()
+        ]
+        apply_customer_ticket_incident_progress(
+            db, ticket_id=tid, event_id=7, team_ok=True, team_rows=team, executor=executor
+        )
+
+    with (
+        get_session_factory()() as db
+    ):  # 角色全失败、Para 待定→终态、只出报告的重派、外部执行器全成功
+        run("t1", False), run("t2", False, status="pending"), run("t2", False)
+        run("t3", True, "scout", executor="grok_bot"), run("t4", True, executor="grok_bot")
+        rows = (
+            db.query(Action)
+            .filter_by(ticket_id=tid, action_type="employee.dispatch")
+            .order_by(Action.id)
+        )
+        got = [(json.loads(a.request_json)["tools"], a.status, a.error) for a in rows]
+    failed = "未成功角色：scout、fix、verify"
+    assert got == [(["incident_team"], "failed", failed)] * 2 + [
+        (["grok_bot"], "partial", ""),
+        (["grok_bot"], "completed", ""),
+    ]
