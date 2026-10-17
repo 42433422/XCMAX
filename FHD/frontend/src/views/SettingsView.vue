@@ -242,7 +242,6 @@ import { readStoredSidebarTheme, applySidebarTheme } from '@/utils/sidebarTheme'
 import HostModBridgeView from '@/components/HostModBridgeView.vue'
 import { useSettingsAccount } from '@/composables/settings/useSettingsAccount'
 import { useAccountProfileStore } from '@/stores/accountProfile'
-import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { useSettingsMods } from '@/composables/settings/useSettingsMods'
 import { useSettingsMemory } from '@/composables/settings/useSettingsMemory'
 import { useSettingsBasics } from '@/composables/settings/useSettingsBasics'
@@ -295,8 +294,7 @@ const {
   saveProfile,
   onLogout,
 } = useSettingsAccount()
-/** 管理端已过管理员会话守卫；市场会话未绑定时只调整展示，不显示「登录」。 */
-const adminSessionOnly = computed(() => !isLoggedIn.value && isAdminConsoleSpa() && accountProfile.isAdminAccount)
+const adminSessionOnly = computed(() => !isLoggedIn.value && accountProfile.isAdminAccount) // 管理员会话已过守卫，市场会话未绑定时只改展示
 const canManageTenantRoles = computed(
   () => accountProfile.accountKind === 'enterprise' && accountProfile.tenantId !== null &&
     accountProfile.marketIsEnterprise && accountProfile.permissions.includes('tenant.manage_roles'),
