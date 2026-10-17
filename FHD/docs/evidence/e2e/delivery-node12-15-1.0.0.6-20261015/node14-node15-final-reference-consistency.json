@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "time": "2026-10-15T22:57:35.757144+08:00",
+  "combinedReport": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-node15-server-delivery-final.json",
+  "combinedReportSha256": "459e85bb1093c052a23fbd4a708695cd9fb98c25e2ae1b5ce099feee329236be",
+  "sourceReportReferences": 6,
+  "allSupportingFileHashReferencesChecked": true,
+  "allPublishedPackageDownloadResults": "PASS",
+  "userConditionalAcceptanceSourceDirectlyVerified": true
+}
