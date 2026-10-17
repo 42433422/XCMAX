@@ -75,12 +75,15 @@ from modstore_server.para_delegate_handler_part02 import (
     _dev_tool as _dev_tool,
 )
 
-_VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae")
+_VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae", "grok_bot")
 _TOOL_INPUT_ALIASES = {
     "claude": "claude_code",
     "claude-code": "claude_code",
     "cursor_agent": "cursor",
     "cursor-agent": "cursor",
+    "grok": "grok_bot",
+    "grok-bot": "grok_bot",
+    "grok-bot-cloud": "grok_bot",
 }
 
 # DevFleet / Mac Bridge 上报的 capability / toolName 与调度侧命名不完全一致。
@@ -89,12 +92,14 @@ _TOOL_CAP_ALIASES: Dict[str, tuple[str, ...]] = {
     "cursor": ("cursor_cli", "cursor_agent_cli", "cursor-agent_cli"),
     "claude_code": ("claude_code_cli", "claude_cli", "claude-code_cli"),
     "trae": ("trae_cli",),
+    "grok_bot": ("grok_bot_cloud",),
 }
 _TOOL_NAME_ALIASES: Dict[str, tuple[str, ...]] = {
     "codex": ("codex",),
     "cursor": ("cursor", "cursor_agent", "cursor-agent"),
     "claude_code": ("claude_code", "claude", "claude-code"),
     "trae": ("trae",),
+    "grok_bot": ("grok_bot",),
 }
 
 
