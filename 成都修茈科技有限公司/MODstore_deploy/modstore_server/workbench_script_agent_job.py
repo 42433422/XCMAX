@@ -70,26 +70,6 @@ async def run_script_agent_job(
             except RECOVERABLE_ERRORS:
                 pass
 
-    async def _notify_rich(
-        summary: str,
-        *,
-        round_num: int = 0,
-        current_tool: str = "",
-        todos: list | None = None,
-        slow_hint: bool = False,
-    ) -> None:
-        """Emit structured dict message to workbench frontend (P1 feature)."""
-        payload: dict = {"summary": summary}
-        if round_num:
-            payload["round"] = round_num
-        if current_tool:
-            payload["current_tool"] = current_tool
-        if todos:
-            payload["todos"] = todos
-        if slow_hint:
-            payload["slow_hint"] = True
-        await _notify(payload)
-
     if db is None:
         _facade().logger.warning(
             "run_script_agent_job: db is None, cannot proceed session=%s user=%s",

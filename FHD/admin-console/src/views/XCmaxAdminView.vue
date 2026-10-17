@@ -35,12 +35,13 @@
         <div class="admin-card">
           <div class="card-header">
             <i class="fa fa-desktop card-icon" aria-hidden="true"></i>
-            <h3>本地服务健康（/api/health）</h3>
+            <h3>本地服务健康</h3>
             <span class="status-badge" :class="localStatus.state !== 'ready' ? 'badge-info' : localStatus.ok ? 'badge-ok' : 'badge-err'">
               {{ observationLabel(localStatus.state) || (localStatus.ok ? '服务健康' : '服务异常') }}
             </span>
           </div>
-          <dl class="card-info">
+          <p v-if="localStatus.state !== 'ready'" class="card-state" :class="`is-${localStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[localStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <dl v-else class="card-info">
             <dt>版本</dt><dd>{{ localStatus.version || '—' }}</dd>
             <dt>数据库</dt><dd>{{ localStatus.database || '—' }}</dd>
             <dt>运行时间</dt><dd>{{ localStatus.uptime || '—' }}</dd>
@@ -57,7 +58,8 @@
               {{ observationLabel(remoteStatus.state) || (remoteStatus.reachable ? '在线' : '离线') }}
             </span>
           </div>
-          <dl class="card-info">
+          <p v-if="remoteStatus.state !== 'ready'" class="card-state" :class="`is-${remoteStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[remoteStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <dl v-else class="card-info">
             <dt>地址</dt><dd>{{ remoteStatus.address || '—' }}</dd>
             <dt>延迟</dt><dd>{{ remoteStatus.latencyMs != null ? `${remoteStatus.latencyMs} ms` : '—' }}</dd>
             <dt>版本</dt><dd>{{ remoteStatus.version || '—' }}</dd>
@@ -77,19 +79,22 @@
             <i class="fa fa-heartbeat card-icon" aria-hidden="true"></i>
             <h3>自治健康</h3>
             <span class="status-badge" :class="autonomyHealth.alive == null ? 'badge-info' : autonomyHealth.alive ? 'badge-ok' : 'badge-err'">
-              {{ autonomyHealthLoading ? '检测中' : autonomyHealth.alive == null ? '状态未知' : autonomyHealth.alive ? '服务存活' : '不可达' }}
+              {{ autonomyHealthLoading ? '读取中' : autonomyHealth.alive == null ? '状态未知' : autonomyHealth.alive ? '服务存活' : '不可达' }}
             </span>
           </div>
-          <dl class="card-info">
+          <p v-if="autonomyHealthLoading || (autonomyHealth.alive == null && !autonomyHealth.error)" class="card-state" :class="{ 'is-loading': autonomyHealthLoading }">
+            {{ autonomyHealthLoading ? '正在读取…' : '尚未读取，点下方「刷新自治健康」获取' }}
+          </p>
+          <dl v-else class="card-info">
             <dt>审批服务</dt><dd>{{ autonomyHealth.service || '—' }}</dd>
-            <dt>最近 loop</dt><dd>{{ autonomyHealth.loopStatus || '—' }}</dd>
-            <dt>run_id</dt><dd class="mono small">{{ autonomyHealth.loopRunId || '—' }}</dd>
+            <dt>最近一次闭环</dt><dd>{{ autonomyHealth.loopStatus && autonomyHealth.loopStatus !== 'unknown' ? autonomyHealth.loopStatus : '未知' }}</dd>
+            <dt>运行编号</dt><dd class="mono small">{{ autonomyHealth.loopRunId || '—' }}</dd>
             <dt>闭环缺口</dt><dd>{{ autonomyHealth.gapCount ?? '—' }}</dd>
           </dl>
           <p v-if="autonomyHealth.error" class="release-error">{{ autonomyHealth.error }}</p>
           <div class="card-actions">
             <button class="btn btn-secondary btn-sm" :disabled="autonomyHealthLoading" @click="loadAutonomyHealth">
-              {{ autonomyHealthLoading ? '检测中...' : '刷新自治健康' }}
+              {{ autonomyHealthLoading ? '读取中…' : '刷新自治健康' }}
             </button>
             <button class="btn btn-primary btn-sm" type="button" @click="activeTab = 'autonomy'">打开自治总览</button>
           </div>
@@ -104,10 +109,11 @@
               {{ observationLabel(syncStatus.state) || (syncStatus.healthy ? '队列已清空' : '待同步') }}
             </span>
           </div>
-          <dl class="card-info">
+          <p v-if="syncStatus.state !== 'ready'" class="card-state" :class="`is-${syncStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[syncStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <dl v-else class="card-info">
             <dt>本地游标</dt><dd>{{ syncStatus.localCursor ?? '—' }}</dd>
             <dt>已拉取服务器游标</dt><dd>{{ syncStatus.remoteCursor ?? '—' }}</dd>
-            <dt>待发送</dt><dd>{{ syncStatus.outboxCount ?? '—' }} 条</dd>
+            <dt>待发送</dt><dd>{{ syncStatus.outboxCount != null ? `${syncStatus.outboxCount} 条` : '—' }}</dd>
             <dt>最近收到变更</dt><dd>{{ syncStatus.lastSyncAt || '—' }}</dd>
             <dt>冲突数</dt><dd>{{ syncStatus.conflictCount ?? '—' }}</dd>
           </dl>
@@ -156,14 +162,14 @@
               </tr>
             </tbody>
           </table>
-          <p v-else class="empty-hint">暂无已注册模块，刷新或检查后端 /api/xcmax/admin/modules</p>
+          <p v-else class="empty-hint">暂无已注册模块，可点右上角「刷新状态」重试</p>
         </div>
 
         <!-- 远端员工 (yuangon) -->
         <div class="admin-card admin-card--wide">
           <div class="card-header">
             <i class="fa fa-users card-icon" aria-hidden="true"></i>
-            <h3>远端服务器员工 (yuangon)</h3>
+            <h3>远端服务器员工</h3>
             <span class="status-badge badge-info">{{ remoteEmployees.length }} 名</span>
           </div>
           <div class="card-actions" style="margin-bottom:12px">

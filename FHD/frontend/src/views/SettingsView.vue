@@ -25,8 +25,8 @@
             aria-hidden="true"
             @change="onAvatarFileChange"
           />
-          <p class="settings-profile__name settings-profile__brand">{{ profileBrandTitle }}</p>
-          <p class="settings-profile__sub">{{ profileSubline }}</p>
+          <p class="settings-profile__name settings-profile__brand">{{ adminSessionOnly ? '管理员' : profileBrandTitle }}</p>
+          <p class="settings-profile__sub">{{ adminSessionOnly ? '已用管理员账号登录' : profileSubline }}</p>
           <div class="settings-profile__actions">
             <button
               v-if="isLoggedIn"
@@ -37,7 +37,7 @@
             >
               {{ logoutLoading ? $t('settings.loggingOut') : $t('settings.logout') }}
             </button>
-            <router-link v-else class="settings-profile__btn settings-profile__btn--primary" :to="loginRoute">
+            <router-link v-else-if="!adminSessionOnly" class="settings-profile__btn settings-profile__btn--primary" :to="loginRoute">
               {{ $t('settings.login') }}
             </router-link>
           </div>
@@ -294,6 +294,7 @@ const {
   saveProfile,
   onLogout,
 } = useSettingsAccount()
+const adminSessionOnly = computed(() => !isLoggedIn.value && accountProfile.isAdminAccount) // 管理员会话已过守卫，市场会话未绑定时只改展示
 const canManageTenantRoles = computed(
   () => accountProfile.accountKind === 'enterprise' && accountProfile.tenantId !== null &&
     accountProfile.marketIsEnterprise && accountProfile.permissions.includes('tenant.manage_roles'),
