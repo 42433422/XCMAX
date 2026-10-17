@@ -5,6 +5,7 @@
  */
 <script setup lang="ts">
 import { computed } from 'vue'
+import { statusLabel } from '../../../utils/statusLabel'
 import type { Deref } from './dutyRosterTypes'
 import type { DutyRun } from './useDutyRun'
 import type { DutyRosterState } from './useDutyRosterState'
@@ -127,7 +128,7 @@ const runAllowHighRisk = computed({
                 <p v-if="runError" class="dg-run-error">{{ runError }}</p>
                 <div v-if="latestRun" class="dg-run-summary">
                   <span class="dg-run-pill">#{{ latestRun.id }}</span>
-                  <span class="dg-run-pill">状态 {{ latestRun.status }}</span>
+                  <span class="dg-run-pill">状态 {{ statusLabel(latestRun.status) }}</span>
                   <span class="dg-run-pill dg-run-pill--ok">成功 {{ latestRun.success_count }}</span>
                   <span class="dg-run-pill dg-run-pill--bad">失败 {{ latestRun.failed_count }}</span>
                   <span class="dg-run-pill dg-run-pill--warn">跳过 {{ latestRun.skipped_count }}</span>
