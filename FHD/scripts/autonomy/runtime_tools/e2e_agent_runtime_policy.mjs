@@ -1,3 +1,6 @@
+import { rmSync } from 'node:fs';
+import { dirname, normalize, resolve } from 'node:path';
+
 const SUPPORTED_TOOLS = new Set(['trae', 'codex', 'cursor', 'claude_code']);
 
 export function forcedToolName(env = process.env) {
@@ -33,6 +36,13 @@ export async function withFailureCleanup(taskDir, prepare, cleanup) {
     cleanup(taskDir);
     throw error;
   }
+}
+
+// 只删本任务自己的工作区：taskDir 必须是规范化路径，且正好是 root 的直接子目录。
+export function removeOwnWorkspace(taskDir, root) {
+  if (!taskDir || normalize(taskDir) !== taskDir || dirname(resolve(taskDir)) !== resolve(root)) return false;
+  rmSync(taskDir, { recursive: true, force: true });
+  return true;
 }
 
 export const supportedToolNames = Object.freeze([...SUPPORTED_TOOLS]);
