@@ -115,14 +115,6 @@ def _role_override(role: str) -> str:
     return (os.environ.get(key) or "").strip()
 
 
-def _candidate_ids(event_id: int) -> List[str]:
-    return [
-        str(row.get("employee_id") or "")
-        for row in _candidate_rows(event_id)
-        if isinstance(row, dict) and str(row.get("employee_id") or "").strip()
-    ]
-
-
 def _candidate_rows(event_id: int) -> List[Dict[str, Any]]:
     try:
         from modstore_server.employee_task_market import rank_market_candidates
