@@ -18,7 +18,7 @@
 
 ### Archive 2026-08
 
-- 归档到 `archive/2026-08/`：`detailed_test.py`、`extract_pdf.py`、`read_pdf.py`、`read_pdf.ps1`、`smoke_test.py`、`verify_db_copy.py`、`verify_import.py`
+- 归档到 `archive/2026-08/`：`detailed_test.py`、`read_pdf.ps1`、`smoke_test.py`、`verify_db_copy.py`、`verify_import.py`
 - 保留在顶层：`arch_fitness.py`、`build_mod.py`、`deploy.sh`、`health-check.sh`、`frontend_smoke_test.py`
 
 ## Launchers

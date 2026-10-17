@@ -105,20 +105,34 @@ onUnmounted(() => { if (timer) clearInterval(timer) })
 </script>
 
 <style scoped>
-.mac-control { padding: 20px; margin: 20px 0; border: 1px solid #cbd5e1; border-radius: 12px; background: var(--bg-card, #fff); color: var(--text-primary, #172033); }
-header { display: flex; gap: 12px; justify-content: space-between; align-items: center; }
-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.mac-control { padding: 18px 20px; margin: 16px 0 0; border: 1px solid rgba(15, 111, 198, 0.12); border-radius: 16px; background: var(--bg-card, #fff); color: #172033; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); font-size: 13px; }
+header { display: flex; gap: 12px; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+header h3 { margin: 0; font-size: 15px; font-weight: 700; }
+header p, .mac-control > p { margin: 4px 0 0; color: #64748b; line-height: 1.6; }
+form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: end; margin-top: 12px; }
 form label:first-child { grid-column: 1 / -1; }
 form button { justify-self: start; }
-.devices { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 16px 0; }
-.devices article, .detail { min-width: 0; overflow-wrap: anywhere; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; }
+.devices { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 14px 0; }
+.devices article, .detail { min-width: 0; overflow-wrap: anywhere; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc; }
+.devices strong { font-size: 14px; }
 small, .devices span, label { display: block; margin-top: 5px; }
-textarea { display: block; box-sizing: border-box; min-height: 90px; width: 100%; resize: vertical; padding: 10px; }
-input, select, textarea { border: 1px solid #cbd5e1; border-radius: 6px; background: inherit; color: inherit; }
-input { padding: 7px; max-width: 100%; box-sizing: border-box; }
+small { color: #64748b; }
+label { color: #475569; font-weight: 600; }
+textarea { display: block; box-sizing: border-box; min-height: 90px; width: 100%; resize: vertical; padding: 10px 12px; margin-top: 6px; }
+input, select, textarea { border: 1px solid #d0d7e2; border-radius: 10px; background: #fff; color: inherit; font: inherit; font-weight: 400; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #1677ff; box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.15); }
+input { display: block; width: 100%; padding: 8px 10px; max-width: 100%; box-sizing: border-box; margin-top: 6px; }
+select { display: block; width: 100%; margin-top: 6px; }
+input[type="checkbox"] { display: inline-block; width: auto; margin: 0 6px 0 0; vertical-align: middle; }
 @media (max-width: 700px) { form { grid-template-columns: 1fr; } }
-button, select { padding: 7px 12px; cursor: pointer; } button:disabled { opacity: .6; cursor: default; }
-.tasks { padding-left: 20px; } .tasks li { margin: 10px 0; overflow-wrap: anywhere; } .tasks span { margin-left: 10px; }
-[role=alert] { color: #b91c1c; }
+button, select { padding: 8px 14px; cursor: pointer; }
+button { border: 1px solid #d0d7e2; border-radius: 10px; background: #fff; color: #0f6fc6; font: inherit; font-weight: 600; }
+button:hover:not(:disabled) { border-color: #1677ff; color: #1677ff; }
+form > button { border-color: #1677ff; background: #1677ff; color: #fff; }
+form > button:hover:not(:disabled) { background: #0f6fc6; color: #fff; }
+button:disabled { opacity: .55; cursor: default; }
+.tasks { padding-left: 20px; } .tasks li { margin: 10px 0; overflow-wrap: anywhere; } .tasks span { margin-left: 10px; color: #64748b; }
+.tasks button { padding: 4px 10px; text-align: left; }
+[role=alert] { color: #b42318; }
 .report { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 </style>
