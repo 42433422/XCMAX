@@ -73,6 +73,7 @@ _SUBTASK_LABELS = ("需求定位与方案", "核心实现", "验证与收尾")
 from modstore_server.para_delegate_handler_part02 import (
     _fallback_order_tools as _fallback_order_tools,
     _dev_tool as _dev_tool,
+    _customer_ticket_cloud_route as _customer_ticket_cloud_route,
 )
 
 _VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae", "grok_bot")
@@ -81,9 +82,7 @@ _TOOL_INPUT_ALIASES = {
     "claude-code": "claude_code",
     "cursor_agent": "cursor",
     "cursor-agent": "cursor",
-    "grok": "grok_bot",
     "grok-bot": "grok_bot",
-    "grok-bot-cloud": "grok_bot",
 }
 
 # DevFleet / Mac Bridge 上报的 capability / toolName 与调度侧命名不完全一致。

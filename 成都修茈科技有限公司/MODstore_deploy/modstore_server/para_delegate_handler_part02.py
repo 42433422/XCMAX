@@ -31,3 +31,14 @@ def _dev_tool() -> str:
         return normalized
     order = _facade()._fallback_order_tools()
     return order[0] if order else "cursor"
+
+
+def _customer_ticket_cloud_route(input_data: dict) -> dict:
+    """客服工单优先派给云端执行器（Grok Bot）；需配 MODSTORE_PARA_TICKET_DEVICE_ID，显式 device_id 优先。"""
+    env = _facade().os.environ
+    device_id = (env.get("MODSTORE_PARA_TICKET_DEVICE_ID") or "").strip()
+    if not device_id or input_data.get("device_id"):
+        return {}
+    if input_data.get("event_type") != "ops.intake.customer_ticket":
+        return {}
+    return {"device_id": device_id, "tool_name": env.get("MODSTORE_PARA_TICKET_TOOL") or "grok_bot"}
