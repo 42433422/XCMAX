@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
   effectiveToolName,
+  removeOwnWorkspace,
   requestedToolName,
   withFailureCleanup,
 } from './e2e_agent_runtime_policy.mjs';
@@ -58,4 +62,13 @@ test('successful workspace preparation is not cleaned early', async () => {
   );
   assert.equal(result, 'ready');
   assert.deepEqual(cleaned, []);
+});
+
+test('clone fallback removes only this task workspace directly under the root', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ws-')), own = join(root, 'task-a'), other = join(root, 'task-b');
+  for (const dir of [own, other]) mkdirSync(join(dir, '.git'), { recursive: true });
+  for (const bad of [root, `${other}/../task-a`, join(other, 'x'), join(root, '..'), 'task-a', '']) assert.equal(removeOwnWorkspace(bad, root), false);
+  assert.equal(removeOwnWorkspace(own, root), true);
+  assert.deepEqual([existsSync(own), existsSync(other)], [false, true]);
+  rmSync(root, { recursive: true });
 });
