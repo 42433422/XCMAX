@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import os
 import threading
@@ -242,33 +241,6 @@ def canonical_checkout_sign_data(body: CheckoutDTO) -> dict[str, str]:
         "total_amount": _amount_sign_str(body.total_amount),
         "wallet_recharge": "true" if body.wallet_recharge else "false",
     }
-
-
-def _catalog_entitlement_metadata(item: CatalogItem, source: str) -> str:
-    material_category = (getattr(item, "material_category", "") or "").strip()
-    if not material_category:
-        art = (getattr(item, "artifact", "") or "").strip()
-        material_category = {
-            "employee_pack": "ai_employee",
-            "workflow_template": "workflow_template",
-            "surface": "page_style",
-            "bundle": "mod_asset",
-            "mod": "mod_asset",
-        }.get(art, "other")
-    license_scope = (getattr(item, "license_scope", "") or "").strip()
-    if not license_scope:
-        license_scope = "commercial" if float(getattr(item, "price", 0) or 0) > 0 else "personal"
-    return json.dumps(
-        {
-            "source": source,
-            "license_scope": license_scope,
-            "material_category": material_category,
-            "origin_type": (getattr(item, "origin_type", "") or "original").strip(),
-            "ip_risk_level": (getattr(item, "ip_risk_level", "") or "low").strip(),
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
 
 
 def _plan_rows(session) -> list[PlanTemplate]:
