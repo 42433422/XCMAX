@@ -15,6 +15,13 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     meta: { title: '客服工单 · 客户反馈', requiresAdminAccount: true, hostAdmin: true },
   },
   {
+    // 详情可直达（刷新、分享链接）；侧栏仍高亮「客服工单」
+    path: '/customer-service-tickets/:ticketId(\\d+)',
+    name: 'customer-service-ticket-detail',
+    component: () => import('./views/CustomerServiceTicketDetailView.vue'),
+    meta: { title: '客服工单详情', requiresAdminAccount: true, hostAdmin: true },
+  },
+  {
     path: '/delivery-center',
     name: 'delivery-center',
     component: () => import('./views/DeliveryCenterView.vue'),
