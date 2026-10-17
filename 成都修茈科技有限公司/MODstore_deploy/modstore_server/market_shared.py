@@ -61,14 +61,6 @@ LICENSE_SCOPE_LABELS = {
     "enterprise": "企业级",
 }
 
-RISKY_ORIGIN_TYPES = {
-    "derivative",
-    "collaboration",
-    "fan_linkage",
-    "suspected_plagiarism",
-}
-RISKY_IP_LEVELS = {"medium", "high"}
-
 _CONTACT_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _CONTACT_SUBMIT_TIMES: dict[str, list[float]] = defaultdict(list)
 _CONTACT_SUBMIT_LIMIT = int(os.environ.get("MODSTORE_PUBLIC_CONTACT_LIMIT", "10"))
@@ -134,21 +126,6 @@ def _normalize_ip_risk_level(raw: str | None) -> str:
 
 def _effective_license_scope(item: CatalogItem) -> str:
     return _normalize_license_scope(getattr(item, "license_scope", None), float(item.price or 0))
-
-
-def _ensure_catalog_listing_allowed(
-    *,
-    price: float,
-    license_scope: str,
-    origin_type: str,
-    ip_risk_level: str,
-) -> None:
-    paid = float(price or 0) > 0
-    if paid and license_scope != "commercial":
-        raise HTTPException(400, "收费商品必须选择商业授权")
-    if origin_type in RISKY_ORIGIN_TYPES or ip_risk_level in RISKY_IP_LEVELS:
-        if paid or license_scope == "commercial":
-            raise HTTPException(400, "疑似抄袭、二创、联动或中高风险素材只能免费或限制个人使用")
 
 
 def _entitlement_metadata(item: CatalogItem, source: str) -> str:
