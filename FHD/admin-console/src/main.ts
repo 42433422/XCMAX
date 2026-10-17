@@ -3,3 +3,4 @@
  * 业务组件与路由主体复用 frontend/src，运维专属源码在 admin-console/src。
  */
 import '@host/main';
+import './styles/adminTheme.css';
