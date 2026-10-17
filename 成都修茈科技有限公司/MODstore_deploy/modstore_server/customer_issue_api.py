@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
-from modstore_server.customer_issue_delivery_contract import issue_resolution
+from modstore_server.customer_issue_delivery_contract import issue_resolution, repair_verification
 from modstore_server.customer_issue_intake import enqueue_issue, request_identity
 from modstore_server.customer_service_orchestrator import CLOSED_CUSTOMER_ISSUE_STATES as _CLOSED
 from modstore_server.customer_service_orchestrator import customer_issue_payload as _issue_row
@@ -411,6 +411,7 @@ def decide_product_issue(
             state="resolved",
             resolved_at=now.isoformat(),
             verification_mode="customer_decision",
+            **repair_verification("customer_decision"),
             closed_by_user_id=int(user.id),
             handled_by=sorted(
                 {
@@ -438,7 +439,7 @@ def decide_product_issue(
             resolution.pop(key, None)
         resolution.update(
             state="reopened",
-            repair_verified=False,
+            **repair_verification(None),
             reopen_note=note,
             reopened_at=now.isoformat(),
             reopen_after_action_id=int(
