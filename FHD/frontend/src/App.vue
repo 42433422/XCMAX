@@ -21,14 +21,15 @@ usePrivateDeliverySync()
     <router-view v-if="hideChrome" />
     <MainLayout v-else>
       <router-view v-slot="{ Component, route }">
-        <transition name="route-fade" mode="out-in">
-          <keep-alive v-if="!isAdminConsoleSpa()" :max="12">
+        <transition v-if="!isAdminConsoleSpa()" name="route-fade" mode="out-in">
+          <keep-alive :max="12">
             <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
           </keep-alive>
-          <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
-          <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
-          <component v-else :is="Component" :key="route.fullPath" class="route-view-shell" />
         </transition>
+        <!-- 管理端不用 out-in 过渡：它依赖 requestAnimationFrame，后台/被遮挡的窗口里会卡在旧页面，表现为地址变了内容不变或空白。 -->
+        <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
+        <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
+        <component v-else :is="Component" :key="route.fullPath" class="route-view-shell" />
       </router-view>
     </MainLayout>
   </div>
