@@ -3,6 +3,8 @@ import MainLayout from './components/MainLayout.vue'
 import LegacyFloatPanels from '@/components/shell/LegacyFloatPanels.vue'
 import AppGlobalProviders from '@/components/shell/AppGlobalProviders.vue'
 import VirtualCursorOverlay from '@/components/aiopen/VirtualCursorOverlay.vue'
+import RouteFallbackPanel from '@/components/shell/RouteFallbackPanel.vue'
+import { clearRouteChunkError, isUnmatchedRoute, routeChunkErrorPath } from '@/utils/routeLoadState'
 import { useAppBoot } from '@/composables/useAppBoot'
 import { usePrivateDeliverySync } from '@/composables/usePrivateDeliverySync'
 
@@ -23,6 +25,8 @@ usePrivateDeliverySync()
           <keep-alive v-if="!isAdminConsoleSpa()" :max="12">
             <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
           </keep-alive>
+          <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
+          <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
           <component v-else :is="Component" :key="route.fullPath" class="route-view-shell" />
         </transition>
       </router-view>
