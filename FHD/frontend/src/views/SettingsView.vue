@@ -25,8 +25,8 @@
             aria-hidden="true"
             @change="onAvatarFileChange"
           />
-          <p class="settings-profile__name settings-profile__brand">{{ profileBrandTitle }}</p>
-          <p class="settings-profile__sub">{{ profileSubline }}</p>
+          <p class="settings-profile__name settings-profile__brand">{{ adminSessionOnly ? '管理员' : profileBrandTitle }}</p>
+          <p class="settings-profile__sub">{{ adminSessionOnly ? '已用管理员账号登录' : profileSubline }}</p>
           <div class="settings-profile__actions">
             <button
               v-if="isLoggedIn"
@@ -37,7 +37,7 @@
             >
               {{ logoutLoading ? $t('settings.loggingOut') : $t('settings.logout') }}
             </button>
-            <router-link v-else class="settings-profile__btn settings-profile__btn--primary" :to="loginRoute">
+            <router-link v-else-if="!adminSessionOnly" class="settings-profile__btn settings-profile__btn--primary" :to="loginRoute">
               {{ $t('settings.login') }}
             </router-link>
           </div>
@@ -242,6 +242,7 @@ import { readStoredSidebarTheme, applySidebarTheme } from '@/utils/sidebarTheme'
 import HostModBridgeView from '@/components/HostModBridgeView.vue'
 import { useSettingsAccount } from '@/composables/settings/useSettingsAccount'
 import { useAccountProfileStore } from '@/stores/accountProfile'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { useSettingsMods } from '@/composables/settings/useSettingsMods'
 import { useSettingsMemory } from '@/composables/settings/useSettingsMemory'
 import { useSettingsBasics } from '@/composables/settings/useSettingsBasics'
@@ -294,6 +295,8 @@ const {
   saveProfile,
   onLogout,
 } = useSettingsAccount()
+/** 管理端已过管理员会话守卫；市场会话未绑定时只调整展示，不显示「登录」。 */
+const adminSessionOnly = computed(() => !isLoggedIn.value && isAdminConsoleSpa() && accountProfile.isAdminAccount)
 const canManageTenantRoles = computed(
   () => accountProfile.accountKind === 'enterprise' && accountProfile.tenantId !== null &&
     accountProfile.marketIsEnterprise && accountProfile.permissions.includes('tenant.manage_roles'),
