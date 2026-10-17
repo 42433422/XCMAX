@@ -50,6 +50,8 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     component: () => import('./views/ServerFunctionsView.vue'),
     meta: { title: '服务器功能模块', requiresAdminAccount: true, hostAdmin: true },
   },
+  // 常见手输地址：/admin/users → 用户管理（admin-entitlements，原守卫不变）
+  { path: '/users', redirect: { name: 'admin-entitlements' } },
   // 菜单 key 仍为 approval-hub；path 避开企业端 ERP /approval-hub 冲突
   {
     path: '/autonomy-approval-hub',
