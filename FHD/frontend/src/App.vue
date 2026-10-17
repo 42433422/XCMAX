@@ -4,6 +4,7 @@ import LegacyFloatPanels from '@/components/shell/LegacyFloatPanels.vue'
 import AppGlobalProviders from '@/components/shell/AppGlobalProviders.vue'
 import VirtualCursorOverlay from '@/components/aiopen/VirtualCursorOverlay.vue'
 import RouteFallbackPanel from '@/components/shell/RouteFallbackPanel.vue'
+import RouteErrorBoundary from '@/components/shell/RouteErrorBoundary.vue'
 import { clearRouteChunkError, isUnmatchedRoute, routeChunkErrorPath } from '@/utils/routeLoadState'
 import { useAppBoot } from '@/composables/useAppBoot'
 import { usePrivateDeliverySync } from '@/composables/usePrivateDeliverySync'
@@ -29,7 +30,9 @@ usePrivateDeliverySync()
         <!-- 管理端不用 out-in 过渡：它依赖 requestAnimationFrame，后台/被遮挡的窗口里会卡在旧页面，表现为地址变了内容不变或空白。 -->
         <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
-        <component v-else :is="Component" :key="route.fullPath" class="route-view-shell" />
+        <RouteErrorBoundary v-else :path="route.fullPath">
+          <component :is="Component" :key="route.fullPath" class="route-view-shell" />
+        </RouteErrorBoundary>
       </router-view>
     </MainLayout>
   </div>
