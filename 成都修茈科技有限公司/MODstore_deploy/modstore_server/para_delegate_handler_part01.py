@@ -101,33 +101,12 @@ def _mode_for_employee(employee_id: str, input_data: _facade().Dict[str, _facade
     return "code"
 
 
-def _customer_ticket_cloud_route(
-    input_data: _facade().Dict[str, _facade().Any],
-) -> _facade().Dict[str, _facade().Any]:
-    """工单 AI 处理优先走云端执行器（如 Grok Bot）。
-
-    仅当配置了 ``MODSTORE_PARA_TICKET_DEVICE_ID``、输入是客服工单事件且调用方没有显式指定
-    device_id 时生效；其余派发（自维护、进化等）与原回退顺序完全不变。
-    """
-    device_id = (_facade().os.environ.get("MODSTORE_PARA_TICKET_DEVICE_ID") or "").strip()
-    if not device_id or str(input_data.get("device_id") or "").strip():
-        return {}
-    if str(input_data.get("event_type") or "").strip() != "ops.intake.customer_ticket":
-        return {}
-    tool = (_facade().os.environ.get("MODSTORE_PARA_TICKET_TOOL") or "grok_bot").strip()
-    return {
-        "device_id": device_id,
-        "tool_name": tool,
-        "dispatch_line": (
-            _facade().os.environ.get("MODSTORE_PARA_TICKET_EXECUTOR") or "grok-bot-cloud"
-        ).strip(),
-    }
-
-
 def _build_request(
     *, task: str, input_data: _facade().Dict[str, _facade().Any], employee_id: str
 ) -> _facade().Dict[str, _facade().Any]:
-    cloud_route = _customer_ticket_cloud_route(input_data)
+    from modstore_server.para_ticket_cloud_route import customer_ticket_cloud_route
+
+    cloud_route = customer_ticket_cloud_route(input_data)
     if cloud_route:
         input_data = {**input_data, **cloud_route}
     workspace_root = _facade()._project_root(input_data)
