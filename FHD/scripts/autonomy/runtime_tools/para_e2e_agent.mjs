@@ -27,6 +27,7 @@ import {
 } from './para_queue_policy.mjs';
 import {
   effectiveToolName,
+  removeOwnWorkspace,
   requestedToolName,
   supportedToolNames,
   withFailureCleanup,
@@ -588,26 +589,23 @@ async function refreshBaseBranchFromOrigin(taskDir, repoUrl, baseBranch) {
   return remoteHead;
 }
 
-async function cloneSourceWorkspace(sourceWorkspace, taskDir, task) {
+async function cloneSourceWorkspace(sourceWorkspace, taskDir, task, root) {
   // 先尝试从本地 sourceWorkspace clone（快，避免 GitHub 网络延迟）。
   // 如果 sourceWorkspace 太大或 clone 失败，fallback 到 GitHub repoUrl（带代理）。
+  const repoUrl = String(task?.repo_url || '').trim();
+  const baseBranch = String(task?.base_branch || 'main').trim() || 'main';
   try {
     await git(process.cwd(), ['clone', '--shared', sourceWorkspace, taskDir]);
   } catch (cloneErr) {
     console.error(`[e2e-agent] clone sourceWorkspace 失败 (${String(cloneErr).slice(0, 200)})，尝试从 GitHub clone`);
-    const repoUrl = String(task?.repo_url || '').trim();
-    const baseBranch = String(task?.base_branch || 'main').trim() || 'main';
     if (!repoUrl) throw cloneErr;
+    if (!removeOwnWorkspace(taskDir, root)) throw cloneErr; // 失败 clone 可能留下半成品（如磁盘满），只删本任务目录
     // 从 GitHub clone，用 --depth 1 避免 clone 全部历史
     await git(process.cwd(), ['clone', '--depth', '1', '--single-branch', '--branch', baseBranch, repoUrl, taskDir]);
     // clone 成功后 origin 已经指向 GitHub，不需要再 set-url
-    if (task.work_branch) {
-      await gitMaybe(taskDir, ['checkout', '-B', task.work_branch]);
-    }
+    if (task.work_branch) await gitMaybe(taskDir, ['checkout', '-B', task.work_branch]);
     return;
   }
-  const repoUrl = String(task?.repo_url || '').trim();
-  const baseBranch = String(task?.base_branch || 'main').trim() || 'main';
   if (repoUrl) {
     // sourceWorkspace 是本地路径，clone 后 origin 指向它。
     // 必须 fail-closed 地刷新并核对远程基线。不能用 fetch 输出或 loose-ref
@@ -768,7 +766,7 @@ async function prepareWorkspace(task) {
     const sourceWorkspace = await sourceWorkspaceFromTask(task);
 
     if (sourceWorkspace && await sourceWorkspaceMatchesRepo(sourceWorkspace, repoUrl)) {
-      await cloneSourceWorkspace(sourceWorkspace, taskDir, task);
+      await cloneSourceWorkspace(sourceWorkspace, taskDir, task, root);
       return taskDir;
     }
 
@@ -799,11 +797,7 @@ const WORKSPACE_RETENTION_MS = (() => {
 // 仅删 workspaceRoot 下的任务子目录，绝不删共享根（无 repoUrl 时 taskDir === workspaceRoot）。
 function cleanupWorkspace(taskDir) {
   try {
-    if (!taskDir || taskDir === workspaceRoot) return;
-    if (!taskDir.startsWith(`${workspaceRoot}/`)) return;
-    if (!existsSync(taskDir)) return;
-    rmSync(taskDir, { recursive: true, force: true });
-    console.log(`[e2e-agent] 已回收工作区 ${taskDir}`);
+    if (existsSync(taskDir) && removeOwnWorkspace(taskDir, workspaceRoot)) console.log(`[e2e-agent] 已回收工作区 ${taskDir}`);
   } catch (err) {
     console.error('[e2e-agent] 工作区回收失败', err);
   }
