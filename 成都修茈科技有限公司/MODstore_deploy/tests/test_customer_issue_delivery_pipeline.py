@@ -876,11 +876,13 @@ def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client,
         assert ticket.closed_at is not None and resolution["closed_by_user_id"] == user.id
         assert resolution["verification_mode"] == "customer_decision"
         assert resolution["handled_by"] == ["fix", "scout", "verify"]
-        audits = {
-            row.event_type
+        audits = {  # 客户接口发起的操作记成客户本人，不记成 AI 代办（#2388）
+            row.event_type: (row.actor_type, row.actor_user_id)
             for row in db.query(CustomerServiceAuditLog).filter_by(ticket_id=tid).all()
         }
-        assert {"customer_issue_reopen", "customer_issue_resolved"} <= audits
+        assert {
+            audits[k] for k in ("customer_issue_reopen", "customer_issue_resolved", "issue_intake")
+        } == {("user", user.id)}
     stranger = _make_user("decision_stranger")
     monkeypatch.setitem(app.dependency_overrides, get_current_user, lambda: stranger)
     assert decide("reopen", "冒充客户重开工单", "stranger-1").status_code == 404
