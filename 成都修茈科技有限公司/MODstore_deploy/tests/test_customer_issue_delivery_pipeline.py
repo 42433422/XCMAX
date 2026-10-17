@@ -174,7 +174,9 @@ def test_shared_release_requires_real_worker_merge_ci_and_customer_action(client
     }
     complete = client.post(endpoint, json=confirmed)
     assert complete.status_code == 200, complete.text
-    assert complete.json()["ticket"]["status"] == "resolved"
+    done = complete.json()["ticket"]
+    assert done["status"] == "resolved" and done["evidence"]["resolution"]["repair_verified"]
+    assert done["evidence"]["resolution"]["repair_verified_by"] == "customer_runtime_receipt"
     assert client.post(endpoint, json={**confirmed, "version": "other"}).status_code == 409
 
 
@@ -853,6 +855,7 @@ def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client,
         )
         evidence = json_loads(ticket.evidence_json, {})
         assert evidence["reopen_history"][0]["release_target"]["fix_sha"] == "b" * 40
+        assert evidence["resolution"]["repair_verified"] is False  # 重开后须重新核验
         rows = [
             {"role": role, "employee_id": role, "ok": True, "status": "success"}
             for role in ("scout", "fix", "verify")
@@ -875,6 +878,8 @@ def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client,
         resolution = json_loads(ticket.evidence_json, {})["resolution"]
         assert ticket.closed_at is not None and resolution["closed_by_user_id"] == user.id
         assert resolution["verification_mode"] == "customer_decision"
+        verified = (resolution["repair_verified"], resolution["repair_verified_by"])
+        assert verified == (True, "customer_decision")  # 已验证关单不能 repair_verified=false
         assert resolution["handled_by"] == ["fix", "scout", "verify"]
         audits = {
             row.event_type
