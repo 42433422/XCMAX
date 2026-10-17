@@ -1,0 +1,31 @@
+{
+  "result": "PASS",
+  "time": "2026-10-15T22:45:06.897753+08:00",
+  "scope": "Public response headers only; complete body integrity has separate receipts",
+  "files": [
+    {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "httpStatus": 200,
+      "contentLength": 568802820,
+      "rawHeadersFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.headers",
+      "rawHeadersSha256": "c39489baa3cfb9332e7cf38f1449f60c5d915fb0089199e249f5279368f95aad",
+      "result": "PASS"
+    },
+    {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "httpStatus": 200,
+      "contentLength": 528146028,
+      "rawHeadersFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.headers",
+      "rawHeadersSha256": "b5a44087d32eb02ae8fa8070c49ed72e684246bd38422118e56440ccf0007351",
+      "result": "PASS"
+    },
+    {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "httpStatus": 200,
+      "contentLength": 331819335,
+      "rawHeadersFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe.headers",
+      "rawHeadersSha256": "e7b0efd99af8158ace9ea9d5bf2eb36dbe8f135aeca0a7f41a3f3e8a103dab98",
+      "result": "PASS"
+    }
+  ]
+}

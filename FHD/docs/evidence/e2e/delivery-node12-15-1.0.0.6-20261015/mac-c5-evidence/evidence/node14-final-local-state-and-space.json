@@ -1,0 +1,33 @@
+{
+  "time": "2026-10-15T22:53:33.693117+08:00",
+  "architecture": "arm64",
+  "spaces": {
+    "/Users/Shared/XCMAX": {
+      "totalBytes": 494384795648,
+      "freeBytes": 2795610112
+    },
+    "/Volumes/KINGSTON": {
+      "totalBytes": 1024190578688,
+      "freeBytes": 36748394496
+    },
+    "/private/tmp/xcagi-mac-c5-20261015": {
+      "totalBytes": 32002498560,
+      "freeBytes": 17154084864
+    }
+  },
+  "ownDownloadVerifierPids": [],
+  "temporarySleepAssertions": [
+    {
+      "pid": 79658,
+      "ownAssertionStillPresent": false
+    },
+    {
+      "pid": 79659,
+      "ownAssertionStillPresent": false
+    }
+  ],
+  "durableBackingImage": "/Volumes/KINGSTON/XCMAX-mac-aligned-c5-20261015.sparsebundle",
+  "retainedAcceptanceEvidenceReason": "Raw lifecycle evidence, isolated synthetic databases/backups, accepted original artifacts and complete public downloaded packages retained for audit/recovery.",
+  "machineChip": "Apple M4",
+  "macOS": "26.3"
+}

@@ -1,0 +1,35 @@
+{
+  "ledger": "software-loop 1.0.0.6 installation/update lifecycle (nodes 12-15)",
+  "recordedAt": "2026-10-17",
+  "verdict": "PASS",
+  "verdictScope": "软件闭环通过（安装和更新生命周期范围）：1.0.0.6，Mac c5e066acff7f50edf5f1e506abcca33372cc6033 / Windows 7102b713df1136ae83848eed5814a60ede66a355，两边 Git tree 同为 60aef1efa8c18fb01cea7c7234716c2e5b758671，按用户认可的同源码树标准判定；节点 15 为用户有条件验收，条件已满足。",
+  "version": "1.0.0.6",
+  "sources": {
+    "mac": {"sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033", "buildRun": 38730362964, "tree": "60aef1efa8c18fb01cea7c7234716c2e5b758671"},
+    "windows": {"sourceSha": "7102b713df1136ae83848eed5814a60ede66a355", "buildRun": "local-windows-longpath-20261015-114026", "tree": "60aef1efa8c18fb01cea7c7234716c2e5b758671"},
+    "sameFullCommitSha": false,
+    "sameTrackedCodeTree": true,
+    "basis": "PASS under user-adopted shared-source-tree criterion",
+    "integrationPr": "https://github.com/42433422/XCMAX/pull/2340"
+  },
+  "nodes": {
+    "12": {"result": "PASS", "evidence": "mac-c5-evidence/evidence/node13-joint-verification-final.json", "note": "Mac M4 arm64 八项生命周期通过；Windows 复用原执行方五项回执及独立正常退出重开回执（newDeviceAcceptanceRun=false，本轮未在 Windows 重跑）"},
+    "13": {"result": "PASS", "evidence": "mac-c5-evidence/evidence/node13-joint-verification-final.json", "note": "同代码树、不同完整 SHA，两边实际身份分别保留"},
+    "14": {"result": "PASS", "evidence": "node14-server-distribution-final.json", "note": "按版本独立手动下载 https://xiu-ci.com/xcagi-v1.0.0.6/；三包匿名完整下载且大小和 sha256 与批准值一致；Windows 包 NotSigned（用户明确不要求签名）"},
+    "15": {"result": "PASS", "evidence": "node15-user-conditional-acceptance-final.json", "acceptanceType": "User personally gave explicit conditional acceptance; executed condition now satisfied", "condition": "All three actual published package files download normally and match approved complete sizes and SHA256", "conditionSatisfiedAt": "2026-10-15T22:49:47.363298+08:00", "userPersonallyDownloadedOrInstalledClaimed": false, "independentExternalCustomerSignatureOrOperationClaimed": false}
+  },
+  "combinedReport": {"file": "node14-node15-server-delivery-final.json", "sha256": "459e85bb1093c052a23fbd4a708695cd9fb98c25e2ae1b5ce099feee329236be"},
+  "outsideScope": [
+    "Intel Mac acceptance",
+    "Ordinary business workflows",
+    "Stable OTA automatic push and default website current-version promotion",
+    "Production application deployment",
+    "Independent external-customer personal installation/signature"
+  ],
+  "limitations": [
+    "Mac acceptance is M4 arm64; Intel Mac outside this round",
+    "Ordinary business features outside this lifecycle acceptance",
+    "Stable OTA automatic update and current default website pointer were not promoted by this task"
+  ],
+  "notCovered": "本总账只覆盖安装和更新生命周期。1.0.0.5 的 25 道发布闸门总账（final-acceptance-1.0.0.5/gates.json）以及工单闭环（闭环二）都不在本总账内，状态不因本总账改变。"
+}
