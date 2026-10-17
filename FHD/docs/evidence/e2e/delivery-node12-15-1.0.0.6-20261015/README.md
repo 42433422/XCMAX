@@ -42,13 +42,26 @@ COS 私有桶 `xcagi-evidence-1374207682`（ap-chengdu），前缀 `software-loo
 
 ## Windows 7102b713 验收证据（COS）
 
-前缀 `windows-acceptance/1.0.0.6-7102b713/`，由另一个任务从佳诺 `C:\XCAGI-QA\candidate-longpath\evidence\` 等目录上传，2026-10-17 12:21（UTC+8）上传完毕，共 123 个对象（121 个证据文件、`SHA256SUMS` 和上传清单）。
-本目录 `windows-7102b713-cos/` 收录了这两个索引文件：
-- `SHA256SUMS`：sha256 `c8fe31eab5b56905510a6e7b9eb28ff9c186d3d53cf788cec77806f6305a4686`
-- `cos-win1006-upload-manifest.json`：sha256 `a356964f94a64a3c478e329a7b730e7be140afa2d919ab46b1b9a3eedcd9b47a`
+前缀 `windows-acceptance/1.0.0.6-7102b713/`，由另一个任务从佳诺 `C:\XCAGI-QA\candidate-longpath\evidence\` 等目录上传。2026-10-17 12:28（UTC+8）核对时共有 132 个对象：
+- 上传清单 `objects` 列出 124 个对象，含 `SHA256SUMS` 和 12:28 补传的两份后端日志
+- 另有 `server-verify-20261017/` 下的 7 个复核回执
+- 以及清单文件本身
 
-2026-10-17 核对：`SHA256SUMS` 列出的 121 个文件都在 COS 上，每个对象记录的 sha256 都与 `SHA256SUMS` 一致。
-上传方排除了 8 个文件，原因见清单的 `excluded`：两份后端日志含 Edge 的 TrustedClientToken、一张截图含配对二维码，另有 5 个脚本或 curl 配置；是否补传由用户决定。
+本目录 `windows-7102b713-cos/` 收录了以下文件：
+
+| 文件 | sha256 |
+| --- | --- |
+| `cos-win1006-upload-manifest.json`（updated_at 2026-10-17T12:28:16+08:00，与 COS 上的同名对象逐字节相同） | `e347920b56b78c12f9c1aea63fed592e780f55aa0fdd7605eb2e85decb4cd3bd` |
+| `SHA256SUMS`（列出首批 121 个文件；两份后端日志的哈希见上传清单） | `c8fe31eab5b56905510a6e7b9eb28ff9c186d3d53cf788cec77806f6305a4686` |
+| `XCAGI-Enterprise-Setup-1.0.0.6-x64.exe.verify-20261017.json`（服务器回执，服务器路径 `/var/www/xcagi-v1.0.0.6/enterprise/`，COS 对象 `server-verify-20261017/`） | `db58136a5d0b2c5e584534fdfb8fb435a3cba9ac4f711de671d50ae7f0a96003` |
+
+服务器回执结论原文：`status: SERVER_VERIFIED_PUBLIC_DOWNLOAD_VERIFIED`。服务器上的文件 `ALREADY_PRESENT_AND_IDENTICAL`（331819335 B，sha256 `9D7025E9…F40100`，2026-10-15 22:00 上传，没有重传），公网完整下载的 sha256 也一致。`authenticode: NotSigned`。
+
+2026-10-17 核对：
+- 上传清单里的 124 个对象都在 COS 上，对象元数据记录的 sha256 与清单一致。
+- `SHA256SUMS` 列出的 121 个文件都在，哈希一致。
+
+仍然排除的 6 个文件见清单的 `excluded`：一张含配对二维码的截图，以及 5 个脚本或 curl 配置。是否补传由用户决定。
 
 ## 2026-10-17 核对结果
 

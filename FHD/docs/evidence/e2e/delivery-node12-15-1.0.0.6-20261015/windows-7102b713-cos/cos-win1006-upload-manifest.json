@@ -7,27 +7,15 @@
  "source_zip_sha256": "a282a86245beaef7f5b003ec8079e922dd159713bf1ac54519099a44d4361c54",
  "label": "Windows 1.0.0.6 real-machine acceptance evidence (佳诺), package source 7102b713df1136ae83848eed5814a60ede66a355, exe sha256 9d7025e9367bb934868adb79be7a99bbb8dae728727aa7ace00c492c45f40100",
  "generated_at": "2026-10-17T12:21:25+0800",
- "count": 122,
- "total_bytes": 4272442,
+ "count": 124,
+ "total_bytes": 14760609,
  "all_redownload_match": true,
  "excluded": [
-  {
-   "path": "evidence/7102-direct-reopen-backend.log",
-   "size": 5368558,
-   "sha256": "e13097e336112613de1f9018be8555b317671b9bb98760a2f98b1cbbaa83a0ae",
-   "reason": "后端日志含 Edge 朗读接口 URL 中的 TrustedClientToken（Edge 内置公开常量，非本公司密钥），按规则“含令牌”先不传，待用户决定"
-  },
-  {
-   "path": "evidence/7102-raw-electron-backend.log",
-   "size": 5119609,
-   "sha256": "c52cc447a9f096766330831b7cebcfdc9b5b2c9e4709ebfd092f8d09f5155ca4",
-   "reason": "同上：含 TrustedClientToken，先不传，待用户决定"
-  },
   {
    "path": "evidence/update-offered.jpg",
    "size": 97208,
    "sha256": "fd29dfd7130044ac751e9b2b0e0bdb25f80134aeb192a3fa1bd259736a717564",
-   "reason": "截图含移动端配对二维码和配对码（10-15 生成、约 24h 有效，应已过期），按“含令牌/配对凭证”保守排除"
+   "reason": "含配对二维码，未上传"
   },
   {
    "path": "server-upload-7102/promote-original-package.py",
@@ -61,6 +49,14 @@
   }
  ],
  "objects": [
+  {
+   "key": "windows-acceptance/1.0.0.6-7102b713/SHA256SUMS",
+   "size": 13094,
+   "sha256": "c8fe31eab5b56905510a6e7b9eb28ff9c186d3d53cf788cec77806f6305a4686",
+   "content_type": "text/plain; charset=utf-8",
+   "state": "uploaded",
+   "redownload_sha256_match": true
+  },
   {
    "key": "windows-acceptance/1.0.0.6-7102b713/evidence/7102-after-normal-upgrade-data.json",
    "size": 2925,
@@ -164,6 +160,15 @@
    "content_type": "application/json",
    "state": "uploaded",
    "redownload_sha256_match": true
+  },
+  {
+   "key": "windows-acceptance/1.0.0.6-7102b713/evidence/7102-direct-reopen-backend.log",
+   "size": 5368558,
+   "sha256": "e13097e336112613de1f9018be8555b317671b9bb98760a2f98b1cbbaa83a0ae",
+   "content_type": "text/plain; charset=utf-8",
+   "state": "uploaded",
+   "redownload_sha256_match": true,
+   "note": "含 Edge 朗读接口 TrustedClientToken（Edge 内置公开常量，非本公司密钥）；用户 2026-10-17 12:27 决定原样上传到私有桶"
   },
   {
    "key": "windows-acceptance/1.0.0.6-7102b713/evidence/7102-direct-reopen-before.json",
@@ -356,6 +361,15 @@
    "content_type": "image/jpeg",
    "state": "uploaded",
    "redownload_sha256_match": true
+  },
+  {
+   "key": "windows-acceptance/1.0.0.6-7102b713/evidence/7102-raw-electron-backend.log",
+   "size": 5119609,
+   "sha256": "c52cc447a9f096766330831b7cebcfdc9b5b2c9e4709ebfd092f8d09f5155ca4",
+   "content_type": "text/plain; charset=utf-8",
+   "state": "uploaded",
+   "redownload_sha256_match": true,
+   "note": "含 Edge 朗读接口 TrustedClientToken（Edge 内置公开常量，非本公司密钥）；用户 2026-10-17 12:27 决定原样上传到私有桶"
   },
   {
    "key": "windows-acceptance/1.0.0.6-7102b713/evidence/7102-raw-updater-events.jsonl",
@@ -1028,14 +1042,15 @@
    "content_type": "application/json",
    "state": "uploaded",
    "redownload_sha256_match": true
-  },
-  {
-   "key": "windows-acceptance/1.0.0.6-7102b713/SHA256SUMS",
-   "size": 13094,
-   "sha256": "c8fe31eab5b56905510a6e7b9eb28ff9c186d3d53cf788cec77806f6305a4686",
-   "content_type": "text/plain; charset=utf-8",
-   "state": "uploaded",
-   "redownload_sha256_match": true
   }
- ]
+ ],
+ "extra_objects": [
+  {
+   "prefix": "windows-acceptance/1.0.0.6-7102b713/server-verify-20261017/",
+   "count": 7,
+   "note": "10-17 服务器/公网复核回执、受保护状态前后、哈希记录；上传后均已重新下载核对一致"
+  }
+ ],
+ "updated_at": "2026-10-17T12:28:16+0800",
+ "sha256sums_note": "SHA256SUMS 对象列出首批 121 个文件；两个后端日志的哈希见本 manifest objects"
 }
