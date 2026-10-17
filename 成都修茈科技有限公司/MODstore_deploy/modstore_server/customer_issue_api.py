@@ -226,6 +226,7 @@ async def intake_customer_issue(
             ticket_id=ticket.id,
             session_id=session.id,
             actor=user,
+            actor_type="user",
             detail={"source_ref": body.source_ref, "event_id": event_id},
         )
         db.commit()
@@ -484,6 +485,7 @@ def decide_product_issue(
         ticket_id=ticket.id,
         session_id=ticket.session_id,
         actor=user,
+        actor_type="user",
         detail={"note": note, "idempotency_key": body.idempotency_key, "event_id": event_id},
     )
     db.commit()
