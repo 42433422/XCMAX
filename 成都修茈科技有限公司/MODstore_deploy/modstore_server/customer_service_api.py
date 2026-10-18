@@ -31,6 +31,7 @@ from modstore_server.customer_service_api_helpers import (
     standard_payload as _standard_payload,
     visible_ticket_or_404 as _visible_ticket_or_404,
 )
+from modstore_server import customer_service_customer_view as customer_view
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models import User
 from modstore_server.models_cs import (
@@ -143,7 +144,7 @@ async def customer_service_chat(
     db.commit()
     if t:
         _schedule_customer_ticket_incident({"ticket_id": int(t.get("id") or 0)})
-    return result
+    return result if user.is_admin else customer_view.customer_chat_result(result)
 
 
 @router.get("/sessions")
@@ -175,20 +176,20 @@ async def session_detail(
         .order_by(CustomerServiceMessage.id.asc())
         .all()
     )
-    return {
-        "session": session_payload(session),
-        "messages": [
-            {
-                "id": m.id,
-                "ticket_id": m.ticket_id,
-                "role": m.role,
-                "content": m.content,
-                "payload": json_loads(m.payload_json, {}),
-                "created_at": m.created_at.isoformat() if m.created_at else "",
-            }
-            for m in messages
-        ],
-    }
+    rows = [
+        {
+            "id": m.id,
+            "ticket_id": m.ticket_id,
+            "role": m.role,
+            "content": m.content,
+            "payload": json_loads(m.payload_json, {}),
+            "created_at": m.created_at.isoformat() if m.created_at else "",
+        }
+        for m in messages
+    ]
+    if not user.is_admin:
+        rows = [customer_view.customer_message(m) for m in rows]
+    return {"session": session_payload(session), "messages": rows}
 
 
 @router.get("/tickets")
@@ -225,8 +226,9 @@ async def list_tickets(
         .limit(limit)
         .all()
     )
+    view = ticket_payload if user.is_admin else customer_view.customer_ticket_row
     return {
-        "items": [ticket_payload(r) for r in rows],
+        "items": [view(r) for r in rows],
         "total": total,
         "offset": offset,
     }
@@ -257,6 +259,14 @@ async def ticket_detail(
         .order_by(CustomerServiceAuditLog.id.asc())
         .all()
     )
+    if not user.is_admin:
+        # 客户只看白名单摘要：内部审计、派单执行原文和内部 resolution 不出站。
+        return {
+            "ticket": customer_view.customer_ticket_row(ticket),
+            "decisions": [customer_view.customer_decision(decision_payload(d)) for d in decisions],
+            "actions": customer_view.customer_actions([action_payload(a) for a in actions]),
+            "audit_logs": [],
+        }
     return {
         "ticket": ticket_payload(ticket),
         "decisions": [decision_payload(d) for d in decisions],
@@ -281,8 +291,8 @@ async def list_actions(
             CustomerServiceTicket,
             CustomerServiceAction.ticket_id == CustomerServiceTicket.id,
         ).filter(CustomerServiceTicket.user_id == user.id)
-    rows = q.order_by(CustomerServiceAction.id.desc()).limit(limit).all()
-    return {"items": [action_payload(r) for r in rows]}
+    rows = [action_payload(r) for r in q.order_by(CustomerServiceAction.id.desc()).limit(limit)]
+    return {"items": rows if user.is_admin else customer_view.customer_actions(rows)}
 
 
 @router.get("/standards")

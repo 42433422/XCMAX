@@ -1201,7 +1201,7 @@ def test_ticket_search_preserves_ownership_identity_and_pagination(client):
         assert client.get(f"/api/customer-service/tickets/{ids[1]}").status_code == 404
         own = client.get(f"/api/customer-service/tickets/{ids[0]}").json()
         assert own["ticket"]["ticket_no"] == f"{marker}-{owner.id}-290063"
-        assert own["ticket"]["assigned_admin_id"] is None
+        assert "assigned_admin_id" not in own["ticket"]
         assert own["ticket"]["summary"] == f"{marker} original 100%_text"
         assert own["actions"] == own["audit_logs"] == []
         assert (
