@@ -450,6 +450,7 @@ from modstore_server.customer_service_orchestrator_part02_part01_part02 import (
     extract_fields as extract_fields,
     is_greeting as is_greeting,
     wants_ticket_escalation as wants_ticket_escalation,
+    resolve_triage_lane as resolve_triage_lane,
     should_create_ticket as should_create_ticket,
     infer_intent as infer_intent,
     classify_customer_intent as classify_customer_intent,

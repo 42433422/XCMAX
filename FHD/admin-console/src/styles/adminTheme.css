@@ -1,0 +1,48 @@
+/*
+ * 管理端统一视觉基线（只在 /admin 构建中加载）。
+ * 只调整页头、间距、字号、对比度和焦点样式；不改布局结构和业务组件行为。
+ * 主色沿用 #1677ff，正文 #172033，次要文字 #64748b（白底对比度 ≥ 4.5:1）。
+ */
+#app .page-content > .page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+}
+
+#app .page-content > .page-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #172033;
+  letter-spacing: 0;
+}
+
+#app .page-content .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#app .page-content .empty-hint,
+#app .page-content .muted {
+  color: #64748b;
+}
+
+#app .page-content table th {
+  font-weight: 600;
+  color: #475569;
+}
+
+#app .page-content :is(button, a, input, select, textarea, summary, [role="tab"]):focus-visible {
+  outline: 2px solid #1677ff;
+  outline-offset: 2px;
+}
+
+#app .page-content :is(input, select, textarea)::placeholder {
+  color: #94a3b8;
+}
