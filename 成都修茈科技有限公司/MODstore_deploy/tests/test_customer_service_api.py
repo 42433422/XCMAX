@@ -1226,13 +1226,13 @@ def test_ticket_search_preserves_ownership_identity_and_pagination(client):
 
 
 def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(client):
+    import importlib.util
+    from pathlib import Path
+
     from sqlalchemy import text
 
     from modstore_server import customer_service_api
     from modstore_server.app import app
-    import importlib.util
-    from pathlib import Path
-
     from modstore_server.db.base import get_engine
     from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
@@ -1261,7 +1261,7 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
             ),
             {"ticket_no": f"{marker}%"},
         )
-    migration = Path(__file__).resolve().parents[1] / "alembic/versions/20261019_ticket_submitter_type.py"
+    migration = Path(__file__).parents[1] / "alembic/versions/20261019_ticket_submitter_type.py"
     spec = importlib.util.spec_from_file_location("ticket_submitter_migration", migration)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
