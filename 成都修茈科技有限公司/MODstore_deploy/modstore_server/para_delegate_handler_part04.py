@@ -12,6 +12,19 @@ def _facade():
     return importlib.import_module("modstore_server.para_delegate_handler")
 
 
+def _attach_credential_grant(prompt: str, task_id: str) -> _facade().Any:
+    """给派单任务签发短期凭据授权，把不含凭据值的授权引用附在提示词末尾。"""
+
+    from modstore_server import cred_vault as credential_vault
+
+    if not task_id or not _facade()._env_bool("MODSTORE_CREDENTIAL_TASK_GRANTS", "1"):
+        return prompt, None
+    grant = credential_vault.issue_task_grant(
+        task_id, credential_vault.default_grant_scopes(), purpose="para_dispatch"
+    )
+    return prompt + "\n" + grant.prompt_line(), grant
+
+
 def _post_para_api_once(
     req: _facade().Dict[str, _facade().Any],
 ) -> _facade().Dict[str, _facade().Any]:
@@ -53,8 +66,10 @@ def _post_para_api_once(
     ).strip()
     try:
         with _facade().httpx.Client(timeout=_facade()._api_timeout(), trust_env=False) as client:
-            token_info = _facade()._get_para_token(client, base)
+            grant_task = str(req.get("para_task_id") or req.get("request_id") or "").strip()
+            token_info = _facade()._get_para_token(client, base, grant_task)
             token = token_info["token"]
+            base_prompt, grant = _attach_credential_grant(base_prompt, grant_task)
             tier, sel_devices, select_reason = _facade()._resolve_dispatch_devices(
                 client, base, token, req
             )
@@ -159,6 +174,10 @@ def _post_para_api_once(
                     }
                 )
             if not dispatched:
+                if grant is not None:
+                    from modstore_server.cred_vault import revoke_task_grants
+
+                    revoke_task_grants(grant.task_id, reason="para_no_subtask_created")
                 return _facade()._outbox_response(
                     {**req, "para_payload": first_payload},
                     status="para_api_no_subtask_created",
