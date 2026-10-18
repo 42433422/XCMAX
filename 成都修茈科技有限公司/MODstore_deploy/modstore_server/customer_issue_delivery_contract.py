@@ -155,6 +155,12 @@ def issue_resolution(ticket: Any, evidence: dict[str, Any]) -> dict[str, Any]:
     return resolution
 
 
+def repair_verification(source: str | None) -> dict[str, Any]:
+    """repair_verified 只随实际核验来源置真：incident_team / customer_decision / *_runtime_receipt。"""
+    at = datetime.now(UTC).isoformat() if source else None
+    return {"repair_verified": bool(source), "repair_verified_by": source, "repair_verified_at": at}
+
+
 def record_team_progress(
     ticket: Any, evidence: dict[str, Any], *, event_id: int, rows: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -176,7 +182,7 @@ def record_team_progress(
             )
         ),
         incident_event_id=int(event_id),
-        repair_verified=successful,
+        **repair_verification("incident_team" if successful else None),
         team=[{k: row.get(k) for k in ("role", "employee_id", "ok", "status")} for row in rows],
         updated_at=datetime.now(UTC).isoformat(),
     )

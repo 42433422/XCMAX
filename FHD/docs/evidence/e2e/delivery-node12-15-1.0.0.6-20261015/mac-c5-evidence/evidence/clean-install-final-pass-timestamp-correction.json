@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-10-15T20:54:23.311+08:00",
+  "result": "PASS",
+  "installationRoute": "Finder copy from mounted notarized DMG into isolated Applications folder; LaunchServices open with isolated HOME/userData and port",
+  "appPath": "/private/tmp/xcagi-mac-c5-20261015/clean-install/Applications/XCAGI.app",
+  "appVersion": "1.0.0.6",
+  "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+  "releaseId": "xcagi-1.0.0.6-c5e066acff7f50edf5f1e506abcca33372cc6033",
+  "userDataPath": "/private/tmp/xcagi-mac-c5-20261015/clean-install/userData",
+  "backendPort": 18504,
+  "backendEvidence": "electron-backend.log has repeated GET /api/health and /api/desktop/status HTTP 200; manual curl returned / 200, /api/health 200 (6523 bytes), /health 200 and /api/desktop/status 200.",
+  "firstScreen": "login page at http://127.0.0.1:18504/login?redirect=/",
+  "database": "data/xcagi.db created; PRAGMA quick_check=ok",
+  "normalExit": "Cmd-Q; app and backend exited normally; port18504 listener closed",
+  "correctionRecordedAt": "2026-10-15T21:40:57.636747+08:00",
+  "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/clean-install-first-launch.json",
+  "originalReceiptSha256": "5fd886effe9d4f258d9d4a6dfd59d11a66bafa897ede51e0121fe78aea43ec14",
+  "correction": "Original20:54:15timestamp was proxy-timeout PARTIAL observation; final direct/no-proxy four-endpoint200 result at20:54:23.311establishes PASS. No test repeated.",
+  "rawSession": "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl",
+  "rawCallId": "call_d2edc76735fa4563b4fa1d2a207fe177",
+  "requestLine": 18885,
+  "successResultLine": 18888
+}
