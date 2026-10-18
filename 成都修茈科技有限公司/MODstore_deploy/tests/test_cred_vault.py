@@ -135,6 +135,8 @@ def test_log_records_are_redacted(monkeypatch, caplog):
     monkeypatch.setenv("XCMAX_LOG_TOKEN", value)
     original = logging.getLogRecordFactory()
     try:
+        # 全量测试里 app 导入时已安装过；先换回原生工厂，验证安装与幂等。
+        logging.setLogRecordFactory(logging.LogRecord)
         assert cv.install_log_redaction() is True
         assert cv.install_log_redaction() is False
         with caplog.at_level(logging.INFO):
