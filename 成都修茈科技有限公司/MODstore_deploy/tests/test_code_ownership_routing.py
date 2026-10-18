@@ -284,3 +284,4 @@ def test_incident_team_fix_task_includes_code_owner_context():
     assert "代码负责人" in task
     assert "MODstore_deploy/modstore_server/workbench_api.py" in task
     assert "可执行处理" in task
+    assert "scripts/dev/push_preflight.py --fix" in task
