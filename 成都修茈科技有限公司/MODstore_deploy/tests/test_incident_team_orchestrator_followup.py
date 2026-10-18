@@ -415,3 +415,102 @@ def test_followup_can_be_disabled_via_env(fresh_db, admin_user, monkeypatch):
     result = dispatch_incident_team(event_id)
     assert result["follow_ups"] == []
     assert retry_calls == []
+
+
+def test_fix_role_timeout_not_shorter_than_para_wait(monkeypatch):
+    """工单40：修复岗外层超时不得早于 Para 等待窗口，其他岗位不变。"""
+    from modstore_server.incident_team_orchestrator import _role_timeout_seconds
+
+    monkeypatch.setenv("MODSTORE_INCIDENT_TEAM_ROLE_TIMEOUT_SECONDS", "480")
+    monkeypatch.setenv("MODSTORE_PARA_WAIT_TIMEOUT_SEC", "1800")
+    assert _role_timeout_seconds("scout") == 480
+    assert _role_timeout_seconds("verify") == 480
+    assert _role_timeout_seconds("fix") == 1920
+    monkeypatch.setenv("MODSTORE_INCIDENT_TEAM_ROLE_TIMEOUT_SECONDS", "3600")
+    assert _role_timeout_seconds("fix") == 3600
+
+
+def test_role_timeout_is_not_retried(monkeypatch):
+    """超时的岗位可能仍在跑：不得 transient 重派第二个 fix，交人工闭环。"""
+    retry_calls = []
+    monkeypatch.setattr(
+        "modstore_server.incident_team_orchestrator._retry_member",
+        lambda **kw: retry_calls.append(kw) or {"status": "success"},
+    )
+    follow_ups = _follow_up_handler_failures(
+        event_id=40,
+        results=_make_results("fix", "incident_team_role_timeout:480s"),
+        team_plan={"team": [{"employee_id": "fix-1", "role": "fix"}]},
+        payload={"summary": "test"},
+        event_type="ops.intake.customer_ticket",
+        source="pytest",
+        uid=1,
+    )
+    assert [fu["action"] for fu in follow_ups] == ["role_timeout_no_retry_need_human"]
+    assert follow_ups[0]["ok"] is False
+    assert retry_calls == []
+
+
+def test_fix_timeout_skips_verify_and_fails_closed(fresh_db, admin_user, monkeypatch):
+    """修复岗超时：不跑 verify（避免假 FAIL），不重派 fix，整单失败闭环。"""
+    sf = models.get_session_factory()
+    with sf() as s:
+        ev = models.IncidentEvent(
+            event_type="on_error",
+            source="unit",
+            payload_json=json.dumps({"summary": "fix timeout"}),
+            dispatched_count=0,
+        )
+        s.add(ev)
+        s.commit()
+        event_id = ev.id
+
+    calls = []
+
+    def fake_timeout(employee_id, task, runtime_input, **kwargs):
+        calls.append((employee_id, kwargs["timeout_seconds"]))
+        if employee_id == "fix-1":
+            return {
+                "ok": False,
+                "handler_failed": True,
+                "status": "handler_failed",
+                "error": "incident_team_role_timeout:1920s",
+                "failure_kind": "transient",
+            }
+        return {"status": "success"}
+
+    monkeypatch.setenv("MODSTORE_INCIDENT_TEAM_ROLE_TIMEOUT_SECONDS", "480")
+    monkeypatch.setenv("MODSTORE_PARA_WAIT_TIMEOUT_SEC", "1800")
+    monkeypatch.setattr(
+        "modstore_server.incident_team_orchestrator._execute_employee_task_with_timeout",
+        fake_timeout,
+    )
+    monkeypatch.setattr(
+        "modstore_server.incident_team_orchestrator.build_incident_team",
+        lambda eid: {
+            "event_id": eid,
+            "code_owner_match": {},
+            "team": [
+                {"employee_id": "scout-1", "role": "scout"},
+                {"employee_id": "fix-1", "role": "fix"},
+                {"employee_id": "verify-1", "role": "verify"},
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        "modstore_server.release_recovery_orchestrator.maybe_execute_recovery",
+        lambda **kw: {"ok": False, "skipped": True},
+    )
+    retry_calls = []
+    monkeypatch.setattr(
+        "modstore_server.incident_team_orchestrator._retry_member",
+        lambda **kw: retry_calls.append(kw) or {"status": "success"},
+    )
+
+    result = dispatch_incident_team(event_id)
+    assert result["ok"] is False
+    assert calls == [("scout-1", 480), ("fix-1", 1920)]
+    assert retry_calls == []
+    by_role = {row["role"]: row for row in result["results"]}
+    assert by_role["verify"]["status"] == "skipped_fix_unfinished"
+    assert [fu["action"] for fu in result["follow_ups"]] == ["role_timeout_no_retry_need_human"]

@@ -12,7 +12,9 @@ from typing import Any, Dict, List, Optional
 
 from modstore_server.employee_executor import execute_employee_task
 from modstore_server.incident_bus import _incident_payload as _payload  # noqa: F401
-from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch_incident_team
+from modstore_server.incident_team_dispatch import (
+    dispatch_incident_team as dispatch_incident_team,
+)
 from modstore_server.llm_failure_classifier import (
     FAILURE_KIND_PROMPT,
     FAILURE_KIND_QUOTA,
@@ -40,6 +42,8 @@ _TRANSIENT_RETRY_LIMIT_ENV = "MODSTORE_INCIDENT_TEAM_TRANSIENT_RETRY_LIMIT"
 # 单角色执行超时（秒）。超时记 handler_failed，避免 Para/LLM 挂死整单 dispatched_count=0。
 _ROLE_TIMEOUT_ENV = "MODSTORE_INCIDENT_TEAM_ROLE_TIMEOUT_SECONDS"
 _ROLE_TIMEOUT_DEFAULT = 120
+_ROLE_TIMEOUT_PARA_GRACE = 120
+_ROLE_TIMEOUT_ERROR = "incident_team_role_timeout:"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -49,14 +53,24 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _role_timeout_seconds() -> int:
+def _role_timeout_seconds(role: str = "") -> int:
     raw = (os.environ.get(_ROLE_TIMEOUT_ENV) or "").strip()
-    if not raw:
-        return _ROLE_TIMEOUT_DEFAULT
     try:
-        return max(15, int(raw))
+        seconds = max(15, int(raw)) if raw else _ROLE_TIMEOUT_DEFAULT
     except ValueError:
-        return _ROLE_TIMEOUT_DEFAULT
+        seconds = _ROLE_TIMEOUT_DEFAULT
+    if role != "fix":
+        return seconds
+    # 修复岗同步等 Para 完成：外层超时不得早于 Para 自身等待窗口，否则 Codex 仍在改时
+    # 就判 handler_failed，verify 报“无代码改动”，transient 重试再派第二个 fix。
+    from modstore_server.para_delegate_handler import _wait_timeout_sec
+
+    return max(seconds, int(_wait_timeout_sec({})) + _ROLE_TIMEOUT_PARA_GRACE)
+
+
+def _is_role_timeout(row: Dict[str, Any]) -> bool:
+    result = row.get("result") if isinstance(row.get("result"), dict) else {}
+    return str(result.get("error") or "").startswith(_ROLE_TIMEOUT_ERROR)
 
 
 def _execute_employee_task_with_timeout(
@@ -93,7 +107,7 @@ def _execute_employee_task_with_timeout(
             "handler_failed": True,
             "status": "handler_failed",
             "execution_status": "handler_failed",
-            "error": f"incident_team_role_timeout:{int(timeout_seconds)}s",
+            "error": f"{_ROLE_TIMEOUT_ERROR}{int(timeout_seconds)}s",
             "failure_kind": FAILURE_KIND_TRANSIENT,
         }
     finally:
@@ -101,9 +115,7 @@ def _execute_employee_task_with_timeout(
 
 
 def _admin_user_id(session) -> int:
-    row = (
-        session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
-    )  # noqa: E712
+    row = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()  # noqa: E712
     if row:
         return int(row.id)
     row = session.query(User).order_by(User.id.asc()).first()
@@ -335,7 +347,10 @@ def _follow_up_handler_failures(
             "retry_result": None,
         }
 
-        if failure_kind == FAILURE_KIND_QUOTA:
+        if _is_role_timeout(row):
+            # 超时线程与已受理的 Para 任务可能仍在跑；再派同岗会并行改同一工单。失败闭环交人工。
+            follow_up["action"] = "role_timeout_no_retry_need_human"
+        elif failure_kind == FAILURE_KIND_QUOTA:
             # 配额/计费类：不重试，标记需要人工处理。飞书告警由 boss_daily_im_report 消费 _team_claim.follow_ups。
             follow_up["action"] = "quota_blocked_need_human"
             follow_up["ok"] = False

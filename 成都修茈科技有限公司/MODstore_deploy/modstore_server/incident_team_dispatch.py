@@ -28,6 +28,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
     _task_for_role = facade._task_for_role
     _execute_employee_task_with_timeout = facade._execute_employee_task_with_timeout
     _role_timeout_seconds = facade._role_timeout_seconds
+    _is_role_timeout = facade._is_role_timeout
     _HANDLER_FAILED_FOLLOWUP_ENV = facade._HANDLER_FAILED_FOLLOWUP_ENV
     _follow_up_handler_failures = facade._follow_up_handler_failures
     logger = facade.logger
@@ -103,6 +104,19 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         employee_id = str(member.get("employee_id") or "")
         if not role or not employee_id:
             continue
+        if role == "verify" and fix_result is not None and _is_role_timeout(fix_result):
+            # 修复岗未结束就验收必然假 FAIL（“无代码改动”）；记跳过，整单仍按失败闭环。
+            results.append(
+                {
+                    "employee_id": employee_id,
+                    "handler_outputs": handler_output_digest({}),
+                    "ok": False,
+                    "role": role,
+                    "status": "skipped_fix_unfinished",
+                    "result": {},
+                }
+            )
+            continue
         route: Dict[str, Any] = {}
         bench_override = None
         try:
@@ -176,7 +190,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             runtime_input,
             user_id=0,
             bench_llm_override=bench_override,
-            timeout_seconds=_role_timeout_seconds(),
+            timeout_seconds=_role_timeout_seconds(role),
         )
         status = str(result.get("status") or result.get("execution_status") or "").strip().lower()
         risk_blocked = (
