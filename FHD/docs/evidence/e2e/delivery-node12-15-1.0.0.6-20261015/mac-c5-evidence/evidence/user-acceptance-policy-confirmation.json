@@ -1,0 +1,9 @@
+{
+  "recordedAt": "2026-10-15T21:44:20.550445+08:00",
+  "directThreadDecision": "先提交同代码树、不同SHA的真实材料供联合核证，暂不重跑Windows",
+  "sourceCoordinatorThread": "01a13f5f-8434-72a1-aa8f-06090b95e741",
+  "primaryHumanMessageId": "01a13fcc-7505-7d03-b95e-157dfefc9103",
+  "primaryHumanQuote": "把 Windows 的签名这个运行标准给我去掉，我之前都已经说过无数遍了，Windows不需要签名",
+  "confirmedBy": "read_thread directly inspected human realtime transcript; no program/system verification changed",
+  "effect": "Windows Authenticode is not an acceptance or channel-precondition gate for this round; actual package remainsNotSigned; no claim that any particular automatic update path technically supports it"
+}

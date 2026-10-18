@@ -1,0 +1,374 @@
+{
+  "issuedAt": "2026-10-15T21:43:03.273971+08:00",
+  "result": "PASS",
+  "scope": "Node12 private1.0.0.6 dual-platform installation lifecycle acceptance closeout and Node13 common-source candidate joint verification; no production/customer closure",
+  "nodes": {
+    "12": {
+      "result": "PASS",
+      "meaning": "Mac currentc5 eight lifecycle requirements passed; existingWindows7102 five plus independent directreopen acceptance reused with original published receipts"
+    },
+    "13": {
+      "result": "PASS",
+      "meaning": "Shared tracked source content, actual per-platform source/package/runtime identities and lifecycle evidence reconcile under latest user same-code-tree basis"
+    },
+    "14": {
+      "result": "NOT_STARTED",
+      "meaning": "Formal distribution/channel work not executed or verified in this task",
+      "remaining": [
+        "Choose and verify the user-permitted actual distribution path for the existing unsigned Windows package",
+        "No public download or stable OTA promotion has been performed; no unverified automatic-update compatibility is claimed"
+      ],
+      "windowsSigningRequired": false
+    },
+    "15": {
+      "result": "NOT_STARTED",
+      "remaining": [
+        "No customer acceptance/signoff receipt"
+      ]
+    }
+  },
+  "firstDeliveryLoopOverall": "NOT_COMPLETE: formalchannel14/customer15remain",
+  "secondBusinessWorkOrderLoop": "NOT_STARTED",
+  "authorization": {
+    "directUserDecision": {
+      "capturedAt": "2026-10-15T21:35:24.385503+08:00",
+      "source": "direct user answer in this thread",
+      "text": "先提交同代码树、不同SHA的真实材料供联合核证，暂不重跑Windows",
+      "effect": "submit truthful shared-tree/different-commit materials; retain both accepted source/package identities; no Windows rerun/rebuild dispatched; node13 remains joint review pending"
+    },
+    "adoptedVerificationBasis": "equal tracked Git source tree plus PR2340 direct merge relationship; preserve actual distinct commit and artifact identities; reuse accepted Windows receipts; no Windows rebuilding/retesting"
+  },
+  "integrationPr": "https://github.com/42433422/XCMAX/pull/2340",
+  "sourceRelationship": {
+    "macMainlineMergeSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "windowsActualAcceptedSourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+    "mergeParents": [
+      "5af87debbf38c35edf46584e7cac9f8c6c13c643",
+      "7102b713df1136ae83848eed5814a60ede66a355"
+    ],
+    "windowsIsDirectSecondParent": true,
+    "macTree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "windowsTree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "gitDiffExitCode": 0,
+    "sameTrackedCodeTree": true,
+    "sameFullCommitSha": false,
+    "differentCommitIdsNotRewritten": true,
+    "verdict": "PASS under user-adopted shared-source-tree criterion"
+  },
+  "macActual": {
+    "version": "1.0.0.6",
+    "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "buildRun": 38730362964,
+    "machine": {
+      "architecture": "arm64",
+      "chip": "Apple M4",
+      "macOS": "26.3"
+    },
+    "dmg": {
+      "path": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "bytes": 568802820,
+      "sha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "staplerValidation": "PASS",
+      "gatekeeperMountedApp": "accepted / Notarized Developer ID"
+    },
+    "zip": {
+      "path": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "bytes": 528146028,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "sha512": "718ba3df61902b34c2672ff71a7beb6a5fd52e0e8d17003299d9c71df8702120904a456f9927615e49824db5170122fc99a0f5079c32ab44dfe3da6cd542af1e",
+      "latestMacYmlSha256": "a87115d74fa9ac23b48f664927afbce3bccdc971bb01d0c6cf049fce2c3e493c",
+      "latestMacYmlBuildSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "latestMacYmlSha512Matches": true,
+      "ed25519FeedSignaturePresent": true
+    },
+    "signing": {
+      "codesignDeepStrict": "PASS",
+      "teamIdentifier": "G26WSH472M",
+      "authority": "Developer ID Application: jialong Li (G26WSH472M)",
+      "notarizationTicket": "stapled",
+      "gatekeeper": "accepted / Notarized Developer ID",
+      "lipoArchitecture": "arm64"
+    },
+    "report": "/private/tmp/xcagi-mac-c5-20261015/evidence/mac-c5-lifecycle-final.json",
+    "reportSha256": "bf473b6bc8368011eb4458f1c936d90962b5a90d672b538b6f56969885bed2f6"
+  },
+  "windowsActual": {
+    "version": "1.0.0.6",
+    "packageSourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+    "tree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "mainlineMergeSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "packageSha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+    "packageBytes": 331819335,
+    "signing": "NotSigned",
+    "buildRun": "local-windows-longpath-20261015-114026",
+    "packagePathOnWindows": "C:\\XCAGI-QA\\candidate-longpath\\final-7102-9d7025e9\\XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+    "reportPathOnWindows": "C:\\XCAGI-QA\\candidate-longpath\\evidence\\acceptance-current.json",
+    "evidenceLinks": [
+      "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6190996826",
+      "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6191186660"
+    ],
+    "evidenceApis": [
+      "https://api.github.com/repos/42433422/XCMAX/issues/comments/6190996826",
+      "https://api.github.com/repos/42433422/XCMAX/issues/comments/6191186660"
+    ],
+    "acceptedAtLocal": "2026-10-15T19:17:35+08:00",
+    "directReopenAcceptedAtLocal": "2026-10-15T19:39:29+08:00",
+    "reportedLifecycleVerdicts": {
+      "download_clean_install_shortcut_launch": "PASS",
+      "normal_1.0.0.5_in_app_upgrade_to_1.0.0.6": "PASS",
+      "nonempty_data_config_upload_preservation_and_continued_write": "PASS",
+      "controlled_failure_automatic_application_database_recovery": "PASS",
+      "normal_uninstall_process_exit_keep_data_reinstall": "PASS",
+      "independent_normal_tray_quit_zero_process_direct_reopen": "PASS"
+    },
+    "boundary": "These real Windows lifecycle PASS reports belong to source 7102 and package 9D7025 only. Same Git tree does not change embedded source SHA. This Mac-side review read the published owner reports; it did not independently read the Windows raw files or recompute the EXE digest."
+  },
+  "jointMatrix": [
+    {
+      "item": "下载、干净安装、正常桌面入口与运行身份",
+      "result": "PASS",
+      "mac": {
+        "result": "PASS",
+        "time": "2026-10-15T20:54:23.311+08:00",
+        "version": "1.0.0.6",
+        "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+        "packageDmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+        "packageZipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+        "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/clean-install-final-pass-timestamp-correction.json"
+      },
+      "windows": {
+        "result": "PASS_REUSED_EXECUTING_OWNER_RECEIPT",
+        "time": "2026-10-15T19:17:35+08:00",
+        "timeScope": "original acceptance completion timestamp; no fabricated per-operation time",
+        "version": "1.0.0.6",
+        "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+        "packageSha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+        "primaryPublishedReceipt": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6190996826",
+        "savedPrimaryReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6190996826.json",
+        "rawOriginalPaths": [
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\acceptance-current.json",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-final-installed-identity.json",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-final-runtime-health.json"
+        ],
+        "rawPathsDirectlyReadThisMacReview": false
+      },
+      "criterionAndReadback": "Mac Finder+LaunchServices and exact c5 application/backend; Windows absent install/profile -> desktop shortcut login, final exact7102 UI/backend healthy; ordinaryAI/business outside scope."
+    },
+    {
+      "item": "旧版经应用内下载校验安装器自动重启进入新版",
+      "result": "PASS",
+      "mac": {
+        "result": "PASS",
+        "time": "2026-10-15T21:11:07.959807+08:00",
+        "version": "1.0.0.6",
+        "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+        "packageDmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+        "packageZipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+        "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/successful-upgrade-readback.json"
+      },
+      "windows": {
+        "result": "PASS_REUSED_EXECUTING_OWNER_RECEIPT",
+        "time": "2026-10-15T19:17:35+08:00",
+        "timeScope": "original acceptance completion timestamp; no fabricated per-operation time",
+        "version": "1.0.0.6",
+        "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+        "packageSha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+        "primaryPublishedReceipt": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6190996826",
+        "savedPrimaryReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6190996826.json",
+        "rawOriginalPaths": [
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-raw-updater-events.jsonl",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-raw-electron-backend.log"
+        ],
+        "rawPathsDirectlyReadThisMacReview": false
+      },
+      "criterionAndReadback": "Mac native ShipIt replacement and installer restart directly observed; Windows owner receipt explicitly confirms actual1.0.0.5 in-app upgrade, not uninstall/reinstall substitution."
+    },
+    {
+      "item": "非空数据ID、归属、设置、附件及Mod保留",
+      "result": "PASS",
+      "mac": {
+        "result": "PASS",
+        "time": "2026-10-15T21:11:07.959807+08:00",
+        "version": "1.0.0.6",
+        "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+        "packageDmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+        "packageZipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+        "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/successful-upgrade-readback.json"
+      },
+      "windows": {
+        "result": "PASS_REUSED_EXECUTING_OWNER_RECEIPT",
+        "time": "2026-10-15T19:17:35+08:00",
+        "timeScope": "original acceptance completion timestamp; no fabricated per-operation time",
+        "version": "1.0.0.6",
+        "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+        "packageSha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+        "primaryPublishedReceipt": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6190996826",
+        "savedPrimaryReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6190996826.json",
+        "rawOriginalPaths": [
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\acceptance-current.json",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-automatic-recovery-verification.json",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-data-after-normal-exit.json"
+        ],
+        "rawPathsDirectlyReadThisMacReview": false
+      },
+      "criterionAndReadback": "Mac94tables/25nonempty/437files exact logical and file readback; Windows protected tables/config/uploads equal,84byteCSV sha3345a3a27d3cf8f13c08a2a49437fecbc2bc9c1004f88ca5d7ab1e378066d108; Mods431unchanged+3matchingnewbuiltins, not allModsbyte-unchanged."
+    },
+    {
+      "item": "正常退出、零相关进程、原安装直接重开",
+      "result": "PASS",
+      "mac": {
+        "result": "PASS",
+        "time": "2026-10-15T21:14:10.836291+08:00",
+        "version": "1.0.0.6",
+        "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+        "packageDmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+        "packageZipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+        "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-reopen-acceptance.json"
+      },
+      "windows": {
+        "result": "PASS_REUSED_EXECUTING_OWNER_RECEIPT",
+        "time": "2026-10-15T19:39:29+08:00",
+        "timeScope": "original acceptance completion timestamp; no fabricated per-operation time",
+        "version": "1.0.0.6",
+        "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+        "packageSha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+        "primaryPublishedReceipt": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6191186660",
+        "savedPrimaryReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6191186660.json",
+        "rawOriginalPaths": [
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-report.json",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-normal-exit-confirmed.json",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-restart-identity.json",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-readback.txt",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-backend.log"
+        ],
+        "rawPathsDirectlyReadThisMacReview": false
+      },
+      "criterionAndReadback": "Mac Cmd-Q -> zero app/backend -> Finder reopen exactc5 with SUNBIRD/config/attachment; Windows independent tray quit zero19:36:38 -> same install/profile directly reopened, source7102, olddata+upload retained, continued-write6->8messages. Later receipt resolves earlier explicit untested limit."
+    },
+    {
+      "item": "受控更新失败后自动恢复程序与数据库、旧版登录读回",
+      "result": "PASS",
+      "mac": {
+        "result": "PASS",
+        "time": "2026-10-15T21:24:23.632839+08:00",
+        "version": "1.0.0.6",
+        "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+        "packageDmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+        "packageZipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+        "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/automatic-rollback-acceptance.json"
+      },
+      "windows": {
+        "result": "PASS_REUSED_EXECUTING_OWNER_RECEIPT",
+        "time": "2026-10-15T19:02:51.0684856+08:00",
+        "timeScope": "original acceptance completion timestamp; no fabricated per-operation time",
+        "version": "1.0.0.6",
+        "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+        "packageSha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+        "primaryPublishedReceipt": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6190996826",
+        "savedPrimaryReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6190996826.json",
+        "rawOriginalPaths": [
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-wpf-prepared-marker.json",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-automatic-recovery-helper.log",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-automatic-recovery-verification.json"
+        ],
+        "rawPathsDirectlyReadThisMacReview": false
+      },
+      "criterionAndReadback": "Mac isolated port fault -> c5->old e3ac/1.0.0.5, restoredDB==naturalBackup34a08c14e4283b6c3a1ce330ede8f89899fc50744280c2a43cfb511f18f6af32, integrityok,94tables437files unchanged; Windows operationIde306819b-b051-4b6c-bfb9-8c69cae1d25f autohelper -> olddf452/1.0.0.5, program/tables/uploads/config equal andintegrityok; no manual restore credited."
+    },
+    {
+      "item": "正常卸载、进程退出、保留数据重装读回",
+      "result": "PASS",
+      "mac": {
+        "result": "PASS",
+        "time": "2026-10-15T21:17:06.029274+08:00",
+        "version": "1.0.0.6",
+        "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+        "packageDmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+        "packageZipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+        "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reinstall-readback-acceptance.json"
+      },
+      "windows": {
+        "result": "PASS_REUSED_EXECUTING_OWNER_RECEIPT",
+        "time": "2026-10-15T19:17:35+08:00",
+        "timeScope": "original acceptance completion timestamp; no fabricated per-operation time",
+        "version": "1.0.0.6",
+        "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+        "packageSha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+        "primaryPublishedReceipt": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6190996826",
+        "savedPrimaryReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6190996826.json",
+        "rawOriginalPaths": [
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-normal-uninstall-verification.json",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-reopened-readback.txt",
+          "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-reopened-continued-write.txt"
+        ],
+        "rawPathsDirectlyReadThisMacReview": false
+      },
+      "criterionAndReadback": "Mac Cmd-Q then Finder Trash, dbhashunchanged, Finder reinstall correctsignedc5,94tables437files unchanged; Windows registered uninstaller requestednormalappclose without external prekill, zero processes/install+registrationremoved/dataretained, samepackage reinstalled/readbackcontinuedwrite."
+    }
+  ],
+  "backupEvidenceBoundary": {
+    "macNaturalUpdateBackupRestore": "PASS; naturally generated preupdate DB backup matches automatic restoration; c5 verifier exit0",
+    "macCorruptCopyRejection": "PASS; deliberately damaged copy of that natural backup rejected with exit1; original preserved",
+    "macCorruptReceipt": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/corrupt-backup-rejection.json",
+    "windowsNaturalSnapshotRestore": "PASS reused primary receipt; nonempty program/database/uploads/config restore and longpathmanifest hash reconciled",
+    "windowsStandaloneCorruptBackupRejection": "NOT_SEPARATELY_ESTABLISHED; not extrapolated toPASS or imposed as a new Windows retest gate",
+    "dailyWeeklySchedulerGeneration": "NOT_TESTED on either platform; narrowed lifecycle scope only"
+  },
+  "evidenceProvenance": {
+    "mac": "Current signed/notarized artifact, physical M4 installation/runtime/UI/screenshots/database+file snapshots/native and product recovery logs directly inspected in this task",
+    "windows": "Two original executing-owner published receipts directly retrieved through GitHub API, saved and reconciled; existing accepted test results reused as user instructed",
+    "windowsLocalRawFilesIndependentlyReadThisTurn": false,
+    "windowsExeDigestIndependentlyRecomputedThisTurn": false,
+    "windowsClaimLimits": "No new Windows execution or raw-file independent audit claimed; local raw paths retained in matrix and primary receipts",
+    "primaryReceipts": [
+      {
+        "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6190996826.json",
+        "sha256": "1873eee6727cb123cecd4f18a0b0761c7d6df9f5b6c7d72ada89f595f4a07b0a",
+        "url": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6190996826",
+        "author": "42433422",
+        "createdAt": "2026-10-15T11:29:19Z",
+        "updatedAt": "2026-10-15T11:40:41Z"
+      },
+      {
+        "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6191186660.json",
+        "sha256": "1be544a5bee4c780b02ea78af5be71d1b200c3a0eee4069507f128836d16c39a",
+        "url": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6191186660",
+        "author": "42433422",
+        "createdAt": "2026-10-15T11:40:15Z",
+        "updatedAt": "2026-10-15T11:40:15Z"
+      }
+    ]
+  },
+  "supportingAudits": [
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/mac-c5-completion-audit.json",
+      "sha256": "9afa16034ff41eeb0e73d7a58ac1bb5be687cc1c2d91137986b2e112de8eecef"
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-existing-acceptance-joint-audit.json",
+      "sha256": "1264f2a5c6a1539ed7d2fe77886c2effb2c8aa8e1c5bc6f594304bc16470c2c6"
+    }
+  ],
+  "cleanupAndRestoration": {
+    "proof": "/private/tmp/xcagi-mac-c5-20261015/evidence/final-environment-and-restoration.json",
+    "processProof": "/private/tmp/xcagi-mac-c5-20261015/evidence/final-process-space-proof.json",
+    "cleanupProof": "/private/tmp/xcagi-mac-c5-20261015/evidence/workspace-cleanup-result.json",
+    "canonicalRestoredOldVersion": "1.0.0.5/e3ac9f1049cb3f25c73dd41c184f6787bb24f897; contentmatchesoriginalbackup",
+    "testAppsPortsAndFeedExited": true,
+    "originalDirtyPathsPreserved": 69,
+    "remainingSpace": "system2.6GiB; KINGSTON37GiB; isolatedvolume17GiB"
+  },
+  "noSourceChangeThisAcceptanceTurn": true,
+  "noWindowsRebuildRetestOrDispatch": true,
+  "noProductionOrPublicStableOtaChange": true,
+  "windowsSignaturePolicy": {
+    "recordedAt": "2026-10-15T21:44:20.550445+08:00",
+    "directThreadDecision": "先提交同代码树、不同SHA的真实材料供联合核证，暂不重跑Windows",
+    "sourceCoordinatorThread": "01a13f5f-8434-72a1-aa8f-06090b95e741",
+    "primaryHumanMessageId": "01a13fcc-7505-7d03-b95e-157dfefc9103",
+    "primaryHumanQuote": "把 Windows 的签名这个运行标准给我去掉，我之前都已经说过无数遍了，Windows不需要签名",
+    "confirmedBy": "read_thread directly inspected human realtime transcript; no program/system verification changed",
+    "effect": "Windows Authenticode is not an acceptance or channel-precondition gate for this round; actual package remainsNotSigned; no claim that any particular automatic update path technically supports it"
+  },
+  "policyBoundary": "Original owner/audit notes that treated NotSigned as a formal-signing prerequisite are historical; latest human rule removes that prerequisite without changing package metadata or technical checks."
+}

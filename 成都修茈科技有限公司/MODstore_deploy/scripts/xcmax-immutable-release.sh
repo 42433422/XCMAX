@@ -396,6 +396,10 @@ else
       || fail "payment service jar missing after build"
   fi
 
+  python3 "$DEPLOY_DIR/scripts/sync_site_download_release.py" --site-root "$(dirname "$DEPLOY_DIR")" \
+    --ssot "$BUILD_ROOT/FHD/config/download_release.json" --version "$PRODUCT_VERSION" --git-sha "$TARGET_SHA" \
+    || fail "public download manifest does not match product version $PRODUCT_VERSION"
+
   TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}^{tree}")"
   SUNBIRD_TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}:FHD/mods/sunbird-attendance-custom")"
   python3 - "$BUILD_ROOT/.xcmax-release.json" "$TARGET_SHA" "$TREE_SHA" "$ARTIFACT_SHA" "$PRODUCT_VERSION" "$RELEASE_ID" "$SUNBIRD_TREE_SHA" "$SOURCE_ROOT" <<'PY'
