@@ -45,9 +45,9 @@
   "release_history": [
     {
       "version": "1.0.0.6", "date": "2026-10-13",
-      "title": "统一桌面发布候选", "channel": "候选验收，尚未发布",
-      "notes": ["Windows 与 Mac 双架构使用同一冻结主线 SHA；各包独立哈希，原包实机验收及发布授权前不推进公开指针。", "Windows 未签名交付保持 stable OTA 关闭；历史版本证据不代替本轮验收。"],
-      "platforms": ["Windows x64", "macOS arm64", "macOS x64"]
+      "title": "统一桌面发布", "channel": "稳定版（手动下载）",
+      "notes": ["1.0.0.6 已于 2026-10-17 部署到生产；Windows x64 与 macOS Apple Silicon 安装包已完成实机安装验收和公网全量下载校验，发布在官网 1.0.0.6 版本目录，可手动下载，安装前请核对 SHA-256。", "Windows 安装包未做 Authenticode 签名，不进入自动更新；macOS 应用内自动更新仍停留在 1.0.0.5，1.0.0.6 暂未推送应用内更新，请手动下载覆盖安装。"],
+      "platforms": ["Windows x64 手动下载（未签名）", "macOS Apple Silicon 手动下载"]
     },
     {
       "version": "1.0.0.5",

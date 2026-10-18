@@ -1,0 +1,58 @@
+{
+  "capturedAt": "2026-10-15T20:44:16.135037+08:00",
+  "githubRun": {
+    "id": 38730362964,
+    "url": "https://github.com/42433422/XCMAX/actions/runs/38730362964",
+    "conclusion": "success",
+    "artifactId": 11973806197,
+    "artifactName": "mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64",
+    "artifactBytes": 1076187294,
+    "candidateOnly": true,
+    "stableOtaPublished": false
+  },
+  "candidate": {
+    "version": "1.0.0.6",
+    "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "architecture": "arm64",
+    "machine": "Apple M4",
+    "buildInfo": {
+      "schema_version": 1,
+      "gitSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "version": "1.0.0.6",
+      "releaseId": "xcagi-1.0.0.6-c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "builtAt": "2026-10-15T12:00:44.188Z"
+    }
+  },
+  "packages": {
+    "dmg": {
+      "path": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "bytes": 568802820,
+      "sha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "staplerValidation": "PASS",
+      "gatekeeperMountedApp": "accepted / Notarized Developer ID"
+    },
+    "zip": {
+      "path": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "bytes": 528146028,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "sha512": "718ba3df61902b34c2672ff71a7beb6a5fd52e0e8d17003299d9c71df8702120904a456f9927615e49824db5170122fc99a0f5079c32ab44dfe3da6cd542af1e",
+      "latestMacYmlSha256": "a87115d74fa9ac23b48f664927afbce3bccdc971bb01d0c6cf049fce2c3e493c",
+      "latestMacYmlBuildSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "latestMacYmlSha512Matches": true,
+      "ed25519FeedSignaturePresent": true
+    }
+  },
+  "signature": {
+    "codesignDeepStrict": "PASS",
+    "teamIdentifier": "G26WSH472M",
+    "authority": "Developer ID Application: jialong Li (G26WSH472M)",
+    "notarizationTicket": "stapled",
+    "gatekeeper": "accepted / Notarized Developer ID",
+    "lipoArchitecture": "arm64"
+  },
+  "dmgVsZipAppContentComparison": {
+    "result": "PASS",
+    "fileContentAndSymlinkDifferences": 0,
+    "entryCount": 3177
+  }
+}

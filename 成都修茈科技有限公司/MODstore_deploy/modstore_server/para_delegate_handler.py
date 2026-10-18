@@ -73,14 +73,20 @@ _SUBTASK_LABELS = ("需求定位与方案", "核心实现", "验证与收尾")
 from modstore_server.para_delegate_handler_part02 import (
     _fallback_order_tools as _fallback_order_tools,
     _dev_tool as _dev_tool,
+    _customer_ticket_cloud_route as _customer_ticket_cloud_route,
+    _ticket_route_hops as _ticket_route_hops,
+    _ticket_hop_should_handoff as _ticket_hop_should_handoff,
+    _post_ticket_route as _post_ticket_route,
 )
 
-_VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae")
+_VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae", "grok_bot", "dolt")
 _TOOL_INPUT_ALIASES = {
     "claude": "claude_code",
     "claude-code": "claude_code",
     "cursor_agent": "cursor",
     "cursor-agent": "cursor",
+    "grok-bot": "grok_bot",
+    "dolt-cloud": "dolt",
 }
 
 # DevFleet / Mac Bridge 上报的 capability / toolName 与调度侧命名不完全一致。
@@ -89,12 +95,16 @@ _TOOL_CAP_ALIASES: Dict[str, tuple[str, ...]] = {
     "cursor": ("cursor_cli", "cursor_agent_cli", "cursor-agent_cli"),
     "claude_code": ("claude_code_cli", "claude_cli", "claude-code_cli"),
     "trae": ("trae_cli",),
+    "grok_bot": ("grok_bot_cloud",),
+    "dolt": ("dolt_cloud",),
 }
 _TOOL_NAME_ALIASES: Dict[str, tuple[str, ...]] = {
     "codex": ("codex",),
     "cursor": ("cursor", "cursor_agent", "cursor-agent"),
     "claude_code": ("claude_code", "claude", "claude-code"),
     "trae": ("trae",),
+    "grok_bot": ("grok_bot",),
+    "dolt": ("dolt",),
 }
 
 

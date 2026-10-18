@@ -10,7 +10,7 @@
     <p v-if="error" class="banner-error">工单刷新失败：{{ error }}</p>
     <section v-if="!orders.length && !error" class="panel empty">当前没有共享工单</section>
     <section v-for="item in orders" :key="item.wo_id" class="panel work-order">
-      <header class="panel-head"><h3>{{ item.wo_id }}</h3><span class="risk">{{ item.status }}</span></header>
+      <header class="panel-head"><h3>{{ item.wo_id }}</h3><span class="risk">{{ statusLabel(item.status) }}</span></header>
       <dl class="facts">
         <dt>客户 / 租户</dt><dd>{{ item.context?.customer_user_id || item.context?.tenant_id || '—' }}</dd>
         <dt>客户实例</dt><dd>{{ item.context?.client_instance_id || '—' }}</dd>
@@ -26,7 +26,7 @@
         <div class="drawer-actions">
           <button class="btn btn-secondary" :disabled="trails[item.wo_id]?.loading" @click="loadTrail(item)">{{ trails[item.wo_id]?.ticket ? '刷新客户工单' : `查看客户工单 #${ticketIdOf(item)}` }}</button>
           <button v-if="obj(trails[item.wo_id]?.ticket?.evidence).support_bundle_base64" class="btn btn-secondary" @click="downloadBundle(item)">下载支持包（先校验 SHA256）</button>
-          <span v-if="trails[item.wo_id]?.ticket" class="muted">{{ trails[item.wo_id]?.ticket?.ticket_no }} · {{ trails[item.wo_id]?.ticket?.lifecycle_label }}（{{ trails[item.wo_id]?.ticket?.status }}）</span>
+          <span v-if="trails[item.wo_id]?.ticket" class="muted">{{ trails[item.wo_id]?.ticket?.ticket_no }} · {{ trails[item.wo_id]?.ticket?.lifecycle_label || statusLabel(trails[item.wo_id]?.ticket?.status) }}</span>
         </div>
         <p v-if="trails[item.wo_id]?.error" class="banner-error">{{ trails[item.wo_id]?.error }}</p>
         <pre v-if="trails[item.wo_id]?.ticket?.summary" class="payload" aria-label="客户问题完整正文">{{ trails[item.wo_id]?.ticket?.summary }}</pre>
@@ -48,6 +48,7 @@ export default { name: 'ApprovalHubView' }
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { statusLabel } from '../utils/statusLabel'
 import { xcmaxAdminApi, type OwnerWorkOrder } from '@/api/xcmaxAdmin'
 import { appAlert, appPrompt } from '@/utils/appDialog'
 

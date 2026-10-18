@@ -140,6 +140,8 @@ internal sealed class WindowsUpgradeSnapshot
         foreach (var owned in ownedSources)
             foreach (var suffix in new[] { ".xcagi-rollback-staging", ".xcagi-failed" })
                 if (File.Exists(owned + suffix) || Directory.Exists(owned + suffix)) throw new IOException("发现已授权 Mod/数据库的恢复暂存或失败现场，未开始更新：" + owned + suffix);
+        // 旧版本强杀后端留下的 WAL：确认无人占用后先另存原样副本再合并，下面的保护照旧生效。
+        if (snapshot._db != "") SqliteWalCheckpoint.CloseAbandonedWal(snapshot._db, root);
         foreach (var suffix in new[] { "-wal", "-journal" })
             if (snapshot._db != "" && File.Exists(snapshot._db + suffix) && new FileInfo(snapshot._db + suffix).Length != 0) throw new IOException("业务数据库尚未正常关闭，未开始更新。");
         Directory.CreateDirectory(snapshot._backup);

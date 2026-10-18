@@ -1,0 +1,119 @@
+{
+  "capturedAt": "2026-10-15T21:32:47.945217+08:00",
+  "integrationPr": "https://github.com/42433422/XCMAX/pull/2340",
+  "macActualSourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+  "windowsActualAcceptedSourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+  "macTree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+  "windowsTree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+  "sameTrackedCodeTree": true,
+  "gitDiffExitCode": 0,
+  "sameFullSourceCommitSha": false,
+  "macAcceptanceResult": "PASS",
+  "windowsExistingAcceptanceResult": "owner reports PASS for7102 package; unchanged",
+  "windowsAcceptedPackage": {
+    "version": "1.0.0.6",
+    "packageSourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+    "tree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "mainlineMergeSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "packageSha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+    "packageBytes": 331819335,
+    "signing": "NotSigned",
+    "buildRun": "local-windows-longpath-20261015-114026",
+    "packagePathOnWindows": "C:\\XCAGI-QA\\candidate-longpath\\final-7102-9d7025e9\\XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+    "reportPathOnWindows": "C:\\XCAGI-QA\\candidate-longpath\\evidence\\acceptance-current.json",
+    "evidenceLinks": [
+      "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6190996826",
+      "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6191186660"
+    ],
+    "evidenceApis": [
+      "https://api.github.com/repos/42433422/XCMAX/issues/comments/6190996826",
+      "https://api.github.com/repos/42433422/XCMAX/issues/comments/6191186660"
+    ],
+    "acceptedAtLocal": "2026-10-15T19:17:35+08:00",
+    "directReopenAcceptedAtLocal": "2026-10-15T19:39:29+08:00",
+    "reportedLifecycleVerdicts": {
+      "download_clean_install_shortcut_launch": "PASS",
+      "normal_1.0.0.5_in_app_upgrade_to_1.0.0.6": "PASS",
+      "nonempty_data_config_upload_preservation_and_continued_write": "PASS",
+      "controlled_failure_automatic_application_database_recovery": "PASS",
+      "normal_uninstall_process_exit_keep_data_reinstall": "PASS",
+      "independent_normal_tray_quit_zero_process_direct_reopen": "PASS"
+    },
+    "boundary": "These real Windows lifecycle PASS reports belong to source 7102 and package 9D7025 only. Same Git tree does not change embedded source SHA. This Mac-side review read the published owner reports; it did not independently read the Windows raw files or recompute the EXE digest."
+  },
+  "windowsC5ExistingArtifact": {
+    "workflowRun": 38680359182,
+    "runUrl": "https://github.com/42433422/XCMAX/actions/runs/38680359182",
+    "runApi": "https://api.github.com/repos/42433422/XCMAX/actions/runs/38680359182",
+    "runConclusion": "success",
+    "runHeadSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "createdAt": "2026-10-15T04:13:40Z",
+    "completedAt": "2026-10-15T04:29:45Z",
+    "artifactId": 11948835671,
+    "artifactName": "xcagi-windows-installer-c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "artifactUrl": "https://github.com/42433422/XCMAX/actions/runs/38680359182/artifacts/11948835671",
+    "artifactsApi": "https://api.github.com/repos/42433422/XCMAX/actions/runs/38680359182/artifacts",
+    "archiveApi": "https://api.github.com/repos/42433422/XCMAX/actions/artifacts/11948835671/zip",
+    "artifactArchiveBytes": 326248851,
+    "artifactArchiveSha256FromGitHub": "e46c3fc2d8634614f869792f9415e856f2c34ad20db3d57aafd0f5f9e9f98516",
+    "artifactExpired": false,
+    "packageFilename": "XCAGI-Enterprise-Setup-1.0.0.6-x64-unsigned.exe",
+    "packageBytes": 331814497,
+    "packageSha256FromReceiptAndChecksumFile": "88f6a1bf29010aaf6477b905d5d0cd4c9eaa27fdc05a98cbe26becf1b6359909",
+    "packageSourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "tree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "deliveryReceipt": {
+      "runner_install_smoke": "passed",
+      "customer_machine_acceptance": "not_verified",
+      "filename": "XCAGI-Enterprise-Setup-1.0.0.6-x64-unsigned.exe",
+      "git_sha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "sha256": "88f6a1bf29010aaf6477b905d5d0cd4c9eaa27fdc05a98cbe26becf1b6359909",
+      "delivery_mode": "manual_installer",
+      "signature_status": "unsigned",
+      "stable_auto_update": false,
+      "version": "1.0.0.6",
+      "authenticode_status": "NotSigned",
+      "size": 331814497,
+      "warning": "未签名安装包，Windows 可能显示未知发布者或安全提示；不进入稳定自动更新。"
+    },
+    "checksumFile": "XCAGI-Enterprise-Setup-1.0.0.6-x64-unsigned.exe.sha256",
+    "checksumFileAgreesWithReceipt": true,
+    "runtimeSmokeLog": {
+      "jobId": 116243261238,
+      "logApi": "https://api.github.com/repos/42433422/XCMAX/actions/jobs/116243261238/logs",
+      "at": "2026-10-15T04:28:42.5946890Z",
+      "line": "OK: installed buildSha=c5e066acff7f50edf5f1e506abcca33372cc6033 version=1.0.0.6 sku=enterprise"
+    },
+    "acceptanceBoundary": "CI runner installation/start/uninstall smoke is passed. Receipt explicitly states customer_machine_acceptance=not_verified. No c5 full real-Windows lifecycle PASS was found in PR #2340; the five-scenario and direct-reopen PASS evidence remains bound to 7102."
+  },
+  "strictSameShaRequirement": {
+    "source": "original user task",
+    "text": "改产品源码须重核两端统一SHA，不拿旧包当修好；不能混用不同SHA证据",
+    "status": "Reconciled by latest user-adopted common-source-tree/merge-relation basis; actual differing SHAs preserved",
+    "notAProgramFailure": true
+  },
+  "node12MacContribution": "PASS",
+  "node13JointVerification": "PASS under adopted same-code-tree basis; see final joint report",
+  "node14FormalChannels": "NOT_STARTED; Windows signature not required by current human rule; actual distribution path still not executed/verified",
+  "node15CustomerAcceptance": "NOT_STARTED",
+  "secondBusinessWorkOrderLoop": "NOT_STARTED",
+  "windowsRebuildOrAcceptanceDispatchedThisTurn": false,
+  "userDecision": {
+    "capturedAt": "2026-10-15T21:35:24.385503+08:00",
+    "source": "direct user answer in this thread",
+    "text": "先提交同代码树、不同SHA的真实材料供联合核证，暂不重跑Windows",
+    "effect": "submit truthful shared-tree/different-commit materials; retain both accepted source/package identities; no Windows rerun/rebuild dispatched; node13 remains joint review pending"
+  },
+  "supersededPendingStatus": "Earlier submission state only; latest user directs common-source-tree joint verification",
+  "finalJointReport": "/private/tmp/xcagi-mac-c5-20261015/evidence/node13-joint-verification-final.json",
+  "finalJointReportSha256": "ab40b1c8d0fcc054ad411620f7eef5fc3c1e584a38acbb359aeb73e55fd10257",
+  "currentUserWindowsSignaturePolicy": {
+    "recordedAt": "2026-10-15T21:44:20.550445+08:00",
+    "directThreadDecision": "先提交同代码树、不同SHA的真实材料供联合核证，暂不重跑Windows",
+    "sourceCoordinatorThread": "01a13f5f-8434-72a1-aa8f-06090b95e741",
+    "primaryHumanMessageId": "01a13fcc-7505-7d03-b95e-157dfefc9103",
+    "primaryHumanQuote": "把 Windows 的签名这个运行标准给我去掉，我之前都已经说过无数遍了，Windows不需要签名",
+    "confirmedBy": "read_thread directly inspected human realtime transcript; no program/system verification changed",
+    "effect": "Windows Authenticode is not an acceptance or channel-precondition gate for this round; actual package remainsNotSigned; no claim that any particular automatic update path technically supports it"
+  }
+}
