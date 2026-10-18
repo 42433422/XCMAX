@@ -20,6 +20,7 @@ import {
   resolveCodexAuth,
   runWithModelFallback,
 } from './codex_model_gateway.mjs';
+import { createCredentialVault, parseCredentialGrant } from './credential_vault.mjs';
 import { createReceiptOutbox, createParaReportOutbox, requestManagedParaSession } from './control_receipt_outbox.mjs';
 import { sourceIdentity } from './control_git_handoff.mjs';
 import {
@@ -51,7 +52,12 @@ const WebSocket = require('ws');
 
 const execFileAsync = promisify(execFile);
 
-const token = process.env.DEVFLEET_DEVICE_TOKEN || resolveDeviceToken();
+const credentialVault = createCredentialVault({ actor: 'para_e2e_agent' });
+const token = credentialVault.getCredential('DEVFLEET_DEVICE_TOKEN', {
+  taskId: 'agent-session', purpose: 'para_device_ws', fallback: resolveDeviceToken, required: true,
+});
+// 子进程（Codex 等）环境走统一凭据层：按派单授权引用审计；开启强制模式后只给作用域内的密钥。
+const toolEnv = (prompt, tool) => credentialVault.childEnv(process.env, parseCredentialGrant(prompt), { tool });
 const apiBase = (process.env.DEVFLEET_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 const workspaceRoot = process.env.DEVFLEET_WORKSPACE_ROOT || '/tmp/devfleet-e2e/agent-workspace';
 const bareRepo = process.env.DEVFLEET_BARE_REPO || '/Users/a4243342/XCMAX-runtime/devfleet-bare.git';
@@ -219,7 +225,7 @@ async function runCursorAgent(taskDir, prompt) {
       cwd: taskDir,
       maxBuffer: 10 * 1024 * 1024,
       timeout: toolCommandTimeoutMs,
-      env: process.env,
+      env: toolEnv(prompt, 'cursor'),
     },
   );
   return (stdout || stderr || '').trim();
@@ -244,7 +250,7 @@ async function runTraeAgent(taskDir, prompt) {
       cwd: taskDir,
       maxBuffer: 10 * 1024 * 1024,
       timeout: toolCommandTimeoutMs,
-      env: process.env,
+      env: toolEnv(prompt, 'trae'),
     },
   );
   const combined = (stdout || stderr || '').trim();
@@ -345,15 +351,17 @@ async function runCodexAgent(taskDir, prompt, log = () => {}) {
     const roEffort = process.env.DEVFLEET_CODEX_REVIEW_EFFORT?.trim();
     if (roEffort) baseArgs.push('-c', `model_reasoning_effort="${roEffort}"`);
   }
+  const codexEnv = toolEnv(prompt, 'codex');
   if (!modelGatewayEnabled()) {
     // 网关关闭：旧行为（report-only 可选 DEVFLEET_CODEX_REVIEW_MODEL，否则不传 -m）。
     const roModel = isReportOnly ? process.env.DEVFLEET_CODEX_REVIEW_MODEL?.trim() : '';
     return spawnCodexOnce(taskDir, prompt, {
       args: [...baseArgs, ...(roModel ? ['-m', roModel] : []), '-'],
-      env: process.env,
+      env: codexEnv,
     });
   }
-  const auth = resolveCodexAuth(process.env);
+  // 密钥库（#2416）决定子进程可见的密钥；网关只在其结果上选择 API Key / ChatGPT 登录。
+  const auth = resolveCodexAuth(codexEnv);
   const candidates = codexModelCandidates({ env: process.env, prompt, reportOnly: isReportOnly });
   log(`codex model gateway: ${auth.label} candidates=${candidates.join('>')}`, auth.mode === 'api_key' ? 'info' : 'warn');
   if (process.env.DEVFLEET_CODEX_MODEL_PROBE !== '0') {
@@ -425,7 +433,7 @@ async function runClaudeAgent(taskDir, prompt) {
     const child = spawn(
       claudeBin,
       ['-p', prompt, '--output-format', 'text', '--permission-mode', permMode],
-      { cwd: taskDir, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] },
+      { cwd: taskDir, env: toolEnv(prompt, 'claude_code'), stdio: ['pipe', 'pipe', 'pipe'] },
     );
     let stdout = '';
     let stderr = '';
@@ -582,7 +590,8 @@ async function gitMaybe(cwd, args) {
   }
 }
 
-async function postTaskReport(task, { progress = 0, status = 'running', content, level = 'info' }) {
+async function postTaskReport(task, { progress = 0, status = 'running', content: rawContent, level = 'info' }) {
+  const content = credentialVault.redact(rawContent || '');
   if (paraReports.record(task, { progress, status, content })) {
     await paraReports.drain();
     return; // A disconnected ACK is pending delivery, never an execution failure.
@@ -667,7 +676,8 @@ const paraReports = createParaReportOutbox({
   url: `${apiBase}/api/devices/me/control-report`, token,
   enabled: process.env.XCMAX_CONTROL_REPORTS_ENABLED === '1',
 });
-const send = (ws, payload) => {
+const send = (ws, rawPayload) => {
+  const payload = credentialVault.redactPayload(rawPayload);
   controlReceipts.record(payload);
   if (payload.type === 'task_progress' && paraReports.record(payload, payload)) return;
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
@@ -1691,6 +1701,7 @@ function drainToolQueue(tool) {
     .finally(() => {
       const subtaskId = String(next.task?.subtask_id || '').trim();
       if (subtaskId) knownSubtasks.delete(subtaskId);
+      credentialVault.revokeTask(String(next.task?.task_id || ''), 'task_finished');
       runningTools.delete(tool);
       runningTaskIdsByTool.delete(tool);
       publishToolStatus(next.ws);

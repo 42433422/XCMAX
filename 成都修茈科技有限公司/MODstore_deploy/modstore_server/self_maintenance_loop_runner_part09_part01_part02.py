@@ -13,11 +13,14 @@ def _facade():
 
 
 def _guest_auth_headers(api_base: str) -> _facade().Dict[str, str]:
-    env_token = (
-        _facade().os.environ.get("MODSTORE_PARA_AUTH_TOKEN")
-        or _facade().os.environ.get("DEVFLEET_AUTH_TOKEN")
-        or ""
-    ).strip()
+    from modstore_server.cred_vault import get_credential
+
+    env_token = get_credential(
+        "MODSTORE_PARA_AUTH_TOKEN",
+        task_id="self-maintenance-loop",
+        purpose="para_status_poll",
+        aliases=("DEVFLEET_AUTH_TOKEN",),
+    )
     if env_token:
         return {"Authorization": f"Bearer {env_token}"}
     cache_key = api_base.rstrip("/")

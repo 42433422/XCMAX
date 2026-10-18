@@ -50,7 +50,9 @@ _TEXT_LIMIT = 300
 
 
 def redact_text(value: Any, limit: int = _TEXT_LIMIT) -> str:
-    text = _SECRET_VALUE_RE.sub(r"\1[redacted]", str(value))
+    from modstore_server.cred_vault import redact
+
+    text = _SECRET_VALUE_RE.sub(r"\1[redacted]", redact(value))
     text = _TOKEN_SHAPES_RE.sub("[redacted]", text)
     return text[:limit]
 

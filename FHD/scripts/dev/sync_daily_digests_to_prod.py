@@ -94,9 +94,8 @@ from pathlib import Path
 payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
 rows = payload.get('rows') or []
 import psycopg2
-conn = psycopg2.connect(
-    host='127.0.0.1', port=5433, user='modstore', password='modstore', dbname='modstore'
-)
+# 口令不入库：由服务器上的 PGPASSWORD 或 ~/.pgpass 提供（libpq 原生支持）。
+conn = psycopg2.connect(host='127.0.0.1', port=5433, user='modstore', dbname='modstore')
 cols = payload['columns']
 inserted = updated = skipped = 0
 with conn, conn.cursor() as cur:
