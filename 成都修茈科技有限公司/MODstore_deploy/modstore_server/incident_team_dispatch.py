@@ -28,6 +28,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
     _task_for_role = facade._task_for_role
     _execute_employee_task_with_timeout = facade._execute_employee_task_with_timeout
     _role_timeout_seconds = facade._role_timeout_seconds
+    _is_role_timeout = facade._is_role_timeout
     _HANDLER_FAILED_FOLLOWUP_ENV = facade._HANDLER_FAILED_FOLLOWUP_ENV
     _follow_up_handler_failures = facade._follow_up_handler_failures
     logger = facade.logger
@@ -103,6 +104,19 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         employee_id = str(member.get("employee_id") or "")
         if not role or not employee_id:
             continue
+        if role == "verify" and fix_result is not None and _is_role_timeout(fix_result):
+            # 修复岗未结束就验收必然假 FAIL（“无代码改动”）；记跳过，整单仍按失败闭环。
+            results.append(
+                {
+                    "employee_id": employee_id,
+                    "handler_outputs": handler_output_digest({}),
+                    "ok": False,
+                    "role": role,
+                    "status": "skipped_fix_unfinished",
+                    "result": {},
+                }
+            )
+            continue
         route: Dict[str, Any] = {}
         bench_override = None
         try:
@@ -176,7 +190,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             runtime_input,
             user_id=0,
             bench_llm_override=bench_override,
-            timeout_seconds=_role_timeout_seconds(),
+            timeout_seconds=_role_timeout_seconds(role),
         )
         status = str(result.get("status") or result.get("execution_status") or "").strip().lower()
         risk_blocked = (
@@ -221,10 +235,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             failed_roles,
         )
 
-    # ---- 闭环：handler_failed → 按 failure_kind 自动 follow-up ----
-    # 旧版：handler_failed 仅写 _team_claim 后 return，184 个 handler_failed 全靠人工接手。
-    # 新版：transient 自动重试 1 次；quota 标记 quota_blocked 不重试（避免 403 死亡螺旋）；
-    # prompt 走 fallback 到 task market（让 self-evolution 重写 prompt）。
+    # ---- 失败闭环：分类 → 模型降级 / 代码回喂再修 / 环境退避重试，到上限升级终极员工 ----
     follow_ups: List[Dict[str, Any]] = []
     if _env_bool(_HANDLER_FAILED_FOLLOWUP_ENV, True):
         follow_ups = _follow_up_handler_failures(
@@ -236,6 +247,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             source=source,
             uid=uid,
         )
+        ok = team_succeeded(results)
 
     slim_rows = [{k: v for k, v in row.items() if k != "result"} for row in results]
     cs_progress: Dict[str, Any] = {}
@@ -287,6 +299,8 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                         payload.get("user_id") or 0
                     ):
                         record_worker_repair(session, ticket, int(event_id), results)
+                        if follow_ups:
+                            _write_repair_loop(session, ticket, int(event_id), follow_ups)
                     updated["_cs_progress"] = {
                         k: cs_progress.get(k)
                         for k in (
@@ -318,3 +332,23 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         "follow_ups": follow_ups,
         "cs_progress": cs_progress,
     }
+
+
+def _write_repair_loop(session, ticket, event_id: int, follow_ups: List[Dict[str, Any]]) -> None:
+    """把失败分类、处置次数、原因、是否升级回写工单（仅管理端证据与审计，客户视图白名单不含）。"""
+    from modstore_server.customer_service_tools import audit
+    from modstore_server.incident_team_failure_loop import loop_summary
+
+    summary = loop_summary(follow_ups)
+    evidence = json.loads(ticket.evidence_json or "{}")
+    evidence = evidence if isinstance(evidence, dict) else {}
+    evidence["repair_loop"] = {"event_id": event_id, "items": summary}
+    ticket.evidence_json = json.dumps(evidence, ensure_ascii=False)
+    escalated = [item for item in summary if item.get("escalated_to")]
+    audit(
+        session,
+        event_type="incident.repair_loop_escalated" if escalated else "incident.repair_loop",
+        detail={"event_id": event_id, "items": summary},
+        ticket_id=int(ticket.id),
+        actor_type="system",
+    )

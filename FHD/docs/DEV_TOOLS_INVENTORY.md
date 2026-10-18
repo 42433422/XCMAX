@@ -58,6 +58,7 @@
 | slo_endpoint_ratchet.py | `scripts/observability/slo_endpoint_ratchet.py` | ratchet | no | stdlib |
 | verify_production_slo_window.py | `scripts/observability/verify_production_slo_window.py` | verify | no | stdlib |
 | verify_upgrade_rollback_evidence.py | `scripts/release/verify_upgrade_rollback_evidence.py` | verify | no | stdlib |
+| check_plaintext_credentials.py | `scripts/security/check_plaintext_credentials.py` | guard | no | stdlib |
 | verify_security_scan_pair.py | `scripts/security/verify_security_scan_pair.py` | verify | no | stdlib |
 | check_openapi_consistency.py | `scripts/tools/check_openapi_consistency.py` | guard | no | stdlib |
 | validate_migration.py | `scripts/validate_migration.py` | guard | no | stdlib |
@@ -67,4 +68,4 @@
 | verify_sales_contract_template_env.py | `scripts/verify_sales_contract_template_env.py` | verify | no | stdlib |
 | verify_six_line_event_rail.py | `scripts/verify_six_line_event_rail.py` | verify | no | stdlib |
 
-合计：14 已纳入 ssot / 46 已登记清单 / 0 新游离
+合计：14 已纳入 ssot / 47 已登记清单 / 0 新游离

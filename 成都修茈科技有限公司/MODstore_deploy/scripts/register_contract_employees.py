@@ -131,7 +131,6 @@ def main():
             ],
             capture_output=True,
             text=True,
-            env={**os.environ, "PGPASSWORD": "modstore"},
         )
         if r.returncode == 0:
             print(f"  DB: {emp_id} registered OK")
