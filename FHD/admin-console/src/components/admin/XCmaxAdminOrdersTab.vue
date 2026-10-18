@@ -88,7 +88,7 @@
             <td>{{ o.subject }}</td>
             <td>¥{{ formatAmount(o.total_amount) }}</td>
             <td>{{ o.user_id }}</td>
-            <td><span :class="['status-badge', statusClass(o.status)]">{{ o.status }}</span></td>
+            <td><span :class="['status-badge', statusClass(o.status)]">{{ statusLabel(o.status) }}</span></td>
             <td class="small">{{ o.created_at }}</td>
             <td class="order-actions">
               <button v-if="String(o.status) === 'pending'" type="button" class="btn-mini" :disabled="busyOrder === orderNo(o)" @click="reprice(o)">改价</button>
@@ -132,6 +132,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { statusLabel } from '../../utils/statusLabel'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog'
 

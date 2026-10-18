@@ -223,6 +223,13 @@ def enrich_customer_ticket_publish_payload(payload: Dict[str, Any]) -> Dict[str,
     body = dict(payload or {})
     _enrich_customer_ticket_duty_input("intake-dispatcher", body, body)
     _enrich_customer_ticket_duty_input("user-customer-service-officer", body, body)
+    # 五项架构·终极员工分诊介入：贴快照；有 triage_intervention 则应用，无则自动继续。
+    try:
+        from modstore_server.customer_ticket_triage import stamp_intake_triage
+
+        body = stamp_intake_triage(body)
+    except RECOVERABLE_ERRORS:
+        pass
     return body
 
 

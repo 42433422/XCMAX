@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { statusLabel } from '../../../utils/statusLabel'
 // 拆分自 SelfEvolutionLoopRuntimePanel.vue 模板（原 run 时间线区块）；模板逐字迁移，行为不变。
 defineProps<{
   runTimeline: any
@@ -8,8 +9,8 @@ defineProps<{
 <template>
     <div v-if="runTimeline" class="selp-timeline" aria-label="自进化 run 时间线">
       <div class="selp-timeline-head">
-        <span>Run 时间线</span>
-        <strong>#{{ runTimeline.runId || 'unknown' }}{{ runTimeline.open ? ' · 运行中' : '' }}</strong>
+        <span>运行时间线</span>
+        <strong>#{{ runTimeline.runId || '未知' }}{{ runTimeline.open ? ' · 运行中' : '' }}</strong>
       </div>
       <ol class="selp-timeline-list">
         <li v-for="(item, idx) in runTimeline.items" :key="`${item.phase}-${item.step}-${idx}`" class="selp-timeline-item">
@@ -19,7 +20,7 @@ defineProps<{
             <span>
               <template v-if="item.employee_id">{{ item.employee_id }}</template>
               <template v-if="item.role_label"> · {{ item.role_label }}</template>
-              <template v-if="item.status"> · {{ item.status }}</template>
+              <template v-if="item.status"> · {{ statusLabel(item.status) }}</template>
             </span>
             <small v-if="item.roster_label || item.department_label" class="selp-timeline-roster" :class="{ 'selp-timeline-roster--outside': item.roster_status === 'out_of_roster' }">
               {{ item.roster_label || item.roster_status || '编制未知' }}

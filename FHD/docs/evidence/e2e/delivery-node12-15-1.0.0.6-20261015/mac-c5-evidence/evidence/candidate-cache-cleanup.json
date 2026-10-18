@@ -1,0 +1,19 @@
+{
+  "capturedAt": "2026-10-15T21:30:01.122517+08:00",
+  "action": "remove only verified task-candidate cache duplicates after updater/app exit",
+  "removed": [
+    {
+      "path": "/Users/a4243342/Library/Caches/xcagi-desktop-updater/update.zip",
+      "bytes": 528146028,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "recoverableExactCopy": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip"
+    },
+    {
+      "path": "/Users/a4243342/Library/Caches/xcagi-desktop-updater/pending/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "bytes": 528146028,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "recoverableExactCopy": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip"
+    }
+  ],
+  "originalArtifactRetained": true
+}

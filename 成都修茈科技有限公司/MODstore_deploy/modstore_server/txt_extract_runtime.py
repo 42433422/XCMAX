@@ -152,15 +152,6 @@ def build_txt_generate_rule_spec(brief: str) -> Dict[str, Any]:
     }
 
 
-def _decode_text_bytes(data: bytes) -> Tuple[str, str]:
-    for enc in ("utf-8-sig", "utf-8", "gb18030", "latin-1"):
-        try:
-            return data.decode(enc), enc
-        except UnicodeDecodeError:
-            continue
-    return data.decode("utf-8", errors="replace"), "utf-8-replace"
-
-
 def render_txt_read_convert_module() -> str:
     return r"""from __future__ import annotations
 
