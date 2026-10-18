@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 
+from modstore_server.codex_model_attempts import parse_codex_models_tried
 from modstore_server.customer_issue_delivery_contract import (
     execution_pending,
     execution_succeeded,
     team_succeeded,
 )
-from modstore_server.codex_model_attempts import parse_codex_models_tried
 from modstore_server.incident_team_handler_digest import handler_output_digest, redact_text
 from modstore_server.models import IncidentEvent, get_session_factory
 from modstore_server.models_cs import CustomerServiceTicket
