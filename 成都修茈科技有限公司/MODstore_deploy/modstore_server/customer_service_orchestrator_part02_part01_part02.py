@@ -70,6 +70,23 @@ def is_greeting(text: str) -> bool:
     return bool(_facade().GREETING_RE.match((text or "").strip()))
 
 
+def resolve_triage_lane(intent: str) -> str:
+    """intent → 分诊车道。ops_fast_fix 预留，本模块不派发运维快修执行器。"""
+    if intent == "product_issue":
+        return "product_defect"
+    if intent == "account_support":
+        return "account_help"
+    if intent in {"refund", "catalog_complaint", "catalog_review", "llm_extension"}:
+        return "commerce"
+    return "general"
+
+
+def _account_word_is_product_defect(text: str) -> bool:
+    """「账号」弱信号：同句已描述产品缺陷时归 product_issue，避免硬吞建单。"""
+    defect_words = ("产品问题", "功能问题", "缺陷")
+    return _facade()._looks_like_product_issue(text) or any((w in text for w in defect_words))
+
+
 def wants_ticket_escalation(text: str) -> bool:
     return bool(_facade().ESCALATE_RE.search(text or ""))
 
@@ -147,13 +164,13 @@ def infer_intent(
         return "catalog_complaint"
     if any((word in text for word in ("上架", "审核", "合规", "下架"))):
         return "catalog_review"
+    # —— 分诊：账号 vs 产品缺陷（五项架构·分诊第一刀）——
+    # 强账号词 → account_support；仅「账号」+产品缺陷语义 → product_issue（可建单）。
+    # 后续「运维快修」挂 resolve_triage_lane / TRIAGE_LANES.ops_fast_fix，此处不实现执行器。
     account_marks = ("会员", "权益", "额度", "登录", "余额", "钱包", "充值", "到账", "扣费", "账单")
     has_account_mark = any((word in text for word in account_marks + ("消费记录",)))
-    # 「账号」只是弱信号：同句已描述产品缺陷时归 product_issue，不再被账号类吞掉建单
-    if "账号" in text and not has_account_mark:
-        defect_words = ("产品问题", "功能问题", "缺陷")
-        if _facade()._looks_like_product_issue(text) or any((w in text for w in defect_words)):
-            return "product_issue"
+    if "账号" in text and not has_account_mark and _account_word_is_product_defect(text):
+        return "product_issue"
     if "账号" in text or has_account_mark:
         return "account_support"
     if any(
@@ -186,6 +203,7 @@ def classify_customer_intent(
     if rule_intent not in {"general"}:
         return {
             "intent": rule_intent,
+            "triage_lane": resolve_triage_lane(rule_intent),
             "need_ticket": _facade().should_create_ticket(rule_intent, text, extracted),
             "confidence": 0.92 if rule_intent != "greeting" else 0.98,
             "source": "rules",
@@ -206,6 +224,7 @@ def classify_customer_intent(
                 need_ticket = True
         return {
             "intent": intent,
+            "triage_lane": resolve_triage_lane(intent),
             "need_ticket": need_ticket,
             "confidence": float(llm.get("confidence") or 0.6),
             "source": "llm",
@@ -214,6 +233,7 @@ def classify_customer_intent(
     if _facade()._looks_like_product_issue(text):
         return {
             "intent": "product_issue",
+            "triage_lane": resolve_triage_lane("product_issue"),
             "need_ticket": escalate,
             "confidence": 0.62,
             "source": "rules",
@@ -221,6 +241,7 @@ def classify_customer_intent(
         }
     return {
         "intent": "general",
+        "triage_lane": resolve_triage_lane("general"),
         "need_ticket": escalate,
         "confidence": 0.55,
         "source": "rules",
