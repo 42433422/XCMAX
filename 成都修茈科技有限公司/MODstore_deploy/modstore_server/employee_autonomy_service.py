@@ -25,7 +25,9 @@ from sqlalchemy import and_, func, or_
 
 from modstore_server import employee_pack_proposal as _employee_pack_proposal
 from modstore_server.llm_failure_classifier import (
+    FAILURE_KIND_MODEL_UNSUPPORTED,
     FAILURE_KIND_QUOTA,
+    FAILURE_KIND_ROLE_TIMEOUT,
     FAILURE_KIND_TRANSIENT,
 )
 from modstore_server.models import (

@@ -43,7 +43,8 @@ Environment.SetEnvironmentVariable("XCMAX_INSTALLER_FIXTURE_MODE", null);
 var json = JsonSerializer.Serialize(new { scope = "Real isolated child-process regression, not installed-product VM acceptance", root, results }, new JsonSerializerOptions { WriteIndented = true });
 Console.WriteLine(json);
 var upgradePassed = await ManualUpgradeCases.RunAsync(root);
-return uiPassed && upgradePassed && results.All(x => (bool)x.GetType().GetProperty("pass")!.GetValue(x)!) ? 0 : 1;
+var walPassed = await WalCheckpointCases.RunAsync(root);
+return uiPassed && upgradePassed && walPassed && results.All(x => (bool)x.GetType().GetProperty("pass")!.GetValue(x)!) ? 0 : 1;
 
 static Task<bool> VerifyCompletionUiAsync()
 {

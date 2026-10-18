@@ -2,7 +2,7 @@
   <section class="enterprise-customer-roster" aria-label="企业客户交付台账">
     <header class="enterprise-customer-roster__head">
       <div>
-        <p>ENTERPRISE CUSTOMER ROSTER</p>
+        <p>企业客户名册</p>
         <h3>企业客户交付台账</h3>
         <span>所有企业用户都在这里；企业身份决定是否进入台账，购买权益与定制需求分别展示。</span>
       </div>

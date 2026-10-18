@@ -165,6 +165,7 @@ def test_wrapped_employee_completion_uses_delivered_module_identity(receipt_case
     record_receipt(ticket, evidence, running(body), owner_id=11)
     complete_delivery_if_ready(ticket, evidence)
     assert ticket.status == "resolved"
+    assert evidence["resolution"]["repair_verified_by"] == "delivery_runtime_receipt"
 
 
 def test_bundle_waits_for_wrapped_employee_runtime_on_same_client(receipt_case, monkeypatch):

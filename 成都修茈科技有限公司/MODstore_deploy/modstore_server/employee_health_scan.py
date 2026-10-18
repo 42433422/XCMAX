@@ -32,7 +32,9 @@ from typing import Any, Dict, List
 from sqlalchemy import and_, func, or_
 
 from modstore_server.llm_failure_classifier import (
+    FAILURE_KIND_MODEL_UNSUPPORTED,
     FAILURE_KIND_QUOTA,
+    FAILURE_KIND_ROLE_TIMEOUT,
     FAILURE_KIND_TRANSIENT,
 )
 from modstore_server.models import (
@@ -47,7 +49,12 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-_INFRA_FAILURE_KINDS = (FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT)
+_INFRA_FAILURE_KINDS = (
+    FAILURE_KIND_QUOTA,
+    FAILURE_KIND_TRANSIENT,
+    FAILURE_KIND_ROLE_TIMEOUT,
+    FAILURE_KIND_MODEL_UNSUPPORTED,
+)
 _INFRA_FAILURE_MARKERS = (
     "配额",
     "quota",
