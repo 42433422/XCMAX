@@ -25,7 +25,14 @@ TICKET_KEYS = (
     "lifecycle_label", "lifecycle_steps",
 )  # fmt: skip
 EVIDENCE_KEYS = ("source_ref", "issue_domain", "issue_domain_label", "reason")
-INTENT_KEYS = ("intent", "need_ticket", "confidence", "issue_domain", "issue_domain_label")
+INTENT_KEYS = (
+    "intent",
+    "need_ticket",
+    "confidence",
+    "issue_domain",
+    "issue_domain_label",
+    "triage_lane",
+)
 DECISION_KEYS = ("id", "ticket_id", "intent", "decision", "rationale", "created_at")
 CARD_KEYS = (
     "type", "title", "ticket_no", "status", "intent", "subject_type", "subject_id",

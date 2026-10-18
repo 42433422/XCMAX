@@ -105,6 +105,9 @@ def _build_request(
     *, task: str, input_data: _facade().Dict[str, _facade().Any], employee_id: str
 ) -> _facade().Dict[str, _facade().Any]:
     input_data = {**input_data, **_facade()._customer_ticket_cloud_route(input_data)}
+    from modstore_server.customer_ticket_triage import para_triage_hook
+
+    input_data = para_triage_hook(input_data, employee_id=employee_id)
     workspace_root = _facade()._project_root(input_data)
     mode = _facade()._mode_for_employee(employee_id, input_data)
     report_only = _facade()._coerce_bool(
