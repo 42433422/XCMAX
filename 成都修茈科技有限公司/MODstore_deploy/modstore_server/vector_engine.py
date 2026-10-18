@@ -71,14 +71,6 @@ def vector_db_dir() -> Path:
     return Path(__file__).resolve().parent / "data" / "chroma"
 
 
-def _legacy_vector_data_dir() -> Path:
-    """旧 ``vector_store.py`` 的目录（``modstore_server/vector_data``），用于兼容存量数据。"""
-    raw = (os.environ.get("MODSTORE_VECTOR_DB_DIR") or "").strip()
-    if raw:
-        return Path(raw).expanduser().resolve()
-    return Path(__file__).resolve().parent / "vector_data"
-
-
 def get_client():
     """懒加载、进程级单例 Chroma ``PersistentClient``。
 

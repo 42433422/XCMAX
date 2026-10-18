@@ -1,0 +1,15 @@
+{
+  "time": "2026-10-15T22:37:55.945608+08:00",
+  "scope": "Temporary idle sleep assertions for own active public download verifiers only; each ends with its verifier",
+  "processes": [
+    {
+      "downloadPid": 75330,
+      "idleSleepAssertionPid": 79658
+    },
+    {
+      "downloadPid": 75331,
+      "idleSleepAssertionPid": 79659
+    }
+  ],
+  "persistentPowerSettingsChanged": false
+}

@@ -1,0 +1,56 @@
+{
+  "node": 15,
+  "status": "PASS_BY_EXPLICIT_USER_CONDITIONAL_ACCEPTANCE",
+  "preparedAt": "2026-10-15T22:27:30.575048+08:00",
+  "productVersion": "1.0.0.6",
+  "distributionPage": "https://xiu-ci.com/xcagi-v1.0.0.6/index.html",
+  "scope": "Installation, startup, old-version upgrade, retained data, failure recovery, agreed uninstall/reinstall only",
+  "sourceTree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+  "actualSourceSha": {
+    "macArm64": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "windowsX64": "7102b713df1136ae83848eed5814a60ede66a355"
+  },
+  "packages": [
+    {
+      "file": "XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "remotePath": "/var/www/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "bytes": 568802820,
+      "sha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "result": "PASS"
+    },
+    {
+      "file": "XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "remotePath": "/var/www/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "bytes": 528146028,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "result": "PASS"
+    },
+    {
+      "file": "XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "remotePath": "/var/www/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "bytes": 331819335,
+      "sha256": "9d7025e9367bb934868adb79be7a99bbb8dae728727aa7ace00c492c45f40100",
+      "result": "PASS"
+    }
+  ],
+  "recipientName": "User personally, via directly verified human realtime statement",
+  "recipientEnterprise": null,
+  "actualAcceptanceStatement": "如果能正常下的话就说明可以了,然后我这边就通过了。如果没法正常下载,你再看核查什么问题就行",
+  "actualAcceptanceTime": "2026-10-15T22:49:47.363298+08:00",
+  "evidenceOfAcceptance": "/private/tmp/xcagi-mac-c5-20261015/evidence/node15-user-conditional-acceptance-final.json",
+  "sentToCustomer": false,
+  "node14FullDownloadVerification": "PASS",
+  "signaturePolicy": {
+    "windowsRequired": false
+  },
+  "draftPromptForRecipient": "Please confirm receipt of the identified XCAGI 1.0.0.6 packages and whether you accept this installation/update delivery scope; list any remaining problem.",
+  "provenanceBoundary": "User authorized own conditional acceptance based on agent download verification. No claim that user personally downloaded/installed or that an external customer operated anything.",
+  "conditionalHumanStatement": "如果能正常下的话就说明可以了,然后我这边就通过了。如果没法正常下载,你再看核查什么问题就行",
+  "conditionalHumanSource": "/private/tmp/xcagi-mac-c5-20261015/evidence/node15-user-conditional-acceptance-source.json",
+  "conditionalDecisionRecordedAtUTC": "2026-10-15T14:36:43Z",
+  "conditionalDecisionTimestampBoundary": "Coordinator observed record time; original turn start and human item are preserved in source record.",
+  "conditionSatisfied": true,
+  "remainingCondition": "All three current published package files must complete anonymous public download with exact size and SHA256",
+  "noFurtherIdenticalConfirmationRequired": true,
+  "acceptanceTimeMeaning": "Effective time when last required download/metadata verification condition was satisfied, not the original human message send time"
+}
