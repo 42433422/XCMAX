@@ -1214,11 +1214,70 @@ def test_ticket_search_preserves_ownership_identity_and_pagination(client):
         result = client.get("/api/customer-service/tickets", params={"search": marker}).json()
         assert result["total"] == 3
         assert {row["id"] for row in result["items"]} == set(ids)
+        assert {row["submitter_type"] for row in result["items"]} == {"customer"}
         result = client.get(
             "/api/customer-service/tickets",
             params={"search": f"{marker}-{other.id}-290063"},
         ).json()
         assert result["items"][0]["id"] == ids[1]
         assert client.get("/api/customer-service/tickets", params={"offset": -1}).status_code == 422
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(client):
+    from sqlalchemy import text
+
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+    from modstore_server.db.base import _backfill_ticket_submitter_types, get_engine
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
+
+    customer, admin = _make_user("submitter_customer"), _make_user("submitter_admin", admin=True)
+    marker = f"SUBMITTER-{uuid.uuid4().hex}"
+    with get_session_factory()() as db:
+        for user in (customer, admin):
+            session = CustomerServiceSession(user_id=user.id)
+            db.add(session)
+            db.flush()
+            db.add(
+                CustomerServiceTicket(
+                    user_id=user.id,
+                    session_id=session.id,
+                    ticket_no=f"{marker}-{user.id}",
+                    summary=marker,
+                )
+            )
+        db.commit()
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE customer_service_tickets SET submitter_type = '' "
+                "WHERE ticket_no LIKE :ticket_no"
+            ),
+            {"ticket_no": f"{marker}%"},
+        )
+    _backfill_ticket_submitter_types(get_engine())
+    try:
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+        only_admin = client.get(
+            "/api/customer-service/tickets", params={"search": marker, "submitter_type": "admin"}
+        ).json()
+        assert only_admin["total"] == 1
+        assert only_admin["items"][0]["submitter_type"] == "admin"
+        only_customer = client.get(
+            "/api/customer-service/tickets", params={"search": marker, "submitter_type": "customer"}
+        ).json()
+        assert only_customer["total"] == 1
+        assert only_customer["items"][0]["submitter_type"] == "customer"
+
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: customer
+        own = client.get(
+            "/api/customer-service/tickets", params={"search": marker, "submitter_type": "admin"}
+        ).json()
+        assert own["total"] == 1
+        assert own["items"][0]["user_id"] == customer.id
+        assert "submitter_type" not in own["items"][0]
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)

@@ -11,6 +11,12 @@
         <span>搜索编号或原文</span>
         <input v-model="search" :disabled="loading" maxlength="200" placeholder="完整编号、尾号、内部 ID 或问题关键词" />
       </label>
+      <label>
+        <span>提交人身份</span>
+        <select v-model="submitterType" :disabled="loading">
+          <option value="">全部</option><option value="admin">管理员提交</option><option value="customer">客户提交</option>
+        </select>
+      </label>
       <button class="cs-btn cs-btn-primary" :disabled="loading">搜索 / 刷新</button>
     </form>
     <p v-if="loading" role="status" class="cs-card cs-state">正在读取客服工单…</p>
@@ -20,7 +26,7 @@
       <div v-else class="cs-table-wrap">
         <table class="cs-table">
           <thead>
-            <tr><th>工单编号</th><th>问题</th><th>分类</th><th>客户</th><th>状态</th><th>最近更新</th></tr>
+            <tr><th>工单编号</th><th>问题</th><th>分类</th><th>提交人</th><th>客户</th><th>状态</th><th>最近更新</th></tr>
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.id" class="cs-row" tabindex="0" :aria-label="`打开工单 ${row.ticketNo}`"
@@ -31,6 +37,7 @@
               </td>
               <td class="cs-title-cell">{{ row.title }}</td>
               <td><span class="cs-tag">{{ row.domain }}</span></td>
+              <td class="cs-nowrap"><span class="cs-tag">{{ row.submitterType }}</span></td>
               <td class="cs-nowrap">市场用户 {{ row.userId }}</td>
               <td><span class="cs-badge" :class="`is-${row.status.tone}`" :title="row.status.raw">{{ row.status.label }}</span></td>
               <td class="cs-time">{{ row.updatedAt }}</td>
@@ -53,21 +60,23 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
-import { formatBeijingTime, intentLabel, ticketStatusBadge, type Row } from '../utils/customerServiceTicketFormat'
+import { formatBeijingTime, intentLabel, submitterTypeLabel, ticketStatusBadge, type Row } from '../utils/customerServiceTicketFormat'
 
 const PAGE_SIZE = 50
 const router = useRouter()
-const search = ref(''), error = ref('')
+const search = ref(''), submitterType = ref(''), error = ref('')
 const tickets = ref<Row[]>([])
 const loading = ref(false), loaded = ref(false)
 const offset = ref(0), total = ref(0)
 let generation = 0
 let appliedSearch = ''
+let appliedSubmitterType = ''
 const page = computed(() => Math.floor(offset.value / PAGE_SIZE) + 1)
 const pages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 const rows = computed(() => tickets.value.map(t => ({
   id: Number(t.id), ticketNo: String(t.ticket_no || '未记录编号'), title: String(t.title || '（无标题）'),
   domain: String(t.issue_domain_label || '') || intentLabel(t.intent), userId: String(t.user_id ?? '—'),
+  submitterType: submitterTypeLabel(t.submitter_type),
   status: ticketStatusBadge(t), updatedAt: formatBeijingTime(t.updated_at || t.created_at),
 })))
 const message = (cause: unknown) => cause instanceof Error ? cause.message : String(cause)
@@ -82,10 +91,12 @@ async function load(nextOffset: number, applySearch = false) {
   loading.value = true; error.value = ''; loaded.value = false
   try {
     const term = applySearch ? search.value.trim() : appliedSearch
-    const result = await xcmaxAdminApi.fetchCustomerTickets(term, nextOffset)
+    const kind = applySearch ? submitterType.value : appliedSubmitterType
+    const result = await xcmaxAdminApi.fetchCustomerTickets(term, nextOffset, kind)
     if (request !== generation) return
     if (!Array.isArray(result.items) || !Number.isInteger(result.total) || result.total < 0) throw new Error('客服列表响应不完整')
     appliedSearch = term
+    appliedSubmitterType = kind
     tickets.value = result.items; total.value = result.total; offset.value = nextOffset; loaded.value = true
   } catch (cause) { if (request === generation) { tickets.value = []; error.value = message(cause) } }
   finally { if (request === generation) loading.value = false }

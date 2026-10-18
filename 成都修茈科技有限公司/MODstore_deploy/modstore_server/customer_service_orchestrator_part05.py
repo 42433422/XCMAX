@@ -329,6 +329,7 @@ def ticket_payload(
         "id": row.id,
         # 管理端必须用稳定的市场用户 ID 把交付工单关联到客户资料。
         "user_id": row.user_id,
+        "submitter_type": row.submitter_type,
         "assigned_admin_id": row.assigned_admin_id,
         "session_id": row.session_id,
         "ticket_no": row.ticket_no,

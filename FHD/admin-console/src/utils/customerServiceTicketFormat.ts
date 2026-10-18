@@ -92,6 +92,9 @@ export const intentLabel = plain({
   greeting: '问候', general: '一般咨询', product_issue: '产品问题', refund: '退款',
   catalog_complaint: '商品投诉', catalog_review: '商品评价', account_support: '账号支持', llm_extension: '模型扩展',
 })
+export const submitterTypeLabel = plain({
+  admin: '管理员提交', customer: '客户提交', unknown: '提交人待确认',
+})
 export const priorityLabel = plain({ low: '低', normal: '普通', high: '高', urgent: '紧急' })
 export const roleLabel = plain({ scout: '排查', fix: '修复', verify: '验证' })
 export const actorLabel = plain({ ai: 'AI 客服', system: '系统', user: '客户', customer: '客户', admin: '管理员', employee: '数字员工' })

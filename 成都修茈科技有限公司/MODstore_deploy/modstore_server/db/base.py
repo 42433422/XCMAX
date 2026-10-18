@@ -205,6 +205,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
     engine = get_engine(db_path)
     _create_schema(engine)
     _ensure_columns(engine)
+    _backfill_ticket_submitter_types(engine)
     _ensure_daily_action_items_table(engine)
     init_default_plan_templates()
 
@@ -238,6 +239,7 @@ def _ensure_columns(engine: Engine) -> None:
         ("workflows", "migrated_to_id", "INTEGER"),
         ("workflows", "kind", "TEXT DEFAULT ''"),
         ("users", "is_enterprise", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("customer_service_tickets", "submitter_type", "VARCHAR(16) NOT NULL DEFAULT 'unknown'"),
         ("daily_digest_records", "vibe_prep_updates_md", "TEXT DEFAULT ''"),
         ("daily_digest_records", "vibe_prep_patches_md", "TEXT DEFAULT ''"),
         ("daily_digest_records", "vibe_prep_meta_json", "TEXT DEFAULT ''"),
@@ -266,6 +268,25 @@ def _ensure_columns(engine: Engine) -> None:
     ]
     for table, column, ddl in patches:
         _add_column_if_missing(engine, table, column, ddl)
+
+
+def _backfill_ticket_submitter_types(engine: Engine) -> None:
+    """一次性补齐旧工单，缺失用户保留为待确认而不冒充客户。"""
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE customer_service_tickets "
+                "SET submitter_type = CASE "
+                "WHEN EXISTS (SELECT 1 FROM users "
+                "WHERE users.id = customer_service_tickets.user_id AND users.is_admin = :admin) "
+                "THEN 'admin' "
+                "WHEN EXISTS (SELECT 1 FROM users "
+                "WHERE users.id = customer_service_tickets.user_id) THEN 'customer' "
+                "ELSE 'unknown' END "
+                "WHERE submitter_type IS NULL OR submitter_type = ''"
+            ),
+            {"admin": True},
+        )
 
 
 def _ensure_daily_action_items_table(engine: Engine) -> None:
