@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 
+from modstore_server.codex_model_attempts import parse_codex_models_tried
 from modstore_server.customer_issue_delivery_contract import (
     execution_pending,
     execution_succeeded,
@@ -104,6 +105,11 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
                             output["error"] = redact_text(
                                 task.get("error") or _first_para_error(snapshot) or "Para任务失败"
                             )
+                        tried = parse_codex_models_tried(
+                            task.get("error"), _first_para_error(snapshot), task.get("summary")
+                        )
+                        if tried:
+                            output["codex_models_tried"] = tried
                     digest.pop("poll_error", None)
                 except RECOVERABLE_ERRORS as exc:
                     code = getattr(getattr(exc, "response", None), "status_code", "")

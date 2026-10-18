@@ -18,7 +18,7 @@ node --check "$AGENT_SOURCE"
 node --check "$HELPER_SOURCE"
 node --check "$QUEUE_POLICY_SOURCE"
 node --check "$RUNTIME_POLICY_SOURCE"
-for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs; do
+for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs credential_vault.mjs; do
   node --check "$SCRIPT_DIR/$control_helper"
 done
 node --test "$SCRIPT_DIR/e2e_agent_runtime_policy.test.mjs"
@@ -56,14 +56,14 @@ if [[ -f "$RUNTIME_POLICY_TARGET" ]]; then
 fi
 
 # Snapshot every existing helper before any install can trigger rollback.
-for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs; do
+for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs credential_vault.mjs; do
   if [[ -f "$TARGET_DIR/$control_helper" ]]; then
     cp -p "$TARGET_DIR/$control_helper" "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX"
   fi
 done
 
 rollback() {
-  for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs; do
+  for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs credential_vault.mjs; do
     if [[ -f "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX" ]]; then
       cp -p "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX" "$TARGET_DIR/$control_helper"
     elif [[ -f "$TARGET_DIR/$control_helper" ]]; then
@@ -89,7 +89,7 @@ rollback() {
 }
 trap rollback ERR
 
-for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs; do
+for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs credential_vault.mjs; do
   install -m 0644 "$SCRIPT_DIR/$control_helper" "$TARGET_DIR/$control_helper.next"
   mv "$TARGET_DIR/$control_helper.next" "$TARGET_DIR/$control_helper"
   cmp "$SCRIPT_DIR/$control_helper" "$TARGET_DIR/$control_helper"
