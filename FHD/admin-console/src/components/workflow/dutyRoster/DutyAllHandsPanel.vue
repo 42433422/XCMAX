@@ -5,6 +5,7 @@
  */
 <script setup lang="ts">
 import { computed } from 'vue'
+import { statusLabel } from '../../../utils/statusLabel'
 import type { Deref } from './dutyRosterTypes'
 import { formatDurationMs, formatTime, isVirtualEmployee } from './dutyRosterConstants'
 import type { DutyAllHands } from './useDutyAllHands'
@@ -318,7 +319,7 @@ const allHandsQuestion = computed({
                         <ul class="dg-allhands-fail-list">
                           <li v-for="f in row.recent_failures" :key="f.id" class="dg-allhands-fail-item">
                             <span class="dg-allhands-fail-time">{{ formatTime(f.created_at) }}</span>
-                            <span class="dg-allhands-fail-status">{{ f.status }}</span>
+                            <span class="dg-allhands-fail-status">{{ statusLabel(f.status) }}</span>
                             <span v-if="f.task" class="dg-allhands-fail-task">{{ f.task }}</span>
                             <code v-if="f.error" class="dg-allhands-fail-err">{{ f.error }}</code>
                           </li>

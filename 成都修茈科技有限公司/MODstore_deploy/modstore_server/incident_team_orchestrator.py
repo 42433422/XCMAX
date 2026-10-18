@@ -14,10 +14,7 @@ from modstore_server.employee_executor import execute_employee_task
 from modstore_server.incident_bus import _incident_payload as _payload  # noqa: F401
 from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch_incident_team
 from modstore_server.llm_failure_classifier import (
-    FAILURE_KIND_PROMPT,
-    FAILURE_KIND_QUOTA,
-    FAILURE_KIND_TRANSIENT,
-    classify_failure_kind,
+    FAILURE_KIND_ROLE_TIMEOUT,
 )
 from modstore_server.models import IncidentEvent as IncidentEvent
 from modstore_server.models import User
@@ -40,6 +37,8 @@ _TRANSIENT_RETRY_LIMIT_ENV = "MODSTORE_INCIDENT_TEAM_TRANSIENT_RETRY_LIMIT"
 # 单角色执行超时（秒）。超时记 handler_failed，避免 Para/LLM 挂死整单 dispatched_count=0。
 _ROLE_TIMEOUT_ENV = "MODSTORE_INCIDENT_TEAM_ROLE_TIMEOUT_SECONDS"
 _ROLE_TIMEOUT_DEFAULT = 120
+_ROLE_TIMEOUT_PARA_GRACE = 120
+_ROLE_TIMEOUT_ERROR = "incident_team_role_timeout:"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -49,14 +48,24 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _role_timeout_seconds() -> int:
+def _role_timeout_seconds(role: str = "") -> int:
     raw = (os.environ.get(_ROLE_TIMEOUT_ENV) or "").strip()
-    if not raw:
-        return _ROLE_TIMEOUT_DEFAULT
     try:
-        return max(15, int(raw))
+        seconds = max(15, int(raw)) if raw else _ROLE_TIMEOUT_DEFAULT
     except ValueError:
-        return _ROLE_TIMEOUT_DEFAULT
+        seconds = _ROLE_TIMEOUT_DEFAULT
+    if role != "fix":
+        return seconds
+    # 修复岗同步等 Para 完成：外层超时不得早于 Para 自身等待窗口，否则 Codex 仍在改时
+    # 就判 handler_failed，verify 报“无代码改动”，transient 重试再派第二个 fix。
+    from modstore_server.para_delegate_handler import _wait_timeout_sec
+
+    return max(seconds, int(_wait_timeout_sec({})) + _ROLE_TIMEOUT_PARA_GRACE)
+
+
+def _is_role_timeout(row: Dict[str, Any]) -> bool:
+    result = row.get("result") if isinstance(row.get("result"), dict) else {}
+    return str(result.get("error") or "").startswith(_ROLE_TIMEOUT_ERROR)
 
 
 def _execute_employee_task_with_timeout(
@@ -93,8 +102,8 @@ def _execute_employee_task_with_timeout(
             "handler_failed": True,
             "status": "handler_failed",
             "execution_status": "handler_failed",
-            "error": f"incident_team_role_timeout:{int(timeout_seconds)}s",
-            "failure_kind": FAILURE_KIND_TRANSIENT,
+            "error": f"{_ROLE_TIMEOUT_ERROR}{int(timeout_seconds)}s",
+            "failure_kind": FAILURE_KIND_ROLE_TIMEOUT,
         }
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
@@ -113,14 +122,6 @@ def _admin_user_id(session) -> int:
 def _role_override(role: str) -> str:
     key = f"MODSTORE_INCIDENT_TEAM_{role.upper()}_EMPLOYEE"
     return (os.environ.get(key) or "").strip()
-
-
-def _candidate_ids(event_id: int) -> List[str]:
-    return [
-        str(row.get("employee_id") or "")
-        for row in _candidate_rows(event_id)
-        if isinstance(row, dict) and str(row.get("employee_id") or "").strip()
-    ]
 
 
 def _candidate_rows(event_id: int) -> List[Dict[str, Any]]:
@@ -281,6 +282,9 @@ def _task_for_role(
     if role == "fix":
         return base + (
             "你的任务是执行或委派最小安全修复。可参考前面排查结果，但输出时要翻译成人话。"
+            "改完先 commit，push 或开 PR 前必须在仓库 FHD/ 下运行 "
+            "python scripts/dev/push_preflight.py --fix，按提示补 CHANGELOG、提交重生成的能力中心页面、"
+            "显式写原因更新净删除基线，直到全部通过再 push。"
             f"{ownership_text}"
             f"\n排查结果：{json.dumps(scout_result or {}, ensure_ascii=False)[:4000]}"
         )
@@ -301,118 +305,28 @@ def _follow_up_handler_failures(
     source: str,
     uid: int,
 ) -> List[Dict[str, Any]]:
-    """对每个 handler_failed 的角色按 failure_kind 分流自动 follow-up。
+    """handler_failed 失败闭环：分类 → 降级/回喂再修/退避重试 → 到上限升级终极员工。
 
-    返回 follow_up 记录列表，写入 _team_claim.follow_ups 便于追踪与可视化。
-
-    分流策略：
-      - quota：不重试（避免 403 死亡螺旋）。标记 need_human=true，由人工或 boss_report 处理。
-      - transient：调一次 execute_employee_task 自动重试（同 employee + 同 task）。
-      - prompt：fallback 到 task market（dispatch_incident_via_market），让 self-evolution 重写 prompt。
+    见 ``incident_team_failure_loop``；返回记录写入 _team_claim.follow_ups 并回写工单。
     """
-    follow_ups: List[Dict[str, Any]] = []
-    team = team_plan.get("team") if isinstance(team_plan.get("team"), list) else []
-    member_by_role = {str(m.get("role") or ""): m for m in team if isinstance(m, dict)}
+    from modstore_server.incident_team_failure_loop import run_failure_loop
 
-    # transient 重试上限（env 可调，默认 1，避免无限重试占满调度）
+    raw_limit = os.environ.get(_TRANSIENT_RETRY_LIMIT_ENV)
     try:
-        transient_retry_limit = max(0, int(os.environ.get(_TRANSIENT_RETRY_LIMIT_ENV) or "1"))
+        transient_limit = None if raw_limit in (None, "") else max(0, int(raw_limit))
     except ValueError:
-        transient_retry_limit = 1
-
-    for row in results:
-        role = str(row.get("role") or "")
-        employee_id = str(row.get("employee_id") or "")
-        result = row.get("result") if isinstance(row.get("result"), dict) else {}
-        is_handler_failed = (
-            bool(result.get("handler_failed"))
-            or str(result.get("status") or "").strip().lower() == "handler_failed"
-        )
-        if not is_handler_failed:
-            continue
-
-        error_text = str(result.get("error") or result.get("reason") or "")
-        failure_kind = classify_failure_kind(error_text)
-        follow_up: Dict[str, Any] = {
-            "role": role,
-            "employee_id": employee_id,
-            "failure_kind": failure_kind,
-            "error": error_text[:500],
-            "action": "",
-            "ok": False,
-            "retry_result": None,
-        }
-
-        if failure_kind == FAILURE_KIND_QUOTA:
-            # 配额/计费类：不重试，标记需要人工处理。飞书告警由 boss_daily_im_report 消费 _team_claim.follow_ups。
-            follow_up["action"] = "quota_blocked_need_human"
-            follow_up["ok"] = False
-            logger.warning("incident_team: handler failed because quota is blocked")
-        elif failure_kind == FAILURE_KIND_TRANSIENT and transient_retry_limit > 0:
-            # 瞬时网络/限流抖动：自动重试 1 次（同 employee + 同 task）。
-            follow_up["action"] = "transient_retry"
-            try:
-                retry_result = _retry_member(
-                    event_id=event_id,
-                    member=member_by_role.get(role, {"employee_id": employee_id, "role": role}),
-                    team_plan=team_plan,
-                    payload=payload,
-                    event_type=event_type,
-                    source=source,
-                    uid=uid,
-                    prev_results={
-                        str(r.get("role") or ""): r for r in results if isinstance(r, dict)
-                    },
-                )
-                follow_up["retry_result"] = {
-                    k: v
-                    for k, v in retry_result.items()
-                    if k in {"status", "ok", "error", "handler_failed"}
-                }
-                retry_status = str(retry_result.get("status") or "").strip().lower()
-                follow_up["ok"] = (
-                    retry_status == "success"
-                    and not retry_result.get("handler_failed")
-                    and not retry_result.get("error")
-                )
-            except RECOVERABLE_ERRORS as exc:
-                follow_up["retry_result"] = {"error": str(exc)[:500]}
-                follow_up["ok"] = False
-                logger.exception(
-                    "incident_team: transient retry failed event_id=%s role=%s",
-                    event_id,
-                    role,
-                )
-        elif failure_kind == FAILURE_KIND_PROMPT:
-            # prompt/逻辑类：fallback 到 task market，让 self-evolution 重写 prompt 后重新分发。
-            follow_up["action"] = "fallback_task_market"
-            try:
-                from modstore_server.employee_task_market import (
-                    dispatch_incident_via_market,
-                )
-
-                market_result = dispatch_incident_via_market(event_id)
-                follow_up["retry_result"] = {
-                    k: v
-                    for k, v in market_result.items()
-                    if k in {"ok", "claimed", "employee_id", "reason"}
-                }
-                follow_up["ok"] = bool(market_result.get("ok") and market_result.get("claimed"))
-            except RECOVERABLE_ERRORS as exc:
-                follow_up["retry_result"] = {"error": str(exc)[:500]}
-                follow_up["ok"] = False
-                logger.exception(
-                    "incident_team: fallback task market failed event_id=%s role=%s",
-                    event_id,
-                    role,
-                )
-        else:
-            follow_up["action"] = "no_action_unknown_kind"
-            follow_up["ok"] = False
-
-        follow_ups.append(follow_up)
-
-    return follow_ups
+        transient_limit = None
+    return run_failure_loop(
+        retry_member=lambda **kw: _retry_member(**kw),
+        event_id=event_id,
+        results=results,
+        team_plan=team_plan,
+        payload=payload,
+        event_type=event_type,
+        source=source,
+        uid=uid,
+        transient_limit=transient_limit,
+    )
 
 
 def _retry_member(
@@ -425,8 +339,9 @@ def _retry_member(
     source: str,
     uid: int,
     prev_results: Dict[str, Dict[str, Any]],
+    feedback: str = "",
 ) -> Dict[str, Any]:
-    """对 transient 失败的员工重新调用 execute_employee_task 一次。
+    """对失败的员工重新调用 execute_employee_task 一次（code 类带上次失败日志回喂）。
 
     复用 _task_for_role 构造 prompt（带 scout/fix_result 上下文），env/route 与首次一致。
     """
@@ -450,6 +365,8 @@ def _retry_member(
         role=role,
         scout_result=scout_result,
     )
+    if feedback:
+        task += f"\n上一轮失败日志（请据此修正后再提交）：{feedback[:2000]}"
 
     try:
         from modstore_server.incident_model_router import (
