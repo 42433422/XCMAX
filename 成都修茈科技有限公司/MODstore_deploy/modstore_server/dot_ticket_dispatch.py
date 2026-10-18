@@ -20,8 +20,6 @@ MARKER_RE = re.compile(r"^\[xcmax:[0-9a-f]{32}:[0-9a-f]{32}\]")
 SUMMARY_LIMIT = 1500
 FIELD_LIMIT = 120
 
-# 只有产品缺陷工单可以修代码（开 PR）；其余分诊结果一律只出报告。
-_CODE_FIX_INTENTS = frozenset({"product_issue"})
 # 账号/登录/密码/权限类：与 dot 侧 classify 的关键词一致并略放宽，命中即只出报告。
 _ACCOUNT_RE = re.compile(
     r"(账号|帐号|账户|帐户|登录|登陆|密码|验证码|注册|实名|权限|封号|解封|鉴权|授权|"
@@ -180,16 +178,41 @@ def is_customer_ticket(req: Dict[str, Any]) -> bool:
     )
 
 
-def ticket_mode(req: Dict[str, Any], fields: Dict[str, Any]) -> str:
-    """分诊结果选模式：只有非只读、产品缺陷且不涉账号类的工单才 code_fix。"""
+def triage_result(req: Dict[str, Any], fields: Dict[str, Any]) -> Dict[str, Any]:
+    """分诊结果：优先 ``customer_ticket_triage`` 贴的快照（含终极员工介入），否则按 intent 推。"""
 
-    intent = str(fields.get("intent") or "").strip().lower()
+    from modstore_server.customer_ticket_triage import allow_code_fix, resolve_dispatch_lane
+
+    raw = _raw(req)
+    snapshot = raw.get("triage") if isinstance(raw.get("triage"), dict) else {}
+    intent = str(snapshot.get("intent") or raw.get("intent") or fields.get("intent") or "")
+    intent = intent.strip().lower()
+    if "allow_code_fix" in raw:
+        allow = bool(raw.get("allow_code_fix"))
+    else:
+        allow = allow_code_fix(intent)
+    lane = str(snapshot.get("triage_lane") or resolve_dispatch_lane(intent))
+    return {"intent": intent, "allow_code_fix": allow, "triage_lane": lane}
+
+
+def ticket_mode(req: Dict[str, Any], fields: Dict[str, Any]) -> str:
+    """按分诊选模式：分诊允许修代码、非只读岗位且不涉账号类，才 code_fix。
+
+    账号/登录/密码/权限类一律只出报告，终极员工介入也不能把它改成修代码。
+    """
+
+    triage = triage_result(req, fields)
     text = " ".join(
         str(fields.get(key) or "") for key in ("title", "summary", "intent", "issue_domain")
     )
-    if bool(req.get("report_only")) or intent == "account_support" or _ACCOUNT_RE.search(text):
+    if (
+        bool(req.get("report_only"))
+        or not triage["allow_code_fix"]
+        or triage["intent"] == "account_support"
+        or _ACCOUNT_RE.search(text + " " + triage["intent"])
+    ):
         return MODE_REPORT_ONLY
-    return MODE_CODE_FIX if intent in _CODE_FIX_INTENTS else MODE_REPORT_ONLY
+    return MODE_CODE_FIX
 
 
 def control_marker(fields: Dict[str, Any], req: Dict[str, Any]) -> str:
@@ -204,6 +227,7 @@ def _sensitive_values(fields: Dict[str, Any]) -> List[str]:
 
 def build_dolt_prompt(fields: Dict[str, Any], req: Dict[str, Any], mode: str) -> str:
     ticket_no = re.sub(r"[^A-Za-z0-9_\-]", "", str(fields.get("ticket_no") or ""))[:64]
+    triage = triage_result(req, fields)
     sensitive = _sensitive_values(fields)
 
     def clean(value: Any, limit: int = FIELD_LIMIT, ip: bool = True) -> str:
@@ -214,7 +238,7 @@ def build_dolt_prompt(fields: Dict[str, Any], req: Dict[str, Any], mode: str) ->
         "[dot 客服工单] 来源 MODstore；内容已在 MODstore 脱敏，只含工单号、分类、摘要和复现信息。",
         f"mode: {mode}",
         f"工单号: {ticket_no or '-'}",
-        f"分类: intent={clean(fields.get('intent')) or '-'}",
+        f"分类: intent={clean(triage['intent']) or '-'}, triage_lane={clean(triage['triage_lane'])}",
         f"岗位: {clean(fields.get('role')) or '-'}",
         f"标题（已脱敏）: {clean(fields.get('title') or '', 200) or '-'}",
         "问题摘要（已脱敏）:",

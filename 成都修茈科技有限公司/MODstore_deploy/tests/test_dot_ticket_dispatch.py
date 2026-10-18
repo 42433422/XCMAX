@@ -308,3 +308,28 @@ def test_ticket_route_hop_to_dolt_is_marked(monkeypatch):
     sent = client.posted[0]
     assert MARKER.match(sent["title"]) and "[dot:report_only]" in sent["title"]
     assert sent["report_only"] is True and sent["device_id"] == "dot-dev"
+
+
+def test_mode_follows_triage_intervention():
+    blocked = _req(_incident(triage_intervention={"allow_code_fix": False, "by": "grok_bot"}))
+    assert blocked["raw_input"]["allow_code_fix"] is False
+    out = dot.prepare_dolt_ticket_payload(blocked, _payload(blocked), "dolt")
+    assert "[dot:report_only]" in out["title"] and out["report_only"] is True
+
+    regraded = _req(
+        _incident(intent="general", triage_intervention={"intent": "product_issue", "by": "dot"})
+    )
+    out = dot.prepare_dolt_ticket_payload(regraded, _payload(regraded), "dolt")
+    assert "[dot:code_fix]" in out["title"] and "intent=product_issue" in out["prompt"]
+    assert "triage_lane=product_defect" in out["prompt"]
+
+
+def test_account_ticket_cannot_be_promoted_to_code_fix_by_intervention():
+    req = _req(
+        _incident(
+            intent="account_support",
+            triage_intervention={"intent": "product_issue", "allow_code_fix": True},
+        )
+    )
+    out = dot.prepare_dolt_ticket_payload(req, _payload(req), "dolt")
+    assert "[dot:report_only]" in out["title"] and out["report_only"] is True
