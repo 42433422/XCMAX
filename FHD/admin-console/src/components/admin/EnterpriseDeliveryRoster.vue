@@ -2,7 +2,7 @@
   <section class="enterprise-roster" aria-label="购买账户标准交付台账">
     <header class="enterprise-roster__head">
       <div>
-        <p>{{ isTrial ? 'TRIAL ACCOUNT DELIVERY SSOT' : 'PURCHASED ACCOUNT DELIVERY SSOT' }}</p>
+        <p>{{ isTrial ? '试用账号交付台账' : '已购账号交付台账' }}</p>
         <h3>{{ isTrial ? '¥99 体验账户交付台账' : '购买账户标准交付台账' }}</h3>
         <span>
           {{

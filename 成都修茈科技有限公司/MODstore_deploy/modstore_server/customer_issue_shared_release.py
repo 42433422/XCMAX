@@ -16,6 +16,7 @@ from modstore_server.customer_delivery_receipts import (
 )
 from modstore_server.customer_issue_delivery_contract import (
     issue_resolution,
+    repair_verification,
     team_succeeded,
 )
 from modstore_server.customer_service_tools import json_dumps, json_loads
@@ -267,6 +268,7 @@ def record_shared_runtime(
             state="resolved",
             resolved_at=ticket.closed_at.isoformat(),
             verification_mode="customer_confirmation",
+            **repair_verification("customer_runtime_receipt"),
         )
     else:
         resolution["state"] = "awaiting_customer_verification"

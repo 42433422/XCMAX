@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "time": "2026-10-15T22:01:10.681105+08:00",
+  "node": 14,
+  "result": "IN_PROGRESS",
+  "userAuthorized": "Upload accepted original packages to user server, explicitly requested during current realtime session",
+  "server": "119.27.178.147",
+  "publicBaseUrl": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/",
+  "remoteDirectory": "/var/www/xcagi-v1.0.0.6/enterprise",
+  "uploadsStarted": {
+    "macDmg": {
+      "session": 61444,
+      "expectedBytes": 568802820,
+      "sha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "currentTransport": "resumable rsync",
+      "currentSession": 74690
+    },
+    "macZip": {
+      "session": 65924,
+      "expectedBytes": 528146028,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "currentTransport": "resumable rsync",
+      "currentSession": 64810
+    }
+  },
+  "windows": {
+    "result": "OBSERVED_FULL_SIZE_PENDING_HASH_AND_PUBLIC_DOWNLOAD",
+    "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+    "bytes": 331819335,
+    "sha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+    "signingRequired": false,
+    "userProvidedForwardingMessage": true,
+    "observedRemotePartialBytes": 331819335,
+    "remotePartialFile": "XCAGI-Enterprise-Setup-1.0.0.6-x64.exe.part-7102-9d7025e9-20261015215512"
+  },
+  "boundaries": [
+    "Static version-specific download assets only",
+    "No production application deployment",
+    "No stable OTA modification",
+    "No public current-version pointer modification",
+    "No GitHub release event triggered",
+    "Node14 not passed until real downloads verified",
+    "Node15 requires original recipient acceptance"
+  ],
+  "alternateServerPull": {
+    "result": "STOPPED_SLOW_ALTERNATIVE",
+    "reason": "Slower than resumed direct upload; no final package published by that attempt",
+    "retainedPartial": "/var/tmp/xcagi-publish-c5-20261015/artifact-11973806197.zip.part"
+  }
+}
