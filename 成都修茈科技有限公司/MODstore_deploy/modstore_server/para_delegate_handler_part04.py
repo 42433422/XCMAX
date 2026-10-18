@@ -242,6 +242,10 @@ def _post_webhook(
 ) -> _facade().Dict[str, _facade().Any]:
     url = _facade()._webhook_url()
     if not url:
+        raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
+        hops = raw.get("_ticket_route") if isinstance(raw.get("_ticket_route"), list) else []
+        if hops:
+            return _facade()._post_ticket_route(req, hops)
         return _facade()._post_para_api(req)
     try:
         resp = _facade().httpx.post(
