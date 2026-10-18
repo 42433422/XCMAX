@@ -51,6 +51,15 @@ second stale copy inside it.
    audits, deduplication, and reconciliation against the SSOT over producing new
    documents. A new document must justify why an existing one cannot be updated.
 
+## Pre-push self-check
+
+Before any `git push` or PR (Para/devfleet fix agents included), commit, then run
+`python scripts/dev/push_preflight.py --fix` from `FHD/` until it passes. It runs
+the CI changelog, capability-center and net-deletion gates in about 20 seconds.
+Commit any capability pages it regenerates. If it reports a net increase, raise the
+baseline with `check_net_deletion.py --update --force --reason` and explain why in
+the PR body. Never raise the baseline without a new reason.
+
 ## Mandatory end-of-task cleanup
 
 Before reporting a task complete:
