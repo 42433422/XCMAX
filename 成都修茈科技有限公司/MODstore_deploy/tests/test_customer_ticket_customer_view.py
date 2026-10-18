@@ -25,24 +25,18 @@ def _keys(value):
 
 
 def _seed(owner_id: int) -> tuple[int, int]:
+    from modstore_server import models_cs as cs
     from modstore_server.models import get_session_factory
-    from modstore_server.models_cs import (
-        CustomerServiceAction as Action,
-        CustomerServiceAuditLog as Audit,
-        CustomerServiceMessage as Message,
-        CustomerServiceSession,
-        CustomerServiceTicket,
-    )
 
     resolution = {"repair_verified": True, "team": [{"role": "scout", "error": LEAK}]}
     resolution["data_correction"] = {"reason": "备份表 bak_t39_20261018_*"}
     report = {"progress": f"排查未完成：{LEAK}", "team_ok": False, "at": "2026-10-16T04:48:46"}
     evidence = {"resolution": resolution, "employee_reports": [report], "source_ref": "WO-1"}
     with get_session_factory()() as db:
-        session = CustomerServiceSession(user_id=owner_id)
+        session = cs.CustomerServiceSession(user_id=owner_id)
         db.add(session)
         db.flush()
-        ticket = CustomerServiceTicket(
+        ticket = cs.CustomerServiceTicket(
             user_id=owner_id,
             session_id=session.id,
             ticket_no=f"LEAK-{uuid.uuid4().hex}",
@@ -55,7 +49,7 @@ def _seed(owner_id: int) -> tuple[int, int]:
         db.flush()
         ids = {"ticket_id": ticket.id, "session_id": session.id}
         db.add(
-            Action(
+            cs.CustomerServiceAction(
                 **{"ticket_id": ticket.id, "user_id": owner_id, "status": "failed"},
                 action_type="employee.dispatch",
                 result_json=json.dumps({"progress": LEAK}),
@@ -64,11 +58,15 @@ def _seed(owner_id: int) -> tuple[int, int]:
             )
         )
         detail = {"progress": LEAK, "backup_tables": ["bak_t39_20261018_ticket"]}
-        db.add(Audit(**ids, actor_type="ai", event_type="x", detail_json=json.dumps(detail)))
+        db.add(
+            cs.CustomerServiceAuditLog(
+                **ids, actor_type="ai", event_type="x", detail_json=json.dumps(detail)
+            )
+        )
         payload = {"ticket": {"evidence": evidence}, "employee_progress": {"progress": LEAK}}
         for role, content in (("user", "还是看不到 1.0.0.6"), ("assistant", f"进展：{LEAK}")):
             db.add(
-                Message(
+                cs.CustomerServiceMessage(
                     **ids,
                     user_id=owner_id,
                     role=role,
