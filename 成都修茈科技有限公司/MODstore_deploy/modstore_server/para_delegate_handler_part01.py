@@ -233,12 +233,20 @@ def _build_para_prompt(req: _facade().Dict[str, _facade().Any]) -> str:
     return prompt + "\n" + "\n".join(context)
 
 
-def _get_para_token(client: _facade().httpx.Client, base: str) -> _facade().Dict[str, str]:
+def _get_para_token(
+    client: _facade().httpx.Client, base: str, task_id: str = ""
+) -> _facade().Dict[str, str]:
+    from modstore_server.cred_vault import get_credential
+
     token = (
-        _facade().os.environ.get("MODSTORE_PARA_AUTH_TOKEN")
-        or _facade().os.environ.get("DEVFLEET_AUTH_TOKEN")
+        get_credential(
+            "MODSTORE_PARA_AUTH_TOKEN",
+            task_id=task_id or "para-dispatch",
+            purpose="para_dispatch_auth",
+            aliases=("DEVFLEET_AUTH_TOKEN",),
+        )
         or ""
-    ).strip()
+    )
     if token:
         return {"token": token, "source": "env"}
     cached = _facade()._PARA_GUEST_AUTH_CACHE.get(base)
