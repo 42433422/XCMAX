@@ -1,0 +1,325 @@
+{
+  "auditedAt": "2026-10-15T21:39:56.803094+08:00",
+  "result": "PASS_WITH_NONBLOCKING_NOTES",
+  "macLifecycleVerdictSupported": true,
+  "jointGoalComplete": false,
+  "sourceReport": "/private/tmp/xcagi-mac-c5-20261015/evidence/mac-c5-lifecycle-final.json",
+  "sourceReportSha256": "bf473b6bc8368011eb4458f1c936d90962b5a90d672b538b6f56969885bed2f6",
+  "auditMode": "read existing artifacts only; no UI, application start/stop, process inspection, database operations, acceptance rerun, source edits or original report mutation",
+  "checks": [
+    {
+      "requirement": "Exact c5 signed/notarized arm64 candidate package",
+      "result": "PASS",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/c5-package-verification.json"
+      ],
+      "basis": "Current DMG and ZIP byte sizes and SHA-256 independently match the frozen report. Original security receipt covers deep strict codesign, Team ID, stapled ticket, Gatekeeper and arm64; this audit did not re-run those tools."
+    },
+    {
+      "requirement": "Clean Finder installation and normal LaunchServices first launch",
+      "result": "PASS",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/clean-install-first-launch.json",
+        "/private/tmp/xcagi-mac-c5-20261015/clean-install/userData/logs/electron-backend.log",
+        "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl:18862",
+        "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl:18885",
+        "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl:18899"
+      ],
+      "basis": "Original actions show Finder copy, isolated normal launch, login page, corrected direct HTTP probes returning 200 and normal Cmd-Q shutdown. Exact package/app identity and executed backend path are preserved; a separate full-SHA /health response was not retained for this first-launch stage, while later OTA and same-DMG reinstall stages retain exact running backend SHA."
+    },
+    {
+      "requirement": "Real 1.0.0.5 application OTA replacement and installer-initiated restart into c5",
+      "result": "PASS",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/shipit-success-original.log",
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/ota-install-observer.jsonl",
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/old-runtime-health.json",
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/successful-upgrade-health.json",
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/successful-upgrade-readback.json"
+      ],
+      "basis": "Old e3ac runtime precedes native bundle move at21:09:34; ShipIt reports success21:09:37 and launch21:09:42; observer records new app PID53994, isolated backend PID54052 and c5 backend identity by21:09:52. Product log commits pending rollback after readiness. No manual install substitutes for this OTA proof."
+    },
+    {
+      "requirement": "Normal quit and normal Finder reopen",
+      "result": "PASS",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-quit.json",
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-reopen-health.json",
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-reopen-acceptance.json",
+        "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl:19665",
+        "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl:19705"
+      ],
+      "basis": "Cmd-Q and zero remaining app/backend precede Finder Cmd-O; running /health is c5. Original snapshots retain all compared rows, IDs, ownership digests and files."
+    },
+    {
+      "requirement": "Normal Finder uninstall after quit, retain data, Finder reinstall and launch",
+      "result": "PASS",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/pre-uninstall.json",
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-uninstall-acceptance.json",
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reinstalled-app-identity.json",
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reinstalled-health.json",
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reinstall-readback-acceptance.json",
+        "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl:19742",
+        "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl:19763",
+        "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl:19810",
+        "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl:19824"
+      ],
+      "basis": "Original CUA calls show normal quit, Finder move to Trash, Finder copy from verified DMG and Cmd-O launch. Application absent/zero processes and retained DB hash are recorded before reinstall; app and runtime return c5 with unchanged snapshots."
+    },
+    {
+      "requirement": "Natural nonempty backup and controlled failed-start automatic full app/database recovery",
+      "result": "PASS",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/recovery-port-guard-20261015T132115274694Z-57250.jsonl",
+        "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/failed-update-and-automatic-rollback-original.log",
+        "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/shipit-failed-start-automatic-recovery-original.log",
+        "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/rollback-helper-completed-original.log",
+        "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/automatic-rollback-acceptance.json",
+        "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/post-rollback-old-health.json"
+      ],
+      "basis": "Old backend naturally exits; product creates migration backup; guard sees c5 installed and captures18503 at21:22:03. c5 logs port occupied and schedules macos-full. Old app returns, fresh applied appears and marker disappears; restored main DB equals natural backup hash34a08c14e4283b6c3a1ce330ede8f89899fc50744280c2a43cfb511f18f6af32 with quick_check ok and WAL0 before socket release. Product helper then logs full rollback and automatically opens old e3ac. Authenticated old UI and attachments are recorded. The guard performs no app/DB restore."
+    },
+    {
+      "requirement": "Corrupted copy of natural backup explicitly rejected",
+      "result": "PASS",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/corrupt-backup-rejection.json",
+        "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/verify-backup-natural-good.log",
+        "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/verify-backup-corrupted-copy.log"
+      ],
+      "basis": "Original receipt/logs show natural backup verification exit0 and damaged-copy verification exit1. This covers verifier rejection, not daily/weekly schedule generation."
+    },
+    {
+      "requirement": "94 tables, nonempty data, IDs/ownership and 437 durable files truly compared",
+      "result": "PASS",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/lifecycle_snapshot.py",
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/preupdate-snapshot.json"
+      ],
+      "basis": "Auditor independently compared stored JSON tables including full-row digests, primary-key digests and ownership digests plus upload/mod/config file hashes. All five later snapshots are identical in these fields:94 tables/25 nonempty/437 files/zero differences."
+    },
+    {
+      "requirement": "Environment restored, own app/feed/guard exited, other backend preserved",
+      "result": "PASS",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/launchctl-original-values.json",
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/final-environment-and-restoration.json",
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/final-process-space-proof.json",
+        "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl:20187",
+        "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl:20275"
+      ],
+      "basis": "Original command asserts no app processes, restores and reads back all saved launchctl values, confirms canonical app equals original backup content, and signals only its verified feed PID46390. Later original ps/lsof proof has no owned app/feed/guard or test listeners; unrelated21238 still alive. This audit performs no fresh process operations."
+    },
+    {
+      "requirement": "Original screenshot bytes, timestamps and calls map to report",
+      "result": "PASS",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T130854-015Z-1.jpg",
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T131202-546Z-1.jpg",
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T132325-584Z-1.jpg",
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T132549-172Z-1.jpg"
+      ],
+      "basis": "All four extracted JPEG byte hashes match report and original session image bytes; timestamps/call IDs match. Auditor visually inspected stored c5 authenticated screenshot and old post-recovery screenshot: versions1.0.0.6 and1.0.0.5, SUNBIRD, attachment and settings are visible."
+    },
+    {
+      "requirement": "Prior operator failures excluded and limits truthful",
+      "result": "PASS_WITH_NONBLOCKING_NOTES",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/ota-r2-operator-interruption.json",
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/ota-attempt-misconfigured-target.json"
+      ],
+      "basis": "20:58 failure is correctly classified as getApp reopening old app and ShipIt cancellation before replacement; successful r3 supersedes it. Early20:47 historical attempt file is not a source of final PASS. No shared DB unchanged claim, Windows c5 PASS, business acceptance, daily/weekly scheduler PASS or joint-goal completion is asserted."
+    },
+    {
+      "requirement": "Mandatory cleanup and remaining disk status",
+      "result": "PASS",
+      "evidence": [
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/workspace-cleanup-result.json",
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/candidate-cache-cleanup.json",
+        "/private/tmp/xcagi-mac-c5-20261015/evidence/final-process-space-proof.json"
+      ],
+      "basis": "Original cleanup exits0 with69 preexisting dirty paths unchanged and only task candidate cache duplicates removed after exact recoverable copy verification. Original disk receipt retains system2.6GiB, Kingston37GiB and evidence volume17GiB free at21:30:59."
+    }
+  ],
+  "receiptReferenceIntegrity": [
+    {
+      "item": "准确候选下载、签名、公证、Gatekeeper",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/evidence/c5-package-verification.json",
+      "exists": true,
+      "sha256MatchesReport": true
+    },
+    {
+      "item": "干净安装、正常入口首次启动、应用和后端身份一致",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/evidence/clean-install-first-launch.json",
+      "exists": true,
+      "sha256MatchesReport": true
+    },
+    {
+      "item": "旧1.0.0.5应用内下载、校验、安装并自动重启进入c5",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/successful-upgrade-readback.json",
+      "exists": true,
+      "sha256MatchesReport": true
+    },
+    {
+      "item": "正常退出、桌面入口重开、账号设置和附件保留",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-reopen-acceptance.json",
+      "exists": true,
+      "sha256MatchesReport": true
+    },
+    {
+      "item": "正常卸载、相关进程退出、数据库保留",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-uninstall-acceptance.json",
+      "exists": true,
+      "sha256MatchesReport": true
+    },
+    {
+      "item": "Finder重装后正常登录和原数据读回",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reinstall-readback-acceptance.json",
+      "exists": true,
+      "sha256MatchesReport": true
+    },
+    {
+      "item": "隔离启动失败后的应用与数据库自动恢复及旧版读回",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/automatic-rollback-acceptance.json",
+      "exists": true,
+      "sha256MatchesReport": true
+    },
+    {
+      "item": "自然更新前备份有效、损坏副本明确拒绝",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/corrupt-backup-rejection.json",
+      "exists": true,
+      "sha256MatchesReport": true
+    }
+  ],
+  "independentPackageIntegrity": [
+    {
+      "name": "dmg",
+      "path": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "bytes": 568802820,
+      "bytesMatch": true,
+      "sha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "sha256MatchesReport": true
+    },
+    {
+      "name": "zip",
+      "path": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "bytes": 528146028,
+      "bytesMatch": true,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "sha256MatchesReport": true
+    }
+  ],
+  "independentSnapshotComparisons": [
+    {
+      "path": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/postupdate-snapshot.json",
+      "tableCount": 94,
+      "nonemptyTables": 25,
+      "durableFileCount": 437,
+      "tableDifferences": [],
+      "fileDifferences": [],
+      "quickCheckInOriginalSnapshot": "ok"
+    },
+    {
+      "path": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reopen-snapshot.json",
+      "tableCount": 94,
+      "nonemptyTables": 25,
+      "durableFileCount": 437,
+      "tableDifferences": [],
+      "fileDifferences": [],
+      "quickCheckInOriginalSnapshot": "ok"
+    },
+    {
+      "path": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reinstalled-snapshot.json",
+      "tableCount": 94,
+      "nonemptyTables": 25,
+      "durableFileCount": 437,
+      "tableDifferences": [],
+      "fileDifferences": [],
+      "quickCheckInOriginalSnapshot": "ok"
+    },
+    {
+      "path": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/pre-failure-snapshot.json",
+      "tableCount": 94,
+      "nonemptyTables": 25,
+      "durableFileCount": 437,
+      "tableDifferences": [],
+      "fileDifferences": [],
+      "quickCheckInOriginalSnapshot": "ok"
+    },
+    {
+      "path": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/post-rollback-snapshot.json",
+      "tableCount": 94,
+      "nonemptyTables": 25,
+      "durableFileCount": 437,
+      "tableDifferences": [],
+      "fileDifferences": [],
+      "quickCheckInOriginalSnapshot": "ok"
+    }
+  ],
+  "originalScreenshotMappings": [
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T130854-015Z-1.jpg",
+      "hashMatchesReport": true,
+      "originalSession": "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl",
+      "originalLine": 19542,
+      "originalCallIdMatches": true,
+      "originalTimestampMatches": true,
+      "sameOriginalImageBytes": true
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T131202-546Z-1.jpg",
+      "hashMatchesReport": true,
+      "originalSession": "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl",
+      "originalLine": 19657,
+      "originalCallIdMatches": true,
+      "originalTimestampMatches": true,
+      "sameOriginalImageBytes": true
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T132325-584Z-1.jpg",
+      "hashMatchesReport": true,
+      "originalSession": "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl",
+      "originalLine": 20107,
+      "originalCallIdMatches": true,
+      "originalTimestampMatches": true,
+      "sameOriginalImageBytes": true
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T132549-172Z-1.jpg",
+      "hashMatchesReport": true,
+      "originalSession": "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl",
+      "originalLine": 20174,
+      "originalCallIdMatches": true,
+      "originalTimestampMatches": true,
+      "sameOriginalImageBytes": true
+    }
+  ],
+  "nonblockingNotes": [
+    {
+      "severity": "nonblocking_evidence_timestamp_precision",
+      "detail": "Clean-install PASS uses20:54:15 time from initial proxy-affected PARTIAL probe. Successful direct --noproxy four-endpoint probe follows at20:54:22.841. Preserve both in time-line; interpret final PASS as established after the latter probe, not at the earlier timeout.",
+      "originalSessionLines": [
+        18878,
+        18885,
+        18899
+      ]
+    },
+    {
+      "severity": "nonblocking_historical_artifact_label",
+      "detail": "ota-attempt-misconfigured-target.json is a20:47 failed-attempt historical file and is not cited by the current final report. Its filename does not establish that canonical /Applications targeting was a product problem. Keep excluded from current PASS evidence; r2 and r3 provide the corrected separation."
+    },
+    {
+      "severity": "scope_boundary",
+      "detail": "A separate first-clean-launch full-SHA backend health payload is not archived, but executed package path and app identity plus later same-DMG reinstall full-SHA health provide lifecycle candidate identity. The report must not claim every single health response contains a full SHA."
+    },
+    {
+      "severity": "scope_boundary",
+      "detail": "Shared profile was accidentally opened by early operator actions; byte-unchanged shared DB state is not proven or claimed. Failure injection and data comparison are confined to isolated profiles."
+    },
+    {
+      "severity": "joint_goal_outstanding",
+      "detail": "Mac lifecycle PASS does not complete Node13: Windows accepted source7102 differs from Macc5 despite identical tracked trees. Report truthfully keeps jointGoalComplete=false and pending review under direct user deferral."
+    }
+  ]
+}

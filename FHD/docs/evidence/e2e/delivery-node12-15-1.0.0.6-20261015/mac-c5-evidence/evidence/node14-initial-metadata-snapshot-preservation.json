@@ -1,0 +1,21 @@
+{
+  "result": "PASS",
+  "provenance": "Initial mutable metadata working copies were updated during final publication; exact original snapshot bytes recovered from the final values and original layout, then verified against the previously captured immutable download hashes. This is metadata snapshot recovery, not a new network download or application backup.",
+  "files": [
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/history/initial-manual-download-manifest.json",
+      "sha256": "4a38156308f542c692f3730c2a6bb4985bf16e9b6a479abeed5cb386ef4855ff",
+      "matchesOriginalObservedPublicDownloadSha256": true
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/history/initial-index.html",
+      "sha256": "79038bfe84e2207778e67faae896cb76fa3bf6d78f9599c9c8a1dd9e7b1409ea",
+      "matchesOriginalObservedPublicDownloadSha256": true
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/history/initial-SHA256SUMS.txt",
+      "sha256": "23ae26605f5a0d9faaca8405bc634bbe10ca912ee4427d2ec13e6f73a57a2b19",
+      "matchesOriginalObservedPublicDownloadSha256": true
+    }
+  ]
+}

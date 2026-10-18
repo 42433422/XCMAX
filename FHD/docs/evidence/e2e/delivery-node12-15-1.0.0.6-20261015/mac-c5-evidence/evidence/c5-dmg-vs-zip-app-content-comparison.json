@@ -1,0 +1,10 @@
+{
+  "capturedAt": "2026-10-15T20:43:56.587692+08:00",
+  "source": "candidate run 38730362964; exact c5 app from ZIP and same candidate DMG mounted read-only in Finder",
+  "zipAppPath": "/private/tmp/xcagi-mac-c5-20261015/clean-install/from-zip/XCAGI.app",
+  "dmgAppPath": "/Volumes/XCAGIEnterprise 8/XCAGI.app",
+  "zipEntryCount": 3177,
+  "dmgEntryCount": 3177,
+  "contentAndSymlinkDifferences": 0,
+  "differences": []
+}

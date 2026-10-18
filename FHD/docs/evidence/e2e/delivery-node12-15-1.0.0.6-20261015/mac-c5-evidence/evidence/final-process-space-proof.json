@@ -1,0 +1,16 @@
+{
+  "capturedAt": "2026-10-15T21:30:59.574078+08:00",
+  "ownedAppFeedGuardProcessesRemaining": [],
+  "testPortsListeners": {
+    "18502": "",
+    "18503": "",
+    "18650": ""
+  },
+  "unrelatedBackend21238StillAlive": true,
+  "machine": {
+    "architecture": "arm64",
+    "chip": "Apple M4",
+    "macOS": "26.3"
+  },
+  "disk": "Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on\n/dev/disk3s1s1   460Gi    11Gi   2.6Gi    82%    453k   28M    2%   /\n/dev/disk35s1    954Gi   917Gi    37Gi    97%       1     0  100%   /Volumes/KINGSTON\n/dev/disk46s1     30Gi    12Gi    17Gi    42%     41k  182M    0%   /private/tmp/xcagi-mac-c5-20261015\n"
+}
