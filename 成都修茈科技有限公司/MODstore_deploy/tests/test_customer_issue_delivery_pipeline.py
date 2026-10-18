@@ -175,8 +175,11 @@ def test_shared_release_requires_real_worker_merge_ci_and_customer_action(client
     complete = client.post(endpoint, json=confirmed)
     assert complete.status_code == 200, complete.text
     done = complete.json()["ticket"]
-    assert done["status"] == "resolved" and done["evidence"]["resolution"]["repair_verified"]
-    assert done["evidence"]["resolution"]["repair_verified_by"] == "customer_runtime_receipt"
+    assert done["status"] == "resolved" and "resolution" not in done["evidence"]
+    with get_session_factory()() as db:
+        resolution = json.loads(db.get(CustomerServiceTicket, tid).evidence_json)["resolution"]
+    assert resolution["repair_verified"]
+    assert resolution["repair_verified_by"] == "customer_runtime_receipt"
     assert client.post(endpoint, json={**confirmed, "version": "other"}).status_code == 409
 
 
@@ -838,7 +841,7 @@ def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client,
         seed_repair(db, db.get(CustomerServiceTicket, tid))
     mine = next(row for row in client.get("/api/customer-service/issues/mine").json()["items"])
     assert mine["id"] == tid and mine["status"] == "processing" and mine["can_reopen"]
-    assert mine["latest_result"]["team_ok"] is True and pending_ready()
+    assert mine["latest_result"]["progress"] and pending_ready()
 
     wakes = len(woken)
     reopened = decide("reopen", "装了新版还是算错", "reopen-1")
