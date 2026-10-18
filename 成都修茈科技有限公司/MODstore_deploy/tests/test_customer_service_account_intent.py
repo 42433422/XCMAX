@@ -25,7 +25,7 @@ def test_infer_intent_account_word_is_weak_signal():
     assert infer_intent("账号登录后余额不对", {}) == "account_support"
     assert infer_intent(DEFECT, {}) == "product_issue"
     assert resolve_triage_lane("product_issue") == "product_defect"
-    assert resolve_triage_lane("account_support") == "account_help"
+    assert resolve_triage_lane("account_support") == "ultimate_review"
     from modstore_server.customer_service_orchestrator import TRIAGE_LANES
 
     assert "ops_fast_fix" in TRIAGE_LANES
@@ -50,7 +50,7 @@ def test_pure_account_help_chats_without_ticket(client, monkeypatch):
     data = _chat(client, _make_user("acct_help"), "我的账号怎么换绑手机号")
     assert data["ticket"] is None
     assert data["intent"]["intent"] == "account_support"
-    assert data["intent"]["triage_lane"] == "account_help"
+    assert data["intent"]["triage_lane"] == "ultimate_review"
 
 
 def test_defect_with_account_word_and_escalation_creates_ticket(client, monkeypatch):

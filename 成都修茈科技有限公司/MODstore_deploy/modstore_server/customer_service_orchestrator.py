@@ -77,11 +77,12 @@ FOLLOWUP_INTENTS = frozenset({"general", "greeting", "account_support", "product
 # ops_fast_fix 仅预留，本 PR 不实现执行器；真正的运维快修另开 PR。
 TRIAGE_LANES = frozenset(
     {
-        "product_defect",  # product_issue：产品缺陷登记
-        "account_help",  # account_support：账号/权益咨询
+        "product_defect",  # product_issue：产品缺陷登记（可进代码修复）
+        "ultimate_review",  # 账号类/不确定：终极员工（Grok Bot/Dolt）可介入
+        "account_help",  # 兼容旧名，等同 ultimate_review
         "commerce",  # refund / catalog_* / llm_extension
         "ops_fast_fix",  # 预留：运维快修通道（未接线）
-        "general",  # greeting / general
+        "general",  # 兜底
     }
 )
 # 问题归属：平台宿主 / 市场上架软件 / 账号定制线（宿主入门第三步定制 Mod/员工）

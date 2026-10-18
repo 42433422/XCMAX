@@ -71,11 +71,11 @@ def is_greeting(text: str) -> bool:
 
 
 def resolve_triage_lane(intent: str) -> str:
-    """intent → 分诊车道。ops_fast_fix 预留，本模块不派发运维快修执行器。"""
+    """intent → 分诊车道。账号/不确定 → ultimate_review（终极员工可介入）；ops_fast_fix 预留。"""
     if intent == "product_issue":
         return "product_defect"
-    if intent == "account_support":
-        return "account_help"
+    if intent in {"account_support", "general", "greeting"}:
+        return "ultimate_review"
     if intent in {"refund", "catalog_complaint", "catalog_review", "llm_extension"}:
         return "commerce"
     return "general"
