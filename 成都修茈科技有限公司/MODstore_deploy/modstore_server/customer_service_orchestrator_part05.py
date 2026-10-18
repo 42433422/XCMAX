@@ -189,6 +189,10 @@ def apply_customer_ticket_incident_progress(
         "tools": sorted({str(o.get("tool_name") or "") for o in outputs} - {""}),
         "executor": executor,
     }
+    tried = [t for o in outputs for t in o.get("codex_models_tried") or [] if isinstance(t, dict)]
+    if tried:
+        # 内部动作记录尝试过的 Codex 模型（不进客户消息）。
+        request["codex_models_tried"] = tried[:8]
     # 同一派单（同一组 Para 任务）待定→终态更新同一条；重派/外部执行是新任务，另记一条。
     action = _facade().build_action(
         db,
