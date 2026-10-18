@@ -70,8 +70,11 @@ def backup_postgres(output_dir: Path) -> Path:
 
 
 def backup_redis(output_dir: Path) -> Path:
-    password = os.environ.get("REDIS_PASSWORD", "modstore-redis")
-    run(["docker", "compose", "exec", "-T", "redis", "redis-cli", "-a", password, "SAVE"])
+    if not os.environ.get("REDIS_PASSWORD"):
+        raise SystemExit("REDIS_PASSWORD 未设置：请从密钥库注入，不再使用默认密码")
+    # 经 REDISCLI_AUTH 传入，避免密码出现在进程参数里。
+    os.environ["REDISCLI_AUTH"] = os.environ["REDIS_PASSWORD"]
+    run(["docker", "compose", "exec", "-T", "-e", "REDISCLI_AUTH", "redis", "redis-cli", "SAVE"])
     output = output_dir / "redis-data.tar.gz"
     docker_tar("redis", "/data", output)
     return output

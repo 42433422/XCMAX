@@ -1,5 +1,5 @@
 {
-  "lines": 2307307,
+  "lines": 2308693,
   "updated": "2026-10-19",
-  "note": "XCMAX#2414 合入最新 main（#2411）后重算：客服分诊+终极员工介入（账号弱信号建单、ultimate_review 车道、customer_ticket_triage 介入/守卫、enrich 与 Para 钩子、回归测试、CHANGELOG）相对 main 净增 407 行；按用户 01:23（北京时间）批准抬升，评审可见"
+  "note": "修复 incident 字段意图读取，避免产品缺陷工单被误改派为只出报告；用户规则 A 批准"
 }
