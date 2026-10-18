@@ -374,6 +374,7 @@ async def create_custom_delivery(
         session_id=int(session.id),
         ticket_id=int(ticket.id),
         actor=user,
+        actor_type="user",
         detail={"kind": body.kind, "source": "desktop_private_delivery"},
     )
     enqueue_customer_service_event(

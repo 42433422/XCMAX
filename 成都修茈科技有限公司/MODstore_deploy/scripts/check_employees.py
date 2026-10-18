@@ -51,7 +51,6 @@ try:
         ],
         capture_output=True,
         text=True,
-        env={**os.environ, "PGPASSWORD": "modstore"},
     )
     if r.stdout.strip():
         for line in r.stdout.strip().split("\n"):
