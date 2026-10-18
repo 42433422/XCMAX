@@ -1,5 +1,5 @@
 {
-  "lines": 2309908,
+  "lines": 2309909,
   "updated": "2026-10-19",
-  "note": "Dot 工单打通（用户 2026-10-19 04:22 UTC+8 批准）：新增 modstore_server/dot_ticket_dispatch.py（派给 dolt 的客服工单加 [xcmax:…] 控制标记、按 #2414 分诊结果选 report_only/code_fix、离开 MODstore 前脱敏）+285 行，tests/test_dot_ticket_dispatch.py +335 行，para_delegate_handler_part04.py 接入净 +5 行；合计净增 625 行，按规则 A 上调基线"
+  "note": "Dot 工单打通（用户 2026-10-19 04:22 UTC+8 批准）：新增 modstore_server/dot_ticket_dispatch.py（派给 dolt 的客服工单加 [xcmax:…] 控制标记、按 #2414 分诊结果选 report_only/code_fix、离开 MODstore 前脱敏）+286 行，tests/test_dot_ticket_dispatch.py +335 行，para_delegate_handler_part04.py 接入净 +5 行；合计净增 626 行，按规则 A 上调基线"
 }

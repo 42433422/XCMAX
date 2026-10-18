@@ -184,7 +184,8 @@ def triage_result(req: Dict[str, Any], fields: Dict[str, Any]) -> Dict[str, Any]
     from modstore_server.customer_ticket_triage import allow_code_fix, resolve_dispatch_lane
 
     raw = _raw(req)
-    snapshot = raw.get("triage") if isinstance(raw.get("triage"), dict) else {}
+    nested = raw.get("triage")
+    snapshot: Dict[str, Any] = nested if isinstance(nested, dict) else {}
     intent = str(snapshot.get("intent") or raw.get("intent") or fields.get("intent") or "")
     intent = intent.strip().lower()
     if "allow_code_fix" in raw:
