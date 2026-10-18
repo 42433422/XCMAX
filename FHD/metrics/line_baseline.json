@@ -1,5 +1,5 @@
 {
-  "lines": 2306808,
+  "lines": 2307098,
   "updated": "2026-10-19",
-  "note": "客服分诊·终极员工介入：新增 customer_ticket_triage 模块+回归；账号/不确定进 ultimate_review，Para 派发前挡代码修复工具；按用户 01:23 批准抬升基线"
+  "note": "XCMAX#2414 客服分诊+终极员工介入：账号弱信号建单、TRIAGE_LANES/ultimate_review、新模块 customer_ticket_triage（快照/介入改分类改派/代码修复工具守卫）、enrich 与 Para 派发钩子及两份回归测试、CHANGELOG；源码不可等量删，按用户 01:23（北京时间）批准抬升基线，评审可见"
 }

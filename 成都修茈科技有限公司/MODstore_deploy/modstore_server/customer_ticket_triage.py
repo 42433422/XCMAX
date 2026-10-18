@@ -75,17 +75,10 @@ def build_triage_snapshot(
 
 
 def _read_intervention(payload: dict[str, Any]) -> dict[str, Any] | None:
-    raw = payload.get("triage_intervention")
-    if isinstance(raw, dict) and raw:
-        return dict(raw)
-    evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
-    raw = evidence.get("triage_intervention")
-    if isinstance(raw, dict) and raw:
-        return dict(raw)
-    resolution = payload.get("resolution") if isinstance(payload.get("resolution"), dict) else {}
-    raw = resolution.get("triage_intervention")
-    if isinstance(raw, dict) and raw:
-        return dict(raw)
+    for holder in (payload, payload.get("evidence"), payload.get("resolution")):
+        raw = holder.get("triage_intervention") if isinstance(holder, dict) else None
+        if isinstance(raw, dict) and raw:
+            return dict(raw)
     return None
 
 
@@ -150,7 +143,8 @@ def apply_para_triage(
     allow = bool(body.get("allow_code_fix"))
     raw_tool = str(body.get("tool_name") or body.get("dev_tool") or "")
     # 有序路由首跳若是终极员工，优先作 fallback
-    hops = body.get("_ticket_route") if isinstance(body.get("_ticket_route"), list) else []
+    route = body.get("_ticket_route")
+    hops: list[Any] = route if isinstance(route, list) else []
     fallback = "grok_bot"
     for hop in hops:
         if isinstance(hop, dict) and str(hop.get("tool_name") or "") in ULTIMATE_TOOLS:
