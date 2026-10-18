@@ -1230,7 +1230,10 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
 
     from modstore_server import customer_service_api
     from modstore_server.app import app
-    from modstore_server.db.base import _backfill_ticket_submitter_types, get_engine
+    import importlib.util
+    from pathlib import Path
+
+    from modstore_server.db.base import get_engine
     from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
 
@@ -1258,7 +1261,12 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
             ),
             {"ticket_no": f"{marker}%"},
         )
-    _backfill_ticket_submitter_types(get_engine())
+    migration = Path(__file__).resolve().parents[1] / "alembic/versions/20261019_ticket_submitter_type.py"
+    spec = importlib.util.spec_from_file_location("ticket_submitter_migration", migration)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with get_engine().begin() as conn:
+        module.backfill_submitter_types(conn)
     try:
         app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
         only_admin = client.get(
