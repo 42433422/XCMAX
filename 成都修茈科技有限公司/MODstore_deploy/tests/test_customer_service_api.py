@@ -545,7 +545,7 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
             .all()
         )
         assert any("员工处理进展" in (m.content or "") for m in msgs)
-        assert "未产生修复" in msgs[0].content and "下一步" in msgs[0].content
+        assert "未产生修复" not in msgs[0].content and "下一步" in msgs[0].content
         assert "should-be-redacted" not in msgs[0].content
         from modstore_server.customer_service_tools import json_loads
 
