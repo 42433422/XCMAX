@@ -136,6 +136,7 @@ test('workspace is reset in place to the task base between tool attempts', async
   const run = (args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: dir, encoding: 'utf8' }).trim();
   try {
     run(['init', '-q', '-b', 'main']);
+    run(['config', 'core.autocrlf', 'false']);
     writeFileSync(join(dir, 'a.txt'), 'base\n');
     run(['add', 'a.txt']);
     run(['commit', '-q', '-m', 'base']);
