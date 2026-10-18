@@ -13,12 +13,8 @@ def _facade():
 
 
 def _env_bool(name: str, default: str = "0") -> bool:
-    return _facade().os.environ.get(name, default).strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
+    value = _facade().os.environ.get(name, default).strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def para_delegate_enabled() -> bool:
@@ -231,6 +227,9 @@ def _build_para_prompt(req: _facade().Dict[str, _facade().Any]) -> str:
         f"- record_id: {req.get('record_id') or ''}",
         f"- guardrail: {guardrail}",
     ]
+    from modstore_server.codex_model_attempts import codex_model_candidates_line
+
+    context += [line for line in (codex_model_candidates_line(req),) if line]
     if report_only:
         return "MODSTORE_REPORT_ONLY=1\nreport_only=true\n\n" + prompt + "\n" + "\n".join(context)
     return prompt + "\n" + "\n".join(context)
