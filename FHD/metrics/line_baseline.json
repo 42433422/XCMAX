@@ -1,5 +1,5 @@
 {
-  "lines": 2306368,
-  "updated": "2026-10-17",
-  "note": "XCMAX#2386 客服工单优先派给 Para 第五位超级员工 grok_bot（云端执行器）：Para 工具枚举/别名 +4、工单云端路由 helper +10、_build_request 接入 +1、回归测试 +27；新增文件已合并进现有模块，最小化后净增 43 行，需评审可见。"
+  "lines": 2306603,
+  "updated": "2026-10-18",
+  "note": "XCMAX#2404 Mac Para 代理工具回退链 DEVFLEET_TOOL_FALLBACK_ORDER（codex→cursor→claude_code→trae）：回退顺序/判定/工作区原地还原 +73、代理接入回退链净 +108、trae_failover 导出策略判定 +5、回归测试净 +92（diff 行）；计数口径净增 235 行。未配置时旧路径不变，用于取代 Mac 上的 DEVFLEET_FORCE_CURSOR=1，需评审可见。"
 }

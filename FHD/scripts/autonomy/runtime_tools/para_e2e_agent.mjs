@@ -27,9 +27,13 @@ import {
 } from './para_queue_policy.mjs';
 import {
   effectiveToolName,
+  isToolFallbackEligible,
   removeOwnWorkspace,
   requestedToolName,
+  resetWorkspaceForNextTool,
   supportedToolNames,
+  toolAttemptPlan,
+  toolFallbackMode,
   withFailureCleanup,
 } from './e2e_agent_runtime_policy.mjs';
 
@@ -372,6 +376,91 @@ async function runClaudeAgent(taskDir, prompt) {
     });
     child.stdin.end();
   });
+}
+
+function toolAvailable(tool) {
+  if (tool === 'trae') return traeAgentAvailable();
+  if (tool === 'claude_code') return claudeAgentAvailable();
+  if (tool === 'cursor') return process.env.DEVFLEET_E2E_CURSOR !== '0' && cursorAgentAvailable();
+  if (tool === 'codex') return codexAgentAvailable();
+  return false;
+}
+
+function runToolOnce(tool, taskDir, prompt) {
+  if (tool === 'trae') return runTraeAgent(taskDir, prompt);
+  if (tool === 'claude_code') return runClaudeAgent(taskDir, prompt);
+  if (tool === 'cursor') return runCursorAgent(taskDir, prompt);
+  return runCodexAgent(taskDir, prompt);
+}
+
+// 失败摘要只取工具自己的 stdout/stderr 尾部，不取 err.message（execFile 会把整段 prompt 拼进去）。
+function describeToolError(tool, err) {
+  if (tool === 'trae') {
+    const failure = describeTraeFailure(err);
+    return { summary: failure.summary, raw: failure.raw || failure.summary.toLowerCase() };
+  }
+  if (tool === 'claude_code') {
+    const summary = String(err instanceof Error ? err.message : err).slice(-800);
+    return { summary, raw: summary.toLowerCase() };
+  }
+  const tail = `${String(err?.stderr || '')}\n${String(err?.stdout || '')}`.trim().split(/\r?\n/).slice(-8).join('\n');
+  const timedOut = Boolean(err?.killed) || err?.signal === 'SIGTERM' || /timeout after/i.test(String(err?.message || ''));
+  const summary = (tail || `${tool} exited${err?.code !== undefined ? ` with code ${err.code}` : ''}${timedOut ? ' (timed out)' : ''}`).slice(0, 800);
+  return { summary, raw: `${tail}${timedOut ? '\ntimed out' : ''}${err?.code === 'ENOENT' ? '\nnot installed' : ''}`.toLowerCase() };
+}
+
+async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requestedTool, baseHead, reportOnly }) {
+  const log = (content, level = 'info') => send(ws, {
+    type: 'task_log',
+    task_id: task.task_id,
+    subtask_id: task.subtask_id,
+    content: `[e2e-agent] ${content}`.slice(0, 4000),
+    level,
+  });
+  const mode = toolFallbackMode();
+  const requested = requestedTool || '-';
+  const attempts = [];
+  let toolError = '';
+  log(`tool fallback chain: requested=${requested} plan=${plan.join('>') || '(none installed)'} on=${mode}`);
+  if (!plan.length) return { toolError: 'tool fallback chain: no installed tool', toolOutput: '', toolUsed: '' };
+  for (let i = 0; i < plan.length; i += 1) {
+    const tool = plan[i];
+    if (i > 0 && !reportOnly) {
+      try {
+        await resetWorkspaceForNextTool(git, taskDir, task, baseHead);
+      } catch (resetErr) {
+        toolError = `${toolError}; workspace reset before ${tool} failed: ${resetErr instanceof Error ? resetErr.message : String(resetErr)}`;
+        log(toolError.slice(0, 1200), 'warn');
+        break;
+      }
+    }
+    log(`tool attempt ${i + 1}/${plan.length}: requested=${requested} used=${tool}`);
+    let failure = null;
+    let output = '';
+    try {
+      output = String(await runToolOnce(tool, taskDir, prompt) || '');
+      if (tool === 'codex' && output.startsWith('[codex exit=')) {
+        const dirty = await gitMaybe(taskDir, ['status', '--porcelain', '--', '.']);
+        if (!dirty && !(await headMovedFromBase(taskDir, baseHead))) failure = describeCodexFailure(output);
+      }
+    } catch (err) {
+      failure = describeToolError(tool, err);
+    }
+    if (!failure) {
+      attempts.push(`${tool}:ok`);
+      if (output) log(output.slice(0, 4000));
+      if (!reportOnly && (tool === 'trae' || tool === 'codex')) await autoFormatPythonFiles(taskDir, ws, task);
+      log(`tool chain result: requested=${requested} used=${tool} attempts=${attempts.join(',')}`);
+      return { toolError: '', toolOutput: output.trim(), toolUsed: tool };
+    }
+    const fallBack = i < plan.length - 1 && isToolFallbackEligible(failure.raw || failure.summary, mode);
+    attempts.push(`${tool}:failed`);
+    toolError = `${tool} 失败: ${failure.summary}`;
+    log(`tool attempt ${i + 1}/${plan.length} failed: used=${tool} next=${fallBack ? plan[i + 1] : 'stop'} reason=${failure.summary}`, 'warn');
+    if (!fallBack) break;
+  }
+  log(`tool chain result: requested=${requested} used=none attempts=${attempts.join(',')}`, 'warn');
+  return { toolError, toolOutput: '', toolUsed: '' };
 }
 
 function resolveDeviceToken() {
@@ -1086,19 +1175,25 @@ async function handleTask(ws, task) {
   const devTool = effectiveToolName({ task, agentConfig });
   let toolError = '';
   let toolOutput = '';
-  const useTrae = devTool === 'trae' && traeAgentAvailable();
+  // DEVFLEET_TOOL_FALLBACK_ORDER 已配置且无 FORCE 覆盖时走回退链，否则下面旧路径原样不变。
+  const fallbackPlan = toolAttemptPlan({ task, agentConfig, isAvailable: toolAvailable });
+  const useChain = Array.isArray(fallbackPlan);
+  const useTrae = !useChain && devTool === 'trae' && traeAgentAvailable();
   const useClaude =
-    !useTrae
+    !useChain
+    && !useTrae
     && devTool === 'claude_code'
     && claudeAgentAvailable();
   const useCursor =
-    !useTrae
+    !useChain
+    && !useTrae
     && !useClaude
     && devTool === 'cursor'
     && process.env.DEVFLEET_E2E_CURSOR !== '0'
     && cursorAgentAvailable();
   const useCodex =
-    !useTrae
+    !useChain
+    && !useTrae
     && !useClaude
     && !useCursor
     && devTool === 'codex'
@@ -1111,6 +1206,19 @@ async function handleTask(ws, task) {
       content: `[e2e-agent] tool override: requested=${requestedTool} effective=${devTool}`,
       level: 'info',
     });
+  }
+
+  if (useChain) {
+    ({ toolError, toolOutput } = await runToolFallbackChain({
+      ws,
+      task,
+      taskDir,
+      prompt: executionPrompt,
+      plan: fallbackPlan,
+      requestedTool,
+      baseHead,
+      reportOnly,
+    }));
   }
 
   if (useTrae) {
@@ -1396,7 +1504,7 @@ async function handleTask(ws, task) {
     return;
   }
 
-  const waitMs = useTrae || useClaude || useCursor || useCodex ? 120_000 : 900_000;
+  const waitMs = useChain || useTrae || useClaude || useCursor || useCodex ? 120_000 : 900_000;
   if (!(await waitForMeaningfulChanges(taskDir, waitMs, baseHead))) {
     await failTask(
       ws,
