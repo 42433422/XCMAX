@@ -88,7 +88,7 @@ jobs:
 
       - name: Download normalized security evidence
         if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: xcagi-security-release-reports
           path: ${{ runner.temp }}/security-reports/current
@@ -97,7 +97,7 @@ jobs:
 
       - name: Download prior-day normalized security evidence
         if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: xcagi-security-release-reports
           path: ${{ runner.temp }}/security-reports/previous
