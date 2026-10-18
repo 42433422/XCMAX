@@ -139,7 +139,15 @@ def apply_para_triage(
 ) -> dict[str, Any]:
     """Para ``_build_request`` 前钩子：贴快照、应用介入、挡住误进代码修复。"""
     _ = employee_id
-    body = apply_triage_intervention(input_data)
+    src = dict(input_data or {})
+    nested = src.get("incident")
+    incident: dict[str, Any] = nested if isinstance(nested, dict) else {}
+    for key in ("intent", "triage_intervention", "allow_code_fix"):
+        if key not in src and key in incident:
+            src[key] = incident[key]
+    if not str(src.get("intent") or "").strip() and not _read_intervention(src):
+        return src  # 意图未知：不改派、不降级，保持原派发
+    body = apply_triage_intervention(src)
     allow = bool(body.get("allow_code_fix"))
     raw_tool = str(body.get("tool_name") or body.get("dev_tool") or "")
     # 有序路由首跳若是终极员工，优先作 fallback

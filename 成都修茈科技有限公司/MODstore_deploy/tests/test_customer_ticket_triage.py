@@ -108,3 +108,17 @@ def test_enrich_publish_stamps_triage_snapshot():
     )
     assert body2["intent"] == "product_issue"
     assert body2["triage"]["allow_code_fix"] is True
+
+
+def test_para_triage_reads_nested_incident_intent_and_keeps_unknown():
+    nested = {
+        "event_type": "ops.intake.customer_ticket",
+        "incident": {"intent": "product_issue", "ticket_id": 40},
+        "tool_name": "codex",
+    }
+    out = apply_para_triage(nested)
+    assert out["tool_name"] == "codex" and out["triage"]["allow_code_fix"] is True
+    unknown = {"event_type": "ops.intake.customer_ticket", "tool_name": "codex"}
+    assert apply_para_triage(unknown)["tool_name"] == "codex"
+    acct = apply_para_triage({**nested, "incident": {"intent": "account_support"}})
+    assert acct["tool_name"] == "grok_bot"
