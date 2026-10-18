@@ -8,8 +8,10 @@ from modman.repo_config import load_config, save_config  # noqa: F401
 from modman.store import project_root  # noqa: F401
 from modstore_server.api.app_factory import create_app, load_default_config
 from modstore_server.api.auth_deps import require_user as _require_user  # noqa: F401
+from modstore_server.cred_vault import install_log_redaction
 from modstore_server.infrastructure import library_paths
 
+install_log_redaction()
 app = create_app(load_default_config())
 
 

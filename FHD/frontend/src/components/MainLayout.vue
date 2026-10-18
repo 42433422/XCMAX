@@ -82,6 +82,7 @@ import { getIndustryPreset } from '@/constants/industryPresets'
 import { resolveCoreNavLabel, INDUSTRY_MENU_LABELS, MENU_DEFAULT_NAMES } from '@/utils/coreNavLabel'
 import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarActiveKey'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
+import { isUnmatchedRoute } from '@/utils/routeLoadState'
 import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
 import { useModRoutes } from '@/composables/useModRoutes'
 import FloatingChatAssistant from './FloatingChatAssistant.vue'
@@ -203,8 +204,11 @@ const viewTitlesBase = {
 }
 
 const routeNameMap = SIDEBAR_ROUTE_NAME_MAP
+const UNMATCHED_ROUTE_KEY = '__route-not-found__'
 
 const currentRouteName = computed(() => {
+  // 无匹配页面时不回落成「对话」高亮，避免空白页被误认成运维对话
+  if (isUnmatchedRoute(route)) return UNMATCHED_ROUTE_KEY
   const modKey = modPathToSidebarKey.value[route.path]
   let raw = modKey || routeNameMap[route.path] || ''
   if (!raw) {
@@ -258,6 +262,7 @@ const viewTitles = computed(() => {
 
 const currentViewTitle = computed(() => {
   const key = currentRouteName.value
+  if (key === UNMATCHED_ROUTE_KEY) return '页面不存在'
   const industryId = String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID)
   const fromNav = resolveCoreNavLabel(key, industryId, modsForUi.value)
   if (fromNav) return fromNav

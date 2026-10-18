@@ -1,0 +1,9 @@
+{
+  "time": "2026-10-15T22:19:55.311649+08:00",
+  "stoppedOnlyOwnVerifierPids": [],
+  "newConcurrentConnectionsPerFile": 1,
+  "preserved": "Existing per-file verified-range prefixes",
+  "reason": "Excessive retransmissions on limited origin egress; reduce own HTTP load",
+  "serverConfigChanged": false,
+  "globalProxyOrRoutesChanged": false
+}

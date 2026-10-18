@@ -19,13 +19,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
-from modstore_server.customer_issue_delivery_contract import issue_resolution
+from modstore_server.customer_issue_delivery_contract import issue_resolution, repair_verification
 from modstore_server.customer_issue_intake import enqueue_issue, request_identity
+from modstore_server.customer_service_customer_view import customer_issue_row as _issue_row
+from modstore_server.customer_service_customer_view import customer_ticket_row
 from modstore_server.customer_service_orchestrator import CLOSED_CUSTOMER_ISSUE_STATES as _CLOSED
-from modstore_server.customer_service_orchestrator import customer_issue_payload as _issue_row
-from modstore_server.customer_service_orchestrator import (
-    ticket_payload,
-)
 from modstore_server.customer_service_tools import audit, json_dumps, json_loads
 from modstore_server.models import User, UserMod
 from modstore_server.models_cs import (
@@ -158,7 +156,7 @@ async def intake_customer_issue(
             "replayed": replayed,
             "ticket_id": ticket.id,
             "ticket_no": ticket.ticket_no,
-            "ticket": ticket_payload(ticket),
+            "ticket": customer_ticket_row(ticket),
             "dispatch_status": "queued",
             "support_bundle_saved": bool(bundle_b64) and saved,
             "support_bundle_sha256": bundle_sha if bundle_b64 and saved else "",
@@ -226,6 +224,7 @@ async def intake_customer_issue(
             ticket_id=ticket.id,
             session_id=session.id,
             actor=user,
+            actor_type="user",
             detail={"source_ref": body.source_ref, "event_id": event_id},
         )
         db.commit()
@@ -310,7 +309,7 @@ def shared_issue_runtime_receipt(
         raise HTTPException(404, "原工单不存在")
     outcome = record_shared_runtime(db, ticket, body.model_dump(), int(user.id))
     db.commit()
-    return {"success": True, "ticket": ticket_payload(ticket), "receipt": outcome}
+    return {"success": True, "ticket": customer_ticket_row(ticket), "receipt": outcome}
 
 
 class CustomerIssueDecisionBody(BaseModel):
@@ -410,6 +409,7 @@ def decide_product_issue(
             state="resolved",
             resolved_at=now.isoformat(),
             verification_mode="customer_decision",
+            **repair_verification("customer_decision"),
             closed_by_user_id=int(user.id),
             handled_by=sorted(
                 {
@@ -437,7 +437,7 @@ def decide_product_issue(
             resolution.pop(key, None)
         resolution.update(
             state="reopened",
-            repair_verified=False,
+            **repair_verification(None),
             reopen_note=note,
             reopened_at=now.isoformat(),
             reopen_after_action_id=int(
@@ -484,6 +484,7 @@ def decide_product_issue(
         ticket_id=ticket.id,
         session_id=ticket.session_id,
         actor=user,
+        actor_type="user",
         detail={"note": note, "idempotency_key": body.idempotency_key, "event_id": event_id},
     )
     db.commit()
