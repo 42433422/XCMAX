@@ -81,6 +81,19 @@ def _summarize_incident_team_rows(
     return "；".join(bits[:6]) if bits else "值班员工已接手"
 
 
+def _customer_incident_progress(team_rows: list[dict[str, Any]]) -> str:
+    """客户可见进度只用固定客服话术：不拼接员工输出、报错原文、路径或工具名（#2389）。"""
+    role_cn = {"scout": "排查", "fix": "修复", "verify": "验证"}
+    bits, failed = [], False
+    for row in [r for r in team_rows or [] if isinstance(r, dict)][:6]:
+        role = role_cn.get(str(row.get("role") or "").strip(), "处理")
+        pending = row.get("status") in ("pending", "manual_review")
+        failed = failed or not (row.get("ok") or pending)
+        bits.append(f"{role}{'已完成' if row.get('ok') else '处理中' if pending else '暂未完成'}")
+    note = "处理过程中遇到内部问题，值班人员正在继续跟进，您无需操作" if failed else ""
+    return "；".join(bits + [note] if note else bits) or "值班员工已接手"
+
+
 def apply_customer_ticket_incident_progress(
     db: _facade().Session,
     *,
@@ -111,6 +124,7 @@ def apply_customer_ticket_incident_progress(
     rows = [r for r in team_rows or [] if isinstance(r, dict)]
     team_ok = bool(team_ok) and team_succeeded(rows)
     from modstore_server.customer_delivery_receipts import canonical_sha256
+    from modstore_server.customer_service_customer_view import customer_ticket
 
     progress_digest = canonical_sha256(
         {
@@ -143,15 +157,18 @@ def apply_customer_ticket_incident_progress(
             "team_ok": team_ok,
         }
     resolution = record_team_progress(ticket, ev, event_id=event_id, rows=rows)
+    # 内部明细（含报错原文）只进 action.result_json 与审计 detail；客户消息/证据只用客服话术。
     progress = _facade()._summarize_incident_team_rows(rows)
+    customer_progress = _customer_incident_progress(rows)
     progress_record = {"event_id": int(event_id or 0), "team_ok": team_ok, "progress": progress}
+    customer_record = {**progress_record, "progress": customer_progress}
     hint = str(summary_hint or ticket.summary or ticket.title or "").strip()[:120]
     if team_ok:
         reply = _facade().delivery_policy.success_reply(
-            hint or ticket.ticket_no, progress, delivery_managed
+            hint or ticket.ticket_no, customer_progress, delivery_managed
         )
     else:
-        reply = f"我是小C。工单「{hint or ticket.ticket_no}」已有员工处理进展：{progress}。我们会继续跟进，也可继续补充截图或具体页面。"
+        reply = f"我是小C。工单「{hint or ticket.ticket_no}」已有员工处理进展：{customer_progress}。我们会继续跟进，也可继续补充截图或具体页面。"
     reply += "下一步：" + (
         "等待正式版本交付后，请在原工单复验并确认。"
         if team_ok
@@ -204,7 +221,7 @@ def apply_customer_ticket_incident_progress(
             "progress_sha256": progress_digest,
             "event_id": int(event_id or 0),
             "team_ok": bool(team_ok),
-            "progress": progress[:500],
+            "progress": customer_progress[:500],
             "at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
     )
@@ -218,7 +235,8 @@ def apply_customer_ticket_incident_progress(
         content=reply,
         payload_json=_facade().json_dumps(
             {
-                "ticket": _facade().ticket_payload(ticket),
+                # 客户消息只存客户白名单工单视图：resolution 等内部证据不随消息落库。
+                "ticket": customer_ticket(_facade().ticket_payload(ticket)),
                 "cards": [
                     {
                         "type": "ticket",
@@ -229,7 +247,7 @@ def apply_customer_ticket_incident_progress(
                         **_facade().ticket_lifecycle_payload(ticket.status, ticket.decision_status),
                     }
                 ],
-                "employee_progress": progress_record,
+                "employee_progress": customer_record,
             }
         ),
     )
