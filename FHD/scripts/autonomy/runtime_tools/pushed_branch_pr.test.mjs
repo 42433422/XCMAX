@@ -20,7 +20,7 @@ test('auto_merge=0 的 GitHub 代码任务 push 后必须开 PR；auto_merge=tru
   assert.equal(pushedPrBaseBranch({ base_branch: 'a'.repeat(40) }), 'main');
 });
 
-test('PR 带 hold-merge、不开 auto-merge，正文不含任务描述', async () => {
+test('PR 带 hold-merge、不开 auto-merge，标题正文不含任务标题与描述', async () => {
   const calls = [];
   const result = await ensurePullRequestForPushedBranch(buildPushedPrRequest(task), async (args) => {
     calls.push(args);
@@ -28,9 +28,9 @@ test('PR 带 hold-merge、不开 auto-merge，正文不含任务描述', async (
   });
   assert.deepEqual(result, { url: 'https://github.com/42433422/XCMAX/pull/2411', number: '2411', created: true });
   const create = calls[1];
-  assert.equal(create[create.indexOf('--label') + 1], 'hold-merge');
-  assert.equal(create.includes('--auto'), false);
+  assert.equal(create[create.indexOf('--label') + 1], 'hold-merge'); assert.equal(create.includes('--auto'), false);
   assert.equal(create[create.indexOf('--body') + 1].includes('客户原文'), false);
+  assert.equal(create[create.indexOf('--title') + 1], 'devfleet: Para 任务 f71572cc 产物（devfleet/codex/sub-1-adc0ac）');
 });
 
 test('已有 open PR 时复用，不重复创建；gh 认证失败给出明确原因', async () => {

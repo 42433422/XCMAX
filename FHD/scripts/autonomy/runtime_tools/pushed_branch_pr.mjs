@@ -29,8 +29,8 @@ export function shouldOpenPrForPushedTask(task, env = process.env) {
 export function buildPushedPrRequest(task) {
   const branch = String(task.work_branch).trim();
   const base = pushedPrBaseBranch(task);
-  // 标题只用任务标题前 80 字；正文不带任务描述，避免把工单原文/客户内容写进 PR。
-  const title = `devfleet: ${String(task.title || branch).replace(/\s+/g, ' ').trim()}`.slice(0, 90);
+  // 仓库公开：标题/正文都不带任务标题与描述（可能含工单原文/客户内容），只用任务 ID 与分支。
+  const title = `devfleet: Para 任务 ${String(task.task_id || '').slice(0, 8)} 产物（${branch}）`;
   const body = [
     '## Para 派工产物（push 后自动开 PR）',
     '',
