@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildPushedPrRequest, describePushedPrFailure, ensurePullRequestForPushedBranch,
-  parseGithubRepoFull, pushedPrBaseBranch, shouldOpenPrForPushedTask,
+  parseGithubRepoFull, pushedPrBaseBranch, requirePrUrlAfterPush, shouldOpenPrForPushedTask,
 } from './pushed_branch_pr.mjs';
 
 const task = {
@@ -40,4 +40,11 @@ test('已有 open PR 时复用，不重复创建；gh 认证失败给出明确�
   });
   assert.equal(result.created, false);
   assert.match(describePushedPrFailure(new Error('HTTP 401: Bad credentials')), /GitHub 认证失败/);
+});
+
+test('系统侧硬门：该开 PR 却没有 URL 必须 fail-closed', () => {
+  assert.equal(requirePrUrlAfterPush(task, '').ok, false);
+  assert.match(requirePrUrlAfterPush(task, '').reason, /pushed_without_pr/);
+  assert.equal(requirePrUrlAfterPush(task, 'https://github.com/42433422/XCMAX/pull/1').ok, true);
+  assert.equal(requirePrUrlAfterPush({ ...task, auto_merge: true }, '').ok, true);
 });

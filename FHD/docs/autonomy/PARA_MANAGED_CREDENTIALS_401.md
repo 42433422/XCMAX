@@ -1,6 +1,9 @@
 # Para 受管凭据 401 恢复手册
 
 ## 现象
+- **fail-closed**：鉴权失败时合并队列不处理任何任务；停摆标记写在
+  `~/.xcmax/autonomy/para-merge-worker-auth-fail.json`（含 runbook 路径与连续失败次数）。
+  登录成功后该文件会被自动清除。日志前缀为 `FAIL-CLOSED`。
 - Mac merge-worker 日志出现 `para auth 401`（新版为 `para auth 401 managed_para_credentials_rejected`），合并队列停摆。
 - 设备代理 `request-merge` 同样失败（共用 `requestManagedParaSession`）。
 

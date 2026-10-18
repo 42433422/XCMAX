@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -715,12 +715,16 @@ test('managed Para login preserves owner and never falls back to guest', async (
 });
 
 test('Para 401 只在首次和每 10 分钟记一条带恢复手册的日志，其它异常照常输出', async () => {
-  const { paraAuthFailureLogLine } = await import('./merge_worker.mjs');
+  const { paraAuthFailureLogLine, AUTH_FAIL_STATE_FILE, clearParaAuthFailClosedMarker } = await import('./merge_worker.mjs');
+  clearParaAuthFailClosedMarker();
   const state = {};
   const err = new Error('para auth 401 managed_para_credentials_rejected: /x 恢复步骤见 FHD/docs/autonomy/PARA_MANAGED_CREDENTIALS_401.md');
-  assert.match(paraAuthFailureLogLine(err, state, 1_000), /合并队列已停摆（连续 1 次）.*PARA_MANAGED_CREDENTIALS_401/);
+  assert.match(paraAuthFailureLogLine(err, state, 1_000), /FAIL-CLOSED Para 鉴权失败，合并队列停摆（连续 1 次）.*PARA_MANAGED_CREDENTIALS_401/);
   assert.equal(paraAuthFailureLogLine(err, state, 31_000), '');
   assert.match(paraAuthFailureLogLine(err, state, 1_000 + 10 * 60 * 1000), /连续 3 次/);
-  assert.match(paraAuthFailureLogLine(new Error('para auth 401'), {}, 0), /guest 模式/);
+  assert.match(paraAuthFailureLogLine(new Error('para auth 401'), {}, 0), /FAIL-CLOSED.*guest 模式/);
+  assert.equal(existsSync(AUTH_FAIL_STATE_FILE), true);
+  clearParaAuthFailClosedMarker();
+  assert.equal(existsSync(AUTH_FAIL_STATE_FILE), false);
   assert.equal(paraAuthFailureLogLine(new Error('merge-queue 500'), state, 0), '轮询异常：Error: merge-queue 500'.replace('Error: ', ''));
 });

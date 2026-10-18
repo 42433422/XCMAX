@@ -28,6 +28,9 @@ const API_BASE = process.env.PARA_API_BASE || 'http://127.0.0.1:3001';
 const POLL_SEC = Number.parseInt(process.env.MERGE_WORKER_POLL_SEC || '15', 10);
 const STATE_FILE = process.env.MERGE_WORKER_STATE_FILE
   || `${process.env.HOME || '/tmp'}/.xcmax/autonomy/para-merge-worker-state.json`;
+export const AUTH_FAIL_STATE_FILE = process.env.MERGE_WORKER_AUTH_FAIL_STATE_FILE
+  || `${process.env.HOME || '/tmp'}/.xcmax/autonomy/para-merge-worker-auth-fail.json`;
+
 const EXPECTED_GITHUB_ACTOR = String(process.env.MERGE_WORKER_EXPECTED_GITHUB_ACTOR || '').trim();
 const REQUIRE_BOT_IDENTITY = process.env.MERGE_WORKER_REQUIRE_BOT_IDENTITY !== '0';
 const BOT_MERGE_WORKFLOW = String(
@@ -1888,7 +1891,25 @@ async function processTask(token, task, state) {
   }
 }
 
-// Para 401 每 30s 一行会淹没日志（10-19 时已累计 11 万行）；改为首次 + 每 10 分钟一条带恢复手册的汇总。
+// Para 401 fail-closed：不处理合并队列；写停摆标记；日志首次 + 每 10 分钟一条（防淹没）。
+export function writeParaAuthFailClosedMarker(err, count, nowMs = Date.now()) {
+  mkdirSync(dirname(AUTH_FAIL_STATE_FILE), { recursive: true, mode: 0o700 });
+  const temporary = `${AUTH_FAIL_STATE_FILE}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify({
+    fail_closed: true,
+    at: new Date(nowMs).toISOString(),
+    consecutive_failures: count,
+    message: String(err?.message || err).slice(0, 800),
+    runbook: 'FHD/docs/autonomy/PARA_MANAGED_CREDENTIALS_401.md',
+    effect: 'merge-queue polling continues but no tasks are processed until login succeeds',
+  }, null, 2)}\n`, { mode: 0o600 });
+  renameSync(temporary, AUTH_FAIL_STATE_FILE);
+}
+
+export function clearParaAuthFailClosedMarker() {
+  if (existsSync(AUTH_FAIL_STATE_FILE)) unlinkSync(AUTH_FAIL_STATE_FILE);
+}
+
 export function paraAuthFailureLogLine(err, state, nowMs = Date.now()) {
   const text = String(err?.message || err);
   if (!/para auth 401/.test(text)) {
@@ -1896,10 +1917,11 @@ export function paraAuthFailureLogLine(err, state, nowMs = Date.now()) {
     return `轮询异常：${text.slice(0, 300)}`;
   }
   state.count = (state.count || 0) + 1;
+  writeParaAuthFailClosedMarker(err, state.count, nowMs);
   if (state.lastAt && nowMs - state.lastAt < 10 * 60 * 1000) return '';
   state.lastAt = nowMs;
   const hint = text.includes('managed_para_credentials_rejected') ? '' : '（guest 模式；受管模式请配置 MERGE_WORKER_PARA_CREDENTIALS_FILE）';
-  return `Para 鉴权失败，合并队列已停摆（连续 ${state.count} 次）${hint}：${text.slice(0, 400)}`;
+  return `FAIL-CLOSED Para 鉴权失败，合并队列停摆（连续 ${state.count} 次）${hint}：${text.slice(0, 400)}`;
 }
 
 async function main() {
@@ -1926,6 +1948,7 @@ async function main() {
       const token = await paraToken();
       authFailureState.count = 0;
       authFailureState.lastAt = 0;
+      clearParaAuthFailClosedMarker();
       await reconcileMergedDeployments(token, state);
       const queue = await fetchMergeQueue(token);
       const queueById = new Map(queue.map((task) => [String(task?.id || ''), task]));

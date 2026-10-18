@@ -40,6 +40,7 @@ import {
   buildPushedPrRequest,
   describePushedPrFailure,
   ensurePullRequestForPushedBranch,
+  requirePrUrlAfterPush,
   shouldOpenPrForPushedTask,
 } from './pushed_branch_pr.mjs';
 
@@ -570,7 +571,8 @@ async function requestMergeOnComplete(task, taskDir) {
     });
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
-      console.error(`[e2e-agent] request-merge failed: ${resp.status} ${text.slice(0, 300)}`);
+      const tag = resp.status === 401 ? 'FAIL-CLOSED Para 鉴权 401（合并入队不可用，见 FHD/docs/autonomy/PARA_MANAGED_CREDENTIALS_401.md）' : 'request-merge failed';
+      console.error(`[e2e-agent] ${tag}: ${resp.status} ${text.slice(0, 300)}`);
       return false;
     }
     console.log(`[e2e-agent] request-merge 成功: task=${task.task_id} workspace=${taskDir}`);
@@ -1033,30 +1035,10 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
     // 工作区干净但 HEAD 已移动：工具(如 trae)已自行 commit → 跳过空 commit，直接 push。
     if (await headMovedFromBase(taskDir, baseHead)) {
       const pushedCommitted = await pushBranch(taskDir, task.work_branch);
-      const prUrl = pushedCommitted ? await openPullRequestAfterPush(ws, task, taskDir) : '';
-      await reportCodeIdentity(task, taskDir, baseHead, pushedCommitted, prUrl);
-      send(ws, {
-        type: 'task_progress',
-        task_id: task.task_id,
-        subtask_id: task.subtask_id,
-        progress: 100,
-        status: 'completed',
-      });
-      send(ws, {
-        type: 'task_log',
-        task_id: task.task_id,
-        subtask_id: task.subtask_id,
-        content: pushedCommitted
+      return settleAfterPush(ws, task, taskDir, baseHead, pushedCommitted,
+        pushedCommitted
           ? '[e2e-agent] 工具已自行 commit，分支已 push'
-          : '[e2e-agent] 工具已自行 commit（无可用远端，结果见日志/本地分支）',
-        level: 'info',
-      });
-      // Only explicitly pre-authorized tasks may enqueue from the device agent.
-      // Self-maintenance tasks are authorized later by review + QA + autonomy_guard.
-      if (pushedCommitted && task.auto_merge === true) {
-        await requestMergeOnComplete(task, taskDir);
-      }
-      return true;
+          : '[e2e-agent] 工具已自行 commit（无可用远端，结果见日志/本地分支）');
     }
     send(ws, {
       type: 'task_log',
@@ -1072,8 +1054,22 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
   await git(taskDir, ['add', '-A', '--', '.']);
   await git(taskDir, ['commit', '-m', `devfleet: ${task.title}`]);
   const pushed = await pushBranch(taskDir, task.work_branch);
+  return settleAfterPush(ws, task, taskDir, baseHead, pushed,
+    pushed
+      ? 'E2E agent 已完成 commit 与 push'
+      : 'E2E agent 已完成 commit（无可用远端，结果见日志/本地分支）');
+}
+
+// 交付管道硬门：push 后由设备代理（系统侧）开 hold-merge PR，不依赖 Codex/Cursor 自觉。
+// 该开却开不出 → fail-closed（任务 failed，分支保留），禁止静默 completed。
+async function settleAfterPush(ws, task, taskDir, baseHead, pushed, okLog) {
   const prUrl = pushed ? await openPullRequestAfterPush(ws, task, taskDir) : '';
   await reportCodeIdentity(task, taskDir, baseHead, pushed, prUrl);
+  const gate = requirePrUrlAfterPush(task, prUrl);
+  if (!gate.ok) {
+    await failTask(ws, task, `[e2e-agent] FAIL-CLOSED ${gate.reason}`);
+    return false;
+  }
   send(ws, {
     type: 'task_progress',
     task_id: task.task_id,
@@ -1085,9 +1081,7 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
     type: 'task_log',
     task_id: task.task_id,
     subtask_id: task.subtask_id,
-    content: pushed
-      ? 'E2E agent 已完成 commit 与 push'
-      : 'E2E agent 已完成 commit（无可用远端，结果见日志/本地分支）',
+    content: okLog,
     level: 'info',
   });
   if (pushed && task.auto_merge === true) {
@@ -1096,7 +1090,6 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
   return true;
 }
 
-// auto_merge≠true 时 merge-worker 不消费，push 后由设备代理开 hold-merge PR；失败只记 error 日志。
 async function openPullRequestAfterPush(ws, task, taskDir) {
   const decision = shouldOpenPrForPushedTask(task);
   const log = (content, level) => send(ws, { type: 'task_log', task_id: task.task_id,
@@ -1112,7 +1105,7 @@ async function openPullRequestAfterPush(ws, task, taskDir) {
     log(`[e2e-agent] ${pr.created ? '已开 PR' : '复用已有 PR'}（hold-merge，未开 auto-merge）：${pr.url}`, 'info');
     return pr.url;
   } catch (err) {
-    log(`[e2e-agent] push 成功但开 PR 失败（分支已保留，需人工开 PR）：${describePushedPrFailure(err)}`, 'error');
+    log(`[e2e-agent] push 成功但开 PR 失败（分支已保留）：${describePushedPrFailure(err)}`, 'error');
     return '';
   }
 }

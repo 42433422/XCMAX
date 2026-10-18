@@ -65,3 +65,15 @@ export function describePushedPrFailure(err) {
   }
   return text;
 }
+
+/** 系统侧硬门：该开 PR 却没有 URL → 任务必须失败（fail-closed），不得静默 completed。 */
+export function requirePrUrlAfterPush(task, prUrl, env = process.env) {
+  const decision = shouldOpenPrForPushedTask(task, env);
+  if (!decision.open) return { ok: true, reason: decision.reason };
+  if (String(prUrl || '').trim()) return { ok: true, reason: '' };
+  return {
+    ok: false,
+    reason: 'pushed_without_pr: 系统侧必须为 auto_merge≠true 的 GitHub 分支开 hold-merge PR；'
+      + '开 PR 失败则任务失败（分支已保留，需人工开 PR 或修复 gh 认证）。',
+  };
+}
