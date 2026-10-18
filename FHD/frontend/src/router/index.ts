@@ -33,6 +33,7 @@ import { BUSINESS_ROUTES } from './routes/business'
 import { SHELL_ROUTES } from './routes/shell'
 import { refreshDesktopSessionInBackground } from '@/utils/desktopSessionRestore'
 import { activeTutorialRunAllowsRoute } from '@/stores/tutorialV2'
+import { clearRouteChunkError, isChunkLoadError, markRouteChunkError } from '@/utils/routeLoadState'
 const DEFAULT_DUTY_ROSTER_GRAPH_VIEW = 'department'
 function normalizeDutyRosterGraphView(raw: unknown): string {
   const token = String(Array.isArray(raw) ? raw[0] : raw || '')
@@ -446,6 +447,16 @@ router.beforeEach(async (to, _from, next) => {
 router.afterEach((to) => {
   const title = to.meta?.title
   document.title = title ? `${title} - XCAGI` : 'XCAGI'
+})
+
+// 管理端：懒加载页面文件失败时（断网 / 刚发版旧分包已下线）给出可见提示和刷新入口，
+// 不再停在原页面无反馈。只影响展示，不改守卫与权限。
+router.onError((error, to) => {
+  if (isAdminConsoleSpa() && isChunkLoadError(error)) markRouteChunkError(to?.fullPath)
+})
+// 加载失败只走 onError、不会触发 afterEach；之后任何一次导航（含点当前页）都收起提示
+router.afterEach(() => {
+  clearRouteChunkError()
 })
 
 export default router

@@ -1,0 +1,307 @@
+{
+  "result": "PASS",
+  "time": "2026-10-15T22:53:33.684091+08:00",
+  "removedOnlyOwnInactiveRangeFragments": true,
+  "reclaimedBytes": 1096948848,
+  "recoveryMethod": "Read exactly bytes at restoreOffset from the retained complete public-download package; every fragment copy was compared byte-for-byte before removal.",
+  "fragments": [
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/000.part",
+      "bytes": 33554432,
+      "sha256": "f8552747f483931a5ce2a4b3acab9f62325f7dbb07537d8158c07aa2a64c171f",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 0,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/001.part",
+      "bytes": 33554432,
+      "sha256": "551d9e116a32a836ecf37a1586b28337cc775518a9001ac662b10281c4426be6",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 33554432,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/002.part",
+      "bytes": 33554432,
+      "sha256": "206cae6ec459021468077b496fa00ad67378033585bccc03a9a0109359f5a997",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 67108864,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/003.part",
+      "bytes": 33554432,
+      "sha256": "44309b341121d507edda7da0d1ad40aff1b68bf774f7aa33f8fecad4a8d589d9",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 100663296,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/004.part",
+      "bytes": 33554432,
+      "sha256": "7cb450c92737c9ec1ee8b5386572622dd14e19dd4bcef25dfc2e499d058b42c5",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 134217728,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/005.part",
+      "bytes": 33554432,
+      "sha256": "f33fdd5086412f1ae52b10faba0892b6ab71882b6e458a8aacc9e312a3479e12",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 167772160,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/006.part",
+      "bytes": 33554432,
+      "sha256": "09a6ac3cd944b24591c32eeabe953f26b10b188eab1d57d2276eda7166a692e7",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 201326592,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/007.part",
+      "bytes": 33554432,
+      "sha256": "96ace8ff3ce8d86b4d454ebfa92282f3dc4da49aff90497c6196cc052e839a61",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 234881024,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/008.part",
+      "bytes": 33554432,
+      "sha256": "4b9ffaf3cba389b3f85805096bf9958f416bde0f3c7a0ffaa6e26cd878946ba2",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 268435456,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/009.part",
+      "bytes": 33554432,
+      "sha256": "a0777620d12e7bed67b436754d11b6932f9409725de10c08f0b392a68d983d7d",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 301989888,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/010.part",
+      "bytes": 33554432,
+      "sha256": "c53fbe58e21ebac2c848f863a699fbb18cb351513a1b5725f35a8934df27cdda",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 335544320,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/011.part",
+      "bytes": 33554432,
+      "sha256": "2c3e0dbde73931834f38b8bdbd3dd8e3801aca6f3aff0150bfdd79ae34362133",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 369098752,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/012.part",
+      "bytes": 33554432,
+      "sha256": "aa5e882be80e3c399a0b2308e55cba9cfc67121804d12dc08e7745e288c1152c",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 402653184,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/013.part",
+      "bytes": 33554432,
+      "sha256": "29304902cf32fae0c162caced551157c9c3c4a4641c3ec0b42cc0afa792ce95c",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 436207616,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/014.part",
+      "bytes": 33554432,
+      "sha256": "18e1d148135ed3ebc191cf161ff8fd776f2156897689151c8a6641070b103915",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 469762048,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/015.part",
+      "bytes": 33554432,
+      "sha256": "cc8729f6762e057000d15c3e8e3f3e238bc348f644e573f0c9a1fcd6d79e6498",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 503316480,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/016.part",
+      "bytes": 31931908,
+      "sha256": "c24957f6a0e3e2ebe210015fab7aeef1a255ab74a7088243521855c053dff91a",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "archiveFullSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "restoreOffset": 536870912,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/000.part",
+      "bytes": 33554432,
+      "sha256": "9e731d6c193786bb72bac515de270c79eed2c037c6d6dbdbe7d46a62606788b7",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 0,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/001.part",
+      "bytes": 33554432,
+      "sha256": "d507a64a47d2898d52add0cd19868babf6f92f590fb1f71c445ab88c1f61ec81",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 33554432,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/002.part",
+      "bytes": 33554432,
+      "sha256": "7abe68f68ce17567ca89ed1f7d15980d2780b2d40bc9a903fd07649c53ac1f8e",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 67108864,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/003.part",
+      "bytes": 33554432,
+      "sha256": "113cf2eb27474a3e992275edfb8b143cd2d795506845700f21e3a9ce2b8cb500",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 100663296,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/004.part",
+      "bytes": 33554432,
+      "sha256": "f77a727733e9ab63f218522f2763b5274370b48c97766061e4e44b649f21d0d3",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 134217728,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/005.part",
+      "bytes": 33554432,
+      "sha256": "fd354bfd2298ac9c2b399d111ec51d689b8502e5834d4f64de230496664c8a95",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 167772160,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/006.part",
+      "bytes": 33554432,
+      "sha256": "da1b0f956de4370ffb7586dd17ca8c211171876704b24dfb5b5843b2f2f65b79",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 201326592,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/007.part",
+      "bytes": 33554432,
+      "sha256": "7e121b9c1625079d6b6bd97b19a9fe9a7a643fbb7ad4445c77acc7d68fa42623",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 234881024,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/008.part",
+      "bytes": 33554432,
+      "sha256": "a64deedc828121400036ee00c875ca915f7ae0230de71665f128484f6acea295",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 268435456,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/009.part",
+      "bytes": 33554432,
+      "sha256": "0f6baf5833d8a0991518773213af47d3b6ff5c548add5246d6bcc3d9dd356406",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 301989888,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/010.part",
+      "bytes": 33554432,
+      "sha256": "44fb36887072fd96bc33bca2dacc6b4206bae3ff0e940f950259af9abc470d63",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 335544320,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/011.part",
+      "bytes": 33554432,
+      "sha256": "716a2ffcce14f9988e2017c95746215e3d6ebe178a9e52bc3843481cb67e2de5",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 369098752,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/012.part",
+      "bytes": 33554432,
+      "sha256": "bc5981c684623c910b364a9725f75c30e7a61860fad0eeef7a81fe81e5288234",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 402653184,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/013.part",
+      "bytes": 33554432,
+      "sha256": "986ac1ec7cdc840b8dcc93e7c48936f8b90da78033a726e38a0940bf7b5635f4",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 436207616,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/014.part",
+      "bytes": 33554432,
+      "sha256": "400a4ba0531b6e8a54ed6c63a416b35590ab47d0357ffa0452a7e569849fb8fe",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 469762048,
+      "copyVerifiedBeforeRemoval": true
+    },
+    {
+      "formerTemporaryFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/015.part",
+      "bytes": 24829548,
+      "sha256": "fd5e71e0877cb6a4084a7285f4b267ede53be8ff2527d5557e94b0b43be990c3",
+      "recoverableArchive": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "archiveFullSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "restoreOffset": 503316480,
+      "copyVerifiedBeforeRemoval": true
+    }
+  ],
+  "completeDownloadedPackagesRetained": true
+}

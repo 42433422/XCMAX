@@ -1,0 +1,187 @@
+2026-10-12 08:20:03.505 ShipIt[87949:85230024] Detected this as an install request
+2026-10-12 08:32:08.992 ShipIt[87949:85230036] Beginning installation
+2026-10-12 08:32:11.811 ShipIt[87949:85247849] Moving bundle from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.qn9FOjUL/XCAGI.app
+2026-10-12 08:32:11.812 ShipIt[87949:85247849] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-12 08:32:11.815 ShipIt[87949:85247849] Moved bundle contents from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.qn9FOjUL/XCAGI.app
+2026-10-12 08:32:11.815 ShipIt[87949:85247849] Moving bundle from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.dm5R92ou/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-12 08:32:11.815 ShipIt[87949:85247849] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-12 08:32:11.815 ShipIt[87949:85247849] Moved bundle contents from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.dm5R92ou/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-12 08:32:12.428 ShipIt[87949:85247849] Couldn't remove owned bundle at location file:///Users/a4243342/Library/Caches/com.xcagi.desktop.enterprise.ShipIt/update.FxXIUGo/XCAGI.app/, error NSError { domain: NSPOSIXErrorDomain, code: 66, description: "Directory not empty", failureReason: "Couldn't remove temp dir "/Users/a4243342/Library/Caches/com.xcagi.desktop.enterprise.ShipIt/update.FxXIUGo"", userInfo: {
+    NSURL = "file:///Users/a4243342/Library/Caches/com.xcagi.desktop.enterprise.ShipIt/update.FxXIUGo/";
+} }
+2026-10-12 08:32:12.461 ShipIt[87949:85247849] Couldn't remove owned bundle at location file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.dm5R92ou/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: "“XCAGI.app” couldn’t be removed.", failureReason: "The file doesn’t exist.", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: "The operation couldn’t be completed. No such file or directory" }, userInfo: {
+    NSFilePath = "/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.dm5R92ou/XCAGI.app";
+    NSURL = "file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.dm5R92ou/XCAGI.app";
+    NSUserStringVariant =     (
+        Remove
+    );
+} }
+2026-10-12 08:32:13.051 ShipIt[87949:85247849] Installation completed successfully
+2026-10-12 08:32:13.051 ShipIt[87949:85247849] ShipIt quitting
+2026-10-12 19:23:24.706 ShipIt[80076:86536217] Detected this as an install request
+2026-10-12 19:23:24.800 ShipIt[80076:86536333] Beginning installation
+2026-10-12 19:23:28.105 ShipIt[80076:86536332] Moving bundle from file:///Applications/XCAGI.app/ to file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.7Eb2Hp0l/XCAGI.app
+2026-10-12 19:23:28.113 ShipIt[80076:86536332] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-12 19:23:28.114 ShipIt[80076:86536332] Moved bundle contents from file:///Applications/XCAGI.app/ to file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.7Eb2Hp0l/XCAGI.app
+2026-10-12 19:23:28.114 ShipIt[80076:86536332] Moving bundle from file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.Tx3oCUEq/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-12 19:23:28.114 ShipIt[80076:86536332] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-12 19:23:28.114 ShipIt[80076:86536332] Moved bundle contents from file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.Tx3oCUEq/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-12 19:23:28.414 ShipIt[80076:86536332] Couldn't remove owned bundle at location file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.Tx3oCUEq/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: "“XCAGI.app” couldn’t be removed.", failureReason: "The file doesn’t exist.", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: "The operation couldn’t be completed. No such file or directory" }, userInfo: {
+    NSFilePath = "/var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.Tx3oCUEq/XCAGI.app";
+    NSURL = "file:///var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/com.xcagi.desktop.enterprise.ShipIt.Tx3oCUEq/XCAGI.app";
+    NSUserStringVariant =     (
+        Remove
+    );
+} }
+2026-10-12 19:23:29.416 ShipIt[80076:86536384] On main thread and launching: file:///Applications/XCAGI.app/
+2026-10-12 19:23:29.416 ShipIt[80076:86536384] Bundle URL is valid
+2026-10-12 19:23:29.416 ShipIt[80076:86536384] Attempting to launch app on 11.0 or higher
+2026-10-12 19:23:29.417 ShipIt[80076:86536384] Launching new ShipIt at /Applications/XCAGI.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt with instructions to launch file:///Applications/XCAGI.app/
+2026-10-12 19:23:29.417 ShipIt[80076:86536332] Installation completed successfully
+2026-10-12 19:23:29.419 ShipIt[80076:86536384] New ShipIt pid: 80138
+2026-10-12 19:23:34.717 ShipIt[80138:86536731] Detected this as a launch request
+2026-10-12 19:23:34.852 ShipIt[80138:86536731] Successfully launched application at file:///Applications/XCAGI.app/
+2026-10-12 19:23:34.852 ShipIt[80138:86536731] ShipIt quitting
+2026-10-12 19:23:34.853 ShipIt[80076:86536384] ShipIt status 0
+2026-10-12 19:23:34.853 ShipIt[80076:86536384] New ShipIt exited
+2026-10-12 19:23:34.853 ShipIt[80076:86536384] ShipIt quitting
+2026-10-14 19:24:01.350 ShipIt[28400:92342983] Detected this as an install request
+2026-10-14 19:24:01.371 ShipIt[28400:92342983] Beginning installation
+2026-10-14 19:24:03.645 ShipIt[28400:92343433] Moving bundle from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.w2lmcKQB/XCAGI.app
+2026-10-14 19:24:03.645 ShipIt[28400:92343433] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-14 19:24:03.646 ShipIt[28400:92343433] Moved bundle contents from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.w2lmcKQB/XCAGI.app
+2026-10-14 19:24:03.646 ShipIt[28400:92343433] Moving bundle from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.sLyyl7Mo/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-14 19:24:03.646 ShipIt[28400:92343433] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-14 19:24:03.646 ShipIt[28400:92343433] Moved bundle contents from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.sLyyl7Mo/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-14 19:24:03.902 ShipIt[28400:92343433] Couldn't remove owned bundle at location file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.sLyyl7Mo/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: "“XCAGI.app” couldn’t be removed.", failureReason: "The file doesn’t exist.", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: "The operation couldn’t be completed. No such file or directory" }, userInfo: {
+    NSFilePath = "/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.sLyyl7Mo/XCAGI.app";
+    NSURL = "file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.sLyyl7Mo/XCAGI.app";
+    NSUserStringVariant =     (
+        Remove
+    );
+} }
+2026-10-14 19:24:09.181 ShipIt[28400:92343509] On main thread and launching: file:///Applications/XCAGI.app/
+2026-10-14 19:24:09.181 ShipIt[28400:92343509] Bundle URL is valid
+2026-10-14 19:24:09.181 ShipIt[28400:92343509] Attempting to launch app on 11.0 or higher
+2026-10-14 19:24:09.181 ShipIt[28400:92343509] Launching new ShipIt at /Applications/XCAGI.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt with instructions to launch file:///Applications/XCAGI.app/
+2026-10-14 19:24:09.182 ShipIt[28400:92343433] Installation completed successfully
+2026-10-14 19:24:09.188 ShipIt[28400:92343509] New ShipIt pid: 28460
+2026-10-14 19:24:11.253 ShipIt[28460:92343686] Detected this as a launch request
+2026-10-14 19:24:11.366 ShipIt[28460:92343686] Successfully launched application at file:///Applications/XCAGI.app/
+2026-10-14 19:24:11.366 ShipIt[28460:92343686] ShipIt quitting
+2026-10-14 19:24:11.367 ShipIt[28400:92343509] ShipIt status 0
+2026-10-14 19:24:11.367 ShipIt[28400:92343509] New ShipIt exited
+2026-10-14 19:24:11.368 ShipIt[28400:92343509] ShipIt quitting
+2026-10-14 19:33:58.493 ShipIt[38194:92399220] Detected this as an install request
+2026-10-14 19:33:58.509 ShipIt[38194:92399220] Beginning installation
+2026-10-14 19:34:01.943 ShipIt[38194:92399615] Moving bundle from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.s2c5EDQ9/XCAGI.app
+2026-10-14 19:34:01.944 ShipIt[38194:92399615] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-14 19:34:01.944 ShipIt[38194:92399615] Moved bundle contents from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.s2c5EDQ9/XCAGI.app
+2026-10-14 19:34:01.944 ShipIt[38194:92399615] Moving bundle from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.0YOPbZrV/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-14 19:34:01.944 ShipIt[38194:92399615] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-14 19:34:01.944 ShipIt[38194:92399615] Moved bundle contents from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.0YOPbZrV/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-14 19:34:02.216 ShipIt[38194:92399615] Couldn't remove owned bundle at location file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.0YOPbZrV/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: "“XCAGI.app” couldn’t be removed.", failureReason: "The file doesn’t exist.", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: "The operation couldn’t be completed. No such file or directory" }, userInfo: {
+    NSFilePath = "/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.0YOPbZrV/XCAGI.app";
+    NSURL = "file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.0YOPbZrV/XCAGI.app";
+    NSUserStringVariant =     (
+        Remove
+    );
+} }
+2026-10-14 19:34:04.282 ShipIt[38194:92399628] On main thread and launching: file:///Applications/XCAGI.app/
+2026-10-14 19:34:04.284 ShipIt[38194:92399615] Installation completed successfully
+2026-10-14 19:34:04.284 ShipIt[38194:92399628] Bundle URL is valid
+2026-10-14 19:34:04.284 ShipIt[38194:92399628] Attempting to launch app on 11.0 or higher
+2026-10-14 19:34:04.284 ShipIt[38194:92399628] Launching new ShipIt at /Applications/XCAGI.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt with instructions to launch file:///Applications/XCAGI.app/
+2026-10-14 19:34:04.292 ShipIt[38194:92399628] New ShipIt pid: 38268
+2026-10-14 19:34:07.266 ShipIt[38268:92400057] Detected this as a launch request
+2026-10-14 19:34:07.358 ShipIt[38268:92400057] Successfully launched application at file:///Applications/XCAGI.app/
+2026-10-14 19:34:07.358 ShipIt[38268:92400057] ShipIt quitting
+2026-10-14 19:34:07.359 ShipIt[38194:92399628] ShipIt status 0
+2026-10-14 19:34:07.359 ShipIt[38194:92399628] New ShipIt exited
+2026-10-14 19:34:07.360 ShipIt[38194:92399628] ShipIt quitting
+2026-10-14 22:21:10.136 ShipIt[88310:92734732] Detected this as an install request
+2026-10-14 22:21:10.160 ShipIt[88310:92734732] Beginning installation
+2026-10-14 22:21:16.886 ShipIt[88310:92734936] Moving bundle from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.2VRmd2Sw/XCAGI.app
+2026-10-14 22:21:16.886 ShipIt[88310:92734936] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-14 22:21:16.886 ShipIt[88310:92734936] Moved bundle contents from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.2VRmd2Sw/XCAGI.app
+2026-10-14 22:21:16.886 ShipIt[88310:92734936] Moving bundle from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.ErY2N3ss/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-14 22:21:16.886 ShipIt[88310:92734936] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-14 22:21:16.887 ShipIt[88310:92734936] Moved bundle contents from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.ErY2N3ss/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-14 22:21:17.135 ShipIt[88310:92734936] Couldn't remove owned bundle at location file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.ErY2N3ss/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: "“XCAGI.app” couldn’t be removed.", failureReason: "The file doesn’t exist.", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: "The operation couldn’t be completed. No such file or directory" }, userInfo: {
+    NSFilePath = "/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.ErY2N3ss/XCAGI.app";
+    NSURL = "file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.ErY2N3ss/XCAGI.app";
+    NSUserStringVariant =     (
+        Remove
+    );
+} }
+2026-10-14 22:21:18.631 ShipIt[88310:92734979] On main thread and launching: file:///Applications/XCAGI.app/
+2026-10-14 22:21:18.632 ShipIt[88310:92734979] Bundle URL is valid
+2026-10-14 22:21:18.632 ShipIt[88310:92734979] Attempting to launch app on 11.0 or higher
+2026-10-14 22:21:18.632 ShipIt[88310:92734979] Launching new ShipIt at /Applications/XCAGI.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt with instructions to launch file:///Applications/XCAGI.app/
+2026-10-14 22:21:18.633 ShipIt[88310:92734936] Installation completed successfully
+2026-10-14 22:21:18.644 ShipIt[88310:92734979] New ShipIt pid: 88353
+2026-10-14 22:21:21.678 ShipIt[88353:92735249] Detected this as a launch request
+2026-10-14 22:21:21.749 ShipIt[88353:92735249] Successfully launched application at file:///Applications/XCAGI.app/
+2026-10-14 22:21:21.749 ShipIt[88353:92735249] ShipIt quitting
+2026-10-14 22:21:21.750 ShipIt[88310:92734979] ShipIt status 0
+2026-10-14 22:21:21.750 ShipIt[88310:92734979] New ShipIt exited
+2026-10-14 22:21:21.751 ShipIt[88310:92734979] ShipIt quitting
+2026-10-14 22:26:35.077 ShipIt[89676:92746137] Detected this as an install request
+2026-10-14 22:26:35.096 ShipIt[89676:92746137] Beginning installation
+2026-10-14 22:26:38.405 ShipIt[89676:92746369] Moving bundle from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.0jNYSUUF/XCAGI.app
+2026-10-14 22:26:38.406 ShipIt[89676:92746369] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-14 22:26:38.406 ShipIt[89676:92746369] Moved bundle contents from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.0jNYSUUF/XCAGI.app
+2026-10-14 22:26:38.406 ShipIt[89676:92746369] Moving bundle from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.aMB0oEER/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-14 22:26:38.406 ShipIt[89676:92746369] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-14 22:26:38.406 ShipIt[89676:92746369] Moved bundle contents from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.aMB0oEER/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-14 22:26:38.656 ShipIt[89676:92746369] Couldn't remove owned bundle at location file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.aMB0oEER/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: "“XCAGI.app” couldn’t be removed.", failureReason: "The file doesn’t exist.", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: "The operation couldn’t be completed. No such file or directory" }, userInfo: {
+    NSFilePath = "/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.aMB0oEER/XCAGI.app";
+    NSURL = "file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.aMB0oEER/XCAGI.app";
+    NSUserStringVariant =     (
+        Remove
+    );
+} }
+2026-10-14 22:26:39.880 ShipIt[89676:92746392] On main thread and launching: file:///Applications/XCAGI.app/
+2026-10-14 22:26:39.880 ShipIt[89676:92746392] Bundle URL is valid
+2026-10-14 22:26:39.880 ShipIt[89676:92746392] Attempting to launch app on 11.0 or higher
+2026-10-14 22:26:39.880 ShipIt[89676:92746392] Launching new ShipIt at /Applications/XCAGI.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt with instructions to launch file:///Applications/XCAGI.app/
+2026-10-14 22:26:39.881 ShipIt[89676:92746369] Installation completed successfully
+2026-10-14 22:26:39.889 ShipIt[89676:92746392] New ShipIt pid: 89695
+2026-10-14 22:26:42.721 ShipIt[89695:92746599] Detected this as a launch request
+2026-10-14 22:26:42.802 ShipIt[89695:92746599] Successfully launched application at file:///Applications/XCAGI.app/
+2026-10-14 22:26:42.802 ShipIt[89695:92746599] ShipIt quitting
+2026-10-14 22:26:42.803 ShipIt[89676:92746392] ShipIt status 0
+2026-10-14 22:26:42.803 ShipIt[89676:92746392] New ShipIt exited
+2026-10-14 22:26:42.804 ShipIt[89676:92746392] ShipIt quitting
+2026-10-15 20:47:06.766 ShipIt[47022:95194925] Detected this as an install request
+2026-10-15 20:47:06.799 ShipIt[47022:95194925] Beginning installation
+2026-10-15 20:47:12.686 ShipIt[47022:95195076] Moving bundle from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.2VC68DuF/XCAGI.app
+2026-10-15 20:47:12.687 ShipIt[47022:95195076] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-15 20:47:12.687 ShipIt[47022:95195076] Moved bundle contents from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.2VC68DuF/XCAGI.app
+2026-10-15 20:47:12.687 ShipIt[47022:95195076] Moving bundle from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.CxhGTMfA/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-15 20:47:12.688 ShipIt[47022:95195076] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt
+2026-10-15 20:47:12.688 ShipIt[47022:95195076] Moved bundle contents from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.CxhGTMfA/XCAGI.app to file:///Applications/XCAGI.app/
+2026-10-15 20:47:13.093 ShipIt[47022:95195076] Couldn't remove owned bundle at location file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.CxhGTMfA/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: "“XCAGI.app” couldn’t be removed.", failureReason: "The file doesn’t exist.", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: "The operation couldn’t be completed. No such file or directory" }, userInfo: {
+    NSFilePath = "/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.CxhGTMfA/XCAGI.app";
+    NSURL = "file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.CxhGTMfA/XCAGI.app";
+    NSUserStringVariant =     (
+        Remove
+    );
+} }
+2026-10-15 20:47:15.314 ShipIt[47022:95195200] On main thread and launching: file:///Applications/XCAGI.app/
+2026-10-15 20:47:15.316 ShipIt[47022:95195200] Bundle URL is valid
+2026-10-15 20:47:15.316 ShipIt[47022:95195200] Attempting to launch app on 11.0 or higher
+2026-10-15 20:47:15.316 ShipIt[47022:95195076] Installation completed successfully
+2026-10-15 20:47:15.316 ShipIt[47022:95195200] Launching new ShipIt at /Applications/XCAGI.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt with instructions to launch file:///Applications/XCAGI.app/
+2026-10-15 20:47:15.320 ShipIt[47022:95195200] New ShipIt pid: 47080
+2026-10-15 20:47:20.561 ShipIt[47080:95195672] Detected this as a launch request
+2026-10-15 20:47:20.657 ShipIt[47080:95195672] Successfully launched application at file:///Applications/XCAGI.app/
+2026-10-15 20:47:20.657 ShipIt[47080:95195672] ShipIt quitting
+2026-10-15 20:47:20.658 ShipIt[47022:95195200] ShipIt status 0
+2026-10-15 20:47:20.658 ShipIt[47022:95195200] New ShipIt exited
+2026-10-15 20:47:20.658 ShipIt[47022:95195200] ShipIt quitting
+2026-10-15 20:58:25.381 ShipIt[50229:95222859] Detected this as an install request
+2026-10-15 20:58:25.398 ShipIt[50229:95222859] Beginning installation
+2026-10-15 20:58:32.646 ShipIt[50229:95223284] Aborting update attempt because there are 1 running instances of the target app
+2026-10-15 20:58:32.647 ShipIt[50229:95223360] Installation cancelled: Error Domain=SQRLInstallerErrorDomain Code=-9 "App Still Running Error" UserInfo={NSLocalizedDescription=App Still Running Error, NSLocalizedRecoverySuggestion=All instances of the target application should be quit during the update process}
+2026-10-15 20:58:32.647 ShipIt[50229:95223360] ShipIt quitting
