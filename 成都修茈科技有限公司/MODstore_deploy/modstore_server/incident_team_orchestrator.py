@@ -115,7 +115,9 @@ def _execute_employee_task_with_timeout(
 
 
 def _admin_user_id(session) -> int:
-    row = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()  # noqa: E712
+    row = (
+        session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+    )  # noqa: E712
     if row:
         return int(row.id)
     row = session.query(User).order_by(User.id.asc()).first()
