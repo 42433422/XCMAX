@@ -282,6 +282,9 @@ def _task_for_role(
     if role == "fix":
         return base + (
             "你的任务是执行或委派最小安全修复。可参考前面排查结果，但输出时要翻译成人话。"
+            "改完先 commit，push 或开 PR 前必须在仓库 FHD/ 下运行 "
+            "python scripts/dev/push_preflight.py --fix，按提示补 CHANGELOG、提交重生成的能力中心页面、"
+            "显式写原因更新净删除基线，直到全部通过再 push。"
             f"{ownership_text}"
             f"\n排查结果：{json.dumps(scout_result or {}, ensure_ascii=False)[:4000]}"
         )
