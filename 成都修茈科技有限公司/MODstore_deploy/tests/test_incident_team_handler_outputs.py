@@ -226,7 +226,8 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
     assert result["ok"] is completed
     ticket, resolution, claim, _, repairs = readback()
     assert repairs == int(completed)
-    assert resolution["repair_verified"] is completed
+    verified = (resolution["repair_verified"], resolution["repair_verified_by"])
+    assert verified == ((True, "incident_team") if completed else (False, None))
     assert resolution["state"] == ("awaiting_delivery" if completed else "processing")
     assert ticket.status == "processing" and ticket.closed_at is None
     if not completed:
