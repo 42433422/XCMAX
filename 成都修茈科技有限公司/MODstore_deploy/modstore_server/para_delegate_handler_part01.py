@@ -13,12 +13,8 @@ def _facade():
 
 
 def _env_bool(name: str, default: str = "0") -> bool:
-    return _facade().os.environ.get(name, default).strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
+    value = _facade().os.environ.get(name, default).strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def para_delegate_enabled() -> bool:
