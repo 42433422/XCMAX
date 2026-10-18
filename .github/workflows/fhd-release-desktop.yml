@@ -108,7 +108,7 @@ jobs:
           "required=$required" >> $env:GITHUB_OUTPUT
           "XCAGI_REQUIRE_WINDOWS_SIGNING=$required" >> $env:GITHUB_ENV
           if ($required -eq '0') { Write-Warning 'Delivering explicitly unsigned installer; stable feeds are untouched.' }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -394,7 +394,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Download normalized security evidence
@@ -481,7 +481,7 @@ jobs:
             Write-Error "::error::Shared vue-dist missing from artifact (frontend_run_id=${{ inputs.frontend_run_id }}). Refusing to build a frontend-less desktop."
             exit 1
           }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: "pip"
@@ -612,7 +612,7 @@ jobs:
             echo "::error::Shared vue-dist missing from artifact (frontend_run_id=${{ inputs.frontend_run_id }}). Refusing to build a frontend-less desktop."
             exit 1
           }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: "pip"
@@ -708,7 +708,7 @@ jobs:
           pattern: xcagi-desktop-*
           merge-multiple: true
           path: ${{ runner.temp }}/artifacts
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Reconstruct release directory from artifacts

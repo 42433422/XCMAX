@@ -43,7 +43,7 @@ jobs:
         if: steps.paths.outputs.skip == 'true'
         run: echo "No release-relevant path changes; Release gate satisfied without running contract tests."
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: steps.paths.outputs.skip != 'true'
         with:
           python-version: "3.11"
