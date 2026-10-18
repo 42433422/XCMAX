@@ -77,6 +77,11 @@ export function describeTraeFailure(error) {
   };
 }
 
+export function isPolicyFailure(value) {
+  const raw = String(value || '').toLowerCase();
+  return POLICY_FAILURES.some((pattern) => raw.includes(pattern));
+}
+
 export function isTraeProviderFailoverEligible(value) {
   const raw = typeof value === 'string'
     ? value.toLowerCase()

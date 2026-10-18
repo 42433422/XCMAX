@@ -1,0 +1,13 @@
+{
+  "observedAt": "2026-10-15T20:48:06+08:00",
+  "event": "isolated-profile app internal updater installed c5 into the app bundle path registered as /Applications/XCAGI.app; update restart process exited before UI/backend health could be confirmed",
+  "targetPath": "/Applications/XCAGI.app",
+  "candidateSourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+  "candidateVersion": "1.0.0.6",
+  "originalRestored": true,
+  "originalVersion": "1.0.0.5",
+  "originalBuildSha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+  "restoredAppContentDifferences": 0,
+  "restoredCodesign": "valid on disk; accepted / Notarized Developer ID",
+  "dataBoundary": "test profile was /private/tmp/xcagi-mac-c5-20261015/update-data/userData; no update backend process using port 18502 after restart. A separate pre-existing candidate process using /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer was observed and left untouched."
+}

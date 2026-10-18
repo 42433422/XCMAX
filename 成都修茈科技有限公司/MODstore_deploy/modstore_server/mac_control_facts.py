@@ -10,10 +10,12 @@ from modstore_server.standard_delivery_api import build_standard_delivery_rows
 
 
 def redact(text):
+    from modstore_server.cred_vault import redact as redact_known
+
     return re.sub(
         r"(?i)(bearer\s+|(?:api[_-]?key|password|token|secret)\s*[:=]\s*)[^\s,;]+",
         r"\1[redacted]",
-        str(text),
+        redact_known(text),
     )[:3000]
 
 

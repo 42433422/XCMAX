@@ -128,7 +128,8 @@ describe('ApprovalHubView', () => {
     expect(wrapper.findAll('.timeline li').map((row) => row.text().replace(/^.*?(?=工单|闸门|客户)/, ''))).toEqual([
       '工单状态 candidate → routed', '闸门 evidence：COLLECTED', '客户重新打开工单：导出还是报错',
     ])
-    expect(wrapper.text()).toContain('CI41 · 处理中（processing）')
+    expect(wrapper.text()).toContain('CI41 · 处理中')
+    expect(wrapper.text()).not.toContain('（processing）')
     await wrapper.findAll('.ticket-trail .btn-secondary')[1].trigger('click')
     await vi.waitFor(() => expect(createObjectURL).toHaveBeenCalledOnce())
     expect(click).toHaveBeenCalledOnce()

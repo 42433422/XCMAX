@@ -1,0 +1,297 @@
+{
+  "scope": "Final nodes12-15 lifecycle/manual distribution evidence. No databases, auth profiles or package binaries embedded. Complete verified binaries remain in the durable backing sparsebundle and published server URLs.",
+  "createdAt": "2026-10-15T22:57:35.772258+08:00",
+  "files": [
+    {
+      "relativePath": "evidence/node14-download-power-assertions.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-download-power-assertions.json",
+      "bytes": 390,
+      "sha256": "0900375bd7e239b677681ce6352c3c0a6f508b148b6d022ab2597ee7d1e127c5"
+    },
+    {
+      "relativePath": "evidence/node14-final-local-state-and-space.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-final-local-state-and-space.json",
+      "bytes": 961,
+      "sha256": "520a144306f123c0350429db8814c62816f4863732dc82898d6cce8e57187e04"
+    },
+    {
+      "relativePath": "evidence/node14-initial-metadata-snapshot-preservation.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-initial-metadata-snapshot-preservation.json",
+      "bytes": 1141,
+      "sha256": "4a493f043ca222809c30128a38682d980a29bd3bbad058dcb88c2b0edbe47561"
+    },
+    {
+      "relativePath": "evidence/node14-node15-final-reference-consistency.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-node15-final-reference-consistency.json",
+      "bytes": 459,
+      "sha256": "089ad572ed6c0beef163fd82019396988f3b41986d40d9e878b294022bae47f4"
+    },
+    {
+      "relativePath": "evidence/node14-node15-server-delivery-final.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-node15-server-delivery-final.json",
+      "bytes": 5876,
+      "sha256": "459e85bb1093c052a23fbd4a708695cd9fb98c25e2ae1b5ce099feee329236be"
+    },
+    {
+      "relativePath": "evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.json",
+      "bytes": 2524,
+      "sha256": "01ef4bd9c5768d500166a912356924cb44def40ab8662b0d450dd5d70eab4793"
+    },
+    {
+      "relativePath": "evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.json",
+      "bytes": 2415,
+      "sha256": "3b15b3808e300e7488a962b1c5aacb9e9a37d3f26c78e901dc8d9e6a5c040548"
+    },
+    {
+      "relativePath": "evidence/node14-public-download-connection-adjustment.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-download-connection-adjustment.json",
+      "bytes": 344,
+      "sha256": "8f2b932ac3f22a6f5c0bc357c2912a064112960491cc5c8457092914c33c5509"
+    },
+    {
+      "relativePath": "evidence/node14-public-metadata-verification-final.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-metadata-verification-final.json",
+      "bytes": 1170,
+      "sha256": "35f704e061caa8495faff1d6e654cf9eb17766b6494b0cb987b758b1143d870d"
+    },
+    {
+      "relativePath": "evidence/node14-public-metadata-verification.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-metadata-verification.json",
+      "bytes": 851,
+      "sha256": "a37bbf2d1d38cad08f3de27b1ca587eaf9db13a18272d7097c4c60dbaf2f3848"
+    },
+    {
+      "relativePath": "evidence/node14-public-package-response-headers.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-package-response-headers.json",
+      "bytes": 1481,
+      "sha256": "0c6eb44a3d226c5451320714a76d58fafd0c6ba75e12927c5eafe5f657aa165b"
+    },
+    {
+      "relativePath": "evidence/node14-range-temporary-cleanup-and-recovery-index.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-range-temporary-cleanup-and-recovery-index.json",
+      "bytes": 19972,
+      "sha256": "58130e35e4c3ad39ba917af6254007b1351e8909f0c016c2b614967c83207713"
+    },
+    {
+      "relativePath": "evidence/node14-server-access-originals/xiu-ci.com.access.log",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-server-access-originals/xiu-ci.com.access.log",
+      "bytes": 17990,
+      "sha256": "702b3b14132af5a736baf6d074dec219eaadafe8b73fa09a65a6b27da9fce40a"
+    },
+    {
+      "relativePath": "evidence/node14-server-distribution-final.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-server-distribution-final.json",
+      "bytes": 5180,
+      "sha256": "64c941c13e6b0e24855c8de17b3226f365c28034aff881e6423ecd58abbdb691"
+    },
+    {
+      "relativePath": "evidence/node14-server-final-state.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-server-final-state.json",
+      "bytes": 1698,
+      "sha256": "af300592abf8c4dba2b74b2e776e9eef020ea52b2623c3407026bab038c1c430"
+    },
+    {
+      "relativePath": "evidence/node14-server-package-verification.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-server-package-verification.json",
+      "bytes": 1481,
+      "sha256": "9177cbeb5d2e79a72d6c0cba9973beb40c79cf11c96038ee605962b69625bd65"
+    },
+    {
+      "relativePath": "evidence/node14-server-publication-progress.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-server-publication-progress.json",
+      "bytes": 3166,
+      "sha256": "f561cde5ac2050d64f4648de43663cbfcc573e23f357549b67752490ab7c8c4d"
+    },
+    {
+      "relativePath": "evidence/node14-unused-server-transfer-cleanup.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-unused-server-transfer-cleanup.json",
+      "bytes": 460,
+      "sha256": "6f9d628f15e2bfeba7676c9cd0b39a86e9c0793642d162f666ab21c9f3b79536"
+    },
+    {
+      "relativePath": "evidence/node14-verifier-transition-correction.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-verifier-transition-correction.json",
+      "bytes": 5189,
+      "sha256": "0cab6e60e0c57980c85200356394f7c9566444545b0f34931e0e72d1c723e4cc"
+    },
+    {
+      "relativePath": "evidence/node14-windows-public-download-verification.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-windows-public-download-verification.json",
+      "bytes": 871,
+      "sha256": "d0ac509059959987ce3c6cb9a8063a68ca759f5aef14f4f75e8abc4750c9cc54"
+    },
+    {
+      "relativePath": "evidence/node14-workspace-cleanup-original.log",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-workspace-cleanup-original.log",
+      "bytes": 6687,
+      "sha256": "813633073be933e1e2b6cebd41213074e3fb842f13ab42d71930f36e2cfb46c7"
+    },
+    {
+      "relativePath": "evidence/node14-workspace-cleanup-result.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-workspace-cleanup-result.json",
+      "bytes": 7852,
+      "sha256": "73c55be637054e310d9025c55ea75fe67478989db897166596613c519f8ca78d"
+    },
+    {
+      "relativePath": "evidence/node15-delivery-preparation.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node15-delivery-preparation.json",
+      "bytes": 3339,
+      "sha256": "15941507ddc0a8d68b510159a6feba2a3fbac4d2ac57279acf7dd5b5265ff3db"
+    },
+    {
+      "relativePath": "evidence/node15-user-conditional-acceptance-final.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node15-user-conditional-acceptance-final.json",
+      "bytes": 4232,
+      "sha256": "b01d2bdaedaa8ebc18d12f96083859632b6b5f858bc14a7e176cfed98ba86334"
+    },
+    {
+      "relativePath": "evidence/node15-user-conditional-acceptance-source.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node15-user-conditional-acceptance-source.json",
+      "bytes": 1344,
+      "sha256": "02c6f7fa329a07d73e94012a06a11f43842a9dffba7cdac684f63fbf9e69e1d0"
+    },
+    {
+      "relativePath": "handoff/bundle-verification-final.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/handoff/bundle-verification-final.json",
+      "bytes": 558,
+      "sha256": "5662f59321dd1df1c734d5dd48a60487c8a79d4f04fbdd086eb6f6f4d4957b71"
+    },
+    {
+      "relativePath": "handoff/node12-node13-mac-c5-evidence.zip",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/handoff/node12-node13-mac-c5-evidence.zip",
+      "bytes": 807614,
+      "sha256": "9abb4eb83a2fb8df12466592175bde2a28325abcb8b27687020a4c9742e2a80d"
+    },
+    {
+      "relativePath": "publication/SHA256SUMS.txt",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/SHA256SUMS.txt",
+      "bytes": 315,
+      "sha256": "23ae26605f5a0d9faaca8405bc634bbe10ca912ee4427d2ec13e6f73a57a2b19"
+    },
+    {
+      "relativePath": "publication/history/initial-SHA256SUMS.txt",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/history/initial-SHA256SUMS.txt",
+      "bytes": 315,
+      "sha256": "23ae26605f5a0d9faaca8405bc634bbe10ca912ee4427d2ec13e6f73a57a2b19"
+    },
+    {
+      "relativePath": "publication/history/initial-index.html",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/history/initial-index.html",
+      "bytes": 1211,
+      "sha256": "79038bfe84e2207778e67faae896cb76fa3bf6d78f9599c9c8a1dd9e7b1409ea"
+    },
+    {
+      "relativePath": "publication/history/initial-manual-download-manifest.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/history/initial-manual-download-manifest.json",
+      "bytes": 2108,
+      "sha256": "4a38156308f542c692f3730c2a6bb4985bf16e9b6a479abeed5cb386ef4855ff"
+    },
+    {
+      "relativePath": "publication/index.html",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/index.html",
+      "bytes": 1259,
+      "sha256": "6742f7ee78c8f06992456a5edcfb89a9e5fb6b050d4be3ca137fc866486b340f"
+    },
+    {
+      "relativePath": "publication/manual-download-manifest.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/manual-download-manifest.json",
+      "bytes": 2296,
+      "sha256": "ecb6eeda0be0b2a314a83e8ba87ba0ab2395243ef4237cf6f2ab71f6f8f4ea8e"
+    },
+    {
+      "relativePath": "publication/ssh-direct-upload.sh",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/ssh-direct-upload.sh",
+      "bytes": 198,
+      "sha256": "4d61445ffe7d1d129d96f3dfa084cc57f650959ec5f93a62699b8e904593bc74"
+    },
+    {
+      "relativePath": "publication/verified-public-metadata/SHA256SUMS.txt",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/SHA256SUMS.txt",
+      "bytes": 315,
+      "sha256": "23ae26605f5a0d9faaca8405bc634bbe10ca912ee4427d2ec13e6f73a57a2b19"
+    },
+    {
+      "relativePath": "publication/verified-public-metadata/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.headers",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.headers",
+      "bytes": 309,
+      "sha256": "c39489baa3cfb9332e7cf38f1449f60c5d915fb0089199e249f5279368f95aad"
+    },
+    {
+      "relativePath": "publication/verified-public-metadata/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.headers",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.headers",
+      "bytes": 300,
+      "sha256": "b5a44087d32eb02ae8fa8070c49ed72e684246bd38422118e56440ccf0007351"
+    },
+    {
+      "relativePath": "publication/verified-public-metadata/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe.headers",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe.headers",
+      "bytes": 309,
+      "sha256": "e7b0efd99af8158ace9ea9d5bf2eb36dbe8f135aeca0a7f41a3f3e8a103dab98"
+    },
+    {
+      "relativePath": "publication/verified-public-metadata/index.html",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/index.html",
+      "bytes": 1259,
+      "sha256": "6742f7ee78c8f06992456a5edcfb89a9e5fb6b050d4be3ca137fc866486b340f"
+    },
+    {
+      "relativePath": "publication/verified-public-metadata/manual-download-manifest.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/manual-download-manifest.json",
+      "bytes": 2296,
+      "sha256": "ecb6eeda0be0b2a314a83e8ba87ba0ab2395243ef4237cf6f2ab71f6f8f4ea8e"
+    },
+    {
+      "relativePath": "publication/verify-public-package.py",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/publication/verify-public-package.py",
+      "bytes": 4552,
+      "sha256": "16a9e24bdab073366eb0c128f6fb879a2aed284127ab53e74ecf98e5d78bb039"
+    }
+  ],
+  "externalLargeArtifacts": [
+    {
+      "version": "1.0.0.6",
+      "platform": "macArm64",
+      "file": "XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "bytes": 568802820,
+      "sha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:40:16.295848+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.json",
+      "originalReceiptSha256": "01ef4bd9c5768d500166a912356924cb44def40ab8662b0d450dd5d70eab4793"
+    },
+    {
+      "version": "1.0.0.6",
+      "platform": "macArm64",
+      "file": "XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "bytes": 528146028,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:48:24.033622+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.json",
+      "originalReceiptSha256": "3b15b3808e300e7488a962b1c5aacb9e9a37d3f26c78e901dc8d9e6a5c040548"
+    },
+    {
+      "version": "1.0.0.6",
+      "platform": "windowsX64",
+      "file": "XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+      "buildRun": "local-windows-longpath-20261015-114026",
+      "bytes": 331819335,
+      "sha256": "9d7025e9367bb934868adb79be7a99bbb8dae728727aa7ace00c492c45f40100",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:16:30.824973+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-windows-public-download-verification.json",
+      "originalReceiptSha256": "d0ac509059959987ce3c6cb9a8063a68ca759f5aef14f4f75e8abc4750c9cc54"
+    }
+  ],
+  "backingImage": "/Volumes/KINGSTON/XCMAX-mac-aligned-c5-20261015.sparsebundle"
+}
