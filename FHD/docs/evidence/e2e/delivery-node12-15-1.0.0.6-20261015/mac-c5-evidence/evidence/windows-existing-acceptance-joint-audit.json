@@ -1,0 +1,283 @@
+{
+  "schema": "xcagi.node13.windows-existing-acceptance-joint-audit.v1",
+  "capturedAt": "2026-10-15T13:40:47.938084+00:00",
+  "authorizedBasis": {
+    "decision": "Human user chose common source baseline by identical tracked Git tree and PR merge relationship; preserve differing actual source SHAs and package hashes. Reuse existing Windows acceptance, with no Windows rebuild or retest.",
+    "source": "Current parent task conveys latest direct user choice and voice correction; supersedes prior strict same-full-SHA gate in earlier reconciliation evidence.",
+    "sameShaMismatchIsBlocker": false
+  },
+  "operation": "Read-only evidence reconciliation; only this new JSON created. No Windows test, build, app/process operation, remote message, original report edit or repository change.",
+  "identity": {
+    "productVersion": "1.0.0.6",
+    "windowsAcceptedSourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+    "macMainlineSourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "commonTrackedTree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "windowsPackageSha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+    "windowsPackageBytes": 331819335,
+    "windowsBuildRun": "local-windows-longpath-20261015-114026",
+    "windowsAuthenticode": "NotSigned",
+    "windowsPackagePath": "C:\\XCAGI-QA\\candidate-longpath\\final-7102-9d7025e9\\XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+    "mainlineIntegrationPr": "https://github.com/42433422/XCMAX/pull/2340",
+    "identityBoundary": "All Windows lifecycle PASS references remain attached to the actual 7102/9D7025 package. The different c5 Windows CI artifact is not used as accepted Windows evidence.",
+    "packageHashEvidence": "Executing owner published receipt; not independently recomputed on the Windows EXE in this turn."
+  },
+  "sourceRelationship": {
+    "verification": "Direct read-only local Git object inspection",
+    "mergeParents": [
+      "5af87debbf38c35edf46584e7cac9f8c6c13c643",
+      "7102b713df1136ae83848eed5814a60ede66a355"
+    ],
+    "windowsShaIsDirectSecondParentOfMacMerge": true,
+    "gitMergeBaseIsAncestorExit": 0,
+    "gitDiffExit": 0,
+    "gitDiffStdout": "",
+    "windowsTree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "macTree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "verdict": "PASS_IDENTICAL_TRACKED_CODE_TREE_AND_INCLUDED_COMMIT"
+  },
+  "originalReportRootOnWindows": "C:\\XCAGI-QA\\candidate-longpath\\evidence\\",
+  "originalReportPath": "C:\\XCAGI-QA\\candidate-longpath\\evidence\\acceptance-current.json",
+  "directOriginalFilesReadThisReview": [],
+  "publishedExecutingOwnerReports": [
+    {
+      "id": 6190996826,
+      "url": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6190996826",
+      "api": "https://api.github.com/repos/42433422/XCMAX/issues/comments/6190996826",
+      "author": "42433422",
+      "createdAt": "2026-10-15T11:29:19Z",
+      "updatedAt": "2026-10-15T11:40:41Z",
+      "sourceType": "original published acceptance handoff by executing owner; references raw local files",
+      "body": "> 更新：独立正常托盘退出、进程清零、同包原安装直接重开、旧数据读回及继续写入已于北京时间 2026-10-15 19:39:29 补验 PASS。原先未测限制已解除，详见 https://github.com/42433422/XCMAX/pull/2340#issuecomment-6191186660 。以下保留初次回填时的历史状态。\n\n## Windows 最终安装包验收回填（仅提交已有结果，没有重跑）\n\n完成时间：2026-10-15 19:17:35（Asia/Shanghai）。本地报告标记 `WINDOWS_ACCEPTANCE_PASS`；以下明确列出证据边界，不把标题当作所有子项均已测试。\n\n### 冻结候选与运行身份\n\n- 版本：`1.0.0.6`；实际源码：`7102b713df1136ae83848eed5814a60ede66a355`。\n- 主线合并提交：`c5e066acff7f50edf5f1e506abcca33372cc6033`；包含本 PR 的长路径修复。两者代码树均为 `60aef1efa8c18fb01cea7c7234716c2e5b758671`，包身份仍为 **7102，不改写成 c5**。\n- 构建：合入主线后本机 Windows 构建，run `local-windows-longpath-20261015-114026`。\n- EXE SHA-256：`9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100`；331819335 bytes。\n- Authenticode：`NotSigned`；私有验收候选，不具备稳定自动更新发布资格。\n- 验收结束时实际 UI/后端：`1.0.0.6`，完整源码 SHA 与上面一致，health `healthy`。\n\n### 生命周期结果\n\n| 项目 | 现有证据结论 |\n|---|---|\n| 正常下载、干净安装、真实桌面快捷方式启动 | PASS；程序和默认档案原先不存在，启动至企业登录页。新档案未登录，AI 能力降级但无 runtime blockers；防火墙权限提示未代用户操作。 |\n| 官方 1.0.0.5 经应用内下载、更新并重新加载、安装器自动重启至 1.0.0.6 | PASS；运行身份匹配最终候选，没有用卸载重装替代正常升级。 |\n| 非空记录、配置、正常上传附件保留，重开读回并继续写入 | 本地报告记 PASS；本轮重开是**正常卸载关闭→同包重装→重开**。新旧会话读回、再次写入并收到回复有证据。**独立“托盘退出→不重装直接重开”未单独实测**；若联合验收要求该子项，须保留为未测。 |\n| 隔离更新失败后的完整自动恢复 | PASS；安装最终包后仅占用隔离测试端口，程序自动触发包内恢复助手、恢复旧程序和数据库并重启。没有手动复制快照或写标记来制造本次 PASS。 |\n| 正常卸载、进程退出、数据保留和同包重装可用 | PASS；正常登记的卸载入口提示应用运行并请求关闭，由卸载器处理；无外部事先强杀。确认进程清零、安装目录及登记删除，测试数据保留，重装后健康且可继续读写。 |\n\n### 原 261 字符 Mod 快照失败场景：最终包已实际复验\n\nWPF 安装器自然生成快照，原相对文件 `mods\\xcagi-customer-service-bridge\\frontend\\components\\CustomerChangeRequestsPanel.vue` 的完整快照路径仍为 **261 字符**。目录名 `manual-<GUID>` 是安装器自动命名，不表示手工复制。\n\n快照清单中的预期哈希及保留原件的实际 SHA-256 均为：\n`4B8619CD37D874FF7213F68BB34645D0FE030FE1A983E7B6221083129B67B2B7`。\n另有 677 个程序备份路径超过 260 字符，最长 316 字符。\n\n包内自动恢复日志摘录（原日志同时保留先前失败记录，未抹去历史）：\n```text\n2026-10-15T19:02:33.1737186+08:00 verified rollback helper started\n2026-10-15T19:02:33.2321562+08:00 waiting for failed XCAGI process pid=23928\n2026-10-15T19:02:51.0684856+08:00 full application rollback completed\n```\n应用日志证明最终候选首次启动因隔离端口占用而触发 `windows-full` 恢复。自动回执：\n```json\n{\n  \"operationId\": \"e306819b-b051-4b6c-bfb9-8c69cae1d25f\",\n  \"reason\": \"startBackend 失败：端口被占或 backend 可执行文件缺失\",\n  \"fromVersion\": \"1.0.0.6+7102b713df1136ae83848eed5814a60ede66a355\",\n  \"toVersion\": \"1.0.0.5+df452b7bcc1879587090bc849fe78ed2c29c79f8\",\n  \"completedAt\": \"2026-10-15T11:02:50.1933994Z\",\n  \"programMatchesOld\": true,\n  \"tablesEqual\": true,\n  \"uploadsEqual\": true,\n  \"configEqual\": true,\n  \"integrity_check\": \"ok\"\n}\n```\n上面最后五个校验字段摘自恢复后验证原件，不是回执文件自身字段。旧版已自动启动、health healthy，历史在界面读回。\n\nMod 保留不宣称全部字节不变：只读复核 434 个 Mod 文件，其中 3 个随最终内置版本更新，均匹配最终包内文件；其余 431 个与旧快照一致。\n\n### 原件位置（Windows 测试机本地，不是跨机器下载链接）\n\n根目录：`C:\\XCAGI-QA\\candidate-longpath\\`。\n\n- 总报告：`evidence\\acceptance-current.json`。\n- 最终 EXE：`final-7102-9d7025e9\\XCAGI-Enterprise-Setup-1.0.0.6-x64.exe`，同目录保存 blockmap 和构建收据。\n- 构建原始日志：`local-windows-longpath-20261015-114026.log`。\n- 升级原始日志：`evidence\\7102-raw-updater-events.jsonl`、`evidence\\7102-raw-electron-backend.log`。\n- 自然快照完整清单：`evidence\\7102-wpf-prepared-marker.json`。\n- 自动回滚原始日志：`evidence\\7102-automatic-recovery-helper.log`。\n- 恢复后程序/数据校验及旧版健康身份：`evidence\\7102-automatic-recovery-verification.json`。\n- 最终安装身份：`evidence\\7102-final-installed-identity.json`、`evidence\\7102-final-runtime-health.json`。\n- 重开与继续写入截图/文本：`evidence\\7102-reopened-readback.*`、`evidence\\7102-reopened-continued-write.*`。\n- 正常卸载校验：`evidence\\7102-normal-uninstall-verification.json`；完整逐项原件索引见总报告。\n\n### 保留的限制与历史\n\n首次故障测试安装因旧版非空 WAL 在改写程序前安全拒绝；进程退出后用 SQLite 正常 checkpoint，记录/附件一致。随后的正常应用内升级未再使用这项手工干预，实际通过。该首次拒绝与处理保存在 `evidence\\7102-wal-preflight.json`，不伪装成一次成功安装。\n\n原 e74 候选和中间 cf3 候选的回滚失败记录继续保留；前期依赖漏包和跳过新版安装器属于验收执行/构建失误，已分开记录。最终安装包的实测成功不覆盖历史失败。\n\nMac 本轮未操作。Mac M4 的原 e74 候选 PASS 不能移用到本 Windows SHA；同 SHA 的 Mac 差异/联合证据核对仍待另行处理。没有公开发布安装包、没有修改正式 OTA。普通审批和出货业务不在此次范围。\n\n清理脚本完成：158 项缓存清除、0 错误；原档案备份、原始证据和原有未提交修改保留。验收结束时剩余空间 C 276.82 GiB、R 3.50 GiB。\r\n",
+      "bodySha256": "8c486cc6b159d5d778a7420e4401601e79f885d3da45144cee440c9623870b00"
+    },
+    {
+      "id": 6191186660,
+      "url": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6191186660",
+      "api": "https://api.github.com/repos/42433422/XCMAX/issues/comments/6191186660",
+      "author": "42433422",
+      "createdAt": "2026-10-15T11:40:15Z",
+      "updatedAt": "2026-10-15T11:40:15Z",
+      "sourceType": "original published acceptance handoff by executing owner; references raw local files",
+      "body": "## 补验完成：正常托盘退出 → 原安装直接启动 → 旧数据读回与继续写入 PASS\n\n2026-10-15 **19:39:29（北京时间）**完成。此次专门补齐前一条验收记录注明的独立直接重开子项；未重跑其余已通过场景，没有修改源码或重新打包。\n\n- 用户从系统托盘选择 XCAGI「退出」。19:36:38 复核该安装目录内 XCAGI / xcagi-backend 必要进程为 **0**，安装程序文件仍在。\n- 直接启动原安装目录 `C:\\XCAGI-QA\\rollback-host\\XCAGI\\XCAGI.exe`，沿用同一隔离测试档案和端口，没有换数据。\n- **无卸载、无重装、无外部强杀。**启动终端保持连接，避免验收管道退出干扰 GUI。\n- 重启后 UI `1.0.0.6`，后端健康 `healthy`，完整源码仍为 `7102b713df1136ae83848eed5814a60ede66a355`。\n- 旧会话已在正常界面读回；继续写入前，原受保护记录表、数据库配置和附件哈希与退出前一致，SQLite integrity_check 为 `ok`。\n- 正常上传 CSV 原件仍可读取：84 bytes，SHA-256 `3345a3a27d3cf8f13c08a2a49437fecbc2bc9c1004f88ca5d7ab1e378066d108`，与退出前相同。\n- 从正常聊天输入框继续发送合成验收消息，收到「收到。」回复，会话由6条增至8条；截图及文本原件已保存。\n\n**本项 PASS。Windows 生命周期五项与独立直接重开子项现在均有实测证据；之前的“该子项未单独实测”限制已由本次补验解除。**前次执行受界面入口控制限制而未完成的记录仍保留，不把它归因于软件故障。\n\n### 包身份未变\n\n- 版本：`1.0.0.6`。\n- 实际源码：`7102b713df1136ae83848eed5814a60ede66a355`，包含本 PR；不是把源码身份改写成合并提交。\n- 主线合并提交：`c5e066acff7f50edf5f1e506abcca33372cc6033`；此前已核代码树相同。\n- EXE SHA-256：`9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100`，本次再次核对一致。\n- 构建 run：`local-windows-longpath-20261015-114026`；`NotSigned`，仍是私有验收候选。\n\n### 原件位置\n\n均在 Windows 测试机 `C:\\XCAGI-QA\\candidate-longpath\\evidence\\`：\n\n| 原件 | 文件 |\n|---|---|\n| 本项完整 PASS 报告、时间、身份和数据校验 | `7102-direct-reopen-report.json` |\n| 用户托盘退出后进程为零的观察原件 | `7102-direct-normal-exit-confirmed.json` |\n| 退出前及正常退出后数据 | `7102-direct-reopen-before.json`、`7102-direct-data-after-normal-exit.json` |\n| 重启后安装程序及包身份 | `7102-direct-restart-identity.json` |\n| 旧会话直接读回截图/文本 | `7102-direct-reopen-readback.jpg`、`7102-direct-reopen-readback.txt` |\n| 重启后继续写入及回复截图/文本 | `7102-direct-reopen-continued-write.jpg`、`7102-direct-reopen-continued-write.txt` |\n| 正常退出和直接启动的原始后端日志 | `7102-direct-reopen-backend.log` |\n| 已补齐子项索引的总报告 | `acceptance-current.json` |\n\nMac 未操作，原 e74 Mac PASS 不移用到此 SHA；同 SHA Mac 差异/联合证据核对仍单独处理。未公开发布安装包、未修改正式 OTA。清理脚本通过，无错误；测试档案/备份/原件保留，剩余空间 C 275.75 GiB、R 3.44 GiB。\r\n",
+      "bodySha256": "67bb5e81f088403b224662ac72f3f63c4fd3eec82ca4906ae4983e1ce3310637"
+    }
+  ],
+  "items": [
+    {
+      "item": "download_clean_install_desktop_shortcut_launch",
+      "reportedVerdict": "PASS",
+      "publishedSourceComment": 6190996826,
+      "reportedFacts": [
+        "program and default profile absent before installation",
+        "normal desktop shortcut opened enterprise login page",
+        "application and backend reported final 1.0.0.6/7102 identity"
+      ],
+      "auditBoundary": "Clean-install per-step original report/screenshots not directly accessible in this review.",
+      "originalPaths": [
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\acceptance-current.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-final-installed-identity.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-final-runtime-health.json"
+      ],
+      "jointReuseVerdict": "PASS",
+      "jointReuseBasis": "Directly read original published receipt by executing owner, with actual 7102 source/package identity retained and identical-tree/direct-merge relationship independently verified. Not a claim of a new Windows test or independent Windows-local raw-file audit.",
+      "rawOriginalReview": "NOT_PERFORMED_DISCLOSED_BOUNDARY; not a new acceptance blocker under authorized receipt-reuse scope."
+    },
+    {
+      "item": "real_in_app_1.0.0.5_upgrade_download_verify_install_automatic_restart",
+      "reportedVerdict": "PASS",
+      "publishedSourceComment": 6190996826,
+      "reportedFacts": [
+        "official 1.0.0.5 used in-app download/update/reload",
+        "installer automatically restarted 1.0.0.6",
+        "no uninstall/reinstall substituted for normal upgrade"
+      ],
+      "auditBoundary": "Raw updater event order and final installed/runtime JSON not directly read; published owner report supplies the claim.",
+      "originalPaths": [
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-raw-updater-events.jsonl",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-raw-electron-backend.log",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-final-installed-identity.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-final-runtime-health.json"
+      ],
+      "jointReuseVerdict": "PASS",
+      "jointReuseBasis": "Directly read original published receipt by executing owner, with actual 7102 source/package identity retained and identical-tree/direct-merge relationship independently verified. Not a claim of a new Windows test or independent Windows-local raw-file audit.",
+      "rawOriginalReview": "NOT_PERFORMED_DISCLOSED_BOUNDARY; not a new acceptance blocker under authorized receipt-reuse scope."
+    },
+    {
+      "item": "nonempty_record_ids_ownership_config_upload_preservation_and_readback",
+      "reportedVerdict": "PASS",
+      "publishedSourceComment": 6191186660,
+      "reportedFacts": [
+        "protected record tables, database configuration and upload hashes unchanged before continued write",
+        "SQLite integrity_check ok",
+        "uploaded CSV 84 bytes sha256 3345a3a27d3cf8f13c08a2a49437fecbc2bc9c1004f88ca5d7ab1e378066d108",
+        "existing conversation read back; normal UI continued write and reply; messages 6 to 8"
+      ],
+      "auditBoundary": "No direct row-ID/tenant/owner inventory or raw before/after JSON available here. Published equal-protected-tables claim supports preservation, but independent ID/ownership audit cannot be completed from the comment alone.",
+      "originalPaths": [
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-before.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-data-after-normal-exit.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-readback.jpg",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-readback.txt",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-continued-write.jpg",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-continued-write.txt"
+      ],
+      "jointReuseVerdict": "PASS",
+      "jointReuseBasis": "Directly read original published receipt by executing owner, with actual 7102 source/package identity retained and identical-tree/direct-merge relationship independently verified. Not a claim of a new Windows test or independent Windows-local raw-file audit.",
+      "rawOriginalReview": "NOT_PERFORMED_DISCLOSED_BOUNDARY; not a new acceptance blocker under authorized receipt-reuse scope."
+    },
+    {
+      "item": "controlled_update_failure_automatic_application_database_recovery",
+      "reportedVerdict": "PASS",
+      "publishedSourceComment": 6190996826,
+      "reportedFacts": [
+        "deliberately occupied isolated test port triggered windows-full recovery",
+        "packaged helper automatically restored old program/database and restarted old 1.0.0.5/df452b7bcc1879587090bc849fe78ed2c29c79f8",
+        "261-character Mod snapshot source file and 677 application backup paths exceeding 260 characters covered",
+        "reported old program/table/upload/config comparison equal; integrity_check ok",
+        "434 Mod files compared: 431 unchanged, 3 updated to final built-in package version"
+      ],
+      "directlyVisiblePrimaryFragments": {
+        "helperLog": [
+          "2026-10-15T19:02:33.1737186+08:00 verified rollback helper started",
+          "2026-10-15T19:02:33.2321562+08:00 waiting for failed XCAGI process pid=23928",
+          "2026-10-15T19:02:51.0684856+08:00 full application rollback completed"
+        ],
+        "operationId": "e306819b-b051-4b6c-bfb9-8c69cae1d25f",
+        "reportedFrom": "1.0.0.6+7102b713df1136ae83848eed5814a60ede66a355",
+        "reportedTo": "1.0.0.5+df452b7bcc1879587090bc849fe78ed2c29c79f8",
+        "reportedCompletedAt": "2026-10-15T11:02:50.1933994Z",
+        "fragmentBoundary": "Published comment states programMatchesOld/tablesEqual/uploadsEqual/configEqual/integrity_check were added from verification originals; these are not themselves raw rollback-receipt fields."
+      },
+      "auditBoundary": "Only the three log lines and receipt/verification excerpt above are directly visible; full natural snapshot inventory, automatic receipt and before/after verification remain Windows-local.",
+      "originalPaths": [
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-wpf-prepared-marker.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-automatic-recovery-helper.log",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-automatic-recovery-verification.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-raw-electron-backend.log"
+      ],
+      "jointReuseVerdict": "PASS",
+      "jointReuseBasis": "Directly read original published receipt by executing owner, with actual 7102 source/package identity retained and identical-tree/direct-merge relationship independently verified. Not a claim of a new Windows test or independent Windows-local raw-file audit.",
+      "rawOriginalReview": "NOT_PERFORMED_DISCLOSED_BOUNDARY; not a new acceptance blocker under authorized receipt-reuse scope."
+    },
+    {
+      "item": "normal_uninstall_process_exit_keep_data_reinstall",
+      "reportedVerdict": "PASS",
+      "publishedSourceComment": 6190996826,
+      "reportedFacts": [
+        "registered normal uninstall requested application closure",
+        "uninstaller handled closure, with no external prior kill",
+        "product processes zero, install directory and registration removed, test profile retained",
+        "same-package reinstall reopened healthy and allowed existing data read/write"
+      ],
+      "auditBoundary": "Actual uninstall checks and keep-data reinstall readback originals not directly accessible.",
+      "originalPaths": [
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-normal-uninstall-verification.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-reopened-readback.jpg",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-reopened-readback.txt",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-reopened-continued-write.jpg",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-reopened-continued-write.txt",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\acceptance-current.json"
+      ],
+      "jointReuseVerdict": "PASS",
+      "jointReuseBasis": "Directly read original published receipt by executing owner, with actual 7102 source/package identity retained and identical-tree/direct-merge relationship independently verified. Not a claim of a new Windows test or independent Windows-local raw-file audit.",
+      "rawOriginalReview": "NOT_PERFORMED_DISCLOSED_BOUNDARY; not a new acceptance blocker under authorized receipt-reuse scope."
+    },
+    {
+      "item": "independent_normal_tray_quit_zero_process_direct_reopen",
+      "reportedVerdict": "PASS",
+      "publishedSourceComment": 6191186660,
+      "reportedAtLocal": "2026-10-15T19:39:29+08:00",
+      "reportedFacts": [
+        "user selected tray Quit",
+        "2026-10-15 19:36:38 product and backend processes in installed directory zero",
+        "same installed executable and same isolated profile/port directly reopened",
+        "no uninstall/reinstall/external kill",
+        "UI and healthy backend both 1.0.0.6/full 7102 SHA",
+        "old conversation/config/upload readback and continued write succeeded"
+      ],
+      "auditBoundary": "The executing owner published a detailed original handoff. This review has not independently read its referenced direct-reopen report, process-zero receipt, runtime identity or screenshots.",
+      "originalPaths": [
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-report.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-normal-exit-confirmed.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-before.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-data-after-normal-exit.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-restart-identity.json",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-readback.jpg",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-readback.txt",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-continued-write.jpg",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-continued-write.txt",
+        "C:\\XCAGI-QA\\candidate-longpath\\evidence\\7102-direct-reopen-backend.log"
+      ],
+      "jointReuseVerdict": "PASS",
+      "jointReuseBasis": "Directly read original published receipt by executing owner, with actual 7102 source/package identity retained and identical-tree/direct-merge relationship independently verified. Not a claim of a new Windows test or independent Windows-local raw-file audit.",
+      "rawOriginalReview": "NOT_PERFORMED_DISCLOSED_BOUNDARY; not a new acceptance blocker under authorized receipt-reuse scope."
+    }
+  ],
+  "evidenceAccessAttempts": [
+    {
+      "tool": "codex_app.read_thread",
+      "threadId": "01a137d6-37ee-73f9-b1b5-05e586fe3000",
+      "returnedHostId": "durable",
+      "title": "完成 Windows 最终实机验收",
+      "result": "Accessible historical actual command outputs end around 2026-10-15T03:33Z; last turn ends in usage-limit error around03:37Z. No 19:17/19:39 final 7102 report contents in the accessible latest window.",
+      "notProductFailure": true,
+      "boundary": "Usage-limit failure describes observer execution capability, not Windows acceptance result."
+    },
+    {
+      "tool": "codex_app.read_thread",
+      "threadId": "01a13f5f-8434-72a1-aa8f-06090b95e741",
+      "returnedHostId": "local",
+      "title": "New voice chat",
+      "result": "Parent history contains detailed links and owner-report summaries, plus direct Mac report reads; no original Windows acceptance-current/direct-reopen report file content."
+    },
+    {
+      "tool": "devfleet.list_devices",
+      "result": "First request rate-limited. Later successful listing contained only an old offline device (lastSeen 2026-09-08) and no accessible current Windows worker. No remote command dispatched."
+    }
+  ],
+  "auditConclusion": {
+    "result": "PASS",
+    "verdictType": "PASS_REUSE_EXISTING_WINDOWS_ACCEPTANCE_PRIMARY_RECEIPTS",
+    "publishedWindowsAcceptance": "Five lifecycle scenarios plus independent normal tray exit, zero product processes and direct reopen PASS are accepted as existing executing-owner results, without replay.",
+    "commonTreeRelationship": "PASS: 7102 is the direct second parent of mainline merge c5; both tree60aef1efa8c18fb01cea7c7234716c2e5b758671; tracked diff empty.",
+    "materialConsistency": "No contradictory candidate identity, package hash, normal-upgrade mechanism, old/new recovery identity or direct-reopen claim found between the two original published receipts. The later receipt explicitly closes the initially untested standalone direct-reopen subitem.",
+    "nonemptyRecoveryEvidence": "Primary receipt supplies natural WPF snapshot context, helper original log excerpt and operationId e306819b-b051-4b6c-bfb9-8c69cae1d25f, old1.0.0.5/df452 and candidate1.0.0.6/7102 identity, program/tables/uploads/config equality and integrity_check ok. Nonempty conversation/upload and continued-write evidence is stated with84-byte upload SHA256 and6-to8 message readback; Mod differences explicitly reconciled431 unchanged and3 matching final built-ins.",
+    "rawWindowsFileReview": "Not independently performed here. acceptance-current.json and referenced Windows-local JSON/log/screenshot files were not directly read through this Mac environment. Published original receipts were directly read and saved. This is a disclosed review boundary, not automatic BLOCKED for the user-authorized reuse scope.",
+    "packageDigestReview": "Actual accepted Windows EXE SHA256 remains9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100 as recorded by its executing owner; no independent EXE digest computation this turn.",
+    "backupBoundary": "Successful automatic recovery from the naturally prepared nonempty snapshot supports usable-backup restoration. Windows published receipts do not separately assert standalone corrupted-backup rejection or day/week scheduler testing. These are not silently marked Windows PASS or newly imposed as Windows retests. Current Mac corruption-rejection evidence must retain its own platform scope.",
+    "sameShaMismatchIsBlocker": false,
+    "newProductFailureFound": false,
+    "necessaryAdditionalWindowsAcceptance": false,
+    "node13WindowsContribution": "PASS for authorized reuse/result attribution and source-tree inclusion; Mac contribution and final joint-report issuance remain with the parent.",
+    "node14Boundary": "Windows NotSigned remains a formal distribution/signing limitation. No public/stable OTA eligibility or publication claimed.",
+    "node15Boundary": "Customer signoff not established.",
+    "secondBusinessLoop": "Not started."
+  },
+  "scope": "Joint result attribution, common tracked-source-tree inclusion and existing Windows acceptance receipt reconciliation under latest human instruction; reuse existing PASS without rebuilding or retesting Windows.",
+  "directPrimaryPublishedReceiptsRead": [
+    {
+      "commentId": 6190996826,
+      "path": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6190996826.json",
+      "bytes": 6955,
+      "sha256": "1873eee6727cb123cecd4f18a0b0761c7d6df9f5b6c7d72ada89f595f4a07b0a",
+      "author": "42433422",
+      "createdAt": "2026-10-15T11:29:19Z",
+      "url": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6190996826",
+      "bodyMatchesApiCapture": true,
+      "sourceLevel": "Executing owner original published acceptance receipt, directly read; valid primary evidence for reuse and result/source/package attribution."
+    },
+    {
+      "commentId": 6191186660,
+      "path": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6191186660.json",
+      "bytes": 3471,
+      "sha256": "1be544a5bee4c780b02ea78af5be71d1b200c3a0eee4069507f128836d16c39a",
+      "author": "42433422",
+      "createdAt": "2026-10-15T11:40:15Z",
+      "url": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6191186660",
+      "bodyMatchesApiCapture": true,
+      "sourceLevel": "Executing owner original published acceptance receipt, directly read; valid primary evidence for reuse and result/source/package attribution."
+    }
+  ],
+  "materialConflictsFound": [],
+  "reviewCorrection": "Earlier raw-access-only audit framing was corrected to the actual authorized scope: original published receipts are valid primary inputs for reuse; no demand for a new independent rerun or for identical commit identifiers."
+}

@@ -37,7 +37,12 @@ def _evolution_failure_candidates(
     task_col = _facade().func.lower(
         _facade().func.coalesce(_facade().EmployeeExecutionMetric.task, "")
     )
-    infra_kinds = [_facade().FAILURE_KIND_QUOTA, _facade().FAILURE_KIND_TRANSIENT]
+    infra_kinds = [
+        _facade().FAILURE_KIND_QUOTA,
+        _facade().FAILURE_KIND_TRANSIENT,
+        _facade().FAILURE_KIND_ROLE_TIMEOUT,
+        _facade().FAILURE_KIND_MODEL_UNSUPPORTED,
+    ]
     query = session.query(
         _facade().EmployeeExecutionMetric.employee_id,
         _facade().func.count(_facade().EmployeeExecutionMetric.id).label("fail_count"),

@@ -545,7 +545,7 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
             .all()
         )
         assert any("员工处理进展" in (m.content or "") for m in msgs)
-        assert "未产生修复" in msgs[0].content and "下一步" in msgs[0].content
+        assert "未产生修复" not in msgs[0].content and "下一步" in msgs[0].content
         assert "should-be-redacted" not in msgs[0].content
         from modstore_server.customer_service_tools import json_loads
 
@@ -1201,7 +1201,7 @@ def test_ticket_search_preserves_ownership_identity_and_pagination(client):
         assert client.get(f"/api/customer-service/tickets/{ids[1]}").status_code == 404
         own = client.get(f"/api/customer-service/tickets/{ids[0]}").json()
         assert own["ticket"]["ticket_no"] == f"{marker}-{owner.id}-290063"
-        assert own["ticket"]["assigned_admin_id"] is None
+        assert "assigned_admin_id" not in own["ticket"]
         assert own["ticket"]["summary"] == f"{marker} original 100%_text"
         assert own["actions"] == own["audit_logs"] == []
         assert (

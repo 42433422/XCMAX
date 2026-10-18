@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-10-15T20:18:00+08:00",
+  "macCandidate": {
+    "targetSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "tree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "workflowRun": 38730362964,
+    "status": "in_progress; no artifact or runtime acceptance yet"
+  },
+  "windowsAccepted": {
+    "packageSourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+    "tree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "packageSha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+    "workflowRun": "local-windows-longpath-20261015-114026",
+    "sourceEvidence": "https://github.com/42433422/XCMAX/pull/2340#issuecomment-6191186660"
+  },
+  "exactShaAlignment": "pending: Windows tested package records 7102 while requested Mac build targets merge SHA c5; the trees are byte-identical, but artifact build identities are not the same full commit SHA",
+  "priorMacCandidate": {
+    "sourceSha": "e74c92b982baf16c9558c5c19451d2758f523050",
+    "tree": "82bddb226532a3f9e7231f725966e54710c6713a",
+    "workflowRun": 38571107551,
+    "note": "existing M4 lifecycle PASS, distinct source tree and not reusable as c5 acceptance"
+  }
+}

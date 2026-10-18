@@ -1,0 +1,309 @@
+{
+  "closedAt": "2026-10-15T21:32:47.945217+08:00",
+  "result": "PASS",
+  "scope": "Mac M4 arm64 installation/update lifecycle only; current c5 candidate",
+  "machine": {
+    "architecture": "arm64",
+    "chip": "Apple M4",
+    "macOS": "26.3"
+  },
+  "integrationPr": "https://github.com/42433422/XCMAX/pull/2340",
+  "candidate": {
+    "version": "1.0.0.6",
+    "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "buildRun": 38730362964,
+    "architecture": "arm64",
+    "dmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+    "zipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+    "runUrl": "https://github.com/42433422/XCMAX/actions/runs/38730362964",
+    "packages": {
+      "dmg": {
+        "path": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+        "bytes": 568802820,
+        "sha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+        "staplerValidation": "PASS",
+        "gatekeeperMountedApp": "accepted / Notarized Developer ID"
+      },
+      "zip": {
+        "path": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+        "bytes": 528146028,
+        "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+        "sha512": "718ba3df61902b34c2672ff71a7beb6a5fd52e0e8d17003299d9c71df8702120904a456f9927615e49824db5170122fc99a0f5079c32ab44dfe3da6cd542af1e",
+        "latestMacYmlSha256": "a87115d74fa9ac23b48f664927afbce3bccdc971bb01d0c6cf049fce2c3e493c",
+        "latestMacYmlBuildSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+        "latestMacYmlSha512Matches": true,
+        "ed25519FeedSignaturePresent": true
+      }
+    },
+    "signature": {
+      "codesignDeepStrict": "PASS",
+      "teamIdentifier": "G26WSH472M",
+      "authority": "Developer ID Application: jialong Li (G26WSH472M)",
+      "notarizationTicket": "stapled",
+      "gatekeeper": "accepted / Notarized Developer ID",
+      "lipoArchitecture": "arm64"
+    },
+    "archiveApplication": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/installed-candidate-archive/XCAGI.app"
+  },
+  "items": [
+    {
+      "item": "准确候选下载、签名、公证、Gatekeeper",
+      "result": "PASS",
+      "time": "2026-10-15T20:44:16.135037+08:00",
+      "version": "1.0.0.6",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "architecture": "arm64",
+      "dmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "zipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/evidence/c5-package-verification.json",
+      "evidenceSha256": "77032c56f2c641379b2acc101644fc5f3e26614fc56b29403defe81264b7fe5e"
+    },
+    {
+      "item": "干净安装、正常入口首次启动、应用和后端身份一致",
+      "result": "PASS",
+      "time": "2026-10-15T20:54:15+08:00",
+      "version": "1.0.0.6",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "architecture": "arm64",
+      "dmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "zipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/evidence/clean-install-first-launch.json",
+      "evidenceSha256": "5fd886effe9d4f258d9d4a6dfd59d11a66bafa897ede51e0121fe78aea43ec14"
+    },
+    {
+      "item": "旧1.0.0.5应用内下载、校验、安装并自动重启进入c5",
+      "result": "PASS",
+      "time": "2026-10-15T21:11:07.959807+08:00",
+      "version": "1.0.0.6",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "architecture": "arm64",
+      "dmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "zipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/successful-upgrade-readback.json",
+      "evidenceSha256": "f790efd110ceddfa056c80eb8d78861b8b7b83271f0a37e5ccce9d95214e09c8"
+    },
+    {
+      "item": "正常退出、桌面入口重开、账号设置和附件保留",
+      "result": "PASS",
+      "time": "2026-10-15T21:14:10.836291+08:00",
+      "version": "1.0.0.6",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "architecture": "arm64",
+      "dmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "zipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-reopen-acceptance.json",
+      "evidenceSha256": "969ffe0fe1ea5065317f0d16df8ec21e48631469ea7f96ee81cc6a4cd958423b"
+    },
+    {
+      "item": "正常卸载、相关进程退出、数据库保留",
+      "result": "PASS",
+      "time": "2026-10-15T21:14:57.705094+08:00",
+      "version": "1.0.0.6",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "architecture": "arm64",
+      "dmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "zipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-uninstall-acceptance.json",
+      "evidenceSha256": "0f1f137a7db79fe00831b1f5fda8c7bc2cab6ab4ccb64fe63c4d4eb8a0d04e64"
+    },
+    {
+      "item": "Finder重装后正常登录和原数据读回",
+      "result": "PASS",
+      "time": "2026-10-15T21:17:06.029274+08:00",
+      "version": "1.0.0.6",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "architecture": "arm64",
+      "dmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "zipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reinstall-readback-acceptance.json",
+      "evidenceSha256": "ce06d6adb6e39cca32dc143b0b5f3d845ed107685fdb9901fb351f590d7cf256"
+    },
+    {
+      "item": "隔离启动失败后的应用与数据库自动恢复及旧版读回",
+      "result": "PASS",
+      "time": "2026-10-15T21:24:23.632839+08:00",
+      "version": "1.0.0.6",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "architecture": "arm64",
+      "dmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "zipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/automatic-rollback-acceptance.json",
+      "evidenceSha256": "ad977dca5991c82dfcf0db893443d1947e4ab9802c8669bd2ef3f9d004944232"
+    },
+    {
+      "item": "自然更新前备份有效、损坏副本明确拒绝",
+      "result": "PASS",
+      "time": "2026-10-15T21:24:56.617495+08:00",
+      "version": "1.0.0.6",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "architecture": "arm64",
+      "dmgSha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "zipSha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/corrupt-backup-rejection.json",
+      "evidenceSha256": "3aae503487f91246afebf5f6f9c73e514a38dbccf1db700f51a0614b3d786a08"
+    }
+  ],
+  "dataReadback": {
+    "tables": 94,
+    "nonemptyTables": 25,
+    "durableFiles": 437,
+    "missingIds": 0,
+    "ownershipChanges": 0,
+    "fileDifferences": 0,
+    "quickCheck": "ok",
+    "syntheticAttachmentSha256": "c62fdd492200ed38fc8a2a5ecd3ebedfc6afcacda31fbb6e12431fdd62ffc2f3"
+  },
+  "uiOriginalScreenshots": [
+    {
+      "capturedAtUtc": "2026-10-15T13:08:54.015Z",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T130854-015Z-1.jpg",
+      "sha256": "09967b84af9613450f8ab138300d01fd5f0fd3f512cc5b9f68f909d9f191e028",
+      "originalSession": "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl",
+      "originalLine": 19542,
+      "originalCallId": "call_986e641f25694930920b7986cb216504",
+      "bytes": 143100
+    },
+    {
+      "capturedAtUtc": "2026-10-15T13:12:02.546Z",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T131202-546Z-1.jpg",
+      "sha256": "b91e5292cdcac91cdf9709186b762ea071af446c69f25254849c2a96e7ef99f9",
+      "originalSession": "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl",
+      "originalLine": 19657,
+      "originalCallId": "call_c98767c05d4746169fcc4990a9b47f9a",
+      "bytes": 169984
+    },
+    {
+      "capturedAtUtc": "2026-10-15T13:23:25.584Z",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T132325-584Z-1.jpg",
+      "sha256": "2151399b186d97700a7dc29685ffc1a527d3c7a5d8a16107aaa740c001012dea",
+      "originalSession": "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl",
+      "originalLine": 20107,
+      "originalCallId": "call_2a8ffe2829814e1495767ac08adc4dae",
+      "bytes": 20023
+    },
+    {
+      "capturedAtUtc": "2026-10-15T13:25:49.172Z",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T132549-172Z-1.jpg",
+      "sha256": "9a97b3e5ca1af592a9f95d9c823021a8b140c859f9744dde9bd5394a64b6841a",
+      "originalSession": "/Users/a4243342/.codex/sessions/2026/10/14/rollout-2026-10-14T08-48-25-01a137e1-c54a-7d22-800d-7b0377f0460f.jsonl",
+      "originalLine": 20174,
+      "originalCallId": "call_f09464245a6c46aeb71cd14ac27229a0",
+      "bytes": 171127
+    }
+  ],
+  "rawEvidenceIndex": {
+    "nativeSuccessfulUpgrade": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/shipit-success-original.log",
+    "nativeControlledFailureAndRecovery": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/shipit-failed-start-automatic-recovery-original.log",
+    "productFailureRecovery": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/failed-update-and-automatic-rollback-original.log",
+    "productRecoveryHelper": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/rollback-helper-completed-original.log",
+    "portGuardResults": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/recovery-port-guard-20261015T132115274694Z-57250-result.json",
+    "operatorInterruptedAttempt": "/private/tmp/xcagi-mac-c5-20261015/evidence/ota-r2-operator-interruption.json"
+  },
+  "anomalyClassification": [
+    {
+      "event": "20:58 installed version remained1.0.0.5",
+      "classification": "acceptance_operator_error",
+      "cause": "cua.getApp reopened old application during native installation; ShipIt canceled App Still Running before replacement",
+      "evidence": "/private/tmp/xcagi-mac-c5-20261015/evidence/ota-r2-operator-interruption.json",
+      "resolvedBy": "r3 no app UI binding until native installation terminal success; c5 real upgrade PASS"
+    },
+    {
+      "event": "stopped-app CUA launch used shared directory despite test launchctl values",
+      "classification": "acceptance_launch_environment_problem",
+      "observed": "normal Finder launch with the same old signed binary used correct isolated profile; CUA auto-launch had used shared profile",
+      "exactHostEnvironmentMergeCause": "not inspected; do not assert a product defect",
+      "resolvedBy": "Finder normal entry plus runtime data-dir verification before every test",
+      "dataImpactBoundary": "Early operator getApp launches inherited shared startup environment; no business operations or fault injection were performed there. No comparable pre-turn shared DB fingerprint was taken, so byte-unchanged is not asserted."
+    },
+    {
+      "event": "fault guard initially waited for port48",
+      "classification": "acceptance_injection_environment_transient",
+      "outcome": "guard captured port at13:22:03Z and valid automatic recovery proof completed; no repeat required"
+    },
+    {
+      "event": "c5 failed backend start on deliberately occupied18503",
+      "classification": "expected_acceptance_fault_injection",
+      "productResult": "PASS automatic application and database recovery, old authenticated UI readback"
+    }
+  ],
+  "environmentRestoration": {
+    "capturedAt": "2026-10-15T21:26:41.729045+08:00",
+    "applicationExitedNormally": true,
+    "remainingApplicationProcesses": [],
+    "canonicalApp": {
+      "schema_version": 1,
+      "gitSha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+      "version": "1.0.0.5",
+      "releaseId": "xcagi-1.0.0.5-e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+      "builtAt": "2026-10-12T09:51:04.060Z"
+    },
+    "canonicalMatchesOriginalBackupContent": true,
+    "launchEnvironmentRestored": {
+      "XCAGI_DESKTOP_USER_DATA_DIR": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer",
+      "XCAGI_DESKTOP_PORT": null,
+      "XCAGI_DESKTOP_API_HOST": null,
+      "XCAGI_UPDATE_URL": "http://127.0.0.1:8765"
+    },
+    "taskFeedServerStopRequested": "SIGINT only owned HTTP server46390",
+    "sharedCustomerDataFailureInjection": false,
+    "sharedCustomerDataByteUnchangedClaim": false,
+    "note": "Early operator getApp launches inherited shared startup environment; no business operations or fault injection were performed there. No comparable pre-turn shared DB fingerprint was taken, so byte-unchanged is not asserted."
+  },
+  "processAndSpaceProof": {
+    "capturedAt": "2026-10-15T21:30:59.574078+08:00",
+    "ownedAppFeedGuardProcessesRemaining": [],
+    "testPortsListeners": {
+      "18502": "",
+      "18503": "",
+      "18650": ""
+    },
+    "unrelatedBackend21238StillAlive": true,
+    "machine": {
+      "architecture": "arm64",
+      "chip": "Apple M4",
+      "macOS": "26.3"
+    },
+    "disk": "Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on\n/dev/disk3s1s1   460Gi    11Gi   2.6Gi    82%    453k   28M    2%   /\n/dev/disk35s1    954Gi   917Gi    37Gi    97%       1     0  100%   /Volumes/KINGSTON\n/dev/disk46s1     30Gi    12Gi    17Gi    42%     41k  182M    0%   /private/tmp/xcagi-mac-c5-20261015\n"
+  },
+  "cleanup": {
+    "commandResult": "/private/tmp/xcagi-mac-c5-20261015/evidence/workspace-cleanup-result.json",
+    "status": "clean",
+    "removedCount": 158,
+    "preexistingDirtyStatusUnchanged": true,
+    "dirtyPathCount": 69,
+    "cacheDuplicates": "/private/tmp/xcagi-mac-c5-20261015/evidence/candidate-cache-cleanup.json"
+  },
+  "storage": [
+    {
+      "imagePath": "/Volumes/KINGSTON/XCMAX-mac-aligned-c5-20261015.sparsebundle",
+      "mountPoint": "/private/tmp/xcagi-mac-c5-20261015"
+    }
+  ],
+  "crossPlatformReconciliation": "/private/tmp/xcagi-mac-c5-20261015/evidence/node12-node13-candidate-reconciliation.json",
+  "excludedScope": [
+    "ordinary approvals/shipment/export business tests",
+    "AI model availability",
+    "daily/weekly backup scheduler generation",
+    "Intel/x64 Mac",
+    "Windows c5 real machine retest",
+    "production deployment",
+    "public downloads or stable OTA publication",
+    "customer signoff"
+  ],
+  "jointGoalComplete": false,
+  "remainingGoalGate": "Node13 joint review of same code tree and distinct real source/package identities; Windows rerun deferred by direct user instruction",
+  "userDecision": {
+    "capturedAt": "2026-10-15T21:35:24.385503+08:00",
+    "source": "direct user answer in this thread",
+    "text": "先提交同代码树、不同SHA的真实材料供联合核证，暂不重跑Windows",
+    "effect": "submit truthful shared-tree/different-commit materials; retain both accepted source/package identities; no Windows rerun/rebuild dispatched; node13 remains joint review pending"
+  }
+}
