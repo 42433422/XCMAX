@@ -6,6 +6,9 @@ import json
 import runpy
 from pathlib import Path
 import subprocess
+import sys
+import selectors
+import time
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -26,16 +29,28 @@ class PreflightTest(unittest.TestCase):
             def command(args, **kwargs):
                 calls.append(args)
                 if command_hook:
-                    command_hook(args)
+                    override = command_hook(args)
+                    if override is not None:
+                        return override
                 self.assertEqual(kwargs['timeout'], 15)
                 self.assertNotIn('shell', kwargs)
                 if fail == 'timeout':
                     raise subprocess.TimeoutExpired(args, 15, output='SECRET_TIMEOUT')
+                if args[-1] == '--version':
+                    return subprocess.CompletedProcess(args, 0, Path(args[0]).name + ' (PostgreSQL) 16.4 (vendor build)\n', '')
                 if Path(args[0]).name == fail:
-                    return subprocess.CompletedProcess(args, 9, 'SECRET_STDOUT', 'SECRET_STDERR')
+                    return subprocess.CompletedProcess(args, 9, b'SECRET_STDOUT', b'SECRET_STDERR')
                 return subprocess.CompletedProcess(args, 0, 'fixed metadata', '')
+            real_popen = subprocess.Popen
+            def validator_process(args, **kwargs):
+                result = command(args, timeout=15)
+                detail = result.stderr or b''
+                if isinstance(detail, str):
+                    detail = detail.encode()
+                script = f'import os, sys; os.write(2, {detail!r}); sys.exit({result.returncode})'
+                return real_popen([sys.executable, '-c', script], **kwargs)
             stream = io.StringIO()
-            with patch('pathlib.Path', mapped), patch('subprocess.run', command), patch('shutil.which', side_effect=lambda tool, **kw: None if tool_missing else '/usr/bin/' + tool), contextlib.redirect_stdout(stream):
+            with patch('pathlib.Path', mapped), patch('subprocess.run', command), patch('subprocess.Popen', validator_process), patch('shutil.which', side_effect=lambda tool, **kw: None if tool_missing else '/usr/bin/' + tool), contextlib.redirect_stdout(stream):
                 with self.assertRaises(SystemExit) as result:
                     (root / 'probe.py').write_text(PROBE)
                     runpy.run_path(str(root / 'probe.py'))
@@ -102,7 +117,7 @@ class PreflightTest(unittest.TestCase):
                  'modstore_sqlite.db.gz', 'configs.tar.gz')
         manifest = []
         for name in names:
-            content = b'PRIVATE_BACKUP_CONTENT'
+            content = b'PGDMP\x01\x0f\x00PRIVATE_BACKUP_CONTENT'
             (directory / name).write_bytes(content)
             manifest.append(hashlib.sha256(content).hexdigest() + '  ./' + name)
         (directory / 'MANIFEST.txt').write_text('\n'.join(manifest) + '\n')
@@ -115,7 +130,7 @@ class PreflightTest(unittest.TestCase):
         self.assertEqual(integrity['status'], 'verified')
         self.assertEqual(integrity['reason'], 'hashes_and_archive_readability_only')
         self.assertNotIn('PRIVATE_BACKUP_CONTENT', str(records))
-        self.assertEqual(sum(Path(c[0]).name in ('pg_restore', 'gzip', 'tar') for c in calls), 5)
+        self.assertEqual(sum(Path(c[0]).name in ('pg_restore', 'gzip', 'tar') and c[-1] != '--version' for c in calls), 5)
 
     def test_invalid_backup_is_never_verified(self):
         for case in ('checksum', 'extra_path', 'duplicate', 'missing', 'symlink', 'stale'):
@@ -148,7 +163,11 @@ class PreflightTest(unittest.TestCase):
             self.assertEqual(code, 1)
             integrity = next(r['value'] for r in records if r['check'] == 'backup_integrity')
             self.assertEqual(integrity['status'], 'unknown')
-            self.assertEqual(integrity['reason'], 'pg_restore_missing' if missing else f'{fail}_exit_9')
+            self.assertEqual(integrity['reason'], 'archive_validator_failed_or_unknown')
+            results = [r['value'] for r in records if r['check'] == 'archive_validator']
+            self.assertEqual(len(results), 5)
+            self.assertTrue(all(r['category'] == 'missing_tool' if missing else r['exitcode'] == 9
+                                for r in results if missing or r['tool'] == fail))
             self.assertNotIn('SECRET', str(records))
 
     def test_writer_busy_or_changed_snapshot_is_unknown(self):
@@ -157,12 +176,98 @@ class PreflightTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn('backup_writer_busy', str(records))
         def change_snapshot(args):
-            if Path(args[0]).name in ('pg_restore', 'gzip', 'tar'):
+            if Path(args[0]).name in ('pg_restore', 'gzip', 'tar') and args[-1] != '--version':
                 manifest = Path(args[-1]).parent / 'MANIFEST.txt'
                 manifest.write_text('CHANGED_DURING_CHECK')
         code, records, _ = self.run_probe(self.backup_fixture, command_hook=change_snapshot)
         self.assertEqual(code, 1)
         self.assertIn('snapshot_changed_during_check', str(records))
+
+    def test_pg_diagnostics_are_allowlisted_and_independent(self):
+        cases = ((b'unsupported version (1.16) in file header SECRET', 'unsupported_version'),
+                 (b'did not find magic string SECRET', 'bad_magic'),
+                 (b'Permission denied SECRET', 'permission'), (b'SECRET OTHER ERROR', 'other'))
+        for detail, category in cases:
+            with self.subTest(category=category):
+                def failure(args):
+                    if Path(args[0]).name == 'pg_restore' and args[-1] != '--version':
+                        return subprocess.CompletedProcess(args, 1, b'SECRET_SQL', detail)
+                code, records, calls = self.run_probe(self.backup_fixture, command_hook=failure)
+                self.assertEqual(code, 1)
+                results = [r['value'] for r in records if r['check'] == 'archive_validator']
+                self.assertEqual([r['category'] for r in results], [category] * 3 + ['ok', 'ok'])
+                self.assertEqual([r['exitcode'] for r in results], [1, 1, 1, 0, 0])
+                headers = [r['value'] for r in records if r['check'] == 'archive_format']
+                self.assertEqual(len(headers), 3)
+                self.assertTrue(all(r['version'] == [1, 15, 0] for r in headers))
+                versions = [r['value'] for r in records if r['check'].endswith('_host_candidate')]
+                self.assertEqual([r['version'] for r in versions], ['16.4', '16.4'])
+                self.assertEqual([r['path'] for r in versions], ['/usr/bin/pg_restore', '/usr/bin/pg_dump'])
+                self.assertNotIn('SECRET', str(records))
+                self.assertNotIn('PRIVATE_BACKUP_CONTENT', str(records))
+                self.assertNotIn('vendor build', str(records))
+
+    def test_version_and_validator_exceptions_stay_unknown(self):
+        for failure in ('timeout', 'execution_error', 'bad_version'):
+            def hook(args):
+                if Path(args[0]).name != 'pg_restore':
+                    return None
+                if failure == 'timeout':
+                    raise subprocess.TimeoutExpired(args, 15, output=b'SECRET', stderr=b'SECRET')
+                if failure == 'execution_error':
+                    raise PermissionError('SECRET')
+                if args[-1] == '--version':
+                    return subprocess.CompletedProcess(args, 0, 'SECRET INVALID VERSION', 'SECRET')
+            code, records, _ = self.run_probe(self.backup_fixture, command_hook=hook)
+            version = next(r['value'] for r in records if r['check'] == 'pg_restore_host_candidate')
+            self.assertEqual(version['version'], 'unknown')
+            results = [r['value'] for r in records if r['check'] == 'archive_validator']
+            self.assertEqual(len(results), 5)
+            self.assertEqual([r['category'] for r in results][-2:], ['ok', 'ok'])
+            self.assertEqual(code, 0 if failure == 'bad_version' else 1)
+            self.assertNotIn('SECRET', str(records))
+
+    def test_archive_header_never_emits_unrecognized_bytes(self):
+        for content, version in ((b'SECRET_BACKUP', None), (b'PGDMP\x01\x00\x04SECRET', [1, 0, 0])):
+            def setup(path):
+                directory = self.backup_fixture(path)
+                target = directory / 'fhd_pg.dump'
+                old_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+                target.write_bytes(content)
+                manifest = directory / 'MANIFEST.txt'
+                manifest.write_text(manifest.read_text().replace(old_hash, hashlib.sha256(content).hexdigest(), 1))
+            _, records, _ = self.run_probe(setup)
+            header = next(r['value'] for r in records if r['check'] == 'archive_format')
+            self.assertEqual(header['version'], version)
+            self.assertNotIn('SECRET', str(records))
+
+    def test_real_validator_stderr_capture_is_bounded(self):
+        imports = 'import os, subprocess, selectors, time\n'
+        function = 'def run_validator' + PROBE.split('def run_validator', 1)[1].split('def validate_archive', 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            module = Path(directory) / 'capture.py'
+            module.write_text(imports + function)
+            capture = runpy.run_path(str(module))['run_validator']
+            args = [sys.executable, '-c', "import os,sys; os.write(2, b'x' * 1048576); sys.exit(7)"]
+            code, detail = capture(args)
+            self.assertEqual(code, 7)
+            self.assertEqual(detail, b'x' * 4096)
+            selector = selectors.DefaultSelector()
+            select = selector.select
+            first = True
+            def delayed_select(timeout):
+                nonlocal first
+                if first:
+                    first = False
+                    time.sleep(0.1)
+                    return []
+                return select(timeout)
+            with patch('selectors.DefaultSelector', return_value=selector), patch.object(selector, 'select', delayed_select):
+                code, detail = capture([sys.executable, '-c', "import os; os.write(2, b'unsupported version')"])
+            self.assertEqual(detail, b'unsupported version')
+            with patch('time.monotonic', side_effect=[0, 16]):
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    capture([sys.executable, '-c', 'import time; time.sleep(60)'])
 
     def test_real_df_inode_arguments(self):
         _, _, calls = self.run_probe()
