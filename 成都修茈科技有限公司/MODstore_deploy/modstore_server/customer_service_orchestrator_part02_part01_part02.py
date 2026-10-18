@@ -147,27 +147,14 @@ def infer_intent(
         return "catalog_complaint"
     if any((word in text for word in ("上架", "审核", "合规", "下架"))):
         return "catalog_review"
-    if any(
-        (
-            word in text
-            for word in (
-                "账号",
-                "会员",
-                "权益",
-                "额度",
-                "登录",
-                "余额",
-                "钱包",
-                "充值",
-                "到账",
-                "扣费",
-                "账单",
-                "消费记录",
-                "余额不对",
-                "余额有误",
-            )
-        )
-    ):
+    account_marks = ("会员", "权益", "额度", "登录", "余额", "钱包", "充值", "到账", "扣费", "账单")
+    has_account_mark = any((word in text for word in account_marks + ("消费记录",)))
+    # 「账号」只是弱信号：同句已描述产品缺陷时归 product_issue，不再被账号类吞掉建单
+    if "账号" in text and not has_account_mark:
+        defect_words = ("产品问题", "功能问题", "缺陷")
+        if _facade()._looks_like_product_issue(text) or any((w in text for w in defect_words)):
+            return "product_issue"
+    if "账号" in text or has_account_mark:
         return "account_support"
     if any(
         (
