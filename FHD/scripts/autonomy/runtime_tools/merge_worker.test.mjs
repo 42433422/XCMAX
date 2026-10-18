@@ -702,7 +702,8 @@ test('managed Para login preserves owner and never falls back to guest', async (
     } }), 'fixture-token');
     await assert.rejects(requestParaSession({ credentialFile, fetchImpl: async () => {
       calls += 1; return { ok: false, status: 401 };
-    } }), /para auth 401/);
+    } }), (err) => /para auth 401 managed_para_credentials_rejected/.test(err.message)
+      && err.message.includes('PARA_MANAGED_CREDENTIALS_401.md') && !err.message.includes('fixture-only'));
     assert.equal(calls, 2);
     await assert.rejects(requestParaSession({ credentialFile, fetchImpl: async () => ({ ok: true, json: async () => ({ token: 'wrong-owner', user: { id: 'owner-2' } }) }) }), /identity_mismatch/);
     await assert.rejects(requestParaSession({ credentialFile: join(directory, 'missing'), fetchImpl: async () => { throw new Error('must not fetch guest'); } }), /managed_para_credentials_unavailable/);
@@ -711,4 +712,15 @@ test('managed Para login preserves owner and never falls back to guest', async (
       return { ok: true, json: async () => ({ token: 'legacy-fixture' }) };
     } }), 'legacy-fixture');
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('Para 401 只在首次和每 10 分钟记一条带恢复手册的日志，其它异常照常输出', async () => {
+  const { paraAuthFailureLogLine } = await import('./merge_worker.mjs');
+  const state = {};
+  const err = new Error('para auth 401 managed_para_credentials_rejected: /x 恢复步骤见 FHD/docs/autonomy/PARA_MANAGED_CREDENTIALS_401.md');
+  assert.match(paraAuthFailureLogLine(err, state, 1_000), /合并队列已停摆（连续 1 次）.*PARA_MANAGED_CREDENTIALS_401/);
+  assert.equal(paraAuthFailureLogLine(err, state, 31_000), '');
+  assert.match(paraAuthFailureLogLine(err, state, 1_000 + 10 * 60 * 1000), /连续 3 次/);
+  assert.match(paraAuthFailureLogLine(new Error('para auth 401'), {}, 0), /guest 模式/);
+  assert.equal(paraAuthFailureLogLine(new Error('merge-queue 500'), state, 0), '轮询异常：Error: merge-queue 500'.replace('Error: ', ''));
 });

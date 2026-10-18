@@ -1888,7 +1888,22 @@ async function processTask(token, task, state) {
   }
 }
 
+// Para 401 每 30s 一行会淹没日志（10-19 时已累计 11 万行）；改为首次 + 每 10 分钟一条带恢复手册的汇总。
+export function paraAuthFailureLogLine(err, state, nowMs = Date.now()) {
+  const text = String(err?.message || err);
+  if (!/para auth 401/.test(text)) {
+    state.count = 0;
+    return `轮询异常：${text.slice(0, 300)}`;
+  }
+  state.count = (state.count || 0) + 1;
+  if (state.lastAt && nowMs - state.lastAt < 10 * 60 * 1000) return '';
+  state.lastAt = nowMs;
+  const hint = text.includes('managed_para_credentials_rejected') ? '' : '（guest 模式；受管模式请配置 MERGE_WORKER_PARA_CREDENTIALS_FILE）';
+  return `Para 鉴权失败，合并队列已停摆（连续 ${state.count} 次）${hint}：${text.slice(0, 400)}`;
+}
+
 async function main() {
+  const authFailureState = {};
   log(`启动：API=${API_BASE} poll=${POLL_SEC}s state=${STATE_FILE}`);
   const state = loadProcessed();
   log(`已有 ${Object.keys(state).length} 条历史记录`);
@@ -1909,6 +1924,8 @@ async function main() {
     }
     try {
       const token = await paraToken();
+      authFailureState.count = 0;
+      authFailureState.lastAt = 0;
       await reconcileMergedDeployments(token, state);
       const queue = await fetchMergeQueue(token);
       const queueById = new Map(queue.map((task) => [String(task?.id || ''), task]));
@@ -1941,7 +1958,8 @@ async function main() {
         }
       }
     } catch (err) {
-      log(`轮询异常：${String(err).slice(0, 300)}`);
+      const line = paraAuthFailureLogLine(err, authFailureState);
+      if (line) log(line);
     }
     await new Promise((r) => setTimeout(r, POLL_SEC * 1000));
   }

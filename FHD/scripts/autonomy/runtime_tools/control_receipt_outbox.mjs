@@ -102,6 +102,13 @@ export function createParaReportOutbox({ directory, url, token, enabled, fetcher
 
 
 /** Local managed login for legacy merge paths; credentials never enter model prompts. */
+// 401 = 凭据文件里的 owner 密码与 Para users.password_hash 不一致（配置漂移，不是代码问题）。
+// 只给文件路径与恢复手册，不输出任何凭据内容；修复后无需重启，下一轮轮询会重读文件。
+export const PARA_AUTH_401_RUNBOOK = 'FHD/docs/autonomy/PARA_MANAGED_CREDENTIALS_401.md';
+export function paraManagedAuthRejectedMessage(credentialFile) {
+  return `para auth 401 managed_para_credentials_rejected: ${credentialFile} 的 owner 密码被 Para /api/auth/login 拒绝`
+    + `（凭据与 Para users 表不一致）；auto_merge 合并队列与 request-merge 均不可用；恢复步骤见 ${PARA_AUTH_401_RUNBOOK}`;
+}
 export async function requestManagedParaSession({ apiBase, credentialFile, fetchImpl = fetch }) {
   let credentials;
   try {
@@ -114,6 +121,7 @@ export async function requestManagedParaSession({ apiBase, credentialFile, fetch
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: credentials.email, password: credentials.password }),
   });
+  if (response.status === 401) throw new Error(paraManagedAuthRejectedMessage(credentialFile));
   if (!response.ok) throw new Error(`para auth ${response.status}`);
   const body = await response.json();
   if (!body?.token || typeof body.token !== 'string' || body.user?.id !== credentials.owner_id) {

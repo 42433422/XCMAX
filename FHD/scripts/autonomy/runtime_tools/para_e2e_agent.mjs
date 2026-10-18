@@ -36,6 +36,12 @@ import {
   toolFallbackMode,
   withFailureCleanup,
 } from './e2e_agent_runtime_policy.mjs';
+import {
+  buildPushedPrRequest,
+  describePushedPrFailure,
+  ensurePullRequestForPushedBranch,
+  shouldOpenPrForPushedTask,
+} from './pushed_branch_pr.mjs';
 
 const require = createRequire(import.meta.url);
 const WebSocket = require('ws');
@@ -1027,7 +1033,8 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
     // 工作区干净但 HEAD 已移动：工具(如 trae)已自行 commit → 跳过空 commit，直接 push。
     if (await headMovedFromBase(taskDir, baseHead)) {
       const pushedCommitted = await pushBranch(taskDir, task.work_branch);
-      await reportCodeIdentity(task, taskDir, baseHead, pushedCommitted);
+      const prUrl = pushedCommitted ? await openPullRequestAfterPush(ws, task, taskDir) : '';
+      await reportCodeIdentity(task, taskDir, baseHead, pushedCommitted, prUrl);
       send(ws, {
         type: 'task_progress',
         task_id: task.task_id,
@@ -1065,7 +1072,8 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
   await git(taskDir, ['add', '-A', '--', '.']);
   await git(taskDir, ['commit', '-m', `devfleet: ${task.title}`]);
   const pushed = await pushBranch(taskDir, task.work_branch);
-  await reportCodeIdentity(task, taskDir, baseHead, pushed);
+  const prUrl = pushed ? await openPullRequestAfterPush(ws, task, taskDir) : '';
+  await reportCodeIdentity(task, taskDir, baseHead, pushed, prUrl);
   send(ws, {
     type: 'task_progress',
     task_id: task.task_id,
@@ -1088,11 +1096,32 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
   return true;
 }
 
-async function reportCodeIdentity(task, taskDir, baseHead, pushed) {
+// auto_merge≠true 时 merge-worker 不消费，push 后由设备代理开 hold-merge PR；失败只记 error 日志。
+async function openPullRequestAfterPush(ws, task, taskDir) {
+  const decision = shouldOpenPrForPushedTask(task);
+  const log = (content, level) => send(ws, { type: 'task_log', task_id: task.task_id,
+    subtask_id: task.subtask_id, content, level });
+  if (!decision.open) {
+    if (decision.reason !== 'auto_merge_handled_by_merge_worker') log(`[e2e-agent] 未开 PR：${decision.reason}`, 'warn');
+    return '';
+  }
+  try {
+    const execGh = async (args) => (await execFileAsync('gh', args, {
+      cwd: taskDir, maxBuffer: 10 * 1024 * 1024, timeout: 60_000 })).stdout;
+    const pr = await ensurePullRequestForPushedBranch(buildPushedPrRequest(task), execGh);
+    log(`[e2e-agent] ${pr.created ? '已开 PR' : '复用已有 PR'}（hold-merge，未开 auto-merge）：${pr.url}`, 'info');
+    return pr.url;
+  } catch (err) {
+    log(`[e2e-agent] push 成功但开 PR 失败（分支已保留，需人工开 PR）：${describePushedPrFailure(err)}`, 'error');
+    return '';
+  }
+}
+
+async function reportCodeIdentity(task, taskDir, baseHead, pushed, prUrl = '') {
   if (!paraReports.handles(task)) return;
   await postTaskReport(task, { status: 'completed', progress: 100,
     content: JSON.stringify({ ...await sourceIdentity(taskDir), base_sha: baseHead,
-      branch: task.work_branch,
+      branch: task.work_branch, pr_url: prUrl || null,
       pushed, workspace_preserved: true, delivery: 'requires_mainline_and_customer_acceptance' }) });
 }
 
