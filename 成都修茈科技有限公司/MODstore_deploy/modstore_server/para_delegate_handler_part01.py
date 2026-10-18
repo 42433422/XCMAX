@@ -105,16 +105,9 @@ def _build_request(
     *, task: str, input_data: _facade().Dict[str, _facade().Any], employee_id: str
 ) -> _facade().Dict[str, _facade().Any]:
     input_data = {**input_data, **_facade()._customer_ticket_cloud_route(input_data)}
-    if str(input_data.get("event_type") or "") == "ops.intake.customer_ticket" or str(
-        input_data.get("source") or ""
-    ).lower() in {"customer_ticket", "customer-issue-intake"}:
-        try:
-            from modstore_server.customer_ticket_triage import apply_para_triage
-            from modstore_server.operational_errors import RECOVERABLE_ERRORS
+    from modstore_server.customer_ticket_triage import para_triage_hook
 
-            input_data = apply_para_triage(input_data, employee_id=employee_id)
-        except RECOVERABLE_ERRORS:
-            pass
+    input_data = para_triage_hook(input_data, employee_id=employee_id)
     workspace_root = _facade()._project_root(input_data)
     mode = _facade()._mode_for_employee(employee_id, input_data)
     report_only = _facade()._coerce_bool(

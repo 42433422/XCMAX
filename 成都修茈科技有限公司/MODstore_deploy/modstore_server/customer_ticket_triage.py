@@ -172,6 +172,18 @@ def apply_para_triage(
     return body
 
 
+def para_triage_hook(input_data: dict[str, Any], *, employee_id: str = "") -> dict[str, Any]:
+    """Para ``_build_request`` 入口：仅客服工单走分诊；分诊异常时保持原派发。"""
+    is_ticket = str(input_data.get("event_type") or "") == "ops.intake.customer_ticket"
+    source = str(input_data.get("source") or "").lower()
+    if not (is_ticket or source in {"customer_ticket", "customer-issue-intake"}):
+        return input_data
+    try:
+        return apply_para_triage(input_data, employee_id=employee_id)
+    except RECOVERABLE_ERRORS:
+        return input_data
+
+
 def stamp_intake_triage(payload: dict[str, Any] | None) -> dict[str, Any]:
     """incident publish 边界：写入分诊快照，供终极员工查看与后续介入。"""
     try:
