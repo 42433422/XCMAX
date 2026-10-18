@@ -14,16 +14,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 SCRIPT = (
-    Path(__file__).resolve().parents[2]
-    / "scripts"
-    / "security"
-    / "verify_security_scan_pair.py"
+    Path(__file__).resolve().parents[2] / "scripts" / "security" / "verify_security_scan_pair.py"
 )
 GATE_SCRIPT = (
-    Path(__file__).resolve().parents[2]
-    / "scripts"
-    / "security"
-    / "security_release_gate.py"
+    Path(__file__).resolve().parents[2] / "scripts" / "security" / "security_release_gate.py"
 )
 RELEASE_SHA = "a" * 40
 
@@ -109,9 +103,7 @@ def test_same_run_passed_as_previous_and_current_passes(tmp_path: Path) -> None:
 
     assert code == 0, result
     assert result["passed"] is True
-    assert not any(
-        b.startswith(("scan_pair_gap", "scans_are_not")) for b in result["blockers"]
-    )
+    assert not any(b.startswith(("scan_pair_gap", "scans_are_not")) for b in result["blockers"])
 
 
 def test_same_directory_counts_as_single_scan(tmp_path: Path) -> None:
@@ -143,9 +135,7 @@ def test_unresolved_secret_still_blocks(tmp_path: Path) -> None:
     _write_scan(
         current,
         _fresh_start(),
-        findings=[
-            {"id": "leak-1", "severity": "low", "secret": True, "status": "open"}
-        ],
+        findings=[{"id": "leak-1", "severity": "low", "secret": True, "status": "open"}],
     )
 
     code, result = _run(current)
@@ -185,8 +175,7 @@ def test_extra_previous_scan_for_other_sha_blocks(tmp_path: Path) -> None:
 
     assert code == 1
     assert any(
-        b.startswith("previous:") and "release_sha_mismatch" in b
-        for b in result["blockers"]
+        b.startswith("previous:") and "release_sha_mismatch" in b for b in result["blockers"]
     )
 
 
