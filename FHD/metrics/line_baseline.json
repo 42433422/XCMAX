@@ -1,5 +1,5 @@
 {
-  "lines": 2309909,
+  "lines": 2310556,
   "updated": "2026-10-19",
-  "note": "Dot 工单打通（用户 2026-10-19 04:22 UTC+8 批准）：新增 modstore_server/dot_ticket_dispatch.py（派给 dolt 的客服工单加 [xcmax:…] 控制标记、按 #2414 分诊结果选 report_only/code_fix、离开 MODstore 前脱敏）+286 行，tests/test_dot_ticket_dispatch.py +335 行，para_delegate_handler_part04.py 接入净 +5 行；合计净增 626 行，按规则 A 上调基线"
+  "note": "PR #2419 与最新 main 90e1fb7d 同步；保留主线 #2418 基线并重新计数，Dot 工单控制标记、分诊模式及脱敏实现和测试净增 626 行；原批准与原因沿用本 PR 现有 2026-10-19 04:22 记录，仅解决基线冲突，不改变 CI 或生产配置。"
 }
