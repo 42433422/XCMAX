@@ -10,10 +10,10 @@
     <form v-if="showCreate" class="cs-card cs-create" @submit.prevent="createTicket">
       <h3 class="cs-card-title">新建产品问题工单</h3>
       <div class="cs-create-grid">
-        <label class="cs-search"><span>问题标题</span><input v-model="createTitle" required maxlength="256" :disabled="creating || Boolean(createError)" /></label>
-        <label><span>问题类型</span><select v-model="createDomain" :disabled="creating || Boolean(createError)"><option value="platform">平台</option><option value="software">软件</option></select></label>
-        <label class="cs-search cs-create-wide"><span>问题描述</span><textarea v-model="createDescription" required minlength="4" maxlength="8000" rows="5" :disabled="creating || Boolean(createError)"></textarea></label>
-        <label class="cs-search cs-create-wide"><span>验收标准（可选）</span><textarea v-model="acceptanceCriteria" maxlength="6000" rows="3" :disabled="creating || Boolean(createError)"></textarea></label>
+        <label class="cs-search"><span>问题标题</span><input v-model="createTitle" required maxlength="256" :disabled="creating || ambiguousCreateResult" @input="clearCreateError" /></label>
+        <label><span>问题类型</span><select v-model="createDomain" :disabled="creating || ambiguousCreateResult" @change="clearCreateError"><option value="platform">平台</option><option value="software">软件</option></select></label>
+        <label class="cs-search cs-create-wide"><span>问题描述</span><textarea v-model="createDescription" required minlength="4" maxlength="8000" rows="5" :disabled="creating || ambiguousCreateResult" @input="clearCreateError"></textarea></label>
+        <label class="cs-search cs-create-wide"><span>验收标准（可选）</span><textarea v-model="acceptanceCriteria" maxlength="6000" rows="3" :disabled="creating || ambiguousCreateResult" @input="clearCreateError"></textarea></label>
       </div>
       <p v-if="createError" role="alert" class="cs-banner-error">{{ createError }}</p>
       <div class="cs-create-actions">
@@ -96,13 +96,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ApiError } from '@/api/core'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { formatBeijingTime, intentLabel, submitterTypeLabel, ticketStatusBadge, type Row } from '../utils/customerServiceTicketFormat'
 
 const PAGE_SIZE = 50
 const router = useRouter()
 const search = ref(''), submitterType = ref(''), intentFilter = ref(''), statusFilter = ref(''), error = ref('')
-const showCreate = ref(false), creating = ref(false), createError = ref('')
+const showCreate = ref(false), creating = ref(false), createError = ref(''), ambiguousCreateResult = ref(false)
 const createTitle = ref(''), createDescription = ref(''), acceptanceCriteria = ref('')
 const createDomain = ref<'platform' | 'software'>('platform'), requestId = ref('')
 const tickets = ref<Row[]>([])
@@ -136,10 +137,15 @@ function closeCreate() {
   if (!creating.value) showCreate.value = false
 }
 
+function clearCreateError() {
+  if (!ambiguousCreateResult.value) createError.value = ''
+}
+
 async function createTicket() {
   if (creating.value) return
   creating.value = true
   createError.value = ''
+  requestId.value ||= window.crypto.randomUUID()
   try {
     const result = await xcmaxAdminApi.createCustomerTicket({
       request_id: requestId.value,
@@ -154,9 +160,16 @@ async function createTicket() {
     requestId.value = ''
     createTitle.value = ''; createDescription.value = ''; acceptanceCriteria.value = ''
     createError.value = ''
+    ambiguousCreateResult.value = false
     open(id)
   } catch (cause) {
-    createError.value = `提交未确认：${message(cause)}。表单与请求标识已保留，重试会防止重复建单。`
+    const status = cause instanceof ApiError ? cause.status : 0
+    const definitivelyRejected = status >= 400 && status < 500 && status !== 408 && status !== 429
+    ambiguousCreateResult.value = !definitivelyRejected
+    if (definitivelyRejected) requestId.value = ''
+    createError.value = definitivelyRejected
+      ? `提交被拒绝：${message(cause)}。请修正表单后重试，重试会使用新的请求标识。`
+      : `提交结果未确认：${message(cause)}。表单与请求标识已保留，请使用当前内容重试以避免重复建单。`
   } finally {
     creating.value = false
   }

@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { reactive } from 'vue'
+import { ApiError } from '@/api/core'
 import CustomerServiceTicketsView from '../../../admin-console/src/views/CustomerServiceTicketsView.vue'
 import CustomerServiceTicketDetailView from '../../../admin-console/src/views/CustomerServiceTicketDetailView.vue'
 import { ADMIN_HOST_ROUTE_RECORDS } from '../../../admin-console/src/adminHostRoutes'
 import { ADMIN_OPERATOR_MENU_ITEMS, ADMIN_OPERATOR_ROUTE_NAMES } from '../../../admin-console/src/constants/adminOperatorNav'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 
-const { list, detail, push, route } = vi.hoisted(() => ({
-  list: vi.fn(), detail: vi.fn(), push: vi.fn(), route: { params: {} as Record<string, string> },
+const { list, detail, create, push, route } = vi.hoisted(() => ({
+  list: vi.fn(), detail: vi.fn(), create: vi.fn(), push: vi.fn(), route: { params: {} as Record<string, string> },
 }))
-vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail } }))
+vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail, createCustomerTicket: create } }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => route }))
 
 const ticket = {
@@ -31,6 +32,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   route.params = {}
   list.mockResolvedValue({ items: [ticket], total: 1 }); detail.mockResolvedValue(payload); push.mockResolvedValue(undefined)
+  create.mockResolvedValue({ ticket_id: 53, ticket_no: 'CS-53' })
 })
 
 describe('customer service ticket list', () => {
@@ -81,14 +83,51 @@ describe('customer service ticket list', () => {
     const wrapper = mount(CustomerServiceTicketsView); await flushPromises()
     expect(wrapper.text()).toContain('第 1 / 2 页')
     await wrapper.find('input').setValue('290063'); await wrapper.find('form').trigger('submit'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('290063', 0, '')
+    expect(list).toHaveBeenLastCalledWith('290063', 0, '', '', '')
     await wrapper.findAll('button').find(row => row.text() === '下一页')!.trigger('click'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('290063', 50, '')
+    expect(list).toHaveBeenLastCalledWith('290063', 50, '', '', '')
     await wrapper.find('input').setValue('UPDATELOG-20261016')
     await wrapper.findAll('button').find(row => row.text() === '上一页')!.trigger('click'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('290063', 0, '')
+    expect(list).toHaveBeenLastCalledWith('290063', 0, '', '', '')
     await wrapper.find('form').trigger('submit'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('UPDATELOG-20261016', 0, '')
+    expect(list).toHaveBeenLastCalledWith('UPDATELOG-20261016', 0, '', '', '')
+    wrapper.unmount()
+  })
+  it('allows correction after a definite rejection and uses a fresh request id', async () => {
+    create.mockRejectedValueOnce(new ApiError('问题描述至少 4 个字符', 422, {}))
+    const wrapper = mount(CustomerServiceTicketsView); await flushPromises()
+    await wrapper.find('button.cs-btn-primary').trigger('click')
+    const form = wrapper.find('form.cs-create')
+    const title = form.find('input')
+    await title.setValue('员工图谱页面无法显示关系线')
+    await form.find('textarea').setValue('管理端员工图谱页面未显示关系线。')
+    await form.trigger('submit')
+    await flushPromises()
+    expect((title.element as HTMLInputElement).disabled).toBe(false)
+    expect(form.text()).toContain('提交被拒绝')
+    await title.setValue('员工图谱页面无法显示关系线')
+    expect(form.text()).not.toContain('提交被拒绝')
+    await form.trigger('submit')
+    await flushPromises()
+    expect(create).toHaveBeenCalledTimes(2)
+    expect(create.mock.calls[0][0].request_id).not.toBe(create.mock.calls[1][0].request_id)
+    expect(push).toHaveBeenCalledWith({ name: 'customer-service-ticket-detail', params: { ticketId: '53' } })
+    wrapper.unmount()
+  })
+  it('keeps the same payload and request id after an uncertain response', async () => {
+    create.mockRejectedValueOnce(new ApiError('请求超时', 0, null))
+    const wrapper = mount(CustomerServiceTicketsView); await flushPromises()
+    await wrapper.find('button.cs-btn-primary').trigger('click')
+    const form = wrapper.find('form.cs-create')
+    await form.find('input').setValue('员工图谱页面无法显示关系线')
+    await form.find('textarea').setValue('管理端员工图谱页面未显示关系线。')
+    await form.trigger('submit')
+    await flushPromises()
+    await form.trigger('submit')
+    await flushPromises()
+    expect(create).toHaveBeenCalledTimes(2)
+    expect(create.mock.calls[0][0]).toEqual(create.mock.calls[1][0])
+    expect((form.find('input').element as HTMLInputElement).disabled).toBe(true)
     wrapper.unmount()
   })
 })
