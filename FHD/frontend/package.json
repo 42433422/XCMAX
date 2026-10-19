@@ -82,7 +82,7 @@
     "unplugin-vue-components": "^30.0.0",
     "vite": "^6.4.3",
     "vitest": "^5.0.3",
-    "vue-tsc": "^2.0.29",
+    "vue-tsc": "^3.3.13",
     "fast-glob": "file:./compat-resource-glob",
     "vue-eslint-parser": "10.4.1"
   },
