@@ -48,12 +48,13 @@
     "font-awesome": "^4.7.0",
     "mermaid": "^11.16.1",
     "mime-types": "^2.1.35",
-    "pinia": "^2.2.2",
+    "pinia": "^4.0.3",
     "qrcode": "^1.5.4",
     "vue": "^3.5.44",
     "vue-i18n": "^9.14.5",
     "vue-router": "^4.4.3",
-    "xlsx": "npm:@e965/xlsx@^0.20.3"
+    "xlsx": "npm:@e965/xlsx@^0.20.3",
+    "@vue/devtools-api": "^8.1.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
