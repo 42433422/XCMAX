@@ -7,7 +7,7 @@
 ``receivable_allocations`` 分配（unpaid / partial / paid / refunded）。
 
 - 累计收款不超应收（超收被拒）；
-- 同单同金额重复收款幂等（不重复生成凭证）；
+- 同订单同参考号的重复收款幂等（不重复生成凭证）；
 - 全额 → paid；
 - refund/reversal 生成反向凭证，原分配更新为 refunded，并新建冲销分配
   （``reversed_of_id`` 关联原始分配）承载反向凭证。
@@ -90,7 +90,7 @@ def payment(
     """登记一笔收款。
 
     调用 ``create_journal_entry`` 过账 ``借现金1001 / 贷应收1122``，并写入
-    ``ReceivableAllocation``。超收被拒；同单同金额幂等；全额 → paid。
+    ``ReceivableAllocation``。超收被拒；有参考号时按参考号幂等；全额 → paid。
     可选 ``db``：调用方持有的会话，提供时使用该精确对象且**不**调用 ``get_db()``，
     也**不** commit/rollback/close（由调用方负责）；缺省时沿用 ``get_db()`` 自带事务。
     """
@@ -109,15 +109,9 @@ def payment(
         existing = _existing_allocations(ctx, sales_order_id)
         current_allocated = _sum_allocated(existing)
 
-        # 同单同金额幂等：已存在未退款且金额一致 → 直接返回，不重复记账
-        for alloc in existing:
-            if _to_decimal(alloc.allocated_amount) == amount_dec:
-                return {
-                    "success": True,
-                    "idempotent": True,
-                    "message": "该订单已存在相同金额的收款分配，幂等返回",
-                    "data": alloc.to_dict(),
-                }
+        # Amount is not a payment identity: distinct installments can have equal amounts.
+        # Existing allocations do not persist the caller's reference. Until a durable
+        # unique payment key is stored, do not falsely deduplicate equal installments.
 
         # 累计收款不超应收（超收被拒）
         new_total = current_allocated + amount_dec
