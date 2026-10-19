@@ -1,5 +1,5 @@
 {
-  "lines": 2310122,
+  "lines": 2310389,
   "updated": "2026-10-19",
-  "note": "依赖整合收口同步 main f2fe05bd（#2420 registry 修复）：完整保留已评审版本与 integrity，仅统一 npmjs resolved；Pinia peer +1、API 测试线程隔离 +2，总例外仍为 3 行。"
+  "note": "依赖整合候选同步 main 9dbb16ed（#2413 已合入）：原依赖版本及 integrity 不变，保留原 Pinia peer +1 与 API 测试隔离 +2，总例外仍为 3 行。按终极员工部署冻结保留 hold-merge。"
 }
