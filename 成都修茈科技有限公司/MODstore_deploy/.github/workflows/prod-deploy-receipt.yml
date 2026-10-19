@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download exact deployment correlation
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: modstore-deployment-correlation
           path: ${{ runner.temp }}/modstore-deployment-correlation

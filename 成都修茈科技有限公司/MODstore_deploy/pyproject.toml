@@ -11,9 +11,9 @@ web = [
     "uvicorn[standard]>=0.27",
     "python-multipart>=0.0.6",
     "httpx[socks]>=0.27",
-    # Starlette 1.6 still imports anyio.abc.BlockingPortal; AnyIO 4.15 turns
-    # that compatibility alias into a deprecation failure under our strict tests.
-    "anyio>=4.4,<4.15",
+    # Starlette 1.7 removes deprecated portal imports required by AnyIO 4.15.
+    "starlette>=1.7,<2",
+    "anyio>=4.15.1,<4.16",
     "socksio>=1.0",
     # 上界不可去掉：sqlalchemy 2.1.0 收紧 Query 类型推断，使 ~30 个既有模块在
     # mypy 门禁下被判 56 条错误（2026-09-25 事故 WO-0f1b3d12bab4，代码零变更）。
@@ -28,7 +28,7 @@ web = [
     "python-pptx>=0.6.23",
     "PyYAML>=6.0",
     "paramiko>=3.4",
-    "cryptography>=42.0",
+    "cryptography>=50.0.2",
     "prometheus-client>=0.20",
     "pika>=1.3",
     "edge-tts>=6.1",
@@ -57,9 +57,9 @@ evolution-metrics = [
     # operating-metrics module uses pandas.  Keep the runtime extra complete
     # so daily 30/90-day snapshots cannot silently degrade to stale evidence.
     "pandas>=2.0",
-    "pytest>=7.4",
+    "pytest>=9.1.1",
     "pytest-cov>=4.1",
-    "pytest-asyncio>=0.23",
+    "pytest-asyncio>=1.4.0",
 ]
 aliyun-tts = [
     "dashscope>=1.14",
@@ -73,11 +73,11 @@ vibe = [
     "vibe-coding[web]>=0.1.0",
 ]
 dev = [
-  "pytest>=7.4",
+  "pytest>=9.1.1",
   "pytest-cov>=4.1",
-  "pytest-asyncio>=0.23",
+  "pytest-asyncio>=1.4.0",
   "PyYAML>=6.0",
-  "black==26.10.0",
+  "black==26.10.1",
   "isort==6.1.0",
   "jsonschema>=4.21",
   # 工具精确固定；升级必须同时验证格式和类型检查。

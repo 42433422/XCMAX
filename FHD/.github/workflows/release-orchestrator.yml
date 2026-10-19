@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Require frozen SHA to be current main with every protected check successful
@@ -95,13 +95,13 @@ jobs:
             printf '::error::Required checks are not successful: %s\n' "${failed[*]}"
             exit 1
           fi
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: xcagi-security-release-reports
           path: security-reports/current
           run-id: ${{ inputs.security_scan_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: xcagi-security-release-reports
           path: security-reports/previous
@@ -124,7 +124,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Verify stable version anchors

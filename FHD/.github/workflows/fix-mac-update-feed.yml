@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {ref: '${{ inputs.build_sha }}'}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with: {python-version: '3.12'}
       - name: Validate main identity and publication authorization
         env:
@@ -111,10 +111,10 @@ jobs:
             rm -rf "$zip_dir"
           done
           bash scripts/package/publish-macos-download-center.sh "$PRODUCT_VERSION" "$BUILD_SHA" "$PAIR_OUTPUT" --dry-run
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: ${{ inputs.publish }}
         with: {name: xcagi-security-release-reports, path: '${{ runner.temp }}/security/current', run-id: '${{ inputs.security_scan_run_id }}', github-token: '${{ github.token }}'}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: ${{ inputs.publish }}
         with: {name: xcagi-security-release-reports, path: '${{ runner.temp }}/security/previous', run-id: '${{ inputs.previous_security_scan_run_id }}', github-token: '${{ github.token }}'}
       - name: Enforce unchanged exact-SHA two-day security clearance
