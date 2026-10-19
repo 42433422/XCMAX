@@ -13,7 +13,7 @@ _SECRET_VALUE_RE = re.compile(
 )
 _TOKEN_SHAPES_RE = re.compile(
     r"(sk-[A-Za-z0-9_\-]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
-    r"|AKID[A-Za-z0-9]{12,}|eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]+)"
+    r"|(?:cst_ro_|pat_)[A-Za-z0-9_\-]{20,}|AKID[A-Za-z0-9]{12,}|eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]+)"
 )
 _SCALAR_KEYS = (
     "handler",
