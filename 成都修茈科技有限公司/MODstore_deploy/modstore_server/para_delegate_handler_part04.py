@@ -29,16 +29,17 @@ def _attach_credential_grant(prompt: str, task_id: str) -> _facade().Any:
 def _post_para_api_once(
     req: _facade().Dict[str, _facade().Any],
 ) -> _facade().Dict[str, _facade().Any]:
-    base = _facade()._api_base()
+    h = _facade()
+    base = h._api_base()
     if not base:
-        return _facade()._outbox_response(
+        return h._outbox_response(
             req,
             status="awaiting_para_dispatcher",
             error="MODSTORE_PARA_API_BASE 未配置；已写入 outbox，但未真实派发到 Para",
         )
     repo_url = str(req.get("repo_url") or "").strip()
-    if not repo_url and (not _facade()._allow_local_workdir()):
-        return _facade()._outbox_response(
+    if not repo_url and (not h._allow_local_workdir()):
+        return h._outbox_response(
             req,
             status="blocked_missing_repo_url",
             error="缺少 repo_url；已拒绝让 Para 使用工作设备本地目录，避免污染设备工作区。请配置 MODSTORE_PARA_REPO_URL 或在任务输入里提供 repo_url；如确实要使用设备本地目录，显式设置 MODSTORE_PARA_ALLOW_LOCAL_WORKDIR=1。",
@@ -46,25 +47,26 @@ def _post_para_api_once(
         )
     branch = str(req.get("branch") or "main").strip() or "main"
     report_only = bool(req.get("report_only"))
-    if repo_url and (not report_only) and (not _facade()._allow_local_workdir()):
-        git_check = _facade()._git_preflight_branch(repo_url, branch)
+    if repo_url and (not report_only) and (not h._allow_local_workdir()):
+        git_check = h._git_preflight_branch(repo_url, branch)
         if not git_check.get("ok"):
-            return _facade()._outbox_response(
+            return h._outbox_response(
                 req,
                 status="blocked_git_preflight",
                 error=str(git_check.get("error") or "git preflight failed"),
                 queued=True,
             )
-    base_prompt = _facade()._build_para_prompt(req)
-    first_payload: _facade().Dict[str, _facade().Any] = {}
-    max_attempts = _facade()._resolve_max_attempts(req)
+    base_prompt = h._build_para_prompt(req)
+    first_payload: dict[str, object] = {}
+    max_attempts = h._resolve_max_attempts(req)
     mode = str(req.get("mode") or "").strip().lower()
     auto_merge = bool(req.get("auto_merge"))
     if not auto_merge and mode in {"verify", "review", "report"} and (report_only is False):
-        auto_merge = _facade()._coerce_bool(req.get("auto_merge_on_complete"), False)
+        auto_merge = h._coerce_bool(req.get("auto_merge_on_complete"), False)
     workspace_path = str(
-        req.get("workspace_path") or _facade().os.environ.get("MODSTORE_PARA_WORKSPACE_PATH") or ""
+        req.get("workspace_path") or h.os.environ.get("MODSTORE_PARA_WORKSPACE_PATH") or ""
     ).strip()
+    task_id = str(req.get("para_task_id") or "").strip()
     try:
         with _facade().httpx.Client(timeout=_facade()._api_timeout(), trust_env=False) as client:
             grant_task = str(req.get("para_task_id") or req.get("request_id") or "").strip()
@@ -75,25 +77,36 @@ def _post_para_api_once(
                 client, base, token, req
             )
             if not sel_devices:
-                return _facade()._outbox_response(
+                raw = req.get("raw_input") or {}
+                if raw.get("_ticket_route") and not req.get("para_task_id"):
+                    # No POST and no replayable outbox: this hop cannot still execute.
+                    return {
+                        "handler": "para_delegate",
+                        "ok": False,
+                        "accepted": False,
+                        "queued": False,
+                        "status": "blocked_no_online_para_device",
+                        "error": select_reason or "No eligible Para device",
+                        "request": h._public_request(req),
+                    }
+                return h._outbox_response(
                     req,
                     status="blocked_no_online_para_device",
                     error=select_reason or "未发现在线可用 Para 工作设备（executorReady）",
                     queued=True,
                 )
             total = len(sel_devices)
-            task_id = str(req.get("para_task_id") or "").strip()
             dispatched: list = []
             for index, device in enumerate(sel_devices):
                 device_id = str(device.get("id") or "").strip()
                 if not device_id:
                     continue
-                payload: _facade().Dict[str, _facade().Any] = {
+                payload: dict[str, object] = {
                     "device_id": device_id,
                     "title": str(req.get("title") or "MODstore loop task").strip(),
-                    "prompt": _facade()._multi_device_prompt(base_prompt, device, index, total),
+                    "prompt": h._multi_device_prompt(base_prompt, device, index, total),
                     "branch": branch,
-                    "subtask_title": _facade()._para_subtask_title(req, index, total),
+                    "subtask_title": h._para_subtask_title(req, index, total),
                     "report_only": report_only,
                     "max_attempts": max_attempts,
                 }
@@ -121,7 +134,7 @@ def _post_para_api_once(
                     headers={"Authorization": f"Bearer {token}"},
                     json=payload,
                 )
-                body = _facade()._safe_json(resp)
+                body = h._safe_json(resp)
                 ok = (
                     resp.status_code < 400
                     and isinstance(body, dict)
@@ -129,44 +142,38 @@ def _post_para_api_once(
                 )
                 if not ok:
                     if not dispatched:
-                        outbox = _facade()._write_outbox(
-                            {
-                                **req,
-                                "para_payload": payload,
-                                "para_response": _facade()._summarize_para_response(body),
-                            }
-                        )
                         err_text = str(
                             body.get("error") or body.get("detail") or resp.text[:500]
                             if isinstance(body, dict)
                             else resp.text[:500]
                         )
+                        response = h._summarize_para_response(body)
+                        rejected = h._outbox_response(
+                            {**req, "para_payload": payload, "para_response": response},
+                            status="para_api_rejected_outboxed",
+                            error=err_text,
+                        )
                         return {
-                            "handler": "para_delegate",
-                            "ok": False,
-                            "queued": True,
-                            "status": "para_api_rejected_outboxed",
+                            **rejected,
                             "status_code": resp.status_code,
                             "source": "para_api",
                             "failure_kind": "para_api",
                             "para_tier": tier,
-                            "error": err_text,
-                            "outbox_path": str(outbox),
-                            "request": _facade()._public_request(req),
-                            "response": _facade()._summarize_para_response(body),
+                            "request": h._public_request(req),
+                            "response": response,
                             "devices": [
                                 {
                                     "device_id": device_id,
                                     "device_name": device.get("name"),
-                                    "tool_name": selected_tool or _facade()._dev_tool(),
+                                    "tool_name": selected_tool or h._dev_tool(),
                                 }
                             ],
                         }
                     continue
-                accepted = _facade()._summarize_para_response(body)
+                accepted = h._summarize_para_response(body)
                 if not task_id:
                     task_id = str(accepted.get("task_id") or "").strip()
-                _facade()._force_single_device_attempt(
+                h._force_single_device_attempt(
                     {**req, "device_id": device_id, "report_only": payload["report_only"]},
                     accepted,
                 )
@@ -175,7 +182,7 @@ def _post_para_api_once(
                         "device_id": device_id,
                         "device_name": accepted.get("device_name") or device.get("name"),
                         "subtask_id": accepted.get("subtask_id"),
-                        "tool_name": selected_tool or _facade()._dev_tool(),
+                        "tool_name": selected_tool or h._dev_tool(),
                     }
                 )
             if not dispatched:
@@ -188,43 +195,9 @@ def _post_para_api_once(
                     status="para_api_no_subtask_created",
                     error="Para API 未创建任何 subtask",
                 )
-            should_wait = _facade()._coerce_bool(
-                req.get("wait_for_para"), _facade()._wait_for_completion_default()
-            )
+            should_wait = h._coerce_bool(req.get("wait_for_para"), h._wait_for_completion_default())
             device_scope = "local_device" if tier == 1 else "all_devices"
-            if should_wait:
-                if not task_id:
-                    return {
-                        "handler": "para_delegate",
-                        "ok": False,
-                        "accepted": True,
-                        "status": "para_api_missing_task_id",
-                        "source": "para_api",
-                        "para_tier": tier,
-                        "device_scope": device_scope,
-                        "request": _facade()._public_request(req),
-                        "devices": dispatched,
-                        "error": "Para API accepted but response missing task.id",
-                    }
-                final = _facade()._wait_for_para_task(client, base, token, task_id, req)
-                return {
-                    "handler": "para_delegate",
-                    "ok": bool(final.get("ok")),
-                    "accepted": True,
-                    "completed": bool(final.get("ok")),
-                    "status": final.get("status"),
-                    "source": "para_api",
-                    "auth": token_info["source"],
-                    "para_tier": tier,
-                    "device_scope": device_scope,
-                    "request": _facade()._public_request(req),
-                    "devices": dispatched,
-                    "para_result": final.get("snapshot"),
-                    "error": (
-                        "" if final.get("ok") else str(final.get("error") or "Para task failed")
-                    ),
-                }
-            return {
+            result = {
                 "handler": "para_delegate",
                 "ok": True,
                 "accepted": True,
@@ -235,15 +208,36 @@ def _post_para_api_once(
                 "auth": token_info["source"],
                 "para_tier": tier,
                 "device_scope": device_scope,
-                "request": _facade()._public_request(req),
+                "request": h._public_request(req),
                 "devices": dispatched,
             }
+            if not should_wait:
+                return result
+            if not task_id:
+                return {
+                    **result,
+                    "ok": False,
+                    "status": "para_api_missing_task_id",
+                    "error": "Para API accepted but response missing task.id",
+                }
+            final = h._wait_for_para_task(client, base, token, task_id, req)
+            return {
+                **result,
+                "ok": bool(final.get("ok")),
+                "completed": bool(final.get("ok")),
+                "status": final.get("status"),
+                "para_result": final.get("snapshot"),
+                "error": "" if final.get("ok") else str(final.get("error") or "Para task failed"),
+            }
     except RECOVERABLE_ERRORS as exc:
-        return _facade()._outbox_response(
-            {**req, "para_payload": first_payload},
+        result = h._outbox_response(
+            {**req, "para_task_id": task_id, "para_payload": first_payload},
             status="para_api_failed_outboxed",
             error=f"Para API 调用失败，已写入 outbox: {str(exc)[:500]}",
         )
+        if task_id:
+            result.update({"accepted": True, "task_id": task_id})
+        return result
 
 
 def _coerce_bool(value: _facade().Any, default: bool) -> bool:
