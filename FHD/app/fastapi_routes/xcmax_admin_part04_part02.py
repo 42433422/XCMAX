@@ -133,12 +133,15 @@ async def _customer_ticket_proxy(request: _facade().Request, path: str):
 async def admin_customer_service_tickets(
     request: _facade().Request,
     search: str = _facade().Query("", max_length=200),
+    submitter_type: str = _facade().Query("", max_length=16),
     offset: int = _facade().Query(0, ge=0),
     limit: int = _facade().Query(50, ge=1, le=100),
 ):
     from urllib.parse import urlencode
 
-    query = urlencode({"search": search, "offset": offset, "limit": limit})
+    query = urlencode(
+        {"search": search, "submitter_type": submitter_type, "offset": offset, "limit": limit}
+    )
     return await _customer_ticket_proxy(request, f"/api/customer-service/tickets?{query}")
 
 
