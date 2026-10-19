@@ -18,21 +18,8 @@
     <p v-if="forceMsg" class="banner-ok">{{ forceMsg }}</p>
 
     <div class="kpi-grid">
-      <div class="kpi">
-        <div class="kpi-label">待办</div>
-        <div class="kpi-value">{{ pendingCount }}</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">30 天动作</div>
-        <div class="kpi-value">{{ window30.action_count ?? '—' }}</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">30 天否决</div>
-        <div class="kpi-value">{{ window30.blocked_count ?? '—' }}</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">30 天 veto rate</div>
-        <div class="kpi-value">{{ formatRate(window30.veto_rate) }}</div>
+      <div v-for="[label, value] in kpis" :key="label" class="kpi">
+        <div class="kpi-label">{{ label }}</div><div class="kpi-value">{{ value }}</div>
       </div>
     </div>
 
@@ -50,54 +37,15 @@
     </section>
 
     <div class="split">
-      <section class="card">
-        <h3>最近部署事件</h3>
-        <table v-if="deployEvents.length" class="data-table">
-          <thead>
-            <tr>
-              <th>deploy_id</th>
-              <th>时间</th>
-              <th>状态</th>
-              <th>分支</th>
-              <th>workflow</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in deployEvents" :key="String(row.deploy_id)">
-              <td class="mono">{{ row.deploy_id }}</td>
-              <td>{{ row.deployed_at || '—' }}</td>
-              <td>{{ row.status || '—' }}</td>
-              <td>{{ row.head_branch || '—' }}</td>
-              <td>{{ row.source_workflow || '—' }}</td>
-            </tr>
-          </tbody>
+      <section v-for="section in recentSections" :key="section.title" class="card">
+        <h3>{{ section.title }}</h3>
+        <table v-if="section.rows.length" class="data-table">
+          <thead><tr><th v-for="column in section.columns" :key="column">{{ column }}</th></tr></thead>
+          <tbody><tr v-for="(row, idx) in section.rows" :key="idx">
+            <td v-for="(value, col) in row" :key="col">{{ value || '—' }}</td>
+          </tr></tbody>
         </table>
-        <div v-else class="empty">暂无部署事件</div>
-      </section>
-
-      <section class="card">
-        <h3>最近审计日志</h3>
-        <table v-if="auditItems.length" class="data-table">
-          <thead>
-            <tr>
-              <th>action</th>
-              <th>risk</th>
-              <th>decision</th>
-              <th>actor</th>
-              <th>time</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, idx) in auditItems" :key="String(row.id || idx)">
-              <td>{{ row.action || '—' }}</td>
-              <td>{{ row.risk_level || '—' }}</td>
-              <td>{{ row.decision || '—' }}</td>
-              <td>{{ row.actor || row.approver || row.source || '—' }}</td>
-              <td>{{ row.timestamp || row.created_at || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-else class="empty">暂无审计日志</div>
+        <div v-else class="empty">{{ section.empty }}</div>
       </section>
     </div>
 
@@ -142,25 +90,26 @@
             :class="{ active: auditTier === t }"
             @click="switchTier(t)"
           >
-            {{ t }}
+            {{ tierLabels[t] }}
           </button>
         </div>
       </div>
-      <div class="muted">{{ auditPath || '—' }}</div>
-      <ul class="audit-mini">
-        <li v-for="(row, idx) in crossAudit" :key="idx">
-          <code>{{ row.action || row.event || row.type || 'entry' }}</code>
-          <span>{{ row.timestamp || row.ts || '' }}</span>
-        </li>
-      </ul>
-      <div v-if="!crossAudit.length" class="empty">该端暂无可读 audit.jsonl</div>
+      <p role="status">{{ auditLoading ? '正在加载审计记录…' : auditMessage }}</p>
+      <p class="muted">{{ crossAudit.length }} 条记录 · 最新事件 {{ auditLatest || '未知' }} · 超过 24 小时提示过期，不代表服务故障</p>
+      <button type="button" class="btn" :disabled="auditLoading" @click="switchTier(auditTier)">重新读取</button>
+      <table v-if="crossAudit.length" class="data-table">
+        <thead><tr><th>动作</th><th>说明</th><th>时间</th><th>详情</th></tr></thead>
+        <tbody><tr v-for="(row, idx) in crossAudit" :key="idx">
+          <td>{{ auditAction(row).type || auditAction(row).action || row.event || row.type || '未标注动作' }}</td>
+          <td>{{ auditAction(row).params?.reason || row.reason || row.decision || '查看原始记录' }}</td>
+          <td>{{ row.timestamp || row.ts || '未知' }}</td>
+          <td><details><summary>原始记录</summary><pre>{{ JSON.stringify(row, null, 2) }}</pre></details></td>
+        </tr></tbody>
+      </table>
+      <details><summary>数据来源</summary><p class="mono">{{ auditPath || '尚未取得来源' }}</p><p>读取服务端可见的该端审计文件，不代表已实时连接其他设备。</p></details>
     </section>
   </div>
 </template>
-
-<script lang="ts">
-export default { name: 'XCmaxAdminAutonomyTab' }
-</script>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
@@ -184,14 +133,38 @@ const gateRules = ref<Array<Record<string, any>>>([])
 const auditTier = ref('server')
 const crossAudit = ref<Record<string, any>[]>([])
 const auditPath = ref('')
+const auditLoading = ref(false)
+const auditStatus = ref('')
+const auditLatest = ref('')
+let auditRequest = 0
+const tierLabels: Record<string, string> = { desktop: '桌面端', server: '服务器', ci: '持续集成' }
+const auditMessages: Record<string, string> = {
+  ready: '已加载审计记录。', stale: '数据已过期：请检查该端审计采集与同步，再重新读取。',
+  not_connected: '数据源未接入：未找到该端审计文件，请检查采集路径和同步配置。',
+  empty: '数据源已接入，但尚无审计记录。',
+  error: '加载失败：请检查网络、登录状态及审计文件权限或格式，再重新读取。',
+  unknown_freshness: '已加载记录，但无法核实数据时效，请检查记录时间。',
+}
+const auditMessage = computed(() => auditMessages[auditStatus.value] || '尚未读取审计数据。')
+function auditAction(row: Record<string, any>): Record<string, any> {
+  return row.action && typeof row.action === 'object' ? row.action : { type: row.action }
+}
 
-const pendingCount = computed(() => Number(overview.value?.pending?.count || 0))
 const window30 = computed(() => overview.value?.operating_metrics?.windows?.['30'] || {})
-const trend = computed(() => overview.value?.operating_metrics?.veto_rate_trend_30d || [])
+const kpis = computed(() => [
+  ['待办', String(overview.value?.pending?.count || 0)], ['30 天动作', String(window30.value.action_count ?? '—')],
+  ['30 天否决', String(window30.value.blocked_count ?? '—')], ['30 天 veto rate', formatRate(window30.value.veto_rate)],
+])
+const recentSections = computed(() => [
+  { title: '最近部署事件', empty: '暂无部署事件', columns: ['deploy_id', '时间', '状态', '分支', 'workflow'],
+    rows: deployEvents.value.map(r => [r.deploy_id, r.deployed_at, r.status, r.head_branch, r.source_workflow]) },
+  { title: '最近审计日志', empty: '暂无审计日志', columns: ['action', 'risk', 'decision', 'actor', 'time'],
+    rows: auditItems.value.map(r => [r.action, r.risk_level, r.decision, r.actor || r.approver || r.source, r.timestamp || r.created_at]) },
+])
 
 const trendPoints = computed(() => {
-  const rows = Array.isArray(trend.value) ? trend.value : []
-  if (rows.length < 2) return []
+  const rows = overview.value?.operating_metrics?.veto_rate_trend_30d || []
+  if (!Array.isArray(rows) || rows.length < 2) return []
   const rates = rows.map((r: any) => Number(r.veto_rate || 0))
   const max = Math.max(...rates, 1)
   const min = Math.min(...rates, 0)
@@ -224,22 +197,32 @@ async function loadAll() {
     githubItems.value = Array.isArray(gh?.items) ? gh.items : []
     githubError.value = Array.isArray(gh?.errors) && gh.errors.length ? String(gh.errors[0]) : ''
     gateRules.value = Array.isArray((gate as any)?.rules) ? (gate as any).rules : []
-    await switchTier(auditTier.value)
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
+    await switchTier(auditTier.value)
     loading.value = false
   }
 }
 
 async function switchTier(tier: string) {
+  const request = ++auditRequest
   auditTier.value = tier
+  auditLoading.value = true
+  crossAudit.value = []
+  auditPath.value = auditLatest.value = ''
   try {
     const res = await xcmaxAdminApi.fetchAutonomyAuditCrossTier({ tier, limit: 30 })
+    if (request !== auditRequest) return
+    if (res?.ok === false) throw new Error('audit_load_failed')
     crossAudit.value = Array.isArray(res?.items) ? res.items : []
-    auditPath.value = String((res as any)?.path || '')
+    auditPath.value = res?.path || ''
+    auditLatest.value = res?.last_event_at || ''
+    auditStatus.value = res?.status || (res?.exists === false ? 'not_connected' : crossAudit.value.length ? 'unknown_freshness' : 'empty')
   } catch {
-    crossAudit.value = []
+    if (request === auditRequest) auditStatus.value = 'error'
+  } finally {
+    if (request === auditRequest) auditLoading.value = false
   }
 }
 
@@ -308,10 +291,11 @@ onMounted(() => {
 .data-table th, .data-table td {
   text-align: left; padding: 6px 8px; border-bottom: 1px solid #eef2f7; vertical-align: top;
 }
+.data-table pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 480px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
 .empty { color: #94a3b8; text-align: center; padding: 18px; }
-.gate-list, .gh-list, .audit-mini { list-style: none; margin: 0; padding: 0; }
-.gate-list li, .gh-list li, .audit-mini li {
+.gate-list, .gh-list { list-style: none; margin: 0; padding: 0; }
+.gate-list li, .gh-list li {
   display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eef2f7;
 }
 .badge {
