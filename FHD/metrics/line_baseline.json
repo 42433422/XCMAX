@@ -1,5 +1,5 @@
 {
-  "lines": 2310537,
+  "lines": 2310552,
   "updated": "2026-10-19",
-  "note": "Independent company ticket service grants and negative authorization tests; explicit capability line increase for PR review, no unrelated deletion. Preserve main submitter-type changes."
+  "note": "Company-scoped ticket read service identity, safe projections and authorization tests, with dedicated read-audit output; explicit capability increase for review."
 }

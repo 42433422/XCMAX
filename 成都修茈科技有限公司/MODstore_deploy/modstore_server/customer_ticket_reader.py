@@ -22,6 +22,12 @@ from modstore_server.models_cs import CustomerServiceAction, CustomerServiceAudi
 PREFIX = "cst_ro_"
 SCOPE = "customer-tickets:read"
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.propagate = False
+if not logger.handlers:
+    audit_handler = logging.StreamHandler()
+    audit_handler.setFormatter(logging.Formatter("%(asctime)s ticket_read_audit %(message)s"))
+    logger.addHandler(audit_handler)
 
 
 @dataclass(frozen=True)

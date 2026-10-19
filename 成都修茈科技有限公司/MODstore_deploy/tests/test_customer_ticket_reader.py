@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -87,9 +88,17 @@ def reader_case(client, monkeypatch, tmp_path):
     return client, {"Authorization": f"Bearer {token}"}, ids, config, save, path
 
 
-def test_company_reader_list_detail_pagination_and_redaction(reader_case, caplog):
+@pytest.fixture
+def audit_capture(caplog):
+    logger = logging.getLogger("modstore_server.customer_ticket_reader")
+    logger.addHandler(caplog.handler)
+    yield caplog
+    logger.removeHandler(caplog.handler)
+
+
+def test_company_reader_list_detail_pagination_and_redaction(reader_case, audit_capture):
     client, headers, ids, config, save, _ = reader_case
-    caplog.set_level("INFO", logger="modstore_server.customer_ticket_reader")
+    audit_capture.set_level("INFO", logger="modstore_server.customer_ticket_reader")
     pages = [
         client.get(
             "/api/customer-service/tickets", headers=headers, params={"limit": 1, "offset": offset}
@@ -112,8 +121,8 @@ def test_company_reader_list_detail_pagination_and_redaction(reader_case, caplog
         assert response.json()["ticket"]["assignment_status"] == "unassigned"
         assert response.json()["timeline"][0]["event_type"] == "employee_progress"
     assert client.get(f"/api/customer-service/tickets/{ids[2]}", headers=headers).status_code == 404
-    assert "grant=dot-read" in caplog.text
-    assert headers["Authorization"] not in caplog.text
+    assert "grant=dot-read" in audit_capture.text
+    assert headers["Authorization"] not in audit_capture.text
     config["grants"][0]["principal"] = "grok-bot"
     save()
     assert client.get("/api/customer-service/tickets", headers=headers).status_code == 200
