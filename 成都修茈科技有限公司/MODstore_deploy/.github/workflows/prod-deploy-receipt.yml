@@ -57,19 +57,41 @@ jobs:
             echo "::error::invalid deployment merge SHA"
             exit 1
           }
+          controller_sha="$(jq -r '.controller_sha // .merge_sha' "$correlation")"
+          [[ "$controller_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::invalid controller SHA"; exit 1; }
+          workflow="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/modstore-prod-deploy.yml")"
           source_run="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_ID}")"
           jq -e \
             --arg repository "$GITHUB_REPOSITORY" \
-            --arg merge_sha "$merge_sha" \
-            '.name == "Deploy MODstore Production"
+            --arg controller_sha "$controller_sha" \
+            --argjson run_id "$SOURCE_WORKFLOW_ID" \
+            --argjson workflow "$workflow" \
+            '.id == $run_id
+              and .workflow_id == $workflow.id
+              and .path == ".github/workflows/modstore-prod-deploy.yml"
+              and .path == $workflow.path
+              and .event == "workflow_dispatch"
+              and .head_branch == "main"
               and .status == "completed"
               and .conclusion == "success"
               and .repository.full_name == $repository
-              and .head_sha == $merge_sha' \
+              and .head_sha == $controller_sha' \
             <<<"$source_run" >/dev/null || {
               echo "::error::source run is not the successful exact deployment"
               exit 1
             }
+          if [ "$controller_sha" != "$merge_sha" ]; then
+            jq -e --arg sha "$merge_sha" \
+              '.git_sha == $sha and .environment == "production" and (.approval_reference | strings | length > 0)' \
+              "$correlation" >/dev/null
+            comparison="$(gh api "/repos/${GITHUB_REPOSITORY}/compare/${merge_sha}...${controller_sha}")"
+            jq -e --arg sha "$merge_sha" \
+              '.status == "ahead" and .merge_base_commit.sha == $sha' \
+              <<<"$comparison" >/dev/null || {
+                echo "::error::deployed product is not an ancestor of controller"
+                exit 1
+              }
+          fi
           package_source_sha="${PACKAGE_SOURCE_SHA:-$merge_sha}"
           [[ "$package_source_sha" =~ ^[0-9a-f]{40}$ ]] || {
             echo "::error::invalid package source SHA"
