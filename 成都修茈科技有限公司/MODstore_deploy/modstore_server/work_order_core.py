@@ -22,6 +22,9 @@ WO_STATES: tuple[str, ...] = (
     "candidate",
     "routed",
     "in_dev",
+    "approved",
+    "rework",
+    "held",
     "merged",
     "released",
     "verifying",
@@ -33,7 +36,10 @@ WO_STATES: tuple[str, ...] = (
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     "candidate": frozenset({"routed", "dropped"}),
     "routed": frozenset({"in_dev", "dropped"}),
-    "in_dev": frozenset({"merged", "dropped"}),
+    "in_dev": frozenset({"approved", "rework", "held", "merged", "dropped"}),
+    "approved": frozenset({"merged", "rework", "held"}),
+    "rework": frozenset({"in_dev", "held", "dropped"}),
+    "held": frozenset({"in_dev", "rework", "dropped"}),
     "merged": frozenset({"released"}),
     "released": frozenset({"verifying", "closed"}),
     "verifying": frozenset({"closed", "reopened"}),
@@ -194,7 +200,12 @@ def acceptance_plan(
 ) -> dict[str, Any]:
     """验收判定计划：返回 {ok, target?, reason, note?, ref?} 供 API 落库。"""
     if verdict == "pending":
-        return {"ok": False, "reason": "verdict_pending", "target": "", "status": current}
+        return {
+            "ok": False,
+            "reason": "verdict_pending",
+            "target": "",
+            "status": current,
+        }
     if verdict not in ("accepted", "rejected"):
         return {"ok": False, "reason": "unknown_verdict", "target": ""}
     version = str(release_version or "").strip()
@@ -211,7 +222,10 @@ def acceptance_plan(
             "recorded_release_version": seen_version,
         }
 
-    ref: dict[str, Any] = {"issue_number": int(issue_number), "release_version": version}
+    ref: dict[str, Any] = {
+        "issue_number": int(issue_number),
+        "release_version": version,
+    }
     if evidence:
         ref["evidence"] = evidence
 
@@ -243,7 +257,11 @@ def acceptance_plan(
                     if int(stats.get("failed") or 0) == 0:
                         healthy.append(p)
         if len(healthy) < 2:
-            return {"ok": False, "reason": "missing_acceptance_evidence", "healthy": healthy}
+            return {
+                "ok": False,
+                "reason": "missing_acceptance_evidence",
+                "healthy": healthy,
+            }
         return {
             "ok": True,
             "target": "closed",
