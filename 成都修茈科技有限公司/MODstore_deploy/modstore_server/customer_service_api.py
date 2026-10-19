@@ -201,6 +201,7 @@ async def session_detail(
 @router.get("/tickets")
 async def list_tickets(
     status: str = "",
+    intent: str = Query("", max_length=64),
     submitter_type: str = Query("", max_length=16),
     search: str = Query("", max_length=200),
     offset: int = Query(0, ge=0),
@@ -215,6 +216,9 @@ async def list_tickets(
         q = q.filter(CustomerServiceTicket.user_id == user.id)
     if status:
         q = q.filter(CustomerServiceTicket.status == status)
+    # 分类筛选只对管理端启用；客户仍只能读取自己的工单。
+    if user.is_admin and intent.strip():
+        q = q.filter(CustomerServiceTicket.intent == intent.strip().lower())
     # 客户侧仍只按本人 user_id 查询；身份筛选只开放给管理端，不能扩大客户可见范围。
     if user.is_admin and submitter_type.strip():
         kind = submitter_type.strip().lower()
