@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from modstore_server.customer_service_tools import audit, json_loads
@@ -18,6 +19,27 @@ from modstore_server.models_cs import (
     CustomerServiceStandard,
     CustomerServiceTicket,
 )
+
+
+class StandardBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    scenario: str = Field(default="general", max_length=64)
+    description: str = Field(default="", max_length=4000)
+    rules: Dict[str, Any] = Field(default_factory=dict)
+    action_policy: Dict[str, Any] = Field(default_factory=dict)
+    auto_enabled: bool = True
+    risk_level: str = Field(default="low", max_length=16)
+    priority: int = 100
+
+
+class IntegrationBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    integration_type: str = Field(default="openapi", max_length=32)
+    connector_id: Optional[int] = None
+    workflow_id: Optional[int] = None
+    scenario: str = Field(default="general", max_length=64)
+    config: Dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
 
 
 def own_session_or_404(db: Session, user: User, session_id: int) -> CustomerServiceSession:

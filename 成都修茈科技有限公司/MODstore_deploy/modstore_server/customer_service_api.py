@@ -26,6 +26,8 @@ from modstore_server.customer_service_orchestrator import (
     ticket_payload,
 )
 from modstore_server.customer_service_api_helpers import (
+    IntegrationBody,
+    StandardBody,
     audit_payload as _audit_payload,
     integration_payload as _integration_payload,
     own_session_or_404 as _own_session_or_404,
@@ -86,27 +88,6 @@ class CustomerServiceChatBody(BaseModel):
 class TicketTitleBody(BaseModel, extra="forbid"):
     title: str = Field(..., min_length=1, max_length=256)
     expected_title: str = Field(..., max_length=256)
-
-
-class StandardBody(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    scenario: str = Field(default="general", max_length=64)
-    description: str = Field(default="", max_length=4000)
-    rules: Dict[str, Any] = Field(default_factory=dict)
-    action_policy: Dict[str, Any] = Field(default_factory=dict)
-    auto_enabled: bool = True
-    risk_level: str = Field(default="low", max_length=16)
-    priority: int = 100
-
-
-class IntegrationBody(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    integration_type: str = Field(default="openapi", max_length=32)
-    connector_id: Optional[int] = None
-    workflow_id: Optional[int] = None
-    scenario: str = Field(default="general", max_length=64)
-    config: Dict[str, Any] = Field(default_factory=dict)
-    enabled: bool = True
 
 
 class CustomerTicketEtaBody(BaseModel):
