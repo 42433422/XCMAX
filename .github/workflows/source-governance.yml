@@ -22,6 +22,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+      - name: Approved release admission tests
+        run: python -m unittest scripts.ci.test_modstore_release_approval
       - name: Test source governance rules
         run: python -m unittest scripts.dev.test_source_governance
       - name: Test unified change classifier

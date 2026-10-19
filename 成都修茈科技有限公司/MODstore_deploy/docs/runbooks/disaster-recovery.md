@@ -1,90 +1,37 @@
-# MODstore 单机灾备与恢复 Runbook
+# MODstore 单机灾备与恢复
 
-## 目标
+当前生产是单 CVM 的 systemd 不可变发行版部署，不以 Compose 应用容器为恢复前提。
+生产运维真相源为根仓 [ops/README.md](../../../../ops/README.md) 与 [ops/dr/README.md](../../../../ops/dr/README.md)。
+RPO 24 小时、支付高峰 1 小时与 RTO 2 小时是恢复目标，不能将备份存在或 dry-run 通过描述为已经实测达到这些数字。
 
-当前目标是单机/少量服务器可恢复，而不承诺真正多活。默认恢复目标：
+## 发布前备份检查
 
-- RPO：核心数据库 24 小时以内，支付高峰期建议 1 小时以内。
-- RTO：单机故障 2 小时内恢复到备机或新机器。
-- 优先级：PostgreSQL > `modstore_data` > Redis/RabbitMQ > Grafana/Prometheus。
+1. 核对 `/opt/xcmax/current` 指向的发行版以及 `/api/health` 的 SHA、产品号和产物哈希。
+2. 检查 `/var/backups/xcmax/daily/<UTC日期>/MANIFEST.txt`，在该目录执行 `sha256sum -c MANIFEST.txt`。
+3. 备份至少覆盖 MODstore PostgreSQL、持久化业务数据和运行配置；按实际部署同时核验支付库、SQLite 与异地 WAL 状态。
+4. 用与数据库版本兼容的 `pg_restore --list` 验证 custom dump；宿主机旧客户端报格式版本不支持不等于备份损坏，须使用已有兼容客户端复核。
+5. 对压缩包执行 `gzip -t`、`tar -tzf` 完整性检查，不向日志输出业务数据或配置凭据。
+6. 核验前一发行版目录和清单仍完整、磁盘足够，且备份/异地状态未过期。缺任一证据即停止发布。
 
-## 备份
+夜间及按需备份使用已安装的 `ops/backup/xcmax_backup.sh`，其产物、校验、轮转及异地传输约束见运维真相源。
+`MODstore_deploy/scripts/backup_modstore.py` 与 `restore_postgres.py` 仅适用于对应 Compose 环境；不能把旧的开发演练路径当成当前生产恢复入口。
 
-在 `MODstore_deploy` 目录运行：
+## 恢复和切换
 
-```bash
-python scripts/backup_modstore.py
-```
-
-可只备份部分组件：
-
-```bash
-python scripts/backup_modstore.py --components postgres,redis,modstore_data
-```
-
-默认输出到 `backups/<UTC timestamp>/`，包含：
-
-- `postgres.dump`：PostgreSQL custom dump。
-- `redis-data.tar.gz`：Redis AOF/RDB 数据目录。
-- `rabbitmq-data.tar.gz`：RabbitMQ 数据目录。
-- `modstore-data.tar.gz`：FastAPI `/data`，含 webhook 事件、支付订单、向量库等。
-- `prometheus-data.tar.gz`、`grafana-data.tar.gz`：监控数据。
-- `manifest.json`：备份清单和文件大小。
-
-建议把备份目录同步到备机或对象存储，不要只保存在业务主机本地。
-
-## PostgreSQL 恢复
-
-先确认目标数据库、环境变量和连接信息正确，再 dry-run：
-
-```bash
-python scripts/restore_postgres.py backups/20260101T000000Z/postgres.dump
-```
-
-确认无误后执行：
-
-```bash
-python scripts/restore_postgres.py backups/20260101T000000Z/postgres.dump --confirm
-```
-
-如需覆盖已有对象：
-
-```bash
-python scripts/restore_postgres.py backups/20260101T000000Z/postgres.dump --confirm --clean
-```
-
-恢复后执行：
-
-```bash
-python scripts/sre_smoke_check.py \
-  --base-url http://127.0.0.1:8765 \
-  --market-url http://127.0.0.1:4173 \
-  --payment-url http://127.0.0.1:8080 \
-  --prometheus-url http://127.0.0.1:9090
-```
-
-## 整机故障切换
-
-1. 在备机安装 Docker、Docker Compose、Git 和运行所需密钥。
-2. 拉取同一版本代码，复制 `.env` 和证书。
-3. 同步最新备份目录到备机。
-4. 启动基础设施：`docker compose up -d postgres redis rabbitmq`。
-5. 恢复 PostgreSQL，必要时恢复 Redis/RabbitMQ/`modstore_data` tar 包。
-6. 启动业务：`docker compose --profile app up -d --build`。
-7. 执行冒烟检查和支付灰度预检。
-8. 通过 DNS、Nginx 或云解析把流量切到备机。
+- 先保留故障现场，明确恢复目标、备份时间点、影响面与操作审批；不要直接覆盖活跃生产库。
+- 优先恢复 PostgreSQL 到隔离实例并验证，再核对持久化业务数据、支付订单与队列幂等性。
+- 发行版回退、温备准备、WAL 恢复和流量切换按 `ops/dr/README.md` 对应流程执行；不能仅复制工作树和 `.env` 后声称恢复完成。
+- 不得借恢复流程扩大凭据或访问权限；无法使用现有权限时报告具体缺口。
+- 恢复后运行正式 `scripts/sre_smoke_check.py`；当前 API 为 `127.0.0.1:9999`，调度器为 `127.0.0.1:9990`，支付健康为 `127.0.0.1:8080`。
+- 核对公网健康、真实发行版 SHA/产物哈希、API/调度器状态与生产哨兵，记录实际 RPO/RTO 和业务核对结果。
 
 ## 常见事故
 
-| 事故          | 止血动作                          | 恢复动作                             |
-| ------------- | --------------------------------- | ------------------------------------ |
-| 数据库损坏    | 停止写入入口，保留现场            | 用最近 `postgres.dump` 恢复到新实例  |
-| 误删业务数据  | 暂停相关写入，确认时间点          | 从备份恢复到临时库，人工比对补偿     |
-| Redis 损坏    | 重启 Redis，允许缓存重建          | 必要时恢复 `redis-data.tar.gz`       |
-| RabbitMQ 损坏 | 暂停依赖队列的功能                | 恢复数据目录或清空重建，确认业务幂等 |
-| 支付切换失败  | 按 `PAYMENT_GRAY_RELEASE.md` 回滚 | 对 Java 期间订单做人工核对           |
-| 前端发布失败  | 回滚静态产物或镜像                | 执行 market workflow 前后冒烟        |
+| 事故 | 处理约束 |
+| --- | --- |
+| 数据库损坏或误删 | 暂停相关写入、保留现场，从备份恢复到隔离实例后比对补偿 |
+| 支付切换失败 | 按支付灰度流程回退并人工核对期间订单 |
+| 发布后健康或身份不符 | 执行不可变发行版失败回退，验证回退后的真实身份与健康 |
+| 队列或缓存故障 | 按当前实际组件恢复，并核对幂等性，不能盲目清空业务状态 |
 
-## 多活目标态
-
-真正多活需要托管数据库或跨区复制、对象存储、全局流量调度、幂等事件、跨区一致性和自动化故障转移。当前阶段只建设冷备/温备和定期恢复演练。
+当前只建设可验证的冷备/温备，不将其称为多活。跨区一致性和自动故障转移必须另行验证。
