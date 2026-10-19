@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 import importlib
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def _facade():
@@ -103,7 +106,23 @@ async def sync_stream(request: _facade().Request, since_cursor: int = _facade().
     )
 
 
-async def _customer_ticket_proxy(request: _facade().Request, path: str):
+class AdminCustomerTicketCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
+    title: str = Field(min_length=2, max_length=256)
+    description: str = Field(min_length=4, max_length=8000)
+    issue_domain: Literal["platform", "software"] = "platform"
+    acceptance_criteria: str = Field(default="", max_length=6000)
+
+
+async def _customer_ticket_proxy(
+    request: _facade().Request,
+    path: str,
+    *,
+    method: str = "GET",
+    json_body: dict[str, _facade().Any] | None = None,
+):
     from app.fastapi_routes.market_account import session_market_token
     from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request
 
@@ -126,7 +145,9 @@ async def _customer_ticket_proxy(request: _facade().Request, path: str):
             status_code=401,
         )
     # Strictly use this session's identity; never fall back to another session or a browser token.
-    return await _facade()._market_admin_proxy(request, "GET", path, authorization_override=token)
+    return await _facade()._market_admin_proxy(
+        request, method, path, json_body=json_body, authorization_override=token
+    )
 
 
 @_facade().router.get("/admin/customer-service/tickets", response_model=None)
@@ -148,6 +169,25 @@ async def admin_customer_service_tickets(
 @_facade().router.get("/admin/customer-service/tickets/{ticket_id}", response_model=None)
 async def admin_customer_service_ticket(request: _facade().Request, ticket_id: int):
     return await _customer_ticket_proxy(request, f"/api/customer-service/tickets/{ticket_id}")
+
+
+@_facade().router.post("/admin/customer-service/tickets", response_model=None)
+async def create_admin_customer_service_ticket(
+    request: _facade().Request, body: AdminCustomerTicketCreateBody
+):
+    return await _customer_ticket_proxy(
+        request,
+        "/api/customer-service/issues/intake",
+        method="POST",
+        json_body={
+            "source": "enterprise_portal",
+            "source_ref": f"xcmax-admin-{body.request_id}",
+            "title": body.title,
+            "description": body.description,
+            "issue_domain": body.issue_domain,
+            "acceptance_criteria": body.acceptance_criteria,
+        },
+    )
 
 
 async def _xcmax_market_proxy_impl(request: _facade().Request, subpath: str):

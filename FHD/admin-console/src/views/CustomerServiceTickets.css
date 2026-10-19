@@ -19,6 +19,12 @@
 .cs-count { padding: 0 8px; border-radius: 999px; background: var(--cs-accent-soft); color: var(--cs-accent); font-size: 12px; }
 .cs-state { padding: 20px 0; text-align: center; }
 .cs-toolbar { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; padding: 14px 20px; }
+.cs-create-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(140px, 1fr); gap: 14px; }
+.cs-create label { display: flex; flex-direction: column; gap: 6px; color: var(--cs-muted); font-size: 12px; }
+.cs-create input, .cs-create select, .cs-create textarea { width: 100%; padding: 8px 10px; border: 1px solid #d0d7e2; border-radius: 8px; color: var(--cs-text); background: #fff; font: inherit; }
+.cs-create textarea { resize: vertical; }
+.cs-create-wide { grid-column: 1 / -1; }
+.cs-create-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .cs-search { display: flex; flex: 1 1 320px; flex-direction: column; gap: 6px; color: var(--cs-muted); font-size: 12px; }
 .cs-search input { height: 34px; padding: 0 12px; border: 1px solid #d0d7e2; border-radius: 8px; font-size: 13px; color: var(--cs-text); background: #fff; }
 .cs-search input:focus { outline: none; border-color: var(--cs-accent); box-shadow: 0 0 0 3px var(--cs-accent-soft); }
@@ -94,4 +100,5 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   .cs-card { padding: 14px; }
   .cs-steps li { font-size: 11px; }
   .cs-pager { flex-direction: column; align-items: flex-start; }
+  .cs-create-grid { grid-template-columns: 1fr; }
 }

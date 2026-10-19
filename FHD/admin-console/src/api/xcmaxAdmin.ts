@@ -475,6 +475,17 @@ export const xcmaxAdminApi = {
       },
     );
   },
+  createCustomerTicket(payload: {
+    request_id: string;
+    title: string;
+    description: string;
+    issue_domain: 'platform' | 'software';
+    acceptance_criteria: string;
+  }) {
+    return api.post<{ success?: boolean; ticket_id?: number; ticket_no?: string }>(
+      '/api/xcmax/admin/customer-service/tickets', payload,
+    );
+  },
   fetchCustomerTicket(ticketId: number) {
     return api.get<{ ticket?: Record<string, unknown>; audit_logs?: Record<string, unknown>[]; actions?: Record<string, unknown>[]; decisions?: Record<string, unknown>[] }>(
       `/api/xcmax/admin/customer-service/tickets/${ticketId}`,
