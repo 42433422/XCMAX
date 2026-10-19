@@ -13,7 +13,6 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-UTC = UTC
 _FHD_ROOT = Path(__file__).resolve().parents[3]
 
 
