@@ -32,7 +32,7 @@ from modstore_server.customer_service_api_helpers import (
     visible_ticket_or_404 as _visible_ticket_or_404,
 )
 from modstore_server import customer_service_customer_view as customer_view
-from modstore_server.customer_service_tools import json_dumps, json_loads
+from modstore_server.customer_service_tools import audit, json_dumps, json_loads
 from modstore_server.models import User
 from modstore_server.customer_ticket_reader import TicketReader, reader_ticket, reader_detail
 from modstore_server.models_cs import (
@@ -79,6 +79,11 @@ class CustomerServiceChatBody(BaseModel):
     context: Dict[str, Any] = Field(default_factory=dict)
     # data:image/...;base64,... 压缩后截图，用于补充材料
     image_data_url: Optional[str] = Field(default=None, max_length=4_500_000)
+
+
+class TicketTitleBody(BaseModel, extra="forbid"):
+    title: str = Field(..., min_length=1, max_length=256)
+    expected_title: str = Field(..., max_length=256)
 
 
 class StandardBody(BaseModel):
@@ -249,6 +254,42 @@ async def list_tickets(
     return payload
 
 
+@router.put("/tickets/{ticket_id}/title")
+async def correct_ticket_title(
+    ticket_id: int,
+    body: TicketTitleBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_admin),
+):
+    ticket = _visible_ticket_or_404(db, user, ticket_id)
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(422, "工单标题不能为空")
+    if title != ticket.title:
+        changed = (
+            db.query(CustomerServiceTicket)
+            .filter(
+                CustomerServiceTicket.id == ticket_id,
+                CustomerServiceTicket.title == body.expected_title,
+            )
+            .update({"title": title}, synchronize_session=False)
+        )
+        if changed != 1:
+            db.rollback()
+            raise HTTPException(409, "工单标题已变化，请刷新后重试")
+        audit(
+            db,
+            actor=user,
+            actor_type="admin",
+            ticket_id=ticket_id,
+            session_id=ticket.session_id,
+            event_type="ticket_title_corrected",
+            detail={"old_title": body.expected_title, "new_title": title},
+        )
+        db.commit()
+    return {"ticket": {"id": ticket_id, "title": title}}
+
+
 @router.get("/tickets/{ticket_id}")
 async def ticket_detail(
     ticket_id: int,
@@ -258,37 +299,24 @@ async def ticket_detail(
     ticket = _visible_ticket_or_404(db, user, ticket_id)
     if isinstance(user, TicketReader):
         return reader_detail(db, ticket, user)
-    decisions = (
-        db.query(CustomerServiceDecision)
-        .filter(CustomerServiceDecision.ticket_id == ticket.id)
-        .order_by(CustomerServiceDecision.id.desc())
-        .all()
-    )
-    actions = (
-        db.query(CustomerServiceAction)
-        .filter(CustomerServiceAction.ticket_id == ticket.id)
-        .order_by(CustomerServiceAction.id.asc())
-        .all()
-    )
-    audits = (
-        db.query(CustomerServiceAuditLog)
-        .filter(CustomerServiceAuditLog.ticket_id == ticket.id)
-        .order_by(CustomerServiceAuditLog.id.asc())
-        .all()
-    )
-    if not user.is_admin:
-        # 客户只看白名单摘要：内部审计、派单执行原文和内部 resolution 不出站。
-        return {
-            "ticket": customer_view.customer_ticket_row(ticket),
-            "decisions": [customer_view.customer_decision(decision_payload(d)) for d in decisions],
-            "actions": customer_view.customer_actions([action_payload(a) for a in actions]),
-            "audit_logs": [],
-        }
+
+    def related(model: Any, descending: bool = False) -> list[Any]:
+        order = model.id.desc() if descending else model.id.asc()
+        return list(db.query(model).filter(model.ticket_id == ticket.id).order_by(order).all())
+
+    decisions = [decision_payload(d) for d in related(CustomerServiceDecision, True)]
+    actions = [action_payload(a) for a in related(CustomerServiceAction)]
     return {
-        "ticket": ticket_payload(ticket),
-        "decisions": [decision_payload(d) for d in decisions],
-        "actions": [action_payload(a) for a in actions],
-        "audit_logs": [_audit_payload(a) for a in audits],
+        "ticket": (
+            ticket_payload(ticket) if user.is_admin else customer_view.customer_ticket_row(ticket)
+        ),
+        "decisions": (
+            decisions if user.is_admin else [customer_view.customer_decision(d) for d in decisions]
+        ),
+        "actions": actions if user.is_admin else customer_view.customer_actions(actions),
+        "audit_logs": (
+            [_audit_payload(a) for a in related(CustomerServiceAuditLog)] if user.is_admin else []
+        ),
     }
 
 
