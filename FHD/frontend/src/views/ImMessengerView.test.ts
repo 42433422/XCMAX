@@ -173,6 +173,11 @@ describe('ImMessengerView.vue', () => {
     expect(fetchImMessages).not.toHaveBeenCalled()
 
     await wrapper.find('.im-compose-input').setValue('测试消息')
+    vi.mocked(sendEnterpriseCsMessage).mockRejectedValueOnce(new Error('请重新登录企业账号'))
+    await wrapper.find('.im-compose').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('重新登录企业账号')
+    expect((wrapper.get('.im-compose-input').element as HTMLInputElement).value).toBe('测试消息')
     await wrapper.find('.im-compose').trigger('submit')
     await flushPromises()
     expect(sendEnterpriseCsMessage).toHaveBeenCalledWith('测试消息')

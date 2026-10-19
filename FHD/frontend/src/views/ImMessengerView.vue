@@ -1,6 +1,10 @@
 <template>
   <div class="im-messenger">
     <SharedIssueAcceptancePanel />
+    <p v-if="isCustomerEnterpriseCs() && enterpriseCsError" role="alert">
+      {{ enterpriseCsError }} <router-link to="/settings">检查账号与连接</router-link>
+      <button type="button" :disabled="busy" @click="refreshEnterpriseCsThread()">重新连接</button>
+    </p>
     <div class="im-body">
       <ConversationSidebar
         :is-admin-customer-service-console="isAdminCustomerServiceConsole"
@@ -98,17 +102,12 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import {
   createDirectConversation,
   fetchCsInbox,
-  fetchCsInboxMessages,
   fetchImConversations,
   fetchImMessages,
-  markImRead,
-  replyCsInbox,
-  sendEnterpriseCsMessage,
-  sendImMessage,
   type ImContact,
   type ImConversationSummary,
   type ImMessage,
@@ -176,6 +175,7 @@ const {
   activeCustomerCsConversation,
   isCustomerEnterpriseCs,
   refreshEnterpriseCsThread,
+  enterpriseCsError,
   startEnterpriseCsPolling,
   stopEnterpriseCsPolling,
 } = useEnterpriseCsBridge({
@@ -277,8 +277,8 @@ const {
   restoreOverlappingAssistantFloat,
 })
 
-// 会话选择与发送动作拆分至 ./im-messenger/useImConversationActions.ts（行为与拆分前一致）
 const { selectConversation, onSend } = useImConversationActions({
+  enterpriseCsError,
   localUserId,
   conversations,
   activeConversationId,
