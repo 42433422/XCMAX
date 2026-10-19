@@ -9,7 +9,9 @@ from tests.test_customer_ticket_customer_view import INTERNAL_KEYS, _keys
 
 pytest.importorskip("fastapi")
 
-DEFECT = "管理端工单详情页面显示异常，分不出是哪个提交账号提的单，这是产品问题，请提交工单"
+DEFECT = (
+    "企业专属客服无法发送产品问题，登录后提示市场登录凭证无效，点击发送后又显示发送失败，请提交工单"
+)
 BASE = "/api/customer-service"
 
 
