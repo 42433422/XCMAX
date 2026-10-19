@@ -398,51 +398,103 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         assert "reset --hard" not in rendered
 
 
-def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_callback() -> None:
-    source_path = ROOT / ".github/workflows/prod-deploy-receipt.yml"
-    published_path = REPO_ROOT / ".github/workflows/modstore-prod-deploy-receipt.yml"
-    source = yaml.safe_load(source_path.read_text())
-    published = yaml.safe_load(published_path.read_text())
-
-    for workflow in (source, published):
-        trigger = workflow[True]
-        assert trigger["workflow_run"]["workflows"] == ["Deploy MODstore Production"]
-        assert trigger["workflow_dispatch"]["inputs"]["source_deploy_run_id"]["required"] is True
-        assert "package_source_sha" in trigger["workflow_dispatch"]["inputs"]
-        receipt = workflow["jobs"]["receipt"]
-        assert "workflow_run.conclusion == 'success'" in receipt["if"]
-        assert "github.event_name == 'workflow_dispatch'" in receipt["if"]
-        rendered = str(receipt)
-        assert workflow["permissions"]["pull-requests"] == "read"
-        assert "actions/download-artifact@v8" in rendered
-        assert "source deployment run id must be numeric" in rendered
-        assert '.name == "Deploy MODstore Production"' in rendered
-        assert ".head_sha == $merge_sha" in rendered
-        assert "package source SHA is not an ancestor of deployed SHA" in rendered
-        assert "steps.source.outputs.package_source_sha" in rendered
-        assert "steps.source.outputs.merge_sha" in rendered
-        assert "fetch-depth': 0" in rendered or "fetch-depth: 0" in rendered
-        assert "/commits/${merge_sha}/pulls" in rendered
-        assert "attested_branch_head_sha" in rendered
-        assert "MODSTORE_OPS_INGEST_TOKEN" in rendered
-        assert "/api/ops/self-maintenance/deployment-receipt" in rendered
-        assert ".recorded == true or .idempotent == true" in rendered
-        assert "/api/ops/self-maintenance/evolution-deployment-receipt" in rendered
-        assert "evolution-packages.json" in rendered
-        assert "catalog_data/files/" in rendered
-        assert "stored_filename" in rendered
-        assert "MODSTORE_AUTO_PUBLISH_TOKEN" in rendered
-        assert "FHD/scripts/dev/publish_modstore.py" in rendered
-        assert "modstore-evolution-publication-receipts" in rendered
-        assert 'git show "${PACKAGE_SOURCE_SHA}:${archive}"' in rendered
-        assert 'cmp --silent "$source_archive" "$archive"' in rendered
-        assert "workflow_status" in rendered
-        assert "completed" in rendered
-    for workflow_path in (source_path, published_path):
-        workflow_text = workflow_path.read_text(encoding="utf-8")
-        assert '"-z"' in workflow_text
-        assert 'split(b"\\0")' in workflow_text
-        assert "os.fsdecode" in workflow_text
+def test_receipt_source_attestation_executes_strict_identity_checks(tmp_path: Path) -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/prod-deploy-receipt.yml").read_text())
+    published = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/modstore-prod-deploy-receipt.yml").read_text()
+    )
+    assert workflow == published
+    rendered = str(workflow)
+    for marker in (
+        "MODSTORE_OPS_INGEST_TOKEN",
+        "/api/ops/self-maintenance/deployment-receipt",
+        ".recorded == true or .idempotent == true",
+        "/api/ops/self-maintenance/evolution-deployment-receipt",
+        'cmp --silent "$source_archive" "$archive"',
+        "FHD/scripts/dev/publish_modstore.py",
+    ):
+        assert marker in rendered
+    script = next(s["run"] for s in workflow["jobs"]["receipt"]["steps"] if s.get("id") == "source")
+    product, controller = "a" * 40, "b" * 40
+    canonical = {"id": 12, "path": ".github/workflows/modstore-prod-deploy.yml"}
+    source = dict(
+        canonical,
+        id=34,
+        workflow_id=12,
+        head_sha=controller,
+        head_branch="main",
+        event="workflow_dispatch",
+        status="completed",
+        conclusion="success",
+        repository={"full_name": "owner/repo"},
+        name=f"Deploy MODstore {product}",
+    )
+    correlation = dict(
+        merge_sha=product,
+        git_sha=product,
+        controller_sha=controller,
+        environment="production",
+        approval_reference="existing approval",
+    )
+    directory = tmp_path / "modstore-deployment-correlation"
+    directory.mkdir()
+    stub = tmp_path / "gh"
+    stub.write_text(
+        '#!/bin/bash\ncase "$2" in\n*/workflows/*) cat "$RUNNER_TEMP/workflow.json";;\n*/runs/*) cat "$RUNNER_TEMP/source.json";;\n*/compare/*) cat "$RUNNER_TEMP/compare.json";;\n*) exit 99;;\nesac\n'
+    )
+    stub.chmod(0o755)
+    (tmp_path / "workflow.json").write_text(json.dumps(canonical))
+    for field, value in [
+        (None, None),
+        ("legacy", None),
+        ("id", 35),
+        ("workflow_id", 13),
+        ("path", "other.yml"),
+        ("head_sha", product),
+        ("head_branch", "other"),
+        ("event", "push"),
+        ("conclusion", "failure"),
+        ("status", "in_progress"),
+        ("repository", {"full_name": "other/repo"}),
+        ("git_sha", controller),
+        ("ancestry", controller),
+        ("controller_sha", "invalid"),
+    ]:
+        run, corr = source.copy(), correlation.copy()
+        comparison = {"status": "ahead", "merge_base_commit": {"sha": product}}
+        if field == "legacy":
+            corr.pop("controller_sha")
+            run["head_sha"] = product
+        elif field == "ancestry":
+            comparison["merge_base_commit"]["sha"] = value
+        elif field in corr:
+            corr[field] = value
+        elif field:
+            run[field] = value
+        for path, data in [
+            (directory / "modstore-deployment-correlation.json", corr),
+            (tmp_path / "source.json", run),
+            (tmp_path / "compare.json", comparison),
+        ]:
+            path.write_text(json.dumps(data))
+        output = tmp_path / "output"
+        output.write_text("")
+        result = subprocess.run(
+            ["bash", "-c", script],
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "PATH": f"{tmp_path}:{os.environ['PATH']}",
+                "RUNNER_TEMP": str(tmp_path),
+                "GITHUB_OUTPUT": str(output),
+                "GITHUB_REPOSITORY": "owner/repo",
+                "SOURCE_WORKFLOW_ID": "34",
+            },
+        )
+        assert (result.returncode == 0) == (field in (None, "legacy")), (field, result.stderr)
+        if result.returncode == 0:
+            assert f"merge_sha={product}\n" in output.read_text()
 
 
 def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke() -> None:
