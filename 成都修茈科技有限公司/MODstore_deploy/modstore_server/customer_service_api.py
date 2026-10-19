@@ -34,6 +34,7 @@ from modstore_server.customer_service_api_helpers import (
 from modstore_server import customer_service_customer_view as customer_view
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models import User
+from modstore_server.customer_ticket_reader import TicketReader, reader_ticket, reader_detail
 from modstore_server.models_cs import (
     CustomerServiceAction,
     CustomerServiceAuditLog,
@@ -202,7 +203,9 @@ async def list_tickets(
     user: User = Depends(_get_current_user),
 ):
     q = db.query(CustomerServiceTicket)
-    if not user.is_admin:
+    if isinstance(user, TicketReader):
+        q = q.filter(CustomerServiceTicket.user_id.in_(user.owner_ids))
+    elif not user.is_admin:
         q = q.filter(CustomerServiceTicket.user_id == user.id)
     if status:
         q = q.filter(CustomerServiceTicket.status == status)
@@ -227,11 +230,16 @@ async def list_tickets(
         .all()
     )
     view = ticket_payload if user.is_admin else customer_view.customer_ticket_row
-    return {
-        "items": [view(r) for r in rows],
+    payload = {
+        "items": [
+            reader_ticket(db, r) if isinstance(user, TicketReader) else view(r) for r in rows
+        ],
         "total": total,
         "offset": offset,
     }
+    if isinstance(user, TicketReader):
+        payload.update(scope=user.scope(), limit=limit, has_more=offset + len(rows) < total)
+    return payload
 
 
 @router.get("/tickets/{ticket_id}")
@@ -241,6 +249,8 @@ async def ticket_detail(
     user: User = Depends(_get_current_user),
 ):
     ticket = _visible_ticket_or_404(db, user, ticket_id)
+    if isinstance(user, TicketReader):
+        return reader_detail(db, ticket, user)
     decisions = (
         db.query(CustomerServiceDecision)
         .filter(CustomerServiceDecision.ticket_id == ticket.id)

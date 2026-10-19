@@ -34,8 +34,12 @@ def own_session_or_404(db: Session, user: User, session_id: int) -> CustomerServ
 
 
 def visible_ticket_or_404(db: Session, user: User, ticket_id: int) -> CustomerServiceTicket:
+    from modstore_server.customer_ticket_reader import TicketReader
+
     query = db.query(CustomerServiceTicket).filter(CustomerServiceTicket.id == ticket_id)
-    if not user.is_admin:
+    if isinstance(user, TicketReader):
+        query = query.filter(CustomerServiceTicket.user_id.in_(user.owner_ids))
+    elif not user.is_admin:
         query = query.filter(CustomerServiceTicket.user_id == user.id)
     row = query.first()
     if not row:

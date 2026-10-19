@@ -1,5 +1,5 @@
 {
-  "lines": 2309930,
+  "lines": 2310352,
   "updated": "2026-10-19",
-  "note": "XCMAX #2418 快车道；合入最新 main（1692886a）后按计数口径重算。按用户 2026-10-19 01:23 CST 批准以带理由 --force 更新基线，评审可见。"
+  "note": "Independent company ticket read grants and security regression tests: reviewed capability addition, no unrelated source deletion."
 }
