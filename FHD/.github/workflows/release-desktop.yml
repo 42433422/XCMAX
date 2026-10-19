@@ -204,13 +204,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: xcagi-windows-installer-${{ inputs.release_sha }}
           path: ${{ runner.temp }}/delivery
           run-id: ${{ inputs.candidate_run_id || github.run_id }}
           github-token: ${{ github.token }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: ${{ inputs.candidate_run_id != '' }}
         with:
           pattern: windows-candidate-evidence-*-${{ inputs.release_sha }}
@@ -396,14 +396,14 @@ jobs:
         with:
           python-version: "3.11"
       - name: Download normalized security evidence
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: xcagi-security-release-reports
           path: security-reports/current
           run-id: ${{ inputs.security_scan_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download prior-day normalized security evidence
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: xcagi-security-release-reports
           path: security-reports/previous
@@ -465,7 +465,7 @@ jobs:
           $expected = $env:XCAGI_BUILD_SHA.Trim().ToLowerInvariant()
           if ($actual -ne $expected) { throw "Checkout drift: actual=$actual expected=$expected" }
       - name: Download shared vue-dist (single frontend build)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: xcagi-vue-dist
           path: FHD/templates/vue-dist
@@ -597,7 +597,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "${XCAGI_BUILD_SHA}" | tr '[:upper:]' '[:lower:]')"
       - name: Download shared vue-dist (single frontend build)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: xcagi-vue-dist
           path: FHD/templates/vue-dist
@@ -701,7 +701,7 @@ jobs:
           ref: ${{ inputs.release_sha }}
       - name: Lock manifest checkout to release SHA
         run: test "$(git rev-parse HEAD)" = "${XCAGI_BUILD_SHA}"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: xcagi-desktop-*
           merge-multiple: true
@@ -962,7 +962,7 @@ jobs:
         with:
           fetch-depth: 1
           ref: ${{ inputs.release_sha }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: ${{ inputs.verify_only != true }}
         with:
           name: xcagi-download-manifest
@@ -1083,7 +1083,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: ${{ inputs.verify_only != true }}
         with:
           name: xcagi-download-manifest
@@ -1217,7 +1217,7 @@ jobs:
       needs.verify-public-windows-signature.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: xcagi-download-manifest
           path: ${{ runner.temp }}/manifest
@@ -1427,7 +1427,7 @@ jobs:
       needs.verify-public-windows-signature.result == 'success' &&
       needs.verify-download-center.result == 'success'
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       - uses: softprops/action-gh-release@v2
