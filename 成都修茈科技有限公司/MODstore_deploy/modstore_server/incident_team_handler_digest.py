@@ -50,7 +50,9 @@ _TEXT_LIMIT = 300
 
 
 def redact_text(value: Any, limit: int = _TEXT_LIMIT) -> str:
-    text = _SECRET_VALUE_RE.sub(r"\1[redacted]", str(value))
+    from modstore_server.cred_vault import redact
+
+    text = _SECRET_VALUE_RE.sub(r"\1[redacted]", redact(value))
     text = _TOKEN_SHAPES_RE.sub("[redacted]", text)
     return text[:limit]
 
@@ -87,6 +89,13 @@ def _row_digest(row: Any) -> Dict[str, Any]:
                     out.setdefault("summary", out["output_summary"])
     elif nested not in ("", None):
         out["output_chars"] = len(str(nested))
+    tried = row.get("codex_models_tried")
+    if isinstance(tried, list):
+        out["codex_models_tried"] = [
+            {k: _scalar(t.get(k)) for k in ("model", "status") if t.get(k)}
+            for t in tried[:8]
+            if isinstance(t, dict)
+        ]
     attempts = row.get("tool_fallback_attempts")
     if isinstance(attempts, list):
         out["tool_fallback_attempts"] = [

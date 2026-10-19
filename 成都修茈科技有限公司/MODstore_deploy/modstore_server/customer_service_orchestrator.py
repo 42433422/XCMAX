@@ -73,6 +73,18 @@ KNOWN_INTENTS = frozenset(
 )
 # 无自动办结动作、只登记跟进的意图
 FOLLOWUP_INTENTS = frozenset({"general", "greeting", "account_support", "product_issue"})
+# 客服分诊车道（五项架构·分诊第一刀）：intent → lane，供后续「运维快修通道」挂接。
+# ops_fast_fix 仅预留，本 PR 不实现执行器；真正的运维快修另开 PR。
+TRIAGE_LANES = frozenset(
+    {
+        "product_defect",  # product_issue：产品缺陷登记（可进代码修复）
+        "ultimate_review",  # 账号类/不确定：终极员工（Grok Bot/Dolt）可介入
+        "account_help",  # 兼容旧名，等同 ultimate_review
+        "commerce",  # refund / catalog_* / llm_extension
+        "ops_fast_fix",  # 预留：运维快修通道（未接线）
+        "general",  # 兜底
+    }
+)
 # 问题归属：平台宿主 / 市场上架软件 / 账号定制线（宿主入门第三步定制 Mod/员工）
 ISSUE_DOMAINS = frozenset({"platform", "software", "custom"})
 ISSUE_DOMAIN_LABELS = {
@@ -112,6 +124,7 @@ from modstore_server.customer_service_orchestrator_part02 import (
     extract_fields as extract_fields,
     is_greeting as is_greeting,
     wants_ticket_escalation as wants_ticket_escalation,
+    resolve_triage_lane as resolve_triage_lane,
     should_create_ticket as should_create_ticket,
     infer_intent as infer_intent,
     classify_customer_intent as classify_customer_intent,

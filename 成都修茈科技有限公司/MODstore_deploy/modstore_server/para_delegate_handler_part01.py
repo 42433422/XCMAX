@@ -13,12 +13,8 @@ def _facade():
 
 
 def _env_bool(name: str, default: str = "0") -> bool:
-    return _facade().os.environ.get(name, default).strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
+    value = _facade().os.environ.get(name, default).strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def para_delegate_enabled() -> bool:
@@ -105,6 +101,9 @@ def _build_request(
     *, task: str, input_data: _facade().Dict[str, _facade().Any], employee_id: str
 ) -> _facade().Dict[str, _facade().Any]:
     input_data = {**input_data, **_facade()._customer_ticket_cloud_route(input_data)}
+    from modstore_server.customer_ticket_triage import para_triage_hook
+
+    input_data = para_triage_hook(input_data, employee_id=employee_id)
     workspace_root = _facade()._project_root(input_data)
     mode = _facade()._mode_for_employee(employee_id, input_data)
     report_only = _facade()._coerce_bool(
@@ -228,17 +227,28 @@ def _build_para_prompt(req: _facade().Dict[str, _facade().Any]) -> str:
         f"- record_id: {req.get('record_id') or ''}",
         f"- guardrail: {guardrail}",
     ]
+    from modstore_server.codex_model_attempts import codex_model_candidates_line
+
+    context += [line for line in (codex_model_candidates_line(req),) if line]
     if report_only:
         return "MODSTORE_REPORT_ONLY=1\nreport_only=true\n\n" + prompt + "\n" + "\n".join(context)
     return prompt + "\n" + "\n".join(context)
 
 
-def _get_para_token(client: _facade().httpx.Client, base: str) -> _facade().Dict[str, str]:
+def _get_para_token(
+    client: _facade().httpx.Client, base: str, task_id: str = ""
+) -> _facade().Dict[str, str]:
+    from modstore_server.cred_vault import get_credential
+
     token = (
-        _facade().os.environ.get("MODSTORE_PARA_AUTH_TOKEN")
-        or _facade().os.environ.get("DEVFLEET_AUTH_TOKEN")
+        get_credential(
+            "MODSTORE_PARA_AUTH_TOKEN",
+            task_id=task_id or "para-dispatch",
+            purpose="para_dispatch_auth",
+            aliases=("DEVFLEET_AUTH_TOKEN",),
+        )
         or ""
-    ).strip()
+    )
     if token:
         return {"token": token, "source": "env"}
     cached = _facade()._PARA_GUEST_AUTH_CACHE.get(base)

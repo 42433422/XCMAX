@@ -1,5 +1,5 @@
 {
-  "lines": 2306603,
-  "updated": "2026-10-18",
-  "note": "XCMAX#2404 Mac Para 代理工具回退链 DEVFLEET_TOOL_FALLBACK_ORDER（codex→cursor→claude_code→trae）：回退顺序/判定/工作区原地还原 +73、代理接入回退链净 +108、trae_failover 导出策略判定 +5、回归测试净 +92（diff 行）；计数口径净增 235 行。未配置时旧路径不变，用于取代 Mac 上的 DEVFLEET_FORCE_CURSOR=1，需评审可见。"
+  "lines": 2309930,
+  "updated": "2026-10-19",
+  "note": "XCMAX #2418 快车道；合入最新 main（1692886a）后按计数口径重算。按用户 2026-10-19 01:23 CST 批准以带理由 --force 更新基线，评审可见。"
 }
