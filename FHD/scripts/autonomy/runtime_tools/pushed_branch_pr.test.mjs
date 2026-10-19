@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import {
   buildPushedPrRequest, describePushedPrFailure, ensurePullRequestForPushedBranch,
   parseGithubRepoFull, pushedPrBaseBranch, requirePrUrlAfterPush, shouldOpenPrForPushedTask,
@@ -47,4 +49,25 @@ test('系统侧硬门：该开 PR 却没有 URL 必须 fail-closed', () => {
   assert.match(requirePrUrlAfterPush(task, '').reason, /pushed_without_pr/);
   assert.equal(requirePrUrlAfterPush(task, 'https://github.com/42433422/XCMAX/pull/1').ok, true);
   assert.equal(requirePrUrlAfterPush({ ...task, auto_merge: true }, '').ok, true);
+});
+
+
+test('PR 创建失败时，受管回执和 WebSocket 都只能报告 failed；成功后才可完成', async () => {
+  const source = readFileSync(new URL('./para_e2e_agent.mjs', import.meta.url), 'utf8');
+  const section = (start, end) => source.slice(source.indexOf(`async function ${start}(`), source.indexOf(`async function ${end}(`));
+  for (const prUrl of ['', 'https://github.com/42433422/XCMAX/pull/1']) {
+    const reports = [], messages = [];
+    const context = vm.createContext({ requirePrUrlAfterPush, console,
+      openPullRequestAfterPush: async () => prUrl, paraReports: { handles: () => true },
+      sourceIdentity: async () => ({ head_sha: 'a'.repeat(40) }),
+      postTaskReport: async (_, report) => reports.push(report),
+      send: (_, message) => messages.push(message), requestMergeOnComplete: async () => {},
+    });
+    vm.runInContext(section('settleAfterPush', 'openPullRequestAfterPush')
+      + section('reportCodeIdentity', 'handleTask'), context);
+    assert.equal(await context.settleAfterPush(null, task, '/task', 'base', true, 'pushed'), Boolean(prUrl));
+    const expected = prUrl ? 'completed' : 'failed';
+    assert.deepEqual(reports.map(report => report.status), [expected]);
+    assert.deepEqual(messages.filter(message => message.type === 'task_progress').map(message => message.status), [expected]);
+  }
 });

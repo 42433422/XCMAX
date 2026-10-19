@@ -1155,12 +1155,12 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
 // 该开却开不出 → fail-closed（任务 failed，分支保留），禁止静默 completed。
 async function settleAfterPush(ws, task, taskDir, baseHead, pushed, okLog) {
   const prUrl = pushed ? await openPullRequestAfterPush(ws, task, taskDir) : '';
-  await reportCodeIdentity(task, taskDir, baseHead, pushed, prUrl);
   const gate = requirePrUrlAfterPush(task, prUrl);
   if (!gate.ok) {
     await failTask(ws, task, `[e2e-agent] FAIL-CLOSED ${gate.reason}`);
     return false;
   }
+  await reportCodeIdentity(task, taskDir, baseHead, pushed, prUrl);
   send(ws, {
     type: 'task_progress',
     task_id: task.task_id,
