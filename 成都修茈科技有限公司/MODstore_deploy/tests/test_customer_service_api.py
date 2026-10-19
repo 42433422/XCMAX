@@ -1289,3 +1289,52 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
         assert "submitter_type" not in own["items"][0]
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_admin_ticket_intent_and_status_filters_keep_customer_scope(client):
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
+
+    customer, admin = _make_user("filter_customer"), _make_user("filter_admin", admin=True)
+    marker = f"FILTER-{uuid.uuid4().hex}"
+    with get_session_factory()() as db:
+        for user, intent, status in (
+            (customer, "account_support", "open"),
+            (admin, "product_issue", "processing"),
+        ):
+            session = CustomerServiceSession(user_id=user.id)
+            db.add(session)
+            db.flush()
+            db.add(
+                CustomerServiceTicket(
+                    user_id=user.id,
+                    session_id=session.id,
+                    ticket_no=f"{marker}-{user.id}",
+                    intent=intent,
+                    status=status,
+                    summary=marker,
+                )
+            )
+        db.commit()
+    try:
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+        filtered = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "intent": "product_issue", "status": "processing"},
+        ).json()
+        assert filtered["total"] == 1
+        assert filtered["items"][0]["intent"] == "product_issue"
+        assert filtered["items"][0]["status"] == "processing"
+
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: customer
+        own = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "intent": "product_issue", "status": "open"},
+        ).json()
+        assert own["total"] == 1
+        assert own["items"][0]["user_id"] == customer.id
+        assert own["items"][0]["status"] == "open"
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
