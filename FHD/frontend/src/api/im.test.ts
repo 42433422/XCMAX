@@ -105,6 +105,11 @@ describe('IM request and response contracts', () => {
     getApiBase.mockReturnValue(base)
     expect(im.imWebSocketUrl()).toBe(/^http/.test(base) ? `${base.replace(/^http/, 'ws').replace(/\/$/, '')}/ws/im` : `${window.location.origin.replace(/^http/, 'ws')}${base ? '/fhd-api' : ''}/ws/im`)
   })
+  it.each([im.fetchEnterpriseCsThread, () => im.sendEnterpriseCsMessage('report')])('guides CS reauthentication without sending again', async (request) => {
+    apiFetch.mockResolvedValue(jsonRes({ message: '市场登录凭证无效' }, { ok: false, status: 401 }))
+    await expect(request()).rejects.toThrow('重新登录企业账号')
+    expect(apiFetch).toHaveBeenCalledTimes(1)
+  })
   it('uses the server-safe websocket fallback without a window', () => {
     vi.stubGlobal('window', undefined)
     expect(im.imWebSocketUrl()).toBe('ws://127.0.0.1:5000/ws/im')
