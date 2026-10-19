@@ -52,8 +52,10 @@ async def owner_work_order_decision(wo_id: str, request: Request) -> Any:
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="json object required")
     decision = str(body.get("decision") or "").strip().lower()
-    if decision not in {"approved", "rejected", "held"}:
-        raise HTTPException(status_code=400, detail="decision 必须为 approved、rejected 或 held")
+    if decision not in {"approved", "rejected", "held", "resume"}:
+        raise HTTPException(
+            status_code=400, detail="decision 必须为 approved、rejected、held 或 resume"
+        )
     actor = admin_approver_from_session(request)
     result = decide_owner_work_order(
         wo_id,
@@ -68,6 +70,17 @@ async def owner_work_order_decision(wo_id: str, request: Request) -> Any:
         raise HTTPException(
             status_code=409, detail="工单必须先通过 RED、GREEN 和 Owner Instance 验证"
         )
+    if result.get("reason") == "decision_note_required":
+        raise HTTPException(status_code=400, detail="打回或暂缓时请填写至少4个字的说明")
+    if result.get("reason") == "invalid_decision":
+        raise HTTPException(status_code=400, detail="当前工单状态不支持该决定")
     if not result.get("ok"):
         raise HTTPException(status_code=503, detail="Owner 决策未写入共享工单")
-    return {"ok": True, "wo_id": wo_id, "decision": decision, "actor": actor, "receipt": result}
+    return {
+        "ok": True,
+        "wo_id": wo_id,
+        "decision": decision,
+        "status": result.get("status"),
+        "actor": actor,
+        "receipt": result,
+    }

@@ -141,7 +141,7 @@ class TestRequestSourcePassthrough:
         assert kwargs["source"] == "ops_autonomy.request"
 
 
-def test_owner_work_order_review_requires_all_gates_and_records_session_actor(monkeypatch):
+def test_owner_work_order_decisions_transition_and_require_complete_gates(monkeypatch):
     monkeypatch.setenv("FHD_BOSS_USER_ID", "17")
     monkeypatch.setattr(
         "app.fastapi_routes.xcmax_admin_auth.require_market_admin_session", lambda request: None
@@ -160,10 +160,16 @@ def test_owner_work_order_review_requires_all_gates_and_records_session_actor(mo
     view = {"wo_id": "WO-abcdef123456", "status": "in_dev", "history": history}
     monkeypatch.setattr("app.services.work_order_ssot.list_work_orders", lambda limit: [view])
     monkeypatch.setattr("app.services.work_order_ssot.get_work_order", lambda wo_id: view)
-    monkeypatch.setattr(
-        "app.services.work_order_gate.record_gate",
-        lambda *args, **kwargs: {"ok": True, "gate": args[1], "status": args[2]},
-    )
+
+    def transition(wo_id, target, *, ref=None, note="", source=""):
+        previous = view["status"]
+        view["status"] = target
+        view["history"].append(
+            {"event": "transition", "from": previous, "to": target, "ref": ref or {}, "note": note}
+        )
+        return {"ok": True, "wo_id": wo_id, "from": previous, "to": target}
+
+    monkeypatch.setattr("app.services.work_order_ssot.record_transition", transition)
     monkeypatch.setattr(
         "app.fastapi_routes.xcmax_admin_auth.admin_approver_from_session", lambda request: "Owner"
     )
@@ -180,7 +186,36 @@ def test_owner_work_order_review_requires_all_gates_and_records_session_actor(mo
     )
     assert approved.status_code == 200
     assert approved.json()["actor"] == "Owner"
-    view["history"] = [row for row in history if row["gate"] != "owner_instance"]
+    assert approved.json()["status"] == "approved"
+    assert view["status"] == "approved"
+    assert (
+        client.get("/api/ops/autonomy/work-orders").json()["items"][0]["gates"]["owner_approval"]
+        == "approved"
+    )
+    view["status"] = "in_dev"
+    rejected = client.post(
+        "/api/ops/autonomy/work-orders/WO-abcdef123456/owner-decision",
+        json={"decision": "rejected", "note": "需要返工并补齐关系校验"},
+    )
+    assert rejected.status_code == 200 and rejected.json()["status"] == "rework"
+    view["status"] = "in_dev"
+    held = client.post(
+        "/api/ops/autonomy/work-orders/WO-abcdef123456/owner-decision",
+        json={"decision": "held", "note": "等待外部依赖确认"},
+    )
+    assert held.status_code == 200 and held.json()["status"] == "held"
+    assert client.get("/api/ops/autonomy/work-orders").json()["items"][0]["can_resume"] is True
+    resumed = client.post(
+        "/api/ops/autonomy/work-orders/WO-abcdef123456/owner-decision",
+        json={"decision": "resume"},
+    )
+    assert resumed.status_code == 200 and resumed.json()["status"] == "in_dev"
+    short_note = client.post(
+        "/api/ops/autonomy/work-orders/WO-abcdef123456/owner-decision",
+        json={"decision": "held", "note": "等"},
+    )
+    assert short_note.status_code == 400
+    view["history"] = [row for row in view["history"] if row.get("gate") != "owner_instance"]
     blocked = client.post(
         "/api/ops/autonomy/work-orders/WO-abcdef123456/owner-decision",
         json={"decision": "approved"},

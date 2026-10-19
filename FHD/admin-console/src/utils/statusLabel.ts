@@ -6,7 +6,9 @@ const STATUS_LABELS: Record<string, string> = {
   success: '成功', succeeded: '成功', ok: '正常', passed: '通过', ready: '就绪',
   failed: '失败', failure: '失败', error: '出错', timeout: '超时', blocked: '受阻',
   cancelled: '已取消', canceled: '已取消', skipped: '已跳过', expired: '已过期',
-  approved: '已批准', rejected: '已驳回', paid: '已支付', unpaid: '未支付', refunded: '已退款',
+  approved: '已批准待合入', rejected: '已驳回', paid: '已支付', unpaid: '未支付', refunded: '已退款',
+  in_dev: '开发中',
+  rework: '已打回待返工', held: '已暂缓',
   active: '启用', inactive: '停用', unknown: '未知',
 }
 
