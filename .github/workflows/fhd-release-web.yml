@@ -51,7 +51,7 @@ jobs:
           printf '%s' "${{ inputs.release_sha }}" | grep -Eq '^[0-9a-f]{40}$'
           test "$(git rev-parse HEAD)" = "${{ inputs.release_sha }}"
       - name: Download shared vue-dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: xcagi-vue-dist
           path: FHD/templates/vue-dist
@@ -97,7 +97,7 @@ jobs:
           printf '%s' "${{ inputs.release_sha }}" | grep -Eq '^[0-9a-f]{40}$'
           test "$(git rev-parse HEAD)" = "${{ inputs.release_sha }}"
       - name: Download shared vue-dist (for frontend image)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: xcagi-vue-dist
           path: FHD/templates/vue-dist
