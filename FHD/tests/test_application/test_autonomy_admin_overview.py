@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import Mock
 
 from app.application.autonomy.admin_overview import (
     closure_gap_count,
@@ -89,33 +90,25 @@ def test_operating_metrics_windows_shape() -> None:
     assert "veto_rate" in data["windows"]["30"]
 
 
-def test_cross_audit_distinguishes_missing_empty_bad_and_stale(tmp_path, monkeypatch):
+def test_cross_audit_statuses(tmp_path, monkeypatch):
     path = tmp_path / "audit.jsonl"
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(path))
     monkeypatch.setenv("XCAGI_AUTONOMY_DATA_DIR", str(tmp_path / "unused"))
-    assert read_cross_tier_audit(tier="server")["status"] == "not_connected"
-    path.write_text("")
-    assert read_cross_tier_audit(tier="server")["status"] == "empty"
-    path.write_text("{broken json}")
-    assert read_cross_tier_audit(tier="server")["status"] == "error"
-    path.write_bytes(b"\xff")
-    assert read_cross_tier_audit(tier="server")["status"] == "error"
+    for content, expected in (
+        (None, "not_connected"),
+        ("", "empty"),
+        ("{", "error"),
+        (b"\xff", "error"),
+    ):
+        if isinstance(content, bytes):
+            path.write_bytes(content)
+        elif content is not None:
+            path.write_text(content)
+        assert read_cross_tier_audit(tier="server")["status"] == expected
     for age, status in ((0, "ready"), (48, "stale"), (-48, "unknown_freshness")):
         stamp = (datetime.now(UTC) - timedelta(hours=age)).isoformat()
         path.write_text(json.dumps({"timestamp": stamp, "action": {"type": "clear_logs"}}))
         result = read_cross_tier_audit(tier="server")
-        assert result["status"] == status
-        assert result["last_event_at"] == stamp
-        assert result["count"] == 1
-
-
-def test_cross_audit_reports_permission_error(tmp_path, monkeypatch):
-    path = tmp_path / "audit.jsonl"
-    path.write_text("{}")
-    monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(path))
-
-    def denied(*args, **kwargs):
-        raise PermissionError("denied")
-
-    monkeypatch.setattr(Path, "read_text", denied)
+        assert (result["status"], result["last_event_at"], result["count"]) == (status, stamp, 1)
+    monkeypatch.setattr(Path, "read_text", Mock(side_effect=PermissionError))
     assert read_cross_tier_audit(tier="server")["status"] == "error"

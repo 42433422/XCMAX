@@ -427,7 +427,6 @@ def read_cross_tier_audit(
         "exists": exists,
         "status": status,
         "last_event_at": last_event_at,
-        "stale_after_seconds": 86400,
         "items": items,
         "count": len(items),
     }
