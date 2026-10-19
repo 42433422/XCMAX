@@ -53,7 +53,7 @@ describe('ApprovalHubView', () => {
     decideOwnerWorkOrder.mockResolvedValue({
       ok: true,
       wo_id: readyOrder.wo_id,
-      decision: 'approved',
+      status: 'approved',
       actor: 'owner:42',
     })
   })
@@ -82,7 +82,7 @@ describe('ApprovalHubView', () => {
 
     expect(decideOwnerWorkOrder).toHaveBeenCalledWith(readyOrder.wo_id, 'approved', '')
     expect(appAlert).toHaveBeenCalledWith(
-      `工单 ${readyOrder.wo_id} 已记录为 approved，操作人 owner:42`,
+      '工单状态已更新为 已批准待合入，操作人 owner:42',
     )
     wrapper.unmount()
   })
@@ -96,7 +96,7 @@ describe('ApprovalHubView', () => {
 
     await wrapper.find('.work-order .btn-secondary').trigger('click')
     await flushPromises()
-    expect(appPrompt).toHaveBeenCalledWith('暂缓说明（可选）', '')
+    expect(appPrompt).toHaveBeenCalledWith('暂缓说明（至少4个字）', '')
     expect(decideOwnerWorkOrder).toHaveBeenCalledWith(readyOrder.wo_id, 'held', '已复核证据')
     expect(wrapper.text()).toContain('工单刷新失败：service unavailable')
 
