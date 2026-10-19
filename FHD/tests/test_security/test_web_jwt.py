@@ -1,4 +1,5 @@
 """Web JWT signing, verification, refresh rotation and flag gating."""
+
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -14,19 +15,18 @@ from app.security import web_jwt as w
 def _isolated_refresh_store(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{tmp_path / 'web-jwt.db'}")
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE web_refresh_token_uses "
-                                "(jti VARCHAR(64) PRIMARY KEY, expires_at BIGINT NOT NULL)"))
+        connection.execute(
+            text(
+                "CREATE TABLE web_refresh_token_uses "
+                "(jti VARCHAR(64) PRIMARY KEY, expires_at BIGINT NOT NULL)"
+            )
+        )
     factory = sessionmaker(bind=engine)
 
     @contextmanager
     def scope():
-        with factory() as db:
-            try:
-                yield db
-                db.commit()
-            except BaseException:
-                db.rollback()
-                raise
+        with factory.begin() as db:
+            yield db
 
     monkeypatch.setenv("SECRET_KEY", "web-jwt-test-only-not-production-" * 2)
     monkeypatch.setattr("app.db.session.get_host_db", scope)
