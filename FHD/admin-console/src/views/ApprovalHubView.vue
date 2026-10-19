@@ -19,7 +19,7 @@
         <dt>客户问题 / 实际</dt><dd>{{ item.context?.actual || item.reason || '—' }}</dd>
         <dt>预期</dt><dd>{{ item.context?.expected || '—' }}</dd>
         <dt>支持包 SHA256</dt><dd>{{ item.context?.support_bundle_sha256 || '—' }}</dd>
-        <dt>闸门</dt><dd>{{ Object.entries(item.gates || {}).map(([k, v]) => `${k}: ${v}`).join(' · ') || '暂无收据' }}</dd>
+        <dt>闸门</dt><dd>{{ Object.entries(item.gates || {}).map(([k, v]) => `${k}: ${k === 'owner_approval' ? statusLabel(v) : v}`).join(' · ') || '暂无收据' }}</dd>
       </dl>
       <details><summary>工单证据、诊断、PR、CI 与时间线</summary><pre class="payload">{{ JSON.stringify(item, null, 2) }}</pre></details>
       <div v-if="ticketIdOf(item)" class="ticket-trail">
@@ -34,9 +34,15 @@
       </div>
       <div v-if="item.can_decide" class="drawer-actions">
         <button class="btn btn-primary" :disabled="acting" @click="decide(item, 'approved')">批准</button>
-        <button class="btn btn-danger" :disabled="acting" @click="decide(item, 'rejected')">拒绝</button>
+        <button class="btn btn-danger" :disabled="acting" @click="decide(item, 'rejected')">打回返工</button>
         <button class="btn btn-secondary" :disabled="acting" @click="decide(item, 'held')">暂缓</button>
       </div>
+      <div v-else-if="item.can_resume" class="drawer-actions">
+        <button class="btn btn-primary" :disabled="acting" @click="decide(item, 'resume')">恢复处理</button>
+      </div>
+      <p v-else-if="item.status === 'approved'" class="muted">已批准放行，等待实际合入后再推进状态。</p>
+      <p v-else-if="item.status === 'rework'" class="muted">已打回，等待修复岗返工。</p>
+      <p v-else-if="item.status === 'held'" class="muted">暂缓中，恢复前需保留原验证闸门收据。</p>
       <p v-else class="muted">决策锁定：必须同一工单已有 RED、GREEN 和 OWNER_INSTANCE_VERIFIED 收据。</p>
     </section>
   </main>
@@ -87,7 +93,7 @@ function timelineOf(item: OwnerWorkOrder) {
   const rows = (item.history || []).map((row) => {
     const ref = obj(row.ref)
     const label = row.event === 'gate' ? `闸门 ${ref.gate}：${ref.gate_status}`
-      : row.event === 'transition' ? `工单状态 ${row.from || '—'} → ${row.to}` : '共享工单已创建'
+      : row.event === 'transition' ? `工单状态 ${statusLabel(row.from)} → ${statusLabel(row.to)}` : '共享工单已创建'
     return { at: eventTime(row.at), label: row.note ? `${label}（${row.note}）` : label }
   })
   for (const audit of trails.value[item.wo_id]?.audits || []) {
@@ -152,14 +158,20 @@ async function refresh() {
   } finally { loading.value = false }
 }
 
-async function decide(item: OwnerWorkOrder, decision: 'approved' | 'rejected' | 'held') {
-  if (!item.can_decide || acting.value) return
-  const note = decision === 'approved' ? '' : await appPrompt(decision === 'held' ? '暂缓说明（可选）' : '拒绝原因（可选）', '')
+async function decide(item: OwnerWorkOrder, decision: 'approved' | 'rejected' | 'held' | 'resume') {
+  if ((!item.can_decide && !(decision === 'resume' && item.can_resume)) || acting.value) return
+  const note = decision === 'resume' ? 'Owner 恢复处理'
+    : decision === 'approved' ? ''
+      : await appPrompt(decision === 'held' ? '暂缓说明（至少4个字）' : '打回原因（至少4个字）', '')
   if (note === null) return
+  if (decision !== 'approved' && decision !== 'resume' && note.trim().length < 4) {
+    await appAlert('请填写至少4个字的说明')
+    return
+  }
   acting.value = true
   try {
     const result = await xcmaxAdminApi.decideOwnerWorkOrder(item.wo_id, decision, note)
-    await appAlert(`工单 ${item.wo_id} 已记录为 ${result.decision}，操作人 ${result.actor}`)
+    await appAlert(`工单状态已更新为 ${statusLabel(result.status)}，操作人 ${result.actor}`)
     await refresh()
   } catch (cause: unknown) {
     await appAlert(cause instanceof Error ? cause.message : String(cause))

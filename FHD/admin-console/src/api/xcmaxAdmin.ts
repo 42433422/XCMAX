@@ -245,6 +245,7 @@ export interface OwnerWorkOrder extends Record<string, unknown> {
   history?: Record<string, unknown>[];
   gates?: Record<string, string>;
   can_decide?: boolean;
+  can_resume?: boolean;
 }
 
 export const xcmaxAdminApi = {
@@ -490,7 +491,7 @@ export const xcmaxAdminApi = {
       `/api/xcmax/admin/customer-service/tickets/${ticketId}`,
     );
   },
-  decideOwnerWorkOrder(woId: string, decision: 'approved' | 'rejected' | 'held', note = '') {
+  decideOwnerWorkOrder(woId: string, decision: 'approved' | 'rejected' | 'held' | 'resume', note = '') {
     return api.post<{ ok: boolean; wo_id: string; decision: string; actor: string }>(
       `/api/ops/autonomy/work-orders/${encodeURIComponent(woId)}/owner-decision`,
       { decision, note },
