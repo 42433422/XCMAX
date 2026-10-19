@@ -109,7 +109,7 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
         run: npm ci --prefix frontend --registry=https://registry.npmjs.org
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: matrix.mode == 'Upgrade' || matrix.mode == 'Rollback'
         with:
           python-version: '3.11'
