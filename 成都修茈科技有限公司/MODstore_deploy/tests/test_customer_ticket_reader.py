@@ -16,9 +16,8 @@ def reader_case(client, monkeypatch, tmp_path):
     from modstore_server.models_cs import (
         CustomerServiceAction,
         CustomerServiceAuditLog,
-        CustomerServiceSession,
-        CustomerServiceTicket,
     )
+    from tests.test_customer_service_api import _make_ticket
 
     token = "cst_ro_" + "test-only-not-a-live-credential" * 2
     ids, owners = [], []
@@ -28,20 +27,15 @@ def reader_case(client, monkeypatch, tmp_path):
             db.add(user)
             db.flush()
             owners.append(user.id)
-            session = CustomerServiceSession(user_id=user.id)
-            db.add(session)
-            db.flush()
-            ticket = CustomerServiceTicket(
-                user_id=user.id,
-                session_id=session.id,
+            ticket = _make_ticket(
+                db,
+                user,
                 ticket_no=uuid.uuid4().hex,
                 title=f"Ticket {n}",
                 status="processing",
                 summary="password=DO_NOT_EXPORT",
                 evidence_json='{"token":"DO_NOT_EXPORT"}',
             )
-            db.add(ticket)
-            db.flush()
             ids.append(ticket.id)
             db.add(
                 CustomerServiceAction(
@@ -202,3 +196,49 @@ def test_grants_fail_closed_and_revocation_is_immediate(reader_case, change):
     if change == "missing":
         path.unlink()
     assert client.get("/api/customer-service/tickets", headers=headers).status_code == 401
+
+
+def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(reader_case, monkeypatch):
+    from modstore_server import customer_service_api
+    from tests.test_customer_service_api import _as_user, _make_user
+
+    client, headers, ids, *_ = reader_case
+    ticket_id = ids[0]
+    url = f"/api/customer-service/tickets/{ticket_id}/title"
+    body = {"title": "  员工图谱无法正常显示  ", "expected_title": "Ticket 0"}
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("metadata correction must not enter chat or dispatch")
+
+    monkeypatch.setattr(customer_service_api, "handle_customer_message", forbidden)
+    monkeypatch.setattr(customer_service_api, "_schedule_customer_ticket_incident", forbidden)
+    assert client.put(url, json=body, headers=headers).status_code == 403
+    with _as_user(_make_user("title_customer")):
+        assert client.put(url, json=body).status_code == 403
+    with _as_user(_make_user("title_admin", admin=True)) as admin:
+        detail_url = f"/api/customer-service/tickets/{ticket_id}"
+        original = client.get(detail_url).json()["ticket"]
+        count = client.get("/api/customer-service/tickets").json()["total"]
+        for changes, status in [
+            ({"title": " "}, 422),
+            ({"title": "x" * 257}, 422),
+            ({"status": "resolved"}, 422),
+            ({"expected_title": "stale"}, 409),
+        ]:
+            assert client.put(url, json={**body, **changes}).status_code == status
+        assert client.put(url.replace(str(ticket_id), "99999999"), json=body).status_code == 404
+        response = client.put(url, json=body)
+        assert response.status_code == 200, response.text
+        assert response.json()["ticket"]["title"] == body["title"].strip()
+        assert client.put(url, json=body).status_code == 200
+        assert client.put(url, json={**body, "title": "another"}).status_code == 409
+        detail = client.get(detail_url).json()
+        current = detail["ticket"]
+        original.pop("updated_at")
+        current.pop("updated_at")
+        assert current == {**original, "title": body["title"].strip()}
+        assert client.get("/api/customer-service/tickets").json()["total"] == count
+        audits = [r for r in detail["audit_logs"] if r["event_type"] == "ticket_title_corrected"]
+        assert len(audits) == 1
+        assert audits[0]["actor_user_id"] == admin.id and audits[0]["actor_type"] == "admin"
+        assert audits[0]["detail"]["old_title"] == "Ticket 0"

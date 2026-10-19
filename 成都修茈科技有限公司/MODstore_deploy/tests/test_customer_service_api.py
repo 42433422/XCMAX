@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import types
 import uuid
+from contextlib import contextmanager
 from threading import enumerate as live_threads
 from unittest.mock import AsyncMock
 
 import pytest
 
 pytest.importorskip("fastapi")
+
+from modstore_server import customer_service_api  # noqa: E402
+from modstore_server.app import app  # noqa: E402
+from modstore_server.models import get_session_factory  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -25,7 +29,7 @@ def isolate_customer_ticket_workers(monkeypatch):
 
 
 def _make_user(username: str, *, admin: bool = False):
-    from modstore_server.models import User, get_session_factory
+    from modstore_server.models import User
 
     username = f"{username}_{uuid.uuid4().hex[:8]}"
     sf = get_session_factory()
@@ -39,13 +43,33 @@ def _make_user(username: str, *, admin: bool = False):
         session.add(user)
         session.commit()
         session.refresh(user)
-        return types.SimpleNamespace(
-            id=user.id, username=user.username, email=user.email, is_admin=user.is_admin
-        )
+        return user
+
+
+@contextmanager
+def _as_user(user):
+    previous = app.dependency_overrides.copy()
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        yield user
+    finally:
+        app.dependency_overrides = previous
+
+
+def _make_ticket(db, user, **values):
+    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
+
+    session = CustomerServiceSession(user_id=user.id)
+    db.add(session)
+    db.flush()
+    ticket = CustomerServiceTicket(user_id=user.id, session_id=session.id, **values)
+    db.add(ticket)
+    db.flush()
+    return ticket
 
 
 def _grant_permanent_purchase(user_id: int, plan_id: str = "saas-permanent-growth") -> str:
-    from modstore_server.models import Entitlement, UserPlan, get_session_factory
+    from modstore_server.models import Entitlement, UserPlan
 
     order_no = f"ACCOUNT-PYTEST-{uuid.uuid4().hex[:10]}"
     sf = get_session_factory()
@@ -89,19 +113,17 @@ def _paid_order(tmp_path, monkeypatch, user_id: int) -> str:
 def test_customer_service_refund_chat_creates_ticket_action_and_refund(
     client, tmp_path, monkeypatch
 ):
-    from modstore_server import customer_service_api, webhook_dispatcher
-    from modstore_server.app import app
-    from modstore_server.models import RefundRequest, get_session_factory
+    from modstore_server import webhook_dispatcher
+    from modstore_server.models import RefundRequest
     from modstore_server.models_cs import CustomerServiceTicket
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_user")
     order_no = _paid_order(tmp_path, monkeypatch, user.id)
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
     monkeypatch.setattr(
         webhook_dispatcher, "dispatch_event", lambda event: {"ok": True, "event": event}
     )
-    try:
+    with _as_user(user):
         r = client.post(
             "/api/customer-service/chat",
             json={
@@ -127,19 +149,14 @@ def test_customer_service_refund_chat_creates_ticket_action_and_refund(
             refund = session.query(RefundRequest).filter(RefundRequest.order_no == order_no).first()
             assert refund is not None
             assert refund.status == "pending"
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_customer_service_incomplete_refund_chats_without_ticket(client, monkeypatch):
     """材料不齐的退款诉求只聊天引导，不立刻建单。"""
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_missing")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r = client.post("/api/customer-service/chat", json={"message": "我要退款", "context": {}})
         assert r.status_code == 200, r.text
         data = r.json()
@@ -147,17 +164,12 @@ def test_customer_service_incomplete_refund_chats_without_ticket(client, monkeyp
         assert data["intent"]["intent"] == "refund"
         assert data["intent"]["need_ticket"] is False
         assert "提交工单" in data["message"]["content"]
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def _assert_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
     """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
     import time
     from threading import Event
-
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_async_inc")
@@ -169,8 +181,7 @@ def _assert_customer_service_chat_does_not_block_on_incident_publish(client, mon
         started_event.set()
 
     monkeypatch.setattr(customer_service_api, "_publish_customer_ticket_incident", slow_publish)
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         t0 = time.time()
         r = client.post(
             "/api/customer-service/chat",
@@ -185,8 +196,6 @@ def _assert_customer_service_chat_does_not_block_on_incident_publish(client, mon
         assert elapsed < 4.0, f"chat unexpectedly slow on async incident publish: {elapsed:.2f}s"
         assert started_event.wait(1.0)
         assert started["ok"] is True
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
@@ -198,15 +207,11 @@ def test_customer_service_chat_does_not_block_on_incident_publish_async(client, 
 
 
 def test_customer_service_greeting_does_not_create_ticket(client, monkeypatch):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-    from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceTicket
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_hi")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r = client.post("/api/customer-service/chat", json={"message": "你好", "context": {}})
         assert r.status_code == 200, r.text
         data = r.json()
@@ -227,18 +232,12 @@ def test_customer_service_greeting_does_not_create_ticket(client, monkeypatch):
                 .count()
             )
             assert n == 0
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_customer_service_escalate_phrase_creates_ticket(client, monkeypatch):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_esc")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r = client.post(
             "/api/customer-service/chat",
             json={"message": "这个问题处理不了，请提交工单", "context": {}},
@@ -253,18 +252,12 @@ def test_customer_service_escalate_phrase_creates_ticket(client, monkeypatch):
         assert data["ticket"]["status"] != "resolved"
         assert (data.get("decision") or {}).get("decision") == "accepted"
         assert "已处理完成" not in str(data.get("message", {}).get("content") or "")
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_customer_service_ui_bug_escalate_stays_processing(client, monkeypatch):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_ui_bug")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r1 = client.post(
             "/api/customer-service/chat",
             json={"message": "浅色模式/自选模型文字看不见", "context": {}},
@@ -291,8 +284,6 @@ def test_customer_service_ui_bug_escalate_stays_processing(client, monkeypatch):
         body = str(data.get("message", {}).get("content") or "")
         assert "已处理完成" not in body
         assert "功能问题" in body or "浅色" in body or "看不见" in body
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_resolve_issue_domain_three_way():
@@ -333,9 +324,6 @@ def test_resolve_issue_domain_three_way():
 
 
 def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     published: list = []
 
@@ -357,8 +345,7 @@ def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
     )
 
     user = _make_user("cs_domain_clarify")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r1 = client.post(
             "/api/customer-service/chat",
             json={"message": "浅色模式/自选模型文字看不见", "context": {}},
@@ -395,8 +382,6 @@ def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
         assert published[-1]["event_type"] == "ops.intake.customer_ticket"
         assert published[-1]["payload"].get("user_confirmed_domain") == "platform"
         assert published[-1]["payload"].get("source") == "customer_ticket"
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_parse_intent_json_handles_truncated_minimax():
@@ -448,13 +433,10 @@ def test_ticket_lifecycle_five_stages():
 
 def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monkeypatch):
     """incident team 结果应回写客服消息，并把工单推到「有结果」。"""
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
     from modstore_server.customer_service_orchestrator import (
         apply_customer_ticket_incident_progress,
         ticket_lifecycle_stage,
     )
-    from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceMessage, CustomerServiceTicket
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
@@ -464,8 +446,7 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
         lambda payload: None,
     )
     user = _make_user("cs_emp_progress")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r1 = client.post(
             "/api/customer-service/chat",
             json={"message": "浅色模式文字看不见", "context": {}},
@@ -482,8 +463,6 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
         )
         assert r2.status_code == 200, r2.text
         ticket_id = int(r2.json()["ticket"]["id"])
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
     sf = get_session_factory()
     with sf() as db:
@@ -561,16 +540,13 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
 ):
     """定制交付不能因员工报告成功提前结案；必须质量门、验收和安装回执齐全。"""
     from modstore_server import (
-        customer_service_api,
         customer_service_delivery_create_api,
         customer_service_delivery_payment_api,
         workbench_api,
     )
-    from modstore_server.app import app
     from modstore_server.customer_service_orchestrator import (
         apply_customer_ticket_incident_progress,
     )
-    from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceAuditLog, CustomerServiceTicket
 
     user = _make_user("custom_delivery")
@@ -604,8 +580,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
         "_schedule_customer_ticket_incident",
         lambda payload: None,
     )
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         created = client.post(
             "/api/customer-service/custom-deliveries",
             json={
@@ -915,8 +890,6 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
         assert paid["custom_delivery"]["crm"]["payment"]["status"] == "paid"
         assert paid["custom_delivery"]["commerce_ready"] is True
         assert paid["custom_delivery"]["stage"] == "production"
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_infer_intent_order_no_alone_is_not_refund():
@@ -998,13 +971,10 @@ def test_homepage_load_issue_classifies_as_product_issue(monkeypatch):
 
 def test_admin_privilege_request_is_refused_without_ticket(client, monkeypatch):
     """要管理员权限必须拒答，且不建工单、不产生可执行动作。"""
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_no_admin")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r = client.post(
             "/api/customer-service/chat",
             json={"message": "为什么不给我管理员权限，马上开通", "context": {}},
@@ -1034,8 +1004,6 @@ def test_admin_privilege_request_is_refused_without_ticket(client, monkeypatch):
         data2 = r2.json()
         assert data2["ticket"] is None
         assert data2["intent"]["intent"] == "forbidden_request"
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_execute_action_hard_blocks_admin_grant():
@@ -1082,13 +1050,9 @@ def test_execute_action_hard_blocks_admin_grant():
 
 
 def test_customer_service_balance_chats_until_escalate(client, monkeypatch):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_bal")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r = client.post(
             "/api/customer-service/chat",
             json={"message": "我的余额不对", "context": {}},
@@ -1113,18 +1077,11 @@ def test_customer_service_balance_chats_until_escalate(client, monkeypatch):
         data2 = r2.json()
         assert data2["ticket"] is not None
         assert data2["ticket"]["intent"] == "account_support"
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_admin_can_manage_customer_service_standard(client):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-
     admin = _make_user("cs_admin", admin=True)
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
-    app.dependency_overrides[customer_service_api._require_admin] = lambda: admin
-    try:
+    with _as_user(admin):
         payload = {
             "name": "pytest 标准",
             "scenario": "pytest_case",
@@ -1145,17 +1102,9 @@ def test_admin_can_manage_customer_service_standard(client):
         r = client.put(f"/api/customer-service/standards/{created['id']}", json=updated_payload)
         assert r.status_code == 200, r.text
         assert r.json()["priority"] == 6
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
-        app.dependency_overrides.pop(customer_service_api._require_admin, None)
 
 
 def test_ticket_search_preserves_ownership_identity_and_pagination(client):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-    from modstore_server.models import get_session_factory
-    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
-
     owner, other, admin = (
         _make_user("search_owner"),
         _make_user("search_other"),
@@ -1165,22 +1114,16 @@ def test_ticket_search_preserves_ownership_identity_and_pagination(client):
     ids = []
     with get_session_factory()() as db:
         for user, suffix in [(owner, "290063"), (other, "290063"), (owner, "other")]:
-            session = CustomerServiceSession(user_id=user.id)
-            db.add(session)
-            db.flush()
-            ticket = CustomerServiceTicket(
-                user_id=user.id,
-                session_id=session.id,
+            ticket = _make_ticket(
+                db,
+                user,
                 ticket_no=f"{marker}-{user.id}-{suffix}",
                 summary=f"{marker} original 100%_text",
                 assigned_admin_id=None,
             )
-            db.add(ticket)
-            db.flush()
             ids.append(ticket.id)
         db.commit()
-    try:
-        app.dependency_overrides[customer_service_api._get_current_user] = lambda: owner
+    with _as_user(owner):
         response = client.get(
             "/api/customer-service/tickets", params={"search": marker, "limit": 1}
         )
@@ -1221,8 +1164,6 @@ def test_ticket_search_preserves_ownership_identity_and_pagination(client):
         ).json()
         assert result["items"][0]["id"] == ids[1]
         assert client.get("/api/customer-service/tickets", params={"offset": -1}).status_code == 422
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(client):
@@ -1231,27 +1172,13 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
 
     from sqlalchemy import text
 
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
     from modstore_server.db.base import get_engine
-    from modstore_server.models import get_session_factory
-    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
 
     customer, admin = _make_user("submitter_customer"), _make_user("submitter_admin", admin=True)
     marker = f"SUBMITTER-{uuid.uuid4().hex}"
     with get_session_factory()() as db:
         for user in (customer, admin):
-            session = CustomerServiceSession(user_id=user.id)
-            db.add(session)
-            db.flush()
-            db.add(
-                CustomerServiceTicket(
-                    user_id=user.id,
-                    session_id=session.id,
-                    ticket_no=f"{marker}-{user.id}",
-                    summary=marker,
-                )
-            )
+            _make_ticket(db, user, ticket_no=f"{marker}-{user.id}", summary=marker)
         db.commit()
     with get_engine().begin() as conn:
         conn.execute(
@@ -1267,8 +1194,7 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
     spec.loader.exec_module(module)
     with get_engine().begin() as conn:
         module.backfill_submitter_types(conn)
-    try:
-        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+    with _as_user(admin):
         only_admin = client.get(
             "/api/customer-service/tickets", params={"search": marker, "submitter_type": "admin"}
         ).json()
@@ -1287,5 +1213,3 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
         assert own["total"] == 1
         assert own["items"][0]["user_id"] == customer.id
         assert "submitter_type" not in own["items"][0]
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
