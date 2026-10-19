@@ -113,7 +113,9 @@ def test_cross_audit_reports_permission_error(tmp_path, monkeypatch):
     path = tmp_path / "audit.jsonl"
     path.write_text("{}")
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(path))
+
     def denied(*args, **kwargs):
         raise PermissionError("denied")
+
     monkeypatch.setattr(Path, "read_text", denied)
     assert read_cross_tier_audit(tier="server")["status"] == "error"
