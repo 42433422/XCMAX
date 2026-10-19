@@ -16,6 +16,7 @@
           </div>
           <div class="cs-badges">
             <span class="cs-badge cs-badge-lg" :class="`is-${status.tone}`" :title="status.raw">{{ status.label }}</span>
+            <span class="cs-tag">{{ submitterTypeLabel(ticket.submitter_type) }}</span>
             <span v-if="ticket.issue_domain_label" class="cs-tag">{{ ticket.issue_domain_label }}</span>
             <span class="cs-tag">{{ intentLabel(ticket.intent) }}</span>
             <span v-if="ticket.priority" class="cs-tag">优先级 {{ priorityLabel(ticket.priority) }}</span>
@@ -26,6 +27,7 @@
         </ol>
         <dl class="cs-facts">
           <div><dt>客户</dt><dd>市场用户 ID {{ ticket.user_id ?? '—' }}<template v-if="ticket.session_id"> · 会话 {{ ticket.session_id }}</template></dd></div>
+          <div><dt>提交人身份</dt><dd>{{ submitterTypeLabel(ticket.submitter_type) }}</dd></div>
           <div><dt>指派管理员</dt><dd>{{ ticket.assigned_admin_id || '暂无管理员指派记录' }}</dd></div>
           <div><dt>创建时间</dt><dd>{{ formatBeijingTime(ticket.created_at) }}</dd></div>
           <div><dt>最近更新</dt><dd>{{ formatBeijingTime(ticket.updated_at) }}</dd></div>
@@ -117,7 +119,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import {
   auditItems, buildTimeline, formatBeijingTime, intentLabel, prettyJson, priorityLabel, resolutionStateBadge,
-  routeLabel, teamMembers, ticketStatusBadge, yesNoBadge, type Row,
+  routeLabel, submitterTypeLabel, teamMembers, ticketStatusBadge, yesNoBadge, type Row,
 } from '../utils/customerServiceTicketFormat'
 
 type Detail = { ticket: Row; decisions: Row[]; actions: Row[]; audit_logs: Row[] }

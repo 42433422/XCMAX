@@ -467,9 +467,11 @@ export const xcmaxAdminApi = {
       '/api/ops/autonomy/work-orders', { limit },
     );
   },
-  fetchCustomerTickets(search = '', offset = 0) {
+  fetchCustomerTickets(search = '', offset = 0, submitterType = '') {
     return api.get<{ items: Record<string, unknown>[]; total: number }>(
-      '/api/xcmax/admin/customer-service/tickets', { search, offset, limit: 50 },
+      '/api/xcmax/admin/customer-service/tickets', {
+        search, submitter_type: submitterType, offset, limit: 50,
+      },
     );
   },
   fetchCustomerTicket(ticketId: number) {

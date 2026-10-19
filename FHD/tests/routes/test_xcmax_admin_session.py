@@ -205,7 +205,12 @@ def test_customer_ticket_proxy_preserves_search_and_market_identity(
     ) as proxy:
         response = client.get(
             "/api/xcmax/admin/customer-service/tickets",
-            params={"search": "290063 & 原文", "offset": 50, "limit": 50},
+            params={
+                "search": "290063 & 原文",
+                "submitter_type": "admin",
+                "offset": 50,
+                "limit": 50,
+            },
             headers={
                 "X-Session-ID": "current-session",
                 "Authorization": "Bearer unrelated-browser-identity",
@@ -217,6 +222,7 @@ def test_customer_ticket_proxy_preserves_search_and_market_identity(
         assert urlsplit(args[1]).path == "/api/customer-service/tickets"
         assert parse_qs(urlsplit(args[1]).query) == {
             "search": ["290063 & 原文"],
+            "submitter_type": ["admin"],
             "offset": ["50"],
             "limit": ["50"],
         }
