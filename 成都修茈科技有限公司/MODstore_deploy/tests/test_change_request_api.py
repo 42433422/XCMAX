@@ -30,6 +30,8 @@ def admin_client(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_AUTO_APPROVE_ENABLED", "0")
     monkeypatch.setenv("MODSTORE_JWT_SECRET", _TEST_JWT_SECRET)
     monkeypatch.setenv("MODSTORE_DISABLE_CSRF", "1")
+    monkeypatch.setenv("MODSTORE_INCIDENT_SYNC_DISPATCH", "1")
+    monkeypatch.setattr("modstore_server.incident_bus._dispatch_incident", lambda _eid: None)
 
     from modstore_server.api.deps import require_admin
     from modstore_server.app import app
