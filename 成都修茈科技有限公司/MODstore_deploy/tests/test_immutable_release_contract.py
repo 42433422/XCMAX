@@ -537,11 +537,13 @@ def test_fixed_release_guard_rejects_production_advance(tmp_path: Path) -> None:
     (fake_bin / "curl").chmod(0o755)
     script = RELEASE_SCRIPT.read_text()
     start = script.index("verify_fixed_release_approval() {")
-    guard = script[
-        start : script.index('\nif [[ -n "${XCMAX_RELEASE_CONTROLLER_SHA', start)
-    ]
-    for deployed, running, expected in [(previous, previous, 0), (target, target, 0),
-                                       (controller, controller, 1), (previous, controller, 1)]:
+    guard = script[start : script.index('\nif [[ -n "${XCMAX_RELEASE_CONTROLLER_SHA', start)]
+    for deployed, running, expected in [
+        (previous, previous, 0),
+        (target, target, 0),
+        (controller, controller, 1),
+        (previous, controller, 1),
+    ]:
         (current / ".xcmax-release.json").write_text(json.dumps({"git_sha": deployed}))
         (current / "health.json").write_text(json.dumps({"ok": True, "git_sha": running}))
         result = subprocess.run(
