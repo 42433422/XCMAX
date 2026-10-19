@@ -49,7 +49,7 @@ def update_expected_completion(
         if value and value.tzinfo is None
         else (value.astimezone(UTC) if value else None)
     )
-    ticket.expected_completion_at = value
+    ticket.expected_completion_at = value  # type: ignore[assignment]
     audit(
         db,
         event_type="expected_completion_updated",
