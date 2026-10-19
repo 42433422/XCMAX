@@ -531,13 +531,19 @@ def test_fixed_release_guard_rejects_production_advance(tmp_path: Path) -> None:
     git("update-ref", "refs/remotes/origin/main", controller)
     current = tmp_path / "current"
     current.mkdir()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    (fake_bin / "curl").write_text('#!/bin/sh\ncat "$CURRENT_LINK/health.json"\n')
+    (fake_bin / "curl").chmod(0o755)
     script = RELEASE_SCRIPT.read_text()
     start = script.index("verify_fixed_release_approval() {")
     guard = script[
         start : script.index('\nif [[ -n "${XCMAX_RELEASE_CONTROLLER_SHA', start)
     ]
-    for deployed, expected in [(previous, 0), (target, 0), (controller, 1)]:
+    for deployed, running, expected in [(previous, previous, 0), (target, target, 0),
+                                       (controller, controller, 1), (previous, controller, 1)]:
         (current / ".xcmax-release.json").write_text(json.dumps({"git_sha": deployed}))
+        (current / "health.json").write_text(json.dumps({"ok": True, "git_sha": running}))
         result = subprocess.run(
             [
                 "bash",
@@ -552,6 +558,8 @@ def test_fixed_release_guard_rejects_production_advance(tmp_path: Path) -> None:
                 "TARGET_SHA": target,
                 "PRODUCT_VERSION": "1.0.0.6",
                 "CURRENT_LINK": str(current),
+                "HEALTH_URL": "http://test.invalid/api/health",
+                "PATH": str(fake_bin) + os.pathsep + os.environ["PATH"],
                 "XCMAX_RELEASE_CONTROLLER_SHA": controller,
             },
             capture_output=True,

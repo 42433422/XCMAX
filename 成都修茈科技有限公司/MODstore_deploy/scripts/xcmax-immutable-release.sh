@@ -263,8 +263,9 @@ verify_fixed_release_approval() {
     || fail "approved release/controller must already belong to main"
   approval="$(git -C "$SOURCE_ROOT" show "$controller:ops/releases/$TARGET_SHA.json")" \
     || fail "committed release approval missing"
-  local current
-  current="$(RELEASE_APPROVAL="$approval" python3 - "$TARGET_SHA" "$PRODUCT_VERSION" "$CURRENT_LINK/.xcmax-release.json" <<'PY_APPROVAL'
+  local current health
+  health="$(curl --noproxy '*' -fsS --max-time 10 "$HEALTH_URL")" || fail "production health unavailable"
+  current="$(RELEASE_APPROVAL="$approval" HEALTH_PAYLOAD="$health" python3 - "$TARGET_SHA" "$PRODUCT_VERSION" "$CURRENT_LINK/.xcmax-release.json" <<'PY_APPROVAL'
 import json, os, re, sys
 approval = json.loads(os.environ["RELEASE_APPROVAL"])
 assert approval["git_sha"] == sys.argv[1] and approval["product_version"] == sys.argv[2]
@@ -272,6 +273,8 @@ assert approval["approval_reference"] and approval["approval_scope"]
 assert re.fullmatch(r"[0-9a-f]{40}", approval["expected_production_sha"])
 with open(sys.argv[3]) as handle:
     current = json.load(handle)["git_sha"]
+health = json.loads(os.environ["HEALTH_PAYLOAD"])
+assert health.get("ok") is True and health.get("git_sha") == current, "running production identity differs from current release"
 assert current in (approval["expected_production_sha"], approval["git_sha"]), "production advanced since approval; refuse overwrite"
 print(current)
 PY_APPROVAL
