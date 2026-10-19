@@ -4,14 +4,23 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 
 from modstore_server.application.auth import AuthApplicationService, AuthenticationError
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import User
 
 
-def get_current_user(authorization: Optional[str] = Header(None)) -> User:
+def get_current_user(
+    authorization: Optional[str] = Header(None),
+    request: Request = None,  # type: ignore[assignment]  # Legacy direct JWT callers have no Request.
+) -> User:
+    from modstore_server.customer_ticket_reader import PREFIX, resolve_reader
+
+    raw = authorization or ""
+    if raw.startswith(f"Bearer {PREFIX}"):
+        # This is a service principal, never an administrator or a login-capable user.
+        return resolve_reader(raw[7:], request)  # type: ignore[return-value]
     try:
         return AuthApplicationService().current_user_from_authorization(authorization)
     except AuthenticationError as e:
