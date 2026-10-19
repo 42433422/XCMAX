@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, Dict
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from modstore_server.customer_service_tools import json_loads
+from modstore_server.customer_service_tools import audit, json_loads
 from modstore_server.models import User
 from modstore_server.models_cs import (
     CustomerServiceAuditLog,
@@ -37,6 +38,29 @@ def visible_ticket_or_404(db: Session, user: User, ticket_id: int) -> CustomerSe
     ):
         return row
     raise HTTPException(404, "客服工单不存在")
+
+
+def update_expected_completion(
+    db: Session, ticket_id: int, user: User, value: datetime | None
+) -> CustomerServiceTicket:
+    ticket = visible_ticket_or_404(db, user, ticket_id)
+    value = (
+        value.replace(tzinfo=UTC)
+        if value and value.tzinfo is None
+        else (value.astimezone(UTC) if value else None)
+    )
+    ticket.expected_completion_at = value
+    audit(
+        db,
+        event_type="expected_completion_updated",
+        detail={"expected_completion_at": value.isoformat() if value else None},
+        actor=user,
+        ticket_id=ticket.id,
+        actor_type="admin",
+    )
+    db.commit()
+    db.refresh(ticket)
+    return ticket
 
 
 def standard_payload(
@@ -82,3 +106,13 @@ def audit_payload(row: CustomerServiceAuditLog) -> Dict[str, Any]:
         "detail": json_loads(row.detail_json, {}),
         "created_at": row.created_at.isoformat() if row.created_at else "",
     }
+
+
+__all__ = [
+    "audit_payload",
+    "integration_payload",
+    "own_session_or_404",
+    "standard_payload",
+    "update_expected_completion",
+    "visible_ticket_or_404",
+]

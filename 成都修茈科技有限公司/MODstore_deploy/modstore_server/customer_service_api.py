@@ -9,7 +9,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -30,6 +30,7 @@ from modstore_server.customer_service_api_helpers import (
     integration_payload as _integration_payload,
     own_session_or_404 as _own_session_or_404,
     standard_payload as _standard_payload,
+    update_expected_completion as _update_expected_completion,
     visible_ticket_or_404 as _visible_ticket_or_404,
 )
 from modstore_server import customer_service_customer_view as customer_view
@@ -332,27 +333,7 @@ async def update_ticket_expected_completion(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
-    ticket = db.query(CustomerServiceTicket).filter(CustomerServiceTicket.id == ticket_id).first()
-    if ticket is None:
-        raise HTTPException(status_code=404, detail="工单不存在")
-    value = body.expected_completion_at
-    if value is not None:
-        value = (
-            value.replace(tzinfo=timezone.utc)
-            if value.tzinfo is None
-            else value.astimezone(timezone.utc)
-        )
-    ticket.expected_completion_at = value
-    audit = CustomerServiceAuditLog(
-        ticket_id=ticket.id,
-        actor_user_id=user.id,
-        actor_type="admin",
-        event_type="expected_completion_updated",
-        detail_json=json_dumps({"expected_completion_at": value.isoformat() if value else None}),
-    )
-    db.add(audit)
-    db.commit()
-    db.refresh(ticket)
+    ticket = _update_expected_completion(db, ticket_id, user, body.expected_completion_at)
     return {"ticket": ticket_payload(ticket)}
 
 
