@@ -66,7 +66,8 @@ def load_workforce_contracts(path: Optional[Path] = None) -> Dict[str, Any]:
         trigger = raw.get("trigger") if isinstance(raw.get("trigger"), dict) else {}
         if not str(trigger.get("cron") or "").strip() and not trigger.get("events"):
             raise RuntimeError(f"duty work contract has no trigger: {employee_id}")
-        normalized.append({**raw, "employee_id": employee_id, "trigger": trigger})
+        acceptance = list(dict.fromkeys([*(payload.get("defaults", {}).get("acceptance") or []), *(raw.get("acceptance") or [])]))
+        normalized.append({**raw, "employee_id": employee_id, "trigger": trigger, "acceptance": acceptance})
     return {**payload, "path": str(target), "contracts": normalized}
 
 
