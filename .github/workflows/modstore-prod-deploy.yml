@@ -106,7 +106,7 @@ jobs:
           username: root
           key: ${{ secrets.FHD_PUSH_SSH_KEY }}
           command_timeout: 45m
-          envs: TARGET_SHA,CONTROLLER_SHA,STRICT_KEY,REPOSITORY_SLUG,PRODUCT_VERSION
+          envs: TARGET_SHA,STRICT_KEY,REPOSITORY_SLUG,PRODUCT_VERSION,CONTROLLER_SHA
           script: |
             set -euo pipefail
             SOURCE_ROOT="${XCMAX_REMOTE_ROOT:-/root/XCMAX}"
