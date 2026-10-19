@@ -510,7 +510,8 @@ export const xcmaxAdminApi = {
     return api.get<Record<string, unknown>>('/api/xcmax/admin/autonomy/cross-tier-gate');
   },
   fetchAutonomyAuditCrossTier(params: { tier?: string; limit?: number } = {}) {
-    return api.get<{ ok: boolean; items?: Record<string, unknown>[]; tier?: string }>(
+    return api.get<{ ok: boolean; items?: Record<string, unknown>[]; tier?: string; path?: string;
+      exists?: boolean; status?: string; last_event_at?: string | null }>(
       '/api/xcmax/admin/autonomy/audit-cross-tier',
       params,
     );
