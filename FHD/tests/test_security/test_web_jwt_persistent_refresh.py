@@ -1,9 +1,10 @@
 """Real SQLite replay protection across independent DB connections/processes."""
+
 from __future__ import annotations
 
-from contextlib import contextmanager
 import multiprocessing
 import time
+from contextlib import contextmanager
 
 import jwt
 import pytest
@@ -19,21 +20,24 @@ def replay_db(tmp_path, monkeypatch):
     path = str(tmp_path / "replay.db")
     engine = create_engine(f"sqlite:///{path}", connect_args={"timeout": 15})
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE web_refresh_token_uses "
-                                "(jti VARCHAR(64) PRIMARY KEY, expires_at BIGINT NOT NULL)"))
-        connection.execute(text("CREATE INDEX ix_web_refresh_token_uses_expires_at "
-                                "ON web_refresh_token_uses (expires_at)"))
+        connection.execute(
+            text(
+                "CREATE TABLE web_refresh_token_uses "
+                "(jti VARCHAR(64) PRIMARY KEY, expires_at BIGINT NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX ix_web_refresh_token_uses_expires_at "
+                "ON web_refresh_token_uses (expires_at)"
+            )
+        )
     factory = sessionmaker(bind=engine)
 
     @contextmanager
     def db_scope():
-        with factory() as db:
-            try:
-                yield db
-                db.commit()
-            except BaseException:
-                db.rollback()
-                raise
+        with factory.begin() as db:
+            yield db
 
     monkeypatch.setenv("SECRET_KEY", "isolated-test-secret-not-for-production-" * 2)
     monkeypatch.setattr("app.db.session.get_host_db", db_scope)
@@ -45,10 +49,9 @@ def _consume_in_process(args):
     path, jti, expiry = args
     engine = create_engine(f"sqlite:///{path}", connect_args={"timeout": 15})
     try:
-        with sessionmaker(bind=engine)() as db:
+        with sessionmaker(bind=engine).begin() as db:
             result = w._consume_refresh_jti(db, jti, expiry, int(time.time()))
-            db.commit()
-            return result
+        return result
     finally:
         engine.dispose()
 
@@ -70,7 +73,9 @@ def test_refresh_binding_and_replay(replay_db):
     tokens = w.issue_web_tokens(user_id=7, session_id="bound-session")
     rotated = w.refresh_web_access_token(tokens["refresh_token"])
     assert rotated is not None
-    assert all(w.verify_web_jwt(token)["session_id"] == "bound-session" for token in rotated.values())
+    assert all(
+        w.verify_web_jwt(token)["session_id"] == "bound-session" for token in rotated.values()
+    )
     assert w.refresh_web_access_token(tokens["refresh_token"]) is None
     with scope() as db:
         assert db.execute(text("SELECT COUNT(*) FROM web_refresh_token_uses")).scalar_one() == 1
