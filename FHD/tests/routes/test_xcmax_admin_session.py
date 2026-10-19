@@ -244,6 +244,45 @@ def test_customer_ticket_proxy_preserves_search_and_market_identity(
         service.validate_session.assert_called_with("current-session")
 
 
+def test_admin_customer_ticket_create_uses_bound_identity_and_idempotent_intake(
+    client, customer_ticket_identity
+):
+    from unittest.mock import AsyncMock
+
+    request_id = "01234567-89ab-4cde-8123-456789abcdef"
+    body = {
+        "request_id": request_id,
+        "title": "员工图谱关系线显示异常",
+        "description": "管理端图谱页面没有绘制关系线。",
+        "issue_domain": "platform",
+        "acceptance_criteria": "节点和关系线都能正常显示。",
+    }
+    with patch(
+        "app.fastapi_routes.market_account._proxy_json",
+        new_callable=AsyncMock,
+        return_value={"success": True, "ticket_id": 52, "ticket_no": "CS-52"},
+    ) as proxy:
+        response = client.post(
+            "/api/xcmax/admin/customer-service/tickets",
+            json=body,
+            headers={"X-Session-ID": "current-session"},
+        )
+    assert response.status_code == 200
+    assert response.json()["ticket_id"] == 52
+    assert proxy.await_args.args == ("POST", "/api/customer-service/issues/intake")
+    assert proxy.await_args.kwargs["authorization"] == "Bearer test-bound-market-identity"
+    assert proxy.await_args.kwargs["json_body"] == {
+        "source": "enterprise_portal",
+        "source_ref": f"xcmax-admin-{request_id}",
+        "title": body["title"],
+        "description": body["description"],
+        "issue_domain": "platform",
+        "acceptance_criteria": body["acceptance_criteria"],
+    }
+    service, _ = customer_ticket_identity
+    service.validate_session.assert_called_with("current-session")
+
+
 @pytest.mark.parametrize("suffix", ["", "/42"])
 @pytest.mark.parametrize("failure", ["no_user", "resolver_error", "inactive", "no_bound_token"])
 def test_customer_ticket_identity_failures_never_use_another_session(

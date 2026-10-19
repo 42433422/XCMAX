@@ -5,7 +5,22 @@
         <h2>客服工单 · 客户反馈</h2>
         <p>来源：市场客服原单（当前登录市场账号的可见范围）。研发 Work Order 与客户交付单在各自入口查看。时间均为北京时间。</p>
       </div>
+      <button class="cs-btn cs-btn-primary" type="button" @click="openCreate">新建产品问题工单</button>
     </header>
+    <form v-if="showCreate" class="cs-card cs-create" @submit.prevent="createTicket">
+      <h3 class="cs-card-title">新建产品问题工单</h3>
+      <div class="cs-create-grid">
+        <label class="cs-search"><span>问题标题</span><input v-model="createTitle" required maxlength="256" :disabled="creating || Boolean(createError)" /></label>
+        <label><span>问题类型</span><select v-model="createDomain" :disabled="creating || Boolean(createError)"><option value="platform">平台</option><option value="software">软件</option></select></label>
+        <label class="cs-search cs-create-wide"><span>问题描述</span><textarea v-model="createDescription" required minlength="4" maxlength="8000" rows="5" :disabled="creating || Boolean(createError)"></textarea></label>
+        <label class="cs-search cs-create-wide"><span>验收标准（可选）</span><textarea v-model="acceptanceCriteria" maxlength="6000" rows="3" :disabled="creating || Boolean(createError)"></textarea></label>
+      </div>
+      <p v-if="createError" role="alert" class="cs-banner-error">{{ createError }}</p>
+      <div class="cs-create-actions">
+        <button class="cs-btn" type="button" :disabled="creating" @click="closeCreate">取消</button>
+        <button class="cs-btn cs-btn-primary" :disabled="creating">{{ creating ? '提交中…' : '提交工单' }}</button>
+      </div>
+    </form>
     <form class="cs-card cs-toolbar" @submit.prevent="load(0, true)">
       <label class="cs-search">
         <span>搜索编号或原文</span>
@@ -65,6 +80,9 @@ import { formatBeijingTime, intentLabel, submitterTypeLabel, ticketStatusBadge, 
 const PAGE_SIZE = 50
 const router = useRouter()
 const search = ref(''), submitterType = ref(''), error = ref('')
+const showCreate = ref(false), creating = ref(false), createError = ref('')
+const createTitle = ref(''), createDescription = ref(''), acceptanceCriteria = ref('')
+const createDomain = ref<'platform' | 'software'>('platform'), requestId = ref('')
 const tickets = ref<Row[]>([])
 const loading = ref(false), loaded = ref(false)
 const offset = ref(0), total = ref(0)
@@ -83,6 +101,41 @@ const message = (cause: unknown) => cause instanceof Error ? cause.message : Str
 
 function open(id: number) {
   void router.push({ name: 'customer-service-ticket-detail', params: { ticketId: String(id) } })
+}
+
+function openCreate() {
+  requestId.value ||= window.crypto.randomUUID()
+  showCreate.value = true
+}
+
+function closeCreate() {
+  if (!creating.value) showCreate.value = false
+}
+
+async function createTicket() {
+  if (creating.value) return
+  creating.value = true
+  createError.value = ''
+  try {
+    const result = await xcmaxAdminApi.createCustomerTicket({
+      request_id: requestId.value,
+      title: createTitle.value.trim(),
+      description: createDescription.value.trim(),
+      issue_domain: createDomain.value,
+      acceptance_criteria: acceptanceCriteria.value.trim(),
+    })
+    const id = Number(result.ticket_id)
+    if (!id) throw new Error('响应中没有工单编号；请使用当前内容重试并沿用相同请求标识。')
+    showCreate.value = false
+    requestId.value = ''
+    createTitle.value = ''; createDescription.value = ''; acceptanceCriteria.value = ''
+    createError.value = ''
+    open(id)
+  } catch (cause) {
+    createError.value = `提交未确认：${message(cause)}。表单与请求标识已保留，重试会防止重复建单。`
+  } finally {
+    creating.value = false
+  }
 }
 
 async function load(nextOffset: number, applySearch = false) {
