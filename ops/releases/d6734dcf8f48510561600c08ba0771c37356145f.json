@@ -1,0 +1,10 @@
+{
+  "git_sha": "d6734dcf8f48510561600c08ba0771c37356145f",
+  "expected_production_sha": "04155ce00e683645dfabd8ef06ca80fb35403ba5",
+  "product_version": "1.0.0.6",
+  "ci_run_id": 39204005761,
+  "security_scan_run_id": 39205199536,
+  "approval_reference": "Sentinel_fb9e8d9604788191961befeec95fe12b",
+  "approval_recorded_at": "2026-10-19T13:33:49Z",
+  "approval_scope": "Approved fixed d6734dcf MODstore release; retain CI, security, health and rollback gates; no FHD deployment or credential grants."
+}

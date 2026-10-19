@@ -32,7 +32,11 @@ on:
         required: true
         type: string
       previous_security_scan_run_id:
-        description: Prior-day all-source zero-finding scan run ID for the same SHA
+        description: Legacy compatibility input; the current single scan is authoritative
+        required: true
+        type: string
+      ci_run_id:
+        description: Successful complete CI run for the exact approved SHA
         required: true
         type: string
 
@@ -46,21 +50,24 @@ permissions:
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.git_sha }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
 
       - name: Resolve exact tested SHA
         id: target
         env:
+          GH_TOKEN: ${{ github.token }}
           REQUESTED_SHA: ${{ inputs.git_sha }}
-        run: |
-          set -euo pipefail
-          target="${REQUESTED_SHA:-}"
-          [[ "$target" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::invalid exact SHA: $target"; exit 1; }
-          echo "sha=$target" >> "$GITHUB_OUTPUT"
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+          SECURITY_SCAN_RUN_ID: ${{ inputs.security_scan_run_id }}
+          PRODUCT_VERSION: ${{ inputs.product_version }}
+          SELF_MAINTENANCE_RUN_ID: ${{ inputs.self_maintenance_run_id }}
+        run: python scripts/ci/verify_modstore_release_approval.py
 
       - name: Download normalized security evidence
         uses: actions/download-artifact@v8
@@ -70,34 +77,13 @@ jobs:
           run-id: ${{ inputs.security_scan_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download prior-day normalized security evidence
-        uses: actions/download-artifact@v8
-        with:
-          name: xcagi-security-release-reports
-          path: ${{ runner.temp }}/security-reports/previous
-          run-id: ${{ inputs.previous_security_scan_run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Enforce exact-SHA two-day security clearance
+      - name: Enforce exact-SHA single-scan security clearance
         env:
           TARGET_SHA: ${{ steps.target.outputs.sha }}
         run: >-
           python FHD/scripts/security/verify_security_scan_pair.py
-          --previous-dir "${RUNNER_TEMP}/security-reports/previous"
           --current-dir "${RUNNER_TEMP}/security-reports/current"
           --release-sha "${TARGET_SHA}"
-
-      - name: Preserve exact deployment correlation
-        env:
-          TARGET_SHA: ${{ steps.target.outputs.sha }}
-          SELF_MAINTENANCE_RUN_ID: ${{ inputs.self_maintenance_run_id }}
-        run: |
-          set -euo pipefail
-          jq -nc \
-            --arg merge_sha "$TARGET_SHA" \
-            --arg run_id "${SELF_MAINTENANCE_RUN_ID:-}" \
-            '{merge_sha:$merge_sha,run_id:$run_id,environment:"production"}' \
-            > "${RUNNER_TEMP}/modstore-deployment-correlation.json"
 
       - name: Upload deployment correlation
         uses: actions/upload-artifact@v4
@@ -111,6 +97,7 @@ jobs:
         uses: appleboy/ssh-action@v1.2.5
         env:
           TARGET_SHA: ${{ steps.target.outputs.sha }}
+          CONTROLLER_SHA: ${{ github.sha }}
           STRICT_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.require_platform_key == 'false' && '0' || '1' }}
           REPOSITORY_SLUG: ${{ github.repository }}
           PRODUCT_VERSION: ${{ inputs.product_version || '1.0.0.1' }}
@@ -119,7 +106,7 @@ jobs:
           username: root
           key: ${{ secrets.FHD_PUSH_SSH_KEY }}
           command_timeout: 45m
-          envs: TARGET_SHA,STRICT_KEY,REPOSITORY_SLUG,PRODUCT_VERSION
+          envs: TARGET_SHA,STRICT_KEY,REPOSITORY_SLUG,PRODUCT_VERSION,CONTROLLER_SHA
           script: |
             set -euo pipefail
             SOURCE_ROOT="${XCMAX_REMOTE_ROOT:-/root/XCMAX}"
@@ -127,9 +114,10 @@ jobs:
             git -C "$SOURCE_ROOT" cat-file -e "${TARGET_SHA}^{commit}"
             BOOTSTRAP="$(mktemp /tmp/xcmax-immutable-release.XXXXXX)"
             trap 'rm -f "$BOOTSTRAP"' EXIT
-            git -C "$SOURCE_ROOT" show "${TARGET_SHA}:成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-immutable-release.sh" > "$BOOTSTRAP"
+            git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-immutable-release.sh" > "$BOOTSTRAP"
             chmod 700 "$BOOTSTRAP"
             XCMAX_SOURCE_ROOT="$SOURCE_ROOT" XCMAX_TARGET_SHA="$TARGET_SHA" \
+              XCMAX_RELEASE_CONTROLLER_SHA="$CONTROLLER_SHA" \
               XCMAX_PRODUCT_VERSION="$PRODUCT_VERSION" \
               XCMAX_GITHUB_REPOSITORY="$REPOSITORY_SLUG" bash "$BOOTSTRAP"
             CURRENT_DEPLOY="/opt/xcmax/current/成都修茈科技有限公司/MODstore_deploy"

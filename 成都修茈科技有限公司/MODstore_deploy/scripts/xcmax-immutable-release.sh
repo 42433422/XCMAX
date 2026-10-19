@@ -254,8 +254,38 @@ git -C "$SOURCE_ROOT" fetch --quiet origin main
 git -C "$SOURCE_ROOT" cat-file -e "${TARGET_SHA}^{commit}" \
   || fail "target commit is unavailable after fetch: $TARGET_SHA"
 REMOTE_MAIN_SHA="$(git -C "$SOURCE_ROOT" rev-parse origin/main)"
-if [[ "$TARGET_SHA" != "$REMOTE_MAIN_SHA" && "${XCMAX_ALLOW_NON_HEAD_SHA:-0}" != 1 ]]; then
-  fail "target SHA is not current origin/main (target=$TARGET_SHA origin_main=$REMOTE_MAIN_SHA)"
+verify_fixed_release_approval() {
+  [[ -n "${XCMAX_RELEASE_CONTROLLER_SHA:-}" ]] || return 0
+  local controller="$XCMAX_RELEASE_CONTROLLER_SHA" approval
+  [[ "$controller" =~ ^[0-9a-f]{40}$ ]] || fail "invalid release controller SHA"
+  git -C "$SOURCE_ROOT" merge-base --is-ancestor "$controller" origin/main \
+    && git -C "$SOURCE_ROOT" merge-base --is-ancestor "$TARGET_SHA" "$controller" \
+    || fail "approved release/controller must already belong to main"
+  approval="$(git -C "$SOURCE_ROOT" show "$controller:ops/releases/$TARGET_SHA.json")" \
+    || fail "committed release approval missing"
+  local current health
+  health="$(curl --noproxy '*' -fsS --max-time 10 "$HEALTH_URL")" || fail "production health unavailable"
+  current="$(RELEASE_APPROVAL="$approval" HEALTH_PAYLOAD="$health" python3 - "$TARGET_SHA" "$PRODUCT_VERSION" "$CURRENT_LINK/.xcmax-release.json" <<'PY_APPROVAL'
+import json, os, re, sys
+approval = json.loads(os.environ["RELEASE_APPROVAL"])
+assert approval["git_sha"] == sys.argv[1] and approval["product_version"] == sys.argv[2]
+assert approval["approval_reference"] and approval["approval_scope"]
+assert re.fullmatch(r"[0-9a-f]{40}", approval["expected_production_sha"])
+with open(sys.argv[3]) as handle:
+    current = json.load(handle)["git_sha"]
+health = json.loads(os.environ["HEALTH_PAYLOAD"])
+assert health.get("ok") is True and health.get("git_sha") == current, "running production identity differs from current release"
+assert current in (approval["expected_production_sha"], approval["git_sha"]), "production advanced since approval; refuse overwrite"
+print(current)
+PY_APPROVAL
+)" || fail "production identity differs from approval"
+  git -C "$SOURCE_ROOT" merge-base --is-ancestor "$current" "$TARGET_SHA" \
+    || fail "approved target would roll production backward"
+}
+if [[ -n "${XCMAX_RELEASE_CONTROLLER_SHA:-}" ]]; then
+  verify_fixed_release_approval
+elif [[ "$TARGET_SHA" != "$REMOTE_MAIN_SHA" ]]; then
+  fail "non-HEAD release requires committed human approval and verified CI"
 fi
 
 migrate_env_file() {
@@ -475,6 +505,7 @@ EXPECTED_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.a
 # The helper verifies and stamps the last known pre-Alembic production baseline
 # before applying newer revisions, then proves every declared head is recorded.
 # A migration failure therefore leaves the currently served release untouched.
+verify_fixed_release_approval
 log "applying database migrations for $TARGET_SHA"
 (
   cd "$DEPLOY_DIR"
@@ -881,6 +912,7 @@ with open(sys.argv[1], encoding="utf-8") as handle:
 assert isinstance(payload, dict) and isinstance(payload.get("packages"), list)
 PY
 
+verify_fixed_release_approval
 ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
 mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
 RELEASE_SWITCHED=1

@@ -483,3 +483,88 @@ def test_corp_site_deploy_publishes_and_verifies_world_will_ticker() -> None:
     for page in (homepage, visualization):
         assert 'href="/world-will-ticker.css?v=20260729a"' in page
         assert 'src="/world-will-ticker.js?v=20260729a"' in page
+
+
+def test_fixed_release_guard_rejects_production_advance(tmp_path: Path) -> None:
+    repo = tmp_path / "source"
+    repo.mkdir()
+
+    def git(*args: str) -> str:
+        return subprocess.check_output(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "-c",
+                "user.name=release-test",
+                "-c",
+                "user.email=release-test@example.invalid",
+                *args,
+            ],
+            text=True,
+        ).strip()
+
+    git("init", "-q")
+
+    def commit(value: str) -> str:
+        (repo / "change").write_text(value)
+        git("add", ".")
+        git("commit", "-qm", value)
+        return git("rev-parse", "HEAD")
+
+    previous = commit("previous")
+    target = commit("target")
+    approvals = repo / "ops/releases"
+    approvals.mkdir(parents=True)
+    (approvals / f"{target}.json").write_text(
+        json.dumps(
+            dict(
+                git_sha=target,
+                expected_production_sha=previous,
+                product_version="1.0.0.6",
+                approval_reference="human",
+                approval_scope="modstore",
+            )
+        )
+    )
+    controller = commit("approved-controller")
+    git("update-ref", "refs/remotes/origin/main", controller)
+    current = tmp_path / "current"
+    current.mkdir()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    (fake_bin / "curl").write_text('#!/bin/sh\ncat "$CURRENT_LINK/health.json"\n')
+    (fake_bin / "curl").chmod(0o755)
+    script = RELEASE_SCRIPT.read_text()
+    start = script.index("verify_fixed_release_approval() {")
+    guard = script[start : script.index('\nif [[ -n "${XCMAX_RELEASE_CONTROLLER_SHA', start)]
+    for deployed, running, expected in [
+        (previous, previous, 0),
+        (target, target, 0),
+        (controller, controller, 1),
+        (previous, controller, 1),
+    ]:
+        (current / ".xcmax-release.json").write_text(json.dumps({"git_sha": deployed}))
+        (current / "health.json").write_text(json.dumps({"ok": True, "git_sha": running}))
+        result = subprocess.run(
+            [
+                "bash",
+                "-ec",
+                'fail() { echo "$*" >&2; return 1; };\n'
+                + guard
+                + "\nverify_fixed_release_approval",
+            ],
+            env={
+                **os.environ,
+                "SOURCE_ROOT": str(repo),
+                "TARGET_SHA": target,
+                "PRODUCT_VERSION": "1.0.0.6",
+                "CURRENT_LINK": str(current),
+                "HEALTH_URL": "http://test.invalid/api/health",
+                "PATH": str(fake_bin) + os.pathsep + os.environ["PATH"],
+                "XCMAX_RELEASE_CONTROLLER_SHA": controller,
+            },
+            capture_output=True,
+            text=True,
+        )
+        assert (result.returncode == 0) == (expected == 0), result.stderr
