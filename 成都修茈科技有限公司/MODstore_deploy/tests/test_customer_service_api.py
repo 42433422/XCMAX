@@ -1170,11 +1170,12 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
     import importlib.util
     from pathlib import Path
 
+    from sqlalchemy import text
+
     from modstore_server import customer_service_api
     from modstore_server.db.base import get_engine
     from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceAuditLog
-    from sqlalchemy import text
 
     customer, admin = _make_user("submitter_customer"), _make_user("submitter_admin", admin=True)
     marker = f"SUBMITTER-{uuid.uuid4().hex}"
