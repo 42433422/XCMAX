@@ -1,18 +1,14 @@
-/**
- * VueFlow 画布（含自定义 group / default 节点模板）。
- *
- * 由 DutyRosterGraphPanel.vue 模板机械切分而来（行为与视觉保持不变）。
- */
 <script setup lang="ts">
+import { VueFlow } from '@vue-flow/core'
+import { Background } from '@vue-flow/background'
+import { Controls } from '@vue-flow/controls'
+import { MiniMap } from '@vue-flow/minimap'
 import type { Deref } from './dutyRosterTypes'
 import { HEALTH_LABEL, LLM_ACT_LABEL, RUN_STATUS_LABEL } from './dutyRosterConstants'
 import type { HealthLv, LlmActLv, RunNodeStatus } from './dutyRosterTypes'
 import type { DutyLoopCore } from './useDutyLoopCore'
 import type { DutyRosterState } from './useDutyRosterState'
 import type { DutyWorkshop } from './useDutyWorkshop'
-
-defineEmits<{
-}>()
 
 defineProps<{
   flowNodes: Deref<DutyRosterState['flowNodes']>
