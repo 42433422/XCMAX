@@ -21,6 +21,18 @@ from modstore_server.models_cs import CustomerServiceAction, CustomerServiceAudi
 
 PREFIX = "cst_ro_"
 SCOPE = "customer-tickets:read"
+_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----.*?"
+    r"(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----|\Z)",
+    re.DOTALL,
+)
+_CREDENTIAL_URI_RE = re.compile(r"([a-zA-Z][a-zA-Z0-9+.-]*://)[^\s/@:]*:[^\s/]*@")
+_SECRET_FIELD_RE = re.compile(
+    r"(?i)((?:api[_ -]?key|password|passwd|token|secret|authorization|"
+    r"private[_ -]?key|access[_ -]?key|密码|口令|密钥|私钥|令牌|授权码)"
+    r"\s*[\"']?\s*(?:[:=：]|为|是)\s*)"
+    r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\r\n,;，；]+)"
+)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.propagate = False
@@ -28,6 +40,13 @@ if not logger.handlers:
     audit_handler = logging.StreamHandler()
     audit_handler.setFormatter(logging.Formatter("%(asctime)s ticket_read_audit %(message)s"))
     logger.addHandler(audit_handler)
+
+
+def _reader_text(value: object, limit: int = 300) -> str:
+    text = _PRIVATE_KEY_RE.sub("[redacted]", str(value))
+    text = _CREDENTIAL_URI_RE.sub(r"\1[redacted]@", text)
+    text = _SECRET_FIELD_RE.sub(r"\1[redacted]", text)
+    return redact_text(text, limit)
 
 
 @dataclass(frozen=True)
@@ -140,7 +159,7 @@ def reader_ticket(db, row) -> dict:
     roles = result.get("roles", []) if isinstance(result, dict) else []
     roles = [r for r in roles if isinstance(r, dict)] if isinstance(roles, list) else []
     responsible_roles = [
-        {k: redact_text(r.get(k)) for k in ("role", "employee_id", "status")}
+        {k: _reader_text(r.get(k)) for k in ("role", "employee_id", "status")}
         for r in roles
         if isinstance(r, dict)
     ]
@@ -150,7 +169,7 @@ def reader_ticket(db, row) -> dict:
         if isinstance(r, dict) and r.get("ok") is False
     ]
     if latest and latest.status in ("failed", "partial") and not blockers:
-        blockers = [{"action_id": latest.id, "status": latest.status}]
+        blockers = [{"action_id": latest.id, "status": _reader_text(latest.status)}]
     if row.status in ("resolved", "closed"):
         blockers = []
     payload = {
@@ -167,7 +186,10 @@ def reader_ticket(db, row) -> dict:
             "assigned_admin_id",
         )
     }
-    payload.update({key: redact_text(getattr(row, key), 4000) for key in ("title", "summary")})
+    for key, value in payload.items():
+        if isinstance(value, str):
+            payload[key] = _reader_text(value)
+    payload.update({key: _reader_text(getattr(row, key), 4000) for key in ("title", "summary")})
     payload.update(
         {
             key: value.isoformat() if value else None
@@ -177,9 +199,9 @@ def reader_ticket(db, row) -> dict:
     )
     payload.update(
         {
-            "assignee": redact_text(owner.username) if owner else None,
+            "assignee": _reader_text(owner.username) if owner else None,
             "assignment_status": "assigned" if owner else "unassigned",
-            "latest_action_status": latest.status if latest else None,
+            "latest_action_status": _reader_text(latest.status) if latest else None,
             "blockers": blockers,
             "responsible_roles": responsible_roles,
             "due_at": None,
@@ -203,8 +225,8 @@ def reader_detail(db, row, reader: TicketReader) -> dict:
         "timeline": [
             {
                 "id": a.id,
-                "event_type": a.event_type,
-                "actor_type": a.actor_type,
+                "event_type": _reader_text(a.event_type),
+                "actor_type": _reader_text(a.actor_type),
                 "created_at": a.created_at.isoformat() if a.created_at else None,
             }
             for a in audits

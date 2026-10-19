@@ -128,6 +128,37 @@ def test_company_reader_list_detail_pagination_and_redaction(reader_case, audit_
     assert client.get("/api/customer-service/tickets", headers=headers).status_code == 200
 
 
+@pytest.mark.parametrize("kind", ["quoted_json", "chinese", "private_key", "database_uri"])
+def test_free_text_credentials_are_redacted_in_list_and_detail(reader_case, kind):
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    client, headers, ids, *_ = reader_case
+    canary = "SYNTHETIC_DO_NOT_EXPORT"
+    values = {
+        "quoted_json": '{"password":"' + canary + '"}',
+        "chinese": "密码：" + canary,
+        "private_key": "-----"
+        + "BEGIN PRIVATE KEY"
+        + "-----\n"
+        + canary
+        + "\n-----"
+        + "END PRIVATE KEY"
+        + "-----",
+        "database_uri": "postgresql://" + "test:" + canary + "@localhost/test",
+    }
+    with get_session_factory()() as db:
+        row = db.get(CustomerServiceTicket, ids[0])
+        row.title = "Safe issue context " + values[kind]
+        row.summary = values[kind]
+        db.commit()
+    for path in ("/api/customer-service/tickets", f"/api/customer-service/tickets/{ids[0]}"):
+        response = client.get(path, headers=headers)
+        assert response.status_code == 200
+        assert canary not in response.text
+        assert "Safe issue context" in response.text
+
+
 @pytest.mark.parametrize(
     "method,path",
     [
