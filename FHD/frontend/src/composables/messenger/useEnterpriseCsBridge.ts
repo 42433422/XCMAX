@@ -1,4 +1,4 @@
-import { computed, nextTick, type Ref } from 'vue'
+import { computed, nextTick, ref, type Ref } from 'vue'
 import {
   fetchEnterpriseCsThread,
   type ImConversationSummary,
@@ -16,21 +16,16 @@ type Options = {
 
 /** Poll the canonical production CS thread while the local fixed contact is open. */
 export function useEnterpriseCsBridge(options: Options) {
+  const enterpriseCsError = ref('')
   let pollTimer: ReturnType<typeof setInterval> | null = null
   let pollBusy = false
 
-  function isCustomerEnterpriseCs(id = options.activeConversationId.value): boolean {
-    if (!options.enabled) return false
+  function customerConversation(id = options.activeConversationId.value) {
     const conv = options.conversations.value.find((item) => item.id === id)
-    return Boolean(conv?.is_enterprise_dedicated_cs && !conv.is_cs_inbox)
-  }
-
-  const activeCustomerCsConversation = computed(() => {
-    const conv = options.conversations.value.find(
-      (item) => item.id === options.activeConversationId.value,
-    )
     return conv?.is_enterprise_dedicated_cs && !conv.is_cs_inbox ? conv : undefined
-  })
+  }
+  const activeCustomerCsConversation = computed(() => customerConversation())
+  const isCustomerEnterpriseCs = (id = options.activeConversationId.value) => Boolean(options.enabled && customerConversation(id))
 
   function stopPolling(): void {
     if (pollTimer) clearInterval(pollTimer)
@@ -45,6 +40,7 @@ export function useEnterpriseCsBridge(options: Options) {
       const oldIds = new Set(options.messages.value.map((item) => item.id))
       const thread = await fetchEnterpriseCsThread()
       if (options.activeConversationId.value !== localId) return
+      enterpriseCsError.value = ''
       options.messages.value = thread.messages
       const local = options.conversations.value.find((item) => item.id === localId)
       const last = thread.messages[thread.messages.length - 1]
@@ -61,6 +57,7 @@ export function useEnterpriseCsBridge(options: Options) {
       await nextTick()
       options.scrollToBottom()
     } catch (error) {
+      if (options.activeConversationId.value === localId) enterpriseCsError.value = error instanceof Error ? error.message : '企业专属客服读取失败'
       if (!notifyIncoming) throw error
     } finally {
       pollBusy = false
@@ -73,6 +70,7 @@ export function useEnterpriseCsBridge(options: Options) {
   }
 
   return {
+    enterpriseCsError,
     activeCustomerCsConversation,
     isCustomerEnterpriseCs,
     refreshEnterpriseCsThread: refreshThread,
