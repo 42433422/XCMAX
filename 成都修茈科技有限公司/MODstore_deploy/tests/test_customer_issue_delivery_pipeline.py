@@ -11,12 +11,17 @@ import pytest
 from modstore_server.customer_service_tools import json_dumps, json_loads
 
 
-def make_ticket(client, monkeypatch, *, private=False):
+def make_ticket(client, monkeypatch, *, private=False, schedule=False):
     from modstore_server.api.deps import get_current_user
     from modstore_server.app import app
     from modstore_server.models import UserMod, get_session_factory
     from tests.test_customer_service_api import _make_user
 
+    if not schedule:
+        monkeypatch.setattr(
+            "modstore_server.customer_service_api._schedule_customer_ticket_incident",
+            lambda _: None,
+        )
     user = _make_user("closure_" + uuid.uuid4().hex[:10])
     monkeypatch.setitem(app.dependency_overrides, get_current_user, lambda: user)
     if private:
@@ -821,7 +826,7 @@ def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client,
 
     woken = []
     monkeypatch.setattr(customer_service_api, "_schedule_customer_ticket_incident", woken.append)
-    user, tid = make_ticket(client, monkeypatch)
+    user, tid = make_ticket(client, monkeypatch, schedule=True)
     endpoint = f"/api/customer-service/issues/{tid}/decision"
 
     def decide(decision, note, key):
