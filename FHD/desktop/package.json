@@ -28,12 +28,12 @@
     "electron-updater": "^6.8.9"
   },
   "devDependencies": {
-    "@electron/notarize": "3.1.1",
+    "@electron/notarize": "3.1.2",
     "@noble/hashes": "^2.4.0",
-    "@playwright/test": "^1.63.0",
-    "@types/node": "26.6.3",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "26.6.5",
     "@vitest/coverage-v8": "^4.1.11",
-    "electron": "44.5.1",
+    "electron": "44.7.1",
     "electron-builder": "26.15.3",
     "typescript": "6.0.3",
     "vitest": "^4.1.11"
