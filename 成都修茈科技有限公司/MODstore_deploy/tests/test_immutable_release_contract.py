@@ -394,7 +394,7 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         assert "modstore-deployment-correlation" in rendered
         assert "actions/upload-artifact@v4" in rendered
         assert "verify_security_scan_pair.py" in rendered
-        assert "actions/download-artifact@v4" in rendered
+        assert "actions/download-artifact@v8" in rendered
         assert "reset --hard" not in rendered
 
 
@@ -414,7 +414,7 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
         assert "github.event_name == 'workflow_dispatch'" in receipt["if"]
         rendered = str(receipt)
         assert workflow["permissions"]["pull-requests"] == "read"
-        assert "actions/download-artifact@v4" in rendered
+        assert "actions/download-artifact@v8" in rendered
         assert "source deployment run id must be numeric" in rendered
         assert '.name == "Deploy MODstore Production"' in rendered
         assert ".head_sha == $merge_sha" in rendered
