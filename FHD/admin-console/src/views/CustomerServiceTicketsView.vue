@@ -5,7 +5,7 @@
         <h2>客服工单 · 客户反馈</h2>
         <p>来源：市场客服原单（当前登录市场账号的可见范围）。研发 Work Order 与客户交付单在各自入口查看。时间均为北京时间。</p>
       </div>
-      <button class="cs-btn cs-btn-primary" type="button" @click="openCreate">新建产品问题工单</button>
+      <button class="cs-btn cs-btn-primary" type="button" @click="showCreate = true">新建产品问题工单</button>
     </header>
     <form v-if="showCreate" class="cs-card cs-create" @submit.prevent="createTicket">
       <h3 class="cs-card-title">新建产品问题工单</h3>
@@ -126,11 +126,6 @@ const message = (cause: unknown) => cause instanceof Error ? cause.message : Str
 
 function open(id: number) {
   void router.push({ name: 'customer-service-ticket-detail', params: { ticketId: String(id) } })
-}
-
-function openCreate() {
-  requestId.value ||= window.crypto.randomUUID()
-  showCreate.value = true
 }
 
 function closeCreate() {

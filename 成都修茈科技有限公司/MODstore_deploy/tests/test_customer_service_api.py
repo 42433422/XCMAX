@@ -1120,6 +1120,8 @@ def test_ticket_search_preserves_ownership_identity_and_pagination(client):
                 ticket_no=f"{marker}-{user.id}-{suffix}",
                 summary=f"{marker} original 100%_text",
                 assigned_admin_id=None,
+                intent="product_issue" if user is other else "general",
+                status="processing" if user is other else "open",
             )
             ids.append(ticket.id)
         db.commit()
@@ -1135,12 +1137,9 @@ def test_ticket_search_preserves_ownership_identity_and_pagination(client):
             params={"search": marker, "limit": 1, "offset": 1},
         ).json()["items"][0]
         assert {first["id"], second["id"]} == {ids[0], ids[2]}
-        assert ids[1] not in {
-            row["id"]
-            for row in client.get(
-                "/api/customer-service/tickets", params={"search": str(ids[1])}
-            ).json()["items"]
-        }
+        assert ids[1] not in {row["id"] for row in client.get(
+            "/api/customer-service/tickets", params={"search": str(ids[1])}
+        ).json()["items"]}
         assert client.get(f"/api/customer-service/tickets/{ids[1]}").status_code == 404
         own = client.get(f"/api/customer-service/tickets/{ids[0]}").json()
         assert own["ticket"]["ticket_no"] == f"{marker}-{owner.id}-290063"
@@ -1160,9 +1159,9 @@ def test_ticket_search_preserves_ownership_identity_and_pagination(client):
         assert {row["submitter_type"] for row in result["items"]} == {"customer"}
         result = client.get(
             "/api/customer-service/tickets",
-            params={"search": f"{marker}-{other.id}-290063"},
+            params={"search": marker, "intent": "product_issue", "status": "processing"},
         ).json()
-        assert result["items"][0]["id"] == ids[1]
+        assert result["total"] == 1 and result["items"][0]["id"] == ids[1]
         assert client.get("/api/customer-service/tickets", params={"offset": -1}).status_code == 422
 
 
@@ -1194,7 +1193,8 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
     spec.loader.exec_module(module)
     with get_engine().begin() as conn:
         module.backfill_submitter_types(conn)
-    with _as_user(admin):
+    try:
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
         only_admin = client.get(
             "/api/customer-service/tickets", params={"search": marker, "submitter_type": "admin"}
         ).json()
