@@ -1,16 +1,4 @@
-"""WO-18443017efd5 复现件（真实执行链）：受理必须先于 normal-slot 快路径。
-
-客户原问题：缺陷上报只收到普通业务答复，拿不到工单编号。
-
-真实链路（桌面端 /api/ai/chat/stream）：
-  compat_routes.ai_unified_chat_stream
-    → planner_compat_service.compat_chat_stream_async
-      → planner_compat_service_part03.compat_chat_stream_async
-
-part03 里的 try_normal_slot_read_payload 会在任何受理之前直接返回业务答复
-（缺陷原话被当成 intent=purchase_query → 「当前没有采购订单。」）。本用例锁定：
-命中缺陷上报时，必须先给出受理回执，绝不能被快路径吃掉。
-"""
+"""产品上报先于业务快路径，并覆盖工单010069中的实测原话。"""
 
 from __future__ import annotations
 
@@ -35,37 +23,44 @@ def _collect(agen) -> list[dict]:
 
 
 @pytest.mark.parametrize(
+    "message",
+    [
+        DEFECT_MESSAGE,
+        "我要提交产品问题工单，问题名称：管理端基础设施展示不直观，请返回工单编号。",
+        "我不是查询生产任务，请使用产品问题上报功能，处理本问题，没有能力请如实说明。",
+    ],
+)
+@pytest.mark.parametrize(
     "guide",
     [
         {"state": "ROUTED", "work_order_id": "WO-fixed-path", "owner_ticket_no": "CI-fixed-path"},
         {"state": "OWNER_ROUTE_UNAVAILABLE", "work_order_id": "WO-fixed-path"},
+        {"state": "NEEDS_MORE_EVIDENCE"},
     ],
 )
-def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide):
+def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide, message):
     import importlib
 
     part03 = importlib.import_module(PART03)
     stream = importlib.import_module(STREAM)
     dispatch = importlib.import_module(DISPATCH)
 
-    # 快路径会返回业务答复——它绝不能在受理之前被采用
     monkeypatch.setattr(
         dispatch,
         "try_normal_slot_read_payload",
-        lambda message, request=None: {
+        lambda message, **kwargs: {
             "response": "当前没有采购订单。",
             "data": {"intent": "purchase_query"},
         },
         raising=False,
     )
 
-    # 受理返回一条带工单号的真回执
     async def _fake_intake_async(*a, **k):
         return dict(guide)
 
     monkeypatch.setattr(stream, "_classify_and_submit_client_issue_async", _fake_intake_async)
 
-    body = NS(message=DEFECT_MESSAGE, context={}, user_id="1", source="test", system_prompt="x")
+    body = NS(message=message, context={}, user_id="1", source="test", system_prompt="x")
     request = NS(
         state=NS(tutorial_active=False),
         headers={},
@@ -79,10 +74,14 @@ def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide):
     )
 
     assert "当前没有采购订单。" not in text, "缺陷上报被 normal-slot 快路径吃掉"
-    assert "WO-fixed-path" in text, "必须回执 Work Order 编号"
+    assert (
+        ("期望" in text and "实际" in text)
+        if guide["state"] == "NEEDS_MORE_EVIDENCE"
+        else "WO-fixed-path" in text
+    )
     events = [json.loads(line[6:]) for line in text.splitlines() if line.startswith("data: ")]
     result = next(event["result"] for event in events if event["type"] == "done")
-    assert result["success"] is (guide["state"] == "ROUTED")
+    assert result["success"] is (guide["state"] != "OWNER_ROUTE_UNAVAILABLE")
     if guide["state"] == "OWNER_ROUTE_UNAVAILABLE":
         assert "尚未送达" in result["message"]
         from app.application.agent_orchestrator import AgentOrchestrator
