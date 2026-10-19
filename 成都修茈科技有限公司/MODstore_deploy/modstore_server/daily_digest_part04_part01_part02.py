@@ -106,7 +106,13 @@ def build_digest_html(
     )
     consistency_block = _facade()._consistency_check_html(root)
     product_updates = (
-        [line.strip() for line in _facade()._git_line(["log", "--since=24 hours ago", "--format=%h %s", "-n", "5"], root).splitlines() if line.strip()]
+        [
+            line.strip()
+            for line in _facade()
+            ._git_line(["log", "--since=24 hours ago", "--format=%h %s", "-n", "5"], root)
+            .splitlines()
+            if line.strip()
+        ]
         if _facade()._git_worktree_root(root)
         else ["仓库未连接 Git，无法核实产品更新"]
     )

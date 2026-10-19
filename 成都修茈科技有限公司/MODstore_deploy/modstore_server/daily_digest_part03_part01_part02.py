@@ -238,13 +238,24 @@ def _run_pytest_summary(repo: _facade().Path) -> str:
 
 
 def _digest_product_work_summary_html(
-    *, product_updates: _facade().Sequence[str], ticket_outcomes: _facade().Sequence[str],
-    pending_decisions: _facade().Sequence[str], pending_decision_count: int
+    *,
+    product_updates: _facade().Sequence[str],
+    ticket_outcomes: _facade().Sequence[str],
+    pending_decisions: _facade().Sequence[str],
+    pending_decision_count: int,
 ) -> str:
     """把产品变更、工单结果和待决事项放到日报主摘要。"""
+
     def _items(rows: _facade().Sequence[str], empty: str) -> str:
-        return "".join(f"<li>{_facade().html.escape(str(row))}</li>" for row in rows) or f"<li>{empty}</li>"
+        return (
+            "".join(f"<li>{_facade().html.escape(str(row))}</li>" for row in rows)
+            or f"<li>{empty}</li>"
+        )
 
     pending = _items(pending_decisions, "当前没有待定案事项")
-    extra = f"<li>另有 {pending_decision_count - len(pending_decisions)} 项</li>" if pending_decision_count > len(pending_decisions) else ""
+    extra = (
+        f"<li>另有 {pending_decision_count - len(pending_decisions)} 项</li>"
+        if pending_decision_count > len(pending_decisions)
+        else ""
+    )
     return f"""\n<div style="padding:14px 24px 8px">\n  {_facade()._section_title("产品与客户进展", icon="&#x1F4CA;", accent="#2563eb")}\n  <div style="background:#f8fafc;border-radius:12px;padding:12px 18px;border:1px solid #e6eaf0">\n    <strong>近 24 小时产品更新</strong><ul>{_items(product_updates, "近 24 小时没有新的仓库提交")}</ul>\n    <strong>近 24 小时工单结果</strong><ul>{_items(ticket_outcomes, "没有状态变化记录")}</ul>\n    <strong>待决策（{pending_decision_count} 项）</strong><ul>{pending}{extra}</ul>\n  </div>\n</div>\n"""
