@@ -1,12 +1,14 @@
 """Execute the candidate Alembic migration against real temporary SQLite files."""
-from pathlib import Path
-import importlib.util
 
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
+import importlib.util
+from pathlib import Path
+
 import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
+
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 
 SOURCE = Path(__file__).resolve().parents[2] / "alembic/versions/2026_10_20_receipt_identity.py"
 spec = importlib.util.spec_from_file_location("candidate_migration", SOURCE)
@@ -22,8 +24,12 @@ def apply(connection, fn):
 def legacy_engine(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'legacy.db'}")
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE receivable_allocations "
-                                "(id INTEGER PRIMARY KEY, sales_order_id INTEGER, amount NUMERIC(18,2))"))
+        connection.execute(
+            text(
+                "CREATE TABLE receivable_allocations "
+                "(id INTEGER PRIMARY KEY, sales_order_id INTEGER, amount NUMERIC(18,2))"
+            )
+        )
         connection.execute(text("INSERT INTO receivable_allocations VALUES (1, 7, 500)"))
     return engine
 
@@ -34,10 +40,17 @@ def test_upgrade_keeps_old_receipts_and_is_repeatable(tmp_path):
         with engine.begin() as connection:
             apply(connection, migration.upgrade)
             apply(connection, migration.upgrade)
-            assert connection.execute(text("SELECT amount, request_key, request_fingerprint "
-                                           "FROM receivable_allocations WHERE id=1")).one() == (500, None, None)
+            receipt = connection.execute(
+                text(
+                    "SELECT amount, request_key, request_fingerprint "
+                    "FROM receivable_allocations WHERE id=1"
+                )
+            ).one()
+            assert receipt == (500, None, None)
             indexes = inspect(connection).get_indexes("receivable_allocations")
-            assert any(row["name"] == "uq_receivable_order_request" and row["unique"] for row in indexes)
+            assert any(
+                row["name"] == "uq_receivable_order_request" and row["unique"] for row in indexes
+            )
             assert "web_refresh_token_uses" in inspect(connection).get_table_names()
     finally:
         engine.dispose()
@@ -48,11 +61,19 @@ def test_payment_identity_unique_index_is_enforced(tmp_path):
     try:
         with engine.begin() as connection:
             apply(connection, migration.upgrade)
-            connection.execute(text("INSERT INTO receivable_allocations "
-                                    "(id, sales_order_id, amount, request_key) VALUES (2, 7, 500, 'same')"))
+            connection.execute(
+                text(
+                    "INSERT INTO receivable_allocations (id, sales_order_id, amount, request_key) "
+                    "VALUES (2, 7, 500, 'same')"
+                )
+            )
         with pytest.raises(IntegrityError), engine.begin() as connection:
-            connection.execute(text("INSERT INTO receivable_allocations "
-                                    "(id, sales_order_id, amount, request_key) VALUES (3, 7, 500, 'same')"))
+            connection.execute(
+                text(
+                    "INSERT INTO receivable_allocations (id, sales_order_id, amount, request_key) "
+                    "VALUES (3, 7, 500, 'same')"
+                )
+            )
     finally:
         engine.dispose()
 
