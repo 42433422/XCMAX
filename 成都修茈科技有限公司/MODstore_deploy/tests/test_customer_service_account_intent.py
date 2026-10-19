@@ -58,12 +58,17 @@ def test_defect_with_account_word_and_escalation_creates_ticket(client, monkeypa
     from modstore_server.app import app
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    scheduled = []
+    monkeypatch.setattr(
+        customer_service_api, "_schedule_customer_ticket_incident", scheduled.append
+    )
     owner, other = _make_user("acct_defect"), _make_user("acct_other")
     data = _chat(client, owner, DEFECT)
     assert data["intent"]["intent"] == "product_issue"
     assert data["intent"]["triage_lane"] == "product_defect"
     assert data["ticket"] is not None and data["ticket"]["intent"] == "product_issue"
     tid = data["ticket"]["id"]
+    assert scheduled == [{"ticket_id": tid}]
     try:
         app.dependency_overrides[customer_service_api._get_current_user] = lambda: owner
         body = client.get(f"{BASE}/tickets/{tid}").json()

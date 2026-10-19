@@ -22,6 +22,8 @@ def test_tool_write_defers_for_regular_employee(monkeypatch, tmp_path):
     _reset_sqlalchemy_globals()
     db = tmp_path / "tw.db"
     monkeypatch.setenv("MODSTORE_DB_PATH", str(db))
+    monkeypatch.setenv("MODSTORE_INCIDENT_SYNC_DISPATCH", "1")
+    monkeypatch.setattr("modstore_server.incident_bus._dispatch_incident", lambda _eid: None)
 
     from modstore_server.models import (
         EmployeeChangeRequest,
