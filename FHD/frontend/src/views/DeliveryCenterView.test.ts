@@ -188,6 +188,18 @@ describe('DeliveryCenterView', () => {
     expect(wrapper.findAll('.enterprise-roster').at(0)?.text()).toContain('标准交付企业')
   })
 
+  it('keeps the add-on timeline at five stages and distinguishes runtime steps', async () => {
+    const ticket = structuredClone(delivery)
+    ticket.custom_delivery.pricing_mode = 'post_delivery_addon'
+    listCustomDeliveries.mockResolvedValue({ items: [ticket] })
+    const wrapper = mount(DeliveryCenterView)
+    await flushPromises()
+    const stages = wrapper.findAll('.delivery-timeline li')
+    expect(stages).toHaveLength(5)
+    expect(stages[0].text()).toContain('需求受理新增报价与付款')
+    expect(wrapper.text()).toContain('本次执行步骤1 项')
+  })
+
   it('shows the trial summary card and keeps trial accounts out of the permanent roster', async () => {
     const wrapper = mount(DeliveryCenterView)
     await flushPromises()

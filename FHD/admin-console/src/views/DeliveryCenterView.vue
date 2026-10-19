@@ -141,7 +141,7 @@
             <div v-if="latestRun(ticket)" class="delivery-run">
               <div><span>最近生产</span><strong>第 {{ latestRun(ticket)?.attempt || runCount(ticket) }} 轮</strong></div>
               <div><span>运行状态</span><strong>{{ runStatusLabel(latestRun(ticket)?.status) }}</strong></div>
-              <div><span>执行步骤</span><strong>{{ latestRun(ticket)?.steps?.length || 0 }} 项</strong></div>
+              <div><span>本次执行步骤</span><strong>{{ latestRun(ticket)?.steps?.length || 0 }} 项</strong></div>
               <p v-if="latestRun(ticket)?.error" class="delivery-run__error">
                 {{ latestRun(ticket)?.error }}
               </p>
