@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  auditItems, buildTimeline, formatBeijingTime, parseServerTime, resolutionStateBadge, runStatusBadge, ticketStatusBadge, yesNoBadge,
+  auditItems, buildTimeline, formatBeijingTime, parseServerTime, resolutionStateBadge, runStatusBadge, submitterTypeLabel, ticketStatusBadge, yesNoBadge,
 } from '../../../admin-console/src/utils/customerServiceTicketFormat'
 
 describe('customer service ticket formatting', () => {
@@ -24,6 +24,9 @@ describe('customer service ticket formatting', () => {
     expect(resolutionStateBadge('repair_failed')).toMatchObject({ label: '修复未完成', tone: 'danger' })
     expect(yesNoBadge(undefined, '是', '否')).toMatchObject({ label: '未记录' })
     expect(yesNoBadge(true, '是', '否')).toMatchObject({ label: '是', tone: 'success' })
+    expect(submitterTypeLabel('admin')).toBe('管理员提交')
+    expect(submitterTypeLabel('customer')).toBe('客户提交')
+    expect(submitterTypeLabel('unknown')).toBe('提交人待确认')
   })
   it('orders timeline items by time and puts undated ones last', () => {
     const items = buildTimeline(

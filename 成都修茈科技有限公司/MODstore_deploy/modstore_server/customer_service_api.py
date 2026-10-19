@@ -196,6 +196,7 @@ async def session_detail(
 @router.get("/tickets")
 async def list_tickets(
     status: str = "",
+    submitter_type: str = Query("", max_length=16),
     search: str = Query("", max_length=200),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
@@ -209,6 +210,12 @@ async def list_tickets(
         q = q.filter(CustomerServiceTicket.user_id == user.id)
     if status:
         q = q.filter(CustomerServiceTicket.status == status)
+    # 客户侧仍只按本人 user_id 查询；身份筛选只开放给管理端，不能扩大客户可见范围。
+    if user.is_admin and submitter_type.strip():
+        kind = submitter_type.strip().lower()
+        if kind not in {"admin", "customer", "unknown"}:
+            raise HTTPException(status_code=422, detail="提交人身份筛选条件无效")
+        q = q.filter(CustomerServiceTicket.submitter_type == kind)
     term = search.strip()
     if term:
         matches = [

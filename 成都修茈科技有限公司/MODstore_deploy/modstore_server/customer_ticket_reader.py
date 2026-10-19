@@ -153,6 +153,7 @@ def reader_ticket(db, row) -> dict:
             "id",
             "ticket_no",
             "user_id",
+            "submitter_type",
             "intent",
             "status",
             "priority",

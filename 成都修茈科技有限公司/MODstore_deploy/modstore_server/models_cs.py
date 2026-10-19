@@ -12,6 +12,8 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
+    select,
 )
 
 from modstore_server.db.base import Base
@@ -48,6 +50,8 @@ class CustomerServiceTicket(Base):
         Integer, ForeignKey("customer_service_sessions.id"), nullable=False, index=True
     )
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # 建单时固化身份，不能在管理统计时再按当前账号角色猜测。
+    submitter_type = Column(String(16), default="unknown", nullable=False, index=True)
     ticket_no = Column(String(64), unique=True, nullable=False, index=True)
     title = Column(String(256), default="")
     intent = Column(String(64), default="", index=True)
@@ -67,6 +71,21 @@ class CustomerServiceTicket(Base):
         onupdate=lambda: datetime.now(UTC),
     )
     closed_at = Column(DateTime, nullable=True)
+
+
+@event.listens_for(CustomerServiceTicket, "before_insert")
+def _snapshot_ticket_submitter_type(_mapper, connection, target) -> None:
+    """在所有建单入口统一固化提交人身份。"""
+    if str(target.submitter_type or "").strip():
+        return
+    from modstore_server.db.identity import User
+
+    is_admin = connection.execute(
+        select(User.is_admin).where(User.id == target.user_id)
+    ).scalar_one_or_none()
+    target.submitter_type = (
+        "admin" if is_admin is True else "customer" if is_admin is False else "unknown"
+    )
 
 
 class CustomerServiceMessage(Base):
