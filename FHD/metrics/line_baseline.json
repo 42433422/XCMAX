@@ -1,5 +1,5 @@
 {
-  "lines": 2310610,
+  "lines": 2310877,
   "updated": "2026-10-19",
-  "note": "Reconcile latest main with independent company-ticket read grants, protected projections, audit output and credential-redaction regression tests; explicit security capability increase."
+  "note": "PR #2421 同步冻结 main 9dbb16ed：保留原公司范围只读授权及结构化文本脱敏修订，净增例外仍为 491 行；不更改生产授权范围或凭据，保留 hold-merge，等待终极员工冻结部署回读后排定合入。"
 }
