@@ -1,9 +1,4 @@
-/**
- * ImMessengerView 的会话操作动作（selectConversation / onSend）。
- *
- * 从视图纯移动抽出以守住 fhd_vue 500 行尺寸棘轮；函数体与拆分前逐字一致，
- * 所有依赖（状态 ref 与桥接函数）经 options 注入，行为不变。
- */
+/** IM 会话选择与发送；客服错误保留到恢复成功。 */
 import { nextTick, type Ref } from 'vue'
 import {
   fetchCsInboxMessages,
@@ -27,6 +22,7 @@ type Options = {
   activeGroupChat: Ref<boolean>
   messages: Ref<ImMessage[]>
   draft: Ref<string>
+  enterpriseCsError?: Ref<string>
   busy: Ref<boolean>
   hasMoreHistory: Ref<boolean>
   dutyEmployeeDraft: Ref<string>
@@ -142,6 +138,7 @@ export function useImConversationActions(options: Options) {
       else if (isCs) await refreshCsInbox()
       else await loadConversations()
     } catch (error) {
+      if (isCustomerCs && options.enterpriseCsError) options.enterpriseCsError.value = error instanceof Error ? error.message : '发送失败'
       showAppToast(error instanceof Error ? error.message : '发送失败', 'error')
     } finally {
       busy.value = false
