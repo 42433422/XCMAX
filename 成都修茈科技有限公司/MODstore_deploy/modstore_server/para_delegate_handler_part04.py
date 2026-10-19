@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib
 
+from modstore_server.dot_ticket_dispatch import prepare_dolt_ticket_payload
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -122,6 +123,10 @@ def _post_para_api_once(
                     payload["depends_on"] = req.get("depends_on")
                 if task_id:
                     payload["task_id"] = task_id
+                # 派给 dot（dolt）的客服工单：控制标记 + 模式 + 脱敏；其他工具不变。
+                payload = prepare_dolt_ticket_payload(
+                    req, payload, _facade()._normalize_tool_name(selected_tool)
+                )
                 if not first_payload:
                     first_payload = payload
                 resp = client.post(
@@ -169,7 +174,7 @@ def _post_para_api_once(
                 if not task_id:
                     task_id = str(accepted.get("task_id") or "").strip()
                 h._force_single_device_attempt(
-                    {**req, "device_id": device_id, "report_only": report_only},
+                    {**req, "device_id": device_id, "report_only": payload["report_only"]},
                     accepted,
                 )
                 dispatched.append(

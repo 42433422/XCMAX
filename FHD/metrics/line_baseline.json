@@ -1,5 +1,5 @@
 {
-  "lines": 2310418,
+  "lines": 2311079,
   "updated": "2026-10-19",
-  "note": "PR #2406 同步冻结 main 9dbb16ed：用户在本会话明确批准的原 32 行 fail-closed 修复例外保持；主线 #2413 完整继承，按新主线重算并保留 hold-merge，不部署。"
+  "note": "PR #2406 同步已合入 Dot 工单的 main 04155ce00：保留用户明确批准的 32 行 fail-closed 例外；冲突合并同时保留 h._force_single_device_attempt 与实际 payload 报告模式，不扩大范围；候选仅准备，等待 #2421 先合入后再同步、完整 CI 和终极员工放行。"
 }
