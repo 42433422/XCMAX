@@ -237,65 +237,14 @@ def _run_pytest_summary(repo: _facade().Path) -> str:
         return f"<pre>{_facade().html.escape(str(e))}</pre>"
 
 
-def _digest_system_work_summary_html(
-    *,
-    host: str,
-    git_branch: str,
-    git_head: str,
-    repo_root: _facade().Path,
-    emp_n: int,
-    catalog_pack_n: int = 0,
-    met_ok: int,
-    met_fail: int,
-    ops_n: int,
-    inc_n: int,
-    event_n: int,
-    cursor_hits: int,
+def _digest_product_work_summary_html(
+    *, product_updates: _facade().Sequence[str], ticket_outcomes: _facade().Sequence[str],
+    pending_decisions: _facade().Sequence[str], pending_decision_count: int
 ) -> str:
-    """邮件「一、系统状态」：结构化键值对展示，替代原文段落。"""
-    rb = _facade().html.escape(str(repo_root))
-    total = met_ok + met_fail
-    rate = f"{met_ok * 100 // total}%" if total > 0 else "--"
+    """把产品变更、工单结果和待决事项放到日报主摘要。"""
+    def _items(rows: _facade().Sequence[str], empty: str) -> str:
+        return "".join(f"<li>{_facade().html.escape(str(row))}</li>" for row in rows) or f"<li>{empty}</li>"
 
-    def _kv_row(label: str, value: str, extra_style: str = "") -> str:
-        return f'<tr style="{extra_style}"><td style="padding:7px 12px;color:#64748b;font-size:13px;white-space:nowrap;border-bottom:1px solid #f1f5f9">{label}</td><td style="padding:7px 12px;color:#1e293b;font-size:13px;font-weight:600;border-bottom:1px solid #f1f5f9">{value}</td></tr>'
-
-    rows = [
-        _kv_row("仓库分支", _facade().html.escape(git_branch)),
-        _kv_row(
-            "最新提交",
-            f'<code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px">{_facade().html.escape(git_head)}</code>',
-        ),
-        _kv_row("运行主机", _facade().html.escape(host)),
-        _kv_row("数据目录", f'<span style="font-size:11px;word-break:break-all">{rb}</span>'),
-    ]
-    system_table = (
-        '<table style="width:100%;border-collapse:collapse;margin:0">' + "".join(rows) + "</table>"
-    )
-    rows2 = [_kv_row("编制在岗", f"{emp_n} 人")]
-    if catalog_pack_n and catalog_pack_n != emp_n:
-        rows2.append(_kv_row("Catalog 员工包", f"{catalog_pack_n} 个"))
-    rows2.extend(
-        [
-            _kv_row("今日任务执行", f"{total} 次"),
-            _kv_row(
-                "成功率",
-                rate,
-                extra_style="" if met_fail == 0 else "background:#fef2f2",
-            ),
-            _kv_row("运维操作记录", f"{ops_n} 条"),
-            _kv_row("系统事件总量", f"{event_n} 条"),
-            _kv_row(
-                "待处理事件",
-                f"{inc_n} 项",
-                extra_style="" if inc_n == 0 else "background:#fffbeb",
-            ),
-        ]
-    )
-    team_table = (
-        '<table style="width:100%;border-collapse:collapse;margin:0">' + "".join(rows2) + "</table>"
-    )
-    cursor_alert = ""
-    if cursor_hits > 0:
-        cursor_alert = f'<div style="margin-top:10px;padding:10px 14px;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:4px"><span style="font-size:13px;color:#92400e">代码助手异常：近 24h 有 <strong>{cursor_hits}</strong> 行 error，建议排查。</span></div>'
-    return f"""\n<div style="padding:14px 24px 8px">\n  {_facade()._section_title("系统状态", icon="&#x1F5A5;&#xFE0F;", accent="#2563eb")}\n  <div style="background:#f8fafc;border-radius:12px;padding:4px 14px 8px;margin-bottom:16px;border:1px solid #e6eaf0">\n    {system_table}\n  </div>\n  {_facade()._section_title("团队活跃度", icon="&#x1F4C8;", accent="#0d9488")}\n  <div style="background:#f8fafc;border-radius:12px;padding:4px 14px 8px;border:1px solid #e6eaf0">\n    {team_table}\n  </div>\n  {cursor_alert}\n</div>\n"""
+    pending = _items(pending_decisions, "当前没有待定案事项")
+    extra = f"<li>另有 {pending_decision_count - len(pending_decisions)} 项</li>" if pending_decision_count > len(pending_decisions) else ""
+    return f"""\n<div style="padding:14px 24px 8px">\n  {_facade()._section_title("产品与客户进展", icon="&#x1F4CA;", accent="#2563eb")}\n  <div style="background:#f8fafc;border-radius:12px;padding:12px 18px;border:1px solid #e6eaf0">\n    <strong>近 24 小时产品更新</strong><ul>{_items(product_updates, "近 24 小时没有新的仓库提交")}</ul>\n    <strong>近 24 小时工单结果</strong><ul>{_items(ticket_outcomes, "没有状态变化记录")}</ul>\n    <strong>待决策（{pending_decision_count} 项）</strong><ul>{pending}{extra}</ul>\n  </div>\n</div>\n"""

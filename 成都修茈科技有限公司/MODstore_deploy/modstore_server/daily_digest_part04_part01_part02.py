@@ -31,12 +31,9 @@ def build_digest_html(
     """
     root = _facade()._repo_root()
     now_utc = _facade().datetime.now(_facade().timezone.utc)
-    host = _facade().socket.gethostname()
-    git_branch, git_head = _facade()._digest_git_branch_and_head(root)
     sf = _facade().get_session_factory()
     since = _facade().datetime.now(_facade().timezone.utc) - _facade().timedelta(hours=24)
     with sf() as session:
-        catalog_pack_n = _facade().count_catalog_employee_packs(session)
         emp_n = _facade().count_on_duty_employees()
         ops_n = (
             session.query(_facade().func.count(_facade().OpsActionAuditLog.id))
@@ -75,6 +72,28 @@ def build_digest_html(
             .scalar()
             or 0
         )
+        ticket_status_rows = (
+            session.query(_facade().CustomerServiceTicket.status, _facade().func.count())
+            .filter(_facade().CustomerServiceTicket.updated_at >= since)
+            .group_by(_facade().CustomerServiceTicket.status)
+            .all()
+        )
+        pending_decision_count = (
+            session.query(_facade().func.count(_facade().StrategicDecision.id))
+            .filter(_facade().StrategicDecision.status == "proposed")
+            .scalar()
+            or 0
+        )
+        pending_decisions = [
+            f"{title}（{scope or '全局'}）"
+            for title, scope in (
+                session.query(_facade().StrategicDecision.title, _facade().StrategicDecision.scope)
+                .filter(_facade().StrategicDecision.status == "proposed")
+                .order_by(_facade().StrategicDecision.created_at.desc())
+                .limit(5)
+                .all()
+            )
+        ]
     cursor_hits = _facade()._cursor_error_lines_count(root)
     audit_hint_html = _facade()._audit_digest_hint_html()
     kpi_cards_html = _facade()._digest_kpi_cards_html(
@@ -86,19 +105,27 @@ def build_digest_html(
         event_n=int(event_n),
     )
     consistency_block = _facade()._consistency_check_html(root)
-    work_summary_html = _facade()._digest_system_work_summary_html(
-        host=host,
-        git_branch=git_branch,
-        git_head=git_head,
-        repo_root=root,
-        emp_n=int(emp_n),
-        catalog_pack_n=int(catalog_pack_n),
-        met_ok=int(met_ok),
-        met_fail=int(met_fail),
-        ops_n=int(ops_n),
-        inc_n=int(inc_n),
-        event_n=int(event_n),
-        cursor_hits=int(cursor_hits),
+    product_updates = (
+        [line.strip() for line in _facade()._git_line(["log", "--since=24 hours ago", "--format=%h %s", "-n", "5"], root).splitlines() if line.strip()]
+        if _facade()._git_worktree_root(root)
+        else ["仓库未连接 Git，无法核实产品更新"]
+    )
+    ticket_status_labels = {
+        "open": "待受理",
+        "processing": "处理中",
+        "resolved": "已解决",
+        "closed": "已关闭",
+        "rejected": "已拒绝",
+    }
+    ticket_outcomes = [
+        f"{ticket_status_labels.get(str(status), str(status) or '未记录')}: {int(count)} 张"
+        for status, count in ticket_status_rows
+    ]
+    work_summary_html = _facade()._digest_product_work_summary_html(
+        product_updates=product_updates,
+        ticket_outcomes=ticket_outcomes,
+        pending_decisions=pending_decisions,
+        pending_decision_count=int(pending_decision_count),
     )
     briefs_block = ""
     if (employee_briefs_html or "").strip():
