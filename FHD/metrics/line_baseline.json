@@ -1,5 +1,5 @@
 {
-  "lines": 2310605,
+  "lines": 2310610,
   "updated": "2026-10-19",
-  "note": "Extend company-ticket read redaction to quoted JSON, Chinese credential labels, private-key blocks and credential URLs, with list/detail regression coverage; explicit security capability increase."
+  "note": "Reconcile latest main with independent company-ticket read grants, protected projections, audit output and credential-redaction regression tests; explicit security capability increase."
 }

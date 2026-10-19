@@ -60,8 +60,12 @@ cd frontend
 # 安装依赖
 npm install
 
-# 或使用国内镜像
-npm install --registry=https://registry.npmmirror.com
+# 或使用国内镜像（只装依赖、不改锁文件）
+npm ci --registry=https://registry.npmmirror.com
+
+# 注意：提交的 package-lock.json 里 resolved 必须是 https://registry.npmjs.org/ ，
+# 不要把镜像地址写进锁文件（GitHub CI 访问 npmmirror 常 503/504）。
+# 用镜像增删依赖后，提交前把锁文件里的 registry.npmmirror.com 换回 registry.npmjs.org。
 ```
 
 ### 开发模式
