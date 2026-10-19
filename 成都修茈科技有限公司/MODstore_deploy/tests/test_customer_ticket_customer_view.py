@@ -103,6 +103,7 @@ def test_customer_views_hide_internal_fields_admin_keeps_everything(client):
             assert not _keys(body) & INTERNAL_KEYS, _keys(body) & INTERNAL_KEYS
         detail, _, session, mine, _ = bodies
         assert detail["audit_logs"] == [] and detail["ticket"]["evidence"] == {"source_ref": "WO-1"}
+        assert "submitter_type" not in detail["ticket"]
         assert detail["actions"] == [{"id": detail["actions"][0]["id"], **_dispatch(detail)}]
         assert detail["ticket"]["progress"][0]["text"].startswith("处理过程中遇到内部问题")
         assert session["messages"][0]["content"] == "还是看不到 1.0.0.6"
