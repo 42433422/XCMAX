@@ -1,5 +1,5 @@
 {
-  "lines": 2310151,
+  "lines": 2310418,
   "updated": "2026-10-19",
-  "note": "PR #2406 同步 main f2fe05bd：保留用户在本收口会话明确批准的 32 行 fail-closed 修复例外；当前主线 registry 修复及其他内容完整保留，原例外范围不变。"
+  "note": "PR #2406 同步冻结 main 9dbb16ed：用户在本会话明确批准的原 32 行 fail-closed 修复例外保持；主线 #2413 完整继承，按新主线重算并保留 hold-merge，不部署。"
 }
