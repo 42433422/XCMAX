@@ -470,12 +470,12 @@ header p { color: var(--muted); font-size: 13px; margin-top: 8px; letter-spacing
 </header>
 
 <div class="tabs" role="tablist" aria-label="架构页面分区">
-  <button class="tab-btn active" id="tab-button-tree" role="tab" aria-selected="true" aria-controls="tab-tree" onclick="switchTab('tree', this)">目录结构</button>
-  <button class="tab-btn" id="tab-button-arch" role="tab" aria-selected="false" aria-controls="tab-arch" onclick="switchTab('arch', this)">分层架构</button>
-  <button class="tab-btn" id="tab-button-flow" role="tab" aria-selected="false" aria-controls="tab-flow" onclick="switchTab('flow', this)">请求流转</button>
-  <button class="tab-btn" id="tab-button-neuro" role="tab" aria-selected="false" aria-controls="tab-neuro" onclick="switchTab('neuro', this)">NeuroBus</button>
-  <button class="tab-btn" id="tab-button-mod" role="tab" aria-selected="false" aria-controls="tab-mod" onclick="switchTab('mod', this)">Mod系统</button>
-  <button class="tab-btn" id="tab-button-dep" role="tab" aria-selected="false" aria-controls="tab-dep" onclick="switchTab('dep', this)">依赖规则</button>
+  <button class="tab-btn active" id="tab-button-tree" role="tab" aria-selected="true" aria-controls="tab-tree" data-tab="tree">目录结构</button>
+  <button class="tab-btn" id="tab-button-arch" role="tab" aria-selected="false" aria-controls="tab-arch" data-tab="arch">分层架构</button>
+  <button class="tab-btn" id="tab-button-flow" role="tab" aria-selected="false" aria-controls="tab-flow" data-tab="flow">请求流转</button>
+  <button class="tab-btn" id="tab-button-neuro" role="tab" aria-selected="false" aria-controls="tab-neuro" data-tab="neuro">NeuroBus</button>
+  <button class="tab-btn" id="tab-button-mod" role="tab" aria-selected="false" aria-controls="tab-mod" data-tab="mod">Mod系统</button>
+  <button class="tab-btn" id="tab-button-dep" role="tab" aria-selected="false" aria-controls="tab-dep" data-tab="dep">依赖规则</button>
 </div>
 <details class="page-index"><summary>本页目录</summary><nav id="section-index" aria-label="当前分区目录"></nav></details>
 
@@ -1128,6 +1128,7 @@ function switchTab(id, button) {
   }));
 }
 document.querySelectorAll('.tab-content').forEach((panel, index) => { panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-hidden', index ? 'true' : 'false'); });
+document.querySelectorAll('[role="tab"]').forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.tab, tab)));
 document.querySelectorAll('[role="tab"]').forEach((tab, index, tabs) => tab.addEventListener('keydown', event => {
   const next = event.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length] : event.key === 'ArrowLeft' ? tabs[(index + tabs.length - 1) % tabs.length] : null;
   if (next) { event.preventDefault(); next.focus(); next.click(); }
