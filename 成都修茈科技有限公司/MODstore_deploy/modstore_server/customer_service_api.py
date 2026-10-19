@@ -9,6 +9,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 import logging
 import threading
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -105,6 +106,10 @@ class IntegrationBody(BaseModel):
     scenario: str = Field(default="general", max_length=64)
     config: Dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
+
+
+class CustomerTicketEtaBody(BaseModel):
+    expected_completion_at: Optional[datetime]
 
 
 @router.post("/chat")
@@ -318,6 +323,37 @@ async def ticket_detail(
             [_audit_payload(a) for a in related(CustomerServiceAuditLog)] if user.is_admin else []
         ),
     }
+
+
+@router.patch("/tickets/{ticket_id}/expected-completion", dependencies=[Depends(_require_admin)])
+async def update_ticket_expected_completion(
+    ticket_id: int,
+    body: CustomerTicketEtaBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
+):
+    ticket = db.query(CustomerServiceTicket).filter(CustomerServiceTicket.id == ticket_id).first()
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    value = body.expected_completion_at
+    if value is not None:
+        value = (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc)
+        )
+    ticket.expected_completion_at = value
+    audit = CustomerServiceAuditLog(
+        ticket_id=ticket.id,
+        actor_user_id=user.id,
+        actor_type="admin",
+        event_type="expected_completion_updated",
+        detail_json=json_dumps({"expected_completion_at": value.isoformat() if value else None}),
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(ticket)
+    return {"ticket": ticket_payload(ticket)}
 
 
 @router.get("/actions")

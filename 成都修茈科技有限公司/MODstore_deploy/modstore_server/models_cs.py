@@ -64,6 +64,7 @@ class CustomerServiceTicket(Base):
     decision_status = Column(String(24), default="pending", index=True)
     automation_level = Column(String(24), default="auto", index=True)
     assigned_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    expected_completion_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,

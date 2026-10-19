@@ -1206,10 +1206,74 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
         assert only_customer["total"] == 1
         assert only_customer["items"][0]["submitter_type"] == "customer"
 
-        app.dependency_overrides[customer_service_api._get_current_user] = lambda: customer
-        own = client.get(
-            "/api/customer-service/tickets", params={"search": marker, "submitter_type": "admin"}
-        ).json()
-        assert own["total"] == 1
-        assert own["items"][0]["user_id"] == customer.id
-        assert "submitter_type" not in own["items"][0]
+        with _as_user(customer):
+            own = client.get(
+                "/api/customer-service/tickets", params={"search": marker, "submitter_type": "admin"}
+            ).json()
+            assert own["total"] == 1
+            assert own["items"][0]["user_id"] == customer.id
+            assert "submitter_type" not in own["items"][0]
+
+
+def test_admin_sets_customer_visible_ticket_expected_completion(client):
+    from datetime import timezone
+
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import (
+        CustomerServiceAuditLog,
+        CustomerServiceSession,
+        CustomerServiceTicket,
+    )
+
+    owner = _make_user("ticket_eta_owner")
+    admin = _make_user("ticket_eta_admin", admin=True)
+    with get_session_factory()() as db:
+        session = CustomerServiceSession(user_id=owner.id)
+        db.add(session)
+        db.flush()
+        ticket = CustomerServiceTicket(
+            user_id=owner.id,
+            session_id=session.id,
+            ticket_no=f"ETA-{uuid.uuid4().hex}",
+            title="客户可见预期完成时间",
+            summary="测试预期完成时间客户可见",
+        )
+        db.add(ticket)
+        db.commit()
+        ticket_id = ticket.id
+
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+    app.dependency_overrides[customer_service_api._require_admin] = lambda: admin
+    try:
+        response = client.patch(
+            f"/api/customer-service/tickets/{ticket_id}/expected-completion",
+            json={"expected_completion_at": "2026-10-21T11:30:00+08:00"},
+        )
+        assert response.status_code == 200
+        assert response.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
+
+        with get_session_factory()() as db:
+            saved = db.get(CustomerServiceTicket, ticket_id)
+            assert saved is not None
+            assert saved.expected_completion_at.replace(tzinfo=timezone.utc).isoformat() == (
+                "2026-10-21T03:30:00+00:00"
+            )
+            audit = (
+                db.query(CustomerServiceAuditLog)
+                .filter(CustomerServiceAuditLog.ticket_id == ticket_id)
+                .one()
+            )
+            assert audit.event_type == "expected_completion_updated"
+
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: owner
+        customer_response = client.get(f"/api/customer-service/tickets/{ticket_id}")
+        assert customer_response.status_code == 200
+        customer_ticket = customer_response.json()["ticket"]
+        assert customer_ticket["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
+        assert "assigned_admin_id" not in customer_ticket
+        assert customer_response.json()["audit_logs"] == []
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+        app.dependency_overrides.pop(customer_service_api._require_admin, None)

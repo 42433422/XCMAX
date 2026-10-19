@@ -244,6 +244,35 @@ def test_customer_ticket_proxy_preserves_search_and_market_identity(
         service.validate_session.assert_called_with("current-session")
 
 
+def test_customer_ticket_expected_completion_update_uses_bound_market_identity(
+    client, customer_ticket_identity
+):
+    from unittest.mock import AsyncMock
+
+    body = {"expected_completion_at": "2026-10-21T11:30:00+08:00"}
+    with patch(
+        "app.fastapi_routes.market_account._proxy_json",
+        new_callable=AsyncMock,
+        return_value={"ticket": {"expected_completion_at": "2026-10-21T03:30:00+00:00"}},
+    ) as proxy:
+        response = client.patch(
+            "/api/xcmax/admin/customer-service/tickets/42/expected-completion",
+            json=body,
+            headers={
+                "X-Session-ID": "current-session",
+                "Authorization": "Bearer unrelated-browser-identity",
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
+    assert proxy.await_args.args == (
+        "PATCH",
+        "/api/customer-service/tickets/42/expected-completion",
+    )
+    assert proxy.await_args.kwargs["json_body"] == body
+    assert proxy.await_args.kwargs["authorization"] == "Bearer test-bound-market-identity"
+
+
 @pytest.mark.parametrize("suffix", ["", "/42"])
 @pytest.mark.parametrize("failure", ["no_user", "resolver_error", "inactive", "no_bound_token"])
 def test_customer_ticket_identity_failures_never_use_another_session(

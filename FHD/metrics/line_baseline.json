@@ -1,5 +1,5 @@
 {
-  "lines": 2311562,
+  "lines": 2311776,
   "updated": "2026-10-20",
-  "note": "棘轮下调"
+  "note": "Backlog item 20 is an explicitly user-requested customer capability: persist an expected completion timestamp, expose it in customer tickets, and save admin edits through the bound session with an audit record. The current change adds this previously absent workflow; formatted Python changes add 14 more maintained lines."
 }

@@ -329,6 +329,9 @@ def ticket_payload(
     domain = str(evidence.get("issue_domain") or "").strip().lower()
     if domain not in _facade().ISSUE_DOMAINS:
         domain = ""
+    expected_completion_at = getattr(row, "expected_completion_at", None)
+    if expected_completion_at is not None and expected_completion_at.tzinfo is None:
+        expected_completion_at = expected_completion_at.replace(tzinfo=_facade().timezone.utc)
     return {
         "id": row.id,
         # 管理端必须用稳定的市场用户 ID 把交付工单关联到客户资料。
@@ -354,6 +357,9 @@ def ticket_payload(
         "created_at": row.created_at.isoformat() if row.created_at else "",
         "updated_at": row.updated_at.isoformat() if row.updated_at else "",
         "closed_at": row.closed_at.isoformat() if row.closed_at else "",
+        "expected_completion_at": (
+            expected_completion_at.isoformat() if expected_completion_at else None
+        ),
         **life,
     }
 

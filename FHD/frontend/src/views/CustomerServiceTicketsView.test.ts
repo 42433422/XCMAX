@@ -7,10 +7,10 @@ import { ADMIN_HOST_ROUTE_RECORDS } from '../../../admin-console/src/adminHostRo
 import { ADMIN_OPERATOR_MENU_ITEMS, ADMIN_OPERATOR_ROUTE_NAMES } from '../../../admin-console/src/constants/adminOperatorNav'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 
-const { list, detail, push, route, put } = vi.hoisted(() => ({
-  put: vi.fn(), list: vi.fn(), detail: vi.fn(), push: vi.fn(), route: { params: {} as Record<string, string> },
+const { list, detail, updateEta, push, route, put } = vi.hoisted(() => ({
+  put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), route: { params: {} as Record<string, string> },
 }))
-vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail } }))
+vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail, updateCustomerTicketExpectedCompletion: updateEta } }))
 vi.mock('@/api/core', () => ({ default: { put } }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => route }))
 
@@ -32,6 +32,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   route.params = {}
   list.mockResolvedValue({ items: [ticket], total: 1 }); detail.mockResolvedValue(payload); push.mockResolvedValue(undefined)
+  updateEta.mockResolvedValue(payload)
 })
 
 describe('customer service ticket list', () => {
@@ -104,6 +105,15 @@ describe('customer service ticket detail', () => {
     expect(wrapper.find('h2').text()).toBe('员工图谱无法正常显示')
     for (const part of ['更正工单标题', '标题：平台功能问题 → 员工图谱无法正常显示']) expect(wrapper.text()).toContain(part)
     wrapper.unmount(); prompt.mockRestore()
+  })
+  it('lets an admin set the customer-visible expected completion time', async () => {
+    const wrapper = mountDetail(); await flushPromises()
+    await wrapper.find('#customer-ticket-eta').setValue('2026-10-21T11:30')
+    await wrapper.find('form.cs-eta-editor').trigger('submit')
+    await flushPromises()
+    expect(updateEta).toHaveBeenCalledWith(42, '2026-10-21T11:30:00+08:00')
+    expect(wrapper.text()).toContain('已保存，客户工单页面会显示此时间。')
+    wrapper.unmount()
   })
   it('opens the real internal id with header, original text and empty sections', async () => {
     const wrapper = mountDetail(); await flushPromises()

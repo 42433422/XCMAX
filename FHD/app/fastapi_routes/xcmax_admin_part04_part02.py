@@ -103,7 +103,9 @@ async def sync_stream(request: _facade().Request, since_cursor: int = _facade().
     )
 
 
-async def _customer_ticket_proxy(request: _facade().Request, path: str):
+async def _customer_ticket_proxy(
+    request: _facade().Request, path: str, *, method: str = "GET", json_body=None
+):
     from app.fastapi_routes.market_account import session_market_token
     from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request
 
@@ -126,7 +128,9 @@ async def _customer_ticket_proxy(request: _facade().Request, path: str):
             status_code=401,
         )
     # Strictly use this session's identity; never fall back to another session or a browser token.
-    return await _facade()._market_admin_proxy(request, "GET", path, authorization_override=token)
+    return await _facade()._market_admin_proxy(
+        request, method, path, json_body=json_body, authorization_override=token
+    )
 
 
 @_facade().router.get("/admin/customer-service/tickets", response_model=None)
@@ -148,6 +152,28 @@ async def admin_customer_service_tickets(
 @_facade().router.get("/admin/customer-service/tickets/{ticket_id}", response_model=None)
 async def admin_customer_service_ticket(request: _facade().Request, ticket_id: int):
     return await _customer_ticket_proxy(request, f"/api/customer-service/tickets/{ticket_id}")
+
+
+@_facade().router.patch(
+    "/admin/customer-service/tickets/{ticket_id}/expected-completion", response_model=None
+)
+async def admin_update_customer_ticket_expected_completion(
+    request: _facade().Request, ticket_id: int
+):
+    try:
+        body = await request.json()
+    except _facade().RECOVERABLE_ERRORS:
+        body = None
+    if not isinstance(body, dict):
+        return _facade().JSONResponse(
+            {"success": False, "message": "请求内容无效"}, status_code=422
+        )
+    return await _customer_ticket_proxy(
+        request,
+        f"/api/customer-service/tickets/{ticket_id}/expected-completion",
+        method="PATCH",
+        json_body=body,
+    )
 
 
 async def _xcmax_market_proxy_impl(request: _facade().Request, subpath: str):
