@@ -142,15 +142,23 @@ class TestComposeGates:
         g2 = lambda name, args: {"ok": True}  # noqa: E731
         assert compose_gates(g1, g2)("t", {})["ok"] is True
 
-    def test_gate_raising_recoverable_is_skipped(self):
+    def test_gate_raising_recoverable_is_denied(self):
         def boom(name, args):
             raise ValueError("recoverable")
 
         g_ok = lambda name, args: {"ok": True}  # noqa: E731
         combined = compose_gates(boom, g_ok)
-        # boom 抛 ValueError（在 RECOVERABLE_ERRORS 内）→ 被跳过，最终放行
-        assert combined("t", {})["ok"] is True
+        # 任一 gate 异常都必须拒绝（fail-closed），不得被跳过
+        verdict = combined("t", {})
+        assert verdict["ok"] is False
+        assert "授权检查失败" in verdict["reason"]
 
-    def test_verdict_missing_ok_defaults_true(self):
+    def test_verdict_missing_ok_is_denied(self):
         g = lambda name, args: {}  # noqa: E731
-        assert compose_gates(g)("t", {})["ok"] is True
+        verdict = compose_gates(g)("t", {})
+        assert verdict["ok"] is False
+        assert "非法" in verdict["reason"]
+
+    def test_non_dict_verdict_is_denied(self):
+        g = lambda name, args: True  # noqa: E731
+        assert compose_gates(g)("t", {})["ok"] is False

@@ -34,7 +34,9 @@ async def execute_workflow(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
+    from modstore_server.workflow_engine import WorkflowTerminated
     from modstore_server.workflow_engine import execute_workflow as engine_execute
+    from modstore_server.workflow_engine import _json_safe
 
     workflow = (
         db.query(Workflow)
@@ -88,6 +90,26 @@ async def execute_workflow(
                 workflow_id,
                 bill_err,
             )
+    except WorkflowTerminated as terminated:
+        # 图未到达 end（循环护栏、缺边、分支未命中）：不写 completed、不发成功事件，
+        # 终态原因与已执行节点落库，部分结果保留用于对账。
+        failure_message = str(terminated)
+        execution.status = "failed"
+        execution.error_message = failure_message
+        execution.output_data = json.dumps(
+            {
+                "termination": terminated.termination,
+                "output": _json_safe(terminated.output),
+            }
+        )
+        execution.completed_at = datetime.now(UTC)
+        logger.warning(
+            "workflow %s terminated without end: reason=%s last_node=%s executed=%s",
+            workflow_id,
+            terminated.termination.get("reason"),
+            terminated.termination.get("last_node_id"),
+            terminated.termination.get("executed_node_ids"),
+        )
     except RECOVERABLE_ERRORS as e:
         failure_message = str(e)
         execution.status = "failed"

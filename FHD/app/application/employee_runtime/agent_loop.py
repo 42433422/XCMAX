@@ -52,6 +52,19 @@ def default_employee_tools() -> list[dict[str, Any]]:
         return []
 
 
+def _tool_names(tool_specs: list[dict[str, Any]] | None) -> set[str]:
+    """从 OpenAI function schema 中提取精确工具名集合（最终 dispatch 白名单）。"""
+    names: set[str] = set()
+    for spec in tool_specs or []:
+        if not isinstance(spec, dict):
+            continue
+        fn = spec.get("function") if isinstance(spec.get("function"), dict) else spec
+        name = str((fn or {}).get("name") or "").strip()
+        if name:
+            names.add(name)
+    return names
+
+
 def _format_tool_calls(tcs: Any) -> list[dict[str, Any]]:
     formatted: list[dict[str, Any]] = []
     for tc in tcs:
@@ -134,10 +147,62 @@ def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
     return True, None, False
 
 
+def _action_key(tool_name: str, args: dict[str, Any], *, invalid_arguments: bool = False) -> str:
+    """Stable key for one logical action.
+
+    A malformed-argument attempt never executed, so it is keyed by tool name
+    only: a later valid call of that tool is the repair of the same intent.
+    Executed attempts are keyed by tool plus arguments, so only an identical
+    replay can supersede them.
+    """
+
+    if invalid_arguments:
+        return f"tool:{tool_name}"
+    return json.dumps({"tool": tool_name, "args": args}, ensure_ascii=False, sort_keys=True)
+
+
+def _mark_superseded(tool_trace: list[dict[str, Any]]) -> None:
+    """Record repair relationships instead of erasing failed history.
+
+    A later success supersedes the earlier failed attempt of the same logical
+    action; the failed row stays in the trace with ``superseded_by`` so an
+    operator can still audit what was repaired.
+    """
+
+    for idx, row in enumerate(tool_trace):
+        if row.get("success") is not True:
+            continue
+        superseding = {row.get("action_key"), f"tool:{row.get('tool')}"}
+        for prior in tool_trace[:idx]:
+            if prior.get("success") is not False or prior.get("superseded_by") is not None:
+                continue
+            if prior.get("action_key") in superseding:
+                prior["superseded_by"] = idx
+
+
+def _unverified_actions(tool_trace: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Successful actions without a structured success receipt.
+
+    Their side effect may have happened but was not proven; the caller must
+    reconcile instead of replaying the whole task.
+    """
+
+    return [
+        {"tool": row.get("tool"), "args": row.get("args")}
+        for row in tool_trace
+        if row.get("success") is True and row.get("verified") is False
+    ]
+
+
 def _terminal_tool_failure(tool_trace: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Summarize an unfinished/failed tool action for the final run result."""
 
-    failed = [row for row in tool_trace if row.get("success") is False]
+    _mark_superseded(tool_trace)
+    failed = [
+        row
+        for row in tool_trace
+        if row.get("success") is False and row.get("superseded_by") is None
+    ]
     if not failed:
         return None
     first = failed[0]
@@ -146,15 +211,19 @@ def _terminal_tool_failure(tool_trace: list[dict[str, Any]]) -> dict[str, Any] |
             "exit_status": "waiting_approval",
             "error": str(first.get("reason") or "工具等待用户授权"),
             "pending_approval": True,
+            "retryable": False,
         }
     if first.get("blocked"):
         return {
             "exit_status": "tool_blocked",
             "error": str(first.get("reason") or "工具调用被拦截"),
+            "retryable": False,
         }
     return {
         "exit_status": "tool_failed",
         "error": str(first.get("error") or first.get("reason") or "工具调用失败"),
+        "retryable": False,
+        "reconcile_required": True,
     }
 
 
@@ -199,6 +268,7 @@ def run_employee_agent_loop(
 
     mdl = model or resolve_chat_model()
     tool_specs = tools if tools is not None else default_employee_tools()
+    allowed_tool_names = _tool_names(tool_specs)
     user_payload = json.dumps({"task": task, "input": input_data or {}}, ensure_ascii=False)[:12000]
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt or "你是智能员工助手。"},
@@ -215,11 +285,14 @@ def run_employee_agent_loop(
             return {
                 "handler": "agent",
                 "ok": False,
+                "error": "已达到墙钟时间上限，任务结果未知",
                 "output": "",
                 "rounds": rounds,
                 "tool_calls": tool_trace,
                 "trajectory": trajectory,
                 "exit_status": "wall_time_limit",
+                "retryable": False,
+                "reconcile_required": True,
             }
         rounds += 1
         try:
@@ -277,6 +350,7 @@ def run_employee_agent_loop(
 
         if not tcs:
             text = str(msg.content or "").strip()
+            _mark_superseded(tool_trace)
             terminal_failure = _terminal_tool_failure(tool_trace)
             if terminal_failure:
                 return {
@@ -288,6 +362,15 @@ def run_employee_agent_loop(
                     "trajectory": trajectory,
                     **terminal_failure,
                 }
+            unverified = _unverified_actions(tool_trace)
+            unverified_summary = (
+                {
+                    "unverified_actions": unverified,
+                    "reconcile_required": True,
+                }
+                if unverified
+                else {}
+            )
             return {
                 "handler": "agent",
                 "ok": True,
@@ -296,6 +379,8 @@ def run_employee_agent_loop(
                 "tool_calls": tool_trace,
                 "trajectory": trajectory,
                 "exit_status": "completed",
+                "retryable": False,
+                **unverified_summary,
             }
 
         for tc in tcs:
@@ -304,6 +389,42 @@ def run_employee_agent_loop(
             raw_arguments = str(getattr(fn, "arguments", "") or "")
             args, args_error = _parse_tool_args(raw_arguments)
             tc_id = str(getattr(tc, "id", "") or "")
+            if tool_name not in allowed_tool_names:
+                reason = (
+                    f"工具 {tool_name or '(unknown)'} 不在本员工授权工具清单内，已拒绝执行"
+                )
+                tool_trace.append(
+                    {
+                        "tool": tool_name,
+                        "args": args,
+                        "blocked": True,
+                        "success": False,
+                        "unknown_tool": True,
+                        "reason": reason,
+                    }
+                )
+                trajectory.append(
+                    {
+                        "round": rounds,
+                        "event": "tool",
+                        "tool": tool_name,
+                        "args": args,
+                        "blocked": True,
+                        "success": False,
+                        "result": reason,
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": json.dumps(
+                            {"success": False, "blocked": True, "reason": reason},
+                            ensure_ascii=False,
+                        ),
+                    }
+                )
+                continue
             if args_error:
                 tool_trace.append(
                     {
@@ -312,6 +433,9 @@ def run_employee_agent_loop(
                         "success": False,
                         "error": args_error,
                         "invalid_arguments": True,
+                        "action_key": _action_key(
+                            tool_name, args, invalid_arguments=True
+                        ),
                     }
                 )
                 trajectory.append(
@@ -347,12 +471,15 @@ def run_employee_agent_loop(
                 return {
                     "handler": "agent",
                     "ok": False,
+                    "error": "检测到重复动作，任务结果未知",
                     "output": "",
                     "rounds": rounds,
                     "tool_calls": tool_trace,
                     "trajectory": trajectory,
                     "exit_status": "stuck_repeating_action",
                     "repeat_count": repeat_limit,
+                    "retryable": False,
+                    "reconcile_required": True,
                 }
 
             if gate is not None:
@@ -361,7 +488,9 @@ def run_employee_agent_loop(
                 except RECOVERABLE_ERRORS:
                     logger.exception("employee tool gate failed closed: %s", tool_name)
                     verdict = {"ok": False, "reason": "工具授权检查失败，未执行"}
-                if not verdict.get("ok", True):
+                if not isinstance(verdict, dict):
+                    verdict = {"ok": False, "reason": "工具授权检查返回非法结果，未执行"}
+                if verdict.get("ok") is not True:
                     reason = str(verdict.get("reason") or "blocked by employee gate")
                     tool_trace.append(
                         {
@@ -413,6 +542,7 @@ def run_employee_agent_loop(
                     "success": tool_success,
                     "error": tool_error,
                     "verified": verified,
+                    "action_key": fingerprint,
                 }
             )
             trajectory.append(
@@ -441,6 +571,8 @@ def run_employee_agent_loop(
         "max_iterations_reached": True,
         "trajectory": trajectory,
         "exit_status": "max_iterations",
+        "retryable": False,
+        "reconcile_required": True,
     }
 
 

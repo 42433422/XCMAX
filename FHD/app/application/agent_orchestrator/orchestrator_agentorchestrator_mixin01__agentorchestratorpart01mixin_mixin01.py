@@ -335,6 +335,20 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         return str(run.error or run.status or "")[:600]
 
     def _apply_plan(self, run: _facade().AgentRun, plan: _facade().PlanGraph) -> None:
+        graph_error = self._validate_plan_graph(plan)
+        if graph_error:
+            run.plan_id = plan.plan_id
+            run.intent = plan.intent
+            run.steps = []
+            run.status = "failed"
+            run.error = graph_error
+            run.final_output = {"error": graph_error, "plan_graph_invalid": True}
+            run.add_event(
+                "planner.rejected",
+                "计划图不合法，已拒绝执行",
+                {"reason": graph_error},
+            )
+            return
         run.plan_id = plan.plan_id
         run.intent = plan.intent
         plan_metadata = dict(plan.metadata or {})
@@ -361,6 +375,70 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
             run.add_event("planner.blocked", "计划没有可执行节点")
 
     @staticmethod
+    def _validate_plan_graph(plan: _facade().PlanGraph) -> str:
+        """校验计划图；不合法时返回拒绝原因（空串表示通过）。
+
+        拒绝而不是降级执行：依赖环、悬空引用、重复节点、以及无法判定的条件边
+        都会让「互斥分支全部执行」或「合法 DAG 被 blocked」，因此必须在执行前
+        明确失败（F04）。
+        """
+        nodes = list(getattr(plan, "nodes", None) or [])
+        if not nodes:
+            return ""
+        ids = [str(n.node_id or "").strip() for n in nodes]
+        if any(not node_id for node_id in ids):
+            return "plan graph contains a node without node_id"
+        if len(set(ids)) != len(ids):
+            return "plan graph contains duplicate node ids"
+        known = set(ids)
+        edges: dict[str, set[str]] = {node_id: set() for node_id in ids}
+        for node in nodes:
+            node_id = str(node.node_id)
+            for dep in node.depends_on or []:
+                dep = str(dep or "").strip()
+                if dep and dep not in known:
+                    return f"node {node_id} depends on unknown node {dep}"
+                if dep:
+                    edges[dep].add(node_id)
+            targets: list[str] = []
+            if node.next:
+                targets.append(str(node.next))
+            for branch in node.branches or []:
+                target = str(getattr(branch, "target", "") or "").strip()
+                condition = getattr(branch, "condition", None) or {}
+                if not target:
+                    return f"node {node_id} has a branch without target"
+                if target not in known:
+                    return f"node {node_id} branches to unknown node {target}"
+                if condition and "key" not in condition:
+                    return (
+                        f"node {node_id} branch to {target} uses an unsupported "
+                        "condition (missing 'key')"
+                    )
+                targets.append(target)
+            for target in targets:
+                edges[node_id].add(target)
+        state: dict[str, int] = {}
+
+        def _visit(node_id: str) -> bool:
+            mark = state.get(node_id, 0)
+            if mark == 1:
+                return False
+            if mark == 2:
+                return True
+            state[node_id] = 1
+            for nxt in edges.get(node_id, ()):
+                if not _visit(nxt):
+                    return False
+            state[node_id] = 2
+            return True
+
+        for node_id in ids:
+            if not _visit(node_id):
+                return "plan graph contains a cycle"
+        return ""
+
+    @staticmethod
     def _step_from_node(node: _facade().WorkflowNode) -> _facade().AgentStep:
         spec = _facade().get_tool_action_spec(node.tool_id, node.action)
         return _facade().AgentStep(
@@ -372,7 +450,53 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
             idempotent=bool(spec.idempotent) if spec is not None else bool(node.idempotent),
             description=str(node.description or ""),
             depends_on=list(node.depends_on or []),
+            next=str(node.next or "") or None,
+            branches=[
+                {
+                    "target": str(branch.target or ""),
+                    "condition": dict(branch.condition or {}),
+                }
+                for branch in (node.branches or [])
+            ],
         )
+
+    @staticmethod
+    def _branch_matches(output: dict[str, _facade().Any], condition: dict[str, _facade().Any]) -> bool:
+        if not condition:
+            return True
+        key = str(condition.get("key") or "")
+        if not key or not isinstance(output, dict):
+            return False
+        if "equals" in condition:
+            return output.get(key) == condition.get("equals")
+        return bool(output.get(key))
+
+    @classmethod
+    def _selected_edges(cls, step: _facade().AgentStep) -> set[tuple[str, str]]:
+        """步骤成功后按条件边决定后继；branches 优先于无条件 next。"""
+        if step.branches:
+            return {
+                (step.node_id, str(branch.get("target") or ""))
+                for branch in step.branches
+                if cls._branch_matches(step.output or {}, dict(branch.get("condition") or {}))
+                and branch.get("target")
+            }
+        if step.next:
+            return {(step.node_id, step.next)}
+        return set()
+
+    @staticmethod
+    def _conditional_predecessors(run: _facade().AgentRun) -> dict[str, set[str]]:
+        incoming: dict[str, set[str]] = {}
+        for step in run.steps:
+            targets = ([step.next] if step.next else []) + [
+                str(branch.get("target") or "") for branch in (step.branches or [])
+            ]
+            for target in targets:
+                if target:
+                    incoming.setdefault(target, set()).add(step.node_id)
+        return incoming
+
 
     @staticmethod
     def _find_waiting_step(
@@ -395,11 +519,12 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         approved_step_id: str = "",
     ) -> None:
         if not run.steps:
-            # 拒绝执行的 SQL 计划（refusal_code）需保持 blocked，交由调用方给出拒答；
-            # 其余空计划维持既有语义：无步骤可执行即视为已完成。
-            refusal = run.final_output if isinstance(run.final_output, dict) else {}
-            if run.status == "blocked" and refusal.get("refusal_code"):
-                return
+            # 空图不是成功：计划没有可执行节点时必须保持 blocked/failed，
+            # 不能因为「没有步骤可跑」就写 completed（F04）。
+            if run.status not in ("blocked", "failed"):
+                run.status = "blocked"
+                run.error = run.error or "planner returned no executable steps"
+            return
         approved = str(approved_step_id or "").strip()
         completed_node_ids: set[str] = {
             step.node_id for step in run.steps if step.status == "completed"
@@ -409,77 +534,109 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
             for step in run.steps
             if step.status == "completed"
         }
-        for step in run.steps:
-            if self._apply_requested_control(run):
-                return
-            if step.status == "completed":
-                continue
-            if any(dep not in completed_node_ids for dep in step.depends_on):
-                run.status = "blocked"
-                step.status = "skipped"
-                step.error = "dependencies are not completed"
-                run.add_event(
-                    "step.blocked",
-                    f"步骤 {step.node_id} 依赖未满足",
-                    {"step_id": step.step_id, "depends_on": step.depends_on},
-                )
-                return
-            if refuse_unresolved_step(run, step, node_outputs):
-                return
-            if pause_for_clarification(run, step, node_outputs):
-                return
-            step_is_approved = bool(approved and approved in {step.step_id, step.node_id})
-            if not self._can_auto_execute(step) and (not step_is_approved):
-                step.status = "waiting_user"
-                run.status = "waiting_user"
-                run.add_event(
-                    "step.waiting_user",
-                    f"步骤 {step.node_id} 需要用户确认",
-                    {
-                        "step_id": step.step_id,
-                        "tool_id": step.tool_id,
-                        "action": step.action,
-                        "risk": step.risk,
-                        "idempotent": step.idempotent,
-                    },
-                )
-                return
-            while True:
-                budget_payload = _facade().budget_exceeded_payload(
-                    run,
-                    additional_cost_units=self._step_cost_units(step),
-                    scope=f"{step.tool_id}.{step.action}",
-                )
-                if budget_payload is not None:
-                    self._mark_budget_exceeded(run, step, budget_payload, node_outputs=node_outputs)
-                    return
-                self._execute_step(
-                    run, step, runtime_context=runtime_context, node_outputs=node_outputs
-                )
+        conditional_incoming = self._conditional_predecessors(run)
+        selected_edges: set[tuple[str, str]] = set()
+        pending = [step for step in run.steps if step.status != "completed"]
+        while pending:
+            progressed = False
+            for step in list(pending):
                 if self._apply_requested_control(run):
                     return
-                if step.status == "completed":
-                    break
-                if self._prepare_repair_or_retry(run, step, runtime_context=runtime_context):
+                if step.status in ("completed", "skipped"):
+                    pending.remove(step)
+                    progressed = True
                     continue
-                run.status = "failed"
-                run.error = step.error or f"step {step.node_id} failed"
-                self._refresh_run_cost_metadata(run)
-                self._refresh_repair_metadata(run)
-                run.final_output = {
-                    "node_outputs": node_outputs,
-                    "tool_calls": [call.to_dict() for call in run.tool_calls],
-                    "artifacts": [artifact.to_dict() for artifact in run.artifacts],
-                    "cost_units_total": run.metadata["cost_units_total"],
-                    "ai_cost_units_total": run.metadata["ai_cost_units_total"],
-                    "failed_step_id": step.step_id,
-                    "error": run.error,
-                    "repair_count": run.metadata.get("repair_count", 0),
-                }
-                self._append_llm_summary_to_final_output(run)
-                self._remember_run_outcome_for(run)
+                if any(dep not in completed_node_ids for dep in step.depends_on):
+                    # 乱序 DAG 合法：先跳到其余就绪步骤，下一轮再判断
+                    continue
+                predecessors = conditional_incoming.get(step.node_id) or set()
+                if predecessors and not any(
+                    (pred, step.node_id) in selected_edges for pred in predecessors
+                ):
+                    step.status = "skipped"
+                    step.error = "branch not selected"
+                    run.add_event(
+                        "step.skipped",
+                        f"步骤 {step.node_id} 未被条件边选中",
+                        {"step_id": step.step_id, "predecessors": sorted(predecessors)},
+                    )
+                    pending.remove(step)
+                    progressed = True
+                    continue
+                if refuse_unresolved_step(run, step, node_outputs):
+                    return
+                if pause_for_clarification(run, step, node_outputs):
+                    return
+                step_is_approved = bool(approved and approved in {step.step_id, step.node_id})
+                if not self._can_auto_execute(step) and (not step_is_approved):
+                    step.status = "waiting_user"
+                    run.status = "waiting_user"
+                    run.add_event(
+                        "step.waiting_user",
+                        f"步骤 {step.node_id} 需要用户确认",
+                        {
+                            "step_id": step.step_id,
+                            "tool_id": step.tool_id,
+                            "action": step.action,
+                            "risk": step.risk,
+                            "idempotent": step.idempotent,
+                        },
+                    )
+                    return
+                while True:
+                    budget_payload = _facade().budget_exceeded_payload(
+                        run,
+                        additional_cost_units=self._step_cost_units(step),
+                        scope=f"{step.tool_id}.{step.action}",
+                    )
+                    if budget_payload is not None:
+                        self._mark_budget_exceeded(
+                            run, step, budget_payload, node_outputs=node_outputs
+                        )
+                        return
+                    self._execute_step(
+                        run, step, runtime_context=runtime_context, node_outputs=node_outputs
+                    )
+                    if self._apply_requested_control(run):
+                        return
+                    if step.status == "completed":
+                        break
+                    if self._prepare_repair_or_retry(run, step, runtime_context=runtime_context):
+                        continue
+                    run.status = "failed"
+                    run.error = step.error or f"step {step.node_id} failed"
+                    self._refresh_run_cost_metadata(run)
+                    self._refresh_repair_metadata(run)
+                    run.final_output = {
+                        "node_outputs": node_outputs,
+                        "tool_calls": [call.to_dict() for call in run.tool_calls],
+                        "artifacts": [artifact.to_dict() for artifact in run.artifacts],
+                        "cost_units_total": run.metadata["cost_units_total"],
+                        "ai_cost_units_total": run.metadata["ai_cost_units_total"],
+                        "failed_step_id": step.step_id,
+                        "error": run.error,
+                        "repair_count": run.metadata.get("repair_count", 0),
+                    }
+                    self._append_llm_summary_to_final_output(run)
+                    self._remember_run_outcome_for(run)
+                    return
+                selected_edges |= self._selected_edges(step)
+                completed_node_ids.add(step.node_id)
+                node_outputs[step.node_id] = dict(step.output or {})
+                pending.remove(step)
+                progressed = True
+            if not progressed:
+                for step in pending:
+                    step.status = "skipped"
+                    step.error = "dependencies are not completed"
+                run.status = "blocked"
+                run.error = "plan graph has unresolved dependencies"
+                run.add_event(
+                    "run.blocked",
+                    "计划依赖无法满足，已停止执行",
+                    {"pending_steps": [step.node_id for step in pending]},
+                )
                 return
-            completed_node_ids.add(step.node_id)
         run.status = "completed"
         self._refresh_run_cost_metadata(run)
         self._refresh_repair_metadata(run)

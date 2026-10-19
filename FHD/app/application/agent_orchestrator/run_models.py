@@ -66,6 +66,8 @@ class AgentStep:
     max_repair_attempts: int = 0
     observations: list[dict[str, Any]] = field(default_factory=list)
     repair_history: list[dict[str, Any]] = field(default_factory=list)
+    next: str | None = None
+    branches: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -88,6 +90,8 @@ class AgentStep:
             "max_repair_attempts": self.max_repair_attempts,
             "observations": self.observations,
             "repair_history": self.repair_history,
+            "next": self.next,
+            "branches": self.branches,
         }
 
 
@@ -114,6 +118,8 @@ def agent_step_from_dict(data: dict[str, Any]) -> AgentStep:
         repair_history=[
             item for item in (data.get("repair_history") or []) if isinstance(item, dict)
         ],
+        next=str(data.get("next") or "") or None,
+        branches=[item for item in (data.get("branches") or []) if isinstance(item, dict)],
     )
 
 

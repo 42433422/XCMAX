@@ -115,8 +115,11 @@ def compose_gates(*gates: Any) -> Any:
             try:
                 verdict = g(tool_name, args)
             except RECOVERABLE_ERRORS:
-                continue
-            if not verdict.get("ok", True):
+                logger.exception("composed gate failed closed tool=%s", tool_name)
+                return {"ok": False, "reason": "工具授权检查失败，已拒绝执行"}
+            if not isinstance(verdict, dict) or "ok" not in verdict:
+                return {"ok": False, "reason": "工具授权检查返回非法结果，已拒绝执行"}
+            if verdict.get("ok") is not True:
                 return cast("dict[str, Any]", verdict)
         return {"ok": True}
 

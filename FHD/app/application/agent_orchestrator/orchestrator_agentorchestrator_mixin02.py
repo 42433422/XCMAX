@@ -20,6 +20,8 @@ class _AgentOrchestratorPart02Mixin:
     ) -> bool:
         if str((step.output or {}).get("error_code") or "") == "tool_billing_blocked":
             return False
+        if (step.output or {}).get("retryable") is False:
+            return False
         if not self._can_auto_execute(step):
             return False
         for source_name, overrides in self._repair_sources(run, runtime_context):

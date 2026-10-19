@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import types
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -73,7 +73,7 @@ def _seed_session(user_id: int, *, ok: bool, code: str = "") -> str:
             "error": "",
         },
         error="",
-        started_at=datetime.utcnow().timestamp(),
+        started_at=datetime.now(UTC).timestamp(),
         files_meta=[],
     )
     return sid

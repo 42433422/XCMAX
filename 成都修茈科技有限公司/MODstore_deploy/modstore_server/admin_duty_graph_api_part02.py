@@ -25,6 +25,7 @@ def execute_duty_graph_programmatic(
     bench_llm_target_id: str = "daily-orchestrator",
 ) -> _facade().Dict[str, _facade().Any]:
     """在岗协作图执行（供定时任务 / orchestrator 调用）。失败返回 ``{"ok": False, "error": ...}``。"""
+    from modstore_server.employee_orchestrator import _evaluate_execution_success
     target = _facade()._as_str(target_employee_id)
     task_s = _facade()._as_str(task)
     if not target:
@@ -225,7 +226,17 @@ def execute_duty_graph_programmatic(
                     user_id=int(created_by_user_id),
                     **exec_kw,
                 )
-                result = run_res if isinstance(run_res, dict) else {"result": run_res}
+                if not isinstance(run_res, dict):
+                    # 非结构化返回无法证明业务成功，按失败处理（不得假成功）。
+                    status = "failed"
+                    error_text = "执行器返回非结构化结果"
+                    result = {"result": run_res}
+                else:
+                    result = run_res
+                    ok, reason = _evaluate_execution_success(result)
+                    if not ok:
+                        status = "failed"
+                        error_text = reason
                 llm_tokens = int(result.get("llm_tokens") or 0)
                 duration_ms = float(result.get("duration_ms") or 0.0)
                 if duration_ms <= 0:
@@ -301,7 +312,22 @@ def execute_duty_graph_programmatic(
         run_row.success_count = success_count
         run_row.failed_count = failed_count
         run_row.skipped_count = skipped_count
-        run_row.status = "failed" if failed_count > 0 else "completed"
+        target_row = next(
+            (r for r in rows2 if _facade()._as_str(r.employee_id) == target), None
+        )
+        target_status = _facade()._as_str(target_row.status) if target_row else ""
+        if failed_count > 0:
+            run_row.status = "failed"
+        elif target_status != "success":
+            # 目标员工被跳过 / 未执行，不能算业务完成。
+            run_row.status = "failed"
+            if not first_error:
+                detail = _facade()._as_str(target_row.error) if target_row else ""
+                first_error = f"目标员工 {target} 未成功（{target_status or 'missing'}）"
+                if detail:
+                    first_error += f"：{detail}"
+        else:
+            run_row.status = "completed"
         run_row.error = first_error
         run_row.completed_at = _facade().datetime.now(_facade().timezone.utc)
         session.commit()

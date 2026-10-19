@@ -139,7 +139,8 @@ def test_admin_duty_graph_capability_and_run(tmp_path, monkeypatch):
         )
         assert run1.status_code == 200, run1.text
         b1 = run1.json()
-        assert b1["status"] == "completed"
+        assert b1["status"] == "failed"
+        assert "目标员工" in b1["error"]
         node_map1 = {n["employee_id"]: n for n in b1["nodes"]}
         assert node_map1["dep-a"]["status"] == "success"
         assert node_map1["target"]["status"] == "skipped"
@@ -166,6 +167,89 @@ def test_admin_duty_graph_capability_and_run(tmp_path, monkeypatch):
         rd = client.get(f"/api/admin/duty-graph/runs/{rid}")
         assert rd.status_code == 200
         assert rd.json()["id"] == rid
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_admin_duty_graph_handler_failed_blocks_downstream(tmp_path, monkeypatch):
+    app, client = _new_client(tmp_path, monkeypatch)
+    import modstore_server.admin_duty_graph_api as duty_api
+
+    rows = [
+        {"id": "dep-a", "name": "依赖A", "source": "catalog"},
+        {"id": "target", "name": "目标员工", "source": "catalog"},
+    ]
+    monkeypatch.setattr(duty_api, "list_employees_exec", lambda: rows)
+
+    def _fake_pack(_session, employee_id: str):
+        deps = [] if employee_id == "dep-a" else ["dep-a"]
+        return {
+            "manifest": {
+                "employee_config_v2": {
+                    "actions": {"handlers": ["echo"]},
+                    "collaboration": {"depends_on": deps},
+                    "cognition": {"agent": {"model": {"provider": "auto", "model_name": "auto"}}},
+                }
+            }
+        }
+
+    monkeypatch.setattr(duty_api, "load_employee_pack", _fake_pack)
+    monkeypatch.setattr(duty_api, "employee_pack_runtime_issues", lambda _pack: [])
+    monkeypatch.setattr(
+        duty_api,
+        "credential_status",
+        lambda _session, _uid, provider: {
+            "provider": provider,
+            "has_platform_key": True,
+            "has_user_override": False,
+        },
+    )
+    monkeypatch.setattr(duty_api, "fernet_configured", lambda: True)
+
+    class _FakeRuntime:
+        def __init__(self):
+            self.calls: list[str] = []
+
+        def execute_task(
+            self,
+            *,
+            employee_id,
+            task,
+            input_data=None,
+            user_id=None,
+            bench_llm_override=None,
+        ):
+            _ = task, input_data, user_id, bench_llm_override
+            self.calls.append(employee_id)
+            return {
+                "handler_failed": True,
+                "error": "boom",
+                "result": {"outputs": [{"handler": "echo", "ok": False, "error": "boom"}]},
+            }
+
+    fake_runtime = _FakeRuntime()
+    monkeypatch.setattr(duty_api, "get_default_employee_client", lambda: fake_runtime)
+
+    admin = types.SimpleNamespace(id=8, username="admin", is_admin=True, email="a@a")
+    app.dependency_overrides[get_current_user] = lambda: admin
+    try:
+        r = client.post(
+            "/api/admin/duty-graph/runs",
+            json={
+                "target_employee_id": "target",
+                "task": "handler failed",
+                "include_dependencies": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "failed"
+        nodes = {n["employee_id"]: n for n in body["nodes"]}
+        assert nodes["dep-a"]["status"] == "failed"
+        assert "handler_failed" in nodes["dep-a"]["error"]
+        assert nodes["target"]["status"] == "skipped"
+        assert "上游未成功" in nodes["target"]["error"]
+        assert fake_runtime.calls == ["dep-a"]
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

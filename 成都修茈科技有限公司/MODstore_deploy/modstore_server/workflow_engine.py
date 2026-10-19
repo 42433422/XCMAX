@@ -42,6 +42,19 @@ MAX_WORKFLOW_STEPS = 1000
 MAX_NODE_VISITS = 50
 
 
+class WorkflowTerminated(RuntimeError):
+    """图未到达 end 节点即中止（循环、缺边、分支未命中）。
+
+    ``termination`` 保留终态原因、最后节点与已执行节点，供 API 层落库诊断；
+    ``output`` 保留已产生的部分上下文，便于对账而不是当成成功结果。
+    """
+
+    def __init__(self, termination: Dict[str, Any], output: Dict[str, Any] | None = None):
+        self.termination = dict(termination or {})
+        self.output = dict(output or {})
+        super().__init__(str(self.termination.get("message") or "工作流未完成"))
+
+
 def _json_safe(value: Any, max_depth: int = 6, max_str: int = 8000) -> Any:
     """将上下文快照转为可 JSON 序列化的结构（沙盒报告用）。"""
     if max_depth <= 0:

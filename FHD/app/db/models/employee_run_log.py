@@ -9,14 +9,14 @@ from sqlalchemy import DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 
 
-class EmployeeRunLog(Base):
+class EmployeeRunLog(TenantScopedMixin, Base):
     __tablename__ = "employee_run_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     employee_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    tenant_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     session_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="running", index=True)

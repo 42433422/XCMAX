@@ -13,11 +13,42 @@ def _facade():
 
 
 def _guard_path(workspace_root: str, path: str) -> _facade().Optional[str]:
-    """Return resolved absolute path only if it stays inside workspace_root."""
-    resolved = _facade().os.path.normpath(_facade().os.path.join(workspace_root, path))
-    workspace_abs = _facade().os.path.abspath(workspace_root)
-    if not resolved.startswith(workspace_abs + _facade().os.sep) and resolved != workspace_abs:
+    """Return the real absolute path only if it stays inside workspace_root.
+
+    Resolves symlinks before comparing (``realpath`` + ``commonpath``) so a link
+    or ``..`` that escapes the workspace is rejected instead of being accepted
+    by a string ``startswith`` check.
+    """
+    os = _facade().os
+    try:
+        root = os.path.realpath(os.path.abspath(str(workspace_root)))
+        joined = os.path.normpath(os.path.join(root, str(path)))
+        resolved = os.path.realpath(joined)
+        if os.path.commonpath([root, resolved]) != root:
+            return None
+    except (OSError, ValueError):
         return None
+    return resolved
+
+
+def _guard_write_path(workspace_root: str, path: str) -> _facade().Optional[str]:
+    """Like :func:`_guard_path`, but also refuse any symlinked path component.
+
+    The extra ``islink`` scan rejects directory/link replacement attempts that a
+    concurrent actor could make between the check and the write.
+    """
+    resolved = _guard_path(workspace_root, path)
+    if resolved is None:
+        return None
+    os = _facade().os
+    root = os.path.realpath(os.path.abspath(str(workspace_root)))
+    current = root
+    for part in os.path.relpath(resolved, root).split(os.sep):
+        if part in ("", "."):
+            continue
+        current = os.path.join(current, part)
+        if os.path.islink(current):
+            return None
     return resolved
 
 
@@ -84,9 +115,9 @@ async def tool_write_workspace_file(
     ctx: _facade().Optional[_facade().Mapping[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
     ctx = ctx or {}
-    resolved = _facade()._guard_path(workspace_root, path)
+    resolved = _facade()._guard_write_path(workspace_root, path)
     if resolved is None:
-        return {"ok": False, "error": f"路径越界：{path!r}"}
+        return {"ok": False, "error": f"路径越界或包含符号链接：{path!r}"}
     sg = [str(x).strip() for x in ctx.get("scope_globs") or [] if str(x).strip()]
     fg = [str(x).strip() for x in ctx.get("forbidden_globs") or [] if str(x).strip()]
     ag = [str(x).strip() for x in ctx.get("approval_required_globs") or [] if str(x).strip()]
@@ -194,35 +225,77 @@ async def tool_list_workspace_dir(
         return {"ok": False, "error": str(exc)[:300]}
 
 
+_UNSANDBOXED_PYTHON_FLAG = "MODSTORE_ENABLE_UNSANDBOXED_PYTHON"
+_PYTHON_DANGER_RE = (
+    "\\b(import\\s+subprocess|import\\s+socket|import\\s+urllib|import\\s+http|"
+    "import\\s+shutil|import\\s+ctypes|import\\s+multiprocessing|open\\s*\\(|"
+    "__import__|exec\\s*\\(|eval\\s*\\(|compile\\s*\\(|os\\.system|os\\.popen|"
+    "shutil\\.rmtree|pathlib|glob\\.glob|os\\.remove|os\\.unlink|os\\.rename|"
+    "os\\.chdir|os\\.environ)\\b"
+)
+
+
+def _unisolated_python_enabled() -> bool:
+    """无 OS 级隔离的 Python 执行默认关闭（F01 安全收口）。"""
+    raw = str(_facade().os.environ.get(_UNSANDBOXED_PYTHON_FLAG, "")).strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
 async def tool_run_sandboxed_python(
     code: str, *, timeout: float = 10.0
 ) -> _facade().Dict[str, _facade().Any]:
-    """Run pure-stdlib Python in a subprocess with a hard time limit."""
-    danger = _facade().re.compile(
-        "\\b(import\\s+subprocess|import\\s+socket|import\\s+urllib|open\\s*\\(|__import__|exec\\s*\\(|eval\\s*\\(|compile\\s*\\(|os\\.system|shutil\\.rmtree)\\b"
-    )
-    if danger.search(code):
+    """Run pure-stdlib Python in a bounded subprocess.
+
+    This tool has no filesystem/network/user isolation, so it is disabled unless
+    the deployment explicitly opts in via ``MODSTORE_ENABLE_UNSANDBOXED_PYTHON``.
+    Even when enabled it runs with ``-I`` (isolated), a fresh temporary cwd, a
+    minimal environment, and a process-group kill on timeout.
+    """
+    if not _unisolated_python_enabled():
+        return {
+            "ok": False,
+            "disabled": True,
+            "error": (
+                "无文件系统/网络隔离的 Python 执行已关闭；"
+                f"如需在受控环境启用请设置 {_UNSANDBOXED_PYTHON_FLAG}=1"
+            ),
+        }
+    os = _facade().os
+    if _facade().re.search(_PYTHON_DANGER_RE, str(code or "")):
         return {"ok": False, "error": "代码包含不允许的操作（网络/文件/exec/eval）"}
+    import tempfile
+
     try:
-        proc = _facade().subprocess.run(
-            [_facade().sys.executable, "-c", code],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env={
-                k: v
-                for (k, v) in _facade().os.environ.items()
-                if k in ("PATH", "PYTHONPATH", "TEMP", "TMP")
-            },
-        )
+        with tempfile.TemporaryDirectory(prefix="modstore-py-") as workdir:
+            env = {"HOME": workdir, "TMPDIR": workdir}
+            path_env = os.environ.get("PATH", "")
+            if path_env:
+                env["PATH"] = path_env
+            proc = _facade().subprocess.Popen(
+                [_facade().sys.executable, "-I", "-c", str(code)],
+                cwd=workdir,
+                stdin=_facade().subprocess.DEVNULL,
+                stdout=_facade().subprocess.PIPE,
+                stderr=_facade().subprocess.PIPE,
+                text=True,
+                env=env,
+                start_new_session=True,
+            )
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout)
+            except _facade().subprocess.TimeoutExpired:
+                try:
+                    os.killpg(os.getpgid(proc.pid), 9)
+                except OSError:
+                    proc.kill()
+                proc.communicate()
+                return {"ok": False, "error": f"执行超时（{timeout:.0f}s）"}
         return {
             "ok": proc.returncode == 0,
-            "stdout": proc.stdout[:2000],
-            "stderr": proc.stderr[:500],
+            "stdout": (stdout or "")[:2000],
+            "stderr": (stderr or "")[:500],
             "returncode": proc.returncode,
         }
-    except _facade().subprocess.TimeoutExpired:
-        return {"ok": False, "error": f"执行超时（{timeout:.0f}s）"}
     except FileNotFoundError:
         return {"ok": False, "error": "Python 运行时不可用"}
     except RECOVERABLE_ERRORS as exc:

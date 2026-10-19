@@ -263,6 +263,74 @@ class TestRunEmployeeAgentLoop:
         assert result["ok"] is False
         assert result["exit_status"] == "tool_failed"
         assert result["tool_calls"][0]["success"] is False
+        assert result["retryable"] is False
+        assert result["reconcile_required"] is True
+
+    @patch("app.application.tools.workflow.execute_workflow_tool", return_value='{"success": true}')
+    @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
+    @patch("app.infrastructure.llm.client.get_openai_compatible_client")
+    @patch("app.infrastructure.llm.client.require_api_key")
+    def test_argument_repair_supersedes_failed_attempt(
+        self, mock_key, mock_client, mock_model, mock_exec
+    ):
+        bad_call = MagicMock()
+        bad_call.id = "call_bad"
+        bad_call.function.name = "tool1"
+        bad_call.function.arguments = "{not-json"
+        good_call = MagicMock()
+        good_call.id = "call_good"
+        good_call.function.name = "tool1"
+        good_call.function.arguments = '{"path": "a.csv"}'
+        first = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="", tool_calls=[bad_call]))]
+        )
+        second = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="", tool_calls=[good_call]))]
+        )
+        third = MagicMock(choices=[MagicMock(message=MagicMock(content="完成", tool_calls=None))])
+        mock_client.return_value.chat.completions.create.side_effect = [first, second, third]
+
+        result = run_employee_agent_loop(
+            employee_id="emp1",
+            system_prompt="test",
+            task="do something",
+            tools=[{"type": "function", "function": {"name": "tool1"}}],
+        )
+
+        assert result["ok"] is True
+        assert result["exit_status"] == "completed"
+        assert result["retryable"] is False
+        assert result["tool_calls"][0]["invalid_arguments"] is True
+        assert result["tool_calls"][0]["superseded_by"] == 1
+        assert result["tool_calls"][1]["success"] is True
+
+    @patch("app.application.tools.workflow.execute_workflow_tool", return_value='{"items": [1]}')
+    @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
+    @patch("app.infrastructure.llm.client.get_openai_compatible_client")
+    @patch("app.infrastructure.llm.client.require_api_key")
+    def test_unverified_side_effect_requires_reconcile(
+        self, mock_key, mock_client, mock_model, mock_exec
+    ):
+        tool_call = MagicMock()
+        tool_call.id = "call_1"
+        tool_call.function.name = "tool1"
+        tool_call.function.arguments = "{}"
+        first = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="", tool_calls=[tool_call]))]
+        )
+        second = MagicMock(choices=[MagicMock(message=MagicMock(content="完成", tool_calls=None))])
+        mock_client.return_value.chat.completions.create.side_effect = [first, second]
+
+        result = run_employee_agent_loop(
+            employee_id="emp1",
+            system_prompt="test",
+            task="do something",
+            tools=[{"type": "function", "function": {"name": "tool1"}}],
+        )
+
+        assert result["ok"] is True
+        assert result["reconcile_required"] is True
+        assert result["unverified_actions"] == [{"tool": "tool1", "args": {}}]
 
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")
@@ -320,6 +388,36 @@ class TestRunEmployeeAgentLoop:
         assert result["ok"] is False
         assert result["exit_status"] == "tool_blocked"
         assert result["tool_calls"][0]["reason"] == "工具授权检查失败，未执行"
+
+    @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
+    @patch("app.infrastructure.llm.client.get_openai_compatible_client")
+    @patch("app.infrastructure.llm.client.require_api_key")
+    def test_unknown_tool_not_dispatched(self, mock_key, mock_client, mock_model):
+        tool_call = MagicMock()
+        tool_call.id = "call_unknown"
+        tool_call.function.name = "not_authorized_tool"
+        tool_call.function.arguments = "{}"
+        first = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="", tool_calls=[tool_call]))]
+        )
+        second = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="工具不可用", tool_calls=None))]
+        )
+        mock_client.return_value.chat.completions.create.side_effect = [first, second]
+
+        with patch("app.application.tools.workflow.execute_workflow_tool") as execute:
+            result = run_employee_agent_loop(
+                employee_id="emp1",
+                system_prompt="test",
+                task="do something",
+                tools=[{"type": "function", "function": {"name": "tool1"}}],
+            )
+
+        execute.assert_not_called()
+        assert result["ok"] is False
+        assert result["exit_status"] == "tool_blocked"
+        assert result["tool_calls"][0]["unknown_tool"] is True
+        assert result["tool_calls"][0]["blocked"] is True
 
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")

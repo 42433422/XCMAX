@@ -1016,6 +1016,94 @@ class TestLocalEmployeeExecuteBranches:
         assert payload["approval_token"] == "at"
         assert payload["trigger"] == "admin_execute"
 
+    def _run_execute(self, stack, result, verdict):
+        for cm in _local_employee_execute_session_patches():
+            stack.enter_context(cm)
+        mock_exec = stack.enter_context(
+            patch(
+                "app.application.employee_runtime.executor.execute_employee_task_local",
+                return_value=result,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.employee_runtime.result_verifier.verify_employee_run_result",
+                return_value=verdict,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.employee_runtime.run_ledger.create_employee_run_log",
+                return_value="run-1",
+            )
+        )
+        finish = stack.enter_context(
+            patch(
+                "app.application.employee_runtime.run_ledger.finish_employee_run_log",
+                return_value=None,
+            )
+        )
+        return mock_exec, finish
+
+    def test_nonretryable_failure_is_not_replayed(self, client: TestClient):
+        with ExitStack() as stack:
+            mock_exec, finish = self._run_execute(
+                stack,
+                {"success": False, "retryable": False, "error": "参数非法"},
+                (False, "参数非法"),
+            )
+            resp = client.post(
+                "/api/xcmax/local/employees/emp1/execute",
+                json={"task": "t", "retry_max": 3},
+            )
+        body = resp.json()
+        assert mock_exec.call_count == 1
+        assert body["success"] is False
+        assert body["attempts"] == 1
+        assert body["retryable"] is False
+        assert finish.call_args.kwargs["attempts"] == 1
+        assert finish.call_args.kwargs["status"] == "failed"
+
+    def test_unknown_side_effect_reconciles_without_replay(self, client: TestClient):
+        with ExitStack() as stack:
+            mock_exec, finish = self._run_execute(
+                stack,
+                {
+                    "success": False,
+                    "reconcile_required": True,
+                    "error": "任务结果未知",
+                },
+                (False, "任务结果未知"),
+            )
+            resp = client.post(
+                "/api/xcmax/local/employees/emp1/execute",
+                json={"task": "t", "retry_max": 3},
+            )
+        body = resp.json()
+        assert mock_exec.call_count == 1
+        assert body["success"] is False
+        assert body["reconcile_required"] is True
+        assert finish.call_args.kwargs["status"] == "reconcile_required"
+        assert finish.call_args.kwargs["verified"] is False
+
+    def test_success_without_receipt_is_marked_reconcile(self, client: TestClient):
+        with ExitStack() as stack:
+            mock_exec, finish = self._run_execute(
+                stack,
+                {"success": True, "reconcile_required": True},
+                (True, "ok"),
+            )
+            resp = client.post(
+                "/api/xcmax/local/employees/emp1/execute",
+                json={"task": "t"},
+            )
+        body = resp.json()
+        assert mock_exec.call_count == 1
+        assert body["success"] is True
+        assert body["reconcile_required"] is True
+        assert finish.call_args.kwargs["status"] == "reconcile_required"
+        assert finish.call_args.kwargs["verified"] is False
+
 
 # ---------------------------------------------------------------------------
 # get_digest_vibe_prep_session / get_all_hands_report_session — empty sid

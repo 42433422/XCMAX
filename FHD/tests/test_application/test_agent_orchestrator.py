@@ -1063,3 +1063,67 @@ def test_agent_orchestrator_generates_office_document_as_artifact_after_approval
     assert run.metadata["artifact_count"] == 1
     assert run.final_output["artifacts"][0]["mime_type"].endswith("wordprocessingml.document")
     assert "artifact.attached" in [event.event_type for event in run.events]
+
+
+def test_non_returning_tool_hits_deadline_and_unknown_write_is_not_retried(monkeypatch):
+    import threading
+    import time
+
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+
+    monkeypatch.setenv("XCAGI_AGENT_TOOL_TIMEOUT_SECONDS", "0.05")
+    release = threading.Event()
+
+    class _NeverReturns:
+        def execute(self, _step, *, runtime_context):
+            del runtime_context
+            release.wait(timeout=10)
+            return {"success": True, "data": []}
+
+    def _pending(idempotent: bool) -> AgentRun:
+        run = AgentRun(user_id="u1", message="timeout", status="queued")
+        run.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
+        run.steps.append(
+            AgentStep(
+                node_id="query",
+                tool_id="products",
+                action="query",
+                params={"keyword": "timeout"},
+                risk="low" if idempotent else "high",
+                idempotent=idempotent,
+            )
+        )
+        return run
+
+    repo = InMemoryAgentRunRepository()
+    orchestrator = AgentOrchestrator(repository=repo, tool_executor=_NeverReturns())
+    orchestrator._record_tool_usage_entry = lambda *_args, **_kwargs: True
+    try:
+        safe = _pending(True)
+        repo.save(safe)
+        started = time.monotonic()
+        timed_out = orchestrator.execute_dispatched_run(safe.run_id)
+        assert time.monotonic() - started < 2
+        assert timed_out is not None and timed_out.status == "failed"
+        assert timed_out.steps[0].output["error_code"] == "tool_timeout"
+        assert timed_out.steps[0].output["retryable"] is True
+        assert timed_out.tool_calls[0].metadata["deadline_enforced"] is True
+        assert timed_out.tool_calls[0].metadata["timed_out"] is True
+        assert timed_out.tool_calls[0].metadata["side_effect_unknown"] is False
+        assert timed_out.steps[0].attempt_count == 1
+
+        unsafe = _pending(False)
+        unsafe.metadata["dispatch"] = {"approved_step_id": unsafe.steps[0].step_id}
+        repo.save(unsafe)
+        unknown = orchestrator.execute_dispatched_run(unsafe.run_id)
+        assert unknown is not None and unknown.status == "failed"
+        assert unknown.steps[0].output["error_code"] == "tool_timeout_unknown"
+        assert unknown.steps[0].output["retryable"] is False
+        assert unknown.steps[0].output["side_effect_unknown"] is True
+        assert unknown.tool_calls[0].metadata["side_effect_unknown"] is True
+        assert unknown.steps[0].attempt_count == 1
+        assert unknown.metadata.get("repair_count", 0) == 0
+    finally:
+        release.set()

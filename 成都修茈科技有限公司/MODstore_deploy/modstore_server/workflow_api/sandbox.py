@@ -95,6 +95,7 @@ async def sandbox_run_workflow(
                 "errors": report.get("errors"),
                 "warnings": report.get("warnings"),
                 "mode": "real" if not body.mock_employees else "mock",
+                "termination": report.get("termination"),
                 "sandbox_status": report.get("sandbox_status"),
             },
         )

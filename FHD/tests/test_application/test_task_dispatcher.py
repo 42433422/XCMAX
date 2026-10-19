@@ -235,3 +235,59 @@ def test_dispatcher_restart_claims_expired_lease_and_completes_idempotent_task()
     assert execution.state == "completed"
     assert recovered is not None and len(recovered.tool_calls) == 2
     assert recovered.tool_calls[0].error == "worker_lease_expired"
+
+
+class _StuckExecutor:
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def execute(self, _step, *, runtime_context):
+        del runtime_context
+        self.started.set()
+        self.release.wait(timeout=10)
+        return {"success": True, "data": []}
+
+
+def test_dispatcher_releases_slot_when_run_exceeds_its_deadline() -> None:
+    run_repository = InMemoryAgentRunRepository()
+    queue = InMemoryTaskExecutionRepository()
+    executor = _StuckExecutor()
+    run = _queued_run("never-returns")
+    run_repository.save(run)
+    queue.enqueue(run, requested_by="owner")
+    dispatcher = AgentTaskDispatcher(
+        execution_repository=queue,
+        run_repository=run_repository,
+        max_workers=1,
+        poll_seconds=0.02,
+        lease_seconds=3.0,
+        heartbeat_seconds=0.5,
+        max_run_seconds=0.05,
+        orchestrator_factory=lambda repository: _orchestrator_factory(repository, executor),
+    )
+
+    dispatcher.start()
+    try:
+        assert executor.started.wait(timeout=3)
+        assert dispatcher.snapshot()["active_count"] == 1
+        assert _wait_until(lambda: dispatcher.snapshot()["active_count"] == 0, timeout=2)
+        assert queue.get(run.run_id).state == "claimed"  # type: ignore[union-attr]
+    finally:
+        executor.release.set()
+        dispatcher.stop()
+
+
+def test_worker_with_expired_lease_cannot_finish_after_reassignment() -> None:
+    queue = InMemoryTaskExecutionRepository()
+    run = _queued_run("stale-owner")
+    queue.enqueue(run, requested_by="owner")
+    assert queue.claim("owner-one", lease_seconds=0.01) is not None
+    time.sleep(1.05)
+    reassigned = queue.claim("owner-two", lease_seconds=30)
+    assert reassigned is not None and reassigned.execution_count == 2
+    assert queue.heartbeat(run.run_id, "owner-one", lease_seconds=30) is False
+    assert queue.finish(run.run_id, "owner-one", "completed") is None
+    assert queue.get(run.run_id).state == "claimed"  # type: ignore[union-attr]
+    assert queue.finish(run.run_id, "owner-two", "completed") is not None
+    assert queue.get(run.run_id).state == "completed"  # type: ignore[union-attr]

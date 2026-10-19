@@ -224,6 +224,7 @@ _READ_ONLY_AGENT_TOOLS = frozenset(
 
 from modstore_server.mod_employee_agent_runner_part02 import (
     _guard_path as _guard_path,
+    _guard_write_path as _guard_write_path,
     tool_read_workspace_file as tool_read_workspace_file,
     tool_write_workspace_file as tool_write_workspace_file,
     tool_list_workspace_dir as tool_list_workspace_dir,

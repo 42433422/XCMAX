@@ -456,7 +456,12 @@ def _actions_fhd(
             outputs.append({"handler": "llm_md", "output": reasoning.get("reasoning", "")})
         else:
             outputs.append(
-                {"handler": handler, "error": "unsupported handler in FHD local executor"}
+                {
+                    "handler": handler,
+                    "ok": False,
+                    "retryable": False,
+                    "error": "unsupported handler in FHD local executor",
+                }
             )
     return {
         "task": task,

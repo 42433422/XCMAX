@@ -114,6 +114,10 @@ class TestNormalizeRel:
         rel = wg._normalize_rel("/etc/hosts", str(tmp_path))
         assert rel.endswith("etc/hosts")
 
+    def test_outside_root_flags_inside_false(self, tmp_path):
+        assert wg._resolve_in_workspace("/etc/hosts", str(tmp_path))[1] is False
+        assert wg._resolve_in_workspace("sub/x.txt", str(tmp_path))[1] is True
+
 
 class TestBuildEmployeeGate:
     def test_returns_none_when_nothing_to_enforce(self):
@@ -167,3 +171,30 @@ class TestBuildEmployeeGate:
         gate = wg.build_employee_gate("e", {}, config, None)
         verdict = gate("excel_analysis", {"file_path": "   "})
         assert verdict["ok"] is True
+
+    def test_symlink_escape_rejected(self, tmp_path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        secret = outside / "secret.txt"
+        secret.write_text("s")
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "link.txt").symlink_to(secret)
+        config = {"workspace_policy": {"forbidden_globs": ["*.key"]}}
+        gate = wg.build_employee_gate("e", {}, config, str(root))
+        verdict = gate("excel_analysis", {"file_path": "link.txt"})
+        assert verdict["ok"] is False
+        assert "工作区之外" in verdict["reason"]
+
+    def test_directory_replacement_escape_rejected(self, tmp_path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "x.txt").write_text("s")
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "sub").symlink_to(outside, target_is_directory=True)
+        config = {"workspace_policy": {"forbidden_globs": ["*.key"]}}
+        gate = wg.build_employee_gate("e", {}, config, str(root))
+        verdict = gate("excel_analysis", {"file_path": "sub/x.txt"})
+        assert verdict["ok"] is False
+        assert "工作区之外" in verdict["reason"]

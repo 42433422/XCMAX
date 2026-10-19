@@ -15,6 +15,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# 执行合同：这些终态一律不算业务成功（pending/running/queued 表示未完成）。
+_FAILED_EXECUTION_STATUSES = frozenset(
+    {
+        "failed",
+        "error",
+        "handler_failed",
+        "orchestrator_failed",
+        "blocked_by_risk_gate",
+        "skipped",
+        "pending",
+        "running",
+        "queued",
+    }
+)
+
 
 def _evaluate_execution_success(result: Dict[str, Any]) -> tuple[bool, str]:
     """从 execute_employee_task 返回值判定真实成功与否（非仅「未抛异常」）。"""
@@ -22,6 +37,15 @@ def _evaluate_execution_success(result: Dict[str, Any]) -> tuple[bool, str]:
         return False, "invalid result payload"
     if result.get("blocked_by_risk_gate"):
         return False, "blocked_by_risk_gate"
+    status = str(result.get("status") or result.get("execution_status") or "").strip().lower()
+    if result.get("handler_failed"):
+        detail = str(result.get("error") or "handler reported failure").strip()[:200]
+        return False, "handler_failed: " + detail
+    if result.get("ok") is False or result.get("success") is False:
+        detail = str(result.get("error") or status or "explicit failure").strip()[:200]
+        return False, "execution_failed: " + detail
+    if status in _FAILED_EXECUTION_STATUSES:
+        return False, "execution_failed: status=" + status
 
     inner = result.get("result") if isinstance(result.get("result"), dict) else {}
     outputs = inner.get("outputs") if isinstance(inner.get("outputs"), list) else []
@@ -215,7 +239,7 @@ def dispatch_subtasks(
         last_results = followup_results
         handoff_depth += 1
 
-    ok = all(r.get("ok", True) for r in all_results)
+    ok = bool(all_results) and all(r.get("ok") is True for r in all_results)
     return {
         "ok": ok,
         "results": all_results,
@@ -259,6 +283,22 @@ def _run_layer(
     def _run_one(st) -> Dict[str, Any]:
         import time
 
+        blocked = [
+            dep
+            for dep in (st.depends_on or [])
+            if not (isinstance(completed.get(dep), dict) and completed[dep].get("ok") is True)
+        ]
+        if blocked:
+            # 依赖只有真实成功才释放下游；失败/未执行一律不派发。
+            return {
+                "ok": False,
+                "status": "skipped",
+                "employee_id": st.employee_id,
+                "result": None,
+                "error": "上游未成功：" + ", ".join(blocked),
+                "validation_reason": "upstream_not_succeeded",
+            }
+
         # 把已完成的依赖结果注入 input_data
         input_data = dict(st.input_data or {})
         for dep_id in st.depends_on or []:
@@ -286,6 +326,7 @@ def _run_layer(
                 )
             return {
                 "ok": ok,
+                "status": "success" if ok else "failed",
                 "employee_id": st.employee_id,
                 "result": result,
                 "error": None if ok else reason,
@@ -302,7 +343,12 @@ def _run_layer(
                 reason=str(exc),
                 duration_ms=duration_ms,
             )
-            return {"ok": False, "employee_id": st.employee_id, "error": str(exc)}
+            return {
+                "ok": False,
+                "status": "failed",
+                "employee_id": st.employee_id,
+                "error": str(exc),
+            }
 
     if len(layer) == 1:
         return [_run_one(layer[0])]

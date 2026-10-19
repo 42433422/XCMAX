@@ -115,9 +115,8 @@ def _explicit_allowlist(config: dict[str, Any], manifest: dict[str, Any]) -> lis
         manifest.get("tools"),
     ):
         if isinstance(candidate, list):
-            names = [str(x).strip() for x in candidate if str(x).strip()]
-            if names:
-                return names
+            # 显式声明即权威：即使是空列表也返回 []，绝不回退到能力派生/默认全量。
+            return [str(x).strip() for x in candidate if str(x).strip()]
     return None
 
 
@@ -193,7 +192,12 @@ def resolve_employee_tools(
     allow = _explicit_allowlist(config, manifest)
     if allow is not None:
         allowlisted = [name for name in allow if name in base]
-        return [base[name] for name in allowlisted] or None
+        unknown = [name for name in allow if name not in base]
+        if unknown:
+            logger.warning(
+                "employee %s allowlist references unknown tools: %s", employee_id, unknown
+            )
+        return [base[name] for name in allowlisted]
 
     text = _capability_text(manifest, config)
     read_only = is_read_only(manifest, config)
@@ -226,7 +230,8 @@ def resolve_employee_tools(
         blocked = set(list_write_tools())
         selected = [n for n in selected if n not in blocked]
 
-    return [base[n] for n in selected] or None
+    # 只读员工过滤后可能为空：返回 [] 表示「无可用工具」，不能退化为 None（默认全量）。
+    return [base[n] for n in selected]
 
 
 def employee_tool_names(

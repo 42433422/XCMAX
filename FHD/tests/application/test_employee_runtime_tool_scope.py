@@ -58,9 +58,9 @@ class TestExplicitAllowlist:
         names = ts._explicit_allowlist({"tools": ["a", "  ", ""]}, {})
         assert names == ["a"]
 
-    def test_empty_list_falls_through(self):
-        # config.tools=[] → 无有效名 → 继续找下个候选 → None
-        assert ts._explicit_allowlist({"tools": []}, {}) is None
+    def test_empty_list_is_authoritative_deny(self):
+        # 显式 tools=[] 表示「不授权任何工具」，不得回退到能力派生或默认全量
+        assert ts._explicit_allowlist({"tools": []}, {}) == []
 
 
 class TestCapabilityText:
@@ -111,8 +111,9 @@ class TestResolveEmployeeTools:
         names = [s["function"]["name"] for s in specs]
         assert names == ["excel_analysis"]
 
-    def test_explicit_allowlist_none_in_base_returns_none(self, fake_base):
-        assert ts.resolve_employee_tools("e", {}, {"tools": ["nope"]}) is None
+    def test_explicit_allowlist_unknown_only_returns_empty(self, fake_base):
+        # 名单全是未知工具时返回 []（拒绝一切），不得退化为 None（默认全量）
+        assert ts.resolve_employee_tools("e", {}, {"tools": ["nope"]}) == []
 
     def test_excel_keyword_selects_read_tools(self, fake_base):
         manifest = {"employee": {"capabilities": ["Excel 数据分析"]}}

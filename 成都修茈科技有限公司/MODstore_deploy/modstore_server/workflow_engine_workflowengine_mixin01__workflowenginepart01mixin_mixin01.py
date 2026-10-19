@@ -53,7 +53,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             )
             if not workflow:
                 raise ValueError(f"工作流不存在: {workflow_id}")
-            output, _steps, _warn = self._run_graph(
+            output, _steps, _warn, termination = self._run_graph(
                 session,
                 workflow,
                 input_data or {},
@@ -61,6 +61,8 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 collect_trace=False,
                 user_id=user_id,
             )
+            if termination["state"] != "completed":
+                raise _facade().WorkflowTerminated(termination, output)
             return output
 
     def run_sandbox(
@@ -98,7 +100,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 "steps": [],
                 "output": {},
             }
-        output, steps, run_warn = self._run_graph(
+        output, steps, run_warn, termination = self._run_graph(
             session,
             workflow,
             input_data or {},
@@ -106,13 +108,17 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             collect_trace=True,
             user_id=user_id,
         )
+        warnings = topo_warnings + run_warn
+        if termination["state"] != "completed" and termination["message"] not in warnings:
+            warnings = warnings + [termination["message"]]
         return {
-            "ok": True,
+            "ok": termination["state"] == "completed",
             "validate_only": False,
             "errors": [],
-            "warnings": topo_warnings + run_warn,
+            "warnings": warnings,
             "steps": steps,
             "output": _facade()._json_safe(output),
+            "termination": termination,
         }
 
     def _run_graph(
@@ -128,6 +134,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         _facade().Dict[str, _facade().Any],
         _facade().List[_facade().Dict[str, _facade().Any]],
         _facade().List[str],
+        _facade().Dict[str, _facade().Any],
     ]:
         nodes = (
             session.query(_facade().WorkflowNode)
@@ -159,31 +166,60 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         order = 0
         total_steps = 0
         visit_count: _facade().Dict[int, int] = {}
+        executed_nodes: _facade().List[str] = []
+        termination: _facade().Dict[str, _facade().Any] = {
+            "state": "failed",
+            "reason": "not_started",
+            "message": "工作流未到达 end 节点",
+            "end_reached": False,
+            "last_node_id": None,
+            "last_node_name": "",
+            "executed_node_ids": [],
+        }
+
+        def _terminate(state: str, reason: str, message: str, node=None) -> None:
+            termination.update(
+                {
+                    "state": state,
+                    "reason": reason,
+                    "message": message,
+                    "end_reached": state == "completed",
+                    "last_node_id": getattr(node, "id", None),
+                    "last_node_name": getattr(node, "name", "") or "",
+                }
+            )
+
         while current_node:
             total_steps += 1
             if total_steps > _facade().MAX_WORKFLOW_STEPS:
-                run_warnings.append(
+                message = (
                     f"工作流步数超过上限 {_facade().MAX_WORKFLOW_STEPS}，疑似存在死循环，已强制中止"
                 )
+                run_warnings.append(message)
                 _facade().logger.warning(
                     "workflow %s exceeded MAX_WORKFLOW_STEPS=%s; aborting at node %s",
                     workflow.id,
                     _facade().MAX_WORKFLOW_STEPS,
                     current_node.id,
                 )
+                _terminate("failed", "max_steps_exceeded", message, current_node)
                 break
             visit_count[current_node.id] = visit_count.get(current_node.id, 0) + 1
             if visit_count[current_node.id] > _facade().MAX_NODE_VISITS:
-                run_warnings.append(
-                    f"节点「{current_node.name}」被重入超过 {_facade().MAX_NODE_VISITS} 次，疑似循环边导致死循环，已强制中止"
+                message = (
+                    f"节点「{current_node.name}」被重入超过 {_facade().MAX_NODE_VISITS} 次，"
+                    "疑似循环边导致死循环，已强制中止"
                 )
+                run_warnings.append(message)
                 _facade().logger.warning(
                     "workflow %s node %s revisited %s times; aborting (cycle)",
                     workflow.id,
                     current_node.id,
                     visit_count[current_node.id],
                 )
+                _terminate("failed", "cycle_detected", message, current_node)
                 break
+            executed_nodes.append(str(current_node.id))
             t0 = _facade().time.perf_counter()
             data_before = _facade()._json_safe(current_data) if collect_trace else {}
             config = _facade().json.loads(current_node.config) if current_node.config else {}
@@ -231,10 +267,13 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             nb["prev"] = node_blob
             current_data["nodes"] = nb
             if current_node.node_type == "end":
+                _terminate("completed", "end_reached", "工作流执行完成", current_node)
                 break
             next_edges = source_to_targets.get(current_node.id, [])
             if not next_edges:
-                run_warnings.append(f"节点「{current_node.name}」无出边，流程提前结束")
+                message = f"节点「{current_node.name}」无出边，流程提前结束"
+                run_warnings.append(message)
+                _terminate("failed", "missing_out_edge", message, current_node)
                 break
             next_node: _facade().Optional[_facade().WorkflowNode] = None
             edge_taken: _facade().Optional[_facade().Dict[str, _facade().Any]] = None
@@ -274,9 +313,12 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             if collect_trace and steps:
                 steps[-1]["edge_taken"] = edge_taken
             if next_node is None and next_edges:
-                run_warnings.append(f"节点「{current_node.name}」无有向边条件命中，流程停止")
+                message = f"节点「{current_node.name}」无有向边条件命中，流程停止"
+                run_warnings.append(message)
+                _terminate("failed", "no_branch_matched", message, current_node)
             current_node = next_node
-        return (current_data, steps, run_warnings)
+        termination["executed_node_ids"] = list(executed_nodes)
+        return (current_data, steps, run_warnings, termination)
 
     def _execute_node(
         self,

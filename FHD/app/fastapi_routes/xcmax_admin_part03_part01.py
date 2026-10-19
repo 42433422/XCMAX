@@ -248,17 +248,27 @@ async def local_employee_execute(
     except (TypeError, ValueError):
         user_id = 0
     retry_max = max(1, min(int(body.get("retry_max") or 3), 5))
-    tenant_id = meta.get("tenant_id")
+    try:
+        tenant_id = int(meta.get("tenant_id")) if meta.get("tenant_id") is not None else None
+    except (TypeError, ValueError):
+        tenant_id = None
+    if tenant_id is None:
+        return _facade().JSONResponse(
+            {"success": False, "message": "缺少租户上下文，拒绝写入执行台账"}, status_code=403
+        )
     run_id = create_employee_run_log(
         employee_id=pid,
         input_payload={"task": task, **payload},
-        tenant_id=int(tenant_id) if tenant_id else None,
+        tenant_id=tenant_id,
         session_id=sid,
         user_id=user_id or None,
     )
     result: dict[str, _facade().Any] = {"success": False, "message": "未执行"}
     last_error = ""
+    attempts = 0
+    reconcile_required = False
     for attempt in range(1, retry_max + 1):
+        attempts = attempt
         result = execute_employee_task_local(
             pid,
             task,
@@ -268,35 +278,44 @@ async def local_employee_execute(
             session_id=str(body.get("session_id") or sid),
         )
         ok, reason = verify_employee_run_result(pid, result if isinstance(result, dict) else {})
+        reconcile_required = bool(result.get("reconcile_required"))
         if ok and result.get("success") is not False:
             finish_employee_run_log(
                 run_id,
-                status="success",
+                status="reconcile_required" if reconcile_required else "success",
                 output=result if isinstance(result, dict) else {},
                 attempts=attempt,
-                verified=True,
+                verified=not reconcile_required,
+                tenant_id=tenant_id,
             )
             return {
                 "success": True,
                 "source": "local",
                 "run_id": run_id,
                 "attempts": attempt,
+                "retryable": False,
+                "reconcile_required": reconcile_required,
                 "data": result,
             }
         last_error = reason or str(result.get("message") or result.get("error") or "执行失败")
+        if result.get("retryable") is False or reconcile_required:
+            break
     finish_employee_run_log(
         run_id,
-        status="failed",
+        status="reconcile_required" if reconcile_required else "failed",
         output=result if isinstance(result, dict) else {},
         error=last_error,
-        attempts=retry_max,
+        attempts=attempts,
         verified=False,
+        tenant_id=tenant_id,
     )
     return {
         "success": False,
         "source": "local",
         "run_id": run_id,
-        "attempts": retry_max,
+        "attempts": attempts,
+        "retryable": result.get("retryable") is not False,
+        "reconcile_required": reconcile_required,
         "message": last_error,
         "data": result,
     }
@@ -304,17 +323,43 @@ async def local_employee_execute(
 
 @_facade().router.get("/local/employees/{employee_id}/runs", response_model=None)
 async def local_employee_runs(request: _facade().Request, employee_id: str, limit: int = 50):
+    """执行台账列表：按可信会话解析租户，只返回本租户该员工的行。"""
+    from app.application.auth_permission_resolver import require_allowed
     from app.application.employee_runtime.run_ledger import list_employee_run_logs
+    from app.application.session_account_meta import enrich_session_meta_with_tenant
     from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+    from app.infrastructure.auth.dependencies import resolve_session_user
+    from app.infrastructure.tenant_scope import tenant_scope
 
-    if not _session_id_from_request(request):
+    sid = _session_id_from_request(request)
+    if not sid:
         return _facade().JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
+    user = resolve_session_user(request)
+    if user is None:
+        return _facade().JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
+    meta = enrich_session_meta_with_tenant(sid, user)
+    require_allowed(
+        user=user,
+        account_kind=str(meta.get("account_kind") or "admin"),
+        session_meta=meta,
+        route=f"/local/employees/{employee_id}/runs",
+    )
     pid = str(employee_id or "").strip()
     if not pid:
         return _facade().JSONResponse(
             {"success": False, "message": "employee_id 必填"}, status_code=400
         )
-    return {"success": True, "data": list_employee_run_logs(pid, limit=limit)}
+    try:
+        tenant_id = int(meta.get("tenant_id")) if meta.get("tenant_id") is not None else None
+    except (TypeError, ValueError):
+        tenant_id = None
+    if tenant_id is None:
+        return _facade().JSONResponse(
+            {"success": False, "message": "缺少租户上下文，拒绝读取执行台账"}, status_code=403
+        )
+    with tenant_scope(tenant_id):
+        rows = list_employee_run_logs(pid, limit=limit, tenant_id=tenant_id)
+    return {"success": True, "data": rows}
 
 
 @_facade().router.get("/local/employees/{employee_id}/manifest", response_model=None)

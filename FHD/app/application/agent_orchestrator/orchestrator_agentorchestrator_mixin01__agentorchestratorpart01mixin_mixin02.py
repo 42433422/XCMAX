@@ -3,14 +3,77 @@
 
 from __future__ import annotations
 
+import contextvars
 import importlib
+import os
+import threading
+
+_TOOL_TIMEOUT_ENV = "XCAGI_AGENT_TOOL_TIMEOUT_SECONDS"
+_DEFAULT_TOOL_TIMEOUT_SECONDS = 60.0
 
 
 def _facade():
     return importlib.import_module("app.application.agent_orchestrator.orchestrator")
 
 
+def _tool_timeout_cap() -> float:
+    raw = os.environ.get(_TOOL_TIMEOUT_ENV, "").strip()
+    if not raw:
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return 0.0
+    return value if value > 0 else 0.0
+
+
 class __AgentOrchestratorPart01MixinPart02Mixin:
+    @staticmethod
+    def _step_timeout_seconds(spec: _facade().Any) -> float:
+        try:
+            timeout = float(getattr(spec, "timeout_seconds", 0) or 0)
+        except (TypeError, ValueError):
+            timeout = 0.0
+        if timeout <= 0:
+            timeout = _DEFAULT_TOOL_TIMEOUT_SECONDS
+        cap = _tool_timeout_cap()
+        return min(timeout, cap) if cap > 0 else timeout
+
+    def _execute_tool_with_deadline(
+        self,
+        step: _facade().AgentStep,
+        *,
+        runtime_context: dict[str, _facade().Any],
+        timeout_seconds: float,
+    ) -> tuple[_facade().Any, bool]:
+        if timeout_seconds <= 0:
+            return self._tool_executor.execute(step, runtime_context=runtime_context), False
+        box: dict[str, _facade().Any] = {}
+        done = threading.Event()
+
+        def _invoke() -> None:
+            try:
+                box["output"] = self._tool_executor.execute(step, runtime_context=runtime_context)
+            except BaseException as exc:  # noqa: BLE001 - re-raised on the caller thread
+                box["error"] = exc
+            finally:
+                done.set()
+
+        context = contextvars.copy_context()
+        worker = threading.Thread(
+            target=context.run,
+            args=(_invoke,),
+            name=f"agent-tool-{step.step_id}",
+            daemon=True,
+        )
+        worker.start()
+        if not done.wait(timeout=max(0.0, float(timeout_seconds))):
+            return None, True
+        error = box.get("error")
+        if isinstance(error, BaseException):
+            raise error
+        return box.get("output"), False
+
     def _execute_step(
         self,
         run: _facade().AgentRun,
@@ -26,6 +89,7 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
         run.status = "running"
         attempt_count = step.attempt_count
         spec = _facade().get_tool_action_spec(step.tool_id, step.action)
+        timeout_seconds = self._step_timeout_seconds(spec)
         tool_call = _facade().ToolCall(
             step_id=step.step_id,
             node_id=step.node_id,
@@ -37,7 +101,8 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
             metadata={
                 "risk": step.risk,
                 "idempotent": step.idempotent,
-                "timeout_seconds": int(getattr(spec, "timeout_seconds", 0) or 0),
+                "timeout_seconds": timeout_seconds,
+                "deadline_enforced": True,
                 "attempt_count": attempt_count,
             },
         )
@@ -65,10 +130,12 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
                 "message": run.message,
                 "user_id": run.user_id,
                 "node_outputs": dict(node_outputs),
+                "deadline_seconds": timeout_seconds,
                 **_facade().task_execution_context(run, step),
             }
         )
         tool_call.metadata["idempotency_key"] = ctx["idempotency_key"]
+        timed_out = False
         validation = _facade().validate_tool_call(step.tool_id, step.action, step.params)
         if not validation.ok:
             output = {
@@ -88,7 +155,24 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
             }
         else:
             try:
-                output = self._tool_executor.execute(step, runtime_context=ctx)
+                output, timed_out = self._execute_tool_with_deadline(
+                    step, runtime_context=ctx, timeout_seconds=timeout_seconds
+                )
+                if timed_out:
+                    retryable = bool(step.idempotent)
+                    output = {
+                        "success": False,
+                        "error_code": "tool_timeout" if retryable else "tool_timeout_unknown",
+                        "message": (
+                            f"工具执行超过 {timeout_seconds:g} 秒未返回"
+                            + ("" if retryable else "，副作用状态未知，禁止自动重试")
+                        ),
+                        "tool_id": step.tool_id,
+                        "action": step.action,
+                        "timeout_seconds": timeout_seconds,
+                        "retryable": retryable,
+                        "side_effect_unknown": not retryable,
+                    }
             except _facade().RECOVERABLE_ERRORS:
                 _facade().logger.exception("agent tool execution failed")
                 output = {
@@ -102,6 +186,9 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
         tool_call.output = _facade().copy.deepcopy(step.output)
         tool_call.finished_at = step.finished_at
         tool_call.duration_ms = step.duration_ms
+        if timed_out:
+            tool_call.metadata["timed_out"] = True
+            tool_call.metadata["side_effect_unknown"] = not bool(step.idempotent)
         self._attach_artifacts_from_payload(
             run,
             step.output,

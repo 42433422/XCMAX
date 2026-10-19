@@ -6,6 +6,16 @@ import json
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from app.infrastructure.tenant_scope import TenantScopeError, tenant_scope
+
+
+@pytest.fixture(autouse=True)
+def _tenant_scope_one():
+    with tenant_scope(1):
+        yield
+
 
 class _FakeDB:
     """Context-manager DB mock supporting add/flush/commit/get/query chain."""
@@ -39,6 +49,9 @@ class _FakeDB:
         self.committed = True
 
     def get(self, model, pk):
+        return self._get_return
+
+    def first(self):
         return self._get_return
 
     def query(self, model):
@@ -185,10 +198,57 @@ class TestCreateEmployeeRunLog:
         with _patch_db(db):
             create_employee_run_log(employee_id="emp7")
         row = db.added[0]
-        assert row.tenant_id is None
+        assert row.tenant_id == 1
         assert row.session_id is None
         assert row.user_id is None
         assert json.loads(row.input_json) == {}
+
+
+class TestEmployeeRunLogTenantScope:
+    """F09：缺租户拒绝写入、完成与读取。"""
+
+    def test_create_without_tenant_rejected(self):
+        from app.application.employee_runtime.run_ledger import create_employee_run_log
+
+        db = _FakeDB()
+        with tenant_scope(None), _patch_db(db), pytest.raises(TenantScopeError):
+            create_employee_run_log(employee_id="emp1")
+        assert db.added == []
+
+    def test_create_explicit_tenant_overrides_scope(self):
+        from app.application.employee_runtime.run_ledger import create_employee_run_log
+
+        db = _FakeDB()
+        with tenant_scope(None), _patch_db(db):
+            create_employee_run_log(employee_id="emp1", tenant_id=9)
+        assert db.added[0].tenant_id == 9
+
+    def test_finish_without_tenant_rejected(self):
+        from app.application.employee_runtime.run_ledger import finish_employee_run_log
+
+        row = _make_row()
+        db = _FakeDB(get_return=row)
+        with tenant_scope(None), _patch_db(db):
+            assert finish_employee_run_log(1, status="success") is False
+        assert row.status == "running"
+        assert db.committed is False
+
+    def test_finish_other_tenant_row_not_updated(self):
+        from app.application.employee_runtime.run_ledger import finish_employee_run_log
+
+        db = _FakeDB(get_return=None)
+        with _patch_db(db):
+            assert finish_employee_run_log(1, status="success", tenant_id=2) is False
+        assert db.committed is False
+
+    def test_finish_own_row_returns_true(self):
+        from app.application.employee_runtime.run_ledger import finish_employee_run_log
+
+        row = _make_row()
+        db = _FakeDB(get_return=row)
+        with _patch_db(db):
+            assert finish_employee_run_log(1, status="success", tenant_id=1) is True
+        assert row.status == "success"
 
 
 class TestFinishEmployeeRunLog:

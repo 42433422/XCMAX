@@ -33,7 +33,12 @@ def verify_employee_run_result(
     outputs = payload.get("outputs")
     if isinstance(outputs, list):
         for item in outputs:
-            if isinstance(item, dict) and item.get("ok") is False:
+            if not isinstance(item, dict):
+                continue
+            error_only = bool(str(item.get("error") or "").strip()) and (
+                item.get("ok") is not True
+            )
+            if item.get("ok") is False or error_only:
                 child = item.get("output") if isinstance(item.get("output"), dict) else {}
                 if not isinstance(child, dict):
                     child = {}

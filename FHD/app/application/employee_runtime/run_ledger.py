@@ -9,8 +9,17 @@ from typing import Any
 
 from app.db.models.employee_run_log import EmployeeRunLog
 from app.db.session import get_db
+from app.infrastructure.tenant_scope import current_tenant_id, tenant_id_for_write
 
 logger = logging.getLogger(__name__)
+
+
+def _tenant_query(db, tid: int):
+    """按显式租户谓词查询；无环境租户时不再叠加全局过滤（否则恒为 false）。"""
+    query = db.query(EmployeeRunLog).filter(EmployeeRunLog.tenant_id == int(tid))
+    if current_tenant_id() is None:
+        return query.execution_options(skip_tenant_filter=True)
+    return query
 
 
 def create_employee_run_log(
@@ -21,10 +30,12 @@ def create_employee_run_log(
     session_id: str | None = None,
     user_id: int | None = None,
 ) -> int:
+    """写入执行台账；缺租户上下文时拒绝（``TenantScopeError``）。"""
+    tid = tenant_id_for_write(tenant_id)
     with get_db() as db:
         row = EmployeeRunLog(
             employee_id=str(employee_id or "").strip(),
-            tenant_id=tenant_id,
+            tenant_id=tid,
             session_id=(str(session_id).strip() if session_id else None),
             user_id=user_id,
             status="running",
@@ -45,11 +56,22 @@ def finish_employee_run_log(
     error: str = "",
     attempts: int = 1,
     verified: bool = False,
-) -> None:
+    tenant_id: int | None = None,
+) -> bool:
+    """按租户归属结束台账；跨租户 / 缺租户时不改任何行。"""
+    tid = tenant_id if tenant_id is not None else current_tenant_id()
+    if tid is None:
+        logger.warning("拒绝结束执行台账 %s：缺少租户上下文", run_id)
+        return False
     with get_db() as db:
-        row = db.get(EmployeeRunLog, int(run_id))
+        row = (
+            _tenant_query(db, tid)
+            .filter(EmployeeRunLog.id == int(run_id))
+            .first()
+        )
         if row is None:
-            return
+            logger.warning("拒绝结束执行台账 %s：非当前租户数据", run_id)
+            return False
         row.status = str(status or "failed")[:32]
         row.output_json = json.dumps(output or {}, ensure_ascii=False)
         row.error_text = str(error or "")[:4000]
@@ -57,15 +79,20 @@ def finish_employee_run_log(
         row.verified = 1 if verified else 0
         row.finished_at = datetime.now(UTC).replace(tzinfo=None)
         db.commit()
+        return True
 
 
-def list_employee_run_logs(employee_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+def list_employee_run_logs(
+    employee_id: str, *, limit: int = 50, tenant_id: int | None = None
+) -> list[dict[str, Any]]:
+    """列出当前租户该员工的执行台账；缺租户时 fail-closed 返回空。"""
     eid = str(employee_id or "").strip()
-    if not eid:
+    tid = tenant_id if tenant_id is not None else current_tenant_id()
+    if not eid or tid is None:
         return []
     with get_db() as db:
         rows = (
-            db.query(EmployeeRunLog)
+            _tenant_query(db, tid)
             .filter(EmployeeRunLog.employee_id == eid)
             .order_by(EmployeeRunLog.id.desc())
             .limit(max(1, min(limit, 200)))

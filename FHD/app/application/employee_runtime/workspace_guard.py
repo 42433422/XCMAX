@@ -105,21 +105,31 @@ def _workspace_policy(manifest: dict[str, Any], config: dict[str, Any]) -> dict[
     return wp2 or {}
 
 
-def _normalize_rel(path: str, workspace_root: str | None) -> str:
+def _resolve_in_workspace(path: str, workspace_root: str | None) -> tuple[str, bool]:
+    """返回 ``(规范化相对路径, 是否仍在工作区内)``。
+
+    先 ``resolve()`` 跟随符号链接再 ``relative_to(root)``，因此指向工作区外的
+    符号链接、``..`` 穿越与绝对路径都会被判定为越界；判断与后续工具使用的是
+    同一个真实路径语义，避免「检查用字符串、执行时再解链接」的替换窗口。
+    """
     raw = str(path or "").strip()
     if not raw:
-        return ""
+        return "", True
     p = Path(raw)
-    if workspace_root:
-        try:
-            root = Path(workspace_root).resolve()
-            cand = (p if p.is_absolute() else root / p).resolve()
-            rel = cand.relative_to(root)
-            return rel.as_posix()
-        except (ValueError, OSError):
-            # 不在 workspace 内：返回带哨兵前缀，便于 scope 判定为「越界」
-            return p.as_posix()
-    return p.as_posix().lstrip("./")
+    if not workspace_root:
+        return p.as_posix().lstrip("./"), True
+    try:
+        root = Path(workspace_root).resolve()
+        cand = (p if p.is_absolute() else root / p).resolve()
+        return cand.relative_to(root).as_posix(), True
+    except (ValueError, OSError):
+        # 不在 workspace 内：返回原路径，由调用方按 inside=False 拒绝
+        return p.as_posix(), False
+
+
+def _normalize_rel(path: str, workspace_root: str | None) -> str:
+    rel, _inside = _resolve_in_workspace(path, workspace_root)
+    return rel
 
 
 def _extract_paths(args: dict[str, Any]) -> list[tuple[str, bool]]:
@@ -166,9 +176,17 @@ def build_employee_gate(
 
         enforce_scope = bool(scope) and name in _WRITE_LIKE_TOOLS
         for raw_path, is_output in _extract_paths(args):
-            rel = _normalize_rel(raw_path, workspace_root)
+            rel, inside = _resolve_in_workspace(raw_path, workspace_root)
             if not rel:
                 continue
+            if not inside:
+                return {
+                    "ok": False,
+                    "reason": (
+                        f"路径 {raw_path} 解析后位于工作区之外"
+                        "（符号链接或目录替换越界），已拒绝"
+                    ),
+                }
             if forbidden and _matches_any(rel, forbidden):
                 return {"ok": False, "reason": f"路径 {raw_path} 命中 forbidden_globs（禁止访问）"}
             if (enforce_scope or is_output) and scope and not _matches_any(rel, scope):

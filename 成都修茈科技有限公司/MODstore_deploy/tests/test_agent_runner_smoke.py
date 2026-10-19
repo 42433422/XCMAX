@@ -240,20 +240,57 @@ def test_tool_list_workspace_dir(tmp_path):
     assert "b" in names
 
 
-def test_tool_run_sandboxed_python_basic(tmp_path):
+def test_tool_run_sandboxed_python_disabled_by_default(tmp_path):
     from modstore_server.mod_employee_agent_runner import tool_run_sandboxed_python
 
+    result = asyncio.run(tool_run_sandboxed_python("print(1 + 1)"))
+    assert result["ok"] is False
+    assert result["disabled"] is True
+
+
+def test_tool_run_sandboxed_python_basic(tmp_path, monkeypatch):
+    from modstore_server.mod_employee_agent_runner import tool_run_sandboxed_python
+
+    monkeypatch.setenv("MODSTORE_ENABLE_UNSANDBOXED_PYTHON", "1")
     result = asyncio.run(tool_run_sandboxed_python("print(1 + 1)"))
     assert result["ok"] is True
     assert "2" in result["stdout"]
 
 
-def test_tool_run_sandboxed_python_blocks_dangerous(tmp_path):
+def test_tool_run_sandboxed_python_blocks_dangerous(tmp_path, monkeypatch):
     from modstore_server.mod_employee_agent_runner import tool_run_sandboxed_python
 
+    monkeypatch.setenv("MODSTORE_ENABLE_UNSANDBOXED_PYTHON", "1")
     result = asyncio.run(tool_run_sandboxed_python("import subprocess; subprocess.run(['ls'])"))
     assert result["ok"] is False
     assert "不允许" in result["error"]
+
+
+def test_tool_read_workspace_file_rejects_symlink_escape(tmp_path):
+    from modstore_server.mod_employee_agent_runner import tool_read_workspace_file
+
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret", encoding="utf-8")
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "link.txt").symlink_to(outside)
+    result = asyncio.run(tool_read_workspace_file(str(root), "link.txt"))
+    assert result["ok"] is False
+    assert "越界" in result["error"]
+
+
+def test_tool_write_workspace_file_rejects_symlinked_component(tmp_path):
+    from modstore_server.mod_employee_agent_runner import tool_write_workspace_file
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "sub").symlink_to(outside, target_is_directory=True)
+    result = asyncio.run(tool_write_workspace_file(str(root), "sub/x.txt", "content"))
+    assert result["ok"] is False
+    assert "符号链接" in result["error"]
+    assert not (outside / "x.txt").exists()
 
 
 # ---------------------------------------------------------------------------

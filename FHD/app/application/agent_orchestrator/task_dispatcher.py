@@ -31,6 +31,7 @@ class _ActiveWorker:
     owner_id: str
     thread: threading.Thread
     last_heartbeat: float
+    started_at: float = 0.0
 
 
 def _configured_worker_count() -> int:
@@ -39,6 +40,15 @@ def _configured_worker_count() -> int:
         return max(1, min(16, int(raw)))
     except ValueError:
         return 4
+
+
+def _configured_max_run_seconds(lease_seconds: float) -> float:
+    raw = os.environ.get("XCAGI_AGENT_TASK_MAX_RUN_SECONDS", "1800").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 1800.0
+    return max(lease_seconds * 2, value)
 
 
 class AgentTaskDispatcher:
@@ -51,6 +61,7 @@ class AgentTaskDispatcher:
         poll_seconds: float = 0.2,
         lease_seconds: float = 15.0,
         heartbeat_seconds: float = 4.0,
+        max_run_seconds: float | None = None,
         orchestrator_factory: Callable[[AgentRunRepository], AgentOrchestrator] | None = None,
     ) -> None:
         self._execution_repo = execution_repository or get_task_execution_repository()
@@ -61,6 +72,14 @@ class AgentTaskDispatcher:
         self._heartbeat_seconds = min(
             max(0.5, float(heartbeat_seconds)),
             self._lease_seconds / 2,
+        )
+        self._max_run_seconds = max(
+            0.05,
+            float(
+                max_run_seconds
+                if max_run_seconds is not None
+                else _configured_max_run_seconds(self._lease_seconds)
+            ),
         )
         self._orchestrator_factory = orchestrator_factory or (
             lambda repository: AgentOrchestrator(repository=repository)
@@ -158,6 +177,7 @@ class AgentTaskDispatcher:
                     owner_id=owner_id,
                     thread=worker,
                     last_heartbeat=time.monotonic(),
+                    started_at=time.monotonic(),
                 )
             worker.start()
 
@@ -165,16 +185,29 @@ class AgentTaskDispatcher:
         with self._active_lock:
             return len(self._active)
 
-    def _prune_and_heartbeat(self) -> None:
-        now = time.monotonic()
+    def _forget_worker(self, run_id: str, owner_id: str) -> None:
+        with self._active_lock:
+            current = self._active.get(run_id)
+            if current is not None and current.owner_id == owner_id:
+                self._active.pop(run_id, None)
+
+    def _prune_and_heartbeat(self, *, now: float | None = None) -> None:
+        current = time.monotonic() if now is None else float(now)
         with self._active_lock:
             active = list(self._active.items())
         for run_id, item in active:
             if not item.thread.is_alive():
-                with self._active_lock:
-                    self._active.pop(run_id, None)
+                self._forget_worker(run_id, item.owner_id)
                 continue
-            if now - item.last_heartbeat < self._heartbeat_seconds:
+            if current - item.started_at >= self._max_run_seconds:
+                self._forget_worker(run_id, item.owner_id)
+                logger.warning(
+                    "agent task run %s exceeded %.1fs; hub stopped renewing its lease and released the slot",
+                    run_id,
+                    self._max_run_seconds,
+                )
+                continue
+            if current - item.last_heartbeat < self._heartbeat_seconds:
                 continue
             renewed = self._execution_repo.heartbeat(
                 run_id,
@@ -183,9 +216,9 @@ class AgentTaskDispatcher:
             )
             if renewed:
                 with self._active_lock:
-                    current = self._active.get(run_id)
-                    if current is not None:
-                        current.last_heartbeat = now
+                    latest = self._active.get(run_id)
+                    if latest is not None and latest.owner_id == item.owner_id:
+                        latest.last_heartbeat = current
 
     def _execute_claim(self, execution: AgentTaskExecution, owner_id: str) -> None:
         from contextlib import nullcontext
@@ -248,8 +281,7 @@ class AgentTaskDispatcher:
                 state,
                 error_code=error_code,
             )
-            with self._active_lock:
-                self._active.pop(execution.run_id, None)
+            self._forget_worker(execution.run_id, owner_id)
             self._wake.set()
 
 
