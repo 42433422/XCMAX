@@ -11,8 +11,8 @@ web = [
     "uvicorn[standard]>=0.27",
     "python-multipart>=0.0.6",
     "httpx[socks]>=0.27",
-    # Starlette 1.6 still imports anyio.abc.BlockingPortal; AnyIO 4.15 turns
-    # that compatibility alias into a deprecation failure under our strict tests.
+    # Starlette 1.7 removes deprecated portal imports required by AnyIO 4.15.
+    "starlette>=1.7,<2",
     "anyio>=4.15.1,<4.16",
     "socksio>=1.0",
     # 上界不可去掉：sqlalchemy 2.1.0 收紧 Query 类型推断，使 ~30 个既有模块在
