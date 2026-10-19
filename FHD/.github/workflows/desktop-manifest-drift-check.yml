@@ -38,7 +38,7 @@ jobs:
         working-directory: FHD
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Check declared size vs live Content-Length
