@@ -106,13 +106,3 @@ def audit_payload(row: CustomerServiceAuditLog) -> Dict[str, Any]:
         "detail": json_loads(row.detail_json, {}),
         "created_at": row.created_at.isoformat() if row.created_at else "",
     }
-
-
-__all__ = [
-    "audit_payload",
-    "integration_payload",
-    "own_session_or_404",
-    "standard_payload",
-    "update_expected_completion",
-    "visible_ticket_or_404",
-]

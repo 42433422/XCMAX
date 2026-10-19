@@ -50,6 +50,8 @@ def _make_user(username: str, *, admin: bool = False):
 def _as_user(user):
     previous = app.dependency_overrides.copy()
     app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    if user.is_admin:
+        app.dependency_overrides[customer_service_api._require_admin] = lambda: user
     try:
         yield user
     finally:
@@ -1172,9 +1174,7 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
 
     from sqlalchemy import text
 
-    from modstore_server import customer_service_api
     from modstore_server.db.base import get_engine
-    from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceAuditLog
 
     customer, admin = _make_user("submitter_customer"), _make_user("submitter_admin", admin=True)
@@ -1201,59 +1201,40 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
     with get_engine().begin() as conn:
         module.backfill_submitter_types(conn)
 
-    previous_admin_override = app.dependency_overrides.get(customer_service_api._require_admin)
-    app.dependency_overrides[customer_service_api._require_admin] = lambda: admin
-    try:
-        with _as_user(admin):
-            only_admin = client.get(
+    ticket_url = f"/api/customer-service/tickets/{customer_ticket_id}"
+    with _as_user(admin):
+        for kind in ("admin", "customer"):
+            result = client.get(
                 "/api/customer-service/tickets",
-                params={"search": marker, "submitter_type": "admin"},
+                params={"search": marker, "submitter_type": kind},
             ).json()
-            assert only_admin["total"] == 1
-            assert only_admin["items"][0]["submitter_type"] == "admin"
-            only_customer = client.get(
-                "/api/customer-service/tickets",
-                params={"search": marker, "submitter_type": "customer"},
-            ).json()
-            assert only_customer["total"] == 1
-            assert only_customer["items"][0]["submitter_type"] == "customer"
-            updated = client.patch(
-                f"/api/customer-service/tickets/{customer_ticket_id}/expected-completion",
-                json={"expected_completion_at": "2026-10-21T11:30:00+08:00"},
-            )
-            assert updated.status_code == 200
-            assert updated.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
-            with get_session_factory()() as db:
-                audit = db.query(CustomerServiceAuditLog).filter_by(ticket_id=customer_ticket_id).one()
-                assert audit.event_type == "expected_completion_updated"
+            assert result["total"] == 1
+            assert result["items"][0]["submitter_type"] == kind
+        updated = client.patch(
+            f"{ticket_url}/expected-completion",
+            json={"expected_completion_at": "2026-10-21T11:30:00+08:00"},
+        )
+        assert updated.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
+        with get_session_factory()() as db:
+            audit = db.query(CustomerServiceAuditLog).filter_by(ticket_id=customer_ticket_id).one()
+            assert audit.event_type == "expected_completion_updated"
 
-        with _as_user(customer):
-            own = client.get(
-                "/api/customer-service/tickets",
-                params={"search": marker, "submitter_type": "admin"},
-            ).json()
-            assert own["total"] == 1
-            assert own["items"][0]["user_id"] == customer.id
-            assert "submitter_type" not in own["items"][0]
-            own_ticket = client.get(
-                f"/api/customer-service/tickets/{customer_ticket_id}"
-            ).json()
-            assert own_ticket["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
-            assert own_ticket["audit_logs"] == []
+    with _as_user(customer):
+        own = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "submitter_type": "admin"},
+        ).json()
+        assert own["total"] == 1 and own["items"][0]["user_id"] == customer.id
+        assert "submitter_type" not in own["items"][0]
+        own_ticket = client.get(ticket_url).json()
+        assert own_ticket["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
+        assert own_ticket["audit_logs"] == []
 
-        with _as_user(admin):
-            cleared = client.patch(
-                f"/api/customer-service/tickets/{customer_ticket_id}/expected-completion",
-                json={"expected_completion_at": None},
-            )
-            assert cleared.status_code == 200
-        with _as_user(customer):
-            own_ticket = client.get(
-                f"/api/customer-service/tickets/{customer_ticket_id}"
-            ).json()
-            assert own_ticket["ticket"]["expected_completion_at"] is None
-    finally:
-        if previous_admin_override is None:
-            app.dependency_overrides.pop(customer_service_api._require_admin, None)
-        else:
-            app.dependency_overrides[customer_service_api._require_admin] = previous_admin_override
+    with _as_user(admin):
+        cleared = client.patch(
+            f"{ticket_url}/expected-completion", json={"expected_completion_at": None}
+        )
+        assert cleared.status_code == 200
+    with _as_user(customer):
+        own_ticket = client.get(ticket_url).json()
+        assert own_ticket["ticket"]["expected_completion_at"] is None
