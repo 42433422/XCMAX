@@ -31,10 +31,11 @@ _ACCOUNT_RE = re.compile(
 _SECRET_KV_RE = re.compile(
     r"(?i)(?:bearer\s+|(?:api[_-]?key|access[_-]?key|private[_-]?key|password|passwd|pwd|"
     r"token|secret|authorization|cookie|session[_-]?key|密码|口令|密钥|令牌)"
-    r"\s*[:=：]\s*(?:bearer\s+)?)[^\s,，;；'\"]+"
+    r"\s*[\"']?\s*[:=：]\s*(?:bearer\s+)?)"
+    r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s,，;；'\"]+)"
 )
-_PEM_RE = re.compile(r"-----BEGIN [^-]*-----.*?-----END [^-]*-----", re.S)
-_URL_USERINFO_RE = re.compile(r"(?i)(https?://)[^/\s:@]+:[^/\s@]+@")
+_PEM_RE = re.compile(r"-----BEGIN [^-]*-----.*?(?:-----END [^-]*-----|\Z)", re.S)
+_URL_USERINFO_RE = re.compile(r"(?i)([a-z][a-z0-9+.-]*://)[^\s/]*:[^\s/]*@")
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 _ID_CARD_RE = re.compile(r"(?<![0-9A-Za-z])\d{17}[\dXx](?![0-9A-Za-z])")
 _BANK_CARD_RE = re.compile(r"(?<!\d)(?:\d[ -]?){14,18}\d(?!\d)")

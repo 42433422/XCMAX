@@ -333,3 +333,23 @@ def test_account_ticket_cannot_be_promoted_to_code_fix_by_intervention():
     )
     out = dot.prepare_dolt_ticket_payload(req, _payload(req), "dolt")
     assert "[dot:report_only]" in out["title"] and out["report_only"] is True
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        '{"password":"testOnlyCanary with spaces"}',
+        '{"api_key":"testOnlyCanary"}',
+        "postgresql://test:testOnlyCanary@localhost/app",
+        "redis://:testOnlyCanary@localhost/0",
+        "postgresql://mail@example.com:prefix@testOnlyCanary@localhost/app",
+        "-----" + "BEGIN PRIVATE KEY" + "-----\ntestOnlyCanary",
+        '密码："testOnlyCanary"',
+    ],
+)
+def test_structured_credentials_never_leave_modstore(secret):
+    req = _req(_incident(summary="复现：点击导出。\n" + secret))
+    out = dot.prepare_dolt_ticket_payload(req, _payload(req), "dolt")
+    assert "testOnlyCanary" not in str(out)
+    assert "点击导出" in out["prompt"]
+    assert MARKER.match(out["title"])
