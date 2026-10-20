@@ -109,9 +109,7 @@ def test_each_production_dispatch_keeps_validated_sha_and_scan_pair(tmp_path, wo
             assert fields["action_id"] == "release:" + "a" * 40
 
 
-@pytest.mark.parametrize(
-    "current,previous", [("", "1200"), ("1234", ""), ("latest", "1200")]
-)
+@pytest.mark.parametrize("current,previous", [("", "1200"), ("1234", ""), ("latest", "1200")])
 def test_missing_or_malformed_evidence_stops_before_dispatch(tmp_path, current, previous):
     result, calls = _run_dispatch(tmp_path, _dispatch_step(SOURCE), current, previous)
     assert result.returncode != 0
