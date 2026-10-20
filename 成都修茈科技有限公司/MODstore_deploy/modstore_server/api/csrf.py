@@ -87,9 +87,8 @@ def _bearer_authenticates(authorization: str) -> bool:
         AuthApplicationService,
         AuthenticationError,
     )
-    from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
     from modstore_server.auth_service import PAT_PREFIX, resolve_pat_identity
+    from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
     try:
         raw = authorization.strip()

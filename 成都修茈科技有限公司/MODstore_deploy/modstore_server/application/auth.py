@@ -41,9 +41,7 @@ class AuthApplicationService:
             identity = resolve_pat_identity(token)
             if not identity:
                 raise AuthenticationError("API Token 无效、已吊销或已过期")
-            raise ScopeAuthorizationError(
-                "此入口未声明 PAT 权限，请使用明确支持对应 scope 的接口"
-            )
+            raise ScopeAuthorizationError("此入口未声明 PAT 权限，请使用明确支持对应 scope 的接口")
 
         payload = decode_access_token(token)
         if not payload:
@@ -89,11 +87,7 @@ class AuthApplicationService:
 
         scopes_norm = validate_scopes_or_raise(scopes or [])
         raw, prefix, digest = generate_pat()
-        expires_at = (
-            datetime.now(UTC) + timedelta(days=int(expires_days))
-            if expires_days
-            else None
-        )
+        expires_at = datetime.now(UTC) + timedelta(days=int(expires_days)) if expires_days else None
         sf = get_session_factory()
         with sf() as session:
             row = DeveloperToken(

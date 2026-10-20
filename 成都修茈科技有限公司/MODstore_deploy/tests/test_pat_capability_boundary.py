@@ -1,7 +1,7 @@
 """A PAT must not become an unrestricted login or administrator identity."""
 
-from datetime import UTC, datetime, timedelta
 import json
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -16,10 +16,14 @@ from modstore_server.models import DeveloperToken, User
 
 @pytest.fixture
 def pat_case(tmp_path, monkeypatch):
-    from modstore_server.api import config, catalog, market_routes
-    from modstore_server import market_catalog_api
-    from modstore_server import customer_issue_api
-    from modstore_server import browser_handoff_api, developer_api, production_line_api
+    from modstore_server import (
+        browser_handoff_api,
+        customer_issue_api,
+        developer_api,
+        market_catalog_api,
+        production_line_api,
+    )
+    from modstore_server.api import catalog, config, market_routes
 
     engine = create_engine(
         f"sqlite:///{tmp_path / 'pat.sqlite3'}",
@@ -138,9 +142,7 @@ def test_invalid_pat_stays_unauthenticated(pat_case, state):
     client, sessions, save, _ = pat_case
     response = client.put(
         "/api/config",
-        headers={
-            "Authorization": "Bearer " + _pat(sessions, ["mod:sync"], state=state)
-        },
+        headers={"Authorization": "Bearer " + _pat(sessions, ["mod:sync"], state=state)},
         json={},
     )
     assert response.status_code == 401
@@ -151,9 +153,7 @@ def test_invalid_pat_stays_unauthenticated(pat_case, state):
 def test_jwt_user_authority_is_unchanged(pat_case, uid, expected):
     client, _, save, _ = pat_case
     token = auth_service.create_access_token(uid, "synthetic", is_admin=uid == 7)
-    response = client.put(
-        "/api/config", headers={"Authorization": "Bearer " + token}, json={}
-    )
+    response = client.put("/api/config", headers={"Authorization": "Bearer " + token}, json={})
     assert response.status_code == expected, response.text
     assert save.call_count == (1 if expected == 200 else 0)
 
@@ -178,13 +178,12 @@ def test_pat_rejection_covers_direct_admin_and_alternate_user_dependencies(
     pat_case, path, method, body, monkeypatch
 ):
     from modstore_server import (
-        production_line_orchestrator,
         customer_issue_shared_release,
+        production_line_orchestrator,
     )
 
     forbidden = [
-        Mock(side_effect=AssertionError("protected business action reached"))
-        for _ in range(3)
+        Mock(side_effect=AssertionError("protected business action reached")) for _ in range(3)
     ]
     monkeypatch.setattr(
         production_line_orchestrator, "get_production_line_orchestrator", forbidden[0]
@@ -192,9 +191,7 @@ def test_pat_rejection_covers_direct_admin_and_alternate_user_dependencies(
     from modstore_server.api import catalog
 
     monkeypatch.setattr(catalog, "write_text_under_mod", forbidden[1])
-    monkeypatch.setattr(
-        customer_issue_shared_release, "bind_shared_release", forbidden[2]
-    )
+    monkeypatch.setattr(customer_issue_shared_release, "bind_shared_release", forbidden[2])
     client, sessions, _, _ = pat_case
     response = client.request(
         method,
@@ -210,9 +207,10 @@ def test_pat_rejection_covers_direct_admin_and_alternate_user_dependencies(
 @pytest.mark.parametrize("optional", ["auth_deps", "market_shared", "market_routes"])
 def test_optional_user_does_not_downgrade_pat_scope_denial(pat_case, optional):
     from fastapi import HTTPException
+
+    from modstore_server.api import market_routes
     from modstore_server.api.auth_deps import get_optional_user
     from modstore_server.market_shared import _optional_current_user
-    from modstore_server.api import market_routes
 
     _get_optional_user = market_routes._get_optional_user
 
@@ -230,13 +228,12 @@ def test_optional_user_does_not_downgrade_pat_scope_denial(pat_case, optional):
 
 @pytest.mark.parametrize("bearer_prefix", ["Bearer ", "Bearer  "])
 @pytest.mark.parametrize("cookie", [False, True])
-@pytest.mark.parametrize(
-    "scopes,expected", [(["mod:sync"], 200), (["catalog:read"], 403)]
-)
+@pytest.mark.parametrize("scopes,expected", [(["mod:sync"], 200), (["catalog:read"], 403)])
 def test_scoped_mod_sync_pat_keeps_scope_and_csrf_boundaries(
     pat_case, monkeypatch, tmp_path, cookie, scopes, expected, bearer_prefix
 ):
-    from modstore_server import app as app_module, mod_sync_catalog_api as sync
+    from modstore_server import app as app_module
+    from modstore_server import mod_sync_catalog_api as sync
     from modstore_server.api.csrf import CSRFMiddleware
 
     _, sessions, _, _ = pat_case
@@ -291,18 +288,15 @@ def test_invalid_scope_json_cannot_grant_generic_permissions(pat_case):
     token = _pat(sessions, [])
     with sessions.begin() as db:
         db.query(DeveloperToken).one().scopes_json = "not-valid-json"
-    response = client.put(
-        "/api/config", json={}, headers={"Authorization": "Bearer " + token}
-    )
+    response = client.put("/api/config", json={}, headers={"Authorization": "Bearer " + token})
     assert response.status_code == 403
     save.assert_not_called()
 
 
 @pytest.mark.parametrize("owned", [True, False])
-def test_mod_sync_pat_still_requires_resource_ownership(
-    pat_case, monkeypatch, tmp_path, owned
-):
-    from modstore_server import app as app_module, mod_sync_catalog_api as sync
+def test_mod_sync_pat_still_requires_resource_ownership(pat_case, monkeypatch, tmp_path, owned):
+    from modstore_server import app as app_module
+    from modstore_server import mod_sync_catalog_api as sync
 
     _, sessions, _, _ = pat_case
     monkeypatch.setattr(app_module, "_cfg", lambda: None)
