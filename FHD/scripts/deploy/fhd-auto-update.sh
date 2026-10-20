@@ -12,6 +12,7 @@
 #   FHD_ENV_FILE        传给 compose apply（staging: /root/fhd-staging.env）
 #   FHD_AUTO_UPDATE_LOCK  默认 /tmp/fhd-auto-update.lock（staging 须用独立锁）
 set -euo pipefail
+case "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" in 0|1) ;; *) echo "XCMAX_PRESERVE_RELEASE_HISTORY must be 0 or 1" >&2; exit 64 ;; esac
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 APPLY_TARBALL="$SCRIPT_DIR/fhd-apply-release.sh"
@@ -175,7 +176,7 @@ sync_dr_release() {
     [[ "${FHD_DR_SYNC_STRICT:-1}" != "1" ]]
     return
   fi
-  if "$sync_script" --component fhd --sha "$GIT_SHA"; then
+  if XCMAX_PRESERVE_RELEASE_HISTORY="${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" "$sync_script" --component fhd --sha "$GIT_SHA"; then
     log "DR FHD 发布同步完成 sha=$GIT_SHA"
     return 0
   fi
@@ -340,6 +341,7 @@ APPLY_ENV=(
   "FHD_GIT_SHA=$GIT_SHA"
   "FHD_ADMIN_CONSOLE_SHA256=$ADMIN_CONSOLE_SHA256"
   "FHD_SKIP_PIP=${FHD_SKIP_PIP:-1}"
+  "XCMAX_PRESERVE_RELEASE_HISTORY=${XCMAX_PRESERVE_RELEASE_HISTORY:-0}"
 )
 [[ -n "${FHD_SERVICE_NAME:-}" ]] && APPLY_ENV+=("FHD_SERVICE_NAME=$FHD_SERVICE_NAME")
 [[ -n "${FHD_HEALTH_PORT:-}" ]] && APPLY_ENV+=("FHD_HEALTH_PORT=$FHD_HEALTH_PORT")

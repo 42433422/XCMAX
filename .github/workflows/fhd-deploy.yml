@@ -46,6 +46,11 @@ on:
         required: false
         type: string
         default: ""
+      preserve_release_history:
+        description: Keep all FHD and DR release history for this apply
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: fhd-deploy-${{ inputs.environment }}
@@ -220,8 +225,14 @@ jobs:
           TARGET_ENV: ${{ inputs.environment }}
           ACTION: ${{ inputs.action }}
           ACTION_ID: ${{ inputs.action_id }}
+          PRESERVE_RELEASE_HISTORY: ${{ inputs.preserve_release_history && '1' || '0' }}
         run: |
           set -euo pipefail
+          if [ "$PRESERVE_RELEASE_HISTORY" = "1" ] \
+            && { [ "$TARGET_ENV" != "production" ] || [ "$ACTION" != "apply-latest" ]; }; then
+            echo "::error::preserve_release_history is only valid for production apply-latest"
+            exit 64
+          fi
           HOST="${FHD_PUSH_HOST:-119.27.178.147}"
           USER="${FHD_PUSH_USER:-root}"
           KEY_FILE="${RUNNER_TEMP}/fhd_deploy_key"
@@ -289,6 +300,7 @@ jobs:
           export FHD_ENV_FILE="${ENV_FILE}"
           export FHD_AUTO_UPDATE_LOCK="${AUTO_LOCK}"
           export FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS="360"
+          case "${PRESERVE_RELEASE_HISTORY}" in 0|1) export XCMAX_PRESERVE_RELEASE_HISTORY="${PRESERVE_RELEASE_HISTORY}" ;; *) exit 64 ;; esac
           if [ "${ACTION}" = "freeze-manifest" ]; then
             touch "${MANIFEST}.frozen"
           elif [ "${ACTION}" = "unfreeze-manifest" ]; then
