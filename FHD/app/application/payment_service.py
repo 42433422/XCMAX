@@ -66,6 +66,7 @@ def _locked_order(db: Any, sales_order_id: int) -> Any:
     acquires its write lock before reading balances, and a row lock on PG.
     The caller retains the lock until its transaction ends.
     """
+    db.flush()  # Preserve caller-owned invoice changes before populate_existing refreshes.
     query = apply_tenant_filter(db.query(SalesOrder), SalesOrder).filter(
         SalesOrder.id == int(sales_order_id)
     )

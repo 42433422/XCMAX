@@ -269,7 +269,12 @@ class __SalesAppServicePart01MixinPart02Mixin:
         payment_allocation_id = None
         if pa.get("requested"):
             payment_res = self.payment(
-                order_id, amount=self._closed_loop_dec(order.get("total_amount")), db=db
+                order_id,
+                amount=self._closed_loop_dec(order.get("total_amount")),
+                db=db,
+                idempotency_key=_facade()
+                .hashlib.sha256(idempotency_key.encode("utf-8"))
+                .hexdigest(),
             )
             if not payment_res.get("success"):
                 raise _facade().ClosedLoopExecutionError(

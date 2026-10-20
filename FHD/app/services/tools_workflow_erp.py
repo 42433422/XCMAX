@@ -357,7 +357,9 @@ def _registered_router_sales(
     if action == "payment":
         amount = params.get("amount")
         return svc.payment(
-            int(params.get("order_id") or 0), float(amount) if amount is not None else None
+            int(params.get("order_id") or 0),
+            float(amount) if amount is not None else None,
+            idempotency_key=params.get("idempotency_key"),
         )
     if action == "refund":
         return svc.refund(int(params.get("allocation_id") or 0))

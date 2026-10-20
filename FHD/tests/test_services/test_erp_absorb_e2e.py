@@ -1783,7 +1783,8 @@ class TestIdempotencyPrefixBoundary:
         assert rows["orders"] == 3
         assert rows["items"] == 3
 
-    def test_exact_key_replay_after_fingerprint_appended(self, _e2e_db, monkeypatch):
+    @pytest.mark.parametrize("key", ["abc", "长" * 129])
+    def test_exact_key_replay_after_fingerprint_appended(self, _e2e_db, monkeypatch, key):
         """指纹追加后，同一精确键 + 完整载荷仍幂等重放，不增行、不动库存。"""
         factory = _e2e_db
         _patch_sessionlocal(monkeypatch, factory)
