@@ -101,6 +101,8 @@ def test_report_classifier_requires_structured_product_defect():
     assert not looks_like_issue_report("怎么导出报表？")
     assert looks_like_issue_report("登录后软件不能用")
     assert not looks_like_issue_report("请写入验收文本。不能用排队或待审批代替完成。")
+    explicit = classify_report(None, "我要提交产品问题工单，期望结果：清楚展示缺口。", "")
+    assert explicit and explicit["missing_evidence"] == ["actual_behavior"]
 
 
 def test_report_classifier_does_not_escalate_usage_question_or_bad_json():
