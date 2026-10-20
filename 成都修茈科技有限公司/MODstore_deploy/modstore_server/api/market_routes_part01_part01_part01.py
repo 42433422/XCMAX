@@ -55,7 +55,9 @@ def _get_optional_user(
         return None
     try:
         return _facade()._get_current_user(authorization)
-    except _facade().HTTPException:
+    except _facade().HTTPException as exc:
+        if exc.status_code != 401:
+            raise
         return None
 
 

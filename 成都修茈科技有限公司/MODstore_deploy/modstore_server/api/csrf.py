@@ -83,10 +83,19 @@ def _csrf_disabled_for_tests() -> bool:
 
 def _bearer_authenticates(authorization: str) -> bool:
     """True only for a user access token or PAT that the auth service accepts."""
-    from modstore_server.application.auth import AuthApplicationService, AuthenticationError
+    from modstore_server.application.auth import (
+        AuthApplicationService,
+        AuthenticationError,
+    )
     from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
+    from modstore_server.auth_service import PAT_PREFIX, resolve_pat_identity
+
     try:
+        raw = authorization.strip()
+        token = raw[7:].strip() if raw.startswith("Bearer ") else ""
+        if token.startswith(PAT_PREFIX):
+            return resolve_pat_identity(token) is not None
         AuthApplicationService().current_user_from_authorization(authorization)
     except AuthenticationError:
         return False
