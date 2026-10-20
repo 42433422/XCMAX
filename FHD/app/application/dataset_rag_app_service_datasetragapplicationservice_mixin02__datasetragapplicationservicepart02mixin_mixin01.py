@@ -329,7 +329,12 @@ class __DatasetRagApplicationServicePart02MixinPart01Mixin:
             with self._lock:
                 state = self._datasets.get(dataset_id)
                 job = state.rebuild_jobs.get(job_id) if state is not None else None
-                if job is not None and not self._rebuild_shutdown:
+                if (
+                    job is not None
+                    and job.status == "running"
+                    and job.worker_id == self._rebuild_owner
+                    and not self._rebuild_shutdown
+                ):
                     now = _facade()._utc_now_iso()
                     if job.attempt_count < max(1, int(job.max_attempts or 1)):
                         job.status = "queued"
