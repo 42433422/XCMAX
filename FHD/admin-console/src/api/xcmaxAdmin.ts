@@ -479,6 +479,12 @@ export const xcmaxAdminApi = {
       `/api/xcmax/admin/customer-service/tickets/${ticketId}`,
     );
   },
+  updateCustomerTicketExpectedCompletion(ticketId: number, expectedCompletionAt: string | null) {
+    return api.patch<{ ticket?: Record<string, unknown> }>(
+      `/api/xcmax/admin/customer-service/tickets/${ticketId}/expected-completion`,
+      { expected_completion_at: expectedCompletionAt },
+    );
+  },
   decideOwnerWorkOrder(woId: string, decision: 'approved' | 'rejected' | 'held', note = '') {
     return api.post<{ ok: boolean; wo_id: string; decision: string; actor: string }>(
       `/api/ops/autonomy/work-orders/${encodeURIComponent(woId)}/owner-decision`,

@@ -70,6 +70,8 @@
 .cs-quote { margin: 0; padding: 12px 14px; border-left: 3px solid var(--cs-accent); border-radius: 0 8px 8px 0; background: #f7fafd; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cs-error-text { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: #fff1f0; color: #a8071a; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cs-detail .cs-card > .cs-hint:last-child { margin-top: 10px; }
+.cs-close-form label { display: grid; gap: 6px; margin: 12px 0; color: var(--cs-muted); }
+.cs-close-form textarea { min-height: 72px; padding: 9px; border: 1px solid var(--cs-line); border-radius: 8px; color: var(--cs-text); font: inherit; }
 .cs-timeline { position: relative; margin: 0; padding: 0 0 0 18px; list-style: none; }
 .cs-timeline::before { content: ''; position: absolute; top: 6px; bottom: 6px; left: 5px; width: 2px; background: var(--cs-line); }
 .cs-timeline > li { position: relative; padding: 0 0 16px 10px; }
@@ -88,3 +90,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   .cs-steps li { font-size: 11px; }
   .cs-pager { flex-direction: column; align-items: flex-start; }
 }
+.cs-eta-editor { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.cs-eta-editor label { flex-basis:100%; }
+.cs-eta-editor input { min-height:36px; padding:6px 8px; }
