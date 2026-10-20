@@ -460,3 +460,17 @@ def assert_response():
         "json_structure": assert_json_structure,
         "list": assert_list_response,
     }
+
+
+@pytest.fixture
+def local_agent_contract_executor(monkeypatch):
+    """Opt-in parent mocks only; persistence/process acceptance keeps the real executor."""
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    class LocalContractExecutor(AgentToolExecutor):
+        def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
+            return self.execute(step, runtime_context=runtime_context)
+
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.AgentToolExecutor", LocalContractExecutor
+    )
