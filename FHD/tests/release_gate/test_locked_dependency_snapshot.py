@@ -54,33 +54,37 @@ def test_snapshot_uses_commit_content_not_dirty_worktree(tmp_path):
     for filename in mod.LOCKFILES:
         path = tmp_path / filename
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("pillow==12.3.0\n")
+        path.write_text(
+            '[[package]]\nname="Pillow"\nversion="12.3.0"\n'
+            if filename.endswith("uv.lock")
+            else "pillow==12.3.0\n"
+        )
         subprocess.run(["git", "add", filename], cwd=tmp_path, check=True)
+    settings = ["user.name=Test", "user.email=test@example.invalid", "commit.gpgsign=false"]
     subprocess.run(
-        [
-            "git",
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "-c",
-            "commit.gpgsign=false",
-            "commit",
-            "-qm",
-            "pins",
-        ],
+        ["git", *[arg for setting in settings for arg in ("-c", setting)], "commit", "-qm", "pins"],
         cwd=tmp_path,
         check=True,
     )
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True).strip()
-    (tmp_path / mod.LOCKFILES[0]).write_text("pillow==1.0.0\n")
+    for filename in mod.LOCKFILES:
+        (tmp_path / filename).write_text("invalid dirty content\n")
     first = mod.build_snapshot(tmp_path, sha, "job-1")
     second = mod.build_snapshot(tmp_path, sha, "job-2")
     assert first["job"]["correlator"] == second["job"]["correlator"]
     assert first["detector"] == second["detector"]
     assert all(
-        m["resolved"]["pillow"]["package_url"] == "pkg:pypi/pillow@12.3.0"
+        row["package_url"] == "pkg:pypi/pillow@12.3.0"
         for m in first["manifests"].values()
+        for row in m["resolved"].values()
     )
     with pytest.raises(ValueError, match="full lowercase"):
         mod.build_snapshot(tmp_path, sha[:8], "job-3")
+
+
+def test_uv_keeps_distinct_platform_versions_and_rejects_duplicate_exact_pin():
+    mod = _module()
+    pins = "numpy==2.3.0\nnumpy==2.4.0"
+    assert len(mod.parse_pins(pins, multiple_versions=True)) == 2
+    with pytest.raises(ValueError, match="duplicate"):
+        mod.parse_pins(pins + "\nnumpy==2.3.0", multiple_versions=True)
