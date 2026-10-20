@@ -100,6 +100,7 @@ JS
 }
 
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "XCMAX_TARGET_SHA must be a full 40-character commit SHA"
+case "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" in 0|1) ;; *) fail "XCMAX_PRESERVE_RELEASE_HISTORY must be 0 or 1" ;; esac
 [[ "$PRODUCT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] \
   || fail "XCMAX_PRODUCT_VERSION must be a numeric product version"
 [[ -d "$SOURCE_ROOT/.git" ]] || fail "source Git mirror not found: $SOURCE_ROOT"
@@ -150,6 +151,10 @@ PY
 }
 
 prune_releases() {
+  if [[ "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" == 1 ]]; then
+    log "preserving all release history for this invocation"
+    return 0
+  fi
   local releases_root=""
   local candidate=""
   local candidate_root=""

@@ -1,17 +1,8 @@
 #!/usr/bin/env bash
-# 服务器端：解压 FHD 发布包 → pip（如需）→ restart fhd-full → 健康检查。
-# 由 fhd-push-release.sh / fhd-auto-update.sh / CI 调用。
-#
-# 环境变量:
-#   FHD_DEPLOY_ROOT      默认 /opt/fhd-full
-#   FHD_RELEASE_TARBALL  必填（除非 FHD_MANIFEST_DIR 已含 artifact）
-#   FHD_SERVICE_NAME     默认 fhd-full.service
-#   FHD_HEALTH_PORT      默认 5100
-#   FHD_RUN_MIGRATIONS   1 时执行 alembic upgrade head
-#   FHD_SKIP_PIP         1 跳过 pip install
-#   FHD_SERVICE_PYTHON   服务实际使用的 Python（默认 /usr/bin/python3）
-#   FHD_SKIP_LANGGRAPH_BOOTSTRAP  1 时跳过受管 LangGraph 依赖/.pth 引导
+# 应用已校验的发布包、备份并按健康身份回滚；由 push / updater 调用。
+# XCMAX_PRESERVE_RELEASE_HISTORY=1 本次保留全部历史；其余配置与默认值见下文。
 set -euo pipefail
+case "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" in 0|1) ;; *) echo "XCMAX_PRESERVE_RELEASE_HISTORY must be 0 or 1" >&2; exit 64 ;; esac
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 if [[ -f "$SCRIPT_DIR/lib/deploy_emit.sh" ]]; then
@@ -109,19 +100,12 @@ for stamp in .deploy-last.tar.gz .deploy-git-sha .deploy-sha256 .deploy-admin-co
 done
 log "已备份至 $BACKUP"
 
-# 保留策略：cron 每 5 分钟执行一次应用，若不清理会以 ~110MB/次速度把磁盘写满
-#（历史事故：/opt/fhd-full-backups 累积 318 个 pre-* 目录，占满 124G 磁盘阻塞发布）。
-# 仅保留最近 FHD_BACKUP_RETAIN 个备份作为回滚窗口，超出的立即删除。
-FHD_BACKUP_RETAIN="${FHD_BACKUP_RETAIN:-10}"
-_retained=0
-for _dir in $(ls -dt "$BACKUP_ROOT"/pre-* 2>/dev/null); do
-  _retained=$((_retained + 1))
-  if [[ "$_retained" -gt "$FHD_BACKUP_RETAIN" ]]; then
-    log "清理旧备份: $_dir（保留最近 ${FHD_BACKUP_RETAIN} 个）"
-    rm -rf "$_dir"
-  fi
-done
-unset _dir _retained
+# 本次显式保留历史时不执行容量清理；日常发布仍按回滚窗口保留。
+if [[ "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" != 1 ]]; then
+  PYTHONPATH="$SCRIPT_DIR" python3 -c \
+    'from prune_release_cache import prune_backups; import sys; print(prune_backups(sys.argv[1], retain_backups=int(sys.argv[2])))' \
+    "$BACKUP_ROOT" "${FHD_BACKUP_RETAIN:-10}"
+fi
 
 rollback_from_backup() {
   autonomy_evaluate_action "rollback_release" "rollback:${TARBALL_SHA256:0:16}"
