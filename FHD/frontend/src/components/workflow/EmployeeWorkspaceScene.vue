@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useNowMsTicker, useWorkflowEmployeeDesks } from '@/composables/useWorkflowEmployeeDesks'
+import { YUANGONG_ENTRY_STITCH_PNG, YUANGONG_ENTRY_WORKFLOW_PNG, YUANGONG_ENTRY_WORKFLOW_SVG } from '@/constants/yuangongAssets'
 import YuangongStation from '@/components/workflow/YuangongStation.vue'
 import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeInspector.vue'
-import { YUANGONG_ENTRY_STITCH_PNG, YUANGONG_ENTRY_WORKFLOW_PNG, YUANGONG_ENTRY_WORKFLOW_SVG } from '@/constants/yuangongAssets'
 import DutyRosterWorkflowLoopView from '@/components/workflow/DutyRosterWorkflowLoopView.vue'
 import SelfEvolutionLoopRuntimePanel from '@/components/workflow/SelfEvolutionLoopRuntimePanel.vue'
 import EmployeeWorkspaceLoopConsole from '@/components/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'
@@ -16,10 +16,6 @@ import { useWorkflowEmployeeRegistrySync } from '@/composables/useWorkflowEmploy
 import { useLoopRuntimeConsole } from '@/composables/useLoopRuntimeConsole'
 import { useWorkspaceDeskSelection } from '@/composables/useWorkspaceDeskSelection'
 import { useWorkspaceDeskDisplay } from '@/composables/useWorkspaceDeskDisplay'
-
-const ENTRY_BG_STITCH = YUANGONG_ENTRY_STITCH_PNG
-const ENTRY_BG_WORKFLOW_PNG = YUANGONG_ENTRY_WORKFLOW_PNG
-const ENTRY_BG_WORKFLOW_SVG = YUANGONG_ENTRY_WORKFLOW_SVG
 
 const isAdminConsole = isAdminConsoleSpa()
 const showManagementLoopPanels = computed(() => isAdminConsole)
@@ -57,15 +53,10 @@ const workspaceDesks = computed(() => {
 
 const { selectedEmpId, routeFocusedEmployeeId, routeFocusedEmployeeInWorkspace, selectDesk } = useWorkspaceDeskSelection(workspaceDesks)
 
-const entryBgUrl = ref(ENTRY_BG_STITCH)
-
-function onEntryBgError() {
-  if (entryBgUrl.value === ENTRY_BG_STITCH) {
-    entryBgUrl.value = ENTRY_BG_WORKFLOW_PNG
-  } else if (entryBgUrl.value === ENTRY_BG_WORKFLOW_PNG) {
-    entryBgUrl.value = ENTRY_BG_WORKFLOW_SVG
-  }
-}
+const entryBackgrounds = [YUANGONG_ENTRY_STITCH_PNG, YUANGONG_ENTRY_WORKFLOW_PNG, YUANGONG_ENTRY_WORKFLOW_SVG]
+const entryBgIndex = ref(0)
+const entryBgUrl = computed(() => entryBackgrounds[entryBgIndex.value])
+function onEntryBgError() { entryBgIndex.value = Math.min(entryBgIndex.value + 1, entryBackgrounds.length - 1) }
 
 const totalCount = computed(() => workspaceDesks.value.length)
 const rosterCount = computed(() => ALL_PLANNED_YUANGON_PKG_IDS.value.size)
@@ -122,8 +113,8 @@ onMounted(() => {
   <section class="ews" aria-labelledby="ews-heading" data-tour="employee-workspace-desks">
     <h3 id="ews-heading" class="ews-sr-only">员工工作流：入口与工位实况</h3>
 
-    <router-link :to="panoramaLocation" class="ews-entry" role="link" :aria-label="entryCtaText">
-      <div class="ews-entry-bg" aria-hidden="true">
+    <router-link :to="panoramaLocation" class="ews-entry" :class="{ 'ews-entry--admin': showManagementLoopPanels }" role="link" :aria-label="entryCtaText">
+      <div v-if="!showManagementLoopPanels" class="ews-entry-bg" aria-hidden="true">
         <img class="ews-entry-bg-img" :src="entryBgUrl" alt="" decoding="async" fetchpriority="low" @error="onEntryBgError" />
         <div class="ews-entry-vignette" />
       </div>
@@ -136,17 +127,6 @@ onMounted(() => {
         </div>
       </div>
     </router-link>
-
-    <DutyRosterWorkflowLoopView v-if="showManagementLoopPanels" surface="employee-space" compact />
-    <SelfEvolutionLoopRuntimePanel v-if="showManagementLoopPanels" surface="employee-space" compact />
-
-    <EmployeeWorkspaceLoopConsole
-      v-if="showManagementLoopPanels"
-      :loop="loop"
-      :route-focused-employee-id="routeFocusedEmployeeId"
-      :route-focused-employee-in-workspace="routeFocusedEmployeeInWorkspace"
-      :show-management-loop-panels="showManagementLoopPanels"
-    />
 
     <div class="ews-stats" role="list" aria-label="员工工位概要">
       <div class="ews-stat" role="listitem">
@@ -293,6 +273,18 @@ onMounted(() => {
         </div>
       </div>
     </div>
+    <details v-if="showManagementLoopPanels" class="ews-diagnostics">
+      <summary>编制与运行诊断（展开查看）</summary>
+      <DutyRosterWorkflowLoopView surface="employee-space" compact />
+      <SelfEvolutionLoopRuntimePanel surface="employee-space" compact />
+
+      <EmployeeWorkspaceLoopConsole
+        :loop="loop"
+        :route-focused-employee-id="routeFocusedEmployeeId"
+        :route-focused-employee-in-workspace="routeFocusedEmployeeInWorkspace"
+        :show-management-loop-panels="showManagementLoopPanels"
+      />
+    </details>
   </section>
 </template>
 

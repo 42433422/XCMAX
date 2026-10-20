@@ -271,6 +271,10 @@ describe('EmployeeWorkspaceScene.vue', () => {
     await flushPromises()
     expect(wrapper.find('.ews-loop-console').exists()).toBe(true)
     expect(wrapper.find('.ews-loop-cockpit').exists()).toBe(true)
+    const diagnostics = wrapper.get('details.ews-diagnostics')
+    expect(diagnostics.attributes('open')).toBeUndefined()
+    expect(diagnostics.get('summary').text()).toContain('编制与运行诊断')
+    expect(wrapper.get('#ews-workflow-monitor').exists()).toBe(true)
   })
 
   it('企业端不渲染管理端编制和自进化面板', async () => {
