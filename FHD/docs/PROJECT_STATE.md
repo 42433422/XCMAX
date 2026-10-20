@@ -74,7 +74,7 @@ L0 物理基底    DB schema🟢(旁路封+冻结) · 租户隔离🟢 · runtim
 | 01 | 收款幂等与等额分期 | Open：[候选 #2449](https://github.com/42433422/XCMAX/pull/2449) 已通过真实 PostgreSQL 17 项收款断言及目标迁移回归；备份恢复后的完整升级链仍在验证，真实交付未闭环。 |
 | 02 | 离线桥接账号隔离 | Open：#2449 的离线桥接 14 项回归在 Node 24 全部通过且无跳过；实际安装软件的账号切换、登出及归属验收仍待完成。 |
 | 03 | Agent 工具截止时间 | Open：[候选 #2451](https://github.com/42433422/XCMAX/pull/2451) 已补默认进程隔离、子进程回收及未知结果传递，macOS 源码挂起/后续调用和真实 SQLite 租户写入验证通过；Windows、冻结后端和生产验收仍待完成。 |
-| 04 | 调度恢复与 SLO | Open：#2453 最近健康读回已恢复，但单次快照不替代持续恢复、每日任务记录及生产 SHA 绑定的 SLO/积压验收。 |
+| 04 | 调度恢复与 SLO | Open：#2453 曾读回健康，后续再次出现 self_maintenance_remediation_loop 失败；持续恢复、每日任务记录及生产 SHA 绑定的 SLO/积压验收尚未完成。 |
 | 05 | MODstore 间歇线程异常 | Open：需复现、定位并重复并发验证，单次重跑成功不能销项。 |
 | 06 | 覆盖率证据 | Open：当前覆盖率报告与验收提交 SHA 的对应关系仍需核实，不沿用旧报告。 |
 | 07 | 工单完整生命周期 | Open：MODstore incident_bus 已定轨（enrich + routing_plan 真派发、handler_failed 可观测），Para 已有 CLI fallback；[主线 #2440](https://github.com/42433422/XCMAX/pull/2440) 与 [主线 ETA #2446](https://github.com/42433422/XCMAX/pull/2446) 不替代无上游替身的真改代码→验证→回写及生产积压验收。 |
