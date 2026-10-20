@@ -166,9 +166,8 @@ def test_merge_upgrades_either_existing_head_without_losing_data(
     root = Path(__file__).parents[1]
     url = f"sqlite:///{tmp_path / 'merge.sqlite'}"
     monkeypatch.setenv("MODSTORE_DATABASE_URL", url)
-    cfg = Config(str(root / "alembic.ini"))
+    cfg = Config()
     cfg.set_main_option("script_location", str(root / "alembic"))
-    cfg.set_main_option("path_separator", "os")
     engine = sa.create_engine(url)
     with engine.begin() as conn:
         for table, identity in (
