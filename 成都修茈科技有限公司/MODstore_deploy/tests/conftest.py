@@ -26,6 +26,9 @@ os.environ.setdefault("MODSTORE_WEB_SEARCH_USE_TAVILY", "0")
 # 单元测试不抓取链接正文（集成测试可显式开启 MODSTORE_WEB_FETCH_PAGES=1）。
 os.environ.setdefault("MODSTORE_WEB_FETCH_PAGES", "0")
 
+# 测试默认同步派发，避免后台线程跨用例；异步场景可显式覆盖为 0。
+os.environ.setdefault("MODSTORE_INCIDENT_SYNC_DISPATCH", "1")
+
 _pytest_runtime_root = Path(tempfile.mkdtemp(prefix="modstore_pytest_runtime_"))
 atexit.register(shutil.rmtree, _pytest_runtime_root, True)
 os.environ.setdefault("MODSTORE_PUBLIC_OUTPUT_ROOT", str(_pytest_runtime_root / "public"))
