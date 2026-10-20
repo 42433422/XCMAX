@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import multiprocessing
+import time
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -27,12 +30,22 @@ def _configure_runtime(monkeypatch, tmp_path) -> None:
     import app.services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
+    monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
     memory_mod.reset_user_memory_service()
+
+
+def _concurrent_memory_candidate_write(user_id, key, value, barrier) -> None:
+    from app.application.memory_v2_facade import get_user_memory_service
+
+    barrier.wait(timeout=15)
+    get_user_memory_service().propose_memory_candidate(
+        user_id, "preference", key, value, source="user_explicit"
+    )
 
 
 def _assert_memory_run(
@@ -184,4 +197,57 @@ def test_memory_v2_blocked_source_confirm_route_records_failed_agent_run(
             assert run.tool_calls[0].permission == "memory_v2.write"
             assert "tool.failed" in {event.event_type for event in run.events}
     finally:
+        memory_mod.reset_user_memory_service()
+
+
+def test_memory_store_keeps_concurrent_same_and_other_user_writes(tmp_path, monkeypatch) -> None:
+    import app.services.user_memory_service as memory_mod
+
+    memory_dir = tmp_path / "memory"
+    memory_path = memory_dir / "memory_store.json"
+    monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
+    monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
+    monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_path))
+    memory_mod.reset_user_memory_service()
+
+    context = multiprocessing.get_context("spawn")
+    barrier = context.Barrier(3)
+    writes = [
+        ("memory-a", "first", "A"),
+        ("memory-a", "second", "B"),
+        ("memory-b", "third", "C"),
+    ]
+    processes = [
+        context.Process(target=_concurrent_memory_candidate_write, args=(*write, barrier))
+        for write in writes
+    ]
+    try:
+        for process in processes:
+            process.start()
+        deadline = time.monotonic() + 25
+        for process in processes:
+            process.join(max(0, deadline - time.monotonic()))
+        alive = [process for process in processes if process.is_alive()]
+        for process in alive:
+            process.terminate()
+        for process in alive:
+            process.join(5)
+        assert not alive
+        assert [process.exitcode for process in processes] == [0, 0, 0]
+
+        memory_mod.reset_user_memory_service()
+        service = memory_mod.get_user_memory_service()
+        assert service.get_memory_v2_summary("memory-a")["by_status"] == {"pending": 2}
+        assert service.get_memory_v2_summary("memory-b")["by_status"] == {"pending": 1}
+        persisted = json.loads(memory_path.read_text(encoding="utf-8"))
+        assert set(persisted) == {"memory-a", "memory-b"}
+        assert {row["key"] for row in persisted["memory-a"]["memory_v2_records"]} == {
+            "first",
+            "second",
+        }
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(5)
         memory_mod.reset_user_memory_service()

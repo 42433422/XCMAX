@@ -91,19 +91,21 @@ def test_store_loads_from_missing_file(tmp_memory_dir):
     assert store._memory_cache == {}
 
 
-def test_store_loads_corrupt_file_falls_back_to_empty(tmp_memory_dir, caplog):
-    p = os.path.join(str(tmp_memory_dir), "memory_store.json")
-    with open(p, "w") as f:
-        f.write("{not valid json")
+def test_store_does_not_overwrite_corrupt_file(tmp_memory_dir):
+    path = tmp_memory_dir / "memory_store.json"
+    original = b"{not valid json"
     store = UserMemoryStore(storage_type="json")
-    assert store._memory_cache == {}
+    path.write_bytes(original)
+    with pytest.raises(json.JSONDecodeError):
+        store.save_memory("u", UserMemory(user_id="u"))
+    assert path.read_bytes() == original
 
 
 def test_store_saves_to_disk(tmp_memory_dir):
     store = UserMemoryStore(storage_type="json")
     mem = UserMemory(user_id="u-1", preferences={"x": {"value": 1, "updated_at": "t", "count": 1}})
     store.save_memory("u-1", mem)
-    # 显式触发 _should_persist
+    # Direct store writes use the same atomic path.
     store._save_all_memories()
     assert os.path.exists(os.path.join(str(tmp_memory_dir), "memory_store.json"))
     with open(os.path.join(str(tmp_memory_dir), "memory_store.json")) as f:

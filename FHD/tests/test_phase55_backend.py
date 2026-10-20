@@ -510,16 +510,17 @@ async def test_security_headers_websocket_passthrough() -> None:
 
 
 def test_user_memory_store_load_invalid_json(memory_paths: Path) -> None:
-    memory_paths.write_text("not-json", encoding="utf-8")
+    original = b"not-json"
+    memory_paths.write_bytes(original)
     store = UserMemoryStore(storage_type="json")
     assert store._memory_cache == {}
+    assert memory_paths.read_bytes() == original
 
 
 def test_user_memory_store_non_json_storage_skips_persist() -> None:
     store = UserMemoryStore(storage_type="memory")
     mem = UserMemory(user_id="u55")
     store.save_memory("u55", mem)
-    store._should_persist()
 
 
 def test_user_memory_preference_roundtrip(memory_paths: Path) -> None:
@@ -610,8 +611,7 @@ def test_user_memory_negated_feedback_lowers_confidence(memory_paths: Path) -> N
 
 def test_user_memory_store_persists_json(memory_paths: Path) -> None:
     store = UserMemoryStore(storage_type="json")
-    store.get_memory("persist-user")
-    store._cache_dirty["persist-user"] = True
+    store.save_memory("persist-user", store.get_memory("persist-user"))
     store._save_all_memories()
     assert memory_paths.exists()
     data = json.loads(memory_paths.read_text(encoding="utf-8"))
