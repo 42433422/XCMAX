@@ -1,5 +1,5 @@
 {
-  "lines": 2316741,
-  "updated": "2026-10-21",
-  "note": "棘轮下调"
+  "lines": 2317069,
+  "updated": "2026-10-20",
+  "note": "A1.4 checkout identity slice: authenticate before payment effects, bind explicit market token to live host Session instead of client-selected/global/Mod database credentials; retain 121 mock-only regression tests including full factory and both bundled Mod routes. Necessary security test growth, no weakened assertions."
 }

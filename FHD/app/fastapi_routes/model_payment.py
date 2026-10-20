@@ -6,7 +6,7 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Body, Header, Request
+from fastapi import APIRouter, Body, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.errors import ErrorCode, PaymentError
@@ -90,15 +90,23 @@ def checkout(
     body: dict[str, Any] = Body(default_factory=dict),
     user_agent: str | None = Header(default=None),
 ):
+    from app.infrastructure.auth.dependencies import get_logged_in_user, session_id_from_request
+
+    checkout_user = get_logged_in_user(request)
+    local_user_id = int(checkout_user.id)
     if is_modstore_payment_sot():
+        from app.infrastructure.payment.modstore_payment_proxy import checkout_session_token
+
+        market_token = checkout_session_token(session_id_from_request(request), local_user_id)
+        if not market_token:
+            raise HTTPException(status_code=401, detail="请先绑定当前会话的市场账号")
         channel = str(body.get("channel") or "alipay").strip().lower()
         plan_id = str(body.get("plan_id") or "").strip()
-        uid = int(body.get("market_user_id") or 0)
         proxy_failed = False
         if plan_id:
             from app.infrastructure.payment.modstore_payment_proxy import proxy_checkout
 
-            proxied = proxy_checkout(plan_id=plan_id, channel=channel, market_user_id=uid)
+            proxied = proxy_checkout(plan_id=plan_id, channel=channel, auth_token=market_token)
             if proxied.get("success"):
                 return JSONResponse({"success": True, "data": proxied.get("data")})
             proxy_failed = True
@@ -212,14 +220,6 @@ def checkout(
         order_id,
         pay_res.get("type"),
     )
-    try:
-        from app.infrastructure.auth.dependencies import resolve_session_user
-
-        checkout_user = resolve_session_user(request)
-        local_user_id = int(checkout_user.id) if checkout_user is not None else None
-    except (TypeError, ValueError, AttributeError):
-        local_user_id = None
-
     try:
         mp_orders.record_checkout_pending(
             out_trade_no=order_id,

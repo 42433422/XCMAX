@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -109,6 +110,21 @@ class TestWechatRedirect:
 
 
 class TestCheckout:
+    @pytest.fixture(autouse=True)
+    def authenticated_business_branch(self):
+        # Business response contracts; real identity boundaries live in checkout_identity.
+        with (
+            patch(
+                "app.infrastructure.auth.dependencies.get_logged_in_user",
+                return_value=SimpleNamespace(id=71),
+            ),
+            patch(
+                "app.infrastructure.payment.modstore_payment_proxy.checkout_session_token",
+                return_value="synthetic-market-71",
+            ),
+        ):
+            yield
+
     def test_checkout_modstore_sot_with_plan_success(self, client_mp):
         mock_proxy = MagicMock()
         mock_proxy.proxy_checkout.return_value = {"success": True, "data": {"order_id": "x1"}}

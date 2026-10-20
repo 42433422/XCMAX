@@ -38,12 +38,13 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/model-payment/checkout")
     def mod_checkout(
+        request: Request,
         body: dict[str, Any] = Body(default_factory=dict),
         user_agent: str | None = Header(default=None),
     ):
         from app.mod_sdk.host_services import checkout
 
-        return checkout(body, user_agent)
+        return checkout(request=request, body=body, user_agent=user_agent)
 
     @router.post("/model-payment/notify/alipay")
     async def mod_alipay_notify(request: Request):
