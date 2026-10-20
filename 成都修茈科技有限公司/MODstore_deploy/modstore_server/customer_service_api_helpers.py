@@ -183,9 +183,10 @@ def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request:
     resolution.pop("resolved_at" if expired else "expired_at", None)
     resolution["expired_at" if expired else "resolved_at"] = now.isoformat()
     evidence["resolution"] = resolution
-    ticket.evidence_json = json_dumps(evidence)
-    ticket.status = disposition
-    ticket.closed_at = ticket.updated_at = now
+    setattr(ticket, "evidence_json", json_dumps(evidence))
+    setattr(ticket, "status", disposition)
+    setattr(ticket, "closed_at", now)
+    setattr(ticket, "updated_at", now)
     db.add(
         CustomerServiceAction(
             ticket_id=ticket.id,

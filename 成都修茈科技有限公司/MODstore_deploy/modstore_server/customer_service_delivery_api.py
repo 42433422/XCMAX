@@ -39,7 +39,7 @@ from modstore_server.customer_service_tools import json_dumps
 from modstore_server.models import User
 from modstore_server.models_cs import CustomerServiceTicket
 
-router = APIRouter()
+router: APIRouter = APIRouter()
 _get_current_user = get_current_user
 
 
