@@ -9,6 +9,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 import logging
 import threading
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -84,6 +85,12 @@ class CustomerServiceChatBody(BaseModel):
 class TicketTitleBody(BaseModel, extra="forbid"):
     title: str = Field(..., min_length=1, max_length=256)
     expected_title: str = Field(..., max_length=256)
+
+
+class AdminTicketCloseBody(BaseModel, extra="forbid"):
+    request_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
+    note: str = Field(min_length=8, max_length=2000)
+    verification: str = Field(min_length=20, max_length=4000)
 
 
 class StandardBody(BaseModel):
@@ -288,6 +295,70 @@ async def correct_ticket_title(
         )
         db.commit()
     return {"ticket": {"id": ticket_id, "title": title}}
+
+
+@router.post("/tickets/{ticket_id}/close")
+async def close_ticket_as_admin(
+    ticket_id: int,
+    body: AdminTicketCloseBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_admin),
+):
+    ticket = _visible_ticket_or_404(db, user, ticket_id)
+    key = f"admin-ticket-close:{ticket_id}:{body.request_id}"
+    existing = db.query(CustomerServiceAction).filter_by(idempotency_key=key).first()
+    request = body.model_dump()
+    if existing:
+        if json_loads(existing.request_json, {}) != request:
+            raise HTTPException(409, "同一关单请求标识不能用于不同内容")
+        if ticket.status != "resolved" or not ticket.closed_at:
+            raise HTTPException(409, "原工单状态已变化，不能重放关单结果")
+        return {"ticket": ticket_payload(ticket), "replayed": True}
+    if ticket.status != "processing" or ticket.closed_at:
+        raise HTTPException(409, "只有处理中且未关闭的工单可以验收关单")
+    if len(body.note.strip()) < 8 or len(body.verification.strip()) < 20:
+        raise HTTPException(422, "处理结论和实际验收证据不能为空")
+
+    now = datetime.now(timezone.utc)
+    evidence = json_loads(ticket.evidence_json, {})
+    resolution = evidence.get("resolution")
+    if not isinstance(resolution, dict):
+        resolution = {}
+    resolution.update(
+        state="resolved",
+        resolved_at=now.isoformat(),
+        verification_mode="admin_runtime",
+        verification_summary=body.verification.strip(),
+        resolution_note=body.note.strip(),
+        repair_verified=True,
+    )
+    evidence["resolution"] = resolution
+    ticket.evidence_json = json_dumps(evidence)
+    ticket.status, ticket.closed_at, ticket.updated_at = "resolved", now, now
+    db.add(
+        CustomerServiceAction(
+            ticket_id=ticket.id,
+            user_id=user.id,
+            action_type="ticket.close",
+            target_type="ticket",
+            target_id=str(ticket.id),
+            status="completed",
+            request_json=json_dumps(request),
+            result_json=json_dumps({"status": "resolved", "closed_at": now.isoformat()}),
+            idempotency_key=key,
+        )
+    )
+    audit(
+        db,
+        actor=user,
+        actor_type="admin",
+        ticket_id=ticket.id,
+        session_id=ticket.session_id,
+        event_type="admin_ticket_closed",
+        detail={"note": body.note.strip(), "verification": body.verification.strip()},
+    )
+    db.commit()
+    return {"ticket": ticket_payload(ticket), "replayed": False}
 
 
 @router.get("/tickets/{ticket_id}")
