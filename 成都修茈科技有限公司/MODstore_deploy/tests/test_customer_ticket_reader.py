@@ -317,3 +317,24 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
         audits = [a for a in detail["audit_logs"] if a["event_type"] == event]
         assert len(audits) == 1 and audits[0]["actor_user_id"] == admin.id
         assert client.post(url, json={**body, "note": "different close request"}).status_code == 409
+        if disposition == "expired":
+            from modstore_server.customer_issue_intake import (
+                dispatch_issue_event,
+                record_dispatch_failure,
+            )
+            from modstore_server.customer_service_orchestrator import (
+                apply_customer_ticket_incident_progress,
+            )
+
+            lineage = {"ticket_id": ticket_id, "user_id": detail["ticket"]["user_id"]}
+            assert (
+                dispatch_issue_event({"id": "late-event", "data": lineage})["reason"]
+                == "ticket_expired"
+            )
+            record_dispatch_failure(lineage, "late failure")
+            with get_session_factory()() as db:
+                assert apply_customer_ticket_incident_progress(db, ticket_id=ticket_id)["replayed"]
+                db.commit()
+            after = client.get(f"/api/customer-service/tickets/{ticket_id}").json()
+            assert after["ticket"]["status"] == "expired"
+            assert after["ticket"]["evidence"] == detail["ticket"]["evidence"]

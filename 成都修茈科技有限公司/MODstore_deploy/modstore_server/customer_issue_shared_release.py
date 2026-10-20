@@ -236,7 +236,7 @@ def record_shared_runtime(
         if prior.get("request_sha256") != digest:
             raise HTTPException(409, "同一回执标识不可绑定不同内容")
         return {"replayed": True, "record": prior}
-    if ticket.status in {"resolved", "closed"}:
+    if ticket.status in {"resolved", "closed", "expired"}:
         raise HTTPException(409, "该工单已完成，新的问题请通过原交付返工入口受理")
     if not body.get("receipt_id") or not body.get("client_instance_id"):
         raise HTTPException(409, "缺少稳定回执或客户端标识")

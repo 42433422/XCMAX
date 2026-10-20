@@ -145,7 +145,7 @@ def apply_customer_ticket_incident_progress(
             ],
         }
     )
-    if ticket.status in {"resolved", "closed"} or any(
+    if ticket.status in {"resolved", "closed", "expired"} or any(
         report.get("progress_sha256") == progress_digest
         for report in ev.get("employee_reports", [])
         if isinstance(report, dict)
