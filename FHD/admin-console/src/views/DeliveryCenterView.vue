@@ -19,16 +19,11 @@
         <small>{{ item.hint }}</small>
       </article>
     </section>
-
-    <nav class="delivery-jumps" aria-label="交付中心快速导航">
-      <a href="#delivery-overview">交付概览</a><a href="#delivery-enterprise-roster">企业客户</a>
-      <a href="#delivery-standard-roster">购买交付</a><a href="#delivery-trial-roster">体验交付</a><a href="#delivery-custom-orders">定制工单</a>
-    </nav>
-
+    <nav class="delivery-jumps" aria-label="交付中心快速导航"><a href="#delivery-overview">交付概览</a><a href="#delivery-enterprise-roster">企业客户</a>
+      <a href="#delivery-standard-roster">购买交付</a><a href="#delivery-trial-roster">体验交付</a><a href="#delivery-custom-orders">定制工单</a></nav>
     <MacControlPanel />
 
-    <EnterpriseCustomerRoster
-      id="delivery-enterprise-roster"
+    <EnterpriseCustomerRoster id="delivery-enterprise-roster"
       v-if="!errorMessage && (!loading || enterpriseUsers.length)"
       :users="enterpriseUsers"
       :tickets="tickets"
@@ -37,8 +32,7 @@
       @open-custom="focusCustomDeliveries"
     />
 
-    <EnterpriseDeliveryRoster
-      id="delivery-standard-roster"
+    <EnterpriseDeliveryRoster id="delivery-standard-roster"
       v-if="!errorMessage && (!loading || standardDeliveries.length)"
       :deliveries="standardDeliveries"
       :tickets="tickets"
@@ -46,8 +40,7 @@
       @open-custom="focusCustomDeliveries"
     />
 
-    <EnterpriseDeliveryRoster
-      id="delivery-trial-roster"
+    <EnterpriseDeliveryRoster id="delivery-trial-roster"
       v-if="!errorMessage && (!loading || trialDeliveries.length)"
       variant="trial"
       :deliveries="trialDeliveries"
