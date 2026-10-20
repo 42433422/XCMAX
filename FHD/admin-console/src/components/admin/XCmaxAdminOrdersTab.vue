@@ -297,10 +297,6 @@ onMounted(loadOrders)
   gap: 18px;
 }
 .admin-card {
-  background: rgba(255, 255, 255, 0.92);
-  border-radius: 16px;
-  border: 1px solid rgba(15, 76, 129, 0.1);
-  box-shadow: 0 4px 18px rgba(15, 76, 129, 0.07);
   padding: 20px;
   display: flex;
   flex-direction: column;
