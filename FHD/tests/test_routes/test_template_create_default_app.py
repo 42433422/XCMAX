@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -54,7 +54,7 @@ def template_app(tmp_path, monkeypatch):
                 Session(
                     session_id=f"label-session-{uid}",
                     user_id=uid,
-                    expires_at=datetime.now() + timedelta(hours=1),
+                    expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
                     account_kind="enterprise",
                 )
             )
