@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 _REPORT_RE = re.compile(
     r"(?i)(问题|故障|缺陷|报错|失败|不能用(?![^。！？\n]{0,40}(?:代替|替代))|没反应|异常|crash|bug)"
 )
+_EXPLICIT_INTAKE_RE = re.compile(
+    r"(提交|上报|反馈|建|创).{0,24}(产品|软件|功能|缺陷).{0,12}(问题|工单|故障|缺陷)"
+)
 _IMAGE_DATA_URL = re.compile(r"(?i)^data:image/[\w.+-]+;base64,")
 
 
@@ -39,15 +42,17 @@ def _attached_screenshots(attachments: Any) -> list[bytes]:
 
 
 def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str, Any] | None:
-    expected = re.search(r"期望[：:]\s*(.+?)(?:[。；;\n]|$)", message)
-    actual = re.search(r"实际[：:]\s*(.+?)(?:[。；;\n]|$)", message)
-    if expected and actual and _REPORT_RE.search(message):
+    fields = {
+        "expected": re.search(r"期望(?:结果|行为)?[：:]\s*(.+?)(?:[。；;\n]|$)", message),
+        "actual": re.search(r"实际(?:结果|表现|行为)?[：:]\s*(.+?)(?:[。；;\n]|$)", message),
+    }
+    explicit = bool(_EXPLICIT_INTAKE_RE.search(message or ""))
+    if _REPORT_RE.search(message) and (explicit or all(fields.values())):
         return {
             "type": "product_defect",
-            "confidence": 0.9,
-            "expected": expected[1][:1000],
-            "actual": actual[1][:1000],
-            "missing_evidence": [],
+            "confidence": 0.95 if explicit else 0.9,
+            **{key: match[1][:1000] if match else "" for key, match in fields.items()},
+            "missing_evidence": [f"{key}_behavior" for key, match in fields.items() if not match],
         }
     try:
         response = client.chat.completions.create(
