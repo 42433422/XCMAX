@@ -291,10 +291,17 @@ class TestAlembicForwardUpgrade:
                     )
                 )
                 connection.execute(text("CREATE TABLE uom_units (id INTEGER PRIMARY KEY)"))
+                connection.execute(text("INSERT INTO products VALUES (7, 'preserved-product', 1)"))
         finally:
             engine.dispose()
 
         command.upgrade(_alembic_config(), "head")
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT id, name, tenant_id FROM products")).one() == (
+                7,
+                "preserved-product",
+                1,
+            )
 
         assert {
             "base_uom_id",

@@ -29,6 +29,7 @@
 .delivery-refresh:disabled { opacity: .55; cursor: wait; }
 
 .delivery-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 11px; margin-bottom: 16px; }
+.delivery-jumps { position: sticky; top: 0; z-index: 5; display: flex; gap: 7px; overflow-x: auto; margin: 0 0 16px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.94); box-shadow: 0 5px 16px rgba(26,62,100,.08); } .delivery-jumps a { flex: 0 0 auto; border-radius: 8px; padding: 7px 10px; color: #34516f; font-size: 12px; text-decoration: none; } .delivery-jumps a:hover,.delivery-jumps a:focus-visible { background: #eaf3fc; color: #1f5f9f; outline: 2px solid #6099d5; outline-offset: 1px; } .delivery-center [id^="delivery-"] { scroll-margin-top: 58px; }
 .delivery-stats article { position: relative; overflow: hidden; min-height: 92px; padding: 14px 16px; border: 1px solid rgba(196,214,233,.9); border-radius: 14px; background: rgba(255,255,255,.9); box-shadow: 0 8px 25px rgba(26,62,100,.055); }
 .delivery-stats article::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: #84a9d0; }
 .delivery-stats .is-enterprise::before { background: #2f7ed7; }
@@ -80,8 +81,8 @@
 .delivery-timeline li:not(:last-child)::after { content: ''; position: absolute; top: 14px; left: 32px; right: 6px; height: 1px; background: #cfdeeb; }
 .delivery-timeline li > span { z-index: 1; display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px; border-radius: 50%; background: #fff; border: 1px solid #ccdae8; }
 .delivery-timeline strong,.delivery-timeline small { display: block; }
-.delivery-timeline strong { color: #597087; font-size: 11px; }
-.delivery-timeline small { font-size: 9px; }
+.delivery-timeline strong { color: #597087; font-size: 12px; }
+.delivery-timeline small { font-size: 11px; }
 .delivery-timeline .done > span,.delivery-timeline .active > span { border-color: #4b91dc; background: #2f7ed7; color: #fff; }
 .delivery-timeline .done:not(:last-child)::after { background: #6fa5dc; }
 .delivery-timeline .active strong { color: #2469af; }
@@ -105,8 +106,8 @@
 .delivery-run { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
 .delivery-run > div { padding: 8px; border-radius: 9px; background: #f1f6fb; }
 .delivery-run span,.delivery-run strong { display: block; }
-.delivery-run span { color: var(--muted); font-size: 9px; }
-.delivery-run strong { margin-top: 2px; color: #355573; font-size: 11px; }
+.delivery-run span { color: var(--muted); font-size: 10px; }
+.delivery-run strong { margin-top: 2px; color: #355573; font-size: 12px; }
 .delivery-run__error { grid-column: 1/-1; margin: 0; padding: 8px; border-radius: 8px; background: #fff0f0; color: #a94343; font-size: 10px; white-space: pre-wrap; }
 
 .delivery-artifacts { margin: 0 18px 15px; padding: 13px; border: 1px solid #e0e9f2; border-radius: 12px; background: #f9fbfd; }

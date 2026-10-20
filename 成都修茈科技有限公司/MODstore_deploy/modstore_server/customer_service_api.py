@@ -9,6 +9,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 import logging
 import threading
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,10 +26,14 @@ from modstore_server.customer_service_orchestrator import (
     ticket_payload,
 )
 from modstore_server.customer_service_api_helpers import (
+    IntegrationBody,
+    StandardBody,
+    close_ticket_with_evidence,
     audit_payload as _audit_payload,
     integration_payload as _integration_payload,
     own_session_or_404 as _own_session_or_404,
     standard_payload as _standard_payload,
+    update_expected_completion as _update_expected_completion,
     visible_ticket_or_404 as _visible_ticket_or_404,
 )
 from modstore_server import customer_service_customer_view as customer_view
@@ -86,25 +91,31 @@ class TicketTitleBody(BaseModel, extra="forbid"):
     expected_title: str = Field(..., max_length=256)
 
 
-class StandardBody(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    scenario: str = Field(default="general", max_length=64)
-    description: str = Field(default="", max_length=4000)
-    rules: Dict[str, Any] = Field(default_factory=dict)
-    action_policy: Dict[str, Any] = Field(default_factory=dict)
-    auto_enabled: bool = True
-    risk_level: str = Field(default="low", max_length=16)
-    priority: int = 100
+class CustomerTicketEtaBody(BaseModel):
+    expected_completion_at: Optional[datetime]
 
 
-class IntegrationBody(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    integration_type: str = Field(default="openapi", max_length=32)
-    connector_id: Optional[int] = None
-    workflow_id: Optional[int] = None
-    scenario: str = Field(default="general", max_length=64)
-    config: Dict[str, Any] = Field(default_factory=dict)
-    enabled: bool = True
+class AdminTicketCloseBody(BaseModel, extra="forbid"):
+    request_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
+    note: str = Field(min_length=8, max_length=2000)
+    verification: str = Field(min_length=20, max_length=4000)
+
+
+def _configuration_values(body: BaseModel) -> Dict[str, Any]:
+    values = body.model_dump()
+    for name, value in tuple(values.items()):
+        if isinstance(value, str):
+            values[name] = value.strip()
+        elif name in {"rules", "action_policy", "config"}:
+            values[name + "_json"] = json_dumps(values.pop(name))
+    for name, default in (
+        ("scenario", "general"),
+        ("risk_level", "low"),
+        ("integration_type", "openapi"),
+    ):
+        if name in values:
+            values[name] = values[name] or default
+    return values
 
 
 @router.post("/chat")
@@ -290,6 +301,16 @@ async def correct_ticket_title(
     return {"ticket": {"id": ticket_id, "title": title}}
 
 
+@router.post("/tickets/{ticket_id}/close")
+async def close_ticket_as_admin(
+    ticket_id: int,
+    body: AdminTicketCloseBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_admin),
+):
+    return close_ticket_with_evidence(db, user, ticket_id, body.model_dump())
+
+
 @router.get("/tickets/{ticket_id}")
 async def ticket_detail(
     ticket_id: int,
@@ -318,6 +339,17 @@ async def ticket_detail(
             [_audit_payload(a) for a in related(CustomerServiceAuditLog)] if user.is_admin else []
         ),
     }
+
+
+@router.patch("/tickets/{ticket_id}/expected-completion", dependencies=[Depends(_require_admin)])
+async def update_ticket_expected_completion(
+    ticket_id: int,
+    body: CustomerTicketEtaBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
+):
+    ticket = _update_expected_completion(db, ticket_id, user, body.expected_completion_at)
+    return {"ticket": ticket_payload(ticket)}
 
 
 @router.get("/actions")
@@ -370,17 +402,7 @@ async def create_standard(
     db: Session = Depends(get_db),
     user: User = Depends(_require_admin),
 ):
-    row = CustomerServiceStandard(
-        name=body.name.strip(),
-        scenario=body.scenario.strip() or "general",
-        description=body.description.strip(),
-        rules_json=json_dumps(body.rules),
-        action_policy_json=json_dumps(body.action_policy),
-        auto_enabled=body.auto_enabled,
-        risk_level=body.risk_level.strip() or "low",
-        priority=body.priority,
-        created_by=user.id,
-    )
+    row = CustomerServiceStandard(**_configuration_values(body), created_by=user.id)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -399,14 +421,8 @@ async def update_standard(
     )
     if not row:
         raise HTTPException(404, "审核标准不存在")
-    row.name = body.name.strip()
-    row.scenario = body.scenario.strip() or "general"
-    row.description = body.description.strip()
-    row.rules_json = json_dumps(body.rules)
-    row.action_policy_json = json_dumps(body.action_policy)
-    row.auto_enabled = body.auto_enabled
-    row.risk_level = body.risk_level.strip() or "low"
-    row.priority = body.priority
+    for key, value in _configuration_values(body).items():
+        setattr(row, key, value)
     db.commit()
     db.refresh(row)
     return _standard_payload(row, include_policy=True)
@@ -427,16 +443,7 @@ async def create_integration(
     db: Session = Depends(get_db),
     user: User = Depends(_require_admin),
 ):
-    row = CustomerServiceIntegration(
-        name=body.name.strip(),
-        integration_type=body.integration_type.strip() or "openapi",
-        connector_id=body.connector_id,
-        workflow_id=body.workflow_id,
-        scenario=body.scenario.strip() or "general",
-        config_json=json_dumps(body.config),
-        enabled=body.enabled,
-        created_by=user.id,
-    )
+    row = CustomerServiceIntegration(**_configuration_values(body), created_by=user.id)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -457,13 +464,8 @@ async def update_integration(
     )
     if not row:
         raise HTTPException(404, "集成配置不存在")
-    row.name = body.name.strip()
-    row.integration_type = body.integration_type.strip() or "openapi"
-    row.connector_id = body.connector_id
-    row.workflow_id = body.workflow_id
-    row.scenario = body.scenario.strip() or "general"
-    row.config_json = json_dumps(body.config)
-    row.enabled = body.enabled
+    for key, value in _configuration_values(body).items():
+        setattr(row, key, value)
     db.commit()
     db.refresh(row)
     return _integration_payload(row)

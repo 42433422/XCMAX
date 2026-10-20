@@ -218,9 +218,6 @@ onMounted(() => {
 }
 
 .admin-card {
-  background: #fff;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 12px;
   padding: 16px 18px;
 }
 

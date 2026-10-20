@@ -10,6 +10,7 @@
           </template>
 
           <template v-if="currentMode === 'admin' && isAdmin">
+            <router-link to="/admin/overview" class="nav-link nav-admin-link">市场总览</router-link>
             <router-link to="/admin/database" class="nav-link nav-admin-link">数据库</router-link>
             <span class="nav-balance nav-badge">管理员模式</span>
           </template>
@@ -76,7 +77,7 @@ function checkHome(): void {
 
 watch(currentMode, (mode) => {
   if (mode === 'admin') {
-    void router.push('/admin/database')
+    void router.push('/admin/overview')
   } else {
     void router.push('/')
   }

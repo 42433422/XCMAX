@@ -32,16 +32,10 @@
 .section-kicker { display: block; margin: 0 0 8px; color: #315dd8; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 .hero-actions { display: flex; align-items: center; gap: 12px; }
 .refresh-time { color: #70839e; font-size: 12px; }
-.refresh-button { border: 0; border-radius: 12px; padding: 11px 16px; color: #fff; background: #1f4fd1; font-weight: 700; cursor: pointer; box-shadow: 0 8px 20px rgba(31, 79, 209, 0.2); }
 .refresh-button:disabled { opacity: 0.65; cursor: wait; }
 
 .overview-grid,
 .evidence-section { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr); gap: 18px; margin-top: 0; }
-.overall-card,
-.attention-card,
-.live-card,
-.truth-card,
-.dimension-card { border: 1px solid rgba(122, 145, 177, 0.2); border-radius: 20px; background: rgba(255, 255, 255, 0.9); box-shadow: 0 12px 34px rgba(37, 57, 87, 0.08); }
 .overall-card { display: flex; align-items: center; gap: 22px; padding: 24px; flex-wrap: wrap; }
 .overall-score { display: flex; align-items: baseline; flex-shrink: 0; min-width: 132px; line-height: 1; color: #1f4fd1; font-size: 58px; font-weight: 850; letter-spacing: -0.06em; }
 .overall-score small { margin-left: 4px; font-size: 24px; }
