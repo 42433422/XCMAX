@@ -120,9 +120,8 @@ p = Path(sys.argv[1])
 p.write_text(p.read_text().replace('publish:\n', f'  - from: {sys.argv[2]}\n    to: legacy-macos-recovery\npublish:\n', 1))
 PY
 
-  (cd desktop && [ -d node_modules ] || npm install)
-  # Finder/provenance xattrs can survive npm's Electron extraction and make
-  # codesign reject helper binaries as containing resource-fork detritus.
+  (cd desktop && npm ci --no-audit --no-fund)
+  # Clear Finder/provenance xattrs before codesign.
   if command -v xattr >/dev/null 2>&1; then
     xattr -cr desktop/node_modules/electron/dist
   fi

@@ -1,5 +1,5 @@
 {
-  "lines": 2317298,
+  "lines": 2317228,
   "updated": "2026-10-20",
-  "note": "A1.2 CI regression correction: retain authorization assertions; isolate OIDC full factory from cached bootstrap and parent-mocked agent tool contract; 37 additional test lines, 154 forward and 81 reverse tests passed. User explicitly approved code and draft PR updates on 2026-10-20."
+  "note": "Preserve the reviewed a1-mobile-auth security slice while incorporating main 3f646df lock and release fixes; recompute actual line count with the updated main counting policy. No security assertions removed. Draft-only changes approved by user."
 }

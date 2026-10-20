@@ -17,7 +17,7 @@ on:
         required: true
         type: string
       previous_security_scan_run_id:
-        description: "Prior-day all-source zero-finding scan run ID for the same SHA"
+        description: "Compatibility input; pass the current scan run ID for the single-scan policy"
         required: true
         type: string
 
@@ -38,7 +38,7 @@ env:
 
 jobs:
   security-preflight:
-    name: Verify two-day all-source security evidence
+    name: Verify exact-SHA all-source security evidence
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -107,7 +107,7 @@ jobs:
           path: security-reports/previous
           run-id: ${{ inputs.previous_security_scan_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Refuse stale, non-consecutive, mismatched, or nonzero evidence
+      - name: Refuse stale, mismatched, incomplete, or nonzero evidence
         run: >-
           python FHD/scripts/security/verify_security_scan_pair.py
           --previous-dir security-reports/previous
@@ -192,9 +192,8 @@ jobs:
           # security-preflight already verified these reports for this SHA.
           # Keep their exact run IDs; never infer evidence from a latest run.
           if [[ ! "$SECURITY_SCAN_RUN_ID" =~ ^[1-9][0-9]*$ ]] \
-            || [[ ! "$PREVIOUS_SECURITY_SCAN_RUN_ID" =~ ^[1-9][0-9]*$ ]] \
-            || [ "$SECURITY_SCAN_RUN_ID" = "$PREVIOUS_SECURITY_SCAN_RUN_ID" ]; then
-            echo "::error::Two distinct successful security scan run IDs are required."
+            || [[ ! "$PREVIOUS_SECURITY_SCAN_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Both security scan run ID inputs must be numeric; the same run ID is valid for the single-scan policy."
             exit 1
           fi
 
