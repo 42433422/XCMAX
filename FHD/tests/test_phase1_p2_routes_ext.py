@@ -142,7 +142,11 @@ def misc_client() -> TestClient:
 
 def test_preferences_require_session_and_ignore_client_user_id(misc_client: TestClient) -> None:
     got = misc_client.get("/preferences", params={"user_id": "u2"}).json()
-    assert got == {"success": True, "preferences": {}, "data": {"user_id": None, "preferences": {}}}
+    assert got == {
+        "success": True,
+        "preferences": {},
+        "data": {"user_id": None, "preferences": {}},
+    }
     r = misc_client.post("/preferences", json={"key": "theme", "value": "dark"})
     assert r.status_code == 401
 
@@ -387,7 +391,10 @@ def test_customers_post_missing_name(_mock_erp: MagicMock, customer_client: Test
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
 @patch("app.fastapi_routes.domains.customer.routes._customer_pg_insert")
 def test_customers_post_ok(
-    mock_insert: MagicMock, _mock_erp: MagicMock, customer_client: TestClient
+    mock_insert: MagicMock,
+    _mock_erp: MagicMock,
+    customer_client: TestClient,
+    local_tools,
 ) -> None:
     mock_insert.return_value = {"id": 5, "name": "丙公司"}
     with patch("app.fastapi_routes.domains.customer.routes._customers_write_raise"):

@@ -6,18 +6,6 @@ from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRe
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
 
-@pytest.fixture
-def mock_tool_dispatch(monkeypatch):
-    """Keep parent-process dispatch mocks local; process boundaries have separate tests."""
-    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-
-    monkeypatch.setattr(
-        AgentToolExecutor,
-        "execute_with_deadline",
-        lambda self, step, **kw: self.execute(step, runtime_context=kw["runtime_context"]),
-    )
-
-
 def test_workflow_registry_exposes_employee_and_business_db_tools():
     from app.application.workflow.planner import get_tool_registry as get_planner_registry
     from app.services.tools_execution.registry import get_workflow_tool_registry
@@ -691,7 +679,7 @@ def test_chat_formats_employee_and_business_db_outputs():
     assert "output_preview" in node_results[0]
 
 
-def test_ai_chat_dynamic_workflow_executes_employee_tool(mock_tool_dispatch):
+def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 
@@ -780,7 +768,7 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(mock_tool_dispatch):
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(mock_tool_dispatch):
+def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(local_tools):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 
@@ -850,7 +838,9 @@ def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(mock_tool_dis
     assert action == "read"
 
 
-def test_ai_chat_pro_low_risk_dynamic_workflow_uses_agent_orchestrator(mock_tool_dispatch):
+def test_ai_chat_pro_low_risk_dynamic_workflow_uses_agent_orchestrator(
+    local_tools,
+):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 
@@ -1206,7 +1196,7 @@ def test_chat_formats_recovery_hint_for_non_retryable_failure():
     assert result["data"]["data"]["workflow_status"] == {}
 
 
-def test_ai_chat_explicit_employee_intent_runs_without_pro_source(mock_tool_dispatch):
+def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 
@@ -1294,7 +1284,7 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source(mock_tool_disp
 
 
 def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_source(
-    mock_tool_dispatch,
+    local_tools,
 ):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
@@ -1387,7 +1377,7 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(mock_tool_dispatch):
+def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(local_tools):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 

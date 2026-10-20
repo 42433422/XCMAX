@@ -733,7 +733,9 @@ def test_attach_chat_trace_run_skips_existing_run_id() -> None:
     assert repo.list_recent() == []
 
 
-def test_attach_chat_trace_run_orchestrates_low_risk_tool_call() -> None:
+def test_attach_chat_trace_run_orchestrates_low_risk_tool_call(
+    local_tools,
+) -> None:
     repo = InMemoryAgentRunRepository()
     payload = {
         "success": True,

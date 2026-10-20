@@ -62,7 +62,7 @@ class TestOrdersNextNumber:
 
 
 class TestShipmentGenerate:
-    def test_success(self, client: TestClient, _mock_svc: MagicMock):
+    def test_success(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.generate_shipment_document.return_value = {
             "success": True,
             "file_path": "/tmp/out.xlsx",
@@ -90,7 +90,7 @@ class TestShipmentGenerate:
 
 
 class TestShipmentGenerateBatch:
-    def test_success(self, client: TestClient, _mock_svc: MagicMock):
+    def test_success(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.generate_shipment_document.return_value = {"success": True}
         r = client.post(
             "/api/shipment/generate-batch",
@@ -130,7 +130,7 @@ class TestShipmentPrint:
         r = client.post("/api/shipment/print", json={"file_path": "/nonexistent/file.xlsx"})
         assert r.status_code == 404
 
-    def test_with_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
+    def test_with_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path, local_tools):
         test_file = Path(get_shipment_output_dir()) / "test.xlsx"
         test_file.write_bytes(b"fake")
         _mock_svc.mark_as_printed.return_value = {"success": True}
@@ -250,7 +250,7 @@ def test_order_readback(client, _mock_svc, url, record, status):
 
 
 class TestShipmentOrdersDelete:
-    def test_success(self, client: TestClient, _mock_svc: MagicMock):
+    def test_success(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.delete_shipment.return_value = {"success": True}
         r = client.delete("/api/shipment/orders/1")
         assert r.status_code == 200
@@ -269,7 +269,7 @@ class TestShipmentOrdersDelete:
 
 
 class TestApiOrdersList:
-    def test_create(self, client: TestClient, _mock_svc: MagicMock):
+    def test_create(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.create_shipment.return_value = {
             "success": True,
             "shipment": {"id": 1, "purchase_unit": "单位A"},
@@ -296,7 +296,7 @@ class TestApiOrdersGet:
         r = client.get("/api/orders/abc")
         assert r.status_code == 404
 
-    def test_update(self, client: TestClient, _mock_svc: MagicMock):
+    def test_update(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.update_shipment_record.return_value = {"success": True}
         _mock_svc.get_order.return_value = {
             "id": 1,

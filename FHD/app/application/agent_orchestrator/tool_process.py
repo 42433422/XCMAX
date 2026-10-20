@@ -9,12 +9,25 @@ import os
 import shutil
 import tempfile
 import time
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
 import psutil
 
 from app.application.tool_execution_deadline import invocation_deadline
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
+
+def _json_scalar(value):
+    # Match API numeric/date encoding; never stringify arbitrary service objects.
+    if isinstance(value, Decimal):
+        exponent = value.as_tuple().exponent
+        return int(value) if isinstance(exponent, int) and exponent >= 0 else float(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    raise TypeError("unsupported tool result value")
 
 
 def _worker(executor_type, payload, folder, ready, start, done, deadline):
@@ -31,10 +44,32 @@ def _worker(executor_type, payload, folder, ready, start, done, deadline):
             output = executor_type().execute(
                 agent_step_from_dict(data["step"]), runtime_context=data["context"]
             )
-        encoded = json.dumps({"output": output, "uncertain": budget.uncertain}, allow_nan=False)
+        encoded = json.dumps(
+            {"output": output, "uncertain": budget.uncertain},
+            allow_nan=False,
+            default=_json_scalar,
+        )
         if len(encoded.encode()) > 8 * 1024 * 1024:
             raise ValueError("tool result exceeds transport limit")
         Path(folder, "result").write_text(encoded, encoding="utf-8")
+        done.set()
+    except BOUNDARY_ERRORS as exc:
+        # Dispatch may already have written: preserve uncertainty without waiting
+        # out the deadline or inviting a duplicate write. Never expose raw errors.
+        Path(folder, "result").write_text(
+            json.dumps(
+                {
+                    "output": {
+                        "outcome": "unknown",
+                        "error_code": "tool_result_transport_failed",
+                        "exception_type": type(exc).__name__,
+                        "retryable": False,
+                    },
+                    "uncertain": [],
+                }
+            ),
+            encoding="utf-8",
+        )
         done.set()
     finally:
         # Keep ancestry intact until the parent has reaped tool-created children.
@@ -83,7 +118,11 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
     try:
         payload = json.dumps({"step": step.to_dict(), "context": context}, allow_nan=False)
     except (ValueError, TypeError):
-        return {"success": False, "error_code": "tool_context_not_serializable", "retryable": False}
+        return {
+            "success": False,
+            "error_code": "tool_context_not_serializable",
+            "retryable": False,
+        }
     if getattr(executor, "_tool_cleanup_failed", False):
         return {"success": False, "error_code": "tool_cleanup_unresolved", "retryable": False}
     ctx = multiprocessing.get_context("spawn")

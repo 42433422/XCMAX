@@ -1024,7 +1024,7 @@ class TestExcelVectorIngest:
             r = client.post("/api/excel/vector/ingest", json={"file_path": ""})
         assert r.status_code == 400
 
-    def test_ingest_json_valid_file_path(self):
+    def test_ingest_json_valid_file_path(self, local_tools):
         mock_svc = MagicMock()
         mock_svc.ingest_excel.return_value = {"success": True, "index_id": "abc"}
         with patch(
@@ -1053,7 +1053,7 @@ class TestExcelVectorIngest:
             )
         assert r.status_code == 400
 
-    def test_ingest_json_exception_returns_500(self):
+    def test_ingest_json_exception_returns_500(self, local_tools):
         mock_svc = MagicMock()
         mock_svc.ingest_excel.side_effect = RuntimeError("crash")
         with patch(
@@ -1083,7 +1083,7 @@ class TestExcelVectorIngest:
             )
         assert r.status_code == 400
 
-    def test_ingest_multipart_valid_file(self, tmp_dir):
+    def test_ingest_multipart_valid_file(self, tmp_dir, local_tools):
         mock_svc = MagicMock()
         mock_svc.ingest_excel.return_value = {"success": True, "index_id": "x"}
         with (
@@ -1124,7 +1124,7 @@ class TestExcelVectorQuery:
             )
         assert r.status_code == 200
 
-    def test_query_failure_returns_400(self):
+    def test_query_failure_returns_400(self, local_tools):
         mock_svc = MagicMock()
         mock_svc.query.return_value = {"success": False, "message": "not found"}
         with patch(
@@ -1138,7 +1138,7 @@ class TestExcelVectorQuery:
             )
         assert r.status_code == 400
 
-    def test_query_exception_returns_500(self):
+    def test_query_exception_returns_500(self, local_tools):
         mock_svc = MagicMock()
         mock_svc.query.side_effect = RuntimeError("db down")
         with patch(

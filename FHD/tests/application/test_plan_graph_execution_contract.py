@@ -28,7 +28,7 @@ def run_plan(plan):
     )
 
 
-def test_permuted_dag_executes_dependencies_first():
+def test_permuted_dag_executes_dependencies_first(local_tools):
     parent, child = node("parent"), node("child", ["parent"])
     for nodes in ([child, parent], [parent, child]):
         calls = []
@@ -63,7 +63,7 @@ def test_invalid_graph_has_zero_side_effects_across_runtimes(nodes):
 
 @pytest.mark.parametrize("available,chosen", [(True, "yes"), (False, "no")])
 @pytest.mark.parametrize("reverse", [False, True])
-def test_conditional_plan_executes_only_selected_branch(available, chosen, reverse):
+def test_conditional_plan_executes_only_selected_branch(available, chosen, reverse, local_tools):
     first = node("first")
     first.branches = [Branch(target="yes", condition={"key": "available", "equals": True})]
     first.next = "no"
@@ -88,7 +88,7 @@ def test_conditional_plan_executes_only_selected_branch(available, chosen, rever
     )
 
 
-def test_unmatched_branch_without_default_has_no_side_effects():
+def test_unmatched_branch_without_default_has_no_side_effects(local_tools):
     first = node("first")
     first.branches = [Branch(target="yes", condition={"key": "available", "equals": True})]
     with patch(
@@ -100,7 +100,9 @@ def test_unmatched_branch_without_default_has_no_side_effects():
     assert dispatch.call_count == 1
 
 
-def test_branch_decision_survives_approval_and_repository_round_trip():
+def test_branch_decision_survives_approval_and_repository_round_trip(
+    local_tools,
+):
     import json
 
     from app.application.agent_orchestrator.run_models import agent_run_from_dict
@@ -137,7 +139,7 @@ def test_branch_decision_survives_approval_and_repository_round_trip():
     assert calls == ["first", "yes"]
 
 
-def test_failed_router_never_dispatches_any_branch():
+def test_failed_router_never_dispatches_any_branch(local_tools):
     first = node("first")
     first.next = "next"
     with patch(
@@ -155,7 +157,7 @@ def test_failed_router_never_dispatches_any_branch():
     "shape", ["nested", "prerequisite", "descendant", "diamond", "hard_join", "shared"]
 )
 @pytest.mark.parametrize("runtime", ["agent", "workflow"])
-def test_control_and_data_dependency_parity(shape, runtime):
+def test_control_and_data_dependency_parity(shape, runtime, local_tools):
     root, yes, no, end = [node(name) for name in ("root", "yes", "no", "end")]
     root.next = "yes"
     root.branches = [Branch("no", {"key": "available", "equals": False})]

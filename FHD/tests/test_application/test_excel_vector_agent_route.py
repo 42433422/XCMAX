@@ -17,8 +17,7 @@ def _client() -> TestClient:
 
 
 def test_excel_vector_ingest_route_executes_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     from app.application.dataset_rag_app_service import reset_dataset_rag_app_service_for_tests
 
@@ -70,8 +69,7 @@ def test_excel_vector_ingest_route_executes_through_agent_orchestrator(
 
 
 def test_excel_vector_query_route_executes_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     search_service = Mock()

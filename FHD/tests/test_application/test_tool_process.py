@@ -25,6 +25,13 @@ def _step(action="read", **params):
 
 class FixtureExecutor(AgentToolExecutor):
     def execute(self, step, *, runtime_context):
+        if step.action == "typed_result":
+            from datetime import date
+            from decimal import Decimal
+
+            return {"success": True, "price": Decimal("99.50"), "date": date(2026, 10, 21)}
+        if step.action == "invalid_result":
+            return {"success": True, "live_object": object()}
         if step.action == "hang":
             script = (
                 "import os,time,json;from pathlib import Path;"
@@ -103,3 +110,25 @@ def test_default_adapter_refuses_unserializable_or_expired_start_without_dispatc
         )
         assert result["error_code"] in codes and result["success"] is False, result
         assert {child.pid for child in multiprocessing.active_children()} <= children
+
+
+def test_real_adapter_transports_database_scalars_and_reports_unsupported_result():
+    executor = FixtureExecutor()
+    result = execute_with_tool_deadline(
+        executor,
+        _step("typed_result"),
+        runtime_context={},
+        timeout_seconds=5,
+    )
+    assert result["success"] and result["price"] == 99.5
+    assert result["date"] == "2026-10-21"
+    started = time.monotonic()
+    invalid = execute_with_tool_deadline(
+        executor,
+        _step("invalid_result"),
+        runtime_context={},
+        timeout_seconds=20,
+    )
+    assert time.monotonic() - started < 10
+    assert invalid["outcome"] == "unknown" and invalid["retryable"] is False
+    assert "tool_result_transport_failed" in str(invalid)

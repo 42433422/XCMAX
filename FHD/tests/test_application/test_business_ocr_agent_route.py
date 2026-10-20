@@ -17,8 +17,7 @@ def _client() -> TestClient:
 
 
 def test_business_ocr_route_publishes_event_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     ocr_domain = Mock()
@@ -71,8 +70,7 @@ def test_business_ocr_route_publishes_event_through_agent_orchestrator(
 
 
 def test_business_print_label_route_runs_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     print_domain = Mock()
@@ -129,8 +127,7 @@ def test_business_print_label_route_runs_through_agent_orchestrator(
 
 
 def test_business_inventory_update_route_runs_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     inventory_domain = Mock()
@@ -185,8 +182,7 @@ def test_business_inventory_update_route_runs_through_agent_orchestrator(
 
 
 def test_business_shipment_create_route_runs_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.delenv("FHD_BUSINESS_API_KEY", raising=False)

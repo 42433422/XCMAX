@@ -17,8 +17,7 @@ def _client() -> TestClient:
 
 
 def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     ocr_domain = Mock()
@@ -67,8 +66,7 @@ def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
 
 
 def test_skills_execute_route_runs_registered_skill_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     ocr_domain = Mock()

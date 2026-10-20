@@ -33,8 +33,7 @@ def _assert_purchase_run(repo: InMemoryAgentRunRepository, run_id: str, action: 
 
 
 def test_purchase_supplier_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
@@ -80,8 +79,7 @@ def test_purchase_supplier_mutation_routes_execute_through_agent_orchestrator(
 
 
 def test_purchase_order_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()

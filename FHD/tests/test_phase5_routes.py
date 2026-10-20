@@ -125,7 +125,9 @@ def test_print_get_printers_error(print_client, mock_printer_service: MagicMock)
     assert r.json()["success"] is False
 
 
-def test_print_printer_selection_get_put(print_client, mock_printer_service: MagicMock) -> None:
+def test_print_printer_selection_get_put(
+    print_client, mock_printer_service: MagicMock, local_tools
+) -> None:
     r = print_client.get("/api/print/printer-selection")
     assert r.status_code == 200
     r2 = print_client.put(
@@ -151,7 +153,7 @@ def test_print_default_and_test_endpoints(print_client) -> None:
     assert print_client.get("/api/print/label-printer").status_code == 200
 
 
-def test_print_document_validation(print_client, tmp_path) -> None:
+def test_print_document_validation(print_client, tmp_path, local_tools) -> None:
     r = print_client.post("/api/print/document", json={})
     assert r.status_code == 400
     missing = print_client.post(
@@ -189,7 +191,7 @@ def test_print_document_rejects_existing_path_outside_allowed_roots(
     assert response.json()["message"] == "文件不存在"
 
 
-def test_print_label_confirm_flow(print_client, tmp_path) -> None:
+def test_print_label_confirm_flow(print_client, tmp_path, local_tools) -> None:
     label = tmp_path / "label.png"
     label.write_bytes(b"\x89PNG\r\n")
     path = str(label)
@@ -226,14 +228,16 @@ def test_print_label_cancel_and_bad_copies(print_client, tmp_path) -> None:
     assert bad.status_code == 400
 
 
-def test_print_test_printer_post(print_client) -> None:
+def test_print_test_printer_post(print_client, local_tools) -> None:
     assert print_client.post("/api/print/test", json={}).status_code == 400
     assert (
         print_client.post("/api/print/test", json={"printer_name": "DocPrinter"}).status_code == 200
     )
 
 
-def test_print_workflow_dispatch(print_client, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def test_print_workflow_dispatch(
+    print_client, monkeypatch: pytest.MonkeyPatch, tmp_path, local_tools
+) -> None:
     fake_print_app = MagicMock()
     fake_print_app.print_single_label.return_value = {"success": True}
     monkeypatch.setattr(

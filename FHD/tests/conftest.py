@@ -463,7 +463,7 @@ def assert_response():
 
 
 @pytest.fixture
-def local_agent_contract_executor(monkeypatch):
+def local_tools(monkeypatch):
     """Opt-in parent mocks only; persistence/process acceptance keeps the real executor."""
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 

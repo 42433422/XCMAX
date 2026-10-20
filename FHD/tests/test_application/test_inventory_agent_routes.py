@@ -79,6 +79,7 @@ def test_inventory_structure_mutation_routes_execute_through_agent_orchestrator(
     payload,
     expected,
     result,
+    local_tools,
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
@@ -100,8 +101,7 @@ def test_inventory_structure_mutation_routes_execute_through_agent_orchestrator(
 
 
 def test_inventory_stock_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()

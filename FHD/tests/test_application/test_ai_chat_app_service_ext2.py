@@ -274,7 +274,7 @@ class TestTryHandleDynamicWorkflowExtended:
         service.workflow_engine.run.assert_not_called()
         service.approval_service.create_approval_request.assert_not_called()
 
-    def test_pro_import_with_db_file_success(self):
+    def test_pro_import_with_db_file_success(self, local_tools):
         service = _make_service()
         repo = InMemoryAgentRunRepository()
         ctx = {
@@ -427,7 +427,7 @@ class TestTryHandleDynamicWorkflowExtended:
         assert run.status == "completed"
         assert run.metadata["runtime_context"]["workflow_trace_mode"] == "deterministic_shortcut"
 
-    def test_pro_excel_deterministic_import_success(self):
+    def test_pro_excel_deterministic_import_success(self, local_tools):
         service = _make_service()
         repo = InMemoryAgentRunRepository()
         ctx = {
@@ -492,7 +492,7 @@ class TestTryHandleDynamicWorkflowExtended:
         output = run.final_output["node_outputs"]["import_excel_records"]
         assert output["data"]["result"]["created_products"] == 1
 
-    def test_pro_excel_deterministic_import_customer_unavailable(self):
+    def test_pro_excel_deterministic_import_customer_unavailable(self, local_tools):
         service = _make_service()
         repo = InMemoryAgentRunRepository()
         ctx = {

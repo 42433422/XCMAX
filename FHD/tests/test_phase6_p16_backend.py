@@ -2559,8 +2559,11 @@ class TestExcelAiFileAnalyze:
 class TestExcelAiSqliteImport:
     """Cover ``ai_sqlite_import_unit_products`` endpoint."""
 
-    def test_sqlite_import_success(self, excel_client):
-        from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    def test_sqlite_import_success(self, excel_client, local_tools):
+        from app.application.agent_orchestrator import (
+            AgentOrchestrator,
+            InMemoryAgentRunRepository,
+        )
 
         repo = InMemoryAgentRunRepository()
         with (
@@ -2730,7 +2733,7 @@ class TestExcelSkillsGenerateLabelTemplate:
             )
         assert response.status_code == 200
 
-    def test_generate_label_template_default_class_name(self, excel_client):
+    def test_generate_label_template_default_class_name(self, excel_client, local_tools):
         with patch(
             "app.infrastructure.skills.label_template_generator.get_label_template_generator_skill"
         ) as mock_get:

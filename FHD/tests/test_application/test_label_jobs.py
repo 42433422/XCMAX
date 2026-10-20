@@ -267,7 +267,7 @@ def test_expired_failed_and_uncertain_submissions_have_distinct_retry_rules(
     env.service.file(OWNER, job["id"])
 
 
-def test_submit_uses_real_agent_and_authenticated_identity(env, monkeypatch):
+def test_submit_uses_real_agent_and_authenticated_identity(env, monkeypatch, local_tools):
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
     repo = InMemoryAgentRunRepository()
