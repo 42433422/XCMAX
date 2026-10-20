@@ -1,5 +1,5 @@
 {
-  "lines": 2316795,
+  "lines": 2316744,
   "updated": "2026-10-21",
-  "note": "PG backup client compatibility on current main; lower measured baseline after preserving all existing backup and release protections."
+  "note": "棘轮下调"
 }
