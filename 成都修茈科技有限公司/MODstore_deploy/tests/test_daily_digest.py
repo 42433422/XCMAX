@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import modstore_server.models as models
@@ -66,9 +66,12 @@ def test_build_digest_html_contains_sections(tmp_path, monkeypatch):
 
     html = build_digest_html()
     assert "MODstore" in html
-    assert "系统状态" in html
+    assert "产品与客户进展" in html
+    assert "近 24 小时产品更新" in html
+    assert "近 24 小时工单结果" in html
+    assert "待决策" in html
+    assert "仓库未连接 Git" in html
     assert "每日运营摘要" in html
-    assert "编制在岗" in html or "在岗员工" in html
     assert "文档一致性" in html
 
     models._engine = None
@@ -78,7 +81,7 @@ def test_build_digest_html_contains_sections(tmp_path, monkeypatch):
 def test_build_digest_approval_bundle_empty_pending() -> None:
     from modstore_server.daily_digest import build_digest_approval_bundle
 
-    expires = datetime.utcnow() + timedelta(hours=36)
+    expires = datetime.now(timezone.utc) + timedelta(hours=36)
     batch, html_out = build_digest_approval_bundle(
         pending=[],
         auth_email="ops@example.com",
@@ -102,7 +105,7 @@ def test_build_digest_approval_bundle_avoids_existing_token_hash(monkeypatch) ->
     batch, html_out = build_digest_approval_bundle(
         pending=[],
         auth_email="ops@example.com",
-        expires_at=datetime.utcnow() + timedelta(hours=36),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=36),
         existing_token_hashes=existing,
     )
 
@@ -114,7 +117,7 @@ def test_build_digest_approval_bundle_avoids_existing_token_hash(monkeypatch) ->
 def test_build_digest_approval_bundle_with_pending_row() -> None:
     from modstore_server.daily_digest import build_digest_approval_bundle
 
-    expires = datetime.utcnow() + timedelta(hours=36)
+    expires = datetime.now(timezone.utc) + timedelta(hours=36)
     row = SimpleNamespace(
         id=42,
         branch="feat/x",
