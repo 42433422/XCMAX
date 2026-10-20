@@ -4,11 +4,10 @@ import importlib.util
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.exc import IntegrityError
-
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 SOURCE = Path(__file__).resolve().parents[2] / "alembic/versions/2026_10_20_receipt_identity.py"
 spec = importlib.util.spec_from_file_location("candidate_migration", SOURCE)

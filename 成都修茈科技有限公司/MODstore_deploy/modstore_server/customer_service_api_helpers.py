@@ -20,15 +20,8 @@ from modstore_server.models_cs import (
 
 
 def own_session_or_404(db: Session, user: User, session_id: int) -> CustomerServiceSession:
-    row = (
-        db.query(CustomerServiceSession)
-        .filter(
-            CustomerServiceSession.id == session_id,
-            CustomerServiceSession.user_id == user.id,
-        )
-        .first()
-    )
-    if not row:
+    row = db.get(CustomerServiceSession, session_id)
+    if row is None or row.user_id != user.id:
         raise HTTPException(404, "客服会话不存在")
     return row
 
@@ -36,15 +29,14 @@ def own_session_or_404(db: Session, user: User, session_id: int) -> CustomerServ
 def visible_ticket_or_404(db: Session, user: User, ticket_id: int) -> CustomerServiceTicket:
     from modstore_server.customer_ticket_reader import TicketReader
 
-    query = db.query(CustomerServiceTicket).filter(CustomerServiceTicket.id == ticket_id)
-    if isinstance(user, TicketReader):
-        query = query.filter(CustomerServiceTicket.user_id.in_(user.owner_ids))
-    elif not user.is_admin:
-        query = query.filter(CustomerServiceTicket.user_id == user.id)
-    row = query.first()
-    if not row:
-        raise HTTPException(404, "客服工单不存在")
-    return row
+    row = db.get(CustomerServiceTicket, ticket_id)
+    if row is not None and (
+        row.user_id in user.owner_ids
+        if isinstance(user, TicketReader)
+        else user.is_admin or row.user_id == user.id
+    ):
+        return row
+    raise HTTPException(404, "客服工单不存在")
 
 
 def standard_payload(
@@ -84,22 +76,9 @@ def integration_payload(row: CustomerServiceIntegration) -> Dict[str, Any]:
 
 
 def audit_payload(row: CustomerServiceAuditLog) -> Dict[str, Any]:
+    fields = "id ticket_id session_id actor_user_id actor_type event_type".split()
     return {
-        "id": row.id,
-        "ticket_id": row.ticket_id,
-        "session_id": row.session_id,
-        "actor_user_id": row.actor_user_id,
-        "actor_type": row.actor_type,
-        "event_type": row.event_type,
+        **{name: getattr(row, name) for name in fields},
         "detail": json_loads(row.detail_json, {}),
         "created_at": row.created_at.isoformat() if row.created_at else "",
     }
-
-
-__all__ = [
-    "audit_payload",
-    "integration_payload",
-    "own_session_or_404",
-    "standard_payload",
-    "visible_ticket_or_404",
-]

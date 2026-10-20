@@ -12,6 +12,7 @@
           <div class="cs-hero-title">
             <span class="cs-kicker">客服原单 · 内部 ID {{ ticketId }}</span>
             <h2>{{ ticket.title || '（无标题）' }}</h2>
+            <button type="button" class="cs-btn" :disabled="saving" @click="correctTitle">更正标题</button>
             <code class="cs-ticket-no">{{ ticket.ticket_no }}</code>
           </div>
           <div class="cs-badges">
@@ -105,9 +106,9 @@
         <summary>原始数据（排查用，默认收起）</summary>
         <p class="cs-hint">包含原单 resolution、附件索引、跟进与员工回写；不展开支持包二进制内容。</p>
         <h4>客户证据、领取与处理进度</h4><pre class="cs-payload">{{ prettyJson(evidence) }}</pre>
-        <h4>决策记录</h4><pre class="cs-payload">{{ rawOrEmpty(detail.decisions) }}</pre>
-        <h4>执行动作</h4><pre class="cs-payload">{{ rawOrEmpty(detail.actions) }}</pre>
-        <h4>审计记录</h4><pre class="cs-payload">{{ rawOrEmpty(detail.audit_logs) }}</pre>
+        <template v-for="(rows, label) in { 决策记录: detail.decisions, 执行动作: detail.actions, 审计记录: detail.audit_logs }" :key="label">
+          <h4>{{ label }}</h4><pre class="cs-payload">{{ rawOrEmpty(rows) }}</pre>
+        </template>
       </details>
     </div>
   </main>
@@ -117,6 +118,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
+import api from '@/api/core'
 import {
   auditItems, buildTimeline, formatBeijingTime, intentLabel, prettyJson, priorityLabel, resolutionStateBadge,
   routeLabel, submitterTypeLabel, teamMembers, ticketStatusBadge, yesNoBadge, type Row,
@@ -127,6 +129,7 @@ const route = useRoute()
 const router = useRouter()
 const detail = ref<Detail | null>(null)
 const loading = ref(false), error = ref('')
+const saving = ref(false)
 let generation = 0
 
 const ticketId = computed(() => Number(String(route.params.ticketId ?? '')))
@@ -150,6 +153,18 @@ const rawOrEmpty = (rows: unknown[]) => rows.length ? prettyJson(rows) : '暂无
 const message = (cause: unknown) => cause instanceof Error ? cause.message : String(cause)
 
 function backToList() { void router.push({ name: 'customer-service-tickets' }) }
+
+async function correctTitle() {
+  const id = ticketId.value, expectedTitle = String(ticket.value.title || '')
+  const title = window.prompt('请输入此工单的正确标题', expectedTitle)?.trim()
+  if (!title || title === expectedTitle || saving.value) return
+  saving.value = true
+  try {
+    await api.put(`/api/xcmax/market-proxy/customer-service/tickets/${id}/title`, { title, expected_title: expectedTitle })
+    if (ticketId.value === id) await load()
+  } catch (cause) { if (ticketId.value === id) error.value = message(cause) }
+  finally { saving.value = false }
+}
 
 async function load() {
   const request = ++generation

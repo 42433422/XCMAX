@@ -7,10 +7,11 @@ import { ADMIN_HOST_ROUTE_RECORDS } from '../../../admin-console/src/adminHostRo
 import { ADMIN_OPERATOR_MENU_ITEMS, ADMIN_OPERATOR_ROUTE_NAMES } from '../../../admin-console/src/constants/adminOperatorNav'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 
-const { list, detail, push, route } = vi.hoisted(() => ({
-  list: vi.fn(), detail: vi.fn(), push: vi.fn(), route: { params: {} as Record<string, string> },
+const { list, detail, push, route, put } = vi.hoisted(() => ({
+  put: vi.fn(), list: vi.fn(), detail: vi.fn(), push: vi.fn(), route: { params: {} as Record<string, string> },
 }))
 vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail } }))
+vi.mock('@/api/core', () => ({ default: { put } }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => route }))
 
 const ticket = {
@@ -94,6 +95,16 @@ describe('customer service ticket list', () => {
 })
 
 describe('customer service ticket detail', () => {
+  it('corrects the same ticket title with a stale-title guard and refreshes audit evidence', async () => {
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('  员工图谱无法正常显示  ')
+    detail.mockResolvedValueOnce(payload).mockResolvedValueOnce({ ...payload, ticket: { ...ticket, title: '员工图谱无法正常显示' }, audit_logs: [{ event_type: 'ticket_title_corrected', detail: { old_title: ticket.title, new_title: '员工图谱无法正常显示' } }] })
+    const wrapper = mountDetail(); await flushPromises()
+    await wrapper.findAll('button').find(row => row.text() === '更正标题')!.trigger('click'); await flushPromises()
+    expect(put).toHaveBeenCalledWith('/api/xcmax/market-proxy/customer-service/tickets/42/title', { title: '员工图谱无法正常显示', expected_title: ticket.title })
+    expect(wrapper.find('h2').text()).toBe('员工图谱无法正常显示')
+    for (const part of ['更正工单标题', '标题：平台功能问题 → 员工图谱无法正常显示']) expect(wrapper.text()).toContain(part)
+    wrapper.unmount(); prompt.mockRestore()
+  })
   it('opens the real internal id with header, original text and empty sections', async () => {
     const wrapper = mountDetail(); await flushPromises()
     expect(detail).toHaveBeenCalledWith(42)

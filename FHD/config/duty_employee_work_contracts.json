@@ -2,6 +2,7 @@
   "schema_version": "xcagi.duty_employee_work_contracts/v1",
   "timezone": "Asia/Shanghai",
   "defaults": {
+    "acceptance": ["代码修复工单必须沿用原编号、单独创建可追溯 PR（一个活跃集成 PR，不混无关工单）；每次进度回写附 PR 链接、提交 SHA、验证结果及阻塞；合入 main、绑定主线构建并完成原问题运行验收后才可报告修复完成，关单遵守客户确认，不得以本地通过或状态标签代替闭环。只读诊断无代码变更时记录证据与原因，不虚建 PR。"],
     "receipt": "employee_execution_metric",
     "retry_limit": 2,
     "failure_route": "employee_evolution_scan",

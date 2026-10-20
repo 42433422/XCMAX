@@ -17,8 +17,7 @@ export interface OfflineQueryResult {
 }
 
 interface SqliteLike {
-  prepare(sql: string): { all(...params: unknown[]): unknown[] }
-  exec(sql: string): void
+  prepare(sql: string): { all(...params: unknown[]): unknown[]; run(...params: unknown[]): unknown }
   close(): void
 }
 
@@ -111,7 +110,8 @@ export async function queryOffline(
   const db = await openReadOnlyDb(dbPath)
   if (!db) return { ok: false, error: 'unsupported', dbPath }
   try {
-    db.exec('PRAGMA busy_timeout=1000; BEGIN')
+    db.prepare('PRAGMA busy_timeout=1000').run()
+    db.prepare('BEGIN').run()
     // SessionManager stores naive UTC dates; julianday also handles ISO UTC offsets.
     // Offline impersonation is deliberately denied until it has a separate verified identity.
     const rows = db.prepare(
@@ -126,7 +126,7 @@ export async function queryOffline(
     const q = resolveOfflineQuery(params.kind, params, rows[0].user_id)
     if (!q) return { ok: false, error: 'unsupported_kind' }
     const data = db.prepare(q.sql).all(...q.bind)
-    db.exec('COMMIT')
+    db.prepare('COMMIT').run()
     return { ok: true, data, dbPath }
   } catch {
     // A missing/old authorization schema must never fall back to an unscoped read.
