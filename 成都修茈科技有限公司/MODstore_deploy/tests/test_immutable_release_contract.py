@@ -387,6 +387,9 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         trigger = workflow[True]
         assert "workflow_run" not in trigger
         assert trigger["workflow_dispatch"]["inputs"]["git_sha"]["required"] is True
+        assert (
+            trigger["workflow_dispatch"]["inputs"]["preserve_release_history"]["default"] is False
+        )
         assert trigger["workflow_dispatch"]["inputs"]["security_scan_run_id"]["required"] is True
         assert (
             trigger["workflow_dispatch"]["inputs"]["previous_security_scan_run_id"]["required"]
@@ -399,6 +402,8 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         assert "XCMAX_GITHUB_REPOSITORY" in rendered
         assert "XCMAX_PRODUCT_VERSION" in rendered
         assert "xcmax-immutable-release.sh" in rendered
+        assert "export XCMAX_PRESERVE_RELEASE_HISTORY=" in rendered
+        assert "${CONTROLLER_SHA}:ops/dr/$file" in rendered
         assert "modstore-deployment-correlation" in rendered
         assert "actions/upload-artifact@v4" in rendered
         assert "verify_security_scan_pair.py" in rendered
