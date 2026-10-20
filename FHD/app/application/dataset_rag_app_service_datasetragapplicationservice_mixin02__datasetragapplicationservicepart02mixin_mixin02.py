@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import importlib
 
+from app.application.dataset_rag_queue import owner_alive
+
 
 def _facade():
     return importlib.import_module("app.application.dataset_rag_app_service")
@@ -207,7 +209,7 @@ class __DatasetRagApplicationServicePart02MixinPart02Mixin:
     @staticmethod
     def _recover_rebuild_jobs_locked(state: _facade()._DatasetState) -> None:
         for job in state.rebuild_jobs.values():
-            if job.status == "running":
+            if job.status == "running" and not owner_alive(job.worker_id):
                 now = _facade()._utc_now_iso()
                 job.status = "queued"
                 job.error = "requeued after service restart"

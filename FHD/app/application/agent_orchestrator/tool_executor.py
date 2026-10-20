@@ -25,6 +25,14 @@ class AgentToolExecutor:
     def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
         from app.application.agent_orchestrator.tool_process import execute_isolated
 
+        if (
+            step.tool_id == "dataset_rag"
+            and step.action == "rebuild_index"
+            and step.params.get("background", True)
+        ):
+            from app.application.dataset_rag_queue import ensure_host_worker
+
+            ensure_host_worker()
         return execute_isolated(self, step, runtime_context, deadline_monotonic)
 
     def execute(
