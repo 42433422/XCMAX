@@ -96,11 +96,13 @@ domains:
       - FHD/frontend/src/api/modelPayment.ts
       - FHD/frontend/src/views/RegisterView.vue
       - FHD/frontend/src/views/AdminEntitlementsView.vue
+      - 成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md
       - 成都修茈科技有限公司/MODstore_deploy/docs/developer/01-quickstart.md
       - 成都修茈科技有限公司/MODstore_deploy/docs/developer/02-authentication.md
       - 成都修茈科技有限公司/MODstore_deploy/docs/developer/05-sdk-examples.md
       - 成都修茈科技有限公司/MODstore_deploy/docs/developer/08-key-export-desktop.md
       - 成都修茈科技有限公司/MODstore_deploy/market/src/views/developer/DeveloperTokensPanel.vue
+      - 成都修茈科技有限公司/MODstore_deploy/market/src/views/developer/DeveloperDocsPanel.vue
     mode: lint
     check: python scripts/dev/ssot_plugins/account_system.py check
     sync: null
