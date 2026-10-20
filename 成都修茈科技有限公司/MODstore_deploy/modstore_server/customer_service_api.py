@@ -9,7 +9,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 import logging
 import threading
-from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,6 +25,7 @@ from modstore_server.customer_service_orchestrator import (
     ticket_payload,
 )
 from modstore_server.customer_service_api_helpers import (
+    close_ticket_with_evidence,
     audit_payload as _audit_payload,
     integration_payload as _integration_payload,
     own_session_or_404 as _own_session_or_404,
@@ -102,6 +102,19 @@ class StandardBody(BaseModel):
     auto_enabled: bool = True
     risk_level: str = Field(default="low", max_length=16)
     priority: int = 100
+
+
+def _configuration_values(body: BaseModel) -> Dict[str, Any]:
+    values = body.model_dump()
+    for name, value in tuple(values.items()):
+        if isinstance(value, str):
+            values[name] = value.strip()
+        elif name in {"rules", "action_policy", "config"}:
+            values[name + "_json"] = json_dumps(values.pop(name))
+    for name, default in (("scenario", "general"), ("risk_level", "low"), ("integration_type", "openapi")):
+        if name in values:
+            values[name] = values[name] or default
+    return values
 
 
 class IntegrationBody(BaseModel):
@@ -304,61 +317,7 @@ async def close_ticket_as_admin(
     db: Session = Depends(get_db),
     user: User = Depends(_require_admin),
 ):
-    ticket = _visible_ticket_or_404(db, user, ticket_id)
-    key = f"admin-ticket-close:{ticket_id}:{body.request_id}"
-    existing = db.query(CustomerServiceAction).filter_by(idempotency_key=key).first()
-    request = body.model_dump()
-    if existing:
-        if json_loads(existing.request_json, {}) != request:
-            raise HTTPException(409, "同一关单请求标识不能用于不同内容")
-        if ticket.status != "resolved" or not ticket.closed_at:
-            raise HTTPException(409, "原工单状态已变化，不能重放关单结果")
-        return {"ticket": ticket_payload(ticket), "replayed": True}
-    if ticket.status != "processing" or ticket.closed_at:
-        raise HTTPException(409, "只有处理中且未关闭的工单可以验收关单")
-    if len(body.note.strip()) < 8 or len(body.verification.strip()) < 20:
-        raise HTTPException(422, "处理结论和实际验收证据不能为空")
-
-    now = datetime.now(timezone.utc)
-    evidence = json_loads(ticket.evidence_json, {})
-    resolution = evidence.get("resolution")
-    if not isinstance(resolution, dict):
-        resolution = {}
-    resolution.update(
-        state="resolved",
-        resolved_at=now.isoformat(),
-        verification_mode="admin_runtime",
-        verification_summary=body.verification.strip(),
-        resolution_note=body.note.strip(),
-        repair_verified=True,
-    )
-    evidence["resolution"] = resolution
-    ticket.evidence_json = json_dumps(evidence)
-    ticket.status, ticket.closed_at, ticket.updated_at = "resolved", now, now
-    db.add(
-        CustomerServiceAction(
-            ticket_id=ticket.id,
-            user_id=user.id,
-            action_type="ticket.close",
-            target_type="ticket",
-            target_id=str(ticket.id),
-            status="completed",
-            request_json=json_dumps(request),
-            result_json=json_dumps({"status": "resolved", "closed_at": now.isoformat()}),
-            idempotency_key=key,
-        )
-    )
-    audit(
-        db,
-        actor=user,
-        actor_type="admin",
-        ticket_id=ticket.id,
-        session_id=ticket.session_id,
-        event_type="admin_ticket_closed",
-        detail={"note": body.note.strip(), "verification": body.verification.strip()},
-    )
-    db.commit()
-    return {"ticket": ticket_payload(ticket), "replayed": False}
+    return close_ticket_with_evidence(db, user, ticket_id, body.model_dump())
 
 
 @router.get("/tickets/{ticket_id}")
@@ -441,17 +400,7 @@ async def create_standard(
     db: Session = Depends(get_db),
     user: User = Depends(_require_admin),
 ):
-    row = CustomerServiceStandard(
-        name=body.name.strip(),
-        scenario=body.scenario.strip() or "general",
-        description=body.description.strip(),
-        rules_json=json_dumps(body.rules),
-        action_policy_json=json_dumps(body.action_policy),
-        auto_enabled=body.auto_enabled,
-        risk_level=body.risk_level.strip() or "low",
-        priority=body.priority,
-        created_by=user.id,
-    )
+    row = CustomerServiceStandard(**_configuration_values(body), created_by=user.id)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -470,14 +419,8 @@ async def update_standard(
     )
     if not row:
         raise HTTPException(404, "审核标准不存在")
-    row.name = body.name.strip()
-    row.scenario = body.scenario.strip() or "general"
-    row.description = body.description.strip()
-    row.rules_json = json_dumps(body.rules)
-    row.action_policy_json = json_dumps(body.action_policy)
-    row.auto_enabled = body.auto_enabled
-    row.risk_level = body.risk_level.strip() or "low"
-    row.priority = body.priority
+    for key, value in _configuration_values(body).items():
+        setattr(row, key, value)
     db.commit()
     db.refresh(row)
     return _standard_payload(row, include_policy=True)
@@ -498,16 +441,7 @@ async def create_integration(
     db: Session = Depends(get_db),
     user: User = Depends(_require_admin),
 ):
-    row = CustomerServiceIntegration(
-        name=body.name.strip(),
-        integration_type=body.integration_type.strip() or "openapi",
-        connector_id=body.connector_id,
-        workflow_id=body.workflow_id,
-        scenario=body.scenario.strip() or "general",
-        config_json=json_dumps(body.config),
-        enabled=body.enabled,
-        created_by=user.id,
-    )
+    row = CustomerServiceIntegration(**_configuration_values(body), created_by=user.id)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -528,13 +462,8 @@ async def update_integration(
     )
     if not row:
         raise HTTPException(404, "集成配置不存在")
-    row.name = body.name.strip()
-    row.integration_type = body.integration_type.strip() or "openapi"
-    row.connector_id = body.connector_id
-    row.workflow_id = body.workflow_id
-    row.scenario = body.scenario.strip() or "general"
-    row.config_json = json_dumps(body.config)
-    row.enabled = body.enabled
+    for key, value in _configuration_values(body).items():
+        setattr(row, key, value)
     db.commit()
     db.refresh(row)
     return _integration_payload(row)
