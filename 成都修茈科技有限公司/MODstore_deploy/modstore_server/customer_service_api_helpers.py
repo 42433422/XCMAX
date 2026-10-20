@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from calendar import monthrange
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from modstore_server.customer_service_orchestrator import ticket_payload
@@ -17,6 +19,7 @@ from modstore_server.models_cs import (
     CustomerServiceAction,
     CustomerServiceAuditLog,
     CustomerServiceIntegration,
+    CustomerServiceMessage,
     CustomerServiceSession,
     CustomerServiceStandard,
     CustomerServiceTicket,
@@ -87,21 +90,22 @@ def update_expected_completion(
     return ticket
 
 
+def _row_payload(row: Any, fields: str) -> dict[str, Any]:
+    return {
+        **{name: getattr(row, name) for name in fields.split()},
+        **{
+            name: getattr(row, name).isoformat() if getattr(row, name) else ""
+            for name in ("created_at", "updated_at")
+            if hasattr(row, name)
+        },
+    }
+
+
 def standard_payload(
     row: CustomerServiceStandard, *, include_policy: bool = False
 ) -> dict[str, Any]:
-    payload = {
-        "id": row.id,
-        "name": row.name,
-        "scenario": row.scenario,
-        "description": row.description,
-        "auto_enabled": row.auto_enabled,
-        "risk_level": row.risk_level,
-        "priority": row.priority,
-        "rules": json_loads(row.rules_json, {}),
-        "created_at": row.created_at.isoformat() if row.created_at else "",
-        "updated_at": row.updated_at.isoformat() if row.updated_at else "",
-    }
+    payload = _row_payload(row, "id name scenario description auto_enabled risk_level priority")
+    payload["rules"] = json_loads(row.rules_json, {})
     if include_policy:
         payload["action_policy"] = json_loads(row.action_policy_json, {})
     return payload
@@ -109,66 +113,83 @@ def standard_payload(
 
 def integration_payload(row: CustomerServiceIntegration) -> dict[str, Any]:
     return {
-        "id": row.id,
-        "name": row.name,
-        "integration_type": row.integration_type,
-        "connector_id": row.connector_id,
-        "workflow_id": row.workflow_id,
-        "scenario": row.scenario,
+        **_row_payload(
+            row, "id name integration_type connector_id workflow_id scenario enabled created_by"
+        ),
         "config": json_loads(row.config_json, {}),
-        "enabled": row.enabled,
-        "created_by": row.created_by,
-        "created_at": row.created_at.isoformat() if row.created_at else "",
-        "updated_at": row.updated_at.isoformat() if row.updated_at else "",
     }
 
 
 def audit_payload(row: CustomerServiceAuditLog) -> dict[str, Any]:
-    fields = ["id", "ticket_id", "session_id", "actor_user_id", "actor_type", "event_type"]
     return {
-        **{name: getattr(row, name) for name in fields},
+        **_row_payload(row, "id ticket_id session_id actor_user_id actor_type event_type"),
         "detail": json_loads(row.detail_json, {}),
-        "created_at": row.created_at.isoformat() if row.created_at else "",
     }
 
 
 def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request: dict[str, str]):
     ticket = visible_ticket_or_404(db, user, ticket_id)
+    disposition = request.get("disposition", "resolved")
+    expired = disposition == "expired"
     key = f"admin-ticket-close:{ticket_id}:{request['request_id']}"
     existing = db.query(CustomerServiceAction).filter_by(idempotency_key=key).first()
     if existing:
-        if json_loads(existing.request_json, {}) != request:
+        previous = json_loads(existing.request_json, {})
+        previous.setdefault("disposition", "resolved")
+        if previous != {"disposition": "resolved", **request}:
             raise HTTPException(409, "同一关单请求标识不能用于不同内容")
-        if ticket.status != "resolved" or not ticket.closed_at:
+        if ticket.status != disposition or not ticket.closed_at:
             raise HTTPException(409, "原工单状态已变化，不能重放关单结果")
         return {"ticket": ticket_payload(ticket), "replayed": True}
     if ticket.status != "processing" or ticket.closed_at:
         raise HTTPException(409, "只有处理中且未关闭的工单可以验收关单")
     if len(request["note"].strip()) < 8 or len(request["verification"].strip()) < 20:
         raise HTTPException(422, "处理结论和实际验收证据不能为空")
+    if expired:
+        today = datetime.now(UTC) + timedelta(hours=8)
+        year, month = divmod(today.year * 12 + today.month - 3, 12)
+        cutoff = datetime(
+            year, month + 1, min(today.day, monthrange(year, month + 1)[1])
+        ) - timedelta(hours=8)
+        recent = max(ticket.created_at, ticket.updated_at or ticket.created_at) >= cutoff
+        for model in (CustomerServiceAuditLog, CustomerServiceMessage, CustomerServiceAction):
+            recent |= (
+                db.query(model.id)
+                .filter(
+                    model.ticket_id == ticket_id,
+                    or_(
+                        model.created_at >= cutoff,
+                        getattr(model, "updated_at", model.created_at) >= cutoff,
+                    ),
+                )
+                .first()
+                is not None
+            )
+        if recent or ticket.intent == "custom_delivery":
+            raise HTTPException(409, "仅可处置超过两个月且无后续活动的非定制旧单")
 
+    session = db.get(CustomerServiceSession, ticket.session_id)
+    if session is None or session.user_id != ticket.user_id:
+        raise HTTPException(409, "原客服会话不可核验，不能关闭工单")
     now = datetime.now(UTC)
     evidence = json_loads(ticket.evidence_json, {})
     resolution = evidence.get("resolution")
     if not isinstance(resolution, dict):
         resolution = {}
     resolution.update(
-        state="resolved",
-        resolved_at=now.isoformat(),
-        verification_mode="admin_runtime",
+        state=disposition,
+        verification_mode="admin_expiry" if expired else "admin_runtime",
         verification_summary=request["verification"].strip(),
         resolution_note=request["note"].strip(),
-        repair_verified=True,
+        repair_verified=not expired,
     )
+    resolution.pop("resolved_at" if expired else "expired_at", None)
+    resolution["expired_at" if expired else "resolved_at"] = now.isoformat()
     evidence["resolution"] = resolution
-    db.query(CustomerServiceTicket).filter_by(id=ticket_id).update(
-        {
-            "evidence_json": json_dumps(evidence),
-            "status": "resolved",
-            "closed_at": now,
-            "updated_at": now,
-        }
-    )
+    setattr(ticket, "evidence_json", json_dumps(evidence))
+    setattr(ticket, "status", disposition)
+    setattr(ticket, "closed_at", now)
+    setattr(ticket, "updated_at", now)
     db.add(
         CustomerServiceAction(
             ticket_id=ticket.id,
@@ -178,17 +199,30 @@ def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request:
             target_id=str(ticket.id),
             status="completed",
             request_json=json_dumps(request),
-            result_json=json_dumps({"status": "resolved", "closed_at": now.isoformat()}),
+            result_json=json_dumps({"status": disposition, "closed_at": now.isoformat()}),
             idempotency_key=key,
         )
     )
+    notice = f"工单 {ticket.ticket_no}：{'已过期不再处理（未修复，资金权益不变）' if expired else '管理员验收并关闭'}。{request['note'].strip()}"
+    db.add(
+        CustomerServiceMessage(
+            session_id=ticket.session_id,
+            ticket_id=ticket.id,
+            user_id=ticket.user_id,
+            role="assistant",
+            content=notice,
+            created_at=now,
+        )
+    )
+    setattr(session, "last_message", notice)
+    setattr(session, "updated_at", now)
     audit(
         db,
         actor=user,
         actor_type="admin",
         ticket_id=ticket.id,
         session_id=ticket.session_id,
-        event_type="admin_ticket_closed",
+        event_type="admin_ticket_expired" if expired else "admin_ticket_closed",
         detail={
             "note": request["note"].strip(),
             "verification": request["verification"].strip(),

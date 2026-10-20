@@ -52,7 +52,7 @@ def record_support_report(
         all(item.get(key, "") == value for key, value in report.items()) for item in reports
     )
     if values.get("support_bundle_base64") and same_issue and not saved:
-        if ticket.status in {"resolved", "closed", "done", "rejected"}:
+        if ticket.status in {"resolved", "closed", "done", "rejected", "expired"}:
             raise HTTPException(409, "原工单已关闭，请先通过客户复验入口重开")
         revision = hashlib.sha256(json.dumps(report, sort_keys=True).encode()).hexdigest()
         evidence["support_reports"] = [

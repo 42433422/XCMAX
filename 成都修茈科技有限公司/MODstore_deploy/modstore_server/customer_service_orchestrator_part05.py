@@ -11,7 +11,7 @@ from modstore_server.customer_issue_delivery_contract import (
     team_succeeded,
 )
 
-CLOSED_CUSTOMER_ISSUE_STATES = frozenset({"resolved", "closed", "done", "rejected"})
+CLOSED_CUSTOMER_ISSUE_STATES = frozenset({"resolved", "closed", "done", "rejected", "expired"})
 
 
 def _facade():
@@ -145,7 +145,7 @@ def apply_customer_ticket_incident_progress(
             ],
         }
     )
-    if ticket.status in {"resolved", "closed"} or any(
+    if ticket.status in {"resolved", "closed", "expired"} or any(
         report.get("progress_sha256") == progress_digest
         for report in ev.get("employee_reports", [])
         if isinstance(report, dict)
@@ -300,6 +300,8 @@ def apply_customer_ticket_incident_progress(
 def ticket_lifecycle_payload(
     status: str | None = None, decision_status: str | None = None
 ) -> _facade().Dict[str, _facade().Any]:
+    if status == "expired":
+        return {"lifecycle_stage": 5, "lifecycle_label": "已过期不再处理", "lifecycle_steps": []}
     stage = _facade().ticket_lifecycle_stage(status, decision_status)
     label = next(
         (name for (num, name) in _facade().TICKET_LIFECYCLE_STEPS if num == stage),

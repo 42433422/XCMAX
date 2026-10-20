@@ -32,7 +32,7 @@ def record_dispatch_failure(payload: dict[str, Any], error: str) -> None:
         return
     with get_session_factory()() as db:
         ticket = db.query(CustomerServiceTicket).filter_by(id=ticket_id, user_id=owner_id).first()
-        if ticket is None or ticket.status in {"resolved", "closed"}:
+        if ticket is None or ticket.status in {"resolved", "closed", "expired"}:
             return
         evidence = json_loads(ticket.evidence_json, {})
         resolution = issue_resolution(ticket, evidence)
@@ -136,6 +136,10 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
     event_id = str(event.get("id") or "")
     if not event_id or not payload.get("ticket_id") or not payload.get("user_id"):
         return {"ok": False, "message": "customer issue event missing lineage"}
+    with db_outbox.get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, int(payload["ticket_id"]))
+        if ticket is not None and ticket.status == "expired":
+            return {"ok": True, "skipped": True, "reason": "ticket_expired"}
     if payload.get("intake_source") == "private_mod_rework":
         from modstore_server.customer_issue_private_factory import (
             dispatch_private_rework,
@@ -162,7 +166,7 @@ def dispatch_pending_issue_events(ticket_id: int) -> None:
     """Retry original intake while retaining dispatched outbox evidence."""
     with db_outbox.get_session_factory()() as db:
         ticket = db.get(CustomerServiceTicket, ticket_id)
-        if ticket is None or ticket.status in {"resolved", "closed"}:
+        if ticket is None or ticket.status in {"resolved", "closed", "expired"}:
             return
         prefix, owner_id = f"{ticket.ticket_no}:", int(ticket.user_id)
     for record in db_outbox.fetch_pending(
