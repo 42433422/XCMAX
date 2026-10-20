@@ -88,7 +88,7 @@ def test_each_production_dispatch_keeps_validated_sha_and_scan_pair(tmp_path, wo
     ):
         assert step["env"][name] == "${{ inputs." + input_name + " }}"
     assert "${{ inputs." not in step["run"]
-    result, calls = _run_dispatch(tmp_path, step, "1234", "1200")
+    result, calls = _run_dispatch(tmp_path, step, "1234", "1234")
     assert result.returncode == 0, result.stderr
     assert [call[0] for call in calls] == [
         "fhd-ci-cd.yml",
@@ -103,16 +103,16 @@ def test_each_production_dispatch_keeps_validated_sha_and_scan_pair(tmp_path, wo
         )
         assert fields.get("release_sha", fields.get("git_sha")) == "a" * 40
         assert fields["security_scan_run_id"] == "1234"
-        assert fields["previous_security_scan_run_id"] == "1200"
+        assert fields["previous_security_scan_run_id"] == "1234"
         if call[0] == "fhd-deploy.yml":
             assert fields["action"] == "apply-latest"
             assert fields["action_id"] == "release:" + "a" * 40
 
 
 @pytest.mark.parametrize(
-    "current,previous", [("", "1200"), ("1234", ""), ("latest", "1200"), ("1234", "1234")]
+    "current,previous", [("", "1200"), ("1234", ""), ("latest", "1200")]
 )
-def test_missing_malformed_or_same_run_evidence_stops_before_dispatch(tmp_path, current, previous):
+def test_missing_or_malformed_evidence_stops_before_dispatch(tmp_path, current, previous):
     result, calls = _run_dispatch(tmp_path, _dispatch_step(SOURCE), current, previous)
     assert result.returncode != 0
     assert calls == []

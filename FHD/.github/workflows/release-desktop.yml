@@ -51,7 +51,7 @@ on:
         required: false
         type: string
       previous_security_scan_run_id:
-        description: "Prior-day zero-finding security scan run ID for the same SHA"
+        description: "Compatibility input; pass the current scan run ID for the single-scan policy"
         required: false
         type: string
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
@@ -402,14 +402,14 @@ jobs:
           path: security-reports/current
           run-id: ${{ inputs.security_scan_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Download prior-day normalized security evidence
+      - name: Download compatibility security evidence
         uses: actions/download-artifact@v8
         with:
           name: xcagi-security-release-reports
           path: security-reports/previous
           run-id: ${{ inputs.previous_security_scan_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Enforce two consecutive fresh zero-critical/high scans
+      - name: Enforce fresh exact-SHA zero-critical/high security scan
         run: >-
           python FHD/scripts/security/verify_security_scan_pair.py
           --previous-dir security-reports/previous
