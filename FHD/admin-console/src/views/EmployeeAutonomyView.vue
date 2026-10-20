@@ -107,10 +107,7 @@
             <td>{{ row.employee_id || row.employee || '—' }}</td>
             <td>{{ row.title || row.summary || row.suggestion || '—' }}</td>
             <td>{{ row.status || 'pending' }}</td>
-            <td class="ops">
-              <button type="button" class="link" @click="approveOne(row.id)">通过</button>
-              <button type="button" class="link danger" @click="rejectOne(row.id)">拒绝</button>
-            </td>
+            <td><div class="ops"><button type="button" class="link" @click="approveOne(row.id)">通过</button><button type="button" class="link danger" @click="rejectOne(row.id)">拒绝</button></div></td>
           </tr>
         </tbody>
       </table>
