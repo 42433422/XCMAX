@@ -30,6 +30,19 @@ def test_fix_failure_or_missing_roles_blocks_team():
     assert ticket.status == "processing" and ticket.closed_at is None
 
 
+def test_verify_must_bind_current_fix_revision():
+    rows = [
+        {"role": "scout", "ok": True},
+        {"role": "fix", "ok": True, "fix_revision": "rev:new"},
+        {"role": "verify", "ok": True, "verified_revision": "rev:old"},
+    ]
+    assert not team_succeeded(rows)
+    rows[2]["verified_revision"] = ""
+    assert not team_succeeded(rows)
+    rows[2]["verified_revision"] = "rev:new"
+    assert team_succeeded(rows)
+
+
 @pytest.mark.parametrize(
     "value",
     [

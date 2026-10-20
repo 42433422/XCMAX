@@ -240,6 +240,67 @@ class TestCapabilities:
         assert r.json()["intent_engines"] == {"error": "unavailable"}
 
 
+class TestAgentExecutionStore:
+    def test_disabled_when_durable_not_required(self) -> None:
+        from app.fastapi_routes.health_k8s import _check_agent_execution_store
+
+        with patch("app.utils.deployment.durable_execution_required", return_value=False):
+            assert _check_agent_execution_store()["status"] == "disabled"
+
+    def test_unhealthy_when_queue_degrades_to_memory(self) -> None:
+        from app.fastapi_routes.health_k8s import _check_agent_execution_store
+
+        with (
+            patch("app.utils.deployment.durable_execution_required", return_value=True),
+            patch(
+                "app.application.agent_orchestrator.run_repository."
+                "get_agent_run_repository_status",
+                return_value={"mode": "sqlalchemy", "durable": True},
+            ),
+            patch(
+                "app.application.agent_orchestrator.task_execution_repository."
+                "get_task_execution_repository_status",
+                return_value={"mode": "memory", "durable": False},
+            ),
+        ):
+            out = _check_agent_execution_store()
+        assert out["status"] == "unhealthy"
+        assert out["queue"]["mode"] == "memory"
+
+    def test_healthy_when_both_stores_durable(self) -> None:
+        from app.fastapi_routes.health_k8s import _check_agent_execution_store
+
+        with (
+            patch("app.utils.deployment.durable_execution_required", return_value=True),
+            patch(
+                "app.application.agent_orchestrator.run_repository."
+                "get_agent_run_repository_status",
+                return_value={"mode": "sqlalchemy", "durable": True},
+            ),
+            patch(
+                "app.application.agent_orchestrator.task_execution_repository."
+                "get_task_execution_repository_status",
+                return_value={"mode": "sqlalchemy", "durable": True},
+            ),
+        ):
+            assert _check_agent_execution_store()["status"] == "healthy"
+
+    def test_unhealthy_when_store_probe_raises(self) -> None:
+        from app.fastapi_routes.health_k8s import _check_agent_execution_store
+
+        with (
+            patch("app.utils.deployment.durable_execution_required", return_value=True),
+            patch(
+                "app.application.agent_orchestrator.run_repository."
+                "get_agent_run_repository_status",
+                side_effect=RuntimeError("durable AgentRun repository is required"),
+            ),
+        ):
+            out = _check_agent_execution_store()
+        assert out["status"] == "unhealthy"
+        assert out["error"] == "unavailable"
+
+
 class TestCheckHelpers:
     def test_check_database_healthy(self) -> None:
         from app.fastapi_routes.health_k8s import _check_database

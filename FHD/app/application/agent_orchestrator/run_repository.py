@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 import threading
 from typing import Protocol
 
@@ -21,9 +20,14 @@ from app.application.agent_orchestrator.task_models import (
     task_from_run,
     tenant_id_of_run,
 )
+from app.utils.deployment import durable_execution_required
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+class DurableExecutionUnavailable(RuntimeError):
+    """生产/预发/企业部署下 Agent run 持久化不可用（F13：拒绝接单而不是降级内存）。"""
 
 
 class AgentRunRepository(Protocol):
@@ -302,11 +306,14 @@ def get_agent_run_repository() -> AgentRunRepository:
                 "degraded_reason": "",
             }
         except RECOVERABLE_ERRORS as exc:
-            require_durable = os.environ.get(
-                "XCAGI_AGENT_RUN_REQUIRE_DURABLE", ""
-            ).strip().lower() in {"1", "true", "yes", "on"}
-            if require_durable:
-                raise RuntimeError(
+            _agent_run_repository = None
+            _agent_run_repository_status = {
+                "mode": "unavailable",
+                "durable": False,
+                "degraded_reason": str(exc),
+            }
+            if durable_execution_required():
+                raise DurableExecutionUnavailable(
                     f"durable AgentRun repository is required but unavailable: {exc}"
                 ) from exc
             logger.warning("AgentRun SQL repository unavailable, using memory store: %s", exc)

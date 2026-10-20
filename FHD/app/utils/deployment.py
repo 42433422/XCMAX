@@ -70,6 +70,24 @@ def is_desktop_mode() -> bool:
         return env_flag("XCAGI_DESKTOP_MODE")
 
 
+def durable_execution_required() -> bool:
+    """Agent run/queue 是否必须使用持久化存储（F13）。
+
+    显式 ``XCAGI_AGENT_RUN_REQUIRE_DURABLE``、staging/生产、企业版 SKU 一律要求持久化，
+    存储不可用时必须拒绝接单；其余（未标注环境的本地开发）允许降级内存但会告警。
+    """
+    if env_flag("XCAGI_AGENT_RUN_REQUIRE_DURABLE"):
+        return True
+    if deployment_is_production() or deployment_is_staging():
+        return True
+    try:
+        from app.mod_sdk.product_skus import resolve_product_sku
+
+        return resolve_product_sku() == "enterprise"
+    except ImportError:
+        return False
+
+
 def distributed_rate_limit_required() -> bool:
     """是否需要分布式（Redis）限流。
 

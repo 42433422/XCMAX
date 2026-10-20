@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from typing import Any
 
@@ -119,9 +120,36 @@ def execution_pending(result: dict[str, Any]) -> bool:
     )
 
 
+_REVISION_KEYS = ("merge_commit_sha", "branch", "task_id", "change_request_id", "revision")
+
+
+def artifact_revision(digest: Any, *, attempt: int = 0) -> str:
+    """fix 产物身份：优先 merge SHA/任务号，缺产物时退化为轮次；新 fix 必得新 revision。"""
+    rows = digest.get("outputs") if isinstance(digest, dict) else None
+    parts = [
+        f"{key}={row[key]}"
+        for row in rows or []
+        if isinstance(row, dict)
+        for key in _REVISION_KEYS
+        if row.get(key)
+    ]
+    parts.append(f"attempt={int(attempt)}")
+    return "rev:" + hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+def verification_bound(fix_row: dict[str, Any], verify_row: dict[str, Any]) -> bool:
+    """verify 只对它验过的那一版 fix 有效；revision 不匹配即视为未验证。"""
+    expected = str(fix_row.get("fix_revision") or "")
+    if not expected:
+        return True
+    return str(verify_row.get("verified_revision") or "") == expected
+
+
 def team_succeeded(rows: list[dict[str, Any]]) -> bool:
     by_role = {str(row.get("role") or ""): row for row in rows if isinstance(row, dict)}
-    return all(by_role.get(role, {}).get("ok") is True for role in ("scout", "fix", "verify"))
+    if not all(by_role.get(role, {}).get("ok") is True for role in ("scout", "fix", "verify")):
+        return False
+    return verification_bound(by_role["fix"], by_role["verify"])
 
 
 def issue_resolution(ticket: Any, evidence: dict[str, Any]) -> dict[str, Any]:

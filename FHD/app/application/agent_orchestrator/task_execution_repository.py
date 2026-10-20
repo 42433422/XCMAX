@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 import threading
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
+from app.application.agent_orchestrator.run_repository import DurableExecutionUnavailable
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
+from app.utils.deployment import durable_execution_required
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -195,31 +196,63 @@ class InMemoryTaskExecutionRepository:
 
 
 _task_execution_repository: TaskExecutionRepository | None = None
+_task_execution_repository_status: dict[str, str | bool] = {
+    "mode": "uninitialized",
+    "durable": False,
+    "degraded_reason": "",
+}
 
 
 def get_task_execution_repository() -> TaskExecutionRepository:
-    global _task_execution_repository
+    global _task_execution_repository, _task_execution_repository_status
     if _task_execution_repository is None:
         try:
             repository = SQLAlchemyTaskExecutionRepository()
             repository.get("")
             _task_execution_repository = repository
+            _task_execution_repository_status = {
+                "mode": "sqlalchemy",
+                "durable": True,
+                "degraded_reason": "",
+            }
         except RECOVERABLE_ERRORS as exc:
-            require_durable = os.environ.get(
-                "XCAGI_AGENT_RUN_REQUIRE_DURABLE", ""
-            ).strip().lower() in {"1", "true", "yes", "on"}
-            if require_durable:
-                raise RuntimeError("durable task execution queue unavailable") from exc
+            _task_execution_repository = None
+            _task_execution_repository_status = {
+                "mode": "unavailable",
+                "durable": False,
+                "degraded_reason": str(exc),
+            }
+            if durable_execution_required():
+                raise DurableExecutionUnavailable(
+                    "durable task execution queue unavailable"
+                ) from exc
             logger.warning("Task execution SQL queue unavailable, using memory: %s", exc)
             _task_execution_repository = InMemoryTaskExecutionRepository()
+            _task_execution_repository_status = {
+                "mode": "memory",
+                "durable": False,
+                "degraded_reason": str(exc),
+            }
     return _task_execution_repository
+
+
+def get_task_execution_repository_status() -> dict[str, str | bool]:
+    get_task_execution_repository()
+    return dict(_task_execution_repository_status)
 
 
 def set_task_execution_repository_for_tests(
     repository: TaskExecutionRepository | None,
 ) -> None:
-    global _task_execution_repository
+    global _task_execution_repository, _task_execution_repository_status
     _task_execution_repository = repository
+    _task_execution_repository_status = {
+        "mode": (
+            "memory" if isinstance(repository, InMemoryTaskExecutionRepository) else "uninitialized"
+        ),
+        "durable": False,
+        "degraded_reason": "",
+    }
 
 
 __all__ = [
@@ -229,5 +262,6 @@ __all__ = [
     "SQLAlchemyTaskExecutionRepository",
     "TaskExecutionRepository",
     "get_task_execution_repository",
+    "get_task_execution_repository_status",
     "set_task_execution_repository_for_tests",
 ]

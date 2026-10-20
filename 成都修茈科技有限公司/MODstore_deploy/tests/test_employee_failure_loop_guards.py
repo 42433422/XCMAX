@@ -255,3 +255,129 @@ def test_llm_catalog_merge_accepts_dict_entries(monkeypatch):
         "gpt-4o",
         "gpt-5",
     ]
+
+
+TEAM_PLAN = {
+    "team": [
+        {"role": "scout", "employee_id": "scout-1"},
+        {"role": "fix", "employee_id": "fix-1"},
+        {"role": "verify", "employee_id": "verify-1"},
+    ]
+}
+
+
+def _loop_rows(*, verify_ok: bool = True, verify_failed: bool = False) -> list[dict]:
+    verify_result = (
+        {"handler_failed": True, "status": "failed", "error": "verify handler failed"}
+        if verify_failed
+        else {"status": "success", "ok": True}
+    )
+    return [
+        {
+            "role": "scout",
+            "ok": True,
+            "status": "completed",
+            "result": {"status": "success"},
+            "handler_outputs": {"outputs": []},
+        },
+        {
+            "role": "fix",
+            "ok": False,
+            "status": "failed",
+            "handler_failed": True,
+            "result": {
+                "handler_failed": True,
+                "status": "failed",
+                "error": "tool call returned invalid json",
+            },
+            "handler_outputs": {"outputs": []},
+            "fix_revision": "rev:old",
+        },
+        {
+            "role": "verify",
+            "ok": verify_ok,
+            "status": "completed" if verify_ok else "failed",
+            "result": verify_result,
+            "handler_outputs": {"outputs": []},
+            "verified_revision": "rev:old" if verify_ok else "",
+        },
+    ]
+
+
+def _run_loop(monkeypatch, rows, *, verify_retry):
+    from modstore_server import incident_team_failure_loop as loop
+
+    monkeypatch.setenv(loop.BACKOFF_ENV, "0")
+    calls: list[str] = []
+
+    def retry_member(*, member, prev_results, **ctx):
+        calls.append(str(member.get("role") or ""))
+        if member.get("role") == "fix":
+            return {
+                "status": "success",
+                "ok": True,
+                "result": {
+                    "outputs": [
+                        {
+                            "handler": "para_delegate",
+                            "ok": True,
+                            "para_result": {"merge_commit_sha": "abc123"},
+                        }
+                    ]
+                },
+            }
+        return verify_retry
+
+    loop.run_failure_loop(
+        retry_member=retry_member,
+        event_id=1,
+        results=rows,
+        team_plan=TEAM_PLAN,
+        payload={},
+        event_type="on_error",
+        source="test",
+        uid=0,
+    )
+    return calls
+
+
+def test_new_fix_invalidates_prior_ok_verify(monkeypatch):
+    from modstore_server.customer_issue_delivery_contract import team_succeeded
+
+    rows = _loop_rows(verify_ok=True)
+    calls = _run_loop(
+        monkeypatch, rows, verify_retry={"status": "success", "ok": True, "result": {}}
+    )
+
+    assert calls == ["fix", "verify"]
+    assert rows[1]["fix_revision"] != "rev:old"
+    assert rows[2]["verified_revision"] == rows[1]["fix_revision"]
+    assert team_succeeded(rows)
+
+
+def test_failed_reverify_blocks_completion_even_if_old_verify_passed(monkeypatch):
+    from modstore_server.customer_issue_delivery_contract import team_succeeded
+
+    rows = _loop_rows(verify_ok=True)
+    _run_loop(
+        monkeypatch,
+        rows,
+        verify_retry={"status": "failed", "ok": False, "error": "FAIL 新版本未通过验收"},
+    )
+
+    assert rows[2]["ok"] is False
+    assert rows[2]["verified_revision"] == ""
+    assert not team_succeeded(rows)
+
+
+def test_verify_row_retried_separately_still_binds_new_fix_revision(monkeypatch):
+    from modstore_server.customer_issue_delivery_contract import team_succeeded
+
+    rows = _loop_rows(verify_ok=False, verify_failed=True)
+    calls = _run_loop(
+        monkeypatch, rows, verify_retry={"status": "success", "ok": True, "result": {}}
+    )
+
+    assert calls == ["fix", "verify"]
+    assert rows[2]["verified_revision"] == rows[1]["fix_revision"]
+    assert team_succeeded(rows)

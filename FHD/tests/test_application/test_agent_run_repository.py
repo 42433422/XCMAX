@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -16,6 +17,90 @@ from app.application.agent_orchestrator import (
     SQLAlchemyAgentRunRepository,
     ToolCall,
 )
+from app.application.agent_orchestrator import run_repository, task_execution_repository
+from app.utils.deployment import durable_execution_required
+
+
+def _break_sql_stores(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _unavailable(*args, **kwargs):
+        raise RuntimeError("database down")
+
+    monkeypatch.setattr(run_repository, "SQLAlchemyAgentRunRepository", _unavailable)
+    monkeypatch.setattr(
+        task_execution_repository, "SQLAlchemyTaskExecutionRepository", _unavailable
+    )
+    run_repository.set_agent_run_repository_for_tests(None)
+    task_execution_repository.set_task_execution_repository_for_tests(None)
+
+
+@pytest.fixture
+def clean_durable_env(monkeypatch: pytest.MonkeyPatch):
+    for name in (
+        "FHD_ENV",
+        "XCAGI_AGENT_RUN_REQUIRE_DURABLE",
+        "XCAGI_PRODUCT_SKU",
+        "TESTING",
+        "XCAGI_TESTING",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    yield
+    run_repository.set_agent_run_repository_for_tests(None)
+    task_execution_repository.set_task_execution_repository_for_tests(None)
+
+
+def test_durable_execution_required_matrix(clean_durable_env, monkeypatch) -> None:
+    assert durable_execution_required() is False
+    monkeypatch.setenv("XCAGI_AGENT_RUN_REQUIRE_DURABLE", "on")
+    assert durable_execution_required() is True
+    monkeypatch.setenv("XCAGI_AGENT_RUN_REQUIRE_DURABLE", "0")
+    monkeypatch.setenv("FHD_ENV", "production")
+    assert durable_execution_required() is True
+    monkeypatch.setenv("FHD_ENV", "staging")
+    assert durable_execution_required() is True
+    monkeypatch.delenv("FHD_ENV")
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    assert durable_execution_required() is True
+
+
+def test_production_refuses_memory_run_and_queue(clean_durable_env, monkeypatch) -> None:
+    monkeypatch.setenv("FHD_ENV", "production")
+    _break_sql_stores(monkeypatch)
+
+    with pytest.raises(RuntimeError):
+        run_repository.get_agent_run_repository()
+    with pytest.raises(RuntimeError):
+        task_execution_repository.get_task_execution_repository()
+
+    assert run_repository._agent_run_repository_status["mode"] == "unavailable"
+    assert task_execution_repository._task_execution_repository_status["durable"] is False
+
+
+def test_enterprise_sku_refuses_memory_run_and_queue(clean_durable_env, monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    _break_sql_stores(monkeypatch)
+
+    with pytest.raises(RuntimeError):
+        run_repository.get_agent_run_repository()
+    with pytest.raises(RuntimeError):
+        task_execution_repository.get_task_execution_repository()
+
+
+def test_local_dev_falls_back_to_memory_with_non_durable_status(
+    clean_durable_env, monkeypatch
+) -> None:
+    _break_sql_stores(monkeypatch)
+
+    runs = run_repository.get_agent_run_repository()
+    queue = task_execution_repository.get_task_execution_repository()
+    assert isinstance(runs, run_repository.InMemoryAgentRunRepository)
+    assert isinstance(queue, task_execution_repository.InMemoryTaskExecutionRepository)
+
+    run_status = run_repository.get_agent_run_repository_status()
+    queue_status = task_execution_repository.get_task_execution_repository_status()
+    assert run_status["durable"] is False
+    assert queue_status["durable"] is False
+    assert "database down" in str(run_status["degraded_reason"])
+    assert "database down" in str(queue_status["degraded_reason"])
 
 
 def test_sql_tenant_filter_precedes_limit_across_streaming_batches(tmp_path):

@@ -77,6 +77,15 @@ def internal_error_response(operation: str) -> JSONResponse:
     )
 
 
+def service_unavailable_response(operation: str) -> JSONResponse:
+    """持久化执行存储不可用时的接单失败关闭（F13），对外统一 503 语义。"""
+    logger.error("%s refused: durable execution store unavailable", operation)
+    return JSONResponse(
+        {"success": False, "message": PUBLIC_AGENT_SERVICE_ERROR},
+        status_code=503,
+    )
+
+
 def run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
     approval = issue_approval_grant(run, principal_id=principal.user_id)
     extra: dict[str, Any] = {"capabilities": task_capabilities(run)}
@@ -193,6 +202,7 @@ __all__ = [
     "public_run_dict",
     "run_reference_response",
     "run_response",
+    "service_unavailable_response",
     "success",
     "sync_execution_terminal_state",
 ]

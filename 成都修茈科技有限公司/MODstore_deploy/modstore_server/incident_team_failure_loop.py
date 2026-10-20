@@ -16,7 +16,7 @@ import os
 import time
 from typing import Any, Dict, List
 
-from modstore_server.customer_issue_delivery_contract import execution_succeeded
+from modstore_server.customer_issue_delivery_contract import artifact_revision, execution_succeeded
 from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.llm_failure_classifier import (
     FAILURE_KIND_MODEL_UNSUPPORTED,
@@ -107,9 +107,21 @@ def _is_handler_failed(result: Dict[str, Any]) -> bool:
     )
 
 
-def _mark_recovered(row: Dict[str, Any], result: Dict[str, Any]) -> None:
+def _mark_recovered(
+    row: Dict[str, Any],
+    result: Dict[str, Any],
+    *,
+    attempt: int = 0,
+    verified_revision: str = "",
+) -> None:
     row.update(ok=True, status="completed", result=result)
     row["handler_outputs"] = handler_output_digest(result)
+    role = str(row.get("role") or "")
+    if role == "fix":
+        # 新 fix 必得新 revision，旧 verify 随之失效
+        row["fix_revision"] = artifact_revision(row["handler_outputs"], attempt=attempt)
+    elif role == "verify":
+        row["verified_revision"] = verified_revision
 
 
 def _retry_ok(result: Dict[str, Any]) -> bool:
@@ -212,7 +224,13 @@ def run_failure_loop(
             }
             if _retry_ok(retry):
                 fu["ok"] = True
-                _mark_recovered(row, retry)
+                fix_row = next((r for r in results if r.get("role") == "fix"), None)
+                _mark_recovered(
+                    row,
+                    retry,
+                    attempt=fu["attempts"],
+                    verified_revision=str((fix_row or {}).get("fix_revision") or ""),
+                )
                 break
             error = failure_text(retry) or error
             kind, category = categorize(error)
@@ -242,16 +260,21 @@ def run_failure_loop(
             }
             _rerun_verify(retry_member, results, members, ctx)
         follow_ups.append(fu)
+    _enforce_verification_binding(results)
     return follow_ups
 
 
 def _rerun_verify(retry_member, results, members, ctx: Dict[str, Any]) -> None:
-    """fix 重派成功后，原 verify 是对失败修复的结论，必须重验一次。"""
+    """fix 重派成功后，旧 verify 只对上一版 fix 有效，必须对新 revision 重验一次。"""
     verify = next((r for r in results if r.get("role") == "verify"), None)
-    if verify is None or verify.get("ok") is True:
+    if verify is None:
         return
     if _is_handler_failed(_dict(verify.get("result"))):
         return  # verify 自己的失败由本循环单独处置，避免重复派
+    fix = next((r for r in results if r.get("role") == "fix"), None)
+    expected = str((fix or {}).get("fix_revision") or "")
+    # 先作废旧结论：即使重验抛错或不通过，也不能再拿上一版 verify 的 ok 完成整单
+    verify.update(ok=False, status="stale_pending_reverify", verified_revision="")
     member = members.get("verify") or {"employee_id": verify.get("employee_id"), "role": "verify"}
     prev = {str(r.get("role") or ""): r for r in results if isinstance(r, dict)}
     try:
@@ -260,7 +283,22 @@ def _rerun_verify(retry_member, results, members, ctx: Dict[str, Any]) -> None:
         logger.exception("incident_team: verify rerun failed")
         return
     if isinstance(out, dict) and _retry_ok(out):
-        _mark_recovered(verify, out)
+        _mark_recovered(verify, out, verified_revision=expected)
+
+
+def _enforce_verification_binding(results: List[Dict[str, Any]]) -> None:
+    """整单收口前再核一次：verify 未绑定当前 fix revision 的一律不算完成。"""
+    fix = next((r for r in results if r.get("role") == "fix"), None)
+    verify = next((r for r in results if r.get("role") == "verify"), None)
+    expected = str((fix or {}).get("fix_revision") or "")
+    if not expected or verify is None:
+        return
+    if str(verify.get("verified_revision") or "") == expected:
+        return
+    verify["ok"] = False
+    if str(verify.get("status") or "") in {"", "completed", "success", "done", "executed", "ok"}:
+        verify["status"] = "stale_pending_reverify"
+    verify["verified_revision"] = ""
 
 
 def loop_summary(follow_ups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

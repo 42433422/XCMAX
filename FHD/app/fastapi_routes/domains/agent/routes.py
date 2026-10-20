@@ -19,7 +19,10 @@ from app.application.agent_orchestrator.clarification import ClarificationAnswer
 from app.application.agent_orchestrator.run_control import run_operation_lock
 from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
 from app.application.agent_orchestrator.run_models import AgentRun
-from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+from app.application.agent_orchestrator.run_repository import (
+    DurableExecutionUnavailable,
+    get_agent_run_repository,
+)
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.runtime_context import RuntimeContextOwnershipError
 from app.application.agent_orchestrator.task_dispatcher import notify_agent_task_dispatcher
@@ -63,6 +66,9 @@ from app.fastapi_routes.domains.agent.route_support import (
     run_response as _run_response,
 )
 from app.fastapi_routes.domains.agent.route_support import (
+    service_unavailable_response as _service_unavailable_response,
+)
+from app.fastapi_routes.domains.agent.route_support import (
     success as _success,
 )
 from app.fastapi_routes.domains.agent.route_support import (
@@ -104,6 +110,8 @@ def create_agent_run(
     runtime_context = authenticated_runtime_context(runtime_context_raw, principal)
 
     try:
+        # F13：持久化部署下先确认执行存储可用，拒绝接单而不是留下无法派发的 queued run。
+        get_task_execution_repository()
         orchestrator = AgentOrchestrator()
         auto_execute = bool(data.get("auto_execute", True))
         run = orchestrator.start_run(
@@ -122,6 +130,8 @@ def create_agent_run(
                 _enqueue_run(run, requested_by=principal.user_id)
         status_code = 202 if run.status in {"queued", "waiting_user", "blocked"} else 200
         return JSONResponse(_run_response(run, principal=principal), status_code=status_code)
+    except DurableExecutionUnavailable:
+        return _service_unavailable_response("create agent run")
     except RECOVERABLE_ERRORS:
         return _internal_error_response("create agent run")
 
@@ -141,6 +151,8 @@ def list_agent_runs(
             mod_id=str((principal.mod_authorization or {}).get("mod_id") or ""),
         )
         return _success([_public_run_dict(run) for run in runs], count=len(runs))
+    except DurableExecutionUnavailable:
+        return _service_unavailable_response("list agent runs")
     except RECOVERABLE_ERRORS:
         return _internal_error_response("list agent runs")
 
@@ -195,6 +207,8 @@ def record_observed_tool_run(
             source=str(data.get("source") or "desktop_fast_path"),
         )
         return _run_reference_response(run)
+    except DurableExecutionUnavailable:
+        return _service_unavailable_response("record observed tool run")
     except RECOVERABLE_ERRORS:
         return _internal_error_response("record observed tool run")
 
@@ -214,6 +228,8 @@ def get_agent_run(
         if command is not None:
             response["control_command"] = command.to_dict()
         return response
+    except DurableExecutionUnavailable:
+        return _service_unavailable_response("get agent run")
     except RECOVERABLE_ERRORS:
         return _internal_error_response("get agent run")
 
@@ -244,6 +260,8 @@ def answer_agent_clarification(
         return JSONResponse(_run_response(run, principal=principal), status_code=202)
     except ClarificationAnswerError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except DurableExecutionUnavailable:
+        return _service_unavailable_response("answer agent clarification")
     except RECOVERABLE_ERRORS:
         return _internal_error_response("answer agent clarification")
 
@@ -335,6 +353,8 @@ def continue_agent_run(
             {"success": False, "message": _PUBLIC_APPROVAL_ERROR},
             status_code=403,
         )
+    except DurableExecutionUnavailable:
+        return _service_unavailable_response("continue agent run")
     except RECOVERABLE_ERRORS:
         return _internal_error_response("continue agent run")
 
@@ -406,10 +426,13 @@ def _control_agent_run(
 
     # Pause/cancel must be able to persist their command while another worker is
     # executing the run. Resume remains serialized with approval/retry mutations.
-    if action in {"pause", "cancel"}:
-        return apply_control()
-    with run_operation_lock(run_id):
-        return apply_control()
+    try:
+        if action in {"pause", "cancel"}:
+            return apply_control()
+        with run_operation_lock(run_id):
+            return apply_control()
+    except DurableExecutionUnavailable:
+        return _service_unavailable_response(f"{action} agent run")
 
 
 @router.post("/api/agent/runs/{run_id}/pause", response_model=None)
@@ -454,6 +477,8 @@ def resume_agent_run(
         return JSONResponse(
             {"success": False, "message": "任务授权或状态已变化，请先核对"}, status_code=403
         )
+    except DurableExecutionUnavailable:
+        return _service_unavailable_response("resume agent run")
     except RECOVERABLE_ERRORS:
         return _internal_error_response("resume agent run")
 
@@ -483,6 +508,7 @@ def retry_agent_run(
                 status_code=409,
             )
         try:
+            get_task_execution_repository()
             retried = orchestrator.retry_run(
                 run_id,
                 requested_by=principal.user_id,
@@ -496,5 +522,7 @@ def retry_agent_run(
                 if retried is not None:
                     _enqueue_run(retried, requested_by=principal.user_id)
             return _run_reference_response(retried)
+        except DurableExecutionUnavailable:
+            return _service_unavailable_response("retry agent run")
         except RECOVERABLE_ERRORS:
             return _internal_error_response("retry agent run")

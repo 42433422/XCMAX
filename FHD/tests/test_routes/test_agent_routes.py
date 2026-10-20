@@ -1586,3 +1586,45 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
             assert _client("another-user").get(run.artifacts[0].uri).status_code in {403, 404}
     finally:
         engine.dispose()
+
+
+def _break_durable_queue(monkeypatch) -> None:
+    from app.application.agent_orchestrator import task_execution_repository
+
+    def _unavailable(*args, **kwargs):
+        raise RuntimeError("database down")
+
+    monkeypatch.setattr(task_execution_repository, "durable_execution_required", lambda: True)
+    monkeypatch.setattr(
+        task_execution_repository, "SQLAlchemyTaskExecutionRepository", _unavailable
+    )
+    task_execution_repository.set_task_execution_repository_for_tests(None)
+
+
+def test_create_run_refuses_intake_when_durable_queue_unavailable(monkeypatch) -> None:
+    from app.fastapi_routes.domains.agent.route_support import PUBLIC_AGENT_SERVICE_ERROR
+
+    get_agent_run_repository().clear()
+    _break_durable_queue(monkeypatch)
+
+    response = _client().post("/api/agent/runs", json={"message": "检查库存"})
+
+    assert response.status_code == 503
+    assert response.json()["message"] == PUBLIC_AGENT_SERVICE_ERROR
+    assert get_agent_run_repository().list_recent() == []
+
+
+def test_retry_refuses_intake_when_durable_queue_unavailable(monkeypatch) -> None:
+    from app.fastapi_routes.domains.agent.route_support import PUBLIC_AGENT_SERVICE_ERROR
+
+    repository = get_agent_run_repository()
+    repository.clear()
+    run = AgentRun(user_id="u1", message="失败任务", status="failed")
+    repository.save(run)
+    _break_durable_queue(monkeypatch)
+
+    response = _client().post(f"/api/agent/runs/{run.run_id}/retry")
+
+    assert response.status_code == 503
+    assert response.json()["message"] == PUBLIC_AGENT_SERVICE_ERROR
+    assert repository.get(run.run_id).status == "failed"

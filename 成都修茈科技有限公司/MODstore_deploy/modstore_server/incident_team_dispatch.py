@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from modstore_server import incident_team_orchestrator as facade
 from modstore_server.customer_issue_delivery_contract import (
+    artifact_revision,
     execution_pending,
     execution_succeeded,
     team_succeeded,
@@ -209,6 +210,11 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             "result": result,
             "status": "pending" if pending else status or ("completed" if succeeded else "failed"),
         }
+        if role == "fix":
+            row["fix_revision"] = artifact_revision(row["handler_outputs"], attempt=0)
+        elif role == "verify":
+            # verify 结论只对本次 fix 产物有效，revision 随行持久化供上游核对
+            row["verified_revision"] = str((fix_result or {}).get("fix_revision") or "")
         results.append(row)
         if role == "scout":
             scout_result = row

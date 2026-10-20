@@ -167,6 +167,40 @@ def _check_rasa_nlu() -> dict[str, Any]:
         return {"status": "unhealthy", "error": _UNAVAILABLE}
 
 
+def _check_agent_execution_store() -> dict[str, Any]:
+    """Agent run/queue 持久化探针（F13）。
+
+    仅在生产/预发/企业部署（``durable_execution_required``）下生效：此时 run 与 queue
+    任一降级到内存都视为 ``unhealthy``，readiness 返回 503 并触发接单失败关闭。
+    """
+
+    from app.utils.deployment import durable_execution_required
+
+    if not durable_execution_required():
+        return {"status": "disabled", "detail": "当前部署不要求持久化 Agent run/queue"}
+
+    try:
+        from app.application.agent_orchestrator.run_repository import (
+            get_agent_run_repository_status,
+        )
+        from app.application.agent_orchestrator.task_execution_repository import (
+            get_task_execution_repository_status,
+        )
+
+        run_store = get_agent_run_repository_status()
+        queue = get_task_execution_repository_status()
+    except RECOVERABLE_ERRORS:
+        logger.exception("agent execution store health check failed")
+        return {"status": "unhealthy", "error": _UNAVAILABLE}
+
+    durable = bool(run_store.get("durable")) and bool(queue.get("durable"))
+    return {
+        "status": "healthy" if durable else "unhealthy",
+        "run_store": run_store,
+        "queue": queue,
+    }
+
+
 def _system_info() -> dict[str, Any]:
     root = "C:\\" if os.name == "nt" else "/"
     try:
@@ -203,6 +237,7 @@ def readiness():
         "ai_service": _check_ai_service(),
         "pgvector": _check_pgvector(),
         "rasa": _check_rasa_nlu(),
+        "agent_execution_store": _check_agent_execution_store(),
     }
     all_healthy = all(c["status"] in _ACCEPTABLE for c in checks.values())
     payload = {
@@ -221,6 +256,7 @@ def health_details(request: Request):
         "ai_service": _check_ai_service(),
         "pgvector": _check_pgvector(),
         "rasa": _check_rasa_nlu(),
+        "agent_execution_store": _check_agent_execution_store(),
     }
     ok = all(c["status"] in _ACCEPTABLE for c in checks.values())
     return JSONResponse(
