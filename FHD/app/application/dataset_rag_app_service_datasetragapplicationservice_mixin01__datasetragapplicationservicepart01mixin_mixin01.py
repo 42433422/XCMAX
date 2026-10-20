@@ -40,13 +40,19 @@ class __DatasetRagApplicationServicePart01MixinPart01Mixin:
                 vector_index_path=vector_index_path,
             )
         )
-        self._lock = _facade().threading.Lock()
+        from app.application.dataset_rag_queue import DatasetStateLock, owner_id
+
+        self._lock = DatasetStateLock(self)
+        self._rebuild_owner = owner_id()
+        self._rebuild_shutdown = False
+        self._rebuild_threads = set()
         self._max_concurrent_rebuild_jobs = _facade()._resolve_max_concurrent_rebuild_jobs(
             max_concurrent_rebuild_jobs
         )
         self._rebuild_workers_enabled = bool(rebuild_workers_enabled)
         self._datasets: dict[str, _facade()._DatasetState] = {}
-        self._load_persisted_state()
+        with self._lock:
+            pass
         if self._rebuild_workers_enabled:
             self._schedule_rebuild_jobs()
 
@@ -75,7 +81,7 @@ class __DatasetRagApplicationServicePart01MixinPart01Mixin:
         requested_tenant = str(
             tenant_id or base_metadata.get("tenant_id") or base_metadata.get("user_id") or ""
         )
-        (tenant_key, denied) = _facade()._resolve_tenant_for_access(
+        tenant_key, denied = _facade()._resolve_tenant_for_access(
             access_context,
             requested_tenant,
             required_permission=_facade().DATASET_WRITE_PERMISSION,
@@ -91,7 +97,7 @@ class __DatasetRagApplicationServicePart01MixinPart01Mixin:
                 extract_metadata: dict[str, _facade().Any] = {}
             elif file_path.strip():
                 path = self._resolve_file_path(file_path)
-                (extracted_text, parser, extract_metadata) = self._extract_file_text(path)
+                extracted_text, parser, extract_metadata = self._extract_file_text(path)
                 source_label = source.strip() or path.name
                 base_metadata.setdefault("file_path", str(path))
             else:
@@ -315,7 +321,7 @@ class __DatasetRagApplicationServicePart01MixinPart01Mixin:
     ) -> dict[str, _facade().Any]:
         dataset_key = _facade()._clean_key(dataset_id, default="default")
         source_label = source.strip()
-        (tenant_key, denied) = _facade()._resolve_tenant_for_access(
+        tenant_key, denied = _facade()._resolve_tenant_for_access(
             access_context,
             tenant_id,
             required_permission=_facade().DATASET_READ_PERMISSION,
@@ -390,7 +396,7 @@ class __DatasetRagApplicationServicePart01MixinPart01Mixin:
     ) -> dict[str, _facade().Any]:
         dataset_key = _facade()._clean_key(dataset_id, default="default")
         source_label = source.strip()
-        (tenant_key, denied) = _facade()._resolve_tenant_for_access(
+        tenant_key, denied = _facade()._resolve_tenant_for_access(
             access_context,
             tenant_id,
             required_permission=_facade().DATASET_WRITE_PERMISSION,

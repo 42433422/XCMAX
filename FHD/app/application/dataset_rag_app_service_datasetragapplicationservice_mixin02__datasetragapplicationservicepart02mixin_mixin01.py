@@ -97,13 +97,15 @@ class __DatasetRagApplicationServicePart02MixinPart01Mixin:
                     documents=documents,
                     chunks=chunks,
                     index=dict(index_payload or {}) if isinstance(index_payload, dict) else {},
-                    rebuild_jobs={
-                        str(job_id): _facade()._rebuild_job_from_dict(row)
-                        for job_id, row in (jobs_payload or {}).items()
-                        if isinstance(row, dict)
-                    }
-                    if isinstance(jobs_payload, dict)
-                    else {},
+                    rebuild_jobs=(
+                        {
+                            str(job_id): _facade()._rebuild_job_from_dict(row)
+                            for job_id, row in (jobs_payload or {}).items()
+                            if isinstance(row, dict)
+                        }
+                        if isinstance(jobs_payload, dict)
+                        else {}
+                    ),
                 )
                 self._recover_rebuild_jobs_locked(state)
                 self._renumber_chunks(state)
@@ -138,6 +140,7 @@ class __DatasetRagApplicationServicePart02MixinPart01Mixin:
             _facade().json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         tmp_path.replace(self._storage_path)
+        self._lock.revision = self._lock.revision_now()
 
     @staticmethod
     def _renumber_chunks(state: _facade()._DatasetState) -> None:
@@ -194,7 +197,7 @@ class __DatasetRagApplicationServicePart02MixinPart01Mixin:
         return "\n".join(chunk.text for chunk in chunks if chunk.text)
 
     def _schedule_rebuild_jobs(self) -> None:
-        if not self._rebuild_workers_enabled:
+        if not self._rebuild_workers_enabled or self._rebuild_shutdown:
             return
         with self._lock:
             starts = self._claim_next_rebuild_jobs_locked()
@@ -227,7 +230,7 @@ class __DatasetRagApplicationServicePart02MixinPart01Mixin:
             job.started_at = now if not job.started_at else job.started_at
             job.updated_at = now
             job.attempt_count += 1
-            job.worker_id = f"rag_worker_{_facade().uuid.uuid4().hex[:8]}"
+            job.worker_id = self._rebuild_owner
             starts.append((dataset_id, job.job_id))
         return starts
 
@@ -238,6 +241,7 @@ class __DatasetRagApplicationServicePart02MixinPart01Mixin:
                 kwargs={"dataset_id": dataset_id, "job_id": job_id, "claimed": True},
                 daemon=True,
             )
+            self._rebuild_threads.add(thread)
             thread.start()
 
     def _run_rebuild_job(
@@ -256,7 +260,7 @@ class __DatasetRagApplicationServicePart02MixinPart01Mixin:
                 job.started_at = now if not job.started_at else job.started_at
                 job.updated_at = now
                 job.attempt_count += 1
-                job.worker_id = f"rag_worker_{_facade().uuid.uuid4().hex[:8]}"
+                job.worker_id = self._rebuild_owner
                 self._persist_locked()
         try:
             with self._lock:
@@ -264,18 +268,48 @@ class __DatasetRagApplicationServicePart02MixinPart01Mixin:
                 job = state.rebuild_jobs.get(job_id) if state is not None else None
                 if state is None or job is None:
                     return
+                work = [
+                    (
+                        (chunk.metadata or {}).get("document_id"),
+                        (chunk.metadata or {}).get("tenant_id"),
+                        chunk.chunk_index,
+                        chunk.text,
+                    )
+                    for chunk in state.chunks
+                    if (
+                        not job.tenant_id
+                        or str((chunk.metadata or {}).get("tenant_id") or "") == job.tenant_id
+                    )
+                    and (
+                        not job.metadata_filter
+                        or _facade()._metadata_matches(chunk, job.metadata_filter)
+                    )
+                ]
+            # Embedding may block; keep state/status/queued cancellation available.
+            vectors = {key: _facade()._embedding_metadata(self._embedder, key[3]) for key in work}
+            with self._lock:
+                state = self._datasets[dataset_id]
+                job = state.rebuild_jobs[job_id]
+                if (
+                    job.status != "running"
+                    or job.worker_id != self._rebuild_owner
+                    or self._rebuild_shutdown
+                ):
+                    return
                 matched_document_ids: set[str] = set()
                 rebuilt_chunks = 0
                 for chunk in state.chunks:
+                    key = (
+                        (chunk.metadata or {}).get("document_id"),
+                        (chunk.metadata or {}).get("tenant_id"),
+                        chunk.chunk_index,
+                        chunk.text,
+                    )
+                    if key not in vectors:
+                        continue
                     metadata = dict(chunk.metadata or {})
-                    if job.tenant_id and str(metadata.get("tenant_id") or "") != job.tenant_id:
-                        continue
-                    if job.metadata_filter and (
-                        not _facade()._metadata_matches(chunk, job.metadata_filter)
-                    ):
-                        continue
                     metadata.pop("_embedding", None)
-                    metadata.update(_facade()._embedding_metadata(self._embedder, chunk.text))
+                    metadata.update(vectors[key])
                     chunk.metadata = metadata
                     rebuilt_chunks += 1
                     document_id = str(metadata.get("document_id") or "")
@@ -295,7 +329,7 @@ class __DatasetRagApplicationServicePart02MixinPart01Mixin:
             with self._lock:
                 state = self._datasets.get(dataset_id)
                 job = state.rebuild_jobs.get(job_id) if state is not None else None
-                if job is not None:
+                if job is not None and not self._rebuild_shutdown:
                     now = _facade()._utc_now_iso()
                     if job.attempt_count < max(1, int(job.max_attempts or 1)):
                         job.status = "queued"
@@ -307,6 +341,7 @@ class __DatasetRagApplicationServicePart02MixinPart01Mixin:
                     job.updated_at = now
                     self._persist_locked()
         finally:
+            self._rebuild_threads.discard(_facade().threading.current_thread())
             if schedule_next:
                 self._schedule_rebuild_jobs()
 

@@ -1055,9 +1055,12 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
         "X-Dataset-Permissions": "dataset.read,dataset.write",
     }
 
-    with patch(
-        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-        return_value=svc,
+    with (
+        patch.dict("os.environ", DATASET_RAG_STORE_PATH=str(tmp_path / "dataset_store.json")),
+        patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service", return_value=svc
+        ),
+        _blocked_host_rebuild(),
     ):
         client.post(
             "/api/knowledge/v1/datasets/route-queue/documents",
@@ -1089,3 +1092,271 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
     assert cancelled.json()["success"] is True
     assert cancelled.json()["job"]["status"] == "cancelled"
     assert job_status.json()["job"]["status"] == "cancelled"
+
+
+@pytest.mark.parametrize("entry", ["http", "agent"])
+def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, entry) -> None:
+    import multiprocessing
+    import threading
+    import time
+
+    monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "host-datasets.json"))
+    monkeypatch.setattr(dataset_rag_module, "_dataset_rag_app_service", None)
+    app = FastAPI()
+    app.include_router(knowledge_router)
+    client = TestClient(app)
+    headers = {
+        "X-Dataset-Tenant-ID": "host-tenant",
+        "X-Dataset-Permissions": "dataset.read,dataset.write",
+    }
+    original_children = {p.pid for p in multiprocessing.active_children()}
+    assert client.post(
+        "/api/knowledge/v1/datasets/host-queue/documents",
+        headers=headers,
+        json={
+            "text": "Host owns durable rebuild work.",
+            "source": "host.md",
+            "chunk_strategy": "fixed",
+        },
+    ).json()["success"]
+    service = _host_service()
+    started, release = threading.Event(), threading.Event()
+
+    def embed(text):
+        started.set()
+        assert release.wait(10), "host rebuild did not receive release"
+        return [float(len(text)), 1.0]
+
+    service._embedder = embed
+    try:
+        if entry == "http":
+            reply = client.post(
+                "/api/knowledge/v1/datasets/host-queue/index/rebuild",
+                headers=headers,
+                json={"background": True},
+            ).json()
+        else:
+            from app.application.agent_orchestrator.run_models import AgentStep
+            from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+            reply = AgentToolExecutor().execute_with_deadline(
+                AgentStep(
+                    node_id="direct-rebuild",
+                    tool_id="dataset_rag",
+                    action="rebuild_index",
+                    params={
+                        "dataset_id": "host-queue",
+                        "background": True,
+                        "access_context": {
+                            "tenant_id": "host-tenant",
+                            "permissions": ["dataset.read", "dataset.write"],
+                        },
+                    },
+                ),
+                runtime_context={},
+                deadline_monotonic=time.monotonic() + 10,
+            )
+        assert reply["job"]["status"] == "queued"
+        assert started.wait(5)
+        assert {p.pid for p in multiprocessing.active_children()} == original_children
+        job_url = f"/api/knowledge/v1/datasets/host-queue/index/rebuild/{reply['job']['job_id']}"
+        assert client.get(job_url, headers=headers).json()["job"]["status"] == "running"
+        queued = client.post(
+            "/api/knowledge/v1/datasets/host-queue/index/rebuild",
+            headers=headers,
+            json={"background": True},
+        ).json()["job"]
+        assert queued["status"] == "queued"
+        cancel_url = f"/api/knowledge/v1/datasets/host-queue/index/rebuild/{queued['job_id']}"
+        assert (
+            client.post(cancel_url + "/cancel", headers=headers).json()["job"]["status"]
+            == "cancelled"
+        )
+        assert client.get(cancel_url, headers=headers).json()["job"]["status"] == "cancelled"
+        release.set()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            job = client.get(
+                f"/api/knowledge/v1/datasets/host-queue/index/rebuild/{reply['job']['job_id']}",
+                headers=headers,
+            ).json()["job"]
+            if job["status"] == "completed":
+                break
+            time.sleep(0.02)
+        assert job["status"] == "completed"
+        assert job["worker_id"].split(":")[0] == str(__import__("os").getpid())
+        reloaded = DatasetRagApplicationService(
+            storage_path=tmp_path / "host-datasets.json", rebuild_workers_enabled=False
+        )
+        persisted = reloaded.get_rebuild_job("host-queue", job["job_id"])["job"]
+        assert persisted["status"] == "completed"
+        assert persisted["attempt_count"] == 1
+    finally:
+        release.set()
+        from app.application.dataset_rag_queue import stop_host_workers
+
+        assert stop_host_workers()
+
+
+def _abandoned_rebuild_host(storage, ready):
+    import threading
+
+    service = DatasetRagApplicationService(storage_path=storage)
+    service.ingest_document(
+        dataset_id="recover-host",
+        source="restart.md",
+        text="Recover only dead owners.",
+        chunk_strategy="fixed",
+    )
+
+    def blocked_embed(text):
+        ready.set()
+        threading.Event().wait(60)
+        return [1.0]
+
+    service._embedder = blocked_embed
+    service.start_rebuild_index(dataset_id="recover-host", background=True)
+    threading.Event().wait(60)
+
+
+def test_rebuild_recovers_only_after_real_host_process_dies(tmp_path, monkeypatch):
+    import multiprocessing
+    import time
+
+    storage = tmp_path / "recover.json"
+    ctx = multiprocessing.get_context("spawn")
+    ready = ctx.Event()
+    host = ctx.Process(target=_abandoned_rebuild_host, args=(storage, ready))
+    host.start()
+    try:
+        assert ready.wait(10)
+        reader = DatasetRagApplicationService(storage_path=storage, rebuild_workers_enabled=False)
+        job_id = next(iter(reader._datasets["recover-host"].rebuild_jobs))
+        assert reader.get_rebuild_job("recover-host", job_id)["job"]["status"] == "running"
+        host.terminate()
+        host.join(5)
+        assert not host.is_alive()
+        monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(storage))
+        monkeypatch.setattr(dataset_rag_module, "_dataset_rag_app_service", None)
+        replacement = _host_service()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            job = replacement.get_rebuild_job("recover-host", job_id)["job"]
+            if job["status"] == "completed":
+                break
+            time.sleep(0.02)
+        assert job["status"] == "completed"
+        assert job["attempt_count"] == 2
+        assert replacement.status("recover-host")["document_count"] == 1
+    finally:
+        if host.is_alive():
+            host.terminate()
+        host.join(5)
+        from app.application.dataset_rag_queue import stop_host_workers
+
+        assert stop_host_workers()
+
+
+def _host_service():
+    import os
+    import time
+
+    from app.application.dataset_rag_queue import _hosts, ensure_host_worker
+
+    ensure_host_worker()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        holder = _hosts[os.environ.get("DATASET_RAG_STORE_PATH")][2]
+        if holder:
+            return holder[0]
+        time.sleep(0.01)
+    raise AssertionError("host consumer did not initialize")
+
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def _blocked_host_rebuild():
+    import threading
+
+    from app.application.dataset_rag_queue import stop_host_workers
+
+    service = _host_service()
+    service.ingest_document(
+        dataset_id="occupied-host",
+        source="host.md",
+        text="Hold the host slot.",
+        chunk_strategy="fixed",
+    )
+    started, release = threading.Event(), threading.Event()
+
+    def embed(text):
+        started.set()
+        assert release.wait(10)
+        return [1.0]
+
+    service._embedder = embed
+    service.start_rebuild_index(dataset_id="occupied-host", background=True)
+    assert started.wait(5)
+    try:
+        yield service
+    finally:
+        release.set()
+        assert stop_host_workers()
+
+
+def test_direct_agent_rebuild_wakes_host_without_waiting_for_cold_storage(tmp_path, monkeypatch):
+    import threading
+    import time
+
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.application.dataset_rag_queue import stop_host_workers
+
+    storage = tmp_path / "cold-host.json"
+    monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(storage))
+    seed = DatasetRagApplicationService(storage_path=storage, rebuild_workers_enabled=False)
+    seed.ingest_document(
+        dataset_id="cold-host",
+        source="cold.md",
+        text="Durable direct Agent job.",
+        chunk_strategy="fixed",
+    )
+    entered, release = threading.Event(), threading.Event()
+
+    def cold_storage(*args, **kwargs):
+        entered.set()
+        assert release.wait(10)
+        return DatasetRagApplicationService(*args, **kwargs)
+
+    monkeypatch.setattr(dataset_rag_module, "DatasetRagApplicationService", cold_storage)
+    try:
+        reply = AgentToolExecutor().execute_with_deadline(
+            AgentStep(
+                node_id="cold",
+                tool_id="dataset_rag",
+                action="rebuild_index",
+                params={"dataset_id": "cold-host", "background": True},
+            ),
+            runtime_context={},
+            deadline_monotonic=time.monotonic() + 10,
+        )
+        assert entered.is_set()
+        assert not release.is_set()
+        assert reply["job"]["status"] == "queued"
+        release.set()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            reader = DatasetRagApplicationService(
+                storage_path=storage, rebuild_workers_enabled=False
+            )
+            job = reader.get_rebuild_job("cold-host", reply["job"]["job_id"])["job"]
+            if job["status"] == "completed":
+                break
+            time.sleep(0.02)
+        assert job["status"] == "completed"
+        assert job["attempt_count"] == 1
+    finally:
+        release.set()
+        assert stop_host_workers()
