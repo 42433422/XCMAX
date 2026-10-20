@@ -29,6 +29,7 @@
 .delivery-refresh:disabled { opacity: .55; cursor: wait; }
 
 .delivery-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 11px; margin-bottom: 16px; }
+.delivery-jumps { position: sticky; top: 0; z-index: 5; display: flex; gap: 7px; overflow-x: auto; margin: 0 0 16px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.94); box-shadow: 0 5px 16px rgba(26,62,100,.08); } .delivery-jumps a { flex: 0 0 auto; border-radius: 8px; padding: 7px 10px; color: #34516f; font-size: 12px; text-decoration: none; } .delivery-jumps a:hover,.delivery-jumps a:focus-visible { background: #eaf3fc; color: #1f5f9f; outline: 2px solid #6099d5; outline-offset: 1px; } .delivery-center [id^="delivery-"] { scroll-margin-top: 58px; }
 .delivery-stats article { position: relative; overflow: hidden; min-height: 92px; padding: 14px 16px; border: 1px solid rgba(196,214,233,.9); border-radius: 14px; background: rgba(255,255,255,.9); box-shadow: 0 8px 25px rgba(26,62,100,.055); }
 .delivery-stats article::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: #84a9d0; }
 .delivery-stats .is-enterprise::before { background: #2f7ed7; }
