@@ -9,6 +9,7 @@ production user by ``market_user_id``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -292,24 +293,31 @@ async def _proxy_to_production(
     token: str,
     *,
     body: dict[str, Any] | None = None,
+    session_id: str = "",
 ) -> JSONResponse:
     url = f"{_public_fhd_base_url()}{_REMOTE_PATH}"
     headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
     try:
-        async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
-            if method.upper() == "POST":
-                prime = await client.get(url, headers=headers)
-                if prime.status_code >= 400:
-                    response = prime
-                else:
-                    csrf = str(client.cookies.get("csrf_token") or "").strip()
-                    post_headers = {**headers, "Content-Type": "application/json"}
-                    if csrf:
-                        post_headers["X-CSRF-Token"] = csrf
-                    response = await client.post(url, headers=post_headers, json=body or {})
-            else:
-                response = await client.get(url, headers=headers)
-    except httpx.HTTPError:
+        async with (
+            asyncio.timeout(20.0),
+            httpx.AsyncClient(timeout=20.0, trust_env=False) as client,
+        ):
+            response = await client.get(url, headers=headers)
+            if response.status_code == 401 and session_id:
+                from app.fastapi_routes import market_account
+
+                refreshed = await market_account.refresh_session_market_token(session_id)
+                refreshed = refreshed or market_account.session_market_token(session_id)
+                if refreshed and refreshed != token:
+                    headers["Authorization"] = f"Bearer {refreshed}"
+                    response = await client.get(url, headers=headers)
+            if method.upper() == "POST" and response.status_code < 400:
+                csrf = str(client.cookies.get("csrf_token") or "").strip()
+                post_headers = {**headers, "Content-Type": "application/json"}
+                if csrf:
+                    post_headers["X-CSRF-Token"] = csrf
+                response = await client.post(url, headers=post_headers, json=body or {})
+    except (httpx.HTTPError, TimeoutError):
         logger.exception("enterprise CS production bridge unavailable")
         return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=502)
     try:
@@ -330,7 +338,7 @@ async def local_enterprise_cs_messages(
     token = await _local_market_token(request)
     if not token:
         return JSONResponse({"success": False, "message": "请重新登录企业账号"}, status_code=401)
-    return await _proxy_to_production("GET", token)
+    return await _proxy_to_production("GET", token, session_id=session_id_from_request(request))
 
 
 @router.post("/api/im/enterprise-cs/messages")
@@ -343,4 +351,9 @@ async def local_enterprise_cs_send(
     token = await _local_market_token(request)
     if not token:
         return JSONResponse({"success": False, "message": "请重新登录企业账号"}, status_code=401)
-    return await _proxy_to_production("POST", token, body={"body": body.get("body")})
+    return await _proxy_to_production(
+        "POST",
+        token,
+        body={"body": body.get("body")},
+        session_id=session_id_from_request(request),
+    )
