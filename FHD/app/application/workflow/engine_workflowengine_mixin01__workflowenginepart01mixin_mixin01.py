@@ -92,7 +92,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             )
             if state == "skipped":
                 blocked.add(node.node_id)
-            return state == "ready"
+            return bool(state == "ready")
 
         while pending:
             before = (len(executed), len(blocked))
