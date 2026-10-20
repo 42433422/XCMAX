@@ -1,4 +1,21 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+import pytest
+
+from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+from app.application.workflow.types import PlanGraph, WorkflowNode
+
+
+@pytest.fixture
+def mock_tool_dispatch(monkeypatch):
+    """Keep parent-process dispatch mocks local; process boundaries have separate tests."""
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    monkeypatch.setattr(
+        AgentToolExecutor,
+        "execute_with_deadline",
+        lambda self, step, **kw: self.execute(step, runtime_context=kw["runtime_context"]),
+    )
 
 
 def test_workflow_registry_exposes_employee_and_business_db_tools():
@@ -609,10 +626,8 @@ def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tm
 
 
 def test_chat_formats_employee_and_business_db_outputs():
-    from unittest.mock import Mock
 
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     service = AIChatApplicationService.__new__(AIChatApplicationService)
     plan = PlanGraph(
@@ -676,12 +691,9 @@ def test_chat_formats_employee_and_business_db_outputs():
     assert "output_preview" in node_results[0]
 
 
-def test_ai_chat_dynamic_workflow_executes_employee_tool():
-    from unittest.mock import Mock
+def test_ai_chat_dynamic_workflow_executes_employee_tool(mock_tool_dispatch):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -768,12 +780,9 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool():
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator():
-    from unittest.mock import Mock
+def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(mock_tool_dispatch):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -841,12 +850,9 @@ def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator():
     assert action == "read"
 
 
-def test_ai_chat_pro_low_risk_dynamic_workflow_uses_agent_orchestrator():
-    from unittest.mock import Mock
+def test_ai_chat_pro_low_risk_dynamic_workflow_uses_agent_orchestrator(mock_tool_dispatch):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -930,7 +936,6 @@ def test_ai_chat_pro_low_risk_dynamic_workflow_uses_agent_orchestrator():
 
 def test_workflow_engine_does_not_retry_non_idempotent_write():
     from app.application.workflow.engine import WorkflowEngine
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     calls = {"count": 0}
 
@@ -1048,9 +1053,7 @@ def test_agentic_loop_uses_action_name_and_disables_write_retry():
 
 
 def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
-    from unittest.mock import Mock
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.workflow.types import NodeExecutionResult, PlanGraph, WorkflowRunResult
 
@@ -1203,12 +1206,9 @@ def test_chat_formats_recovery_hint_for_non_retryable_failure():
     assert result["data"]["data"]["workflow_status"] == {}
 
 
-def test_ai_chat_explicit_employee_intent_runs_without_pro_source():
-    from unittest.mock import Mock
+def test_ai_chat_explicit_employee_intent_runs_without_pro_source(mock_tool_dispatch):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -1293,12 +1293,11 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source():
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_source():
-    from unittest.mock import Mock
+def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_source(
+    mock_tool_dispatch,
+):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -1388,12 +1387,9 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_medium_risk_confirmation_continues_same_agent_run():
-    from unittest.mock import Mock
+def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(mock_tool_dispatch):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
