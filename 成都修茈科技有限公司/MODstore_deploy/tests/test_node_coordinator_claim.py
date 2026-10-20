@@ -152,3 +152,70 @@ def test_existing_database_migration_preserves_events_and_is_idempotent():
         ).one() == (7, "", None)
         assert {"incident_claims", "incident_inbox"} <= set(sa.inspect(conn).get_table_names())
     engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "starting_head", ["20261020_customer_ticket_eta", "20261020_incident_ownership", "both"]
+)
+def test_merge_upgrades_either_existing_head_without_losing_data(
+    tmp_path, monkeypatch, starting_head
+):
+    from alembic import command
+    from alembic.config import Config
+
+    root = Path(__file__).parents[1]
+    url = f"sqlite:///{tmp_path / 'merge.sqlite'}"
+    monkeypatch.setenv("MODSTORE_DATABASE_URL", url)
+    cfg = Config(str(root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(root / "alembic"))
+    cfg.set_main_option("path_separator", "os")
+    engine = sa.create_engine(url)
+    with engine.begin() as conn:
+        for table, identity in (
+            ("customer_service_tickets", 3),
+            ("incident_events", 42),
+            ("event_outbox", 7),
+        ):
+            conn.exec_driver_sql(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY)")
+            conn.exec_driver_sql(f"INSERT INTO {table} VALUES ({identity})")
+    # Never bootstrap from current ORM metadata: it would conceal an omitted branch.
+    command.stamp(cfg, "20261019_ticket_submitter")
+    for revision in (
+        ["20261020_customer_ticket_eta", "20261020_incident_ownership"]
+        if starting_head == "both"
+        else [starting_head]
+    ):
+        command.upgrade(cfg, revision)
+    with engine.begin() as conn:
+        if starting_head.endswith("ticket_eta") or starting_head == "both":
+            conn.exec_driver_sql(
+                "UPDATE customer_service_tickets SET expected_completion_at='2026-10-21 03:30:00'"
+            )
+        if starting_head.endswith("incident_ownership") or starting_head == "both":
+            conn.exec_driver_sql(
+                "INSERT INTO incident_inbox VALUES ('kept-key', 42, '2026-10-20 00:00:00')"
+            )
+    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalars().all() == [
+            "20261020_merge_ticket_incident"
+        ]
+        expected_eta = (
+            "2026-10-21 03:30:00"
+            if starting_head.endswith("ticket_eta") or starting_head == "both"
+            else None
+        )
+        assert conn.exec_driver_sql(
+            "SELECT id, expected_completion_at FROM customer_service_tickets"
+        ).one() == (3, expected_eta)
+        assert conn.exec_driver_sql("SELECT id FROM incident_events").scalar_one() == 42
+        assert conn.exec_driver_sql(
+            "SELECT id, claim_token, claim_until FROM event_outbox"
+        ).one() == (7, "", None)
+        assert {"incident_inbox", "incident_claims"} <= set(sa.inspect(conn).get_table_names())
+        if starting_head.endswith("incident_ownership") or starting_head == "both":
+            assert conn.exec_driver_sql(
+                "SELECT inbox_key, incident_event_id FROM incident_inbox"
+            ).one() == ("kept-key", 42)
+    engine.dispose()

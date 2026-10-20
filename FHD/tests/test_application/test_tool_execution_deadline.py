@@ -247,3 +247,41 @@ def test_unrelated_executor_error_keeps_original_exception(monkeypatch):
         execute_with_tool_deadline(
             SimpleNamespace(execute=execute), _step(), runtime_context={}, timeout_seconds=1
         )
+
+
+@pytest.mark.parametrize("bridge", ["executor", "agent_runner"])
+def test_employee_async_bridge_preserves_invocation_budget(bridge):
+    import asyncio
+    from contextvars import ContextVar
+
+    from app.application.employee_runtime import agent_runner, executor
+    from app.application.tool_execution_deadline import _DEADLINE, invocation_deadline
+
+    tenant = ContextVar("bridge_test_tenant", default=None)
+
+    async def observe():
+        owner = _DEADLINE.get()
+        assert owner is not None
+        inherited_tenant = tenant.get()
+        with invocation_deadline(owner.deadline + 30) as nested:
+            assert nested.deadline == owner.deadline
+            tenant.set("child-only")
+            nested.uncertain.append({"kind": "bridge_probe"})
+        return inherited_tenant, owner.deadline
+
+    async def running_loop():
+        return (
+            executor._run_maybe_async(observe)
+            if bridge == "executor"
+            else agent_runner._run_async(observe())
+        )
+
+    token = tenant.set("tenant-a")
+    try:
+        with invocation_deadline(time.monotonic() + 10) as budget:
+            assert asyncio.run(running_loop()) == ("tenant-a", budget.deadline)
+            assert budget.uncertain == [{"kind": "bridge_probe"}]
+            assert tenant.get() == "tenant-a"
+        assert _DEADLINE.get() is None
+    finally:
+        tenant.reset(token)

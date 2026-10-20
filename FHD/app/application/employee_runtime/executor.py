@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import uuid
+from contextvars import copy_context
 from pathlib import Path
 from typing import Any
 
@@ -128,7 +129,7 @@ def _run_maybe_async(fn, *args, **kwargs):
         import concurrent.futures
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(asyncio.run, out).result()
+            return pool.submit(copy_context().run, asyncio.run, out).result()
     return out
 
 
