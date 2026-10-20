@@ -2,6 +2,17 @@ from __future__ import annotations
 
 import types
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _initialized_workflow_database(client):
+    # The singleton app may have been imported under another test's DB path.
+    # Ensure this fixture's restored temporary database has its own schema.
+    from modstore_server.models import init_db
+
+    init_db()
+
 
 def _create_minimal_workflow(client):
     r = client.post(

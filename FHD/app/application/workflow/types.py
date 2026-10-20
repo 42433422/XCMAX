@@ -342,10 +342,30 @@ def validate_plan_graph(plan: PlanGraph) -> str | None:
     return _find_conditional_cycle(plan.nodes, node_ids)
 
 
+def step_plan_nodes(plan: PlanGraph) -> tuple[list[WorkflowNode], str | None]:
+    """Validate graph takeover and order nodes for a runtime without conditional routing."""
+    error = validate_plan_graph(plan) if plan.nodes else None
+    if not error and any(node.branches or node.next is not None for node in plan.nodes):
+        error = "conditional plans require the workflow engine; step runtime cannot execute them"
+    if error:
+        return [], error
+    ordered: list[WorkflowNode] = []
+    remaining = list(plan.nodes)
+    completed: set[str] = set()
+    while remaining:
+        ready = [node for node in remaining if all(dep in completed for dep in node.depends_on)]
+        ordered.extend(ready)
+        completed.update(node.node_id for node in ready)
+        remaining = [node for node in remaining if node.node_id not in completed]
+    return ordered, None
+
+
 def _find_conditional_cycle(nodes: list[WorkflowNode], node_ids: set[str]) -> str | None:
-    """沿 next / branches[].target 下游边做 DFS 环检测；有环返回错误信息，否则 None。"""
+    """Detect cycles across dependency and conditional successor edges."""
     adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
     for node in nodes:
+        for dependency in node.depends_on:
+            adj[dependency].append(node.node_id)
         if node.next is not None:
             adj[node.node_id].append(node.next)
         for branch in node.branches:
@@ -359,7 +379,7 @@ def _find_conditional_cycle(nodes: list[WorkflowNode], node_ids: set[str]) -> st
         for v in adj[u]:
             if color[v] == GRAY:
                 start = stack.index(v) if v in stack else 0
-                return f"条件边形成环: {' -> '.join(stack[start:] + [v])}"
+                return f"计划依赖或条件边形成环: {' -> '.join(stack[start:] + [v])}"
             if color[v] == WHITE:
                 stack.append(v)
                 err = dfs(v, stack)

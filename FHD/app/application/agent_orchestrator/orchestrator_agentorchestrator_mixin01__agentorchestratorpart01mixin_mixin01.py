@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import importlib
 
-from app.application.agent_orchestrator.clarification import pause_for_clarification
+from app.application.agent_orchestrator.clarification import (
+    find_waiting_step,
+    pause_for_clarification,
+)
 from app.application.agent_orchestrator.param_references import refuse_unresolved_step
 
 
@@ -344,11 +347,17 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
             "metadata": plan_metadata,
         }
         self._attach_memory_recall(run, plan_metadata.get("memory_recall"))
-        run.steps = [self._step_from_node(node) for node in plan.nodes]
-        self._apply_repair_policy(run, dict(plan.metadata or {}))
-        self._attach_artifacts_from_payload(
-            run, getattr(plan, "metadata", {}) or {}, source="plan.metadata"
-        )
+        from app.application.workflow.types import step_plan_nodes
+
+        nodes, graph_error = step_plan_nodes(plan)
+        run.steps = [self._step_from_node(node) for node in nodes]
+        if graph_error:
+            run.status = "blocked"
+            run.error = graph_error
+            run.add_event("planner.blocked", graph_error)
+            return
+        self._apply_repair_policy(run, plan_metadata)
+        self._attach_artifacts_from_payload(run, plan_metadata, source="plan.metadata")
         self._refresh_artifact_metadata(run)
         run.status = "running" if run.steps else "blocked"
         if not run.steps:
@@ -374,18 +383,7 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
             depends_on=list(node.depends_on or []),
         )
 
-    @staticmethod
-    def _find_waiting_step(
-        run: _facade().AgentRun, *, approved_step_id: str = ""
-    ) -> _facade().AgentStep | None:
-        wanted = str(approved_step_id or "").strip()
-        for step in run.steps:
-            if step.status != "waiting_user":
-                continue
-            if wanted and wanted not in {step.step_id, step.node_id}:
-                continue
-            return step
-        return None
+    _find_waiting_step = staticmethod(find_waiting_step)
 
     def _execute_ready_steps(
         self,
@@ -395,11 +393,9 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         approved_step_id: str = "",
     ) -> None:
         if not run.steps:
-            # 拒绝执行的 SQL 计划（refusal_code）需保持 blocked，交由调用方给出拒答；
-            # 其余空计划维持既有语义：无步骤可执行即视为已完成。
-            refusal = run.final_output if isinstance(run.final_output, dict) else {}
-            if run.status == "blocked" and refusal.get("refusal_code"):
-                return
+            run.status = "blocked"
+            run.error = run.error or "planner returned no executable steps"
+            return
         approved = str(approved_step_id or "").strip()
         completed_node_ids: set[str] = {
             step.node_id for step in run.steps if step.status == "completed"
@@ -456,6 +452,10 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
                 self._execute_step(
                     run, step, runtime_context=runtime_context, node_outputs=node_outputs
                 )
+                if run.metadata.get("non_retryable"):
+                    run.status = "blocked"
+                    run.error = step.error
+                    return
                 if self._apply_requested_control(run):
                     return
                 if step.status == "completed":

@@ -59,6 +59,15 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         checkpointer: _facade().Any | None = None,
         resume_state: dict[str, _facade().Any] | None = None,
     ) -> _facade().WorkflowRunResult:
+        from app.application.workflow.types import validate_plan_graph
+
+        if error := validate_plan_graph(plan):
+            return _facade().WorkflowRunResult(
+                plan_id=plan.plan_id,
+                success=False,
+                final_context={"workflow_status": {"state": "blocked", "message": error}},
+                message=error,
+            )
         if resume_state is not None:
             runtime_context = dict(resume_state.get("runtime_context") or {})
             executed: set[str] = set(resume_state.get("executed", set()))

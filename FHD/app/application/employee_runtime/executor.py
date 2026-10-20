@@ -305,10 +305,7 @@ def _action_direct_python_module(
             payload[key] = reasoning[key]
     payload.setdefault("task", task)
     payload.setdefault("workspace_root", str(workspace_root or os.getcwd()))
-    # The generated employee modules require an input file, but their vendor
-    # converters can deterministically construct a document from user_request.
-    # Route that no-file case there instead of asking the model to improvise an
-    # input or attempting writes inside the installed application bundle.
+    # No-file document requests use deterministic vendor conversion.
     is_generate = "generate" in employee_id.lower()
     has_file = bool(str(payload.get("file_path") or payload.get("path") or "").strip())
     if is_generate and not has_file and str(payload.get("user_request") or "").strip():
@@ -456,7 +453,12 @@ def _actions_fhd(
             outputs.append({"handler": "llm_md", "output": reasoning.get("reasoning", "")})
         else:
             outputs.append(
-                {"handler": handler, "error": "unsupported handler in FHD local executor"}
+                {
+                    "handler": handler,
+                    "ok": False,
+                    "retryable": False,
+                    "error": "unsupported handler in FHD local executor",
+                }
             )
     return {
         "task": task,
@@ -467,13 +469,9 @@ def _actions_fhd(
 
 
 def _handlers_execution_ok(result: dict[str, Any]) -> bool:
-    outputs = result.get("outputs") if isinstance(result.get("outputs"), list) else []
-    if not outputs:
-        return True
-    for out in outputs:
-        if isinstance(out, dict) and out.get("ok") is False:
-            return False
-    return True
+    from app.application.employee_runtime.result_verifier import execution_result_error
+
+    return not execution_result_error(result)
 
 
 def execute_employee_task_local(
@@ -488,13 +486,14 @@ def execute_employee_task_local(
     """委托给 EmployeeAgent 执行本地 employee_pack，保持原返回契约。"""
     from app.application.employee_runtime.agent import EmployeeAgent
 
-    return EmployeeAgent(employee_id).run(
+    result: dict[str, Any] = EmployeeAgent(employee_id).run(
         task,
         input_data,
         user_id=user_id,
         workspace_root=workspace_root,
         session_id=session_id,
     )
+    return result
 
 
 __all__ = ["execute_employee_task_local"]

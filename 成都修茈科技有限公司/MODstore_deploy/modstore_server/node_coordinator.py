@@ -1,8 +1,8 @@
 """Cluster coordination for Mac/CVM/K8s MODstore workers.
 
-The coordinator uses Redis when available so multiple nodes can share
-heartbeats and incident claim locks. Without Redis it falls back to local files,
-which still keeps single-node development behavior stable.
+Node heartbeats use Redis or local files. Incident ownership always uses the
+application SQL database; a failed claim never falls back to another authority.
+Cluster workers must share that database (PostgreSQL for multi-node deployments).
 """
 
 from __future__ import annotations
@@ -10,17 +10,28 @@ from __future__ import annotations
 import json
 import os
 import socket
+import threading
 import time
+import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
+
+from modstore_server.models import IncidentClaim, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 NODES_KEY = "xcmax:cluster:nodes"
-CLAIM_PREFIX = "xcmax:cluster:incident_claim:"
 DEFAULT_STALE_SECONDS = 300
-# 同节点不同 PID / 僵死派发：超过该秒数可抢夺未完成 claim（默认 3 分钟）
-DEFAULT_CLAIM_STEAL_AFTER = 180
+_CURRENT_CLAIM: ContextVar[dict[str, Any] | None] = ContextVar("incident_claim", default=None)
+
+
+class IncidentClaimLost(RuntimeError):
+    """No side effect or final projection may proceed without the current owner."""
 
 
 def _runtime_dir() -> Path:
@@ -34,85 +45,6 @@ def _node_id() -> str:
         or socket.gethostname()
         or "local-node"
     ).strip()
-
-
-def _claim_steal_after_seconds() -> int:
-    raw = (os.environ.get("MODSTORE_INCIDENT_CLAIM_STEAL_AFTER") or "").strip()
-    if not raw:
-        return DEFAULT_CLAIM_STEAL_AFTER
-    try:
-        return max(30, int(raw))
-    except ValueError:
-        return DEFAULT_CLAIM_STEAL_AFTER
-
-
-def _pid_alive(pid: int) -> bool:
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        # 进程存在但无权限发信号，视为仍存活
-        return True
-    except OSError:
-        return False
-    return True
-
-
-def _parse_claim_owner(raw: Any) -> Dict[str, Any]:
-    if raw is None:
-        return {}
-    if isinstance(raw, dict):
-        return raw
-    text = str(raw or "").strip()
-    if not text:
-        return {}
-    if text.startswith("{"):
-        try:
-            data = json.loads(text)
-            return data if isinstance(data, dict) else {"node_id": text}
-        except RECOVERABLE_ERRORS:
-            return {"node_id": text}
-    return {"node_id": text}
-
-
-def _claim_payload(*, event_id: int, ttl_seconds: int) -> Dict[str, Any]:
-    now = time.time()
-    return {
-        "claimed_at": now,
-        "event_id": int(event_id),
-        "expires_at": now + max(60, int(ttl_seconds or 900)),
-        "node_id": _node_id(),
-        "pid": os.getpid(),
-        "schema_version": 2,
-    }
-
-
-def _can_steal_claim(owner: Dict[str, Any]) -> bool:
-    """Allow reclaim when owner process is dead or claim soft-TTL elapsed."""
-    owner_node = str(owner.get("node_id") or "").strip()
-    if not owner_node:
-        return True
-    try:
-        owner_pid = int(owner.get("pid") or 0)
-    except (TypeError, ValueError):
-        owner_pid = 0
-    try:
-        claimed_at = float(owner.get("claimed_at") or 0)
-    except (TypeError, ValueError):
-        claimed_at = 0.0
-    age = time.time() - claimed_at if claimed_at > 0 else 10**9
-    steal_after = _claim_steal_after_seconds()
-    if owner_node == _node_id():
-        if owner_pid and owner_pid == os.getpid():
-            return False
-        if owner_pid and not _pid_alive(owner_pid):
-            return True
-        return age >= steal_after
-    # 跨节点：仅软超时后抢（避免双活误杀）；无 claimed_at 的旧字符串 claim 也可抢
-    return age >= steal_after
 
 
 def _node_role() -> str:
@@ -266,166 +198,203 @@ def is_leader() -> bool:
     return str(leader.get("node_id") or "") == _node_id()
 
 
+def _database_time(session) -> datetime:
+    value = session.execute(select(func.current_timestamp())).scalar_one()
+    if not isinstance(value, datetime):
+        raise RuntimeError("database clock unavailable")
+    return value.replace(tzinfo=None)
+
+
 def claim_incident_for_node(event_id: int, *, ttl_seconds: int = 900) -> Dict[str, Any]:
-    """Best-effort cross-node incident claim lock.
-
-    Claim value is JSON ``{node_id, pid, claimed_at}`` so same-host uvicorn
-    workers do not all treat one hostname lock as owned by every PID. Stale or
-    dead-owner claims can be stolen after soft TTL.
-    """
-
-    key = f"{CLAIM_PREFIX}{int(event_id)}"
-    node_id = _node_id()
-    ttl = max(60, int(ttl_seconds or 900))
-    payload = _claim_payload(event_id=event_id, ttl_seconds=ttl)
-    payload_json = json.dumps(payload, ensure_ascii=False)
-    r = _redis_client()
-    if r is not None:
-        try:
-            ok = bool(r.set(key, payload_json, nx=True, ex=ttl))
-            if ok:
-                return {
-                    "backend": "redis",
-                    "claimed": True,
-                    "event_id": int(event_id),
-                    "node_id": node_id,
-                    "owner": payload,
-                    "pid": payload["pid"],
-                }
-            owner = _parse_claim_owner(r.get(key))
-            same_owner = (
-                str(owner.get("node_id") or "") == node_id
-                and int(owner.get("pid") or 0) == os.getpid()
+    """Atomically issue a fresh token; even two calls in one PID are competitors."""
+    event_id, ttl = int(event_id), max(30, int(ttl_seconds))
+    token = uuid.uuid4().hex
+    try:
+        with get_session_factory()() as session:
+            now = _database_time(session)
+            if session.get(IncidentClaim, event_id) is None:
+                try:
+                    with session.begin_nested():
+                        session.add(IncidentClaim(event_id=event_id, lease_until=now))
+                        session.flush()
+                except IntegrityError:
+                    pass  # Another process inserted the row; only the CAS below can own it.
+            won = (
+                session.query(IncidentClaim)
+                .filter(
+                    IncidentClaim.event_id == event_id,
+                    or_(
+                        IncidentClaim.owner_token == "",
+                        IncidentClaim.lease_until <= now,
+                    ),
+                )
+                .update(
+                    {
+                        "owner_token": token,
+                        "generation": IncidentClaim.generation + 1,
+                        "lease_until": now + timedelta(seconds=ttl),
+                    },
+                    synchronize_session=False,
+                )
             )
-            if same_owner:
-                return {
-                    "backend": "redis",
-                    "claimed": True,
-                    "event_id": int(event_id),
-                    "node_id": node_id,
-                    "owner": owner,
-                    "pid": os.getpid(),
-                }
-            if _can_steal_claim(owner):
-                # 无 CAS：best-effort overwrite；双抢时靠后续 dispatched_count 去重
-                r.set(key, payload_json, ex=ttl)
-                return {
-                    "backend": "redis",
-                    "claimed": True,
-                    "event_id": int(event_id),
-                    "node_id": node_id,
-                    "owner": payload,
-                    "pid": payload["pid"],
-                    "stolen_from": owner,
-                }
+            session.commit()
+            row = session.get(IncidentClaim, event_id, populate_existing=True)
+            if row is None:
+                raise IncidentClaimLost("claim row unavailable")
             return {
-                "backend": "redis",
-                "claimed": False,
-                "event_id": int(event_id),
-                "node_id": node_id,
-                "owner": owner,
+                "backend": "sql",
+                "event_id": event_id,
+                "claimed": bool(won),
+                "owner_token": token if won else "",
+                "generation": row.generation,
+                "dispatch_state": row.dispatch_state,
+                "ttl_seconds": ttl,
             }
-        except RECOVERABLE_ERRORS:
-            pass
-    claim_dir = _runtime_dir() / "cluster_claims"
-    claim_dir.mkdir(parents=True, exist_ok=True)
-    claim_path = claim_dir / f"incident-{int(event_id)}.json"
-    if claim_path.exists():
-        try:
-            owner = _parse_claim_owner(claim_path.read_text(encoding="utf-8"))
-        except RECOVERABLE_ERRORS:
-            owner = {}
-        same_owner = (
-            str(owner.get("node_id") or "") == node_id and int(owner.get("pid") or 0) == os.getpid()
-        )
-        if same_owner:
-            return {
-                "backend": "file",
-                "claimed": True,
-                "event_id": int(event_id),
-                "node_id": node_id,
-                "owner": owner,
-                "pid": os.getpid(),
-            }
-        if not _can_steal_claim(owner):
-            return {
-                "backend": "file",
-                "claimed": False,
-                "event_id": int(event_id),
-                "node_id": node_id,
-                "owner": owner,
-            }
-    claim_path.write_text(payload_json + "\n", encoding="utf-8")
-    return {
-        "backend": "file",
-        "claimed": True,
-        "event_id": int(event_id),
-        "node_id": node_id,
-        "owner": payload,
-        "pid": payload["pid"],
-    }
-
-
-def release_incident_claim(event_id: int) -> Dict[str, Any]:
-    """Release claim when held by this process (best-effort)."""
-
-    key = f"{CLAIM_PREFIX}{int(event_id)}"
-    node_id = _node_id()
-    pid = os.getpid()
-    r = _redis_client()
-    if r is not None:
-        try:
-            owner = _parse_claim_owner(r.get(key))
-            if (
-                str(owner.get("node_id") or "") == node_id
-                and int(owner.get("pid") or 0) in {0, pid}
-            ) or not owner:
-                r.delete(key)
-                return {"backend": "redis", "released": True, "event_id": int(event_id)}
-            return {
-                "backend": "redis",
-                "released": False,
-                "event_id": int(event_id),
-                "owner": owner,
-            }
-        except RECOVERABLE_ERRORS as exc:
-            return {
-                "backend": "redis",
-                "released": False,
-                "event_id": int(event_id),
-                "error": str(exc)[:200],
-            }
-    claim_path = _runtime_dir() / "cluster_claims" / f"incident-{int(event_id)}.json"
-    if claim_path.exists():
-        try:
-            owner = _parse_claim_owner(claim_path.read_text(encoding="utf-8"))
-        except RECOVERABLE_ERRORS:
-            owner = {}
-        if (
-            str(owner.get("node_id") or "") == node_id and int(owner.get("pid") or 0) in {0, pid}
-        ) or not owner:
-            try:
-                claim_path.unlink()
-            except OSError:
-                pass
-            return {"backend": "file", "released": True, "event_id": int(event_id)}
+    except RECOVERABLE_ERRORS as exc:
         return {
-            "backend": "file",
-            "released": False,
-            "event_id": int(event_id),
-            "owner": owner,
+            "backend": "sql",
+            "event_id": event_id,
+            "claimed": False,
+            "error": f"claim unavailable: {type(exc).__name__}",
         }
-    return {
-        "backend": "file",
-        "released": True,
-        "event_id": int(event_id),
-        "missing": True,
-    }
+
+
+def current_claim() -> dict[str, Any] | None:
+    return _CURRENT_CLAIM.get()
+
+
+def assert_incident_claim(event_id: int, *, session=None) -> dict[str, Any]:
+    """Fence this transaction with the current token and live lease.
+
+    When a caller supplies its write session, the guarded UPDATE locks ownership
+    until that same transaction commits; checking in a different transaction is
+    insufficient to fence a subsequent projection write.
+    """
+    claim = current_claim()
+    if not claim or claim["event_id"] != int(event_id) or claim.get("lost"):
+        raise IncidentClaimLost(f"incident {event_id}: current claim required")
+
+    def check(db):
+        now = _database_time(db)
+        won = (
+            db.query(IncidentClaim)
+            .filter(
+                IncidentClaim.event_id == int(event_id),
+                IncidentClaim.owner_token == claim["owner_token"],
+                IncidentClaim.generation == claim["generation"],
+                IncidentClaim.lease_until > now,
+            )
+            .update({"lease_until": IncidentClaim.lease_until}, synchronize_session=False)
+        )
+        if not won:
+            claim["lost"] = True
+            raise IncidentClaimLost(f"incident {event_id}: ownership expired or superseded")
+
+    try:
+        if session is not None:
+            check(session)
+        else:
+            with get_session_factory()() as db:
+                check(db)
+                db.commit()
+    except IncidentClaimLost:
+        raise
+    except RECOVERABLE_ERRORS as exc:
+        claim["lost"] = True
+        raise IncidentClaimLost(f"incident {event_id}: ownership store unavailable") from exc
+    return claim
+
+
+def renew_incident_claim(event_id: int, owner_token: str, *, ttl_seconds: int = 900) -> bool:
+    try:
+        with get_session_factory()() as db:
+            now = _database_time(db)
+            won = (
+                db.query(IncidentClaim)
+                .filter(
+                    IncidentClaim.event_id == int(event_id),
+                    IncidentClaim.owner_token == owner_token,
+                    IncidentClaim.lease_until > now,
+                )
+                .update(
+                    {"lease_until": now + timedelta(seconds=max(30, int(ttl_seconds)))},
+                    synchronize_session=False,
+                )
+            )
+            db.commit()
+            return bool(won)
+    except RECOVERABLE_ERRORS:
+        return False
+
+
+def release_incident_claim(event_id: int, *, owner_token: str = "") -> Dict[str, Any]:
+    claim = current_claim()
+    token = owner_token or (
+        claim["owner_token"] if claim and claim["event_id"] == int(event_id) else ""
+    )
+    if not token:
+        return {"backend": "sql", "event_id": int(event_id), "released": False}
+    try:
+        with get_session_factory()() as db:
+            won = (
+                db.query(IncidentClaim)
+                .filter(
+                    IncidentClaim.event_id == int(event_id),
+                    IncidentClaim.owner_token == token,
+                )
+                .update({"owner_token": ""}, synchronize_session=False)
+            )
+            db.commit()
+            return {"backend": "sql", "event_id": int(event_id), "released": bool(won)}
+    except RECOVERABLE_ERRORS as exc:
+        return {
+            "backend": "sql",
+            "event_id": int(event_id),
+            "released": False,
+            "error": type(exc).__name__,
+        }
+
+
+@contextmanager
+def incident_claim_scope(event_id: int, *, ttl_seconds: int = 900):
+    """Renew a token for this dispatch; only explicit nested scopes are reentrant."""
+    existing = current_claim()
+    if existing and existing["event_id"] == int(event_id):
+        yield assert_incident_claim(event_id)
+        return
+    claim = claim_incident_for_node(event_id, ttl_seconds=ttl_seconds)
+    if not claim.get("claimed"):
+        raise IncidentClaimLost(f"incident {event_id}: already owned or SQL unavailable")
+    marker = _CURRENT_CLAIM.set(claim)
+    stop = threading.Event()
+
+    def keep_alive():
+        while not stop.wait(max(1, claim["ttl_seconds"] / 3)):
+            if not renew_incident_claim(
+                event_id, claim["owner_token"], ttl_seconds=claim["ttl_seconds"]
+            ):
+                claim["lost"] = True
+                return
+
+    renewal = threading.Thread(target=keep_alive, name=f"incident-lease-{event_id}", daemon=True)
+    renewal.start()
+    try:
+        yield claim
+    finally:
+        stop.set()
+        renewal.join(timeout=1)
+        release_incident_claim(event_id, owner_token=claim["owner_token"])
+        _CURRENT_CLAIM.reset(marker)
 
 
 __all__ = [
     "claim_incident_for_node",
     "release_incident_claim",
+    "renew_incident_claim",
+    "incident_claim_scope",
+    "assert_incident_claim",
+    "current_claim",
+    "IncidentClaimLost",
     "cluster_status",
     "elect_leader",
     "is_leader",

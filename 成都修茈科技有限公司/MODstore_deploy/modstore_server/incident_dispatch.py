@@ -160,6 +160,12 @@ def _dispatch_incident_body(event_id: int) -> None:
             )
 
             team = dispatch_incident_team(event_id)
+            if team.get("requires_reconciliation") or team.get("outcome") == "unknown":
+                logger.warning(
+                    "incident team requires original-attempt readback event_id=%s",
+                    event_id,
+                )
+                return
             if team.get("claimed"):
                 logger.info(
                     "incident_bus: team claimed event_id=%s ok=%s",
@@ -179,7 +185,11 @@ def _dispatch_incident_body(event_id: int) -> None:
                     event_id,
                 )
         except RECOVERABLE_ERRORS:
-            logger.warning("incident team failed event_id=%s; fallback market", event_id)
+            logger.warning(
+                "incident team outcome unknown event_id=%s; stop fallback for readback",
+                event_id,
+            )
+            return
 
     if not binding_only and (
         os.environ.get("MODSTORE_EMPLOYEE_TASK_MARKET_ENABLED", "1") or ""

@@ -119,7 +119,22 @@ def _build_request(
         or "main"
     )
     return {
-        "request_id": _facade().uuid.uuid4().hex,
+        "request_id": str(
+            input_data.get("request_id")
+            or input_data.get("attempt_id")
+            or _facade().uuid.uuid4().hex
+        ),
+        "execution_identity": {
+            key: input_data.get(key)
+            for key in (
+                "event_id",
+                "tenant_id",
+                "user_id",
+                "attempt_id",
+                "revision",
+                "role",
+            )
+        },
         "created_at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         "source": "modstore_employee_loop",
         "employee_id": employee_id,
@@ -291,50 +306,6 @@ def _summarize_para_response(body: _facade().Any) -> _facade().Dict[str, _facade
     }
 
 
-def _para_db_file() -> _facade().Path:
-    raw = (
-        _facade().os.environ.get("MODSTORE_PARA_DB_FILE")
-        or "~/Library/Application Support/com.devfleet.desktop/devfleet.db"
-    )
-    return _facade().Path(raw).expanduser()
-
-
-def _force_single_device_attempt(
-    req: _facade().Dict[str, _facade().Any],
-    accepted: _facade().Dict[str, _facade().Any],
-) -> _facade().Dict[str, _facade().Any]:
-    """仅 report_only 强制 max_attempts=1；重负载保留 Para 默认/请求值以便 transient 重试。"""
-    if not bool(req.get("report_only")):
-        return {"ok": True, "enabled": False, "reason": "heavy_workload_keeps_retries"}
-    if not _facade()._env_bool("MODSTORE_PARA_DISABLE_AUTO_RETRY", "1"):
-        return {"ok": True, "enabled": False}
-    task_id = str(accepted.get("task_id") or "").strip()
-    subtask_id = str(accepted.get("subtask_id") or "").strip()
-    if not task_id or not subtask_id:
-        return {"ok": False, "error": "missing task_id/subtask_id"}
-    try:
-        import sqlite3
-
-        db_file = _facade()._para_db_file()
-        con = sqlite3.connect(str(db_file))
-        try:
-            con.execute(
-                "update sub_tasks set max_attempts = 1 where id = ? and task_id = ?",
-                (subtask_id, task_id),
-            )
-            con.commit()
-        finally:
-            con.close()
-        return {
-            "ok": True,
-            "enabled": True,
-            "task_id": task_id,
-            "subtask_id": subtask_id,
-        }
-    except RECOVERABLE_ERRORS as exc:
-        return {"ok": False, "enabled": True, "error": str(exc)[:500]}
-
-
 def _resolve_max_attempts(req: _facade().Dict[str, _facade().Any]) -> int:
     if bool(req.get("report_only")):
         return 1
@@ -424,63 +395,6 @@ def _task_result_snapshot(body: _facade().Any) -> _facade().Dict[str, _facade().
         "subtasks": normalized_subtasks,
         "logs_tail": logs_tail[-10:],
     }
-
-
-def _wait_for_para_task(
-    client: _facade().httpx.Client,
-    base: str,
-    token: str,
-    task_id: str,
-    req: _facade().Dict[str, _facade().Any],
-) -> _facade().Dict[str, _facade().Any]:
-    deadline = _facade().time.monotonic() + _facade()._wait_timeout_sec(req)
-    last_body: _facade().Any = {}
-    terminal = {"completed", "merged", "failed", "merge_conflict"}
-    while True:
-        resp = client.get(
-            f"{base}/api/tasks/{task_id}", headers={"Authorization": f"Bearer {token}"}
-        )
-        try:
-            body = resp.json() if resp.content else {}
-        except RECOVERABLE_ERRORS:
-            body = {"raw": resp.text[:4000]}
-        last_body = body
-        if resp.status_code >= 400:
-            return {
-                "ok": False,
-                "status": "para_task_poll_failed",
-                "status_code": resp.status_code,
-                "error": str(
-                    body.get("error") or body.get("detail") or resp.text[:500]
-                    if isinstance(body, dict)
-                    else resp.text[:500]
-                ),
-                "snapshot": _facade()._task_result_snapshot(body),
-            }
-        task = (
-            body.get("task")
-            if isinstance(body, dict) and isinstance(body.get("task"), dict)
-            else {}
-        )
-        status = str(task.get("status") or "").strip()
-        if status in terminal:
-            snapshot = _facade()._task_result_snapshot(body)
-            ok = status in {"completed", "merged"}
-            return {
-                "ok": ok,
-                "status": "para_task_" + (status or "unknown"),
-                "error": "" if ok else _facade()._first_para_error(snapshot),
-                "snapshot": snapshot,
-            }
-        if _facade().time.monotonic() >= deadline:
-            snapshot = _facade()._task_result_snapshot(last_body)
-            return {
-                "ok": False,
-                "status": "para_task_timeout",
-                "error": f"Para task {task_id} 未在 {_facade()._wait_timeout_sec(req):.0f}s 内完成",
-                "snapshot": snapshot,
-            }
-        _facade().time.sleep(_facade()._wait_poll_sec())
 
 
 def _first_para_error(snapshot: _facade().Dict[str, _facade().Any]) -> str:

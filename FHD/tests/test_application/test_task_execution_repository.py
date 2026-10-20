@@ -120,3 +120,63 @@ def test_expired_owner_cannot_renew_or_finish_before_replacement(tmp_path, monke
     assert repository.get(run.run_id).lease_owner == "new"
     assert repository.finish(run.run_id, "new", "completed").state == "completed"
     engine.dispose()
+
+
+def test_repository_initialization_failure_never_silently_accepts_volatile_runs(monkeypatch):
+    import pytest
+
+    from app.application.agent_orchestrator import run_repository as runs
+    from app.application.agent_orchestrator import task_execution_repository as queue
+
+    monkeypatch.delenv("FHD_ENV", raising=False)
+    monkeypatch.delenv("XCAGI_AGENT_RUN_REQUIRE_DURABLE", raising=False)
+    monkeypatch.setattr(runs, "_agent_run_repository", None)
+    monkeypatch.setattr(queue, "_task_execution_repository", None)
+
+    class BrokenStore:
+        def __init__(self):
+            raise OSError("database unavailable")
+
+    monkeypatch.setattr(runs, "SQLAlchemyAgentRunRepository", BrokenStore)
+    monkeypatch.setattr(queue, "SQLAlchemyTaskExecutionRepository", BrokenStore)
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="durable AgentRun"):
+            runs.get_agent_run_repository()
+        with pytest.raises(RuntimeError, match="durable task execution"):
+            queue.get_task_execution_repository()
+    assert runs._agent_run_repository is None
+    assert queue._task_execution_repository is None
+
+
+def test_memory_mode_is_explicit_development_only_and_shared_by_run_and_queue(monkeypatch):
+    import pytest
+
+    from app.application.agent_orchestrator import run_repository as runs
+    from app.application.agent_orchestrator import task_execution_repository as queue
+
+    monkeypatch.setenv("XCAGI_AGENT_RUN_REQUIRE_DURABLE", "false")
+
+    class UnexpectedSQL:
+        def __init__(self):
+            raise OSError("offline development mode")
+
+    monkeypatch.setattr(runs, "SQLAlchemyAgentRunRepository", UnexpectedSQL)
+    monkeypatch.setattr(queue, "SQLAlchemyTaskExecutionRepository", UnexpectedSQL)
+    for environment in ("", "production", "prod", "staging", "development", "dev", "test"):
+        monkeypatch.setenv("FHD_ENV", environment)
+        monkeypatch.setattr(runs, "_agent_run_repository", None)
+        monkeypatch.setattr(queue, "_task_execution_repository", None)
+        monkeypatch.setattr(runs, "_agent_run_repository_status", {})
+        if environment not in {"development", "dev", "test"}:
+            with pytest.raises(RuntimeError):
+                runs.get_agent_run_repository()
+            with pytest.raises(RuntimeError):
+                queue.get_task_execution_repository()
+            continue
+        assert isinstance(runs.get_agent_run_repository(), runs.InMemoryAgentRunRepository)
+        assert isinstance(
+            queue.get_task_execution_repository(), queue.InMemoryTaskExecutionRepository
+        )
+        assert (
+            runs.get_agent_run_repository_status()["degraded_reason"] == "explicit development mode"
+        )

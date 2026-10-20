@@ -252,6 +252,8 @@ def _ensure_columns(engine: Engine) -> None:
         ("daily_digest_records", "release_kind", "TEXT DEFAULT ''"),
         ("transactions", "idempotency_key", "TEXT DEFAULT ''"),
         ("employee_execution_metrics", "failure_kind", "TEXT DEFAULT ''"),
+        ("event_outbox", "claim_token", "VARCHAR(64) NOT NULL DEFAULT ''"),
+        ("event_outbox", "claim_until", "DATETIME"),
         ("event_outbox_dlq", "resolution_status", "VARCHAR(32) DEFAULT ''"),
         ("event_outbox_dlq", "resolution_action", "VARCHAR(32) DEFAULT ''"),
         ("event_outbox_dlq", "resolution_note", "TEXT DEFAULT ''"),

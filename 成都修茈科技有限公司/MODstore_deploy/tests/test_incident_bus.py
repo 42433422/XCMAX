@@ -24,10 +24,6 @@ def fresh_db(tmp_path, monkeypatch):
     # 单测断言派发副作用时保持同步，避免线程竞态。
     monkeypatch.setenv("MODSTORE_INCIDENT_SYNC_DISPATCH", "1")
     monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
-    monkeypatch.setattr(
-        "modstore_server.node_coordinator.claim_incident_for_node",
-        lambda _event_id: {"claimed": True},
-    )
     models.init_db()
     yield tmp_path
     models._engine = None

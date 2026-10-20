@@ -486,7 +486,8 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(
             }
         outbox = db.get(OutboxEvent, outbox_id)
         assert (outbox.status, outbox.last_error, outbox.attempts) == original_outbox
-        assert calls == ([] if incident_state == "healthy" else [restored[-1].id])
+        # Replay schedules readback of the same inbox identity, never another incident.
+        assert calls == [restored[-1].id] * 2
     marker = f"unpersisted-{uuid.uuid4().hex}"
     body.update(source_ref="bad-work-order", title=marker, work_order_id="WO-111111111111")
     bad = client.post("/api/customer-service/issues/intake", json=body, headers=headers)

@@ -203,7 +203,11 @@ async def local_employee_execute(
     """管理端本机员工执行入口：绕开远端代理，直接调用 FHD employee_runtime。"""
     from app.application.auth_permission_resolver import require_allowed
     from app.application.employee_runtime.executor import execute_employee_task_local
-    from app.application.employee_runtime.result_verifier import verify_employee_run_result
+    from app.application.employee_runtime.result_verifier import (
+        execution_result_awaits_approval,
+        execution_result_requires_reconciliation,
+        verify_employee_run_result,
+    )
     from app.application.employee_runtime.run_ledger import (
         create_employee_run_log,
         finish_employee_run_log,
@@ -244,11 +248,17 @@ async def local_employee_execute(
             payload[key] = body[key]
     payload.setdefault("trigger", "admin_execute")
     try:
-        user_id = int(body.get("user_id") or getattr(user, "id", 0) or 0)
+        user_id = int(getattr(user, "id", 0) or 0)
     except (TypeError, ValueError):
         user_id = 0
-    retry_max = max(1, min(int(body.get("retry_max") or 3), 5))
     tenant_id = meta.get("tenant_id")
+    if not isinstance(tenant_id, int) or isinstance(tenant_id, bool) or tenant_id <= 0:
+        return _facade().JSONResponse(
+            {"success": False, "message": "缺少可信租户"}, status_code=403
+        )
+    for reserved in ("_runtime_context", "runtime_context", "_mod_authorization"):
+        payload.pop(reserved, None)
+    payload.update(user_id=user_id, session_id=sid, tenant_id=tenant_id, employee_id=pid, task=task)
     run_id = create_employee_run_log(
         employee_id=pid,
         input_payload={"task": task, **payload},
@@ -256,47 +266,54 @@ async def local_employee_execute(
         session_id=sid,
         user_id=user_id or None,
     )
-    result: dict[str, _facade().Any] = {"success": False, "message": "未执行"}
-    last_error = ""
-    for attempt in range(1, retry_max + 1):
-        result = execute_employee_task_local(
-            pid,
-            task,
-            payload,
-            user_id=user_id,
-            workspace_root=str(body.get("workspace_root") or "").strip() or None,
-            session_id=str(body.get("session_id") or sid),
+    payload["run_id"] = run_id
+    # A whole-task replay can repeat successful writes before a later failure.
+    # Repairs belong to the same action/run, not a new execution of the request.
+    result = execute_employee_task_local(
+        pid,
+        task,
+        payload,
+        user_id=user_id,
+        workspace_root=str(body.get("workspace_root") or "").strip() or None,
+        session_id=sid,
+    )
+    result = (
+        result
+        if isinstance(result, dict)
+        else {
+            "success": False,
+            "error": "invalid employee result",
+            "execution_state": "unknown",
+            "reconciliation_required": True,
+        }
+    )
+    ok, reason = verify_employee_run_result(pid, result)
+    if ok and result.get("success") is not False:
+        finish_employee_run_log(
+            run_id, tenant_id=tenant_id, status="success", output=result, attempts=1, verified=True
         )
-        ok, reason = verify_employee_run_result(pid, result if isinstance(result, dict) else {})
-        if ok and result.get("success") is not False:
-            finish_employee_run_log(
-                run_id,
-                status="success",
-                output=result if isinstance(result, dict) else {},
-                attempts=attempt,
-                verified=True,
-            )
-            return {
-                "success": True,
-                "source": "local",
-                "run_id": run_id,
-                "attempts": attempt,
-                "data": result,
-            }
-        last_error = reason or str(result.get("message") or result.get("error") or "执行失败")
+        return {"success": True, "source": "local", "run_id": run_id, "attempts": 1, "data": result}
+    last_error = reason or str(result.get("message") or result.get("error") or "执行失败")
     finish_employee_run_log(
         run_id,
-        status="failed",
+        tenant_id=tenant_id,
+        status=(
+            "unknown"
+            if execution_result_requires_reconciliation(result)
+            else "awaiting_approval"
+            if execution_result_awaits_approval(result)
+            else "failed"
+        ),
         output=result if isinstance(result, dict) else {},
         error=last_error,
-        attempts=retry_max,
+        attempts=1,
         verified=False,
     )
     return {
         "success": False,
         "source": "local",
         "run_id": run_id,
-        "attempts": retry_max,
+        "attempts": 1,
         "message": last_error,
         "data": result,
     }
@@ -305,16 +322,25 @@ async def local_employee_execute(
 @_facade().router.get("/local/employees/{employee_id}/runs", response_model=None)
 async def local_employee_runs(request: _facade().Request, employee_id: str, limit: int = 50):
     from app.application.employee_runtime.run_ledger import list_employee_run_logs
+    from app.application.session_account_meta import enrich_session_meta_with_tenant
     from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+    from app.infrastructure.auth.dependencies import resolve_session_user
 
-    if not _session_id_from_request(request):
+    sid = _session_id_from_request(request)
+    user = resolve_session_user(request) if sid else None
+    if user is None:
         return _facade().JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
+    tenant_id = enrich_session_meta_with_tenant(sid, user).get("tenant_id")
+    if not isinstance(tenant_id, int) or isinstance(tenant_id, bool) or tenant_id <= 0:
+        return _facade().JSONResponse(
+            {"success": False, "message": "缺少可信租户"}, status_code=403
+        )
     pid = str(employee_id or "").strip()
     if not pid:
         return _facade().JSONResponse(
             {"success": False, "message": "employee_id 必填"}, status_code=400
         )
-    return {"success": True, "data": list_employee_run_logs(pid, limit=limit)}
+    return {"success": True, "data": list_employee_run_logs(pid, tenant_id=tenant_id, limit=limit)}
 
 
 @_facade().router.get("/local/employees/{employee_id}/manifest", response_model=None)

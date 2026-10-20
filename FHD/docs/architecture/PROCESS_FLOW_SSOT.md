@@ -28,6 +28,21 @@
 
 **结论**：编排引擎已就位，但尚无内置 WorkflowDefinition；发票→入库→审批→月报 由 NeuroBus 域处理器直接编排（`../../app/neuro_bus/domains/inventory_domain_handlers.py`、`finance_domain_handlers.py`，月报由 `../../app/application/monthly_report_scheduler.py` 触发）。
 
+### 2.1 执行入口与状态归属（核心审计整改候选，2026-10-20）
+
+以下是源码责任边界，不代表候选已合入、部署或通过真实业务验收。路径以仓库根为准；MODstore 前缀为 `成都修茈科技有限公司/MODstore_deploy/modstore_server/`。
+
+| 入口 | 执行 owner / 事务台账 | 重试与结果合同 |
+|---|---|---|
+| FHD `agent_orchestrator/unified_task.py` | `task_background.py`；`run_sql_repository.py` 与 `task_execution_sql_repository.py`（均在 `FHD/app/application/agent_orchestrator/`） | Run/Step 与队列租约归属；unknown 不等于失败可重派；生产持久化初始化失败拒接 |
+| FHD `app/di/registry.py` 的 workflow runtime | `app/application/workflow/runtime/`；checkpoint bridge | legacy 默认，其他模式显式配置；支持条件图的引擎执行条件，不支持的 AgentStep 入口拒绝该计划 |
+| FHD `xcmax_admin_part03_part01.py:local_employee_execute` | `employee_runtime/executor.py`；`run_ledger.py` 的租户日志（分别位于 routes 与 application） | 单次请求执行一次；工具授权在最终 dispatch；error/accepted/unknown 不得 verified；业务完成另需独立 readback |
+| MODstore `customer_issue_intake.py` → `incident_bus.py` | outbox、唯一 incident 与 dispatch claim；`incident_team_dispatch.py` | 保留 event/task/attempt 身份；已受理或结果未知只核对原任务；新 fix 使旧 verify 失效 |
+| MODstore `admin_duty_graph_api_part02.py` / `employee_orchestrator.py` | 持久 DutyRun/节点或动态图运行记录 | 下游仅接受成功依赖；失败、跳过、pending 分开；传统 workflow 必须到达 end 才能成功 |
+| MODstore Para handler / 可选 Mac Control | 外部 API task ID / `mac_control_store.py` attempt | HTTP 200 不等于完成；子任务集合与原 ID 必须匹配；默认关闭的 Mac Control 不能替默认 Para 通道验收 |
+
+跨入口回归以 `test_plan_graph_execution_contract.py`、`test_employee_run_tenant_isolation.py`、`test_tool_execution_deadline.py` 及 MODstore `test_workflow_terminal_contract.py` 为入口。稳定 facade 保留，新增合同应复用已有结果判定，避免反向动态 import 扩散。尚未提供真实进程隔离的同步工具在未开启严格 deadline 模式时仍可能挂起；该 F08 缺口及真实容量、连续 SLO、同发布 SHA 业务/恢复验收不得由本表替代。
+
 ## 3. 工作流程（企业内部业务）
 
 ### 3.1 采购线（相对完整）

@@ -50,12 +50,9 @@ from modstore_server.para_delegate_handler_part01 import (
     _build_para_prompt as _build_para_prompt,
     _get_para_token as _get_para_token,
     _summarize_para_response as _summarize_para_response,
-    _para_db_file as _para_db_file,
-    _force_single_device_attempt as _force_single_device_attempt,
     _resolve_max_attempts as _resolve_max_attempts,
     _git_preflight_branch as _git_preflight_branch,
     _task_result_snapshot as _task_result_snapshot,
-    _wait_for_para_task as _wait_for_para_task,
     _first_para_error as _first_para_error,
 )
 
@@ -132,9 +129,6 @@ from modstore_server.para_delegate_handler_part03 import (
     _resolve_dispatch_devices as _resolve_dispatch_devices,
     _multi_device_prompt as _multi_device_prompt,
     _para_subtask_title as _para_subtask_title,
-    _req_with_excluded_tools as _req_with_excluded_tools,
-    _attach_tool_fallback_meta as _attach_tool_fallback_meta,
-    _post_para_api as _post_para_api,
 )
 
 
@@ -150,3 +144,10 @@ __all__ = [
     "para_delegate_enabled",
     "para_delegate_ready_for_dispatch",
 ]
+
+from modstore_server.para_delegate_handler_part02 import (
+    _wait_for_para_task as _wait_for_para_task,
+    _post_para_api as _post_para_api,
+    _req_with_excluded_tools as _req_with_excluded_tools,
+    _attach_tool_fallback_meta as _attach_tool_fallback_meta,
+)

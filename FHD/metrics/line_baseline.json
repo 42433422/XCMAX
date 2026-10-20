@@ -1,5 +1,5 @@
 {
-  "lines": 2311547,
+  "lines": 2313963,
   "updated": "2026-10-20",
-  "note": "棘轮下调"
+  "note": "Core-audit safety candidate adds durable incident identity/lease/outbox schema and negative HTTP/process/migration tests after removing obsolete private Para DB writes and 485 lines of mock-only ledger tests. Additional combined-suite regressions now anchor spawn imports and isolate real SQLite HTTP fixtures; F08, late employee reconciliation and runtime acceptance remain explicitly open."
 }

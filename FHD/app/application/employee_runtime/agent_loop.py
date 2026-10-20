@@ -85,6 +85,8 @@ def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
         return False, "工具返回不是有效 JSON", True
     if not isinstance(payload, dict):
         return False, "工具返回必须是 JSON 对象", True
+    if payload.get("error") or payload.get("ok") is False:
+        return False, str(payload.get("error") or "工具返回失败")[:500], True
     if "success" in payload:
         if payload.get("success") is True:
             return True, None, True
@@ -110,7 +112,9 @@ def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
 def _terminal_tool_failure(tool_trace: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Summarize an unfinished/failed tool action for the final run result."""
 
-    failed = [row for row in tool_trace if row.get("success") is False]
+    failed = [
+        row for row in tool_trace if row.get("success") is False and not row.get("superseded_by")
+    ]
     if not failed:
         return None
     first = failed[0]
@@ -289,6 +293,7 @@ def run_employee_agent_loop(
                         "success": False,
                         "error": args_error,
                         "invalid_arguments": True,
+                        "action_id": tc_id,
                     }
                 )
                 trajectory.append(
@@ -388,12 +393,46 @@ def run_employee_agent_loop(
                 result_raw = execute_workflow_tool(tool_name, args, workspace_root)
             except RECOVERABLE_ERRORS:
                 result_raw = json.dumps(
-                    {"success": False, "error": "工具执行失败"}, ensure_ascii=False
+                    {
+                        "success": False,
+                        "error": "工具执行失败",
+                        "execution_state": "unknown",
+                        "retryable": False,
+                    },
+                    ensure_ascii=False,
                 )
+            try:
+                result_payload = json.loads(str(result_raw))
+            except (TypeError, json.JSONDecodeError):
+                result_payload = None
+            invalid_receipt = not isinstance(result_payload, dict)
+            if invalid_receipt:
+                result_payload = {}
+            state = str(result_payload.get("execution_state") or result_payload.get("status") or "")
+            unknown = (
+                invalid_receipt
+                or state in {"unknown", "accepted", "pending", "running"}
+                or bool(result_payload.get("reconciliation_required"))
+            )
             tool_success, tool_error, verified = _tool_result_state(str(result_raw))
+            if unknown:
+                tool_success, tool_error = (
+                    False,
+                    str(result_payload.get("error") or "工具结果待核对"),
+                )
+            if tool_success:
+                for previous in reversed(tool_trace):
+                    if (
+                        previous.get("tool") == tool_name
+                        and previous.get("invalid_arguments")
+                        and not previous.get("superseded_by")
+                    ):
+                        previous["superseded_by"] = tc_id or f"round-{rounds}"
+                        break
             tool_trace.append(
                 {
                     "tool": tool_name,
+                    "action_id": tc_id,
                     "args": args,
                     "success": tool_success,
                     "error": tool_error,
@@ -419,6 +458,20 @@ def run_employee_agent_loop(
                     "content": str(result_raw)[:8000],
                 }
             )
+            if unknown or (not tool_success and result_payload.get("retryable") is False):
+                return {
+                    "handler": "agent",
+                    "ok": False,
+                    "output": "",
+                    "rounds": rounds,
+                    "tool_calls": tool_trace,
+                    "trajectory": trajectory,
+                    "exit_status": "unknown" if unknown else "tool_failed",
+                    "execution_state": (state or "unknown") if unknown else "failed",
+                    "error": tool_error,
+                    "retryable": False,
+                    "reconciliation_required": unknown,
+                }
 
     return {
         "handler": "agent",

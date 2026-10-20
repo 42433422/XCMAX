@@ -9,7 +9,10 @@ from pathlib import Path
 import pytest
 
 import modstore_server.models as models
-from modstore_server.customer_issue_delivery_contract import execution_pending, execution_succeeded
+from modstore_server.customer_issue_delivery_contract import (
+    execution_pending,
+    execution_succeeded,
+)
 from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.incident_team_orchestrator import dispatch_incident_team
 from tests.test_para_first_no_planning_llm import fresh_db as fresh_db
@@ -43,7 +46,10 @@ INFO = [{"handler": h, "output": ""} for h in ("llm_md", "echo")]
         ([PARA_OK, *INFO], True),
         ([{"handler": "llm_md", "output": "看起来修好了"}], False),
         ([PARA_OK, {"handler": "llm_md", "error": "llm failed"}], False),
-        ([{**PARA_OK, "completed": False, "status": "para_task_accepted"}, INFO[0]], False),
+        (
+            [{**PARA_OK, "completed": False, "status": "para_task_accepted"}, INFO[0]],
+            False,
+        ),
         ([{**PARA_OK, "accepted": False}], False),
         ([{**PARA_OK, "para_result": {}}], False),
         (
@@ -77,7 +83,14 @@ def test_real_ledger_accepts_digest_evidence(tmp_path, completed, accepted, expe
     spec.loader.exec_module(module)
     digest = handler_output_digest(
         _employee_result(
-            [{**PARA_OK, "para_result": snapshot, "completed": completed, "accepted": accepted}]
+            [
+                {
+                    **PARA_OK,
+                    "para_result": snapshot,
+                    "completed": completed,
+                    "accepted": accepted,
+                }
+            ]
         )
     )
     (tmp_path / "handlers.json").write_text(json.dumps(digest))
@@ -172,7 +185,11 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
             event_type="ops.intake.customer_ticket",
             source="customer_ticket",
             payload_json=json.dumps(
-                {"summary": "handler outputs", "ticket_id": ticket_id, "user_id": owner.id}
+                {
+                    "summary": "handler outputs",
+                    "ticket_id": ticket_id,
+                    "user_id": owner.id,
+                }
             ),
             dispatched_count=0,
         )
@@ -250,14 +267,19 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
 
         monkeypatch.setattr(
             "modstore_server.incident_team_orchestrator.execute_employee_task",
-            lambda *a, **kw: pytest.fail("续读不能重新派单"),
+            lambda employee_id, *a, **kw: (
+                _employee_result([PARA_OK])
+                if employee_id == "verify-1" and terminal == "completed"
+                else pytest.fail("不能重派原scout/fix或已关闭工单")
+            ),
         )
         if terminal == "missing":
             with sf() as db:
                 event = db.get(models.IncidentEvent, event_id)
                 data = json.loads(event.payload_json)
                 for row in data["_team_claim"]["team"]:
-                    row["handler_outputs"]["outputs"][0].pop("task_id")
+                    for output in row["handler_outputs"]["outputs"]:
+                        output.pop("task_id", None)
                 event.payload_json = json.dumps(data)
                 db.commit()
             reconcile_pending_teams(
@@ -284,7 +306,7 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
             ticket, _, claim, latest_messages, repairs = readback()
             assert repairs == 0 and ticket.evidence_json == original_decision
             assert latest_messages == messages
-            assert claim["ok"]
+            assert not claim["ok"]  # customer decision does not invent unrun verification
             assert reconcile_pending_teams(event_id=event_id, fetcher=fetch)["changed"] == 0
             return
         for mismatch in ("owner", "incident"):
@@ -304,7 +326,8 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
                 db.commit()
             assert (
                 reconcile_pending_teams(
-                    event_id=event_id, fetcher=lambda base, tid: {"id": tid, "status": "completed"}
+                    event_id=event_id,
+                    fetcher=lambda base, tid: {"id": tid, "status": "completed"},
                 )["changed"]
                 == 0
             )
@@ -389,7 +412,6 @@ def test_real_async_para_return_keeps_parent_task_id(monkeypatch):
         "_resolve_dispatch_devices",
         lambda *a: ("local", [{"id": "d1", "_selected_tool": "cursor"}], ""),
     )
-    monkeypatch.setattr(handler, "_force_single_device_attempt", lambda *a: {})
     client_class = httpx.Client
     requests = []
 
@@ -403,7 +425,11 @@ def test_real_async_para_return_keeps_parent_task_id(monkeypatch):
         lambda **kw: client_class(transport=httpx.MockTransport(respond), **kw),
     )
     result = handler._post_para_api_once(
-        {"task": "test", "report_only": True, "repo_url": "https://github.com/example/test.git"}
+        {
+            "task": "test",
+            "report_only": True,
+            "repo_url": "https://github.com/example/test.git",
+        }
     )
     assert result["accepted"] and not result["completed"]
     assert result["task_id"] == "parent-task"

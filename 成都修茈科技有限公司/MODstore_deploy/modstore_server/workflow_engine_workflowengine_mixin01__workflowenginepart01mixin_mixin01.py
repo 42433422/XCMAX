@@ -10,6 +10,19 @@ def _facade():
     return importlib.import_module("modstore_server.workflow_engine")
 
 
+class WorkflowGraphError(ValueError):
+    """A nonterminal graph keeps partial execution evidence for API/sandbox callers."""
+
+    def __init__(self, message, output, steps, warnings):
+        super().__init__(message)
+        self.evidence = {
+            "partial_output": output,
+            "steps": steps,
+            "warnings": warnings,
+            "terminal_reason": message,
+        }
+
+
 class __WorkflowEnginePart01MixinPart01Mixin:
     def __init__(self):
         self.executors = {
@@ -98,14 +111,24 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 "steps": [],
                 "output": {},
             }
-        output, steps, run_warn = self._run_graph(
-            session,
-            workflow,
-            input_data or {},
-            mock_employees=mock_employees,
-            collect_trace=True,
-            user_id=user_id,
-        )
+        try:
+            output, steps, run_warn = self._run_graph(
+                session,
+                workflow,
+                input_data or {},
+                mock_employees=mock_employees,
+                collect_trace=True,
+                user_id=user_id,
+            )
+        except WorkflowGraphError as exc:
+            return {
+                "ok": False,
+                "validate_only": False,
+                "errors": [str(exc)],
+                "warnings": topo_warnings + exc.evidence["warnings"],
+                "steps": exc.evidence["steps"],
+                "output": exc.evidence["partial_output"],
+            }
         return {
             "ok": True,
             "validate_only": False,
@@ -158,6 +181,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         run_warnings: _facade().List[str] = []
         order = 0
         total_steps = 0
+        reached_end = False
         visit_count: _facade().Dict[int, int] = {}
         while current_node:
             total_steps += 1
@@ -231,6 +255,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             nb["prev"] = node_blob
             current_data["nodes"] = nb
             if current_node.node_type == "end":
+                reached_end = True
                 break
             next_edges = source_to_targets.get(current_node.id, [])
             if not next_edges:
@@ -276,6 +301,13 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             if next_node is None and next_edges:
                 run_warnings.append(f"节点「{current_node.name}」无有向边条件命中，流程停止")
             current_node = next_node
+        if not reached_end:
+            raise WorkflowGraphError(
+                "workflow did not reach end: " + "; ".join(run_warnings),
+                current_data,
+                steps,
+                run_warnings,
+            )
         return (current_data, steps, run_warnings)
 
     def _execute_node(

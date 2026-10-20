@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import math
+import os
+import time
 from contextlib import nullcontext
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.application.agent_orchestrator.param_references import (
@@ -112,3 +116,64 @@ class AgentToolExecutor:
                 "output_keys": sorted(str(key) for key in result.keys()),
             }
         return result
+
+
+def execute_with_tool_deadline(
+    executor: Any, step: AgentStep, *, runtime_context: dict[str, Any], timeout_seconds: float
+) -> dict[str, Any]:
+    """Propagate a deadline; strict deployments reject executors lacking a bounded adapter.
+
+    This deliberately does not move SQL/Mod transactions into an unrelated process.
+    The optional ``execute_with_deadline`` adapter owns cancellation/isolation.
+    """
+    timeout = float(timeout_seconds)
+    if not math.isfinite(timeout) or timeout <= 0:
+        return {"success": False, "error_code": "invalid_tool_timeout", "retryable": False}
+    started = time.monotonic()
+    deadline = started + timeout
+    context = dict(runtime_context)
+    context.update(
+        {
+            "timeout_seconds": timeout,
+            "deadline_monotonic": deadline,
+            "deadline_utc": (datetime.now(UTC) + timedelta(seconds=timeout)).isoformat(),
+        }
+    )
+    bounded = getattr(executor, "execute_with_deadline", None)
+    required = os.environ.get("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if required and not callable(bounded):
+        return {
+            "success": False,
+            "error_code": "tool_deadline_unsupported",
+            "retryable": False,
+            "message": "工具缺少可取消/隔离的有界执行适配器，已拒绝执行",
+        }
+    try:
+        result = (
+            bounded(step, runtime_context=context, deadline_monotonic=deadline)
+            if callable(bounded)
+            else executor.execute(step, runtime_context=context)
+        )
+    except TimeoutError:
+        pass
+    else:
+        if (
+            time.monotonic() <= deadline
+            and isinstance(result, dict)
+            and result.get("outcome") != "unknown"
+            and not result.get("reconciliation_required")
+        ):
+            return result
+    return {
+        "success": False,
+        "error_code": "tool_timeout_unknown",
+        "outcome": "unknown",
+        "retryable": False,
+        "reconciliation_required": True,
+        "message": "工具超时，业务结果未知；必须核对原调用，不可自动重试",
+    }

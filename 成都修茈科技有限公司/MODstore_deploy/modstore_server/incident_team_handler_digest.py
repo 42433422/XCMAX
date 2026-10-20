@@ -21,6 +21,17 @@ _SCALAR_KEYS = (
     "success",
     "accepted",
     "completed",
+    "outcome",
+    "requires_reconciliation",
+    "retryable",
+    "attempt_id",
+    "revision",
+    "event_id",
+    "tenant_id",
+    "user_id",
+    "partial",
+    "queued",
+    "outbox_path",
     "status",
     "execution_status",
     "skipped",
@@ -72,6 +83,15 @@ def _row_digest(row: Any) -> Dict[str, Any]:
     for key in _SCALAR_KEYS:
         if key in row and row.get(key) not in ("", None):
             out[key] = _scalar(row.get(key))
+    for key in ("required_subtask_ids", "planned_devices"):
+        if isinstance(row.get(key), list):
+            out[key] = [_scalar(value) for value in row[key][:50]]
+    if isinstance(row.get("dispatch_failures"), list):
+        out["dispatch_failures"] = [
+            {key: _scalar(item.get(key)) for key in ("device_id", "error", "status_code")}
+            for item in row["dispatch_failures"][:50]
+            if isinstance(item, dict)
+        ]
     snapshot = row.get("para_result")
     if isinstance(snapshot, dict):
         task_id = _para_task_id(row)
@@ -116,7 +136,11 @@ def handler_output_digest(result: Any) -> Dict[str, Any]:
     raw_nested = result.get("result")
     nested: Dict[str, Any] = raw_nested if isinstance(raw_nested, dict) else {}
     raw_outputs = nested.get("outputs")
-    outputs: List[Any] = raw_outputs if isinstance(raw_outputs, list) else []
+    outputs: List[Any] = (
+        raw_outputs
+        if isinstance(raw_outputs, list)
+        else ([result] if result.get("handler") else [])
+    )
     digest: Dict[str, Any] = {
         "outputs": [_row_digest(row) for row in outputs[:12]],
     }

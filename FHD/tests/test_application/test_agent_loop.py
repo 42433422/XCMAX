@@ -223,7 +223,7 @@ class TestRunEmployeeAgentLoop:
             tools=[{"type": "function", "function": {"name": "tool1"}}],
         )
         assert result["ok"] is False
-        assert result["exit_status"] == "tool_failed"
+        assert result["exit_status"] == "unknown"
         assert result["tool_calls"][0]["success"] is False
 
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
@@ -323,3 +323,61 @@ def test_final_dispatch_requires_allowlisted_tool_and_valid_gate(tools, verdict)
     execute.assert_not_called()
     assert result["ok"] is False
     assert result["exit_status"] == "tool_blocked"
+
+
+def _run_action_sequence(arguments, results):
+    calls = []
+    for index, raw in enumerate(arguments):
+        call = MagicMock(id=f"action-{index}")
+        call.function.name, call.function.arguments = "tool1", raw
+        calls.append(MagicMock(content="", tool_calls=[call]))
+    calls.append(MagicMock(content="done", tool_calls=[]))
+    with (
+        patch("app.infrastructure.llm.client.require_api_key"),
+        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
+        patch(
+            "app.application.tools.workflow.execute_workflow_tool", side_effect=results
+        ) as execute,
+    ):
+        client.return_value.chat.completions.create.side_effect = [
+            MagicMock(choices=[MagicMock(message=message)]) for message in calls
+        ]
+        result = run_employee_agent_loop(
+            employee_id="employee",
+            system_prompt="",
+            task="task",
+            model="test",
+            tools=[{"function": {"name": "tool1"}}],
+        )
+    return result, execute.call_count
+
+
+def test_corrected_arguments_supersede_only_unexecuted_validation_failure():
+    result, count = _run_action_sequence(["{broken", '{"path":"valid"}'], ['{"success":true}'])
+    assert count == 1 and result["ok"] is True
+    assert result["tool_calls"][0]["superseded_by"] == "action-1"
+    assert result["tool_calls"][0]["success"] is False
+
+
+def test_later_success_cannot_erase_an_executed_failure():
+    result, count = _run_action_sequence(
+        ["{}", '{"new":true}'], ['{"success":false,"error":"failed"}', '{"success":true}']
+    )
+    assert count == 2 and result["ok"] is False
+    assert not result["tool_calls"][0].get("superseded_by")
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        ConnectionError("lost receipt"),
+        "invalid tool receipt",
+        '{"success":false,"execution_state":"unknown"}',
+        '{"success":true,"status":"accepted"}',
+        '{"success":false,"retryable":false,"error":"denied"}',
+    ],
+)
+def test_unknown_or_nonretryable_action_cannot_replay(outcome):
+    result, count = _run_action_sequence(["{}", "{}"], [outcome, '{"success":true}'])
+    assert count == 1 and result["ok"] is False
+    assert result["retryable"] is False

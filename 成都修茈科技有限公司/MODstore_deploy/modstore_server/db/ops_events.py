@@ -61,6 +61,8 @@ class OutboxEvent(Base):
     last_error = Column(Text, default="")
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     dispatched_at = Column(DateTime, nullable=True)
+    claim_token = Column(String(64), nullable=False, default="")
+    claim_until = Column(DateTime, nullable=True)
 
 
 class OutboxDeadLetter(Base):
