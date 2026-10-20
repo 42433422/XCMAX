@@ -183,11 +183,7 @@ class UserMemoryStore:
     def transaction(self):
         depth = getattr(self._transaction_state, "depth", 0)
         if depth:
-            self._transaction_state.depth += 1
-            try:
-                yield
-            finally:
-                self._transaction_state.depth -= 1
+            yield
             return
         with self._transaction_lock:
             if self.storage_type == "json":
