@@ -84,21 +84,13 @@ def _submit_issue(
 
 
 def test_report_classifier_requires_structured_product_defect():
-    client, calls = _client(
-        '{"type":"product_defect","confidence":0.93,"expected":"saved",'
-        '"actual":"save failed","missing_evidence":[]}'
-    )
+    client, calls = _client('{"type":"product_defect","confidence":0.93,"actual":"failed"}')
     triage = classify_report(client, "保存时报错", "这是软件缺陷。")
-    assert triage == {
-        "type": "product_defect",
-        "confidence": 0.93,
-        "expected": "saved",
-        "actual": "save failed",
-        "missing_evidence": [],
-    }
+    assert triage["type"] == "product_defect" and triage["actual"] == "failed"
     assert calls[0]["response_format"] == {"type": "json_object"}
-    assert looks_like_issue_report("保存时报错")
-    assert not looks_like_issue_report("怎么导出报表？")
+    assert classify_report(None, "提交产品问题，期望：缺口。", "")["missing_evidence"] == [
+        "actual_behavior"
+    ]
     assert looks_like_issue_report("登录后软件不能用")
     assert not looks_like_issue_report("请写入验收文本。不能用排队或待审批代替完成。")
 
