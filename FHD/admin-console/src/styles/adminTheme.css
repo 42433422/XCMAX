@@ -19,7 +19,7 @@
   min-height: 32px; border-radius: var(--admin-control-radius); font-family: inherit;
   font-size: var(--admin-control-size); line-height: 1.4;
 }
-#app .page-content :is(.btn, .cs-btn) { padding: 8px 12px; border: 1px solid var(--admin-border); background: #fff; color: var(--admin-text); cursor: pointer; }
+#app .page-content :is(.btn, .cs-btn):where(:not(.btn-danger, .is-danger)) { padding: 8px 12px; border: 1px solid var(--admin-border); background: #fff; color: var(--admin-text); cursor: pointer; }
 #app .page-content :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
   min-width: 0; min-height: 36px; padding: 8px 10px; border-color: var(--admin-border); border-radius: var(--admin-control-radius);
   color: var(--admin-text); font-family: inherit; font-size: var(--admin-control-size);
