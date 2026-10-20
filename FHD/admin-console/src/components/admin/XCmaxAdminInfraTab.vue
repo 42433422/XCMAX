@@ -11,20 +11,22 @@
 
     <div class="admin-card">
       <div class="card-header">
-        <h3>闭环状态</h3>
+        <h3>岗位与服务状态</h3>
         <span class="status-badge" :class="closureOk ? 'badge-ok' : 'badge-warn'">
-          {{ closureOk ? '就绪' : '待补齐' }}
+          {{ closureOk ? '编制就绪' : '存在编制缺口' }}
         </span>
       </div>
       <dl class="card-info">
-        <dt>编制缺口</dt>
+        <dt>计划岗位</dt>
+        <dd>{{ plannedCount }}</dd>
+        <dt>缺口岗位</dt>
         <dd>{{ missingCount }}</dd>
-        <dt>本地已装</dt>
+        <dt>本机已安装</dt>
         <dd>{{ localInstalled }}</dd>
-        <dt>远端可达</dt>
-        <dd>{{ remoteReachable ? '是' : '否' }}</dd>
+        <dt>远端服务</dt>
+        <dd>{{ remoteStateLabel }}</dd>
       </dl>
-      <pre v-if="closureDetail" class="ops-json">{{ closureDetail }}</pre>
+      <details v-if="closureDetail"><summary>查看原始状态数据</summary><pre class="ops-json">{{ closureDetail }}</pre></details>
     </div>
 
     <div class="admin-card admin-card--wide">
@@ -34,7 +36,7 @@
       <ul class="dept-list">
         <li v-for="(dept, id) in YUANGON_AREAS" :key="id">
           <strong>{{ dept.label }}</strong>
-          <span class="dept-meta">{{ dept.ids.length }} 个计划编制包</span>
+          <span class="dept-meta">{{ dept.ids.length }} 个计划岗位 · 本机已装 {{ departmentCount(dept.ids, 'installed') }} · 缺口 {{ departmentCount(dept.ids, 'missing') }}</span>
         </li>
       </ul>
     </div>
@@ -42,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { xcmaxOpsApi } from '@/api/xcmaxOps'
 import { api } from '@/api'
 import { YUANGON_AREAS } from '@/domain/yuangonDutyRoster'
@@ -56,6 +58,9 @@ const localInstalled = ref(0)
 const remoteReachable = ref(false)
 const closureDetail = ref('')
 const rosterRows = ref<ReturnType<typeof buildDutyRosterRows>>([])
+const plannedCount = computed(() => Object.values(YUANGON_AREAS).reduce((total, dept) => total + dept.ids.length, 0))
+const remoteStateLabel = computed(() => loading.value ? '读取中' : errorMessage.value ? '待核实' : remoteReachable.value ? '可达' : '不可达')
+const departmentCount = (ids: string[], status: string) => ids.filter(id => rosterRows.value.some(row => row.pkgId === id && row.status === status)).length
 
 async function refresh() {
   loading.value = true
@@ -136,16 +141,7 @@ onMounted(() => {
   gap: 6px 12px;
   font-size: 13px;
 }
-.ops-json {
-  margin-top: 10px;
-  padding: 10px;
-  font-size: 11px;
-  background: #0f172a;
-  color: #e2e8f0;
-  border-radius: 6px;
-  overflow: auto;
-  max-height: 180px;
-}
+.ops-json { margin-top: 10px; padding: 10px; font-size: 11px; background: #0f172a; color: #e2e8f0; border-radius: 6px; overflow: auto; max-height: 180px; }
 .dept-list {
   list-style: none;
   margin: 0;
@@ -155,6 +151,8 @@ onMounted(() => {
 }
 .dept-list li {
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
   justify-content: space-between;
   font-size: 13px;
   padding: 8px 10px;

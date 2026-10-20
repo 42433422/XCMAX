@@ -48,7 +48,19 @@ header p { color: var(--muted); font-size: 13px; margin-top: 8px; letter-spacing
   gap: 4px;
   margin-bottom: 40px;
   flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: 10px 0;
+  background: rgba(11, 15, 25, 0.96);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
 }
+.page-index { position: fixed; right: 18px; top: 50%; z-index: 30; width: 210px; color: var(--fg); }
+.page-index summary { cursor: pointer; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg2); }
+.page-index nav { max-height: 65vh; overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg2); }
+.page-index a { display: block; padding: 7px 8px; border-radius: 5px; color: var(--muted); font-size: 11px; line-height: 1.4; text-decoration: none; }
+.page-index a:hover, .page-index a:focus-visible { color: var(--accent); background: rgba(34, 211, 238, 0.08); outline: none; } .tree-title, .arch-layer-label, .flow-title, .neuro-bus-title, .mod-card-title, .dep-rule-title { scroll-margin-top: 82px; }
 .tab-btn {
   padding: 10px 20px;
   background: transparent;
@@ -443,6 +455,7 @@ header p { color: var(--muted); font-size: 13px; margin-top: 8px; letter-spacing
   .arch-layer-label { width: 80px; font-size: 9px; padding-right: 8px; }
   .arch-box { font-size: 10px; padding: 6px 10px; }
   .dep-rules { grid-template-columns: 1fr; }
+  .page-index { right: 10px; top: auto; bottom: 12px; width: min(210px, 62vw); } .page-index nav { max-height: 45vh; }
 }
 </style>
 </head>
@@ -454,14 +467,15 @@ header p { color: var(--muted); font-size: 13px; margin-top: 8px; letter-spacing
   <p>代码架构 · 模块依赖 · 请求流转 · NeuroBus拓扑 · Mod系统</p>
 </header>
 
-<div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('tree')">目录结构</button>
-  <button class="tab-btn" onclick="switchTab('arch')">分层架构</button>
-  <button class="tab-btn" onclick="switchTab('flow')">请求流转</button>
-  <button class="tab-btn" onclick="switchTab('neuro')">NeuroBus</button>
-  <button class="tab-btn" onclick="switchTab('mod')">Mod系统</button>
-  <button class="tab-btn" onclick="switchTab('dep')">依赖规则</button>
+<div class="tabs" role="tablist" aria-label="架构页面分区">
+  <button class="tab-btn active" id="tab-button-tree" role="tab" aria-selected="true" aria-controls="tab-tree" data-tab="tree">目录结构</button>
+  <button class="tab-btn" id="tab-button-arch" role="tab" aria-selected="false" aria-controls="tab-arch" data-tab="arch">分层架构</button>
+  <button class="tab-btn" id="tab-button-flow" role="tab" aria-selected="false" aria-controls="tab-flow" data-tab="flow">请求流转</button>
+  <button class="tab-btn" id="tab-button-neuro" role="tab" aria-selected="false" aria-controls="tab-neuro" data-tab="neuro">NeuroBus</button>
+  <button class="tab-btn" id="tab-button-mod" role="tab" aria-selected="false" aria-controls="tab-mod" data-tab="mod">Mod系统</button>
+  <button class="tab-btn" id="tab-button-dep" role="tab" aria-selected="false" aria-controls="tab-dep" data-tab="dep">依赖规则</button>
 </div>
+<details class="page-index"><summary>本页目录</summary><nav id="section-index" aria-label="当前分区目录"></nav></details>
 
 <!-- ====== TAB 1: 目录结构 ====== -->
 <div class="tab-content active" id="tab-tree">
@@ -1094,12 +1108,30 @@ header p { color: var(--muted); font-size: 13px; margin-top: 8px; letter-spacing
 </div>
 
 <script>
-function switchTab(id) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + id).classList.add('active');
-  event.target.classList.add('active');
+const sectionSelectors = { tree: '.tree-section > .tree-title', arch: '.arch-layer-label', flow: '.flow-title', neuro: '.neuro-bus-title, #tab-neuro h3', mod: '.mod-card-title', dep: '.dep-rule-title' };
+function switchTab(id, button) {
+  document.querySelectorAll('.tab-content').forEach(el => { el.classList.remove('active'); el.setAttribute('aria-hidden', 'true'); });
+  document.querySelectorAll('.tab-btn').forEach(el => { el.classList.remove('active'); el.setAttribute('aria-selected', 'false'); });
+  const panel = document.getElementById('tab-' + id);
+  panel.classList.add('active');
+  panel.setAttribute('aria-hidden', 'false');
+  button.classList.add('active');
+  button.setAttribute('aria-selected', 'true');
+  const index = document.getElementById('section-index');
+  index.replaceChildren(...[...panel.querySelectorAll(sectionSelectors[id])].map((section, number) => {
+    const anchor = document.createElement('a');
+    anchor.href = '#' + (section.id = `section-${id}-${number}`);
+    anchor.textContent = section.textContent.trim();
+    return anchor;
+  }));
 }
+document.querySelectorAll('.tab-content').forEach((panel, index) => { panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-hidden', index ? 'true' : 'false'); });
+document.querySelectorAll('[role="tab"]').forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.tab, tab)));
+document.querySelectorAll('[role="tab"]').forEach((tab, index, tabs) => tab.addEventListener('keydown', event => {
+  const next = event.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length] : event.key === 'ArrowLeft' ? tabs[(index + tabs.length - 1) % tabs.length] : null;
+  if (next) { event.preventDefault(); next.focus(); next.click(); }
+}));
+switchTab('tree', document.getElementById('tab-button-tree'));
 </script>
 
 </body>
