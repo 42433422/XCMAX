@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -189,7 +190,9 @@ async def test_bridge_recovers_only_before_sending(method, initial, refresh_toke
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["GET", "POST", "refresh_deadline"])
+@pytest.mark.parametrize(
+    "failure", ["GET", "POST", "refresh_deadline", "response_invalid", "server_error"]
+)
 async def test_bridge_never_replays_timeout_or_outlives_auth_deadline(failure):
     from app.fastapi_routes import im_cs_client_routes as routes
 
@@ -199,6 +202,10 @@ async def test_bridge_never_replays_timeout_or_outlives_auth_deadline(failure):
         sent.append(request.method)
         if request.method == failure:
             raise httpx.ReadTimeout("fixture timeout", request=request)
+        if request.method == "POST" and failure == "response_invalid":
+            return httpx.Response(200, content=b"unparseable")
+        if request.method == "POST" and failure == "server_error":
+            return httpx.Response(503, json={"success": False})
         status = 401 if failure == "refresh_deadline" else 200
         return httpx.Response(
             status,
@@ -228,7 +235,14 @@ async def test_bridge_never_replays_timeout_or_outlives_auth_deadline(failure):
             "POST", "bound", body={"body": "original"}, session_id="bound-session"
         )
     assert response.status_code == 502
-    assert sent == (["GET", "POST"] if failure == "POST" else ["GET"])
+    sent_post = failure in {"POST", "response_invalid", "server_error"}
+    assert sent == (["GET", "POST"] if sent_post else ["GET"])
+    payload = json.loads(response.body)
+    if sent_post:
+        assert payload["outcome"] == "unknown" and payload["retryable"] is False
+        assert payload["reconciliation_required"] is True
+    else:
+        assert "outcome" not in payload
     if failure == "refresh_deadline":
         refresh.assert_awaited_once_with("bound-session")
     else:
