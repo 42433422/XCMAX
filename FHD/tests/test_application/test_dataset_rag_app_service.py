@@ -867,11 +867,6 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
-    svc = DatasetRagApplicationService(
-        embedder=None,
-        allowed_roots=[tmp_path],
-        storage_path=tmp_path / "dataset_store.json",
-    )
     admin_headers = {"X-Dataset-Admin": "true"}
     tenant_a_read_headers = {
         "X-Dataset-Tenant-ID": "tenant-a",
@@ -882,9 +877,10 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
         "X-Dataset-Permissions": "dataset.read,dataset.write",
     }
 
-    with patch(
-        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-        return_value=svc,
+    # Spawned tools and direct status routes must use the same real persisted store.
+    with (
+        patch.dict("os.environ", DATASET_RAG_STORE_PATH=str(tmp_path / "dataset_store.json")),
+        patch.object(dataset_rag_module, "_dataset_rag_app_service", None),
     ):
         tenant_a = client.post(
             "/api/knowledge/v1/datasets/secure-route/documents",
@@ -971,15 +967,11 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
             "X-Dataset-Permissions": "dataset.read,dataset.write",
         }
     )
-    svc = DatasetRagApplicationService(
-        embedder=None,
-        allowed_roots=[tmp_path],
-        storage_path=tmp_path / "dataset_store.json",
-    )
 
-    with patch(
-        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-        return_value=svc,
+    # Spawned tools and direct status routes must use the same real persisted store.
+    with (
+        patch.dict("os.environ", DATASET_RAG_STORE_PATH=str(tmp_path / "dataset_store.json")),
+        patch.object(dataset_rag_module, "_dataset_rag_app_service", None),
     ):
         first = client.post(
             "/api/knowledge/v1/datasets/route-versioned/documents",
