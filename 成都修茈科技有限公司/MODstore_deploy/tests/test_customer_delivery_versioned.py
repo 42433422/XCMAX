@@ -135,9 +135,8 @@ def test_only_entitled_owner_can_import_sunbird_source(pinned_source, monkeypatc
 
 
 def test_create_request_blocks_unentitled_owner_and_unpinned_release(monkeypatch):
-    from fastapi import HTTPException
-
     import modstore_server.customer_service_api  # noqa: F401 - initializes its router imports
+    from fastapi import HTTPException
     from modstore_server import customer_delivery_versioned as versioned
     from modstore_server import customer_service_delivery_create_api as create_api
     from modstore_server.customer_service_delivery_models import (
@@ -191,6 +190,7 @@ def test_copy_rejects_wrong_entitlement_even_with_valid_release_hash(pinned_sour
 
 def test_signed_record_cannot_drop_or_forge_source_provenance(tmp_path, monkeypatch):
     from modstore_server import customer_delivery_build as build
+
     from tests.customer_delivery_fixture import signed_artifact
 
     record = signed_artifact(tmp_path, monkeypatch, owner=81, ticket=82)
@@ -218,13 +218,13 @@ def test_signed_record_cannot_drop_or_forge_source_provenance(tmp_path, monkeypa
 
 def test_sunbird_signed_package_preserves_legacy_entitlement_and_source_hash(tmp_path, monkeypatch):
     from cryptography.hazmat.primitives import serialization
-
     from modstore_server import customer_delivery_build as build
     from modstore_server.customer_delivery_versioned import (
         LEGACY_ID,
         MOD_ID,
         source_sha256,
     )
+
     from tests.customer_delivery_fixture import persist_private_source, signed_artifact
 
     signed_artifact(tmp_path, monkeypatch, owner=81, ticket=82)
@@ -369,9 +369,8 @@ def test_signing_failure_rolls_done_session_back_to_error(pinned_source, tmp_pat
 
 @pytest.mark.parametrize("failure", ["owner", "release", "wrong_mod", "accept"])
 def test_original_ticket_main_rework_rejects_before_start_or_commit(monkeypatch, failure):
-    from fastapi import HTTPException
-
     import modstore_server.customer_service_api  # noqa: F401
+    from fastapi import HTTPException
     from modstore_server import customer_delivery_versioned as versioned
     from modstore_server import customer_service_delivery_api as api
     from modstore_server.customer_service_delivery_models import (
@@ -485,3 +484,37 @@ def test_original_ticket_rework_preserves_identity_and_source_choice(
     assert saved["delivery_artifacts"] == [] and saved["acceptance_status"] == "pending"
     assert ticket.status == "processing" and ticket.closed_at is None
     assert events[0]["event_type"] == "custom_delivery_rework_requested"
+
+
+@pytest.mark.parametrize(
+    "sessions,live,stage",
+    [
+        ([], False, "queued"),
+        (["missing"], False, "rework"),
+        (["old", "missing"], False, "rework"),
+        (["old"], True, "production"),
+    ],
+)
+def test_latest_missing_session_allows_original_ticket_rework(monkeypatch, sessions, live, stage):
+    from modstore_server import customer_service_delivery_api as api
+    from modstore_server import workbench_api
+
+    evidence = {"kind": "module", "runs": [{"session_id": sid} for sid in sessions]}
+    ticket = types.SimpleNamespace(
+        id=34, user_id=29, status="processing", evidence_json=json.dumps(evidence)
+    )
+
+    async def snapshot(sid, owner):
+        assert owner == 29
+        return (
+            {"status": "running" if live else "done", "artifact": {"mod_id": "old"}}
+            if sid == "old"
+            else None
+        )
+
+    monkeypatch.setattr(workbench_api, "get_workbench_session_snapshot", snapshot)
+    monkeypatch.setattr(api, "ticket_payload", lambda row: {"id": row.id})
+    result = asyncio.run(api._custom_delivery_payload(ticket))["custom_delivery"]
+    assert result["stage"] == stage
+    if stage == "rework":
+        assert not result["gate_ok"] and result["artifacts"] == []

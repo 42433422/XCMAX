@@ -96,11 +96,12 @@ describe('customer service ticket list', () => {
 })
 
 describe('customer service ticket detail', () => {
-  it('keeps ETA and close forms distinct, cancels safely and reuses close retry identity', async () => {
+  it.each(['resolved', 'expired'])('keeps %s disposition and retry identity distinct from ETA', async (disposition) => {
     const processing = { ...payload, ticket: { ...ticket, status: 'processing' } }
     detail.mockResolvedValue(processing)
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const wrapper = mountDetail(); await flushPromises()
+    await wrapper.find('.cs-close-form select').setValue(disposition)
     expect(wrapper.find('form.cs-eta-editor').exists()).toBe(true)
     await wrapper.findAll('.cs-close-form textarea')[0].setValue('修复已部署并完成原场景验收')
     await wrapper.findAll('.cs-close-form textarea')[1].setValue('主线 SHA abc123，目标版本已按原步骤运行并核实结果。')
@@ -116,12 +117,13 @@ describe('customer service ticket detail', () => {
     reject(new Error('network response unknown')); await flushPromises()
     await wrapper.findAll('button').find(button => button.text() === '重试详情')!.trigger('click'); await flushPromises()
     expect((wrapper.findAll('.cs-close-form textarea')[0].element as HTMLTextAreaElement).value).toBe('修复已部署并完成原场景验收')
-    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, evidence: { resolution: { state: 'resolved', verification_mode: 'admin_runtime' } } } })
+    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, status: disposition, evidence: { resolution: { state: disposition, verification_mode: disposition === 'expired' ? 'admin_expiry' : 'admin_runtime' } } } })
     post.mockResolvedValueOnce({ success: true })
     await wrapper.find('.cs-close-form').trigger('submit'); await flushPromises()
     expect(post.mock.calls[1]).toEqual(original)
     expect(original[0]).toBe('/api/xcmax/admin/customer-service/tickets/42/close')
-    expect(wrapper.text()).toContain('管理员验收已关闭'); expect(wrapper.text()).not.toContain('客户确认已解决')
+    expect(original[1].disposition).toBe(disposition)
+    expect(wrapper.text()).toContain(disposition === 'expired' ? '已过期不再处理（未修复）' : '管理员验收已关闭'); expect(wrapper.text()).not.toContain('客户确认已解决')
     expect(wrapper.find('.cs-close-form').exists()).toBe(false)
     wrapper.unmount(); confirm.mockRestore()
   })

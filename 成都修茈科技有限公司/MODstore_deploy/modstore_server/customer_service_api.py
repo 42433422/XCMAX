@@ -10,7 +10,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import logging
 import threading
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -96,6 +96,7 @@ class CustomerTicketEtaBody(BaseModel):
 
 
 class AdminTicketCloseBody(BaseModel, extra="forbid"):
+    disposition: Literal["resolved", "expired"] = "resolved"
     request_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
     note: str = Field(min_length=8, max_length=2000)
     verification: str = Field(min_length=20, max_length=4000)
