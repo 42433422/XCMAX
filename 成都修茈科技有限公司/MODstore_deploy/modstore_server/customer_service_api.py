@@ -27,6 +27,8 @@ from modstore_server.customer_service_orchestrator import (
 )
 from modstore_server.customer_service_api_helpers import (
     IntegrationBody,
+    TicketTitleBody,
+    correct_ticket_metadata,
     StandardBody,
     close_ticket_with_evidence,
     audit_payload as _audit_payload,
@@ -37,7 +39,7 @@ from modstore_server.customer_service_api_helpers import (
     visible_ticket_or_404 as _visible_ticket_or_404,
 )
 from modstore_server import customer_service_customer_view as customer_view
-from modstore_server.customer_service_tools import audit, json_dumps, json_loads
+from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models import User
 from modstore_server.customer_ticket_reader import TicketReader, reader_ticket, reader_detail
 from modstore_server.models_cs import (
@@ -84,14 +86,6 @@ class CustomerServiceChatBody(BaseModel):
     context: Dict[str, Any] = Field(default_factory=dict)
     # data:image/...;base64,... 压缩后截图，用于补充材料
     image_data_url: Optional[str] = Field(default=None, max_length=4_500_000)
-
-
-class TicketTitleBody(BaseModel, extra="forbid"):
-    title: str = Field(..., min_length=1, max_length=256)
-    expected_title: str = Field(..., max_length=256)
-    intent: Literal["product_issue"] | None = None
-    expected_intent: Literal["account_support", "general"] | None = None
-    reason: str = Field(default="", max_length=2000)
 
 
 class CustomerTicketEtaBody(BaseModel):
@@ -276,65 +270,7 @@ async def correct_ticket_title(
     db: Session = Depends(get_db),
     user: User = Depends(_require_admin),
 ):
-    ticket = _visible_ticket_or_404(db, user, ticket_id)
-    title = body.title.strip()
-    if not title:
-        raise HTTPException(422, "工单标题不能为空")
-    correction = body.intent is not None
-    if correction:
-        if body.expected_intent is None or len(body.reason.strip()) < 8:
-            raise HTTPException(422, "分类修正须提供原分类和至少8字的原因")
-        if ticket.status != "processing" or ticket.closed_at:
-            raise HTTPException(409, "只能纠正处理中且未关闭的原工单分类")
-    elif body.expected_intent is not None or body.reason.strip():
-        raise HTTPException(422, "分类修正参数不完整")
-    updates = {"title": title, **({"intent": body.intent} if correction else {})}
-    if any(getattr(ticket, key) != value for key, value in updates.items()):
-        filters = [
-            CustomerServiceTicket.id == ticket_id,
-            CustomerServiceTicket.title == body.expected_title,
-        ]
-        if correction:
-            filters.extend(
-                [
-                    CustomerServiceTicket.intent == body.expected_intent,
-                    CustomerServiceTicket.status == "processing",
-                    CustomerServiceTicket.closed_at.is_(None),
-                ]
-            )
-        changed = (
-            db.query(CustomerServiceTicket)
-            .filter(*filters)
-            .update(updates, synchronize_session=False)
-        )
-        if changed != 1:
-            db.rollback()
-            raise HTTPException(409, "工单标题、分类或状态已变化，请刷新后重试")
-        audit(
-            db,
-            actor=user,
-            actor_type="admin",
-            ticket_id=ticket_id,
-            session_id=ticket.session_id,
-            event_type=(
-                "ticket_classification_corrected" if correction else "ticket_title_corrected"
-            ),
-            detail={
-                "old_title": body.expected_title,
-                "new_title": title,
-                **(
-                    {
-                        "old_intent": body.expected_intent,
-                        "new_intent": body.intent,
-                        "reason": body.reason.strip(),
-                    }
-                    if correction
-                    else {}
-                ),
-            },
-        )
-        db.commit()
-    return {"ticket": {"id": ticket_id, **updates}}
+    return correct_ticket_metadata(db, user, ticket_id, body)
 
 
 @router.post("/tickets/{ticket_id}/close")
