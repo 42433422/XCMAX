@@ -69,6 +69,8 @@ from modstore_server.models import (
     OpsStagedChange,
     get_session_factory,
 )
+from modstore_server.models_cs import CustomerServiceTicket
+from modstore_server.db.strategic import StrategicDecision
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +127,7 @@ from modstore_server.daily_digest_part03 import (
     _tls_cert_digest_html as _tls_cert_digest_html,
     _nginx_tail_hint as _nginx_tail_hint,
     _run_pytest_summary as _run_pytest_summary,
-    _digest_system_work_summary_html as _digest_system_work_summary_html,
+    _digest_product_work_summary_html as _digest_product_work_summary_html,
     _digest_kpi_cards_html as _digest_kpi_cards_html,
 )
 
