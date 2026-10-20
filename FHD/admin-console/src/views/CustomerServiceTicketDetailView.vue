@@ -67,6 +67,13 @@
         </template>
       </section>
 
+      <form v-if="ticket.status === 'processing'" class="cs-card cs-close-form" @submit.prevent="closeTicket">
+        <h3 class="cs-card-title">验收并关闭</h3>
+        <label>处理结论<textarea v-model="closeNote" required minlength="8" maxlength="2000" /></label>
+        <label>实际验收证据<textarea v-model="closeVerification" required minlength="20" maxlength="4000" /></label>
+        <button class="cs-btn" type="submit" :disabled="saving">记录管理员验收并关闭</button>
+      </form>
+
       <section class="cs-card" aria-label="处理时间线">
         <h3 class="cs-card-title">处理时间线 <span class="cs-count">{{ timeline.length }}</span></h3>
         <p v-if="!timeline.length" class="cs-state">暂无记录</p>
@@ -130,6 +137,7 @@ const router = useRouter()
 const detail = ref<Detail | null>(null)
 const loading = ref(false), error = ref('')
 const saving = ref(false)
+const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref('')
 let generation = 0
 
 const ticketId = computed(() => Number(String(route.params.ticketId ?? '')))
@@ -153,6 +161,23 @@ const rawOrEmpty = (rows: unknown[]) => rows.length ? prettyJson(rows) : '暂无
 const message = (cause: unknown) => cause instanceof Error ? cause.message : String(cause)
 
 function backToList() { void router.push({ name: 'customer-service-tickets' }) }
+
+watch([closeNote, closeVerification], () => { closeRequestId.value = '' })
+
+async function closeTicket() {
+  const id = ticketId.value
+  if (saving.value || ticket.value.status !== 'processing' || !window.confirm('确认已在目标版本完成实际验收，并关闭这张原工单？')) return
+  closeRequestId.value ||= crypto.randomUUID()
+  saving.value = true
+  try {
+    await api.post(`/api/xcmax/admin/customer-service/tickets/${id}/close`, {
+      request_id: closeRequestId.value, note: closeNote.value, verification: closeVerification.value,
+    })
+    closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''
+    if (ticketId.value === id) await load()
+  } catch (cause) { if (ticketId.value === id) error.value = message(cause) }
+  finally { saving.value = false }
+}
 
 async function correctTitle() {
   const id = ticketId.value, expectedTitle = String(ticket.value.title || '')
