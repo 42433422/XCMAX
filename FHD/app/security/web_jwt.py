@@ -4,6 +4,7 @@ The shared host database, not a process-local set, is authoritative for refresh
 replay prevention. Deploy the additive replay-table migration before enabling
 JWT authentication. Database errors fail closed; there is no memory fallback.
 """
+
 from __future__ import annotations
 
 import logging
@@ -39,34 +40,65 @@ def _secret_key() -> str:
     return configured or _FALLBACK_SECRET
 
 
-def _issue(*, user_id: int, username: str, account_kind: str, ttl_hours: int,
-           typ: str, session_id: str = "") -> str:
+def _issue(
+    *,
+    user_id: int,
+    username: str,
+    account_kind: str,
+    ttl_hours: int,
+    typ: str,
+    session_id: str = "",
+) -> str:
     now = int(time.time())
     payload = {
-        "aud": WEB_JWT_AUD, "iss": WEB_JWT_ISS, "typ": typ,
-        "user_id": int(user_id), "username": username, "account_kind": account_kind,
-        "iat": now, "exp": now + ttl_hours * 3600, "jti": uuid.uuid4().hex,
+        "aud": WEB_JWT_AUD,
+        "iss": WEB_JWT_ISS,
+        "typ": typ,
+        "user_id": int(user_id),
+        "username": username,
+        "account_kind": account_kind,
+        "iat": now,
+        "exp": now + ttl_hours * 3600,
+        "jti": uuid.uuid4().hex,
     }
     if session_id:
         payload["session_id"] = session_id
     return jwt.encode(payload, _secret_key(), algorithm=WEB_JWT_ALG)
 
 
-def issue_web_tokens(*, user_id: int, username: str = "", account_kind: str = "enterprise",
-                     session_id: str = "") -> dict[str, str]:
+def issue_web_tokens(
+    *, user_id: int, username: str = "", account_kind: str = "enterprise", session_id: str = ""
+) -> dict[str, str]:
     return {
-        "access_token": _issue(user_id=user_id, username=username, account_kind=account_kind,
-                               session_id=session_id, ttl_hours=WEB_ACCESS_TTL_HOURS, typ="access"),
-        "refresh_token": _issue(user_id=user_id, username=username, account_kind=account_kind,
-                                session_id=session_id, ttl_hours=WEB_REFRESH_TTL_HOURS, typ="refresh"),
+        "access_token": _issue(
+            user_id=user_id,
+            username=username,
+            account_kind=account_kind,
+            session_id=session_id,
+            ttl_hours=WEB_ACCESS_TTL_HOURS,
+            typ="access",
+        ),
+        "refresh_token": _issue(
+            user_id=user_id,
+            username=username,
+            account_kind=account_kind,
+            session_id=session_id,
+            ttl_hours=WEB_REFRESH_TTL_HOURS,
+            typ="refresh",
+        ),
     }
 
 
 def verify_web_jwt(token: str) -> dict[str, Any] | None:
     try:
-        return jwt.decode(token, _secret_key(), algorithms=[WEB_JWT_ALG],
-                          audience=WEB_JWT_AUD, issuer=WEB_JWT_ISS,
-                          options={"require": ["exp", "aud", "iss", "jti", "user_id", "typ"]})
+        return jwt.decode(
+            token,
+            _secret_key(),
+            algorithms=[WEB_JWT_ALG],
+            audience=WEB_JWT_AUD,
+            issuer=WEB_JWT_ISS,
+            options={"require": ["exp", "aud", "iss", "jti", "user_id", "typ"]},
+        )
     except (jwt.PyJWTError, RuntimeError) as exc:
         logger.debug("web jwt verify failed: %s", exc)
         return None
@@ -74,17 +106,26 @@ def verify_web_jwt(token: str) -> dict[str, Any] | None:
 
 def _consume_refresh_jti(db: Any, jti: str, expires_at: int, now: int) -> bool:
     """Caller must commit before releasing replacement tokens to the client."""
-    if (not isinstance(jti, str) or not jti or len(jti) > 64
-            or type(expires_at) is not int or not now < expires_at <= 2**63 - 1):
+    if (
+        not isinstance(jti, str)
+        or not jti
+        or len(jti) > 64
+        or type(expires_at) is not int
+        or not now < expires_at <= 2**63 - 1
+    ):
         return False
     # Expired tokens have already been rejected cryptographically. Indexed cleanup
     # keeps the store bounded by valid token lifetime without enabling valid replay.
     db.execute(text("DELETE FROM web_refresh_token_uses WHERE expires_at < :now"), {"now": now})
     try:
         with db.begin_nested():
-            db.execute(text("INSERT INTO web_refresh_token_uses (jti, expires_at) "
-                            "VALUES (:jti, :expires_at)"),
-                       {"jti": jti, "expires_at": expires_at})
+            db.execute(
+                text(
+                    "INSERT INTO web_refresh_token_uses (jti, expires_at) "
+                    "VALUES (:jti, :expires_at)"
+                ),
+                {"jti": jti, "expires_at": expires_at},
+            )
         return True
     except IntegrityError:
         return False
@@ -95,16 +136,24 @@ def refresh_web_access_token(refresh_token: str) -> dict[str, str] | None:
     if not payload or payload.get("typ") != "refresh":
         return None
     jti, expires_at, user_id = payload.get("jti"), payload.get("exp"), payload.get("user_id")
-    if (not isinstance(jti, str) or not jti or len(jti) > 64
-            or type(expires_at) is not int or type(user_id) is not int or user_id <= 0):
+    if (
+        not isinstance(jti, str)
+        or not jti
+        or len(jti) > 64
+        or type(expires_at) is not int
+        or type(user_id) is not int
+        or user_id <= 0
+    ):
         return None
     try:
         # Generate before consuming so signing/configuration errors do not burn the
         # refresh token. The result remains private until the DB commit succeeds.
-        rotated = issue_web_tokens(user_id=user_id,
-                                   username=str(payload.get("username") or ""),
-                                   account_kind=str(payload.get("account_kind") or "enterprise"),
-                                   session_id=str(payload.get("session_id") or ""))
+        rotated = issue_web_tokens(
+            user_id=user_id,
+            username=str(payload.get("username") or ""),
+            account_kind=str(payload.get("account_kind") or "enterprise"),
+            session_id=str(payload.get("session_id") or ""),
+        )
         from app.db.session import get_host_db
 
         with get_host_db() as db:
@@ -140,5 +189,10 @@ def resolve_user_from_web_jwt(token: str) -> Any | None:
         return None
 
 
-__all__ = ["issue_web_tokens", "refresh_web_access_token", "resolve_user_from_web_jwt",
-           "verify_web_jwt", "web_jwt_auth_enabled"]
+__all__ = [
+    "issue_web_tokens",
+    "refresh_web_access_token",
+    "resolve_user_from_web_jwt",
+    "verify_web_jwt",
+    "web_jwt_auth_enabled",
+]

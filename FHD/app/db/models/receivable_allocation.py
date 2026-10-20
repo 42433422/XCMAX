@@ -15,8 +15,10 @@ RECEIVABLE_STATUS_PARTIAL = "partial"
 RECEIVABLE_STATUS_PAID = "paid"
 RECEIVABLE_STATUS_REFUNDED = "refunded"
 RECEIVABLE_STATUS_VALUES = {
-    RECEIVABLE_STATUS_UNPAID, RECEIVABLE_STATUS_PARTIAL,
-    RECEIVABLE_STATUS_PAID, RECEIVABLE_STATUS_REFUNDED,
+    RECEIVABLE_STATUS_UNPAID,
+    RECEIVABLE_STATUS_PARTIAL,
+    RECEIVABLE_STATUS_PAID,
+    RECEIVABLE_STATUS_REFUNDED,
 }
 
 
@@ -26,14 +28,21 @@ class ReceivableAllocation(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedM
     __tablename__ = "receivable_allocations"
     __table_args__ = (
         Index("uq_receivable_order_request", "sales_order_id", "request_key", unique=True),
-        CheckConstraint("status IN ('unpaid', 'partial', 'paid', 'refunded')",
-                        name="ck_receivable_allocations_status_valid"),
-        CheckConstraint("COALESCE(amount, 0) >= 0",
-                        name="ck_receivable_allocations_amount_non_negative"),
-        CheckConstraint("COALESCE(allocated_amount, 0) >= 0",
-                        name="ck_receivable_allocations_allocated_amount_non_negative"),
-        CheckConstraint("COALESCE(allocated_amount, 0) <= COALESCE(amount, 0)",
-                        name="ck_receivable_allocations_allocated_le_amount"),
+        CheckConstraint(
+            "status IN ('unpaid', 'partial', 'paid', 'refunded')",
+            name="ck_receivable_allocations_status_valid",
+        ),
+        CheckConstraint(
+            "COALESCE(amount, 0) >= 0", name="ck_receivable_allocations_amount_non_negative"
+        ),
+        CheckConstraint(
+            "COALESCE(allocated_amount, 0) >= 0",
+            name="ck_receivable_allocations_allocated_amount_non_negative",
+        ),
+        CheckConstraint(
+            "COALESCE(allocated_amount, 0) <= COALESCE(amount, 0)",
+            name="ck_receivable_allocations_allocated_le_amount",
+        ),
     )
     sales_order_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("sales_orders.id"), nullable=True, index=True
@@ -55,7 +64,8 @@ class ReceivableAllocation(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedM
     reversed_of_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("receivable_allocations.id", name="fk_receivable_allocations_reversed_of_id"),
-        nullable=True, index=True,
+        nullable=True,
+        index=True,
     )
     allocated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     sales_order: Mapped[Optional[object]] = relationship("SalesOrder")
@@ -63,12 +73,18 @@ class ReceivableAllocation(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedM
 
     def to_dict(self) -> dict:
         return {
-            "id": self.id, "sales_order_id": self.sales_order_id,
-            "journal_entry_id": self.journal_entry_id, "line_id": self.line_id,
+            "id": self.id,
+            "sales_order_id": self.sales_order_id,
+            "journal_entry_id": self.journal_entry_id,
+            "line_id": self.line_id,
             "amount": float(self.amount) if self.amount is not None else 0.0,
-            "allocated_amount": float(self.allocated_amount) if self.allocated_amount is not None else 0.0,
-            "status": self.status, "reference_type": self.reference_type,
-            "reference_id": self.reference_id, "reversed_of_id": self.reversed_of_id,
+            "allocated_amount": float(self.allocated_amount)
+            if self.allocated_amount is not None
+            else 0.0,
+            "status": self.status,
+            "reference_type": self.reference_type,
+            "reference_id": self.reference_id,
+            "reversed_of_id": self.reversed_of_id,
             "allocated_at": self.allocated_at.isoformat() if self.allocated_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

@@ -152,9 +152,7 @@ def test_other_tenant_cannot_lock_or_replay(payment_db):
     scope, order_id = payment_db
     assert pay(order_id, "bank-1")["success"]
     with tenant_scope(2):
-        result = service.payment(
-            sales_order_id=order_id, amount=500, idempotency_key="bank-1"
-        )
+        result = service.payment(sales_order_id=order_id, amount=500, idempotency_key="bank-1")
     assert not result["success"]
     with tenant_scope(1), scope() as db:
         assert db.query(JournalEntry).count() == 1

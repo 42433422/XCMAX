@@ -82,9 +82,14 @@ def test_downgrade_preserves_used_token_identity(tmp_path):
     try:
         with engine.begin() as connection:
             apply(connection, migration.upgrade)
-            connection.execute(text("INSERT INTO web_refresh_token_uses VALUES ('used', 2000000000)"))
+            connection.execute(
+                text("INSERT INTO web_refresh_token_uses VALUES ('used', 2000000000)")
+            )
             apply(connection, migration.downgrade)
-            assert connection.execute(text("SELECT jti FROM web_refresh_token_uses")).scalar_one() == "used"
+            assert (
+                connection.execute(text("SELECT jti FROM web_refresh_token_uses")).scalar_one()
+                == "used"
+            )
     finally:
         engine.dispose()
 
