@@ -370,21 +370,10 @@ def skip_unselected_step(run: Any, step: Any) -> bool:
     graph = plan_from_dict(run.metadata.get("plan"))
     if graph is None or not graph.nodes:
         return False  # Older persisted runs contain dependency-only AgentSteps.
-    steps = {item.node_id: item for item in run.steps}
-    routers = [
-        node
-        for node in graph.nodes
-        if step.node_id in [node.next, *(branch.target for branch in node.branches)]
-    ]
-    excluded = bool(routers) and all(
-        steps[node.node_id].status == "skipped"
-        or (
-            steps[node.node_id].status == "completed"
-            and WorkflowEngine._resolve_successor(node, steps[node.node_id].output) != step.node_id
-        )
-        for node in routers
-    )
-    if not excluded and not any(steps[dep].status == "skipped" for dep in step.depends_on):
+    executed = {item.node_id for item in run.steps if item.status == "completed"}
+    blocked = {item.node_id for item in run.steps if item.status == "skipped"}
+    outputs = {item.node_id: item.output for item in run.steps if item.node_id in executed}
+    if WorkflowEngine._routing_state(step, graph, executed, blocked, outputs) != "skipped":
         return False
     step.status = "skipped"
     step.error = "conditional route not selected"

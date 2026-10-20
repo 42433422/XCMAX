@@ -20,9 +20,18 @@ def workflow_database(tmp_path, monkeypatch):
     from modstore_server import models, workflow_engine
 
     engine = create_engine(f"sqlite:///{tmp_path / 'workflow.sqlite3'}")
-    tables = [models.Workflow, models.WorkflowNode, models.WorkflowEdge, models.WorkflowExecution]
+    tables = [
+        models.User,
+        models.Workflow,
+        models.WorkflowNode,
+        models.WorkflowEdge,
+        models.WorkflowExecution,
+    ]
     models.Base.metadata.create_all(engine, tables=[model.__table__ for model in tables])
     sf = sessionmaker(bind=engine)
+    with sf() as db:
+        db.add(models.User(id=1, username="terminal-contract", password_hash="test-only"))
+        db.commit()
     monkeypatch.setattr(workflow_engine, "get_session_factory", lambda: sf)
     monkeypatch.setattr(execution, "get_session_factory", lambda: sf)
     try:
