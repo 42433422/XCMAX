@@ -51,7 +51,7 @@ on:
         default: ""
         type: string
       previous_security_scan_run_id:
-        description: "Prior-day zero-finding scan; required for stable CVM upload"
+        description: "Compatibility input; pass the current scan run ID for single-scan stable upload"
         required: false
         default: ""
         type: string
@@ -989,7 +989,7 @@ jobs:
           run-id: ${{ inputs.security_scan_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download prior-day security evidence for stable upload
+      - name: Download compatibility security evidence for stable upload
         if: ${{ inputs.release_channel == 'stable' }}
         uses: actions/download-artifact@v8
         with:
@@ -998,7 +998,7 @@ jobs:
           run-id: ${{ inputs.previous_security_scan_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enforce exact-SHA two-day security clearance for stable upload
+      - name: Enforce exact-SHA security clearance for stable upload
         if: ${{ inputs.release_channel == 'stable' }}
         working-directory: .
         run: >-

@@ -1,5 +1,5 @@
 {
-  "lines": 2316954,
+  "lines": 2316884,
   "updated": "2026-10-20",
-  "note": "用户于2026-10-20 20:28 UTC明确要求执行附件全量架构改造方案。首批A1.1仅修复Agent run管理员跨用户/跨租户绕过，产品逻辑净减1行；路由回归24增5删净增19行，真实完整应用会话与xlsx附件回归123行，更新日志2行，现有模板UTC测试修正2增2删净0行。实测必要净增143行，2316811至2316954。保留有效断言，不以删除无关代码抵消；不新增支持授权、不改线上权限配置、不自动合并或部署。"
+  "note": "Preserve the reviewed a1-auth-boundaries security slice while incorporating main 3f646df lock and release fixes; recompute actual line count with the updated main counting policy. No security assertions removed. Draft-only changes approved by user."
 }
