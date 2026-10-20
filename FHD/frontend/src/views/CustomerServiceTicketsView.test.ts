@@ -141,14 +141,17 @@ describe('customer service ticket detail', () => {
     expect(wrapper.text()).toContain('另一张工单'); expect(wrapper.text()).not.toContain('已保存，客户工单页面会显示此时间。')
     wrapper.unmount()
   })
-  it('corrects the same ticket title with a stale-title guard and refreshes audit evidence', async () => {
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('  员工图谱无法正常显示  ')
-    detail.mockResolvedValueOnce(payload).mockResolvedValueOnce({ ...payload, ticket: { ...ticket, title: '员工图谱无法正常显示' }, audit_logs: [{ event_type: 'ticket_title_corrected', detail: { old_title: ticket.title, new_title: '员工图谱无法正常显示' } }] })
+  it.each([false, true])('corrects original-ticket metadata with CAS and refreshed audit (classification=%s)', async classification => {
+    const before = { ...ticket, ...(classification ? { status: 'processing', intent: 'account_support' } : {}) }
+    const title = classification ? before.title : '员工图谱无法正常显示', reason = '原描述明确是软件功能故障，纠正误分类'
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue(classification ? reason : `  ${title}  `)
+    detail.mockResolvedValueOnce({ ...payload, ticket: before }).mockResolvedValueOnce({ ...payload, ticket: { ...before, title, intent: 'product_issue' }, audit_logs: [{ event_type: classification ? 'ticket_classification_corrected' : 'ticket_title_corrected', detail: { old_title: before.title, new_title: title, ...(classification ? { old_intent: before.intent, new_intent: 'product_issue', reason } : {}) } }] })
     const wrapper = mountDetail(); await flushPromises()
-    await wrapper.findAll('button').find(row => row.text() === '更正标题')!.trigger('click'); await flushPromises()
-    expect(put).toHaveBeenCalledWith('/api/xcmax/market-proxy/customer-service/tickets/42/title', { title: '员工图谱无法正常显示', expected_title: ticket.title })
-    expect(wrapper.find('h2').text()).toBe('员工图谱无法正常显示')
-    for (const part of ['更正工单标题', '标题：平台功能问题 → 员工图谱无法正常显示']) expect(wrapper.text()).toContain(part)
+    await wrapper.findAll('button').find(row => row.text() === (classification ? '纠正为平台功能问题' : '更正标题'))!.trigger('click'); await flushPromises()
+    expect(put).toHaveBeenCalledWith('/api/xcmax/market-proxy/customer-service/tickets/42/title', { title, expected_title: before.title, ...(classification ? { intent: 'product_issue', expected_intent: before.intent, reason } : {}) })
+    expect(wrapper.find('h2').text()).toBe(title)
+    for (const part of classification ? ['纠正工单分类', '分类：账号支持 → 产品问题', reason] : ['更正工单标题', '标题：平台功能问题 → 员工图谱无法正常显示']) expect(wrapper.text()).toContain(part)
+    expect(wrapper.findAll('button').some(row => row.text() === '纠正为平台功能问题')).toBe(false)
     wrapper.unmount(); prompt.mockRestore()
   })
   it('lets an admin set the customer-visible expected completion time', async () => {
