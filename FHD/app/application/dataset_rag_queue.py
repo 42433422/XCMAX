@@ -8,6 +8,7 @@ import sqlite3
 import threading
 import uuid
 import weakref
+from contextlib import ExitStack
 from typing import Any
 
 import psutil
@@ -42,8 +43,9 @@ class DatasetStateLock:
         return (path.stat().st_mtime_ns, path.stat().st_size) if path.exists() else None
 
     def __enter__(self):
-        self.thread_lock.acquire()
-        try:
+        with ExitStack() as cleanup:
+            self.thread_lock.acquire()
+            cleanup.callback(self.__exit__, None, None, None)
             path = self.service._storage_path
             path.parent.mkdir(parents=True, exist_ok=True)
             self.connection = sqlite3.connect(str(path) + ".lock.sqlite3", timeout=1)
@@ -51,10 +53,8 @@ class DatasetStateLock:
             if self.revision != self.revision_now():
                 self.service._load_persisted_state()
                 self.revision = self.revision_now()
+            cleanup.pop_all()
             return self
-        except BaseException:
-            self.__exit__(None, None, None)
-            raise
 
     def __exit__(self, *args):
         if self.connection is not None:
