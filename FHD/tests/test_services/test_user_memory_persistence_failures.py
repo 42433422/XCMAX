@@ -94,8 +94,9 @@ def test_store_loads_from_missing_file(tmp_memory_dir):
 def test_store_does_not_overwrite_corrupt_file(tmp_memory_dir):
     path = tmp_memory_dir / "memory_store.json"
     original = b"{not valid json"
-    store = UserMemoryStore(storage_type="json")
     path.write_bytes(original)
+    store = UserMemoryStore(storage_type="json")
+    assert store._memory_cache == {}
     with pytest.raises(json.JSONDecodeError):
         store.save_memory("u", UserMemory(user_id="u"))
     assert path.read_bytes() == original
@@ -108,6 +109,8 @@ def test_store_saves_to_disk(tmp_memory_dir):
     # Direct store writes use the same atomic path.
     store._save_all_memories()
     assert os.path.exists(os.path.join(str(tmp_memory_dir), "memory_store.json"))
+    if os.name == "posix":
+        assert (tmp_memory_dir / "memory_store.json").stat().st_mode & 0o077 == 0
     with open(os.path.join(str(tmp_memory_dir), "memory_store.json")) as f:
         data = json.load(f)
     assert "u-1" in data

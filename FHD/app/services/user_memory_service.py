@@ -238,7 +238,11 @@ class UserMemoryStore:
                 f".{self._memory_path.name}.{uuid.uuid4().hex}.tmp"
             )
             try:
-                with temporary.open("w", encoding="utf-8") as f:
+                with os.fdopen(
+                    os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600),
+                    "w",
+                    encoding="utf-8",
+                ) as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
                     f.flush()
                     os.fsync(f.fileno())
