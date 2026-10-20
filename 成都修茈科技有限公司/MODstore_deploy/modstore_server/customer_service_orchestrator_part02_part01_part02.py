@@ -164,12 +164,10 @@ def infer_intent(
         return "catalog_complaint"
     if any((word in text for word in ("上架", "审核", "合规", "下架"))):
         return "catalog_review"
-    # —— 分诊：账号 vs 产品缺陷（五项架构·分诊第一刀）——
-    # 强账号词 → account_support；仅「账号」+产品缺陷语义 → product_issue（可建单）。
-    # 后续「运维快修」挂 resolve_triage_lane / TRIAGE_LANES.ops_fast_fix，此处不实现执行器。
+    # 明确的产品缺陷描述优先于登录、余额等账号词；普通账号求助仍归账号支持。
     account_marks = ("会员", "权益", "额度", "登录", "余额", "钱包", "充值", "到账", "扣费", "账单")
     has_account_mark = any((word in text for word in account_marks + ("消费记录",)))
-    if "账号" in text and not has_account_mark and _account_word_is_product_defect(text):
+    if _account_word_is_product_defect(text) and ("账号" in text or has_account_mark):
         return "product_issue"
     if "账号" in text or has_account_mark:
         return "account_support"
