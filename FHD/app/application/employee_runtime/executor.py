@@ -24,6 +24,7 @@ from app.application.shipment_excel_etl_security import (
     resolve_etl_output_path,
     resolve_etl_path,
 )
+from app.application.tool_execution_deadline import build_http_helpers
 from app.mod_sdk.employee_specialized_tools import get_employee_tools, handle_specialized
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
@@ -63,31 +64,8 @@ def _build_enriched_ctx(employee_id: str, workspace_root: str) -> dict[str, Any]
         except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  LLM 调用边界：异常转结构化结果
             return {"ok": False, "error": repr(exc)}
 
-    async def _http_request(method: str, url: str, **kw: Any) -> dict[str, Any]:
-        try:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=kw.pop("timeout", 30)) as client:
-                resp = await client.request(method, url, **kw)
-                try:
-                    body = resp.json()
-                except RECOVERABLE_ERRORS:  # noqa: BLE001  JSON 解析失败降级为文本
-                    body = resp.text
-                return {"ok": resp.is_success, "status": resp.status_code, "body": body}
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  HTTP 调用边界：异常转结构化结果
-            return {"ok": False, "error": repr(exc)}
-
-    async def _http_get(url: str, **kw: Any) -> dict[str, Any]:
-        return await _http_request("GET", url, **kw)
-
-    async def _http_post(url: str, json_body: Any = None, **kw: Any) -> dict[str, Any]:
-        if json_body is not None:
-            kw["json"] = json_body
-        return await _http_request("POST", url, **kw)
-
     ctx["call_llm"] = _call_llm
-    ctx["http_get"] = _http_get
-    ctx["http_post"] = _http_post
+    ctx["http_get"], ctx["http_post"] = build_http_helpers()
     return ctx
 
 

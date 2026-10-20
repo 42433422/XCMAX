@@ -108,3 +108,142 @@ def test_unknown_outcome_blocks_automatic_repair_without_dispatch():
     runner = _AgentOrchestratorPart02Mixin()
     run = SimpleNamespace(metadata={"non_retryable": True})
     assert runner._prepare_repair_or_retry(run, _step(), runtime_context={}) is False
+
+
+@pytest.mark.parametrize("mode", ["expired", "outer_timeout", "http_timeout", "success"])
+def test_employee_http_helpers_use_captured_budget_without_network(monkeypatch, mode):
+    import asyncio
+
+    import httpx
+
+    from app.application.employee_runtime import executor as employee
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    calls, cancelled = [], []
+    monkeypatch.setattr(employee, "get_employee_tools", lambda employee_id: [])
+
+    class Client:
+        def __init__(self, **kwargs):
+            calls.append("client")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def request(self, method, url, **kwargs):
+            calls.append((method, kwargs))
+            if mode == "http_timeout":
+                raise httpx.ReadTimeout("stub request timed out")
+            if mode == "outer_timeout":
+                try:
+                    await asyncio.sleep(10)
+                except asyncio.CancelledError:
+                    cancelled.append(True)
+                    raise
+            return SimpleNamespace(is_success=True, status_code=200, json=lambda: {"id": 7})
+
+    monkeypatch.setattr(httpx, "AsyncClient", Client)
+    duration = -1 if mode == "expired" else (0.2 if mode == "outer_timeout" else 10)
+    with invocation_deadline(time.monotonic() + duration):
+        with invocation_deadline(time.monotonic() + 100):  # Nested call cannot extend budget.
+            ctx = employee._build_enriched_ctx("stub", "/tmp")
+    # Scope has ended; a new thread/event loop must still use the captured budget.
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        result = pool.submit(
+            asyncio.run, ctx["http_post"]("https://stub.invalid", {"a": 1}, timeout=None)
+        ).result(timeout=2)
+    if mode == "expired":
+        assert result["outcome"] == "not_started" and calls == []
+    elif mode in {"outer_timeout", "http_timeout"}:
+        assert result["outcome"] == "unknown" and result["retryable"] is False
+        assert len(calls) == 2  # Never retry an ambiguous POST.
+        assert bool(cancelled) == (mode == "outer_timeout")
+    else:
+        assert result == {"ok": True, "status": 200, "body": {"id": 7}}
+        assert calls[1] == ("POST", {"json": {"a": 1}})
+    # Expired invocation context must not leak into the next unrelated call.
+    mode = "success"
+    fresh = employee._build_enriched_ctx("stub", "/tmp")
+    assert asyncio.run(fresh["http_get"]("https://stub.invalid"))["ok"]
+
+
+@pytest.mark.parametrize("claimed_success", [False, True, "raises"])
+def test_employee_cannot_hide_early_http_timeout_from_outer_invocation(
+    monkeypatch, claimed_success
+):
+    import asyncio
+
+    import httpx
+
+    from app.application.employee_runtime import executor as employee
+
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+    monkeypatch.setattr(employee, "get_employee_tools", lambda employee_id: [])
+    calls = []
+
+    async def request(self, *args, **kwargs):
+        calls.append(args)
+        raise httpx.ReadTimeout("response unknown")
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    Client.request = request
+    monkeypatch.setattr(httpx, "AsyncClient", Client)
+
+    def execute(step, *, runtime_context):
+        ctx = employee._build_enriched_ctx("stub", "/tmp")
+        output = asyncio.run(ctx["http_post"]("https://stub.invalid", {"secret": "not-in-receipt"}))
+        if claimed_success == "raises":
+            raise ValueError("employee processing failed after unknown request")
+        return {"success": claimed_success, "data": {"output": output}}
+
+    result = execute_with_tool_deadline(
+        SimpleNamespace(execute=execute), _step(), runtime_context={}, timeout_seconds=30
+    )
+    assert len(calls) == 1 and result["outcome"] == "unknown"
+    assert result["retryable"] is False and result["reconciliation_required"]
+    assert result["io_reconciliation"] == [{"kind": "http_timeout", "method": "POST"}]
+    if claimed_success == "raises":
+        assert result["reconciliation_evidence"]["exception_type"] == "ValueError"
+    else:
+        assert result["reconciliation_evidence"]["success"] is claimed_success
+
+
+def test_existing_http_helper_obeys_shorter_current_scope(monkeypatch):
+    import asyncio
+
+    import httpx
+
+    from app.application.tool_execution_deadline import build_http_helpers, invocation_deadline
+
+    calls = []
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: calls.append(kwargs))
+    with invocation_deadline(time.monotonic() + 100):
+        get, _ = build_http_helpers()
+        with invocation_deadline(time.monotonic() - 1):
+            assert asyncio.run(get("https://stub.invalid"))["outcome"] == "not_started"
+    assert calls == []
+
+
+def test_unrelated_executor_error_keeps_original_exception(monkeypatch):
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+
+    def execute(*args, **kwargs):
+        raise ValueError("no unknown I/O")
+
+    with pytest.raises(ValueError, match="no unknown I/O"):
+        execute_with_tool_deadline(
+            SimpleNamespace(execute=execute), _step(), runtime_context={}, timeout_seconds=1
+        )

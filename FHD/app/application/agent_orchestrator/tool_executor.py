@@ -13,6 +13,8 @@ from app.application.agent_orchestrator.param_references import (
 )
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_spec import validate_tool_call, validate_tool_result
+from app.application.tool_execution_deadline import invocation_deadline
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
     {"business_db", "inventory", "shipment_records", "shipment_orders"}
@@ -155,17 +157,26 @@ def execute_with_tool_deadline(
         }
     result: Any = None
     try:
-        result = (
-            bounded(step, runtime_context=context, deadline_monotonic=deadline)
-            if callable(bounded)
-            else executor.execute(step, runtime_context=context)
-        )
+        with invocation_deadline(deadline) as invocation:
+            result = (
+                bounded(step, runtime_context=context, deadline_monotonic=deadline)
+                if callable(bounded)
+                else executor.execute(step, runtime_context=context)
+            )
     except TimeoutError:
         pass
+    except RECOVERABLE_ERRORS as exc:
+        if not invocation.uncertain:
+            raise
+        result = {
+            "error_code": "tool_exception_after_unknown_io",
+            "exception_type": type(exc).__name__,
+        }
     else:
         if (
             time.monotonic() <= deadline
             and isinstance(result, dict)
+            and not invocation.uncertain
             and result.get("outcome") != "unknown"
             and not result.get("reconciliation_required")
         ):
@@ -174,6 +185,7 @@ def execute_with_tool_deadline(
         "success": False,
         "error_code": "tool_timeout_unknown",
         "reconciliation_evidence": result if isinstance(result, dict) else {},
+        "io_reconciliation": list(invocation.uncertain),
         "outcome": "unknown",
         "retryable": False,
         "reconciliation_required": True,
