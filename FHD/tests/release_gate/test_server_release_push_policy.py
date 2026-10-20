@@ -355,7 +355,10 @@ def test_deploy_validates_autonomy_without_rewriting_server_configuration(tmp_pa
     assert apply["env"]["PRESERVE_RELEASE_HISTORY"] == (
         "${{ inputs.preserve_release_history && '1' || '0' }}"
     )
-    assert 'case "${PRESERVE_RELEASE_HISTORY}" in 0|1) export XCMAX_PRESERVE_RELEASE_HISTORY=' in apply["run"]
+    assert (
+        'case "${PRESERVE_RELEASE_HISTORY}" in 0|1) export XCMAX_PRESERVE_RELEASE_HISTORY='
+        in apply["run"]
+    )
     assert 'export FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS="360"' in apply["run"]
     updater = (FHD_ROOT / "scripts/deploy/fhd-auto-update.sh").read_text()
     assert 'case "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" in 0|1)' in updater
