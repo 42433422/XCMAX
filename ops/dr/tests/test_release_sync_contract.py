@@ -21,6 +21,8 @@ def test_fhd_release_sync_does_not_require_a_git_object() -> None:
 
 def test_release_sync_prunes_only_validated_component_candidates() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
+    assert 'readonly preserve_history="${XCMAX_PRESERVE_RELEASE_HISTORY:-0}"' in text
+    assert '--preserve-history "$preserve_history"' in text
     lock = text.index('flock -w "$TRANSFER_WAIT_SECONDS" 8')
     selector = text.index('python3 "$PRUNE_HELPER"', lock)
     bounded_clear = text.index(
