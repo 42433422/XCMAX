@@ -17,7 +17,7 @@ from app.application.tool_execution_deadline import invocation_deadline
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
-    {"business_db", "inventory", "shipment_records", "shipment_orders"}
+    {"business_db", "inventory", "shipment_records", "shipment_orders", "document_template"}
 )
 
 
