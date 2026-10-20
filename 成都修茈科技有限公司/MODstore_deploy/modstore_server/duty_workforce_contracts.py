@@ -1,10 +1,5 @@
 # mypy: disable-error-code="attr-defined, no-any-return, union-attr, valid-type"
-"""Runtime loader for the 55-role duty workforce work contracts.
-
-The roster says who exists.  This file loads the separate contract SSOT that
-says what each employee is expected to do, how work is triggered, how risky it
-is, and what evidence counts as a receipt.
-"""
+"""Load the 55-role contract SSOT: duties, triggers, risk and receipt evidence."""
 
 from __future__ import annotations
 
@@ -94,11 +89,8 @@ def _duty_manifest_roots() -> Iterable[Path]:
 
 
 def resolve_reviewed_duty_employee_root(employee_id: str) -> Path:
-    """Resolve one duty employee directory from the reviewed runtime SSOT.
-
-    Burn-in must execute the Python module shipped beside the exact manifest it
-    reviewed. Returning a catalog ZIP here would allow a stale package body to
-    run under a newer source contract.
+    """Resolve the reviewed runtime directory, keeping its module and manifest
+    together so burn-in cannot run a stale catalog body under a newer contract.
     """
 
     eid = str(employee_id or "").strip()
@@ -125,14 +117,7 @@ def resolve_reviewed_duty_employee_root(employee_id: str) -> Path:
 
 
 def load_reviewed_duty_manifest(employee_id: str) -> Dict[str, Any]:
-    """Load the reviewed FHD manifest SSOT for one contracted duty employee.
-
-    Catalog archives can legitimately lag source deployment.  Burn-in must not
-    prove an old generic shell after the reviewed duty manifest gained a real
-    handler.  This loader is intentionally explicit and is only consumed by
-    the read-only burn-in path; normal customer executions retain catalog
-    package authority.
-    """
+    """Read reviewed FHD manifests for burn-in; customers retain catalog authority."""
 
     root = resolve_reviewed_duty_employee_root(employee_id)
     return json.loads((root / "manifest.json").read_text(encoding="utf-8"))
