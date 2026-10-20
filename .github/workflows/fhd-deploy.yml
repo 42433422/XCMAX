@@ -42,7 +42,7 @@ on:
         type: string
         default: ""
       previous_security_scan_run_id:
-        description: Required for production apply-latest; previous-day successful full security scan
+        description: Required for production apply-latest; compatibility input, use the current scan run ID
         required: false
         type: string
         default: ""
@@ -100,7 +100,7 @@ jobs:
           run-id: ${{ inputs.security_scan_run_id }}
           github-token: ${{ github.token }}
 
-      - name: Download prior-day normalized security evidence
+      - name: Download compatibility security evidence
         if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
         uses: actions/download-artifact@v8
         with:
@@ -109,7 +109,7 @@ jobs:
           run-id: ${{ inputs.previous_security_scan_run_id }}
           github-token: ${{ github.token }}
 
-      - name: Enforce exact-SHA two-day security clearance
+      - name: Enforce fresh exact-SHA security clearance
         if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
         run: |
           python FHD/scripts/security/verify_security_scan_pair.py \

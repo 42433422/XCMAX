@@ -1,5 +1,5 @@
 {
-  "lines": 2317123,
+  "lines": 2317053,
   "updated": "2026-10-20",
-  "note": "A1.3同一执行授权与能力边界：在已记录323行必要增量之上，同步仍在公开展示的README及DeveloperDocsPanel入口描述，去掉Token触发员工的失效承诺；两处消费页新增derived登记净2行，当前实测2317136（相对main净325）。不新增功能或权限，不覆盖2462/2464预算；其余79项测试及未迁移兼容限制沿用同一源码tree差异说明，最终head门禁重跑。；按MODstore实际CI的Black26.10.1/isort6.1.0格式合同统一3文件，保留全部断言和权限逻辑，净减13行，最终实测2317123，相对main必要净增312；不是取消原例外或改变授权。"
+  "note": "Preserve the reviewed a1-pat-scope security slice while incorporating main 3f646df lock and release fixes; recompute actual line count with the updated main counting policy. No security assertions removed. Draft-only changes approved by user."
 }
