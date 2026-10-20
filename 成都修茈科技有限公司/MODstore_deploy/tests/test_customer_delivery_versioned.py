@@ -135,8 +135,9 @@ def test_only_entitled_owner_can_import_sunbird_source(pinned_source, monkeypatc
 
 
 def test_create_request_blocks_unentitled_owner_and_unpinned_release(monkeypatch):
-    import modstore_server.customer_service_api  # noqa: F401 - initializes its router imports
     from fastapi import HTTPException
+
+    import modstore_server.customer_service_api  # noqa: F401 - initializes its router imports
     from modstore_server import customer_delivery_versioned as versioned
     from modstore_server import customer_service_delivery_create_api as create_api
     from modstore_server.customer_service_delivery_models import (
@@ -190,7 +191,6 @@ def test_copy_rejects_wrong_entitlement_even_with_valid_release_hash(pinned_sour
 
 def test_signed_record_cannot_drop_or_forge_source_provenance(tmp_path, monkeypatch):
     from modstore_server import customer_delivery_build as build
-
     from tests.customer_delivery_fixture import signed_artifact
 
     record = signed_artifact(tmp_path, monkeypatch, owner=81, ticket=82)
@@ -218,13 +218,13 @@ def test_signed_record_cannot_drop_or_forge_source_provenance(tmp_path, monkeypa
 
 def test_sunbird_signed_package_preserves_legacy_entitlement_and_source_hash(tmp_path, monkeypatch):
     from cryptography.hazmat.primitives import serialization
+
     from modstore_server import customer_delivery_build as build
     from modstore_server.customer_delivery_versioned import (
         LEGACY_ID,
         MOD_ID,
         source_sha256,
     )
-
     from tests.customer_delivery_fixture import persist_private_source, signed_artifact
 
     signed_artifact(tmp_path, monkeypatch, owner=81, ticket=82)
@@ -369,8 +369,9 @@ def test_signing_failure_rolls_done_session_back_to_error(pinned_source, tmp_pat
 
 @pytest.mark.parametrize("failure", ["owner", "release", "wrong_mod", "accept"])
 def test_original_ticket_main_rework_rejects_before_start_or_commit(monkeypatch, failure):
-    import modstore_server.customer_service_api  # noqa: F401
     from fastapi import HTTPException
+
+    import modstore_server.customer_service_api  # noqa: F401
     from modstore_server import customer_delivery_versioned as versioned
     from modstore_server import customer_service_delivery_api as api
     from modstore_server.customer_service_delivery_models import (

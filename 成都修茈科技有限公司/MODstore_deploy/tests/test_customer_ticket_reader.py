@@ -17,7 +17,6 @@ def reader_case(client, monkeypatch, tmp_path):
         CustomerServiceAction,
         CustomerServiceAuditLog,
     )
-
     from tests.test_customer_service_api import _make_ticket
 
     token = "cst_ro_" + "test-only-not-a-live-credential" * 2
@@ -201,7 +200,6 @@ def test_grants_fail_closed_and_revocation_is_immediate(reader_case, change):
 
 def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(reader_case, monkeypatch):
     from modstore_server import customer_service_api
-
     from tests.test_customer_service_api import _as_user, _make_user
 
     client, headers, ids, *_ = reader_case
@@ -256,7 +254,6 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
         CustomerServiceAuditLog,
         CustomerServiceTicket,
     )
-
     from tests.test_customer_service_api import _as_user, _make_user
 
     client, reader_headers, ids, *_ = reader_case
