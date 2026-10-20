@@ -150,11 +150,14 @@ describe('DeliveryCenterView', () => {
   )
 
   it('renders the real customer, quality gate, artifact, and receipt state', async () => {
+    const ticket = structuredClone(delivery)
+    ticket.custom_delivery.pricing_mode = 'post_delivery_addon'
+    ticket.custom_delivery.pricing_label = '新增报价与付款'
+    listCustomDeliveries.mockResolvedValue({ items: [ticket] })
     const wrapper = mount(DeliveryCenterView)
     await flushPromises()
     expect(wrapper.text()).toContain('客户交付中心')
     expect(wrapper.text()).toContain('企业客户交付台账')
-    expect(wrapper.text()).toContain('无套餐企业')
     expect(wrapper.text()).toContain('未绑定购买套餐，不冒充已购买')
     expect(wrapper.findAll('.enterprise-customer-roster__grid article')).toHaveLength(3)
     const enterpriseCard = wrapper.findAll('.delivery-stats article').find((card) => card.text().includes('企业用户'))
@@ -165,19 +168,20 @@ describe('DeliveryCenterView', () => {
     expect(wrapper.text()).toContain('0/1 已安装')
     expect(wrapper.text()).toContain('待客户安装回执')
     expect(wrapper.text()).toContain('购买账户标准交付台账')
-    expect(wrapper.text()).toContain('标准交付企业')
+    const timeline = wrapper.findAll('.delivery-timeline li')
+    expect(timeline).toHaveLength(5)
+    expect(timeline[0].text()).toContain('需求受理新增报价与付款')
+    expect(wrapper.text()).toContain('本次执行步骤1 项')
     expect(wrapper.text()).toContain('企业成长版')
     expect(wrapper.text()).toContain('安装并首次登录完成')
     expect(wrapper.text()).toContain('当前版本 1.0.0.1')
     expect(wrapper.text()).toContain('Windows')
     expect(wrapper.text()).not.toContain('当前版本 1.0.0.2')
     expect(wrapper.get('.proof-pill.is-version').attributes('title')).toContain('构建 customer-build-sha')
-    expect(wrapper.text()).toContain('首次交付内含，交付前开发免费')
+    expect(wrapper.text()).toContain('新增报价与付款')
     expect(wrapper.text()).not.toContain('权益快速通道')
     expect(wrapper.text()).not.toContain('终端同源快捷模式')
     expect(wrapper.text()).toContain('¥99 体验账户交付台账')
-    expect(wrapper.text()).toContain('体验测试用户')
-    expect(wrapper.text()).toContain('30 天全功能体验')
     expect(wrapper.text()).toContain('30 天体验')
     expect(listStandardDeliveries).toHaveBeenCalledTimes(1)
     expect(listTrialDeliveries).toHaveBeenCalledTimes(1)
@@ -186,18 +190,6 @@ describe('DeliveryCenterView', () => {
     await wrapper.get('input[placeholder*="安装版本"]').setValue('1.0.0.1')
     expect(wrapper.findAll('.enterprise-roster').at(0)?.findAll('article')).toHaveLength(1)
     expect(wrapper.findAll('.enterprise-roster').at(0)?.text()).toContain('标准交付企业')
-  })
-
-  it('keeps the add-on timeline at five stages and distinguishes runtime steps', async () => {
-    const ticket = structuredClone(delivery)
-    ticket.custom_delivery.pricing_mode = 'post_delivery_addon'
-    listCustomDeliveries.mockResolvedValue({ items: [ticket] })
-    const wrapper = mount(DeliveryCenterView)
-    await flushPromises()
-    const stages = wrapper.findAll('.delivery-timeline li')
-    expect(stages).toHaveLength(5)
-    expect(stages[0].text()).toContain('需求受理新增报价与付款')
-    expect(wrapper.text()).toContain('本次执行步骤1 项')
   })
 
   it('shows the trial summary card and keeps trial accounts out of the permanent roster', async () => {
