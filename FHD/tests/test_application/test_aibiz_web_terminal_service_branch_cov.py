@@ -192,7 +192,7 @@ class TestTransformPngView:
 
 
 class TestPngHttpResponse:
-    """Cover _png_http_response cacheable vs non-cacheable branches."""
+    """Cover _png_http_response private no-store behavior for every view."""
 
     def test_cacheable_view_thumb(self):
         from app.application.aibiz_web_terminal_service import _png_http_response
@@ -200,26 +200,26 @@ class TestPngHttpResponse:
         resp = _png_http_response(b"raw", view="thumb")
         assert isinstance(resp, Response)
         assert resp.media_type == "image/png"
-        assert "immutable" in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("Cache-Control", "") == "private, no-store"
 
     def test_cacheable_view_viewport(self):
         from app.application.aibiz_web_terminal_service import _png_http_response
 
         resp = _png_http_response(b"raw", view="viewport")
-        assert "immutable" in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("Cache-Control", "") == "private, no-store"
 
     def test_cacheable_view_empty(self):
         from app.application.aibiz_web_terminal_service import _png_http_response
 
         resp = _png_http_response(b"raw", view="")
-        assert "immutable" in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("Cache-Control", "") == "private, no-store"
 
     def test_non_cacheable_view(self):
         from app.application.aibiz_web_terminal_service import _png_http_response
 
         resp = _png_http_response(b"raw", view="full")
-        assert "no-cache" in resp.headers.get("Cache-Control", "")
-        assert "must-revalidate" in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("Cache-Control", "") == "private, no-store"
+        assert "public" not in resp.headers.get("Cache-Control", "")
 
 
 # ---------------------------------------------------------------------------
