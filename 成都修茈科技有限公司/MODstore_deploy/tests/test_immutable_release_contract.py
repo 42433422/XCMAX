@@ -296,9 +296,7 @@ def test_release_retention_prunes_only_verified_sha_directories(
     for position, sha in enumerate(shas, start=1):
         release = releases / sha
         release.mkdir()
-        (release / ".xcmax-release.json").write_text(
-            json.dumps({"git_sha": sha}), encoding="utf-8"
-        )
+        (release / ".xcmax-release.json").write_text(json.dumps({"git_sha": sha}), encoding="utf-8")
         os.utime(release, (position, position))
 
     malformed_sha = "f" * 40
