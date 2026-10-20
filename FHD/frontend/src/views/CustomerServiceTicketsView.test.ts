@@ -7,11 +7,11 @@ import { ADMIN_HOST_ROUTE_RECORDS } from '../../../admin-console/src/adminHostRo
 import { ADMIN_OPERATOR_MENU_ITEMS, ADMIN_OPERATOR_ROUTE_NAMES } from '../../../admin-console/src/constants/adminOperatorNav'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 
-const { list, detail, updateEta, push, route, put } = vi.hoisted(() => ({
-  put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), route: { params: {} as Record<string, string> },
+const { list, detail, updateEta, push, route, put, post } = vi.hoisted(() => ({
+  post: vi.fn(), put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), route: { params: {} as Record<string, string> },
 }))
 vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail, updateCustomerTicketExpectedCompletion: updateEta } }))
-vi.mock('@/api/core', () => ({ default: { put } }))
+vi.mock('@/api/core', () => ({ default: { put, post } }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => route }))
 
 const ticket = {
@@ -96,6 +96,49 @@ describe('customer service ticket list', () => {
 })
 
 describe('customer service ticket detail', () => {
+  it('keeps ETA and close forms distinct, cancels safely and reuses close retry identity', async () => {
+    const processing = { ...payload, ticket: { ...ticket, status: 'processing' } }
+    detail.mockResolvedValue(processing)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const wrapper = mountDetail(); await flushPromises()
+    expect(wrapper.find('form.cs-eta-editor').exists()).toBe(true)
+    await wrapper.findAll('.cs-close-form textarea')[0].setValue('修复已部署并完成原场景验收')
+    await wrapper.findAll('.cs-close-form textarea')[1].setValue('主线 SHA abc123，目标版本已按原步骤运行并核实结果。')
+    await wrapper.find('.cs-close-form').trigger('submit'); expect(post).not.toHaveBeenCalled()
+    confirm.mockReturnValue(true)
+    let reject!: (error: Error) => void
+    post.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail }))
+    await wrapper.find('.cs-close-form').trigger('submit')
+    await wrapper.find('.cs-close-form').trigger('submit')
+    await wrapper.find('form.cs-eta-editor').trigger('submit')
+    expect(post).toHaveBeenCalledTimes(1); expect(updateEta).not.toHaveBeenCalled()
+    const original = post.mock.calls[0]
+    reject(new Error('network response unknown')); await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === '重试详情')!.trigger('click'); await flushPromises()
+    expect((wrapper.findAll('.cs-close-form textarea')[0].element as HTMLTextAreaElement).value).toBe('修复已部署并完成原场景验收')
+    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, evidence: { resolution: { state: 'resolved', verification_mode: 'admin_runtime' } } } })
+    post.mockResolvedValueOnce({ success: true })
+    await wrapper.find('.cs-close-form').trigger('submit'); await flushPromises()
+    expect(post.mock.calls[1]).toEqual(original)
+    expect(original[0]).toBe('/api/xcmax/admin/customer-service/tickets/42/close')
+    expect(wrapper.text()).toContain('管理员验收已关闭'); expect(wrapper.text()).not.toContain('客户确认已解决')
+    expect(wrapper.find('.cs-close-form').exists()).toBe(false)
+    wrapper.unmount(); confirm.mockRestore()
+  })
+  it('does not apply an old ETA save result after navigating to another ticket', async () => {
+    let complete!: (value: unknown) => void
+    updateEta.mockReturnValueOnce(new Promise(resolve => { complete = resolve }))
+    const wrapper = mountDetail(); await flushPromises()
+    await wrapper.find('#customer-ticket-eta').setValue('2026-10-21T11:30')
+    await wrapper.find('form.cs-eta-editor').trigger('submit')
+    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, id: 43, title: '另一张工单' } })
+    route.params.ticketId = '43'; await flushPromises()
+    complete(payload); await flushPromises()
+    expect(updateEta).toHaveBeenCalledWith(42, '2026-10-21T11:30:00+08:00')
+    expect(detail).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('另一张工单'); expect(wrapper.text()).not.toContain('已保存，客户工单页面会显示此时间。')
+    wrapper.unmount()
+  })
   it('corrects the same ticket title with a stale-title guard and refreshes audit evidence', async () => {
     const prompt = vi.spyOn(window, 'prompt').mockReturnValue('  员工图谱无法正常显示  ')
     detail.mockResolvedValueOnce(payload).mockResolvedValueOnce({ ...payload, ticket: { ...ticket, title: '员工图谱无法正常显示' }, audit_logs: [{ event_type: 'ticket_title_corrected', detail: { old_title: ticket.title, new_title: '员工图谱无法正常显示' } }] })

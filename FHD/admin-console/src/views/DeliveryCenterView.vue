@@ -12,17 +12,18 @@
       </button>
     </header>
 
-    <section class="delivery-stats" aria-label="交付统计">
+    <section id="delivery-overview" class="delivery-stats" aria-label="交付统计">
       <article v-for="item in summaryCards" :key="item.key" :class="`is-${item.key}`">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
         <small>{{ item.hint }}</small>
       </article>
     </section>
-
+    <nav class="delivery-jumps" aria-label="交付中心快速导航"><a href="#delivery-overview">交付概览</a><a href="#delivery-enterprise-roster">企业客户</a>
+      <a href="#delivery-standard-roster">购买交付</a><a href="#delivery-trial-roster">体验交付</a><a href="#delivery-custom-orders">定制工单</a></nav>
     <MacControlPanel />
 
-    <EnterpriseCustomerRoster
+    <EnterpriseCustomerRoster id="delivery-enterprise-roster"
       v-if="!errorMessage && (!loading || enterpriseUsers.length)"
       :users="enterpriseUsers"
       :tickets="tickets"
@@ -31,7 +32,7 @@
       @open-custom="focusCustomDeliveries"
     />
 
-    <EnterpriseDeliveryRoster
+    <EnterpriseDeliveryRoster id="delivery-standard-roster"
       v-if="!errorMessage && (!loading || standardDeliveries.length)"
       :deliveries="standardDeliveries"
       :tickets="tickets"
@@ -39,7 +40,7 @@
       @open-custom="focusCustomDeliveries"
     />
 
-    <EnterpriseDeliveryRoster
+    <EnterpriseDeliveryRoster id="delivery-trial-roster"
       v-if="!errorMessage && (!loading || trialDeliveries.length)"
       variant="trial"
       :deliveries="trialDeliveries"
@@ -141,7 +142,7 @@
             <div v-if="latestRun(ticket)" class="delivery-run">
               <div><span>最近生产</span><strong>第 {{ latestRun(ticket)?.attempt || runCount(ticket) }} 轮</strong></div>
               <div><span>运行状态</span><strong>{{ runStatusLabel(latestRun(ticket)?.status) }}</strong></div>
-              <div><span>执行步骤</span><strong>{{ latestRun(ticket)?.steps?.length || 0 }} 项</strong></div>
+              <div><span>本次执行步骤</span><strong>{{ latestRun(ticket)?.steps?.length || 0 }} 项</strong></div>
               <p v-if="latestRun(ticket)?.error" class="delivery-run__error">
                 {{ latestRun(ticket)?.error }}
               </p>

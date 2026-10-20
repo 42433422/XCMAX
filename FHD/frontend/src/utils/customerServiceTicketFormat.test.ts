@@ -21,6 +21,8 @@ describe('customer service ticket formatting', () => {
     expect(ticketStatusBadge({})).toMatchObject({ label: '未记录', tone: 'neutral' })
     expect(runStatusBadge('failed')).toMatchObject({ label: '失败', tone: 'danger' })
     expect(runStatusBadge('weird')).toMatchObject({ label: 'weird', tone: 'warning' })
+    expect(resolutionStateBadge('resolved', 'admin_runtime')).toMatchObject({ label: '管理员验收已关闭' })
+    expect(resolutionStateBadge('resolved')).toMatchObject({ label: '客户确认已解决' })
     expect(resolutionStateBadge('repair_failed')).toMatchObject({ label: '修复未完成', tone: 'danger' })
     expect(yesNoBadge(undefined, '是', '否')).toMatchObject({ label: '未记录' })
     expect(yesNoBadge(true, '是', '否')).toMatchObject({ label: '是', tone: 'success' })

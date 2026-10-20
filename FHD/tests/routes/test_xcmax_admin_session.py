@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -144,8 +144,6 @@ class TestReleaseTrainSnapshot:
 )
 @pytest.mark.parametrize("suffix", ["", "/42"])
 def test_customer_ticket_list_requires_bound_market_admin(client, meta, sid, expected, suffix):
-    from unittest.mock import AsyncMock
-
     with (
         patch("app.fastapi_routes.domains.misc.helpers._session_id_from_request", return_value=sid),
         patch("app.application.session_account_meta.load_session_account_meta", return_value=meta),
@@ -244,31 +242,26 @@ def test_customer_ticket_proxy_preserves_search_and_market_identity(
         service.validate_session.assert_called_with("current-session")
 
 
-def test_customer_ticket_expected_completion_update_uses_bound_market_identity(
+def test_customer_ticket_close_uses_only_current_admin_market_identity(
     client, customer_ticket_identity
 ):
-    from unittest.mock import AsyncMock
-
-    body = {"expected_completion_at": "2026-10-21T11:30:00+08:00"}
+    body = {
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "note": "验收通过并关闭",
+        "verification": "目标版本页面按原复现步骤通过。",
+    }
     with patch(
         "app.fastapi_routes.market_account._proxy_json",
         new_callable=AsyncMock,
-        return_value={"ticket": {"expected_completion_at": "2026-10-21T03:30:00+00:00"}},
+        return_value={"ticket": {"id": 42, "status": "resolved"}},
     ) as proxy:
-        response = client.patch(
-            "/api/xcmax/admin/customer-service/tickets/42/expected-completion",
+        response = client.post(
+            "/api/xcmax/admin/customer-service/tickets/42/close",
             json=body,
-            headers={
-                "X-Session-ID": "current-session",
-                "Authorization": "Bearer unrelated-browser-identity",
-            },
+            headers={"X-Session-ID": "current-session", "Authorization": "Bearer unrelated"},
         )
     assert response.status_code == 200
-    assert response.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
-    assert proxy.await_args.args == (
-        "PATCH",
-        "/api/customer-service/tickets/42/expected-completion",
-    )
+    assert proxy.await_args.args == ("POST", "/api/customer-service/tickets/42/close")
     assert proxy.await_args.kwargs["json_body"] == body
     assert proxy.await_args.kwargs["authorization"] == "Bearer test-bound-market-identity"
 
@@ -279,7 +272,6 @@ def test_customer_ticket_identity_failures_never_use_another_session(
     client, customer_ticket_identity, suffix, failure
 ):
     from types import SimpleNamespace
-    from unittest.mock import AsyncMock
 
     service, market = customer_ticket_identity
     if failure == "no_user":
@@ -308,8 +300,6 @@ def test_customer_ticket_identity_failures_never_use_another_session(
 def test_customer_ticket_proxy_preserves_upstream_failure(
     client, customer_ticket_identity, suffix, status
 ):
-    from unittest.mock import AsyncMock
-
     with patch(
         "app.fastapi_routes.market_account._proxy_json",
         new_callable=AsyncMock,
@@ -325,4 +315,33 @@ def test_customer_ticket_proxy_preserves_upstream_failure(
         )
     assert response.status_code == status
     assert "items" not in response.json()
+    assert proxy.await_args.kwargs["authorization"] == "Bearer test-bound-market-identity"
+
+
+def test_customer_ticket_expected_completion_update_uses_bound_market_identity(
+    client, customer_ticket_identity
+):
+    from unittest.mock import AsyncMock
+
+    body = {"expected_completion_at": "2026-10-21T11:30:00+08:00"}
+    with patch(
+        "app.fastapi_routes.market_account._proxy_json",
+        new_callable=AsyncMock,
+        return_value={"ticket": {"expected_completion_at": "2026-10-21T03:30:00+00:00"}},
+    ) as proxy:
+        response = client.patch(
+            "/api/xcmax/admin/customer-service/tickets/42/expected-completion",
+            json=body,
+            headers={
+                "X-Session-ID": "current-session",
+                "Authorization": "Bearer unrelated-browser-identity",
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
+    assert proxy.await_args.args == (
+        "PATCH",
+        "/api/customer-service/tickets/42/expected-completion",
+    )
+    assert proxy.await_args.kwargs["json_body"] == body
     assert proxy.await_args.kwargs["authorization"] == "Bearer test-bound-market-identity"

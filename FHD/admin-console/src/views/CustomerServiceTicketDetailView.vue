@@ -12,7 +12,7 @@
           <div class="cs-hero-title">
             <span class="cs-kicker">客服原单 · 内部 ID {{ ticketId }}</span>
             <h2>{{ ticket.title || '（无标题）' }}</h2>
-            <button type="button" class="cs-btn" :disabled="saving" @click="correctTitle">更正标题</button>
+            <button type="button" class="cs-btn" :disabled="saving || savingEta" @click="correctTitle">更正标题</button>
             <code class="cs-ticket-no">{{ ticket.ticket_no }}</code>
           </div>
           <div class="cs-badges">
@@ -38,8 +38,8 @@
         <form class="cs-eta-editor" @submit.prevent="saveExpectedCompletion">
           <label for="customer-ticket-eta">设置客户可见的预期完成时间（北京时间）</label>
           <input id="customer-ticket-eta" v-model="expectedCompletionInput" type="datetime-local" />
-          <button type="submit" class="cs-btn" :disabled="savingEta">{{ savingEta ? '保存中…' : '保存时间' }}</button>
-          <button v-if="ticket.expected_completion_at" type="button" class="cs-btn" :disabled="savingEta" @click="clearExpectedCompletion">清除</button>
+          <button type="submit" class="cs-btn" :disabled="saving || savingEta">{{ savingEta ? '保存中…' : '保存时间' }}</button>
+          <button v-if="ticket.expected_completion_at" type="button" class="cs-btn" :disabled="saving || savingEta" @click="clearExpectedCompletion">清除</button>
           <span v-if="etaMessage" role="status">{{ etaMessage }}</span>
           <span v-if="etaError" role="alert" class="cs-error-text">{{ etaError }}</span>
         </form>
@@ -75,6 +75,13 @@
           <p class="cs-hint">结论更新于 {{ formatBeijingTime(resolution.updated_at) }}</p>
         </template>
       </section>
+
+      <form v-if="ticket.status === 'processing'" class="cs-card cs-close-form" @submit.prevent="closeTicket">
+        <h3 class="cs-card-title">验收并关闭</h3>
+        <label>处理结论<textarea v-model="closeNote" required minlength="8" maxlength="2000" /></label>
+        <label>实际验收证据<textarea v-model="closeVerification" required minlength="20" maxlength="4000" /></label>
+        <button class="cs-btn" type="submit" :disabled="saving || savingEta">记录管理员验收并关闭</button>
+      </form>
 
       <section class="cs-card" aria-label="处理时间线">
         <h3 class="cs-card-title">处理时间线 <span class="cs-count">{{ timeline.length }}</span></h3>
@@ -129,7 +136,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import api from '@/api/core'
 import {
-  auditItems, buildTimeline, formatBeijingTime, intentLabel, prettyJson, priorityLabel, resolutionStateBadge,
+  auditItems, buildTimeline, formatBeijingTime, intentLabel, parseServerTime, prettyJson, priorityLabel, resolutionStateBadge,
   routeLabel, submitterTypeLabel, teamMembers, ticketStatusBadge, yesNoBadge, type Row,
 } from '../utils/customerServiceTicketFormat'
 
@@ -141,6 +148,7 @@ const loading = ref(false), error = ref('')
 const saving = ref(false)
 const expectedCompletionInput = ref('')
 const savingEta = ref(false), etaMessage = ref(''), etaError = ref('')
+const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref('')
 let generation = 0
 
 const ticketId = computed(() => Number(String(route.params.ticketId ?? '')))
@@ -155,7 +163,7 @@ const resolution = computed(() => {
 })
 const status = computed(() => ticketStatusBadge(ticket.value))
 const steps = computed(() => (Array.isArray(ticket.value.lifecycle_steps) ? ticket.value.lifecycle_steps : []) as Row[])
-const resolutionState = computed(() => resolutionStateBadge(resolution.value?.state))
+const resolutionState = computed(() => resolutionStateBadge(resolution.value?.state, resolution.value?.verification_mode))
 const repairVerified = computed(() => yesNoBadge(resolution.value?.repair_verified, '修复已验证', '修复未验证'))
 const team = computed(() => teamMembers(resolution.value?.team))
 const timeline = computed(() => detail.value ? buildTimeline(detail.value.decisions, detail.value.actions, evidence.value) : [])
@@ -165,7 +173,27 @@ const message = (cause: unknown) => cause instanceof Error ? cause.message : Str
 
 function backToList() { void router.push({ name: 'customer-service-tickets' }) }
 
+watch([closeNote, closeVerification], () => { closeRequestId.value = '' })
+
+async function closeTicket() {
+  const id = ticketId.value
+  if (saving.value || savingEta.value || ticket.value.status !== 'processing' || !window.confirm('确认已在目标版本完成实际验收，并关闭这张原工单？')) return
+  closeRequestId.value ||= crypto.randomUUID()
+  saving.value = true
+  try {
+    await api.post(`/api/xcmax/admin/customer-service/tickets/${id}/close`, {
+      request_id: closeRequestId.value, note: closeNote.value, verification: closeVerification.value,
+    })
+    if (ticketId.value === id) {
+      closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''
+      await load()
+    }
+  } catch (cause) { if (ticketId.value === id) error.value = message(cause) }
+  finally { saving.value = false }
+}
+
 async function correctTitle() {
+  if (saving.value || savingEta.value) return
   const id = ticketId.value, expectedTitle = String(ticket.value.title || '')
   const title = window.prompt('请输入此工单的正确标题', expectedTitle)?.trim()
   if (!title || title === expectedTitle || saving.value) return
@@ -178,8 +206,8 @@ async function correctTitle() {
 }
 
 function toBeijingInput(value: unknown): string {
-  const date = new Date(String(value || ''))
-  return Number.isNaN(date.getTime()) ? '' : new Date(date.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 16)
+  const ms = parseServerTime(value)
+  return ms === null ? '' : new Date(ms + 8 * 60 * 60 * 1000).toISOString().slice(0, 16)
 }
 
 function fromBeijingInput(value: string): string | null {
@@ -187,16 +215,20 @@ function fromBeijingInput(value: string): string | null {
 }
 
 async function saveExpectedCompletion() {
+  const id = ticketId.value
+  if (saving.value || savingEta.value || !validId.value) return
   savingEta.value = true; etaMessage.value = ''; etaError.value = ''
   try {
-    await xcmaxAdminApi.updateCustomerTicketExpectedCompletion(ticketId.value, fromBeijingInput(expectedCompletionInput.value))
+    await xcmaxAdminApi.updateCustomerTicketExpectedCompletion(id, fromBeijingInput(expectedCompletionInput.value))
+    if (ticketId.value !== id) return
     await load()
-    etaMessage.value = '已保存，客户工单页面会显示此时间。'
-  } catch (cause) { etaError.value = message(cause) }
+    if (ticketId.value === id) etaMessage.value = '已保存，客户工单页面会显示此时间。'
+  } catch (cause) { if (ticketId.value === id) etaError.value = message(cause) }
   finally { savingEta.value = false }
 }
 
 async function clearExpectedCompletion() {
+  if (saving.value || savingEta.value) return
   expectedCompletionInput.value = ''
   await saveExpectedCompletion()
 }
@@ -216,7 +248,7 @@ async function load() {
   } catch (cause) { if (request === generation) error.value = message(cause) }
   finally { if (request === generation) loading.value = false }
 }
-watch(ticketId, () => { void load() }, { immediate: true })
+watch(ticketId, () => { closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''; etaMessage.value = ''; etaError.value = ''; void load() }, { immediate: true })
 onBeforeUnmount(() => { generation++ })
 </script>
 

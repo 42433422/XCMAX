@@ -104,7 +104,11 @@ async def sync_stream(request: _facade().Request, since_cursor: int = _facade().
 
 
 async def _customer_ticket_proxy(
-    request: _facade().Request, path: str, *, method: str = "GET", json_body=None
+    request: _facade().Request,
+    path: str,
+    *,
+    method: str = "GET",
+    json_body: dict[str, _facade().Any] | None = None,
 ):
     from app.fastapi_routes.market_account import session_market_token
     from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request
@@ -154,24 +158,14 @@ async def admin_customer_service_ticket(request: _facade().Request, ticket_id: i
     return await _customer_ticket_proxy(request, f"/api/customer-service/tickets/{ticket_id}")
 
 
-@_facade().router.patch(
-    "/admin/customer-service/tickets/{ticket_id}/expected-completion", response_model=None
-)
-async def admin_update_customer_ticket_expected_completion(
-    request: _facade().Request, ticket_id: int
+@_facade().router.post("/admin/customer-service/tickets/{ticket_id}/close", response_model=None)
+async def close_admin_customer_service_ticket(
+    request: _facade().Request, ticket_id: int, body: dict[str, _facade().Any]
 ):
-    try:
-        body = await request.json()
-    except _facade().RECOVERABLE_ERRORS:
-        body = None
-    if not isinstance(body, dict):
-        return _facade().JSONResponse(
-            {"success": False, "message": "请求内容无效"}, status_code=422
-        )
     return await _customer_ticket_proxy(
         request,
-        f"/api/customer-service/tickets/{ticket_id}/expected-completion",
-        method="PATCH",
+        f"/api/customer-service/tickets/{ticket_id}/close",
+        method="POST",
         json_body=body,
     )
 
@@ -307,3 +301,25 @@ def _collect_cursor_usage() -> dict[str, _facade().Any]:
             )
         ),
     }
+
+
+@_facade().router.patch(
+    "/admin/customer-service/tickets/{ticket_id}/expected-completion", response_model=None
+)
+async def admin_update_customer_ticket_expected_completion(
+    request: _facade().Request, ticket_id: int
+):
+    try:
+        body = await request.json()
+    except _facade().RECOVERABLE_ERRORS:
+        body = None
+    if not isinstance(body, dict):
+        return _facade().JSONResponse(
+            {"success": False, "message": "请求内容无效"}, status_code=422
+        )
+    return await _customer_ticket_proxy(
+        request,
+        f"/api/customer-service/tickets/{ticket_id}/expected-completion",
+        method="PATCH",
+        json_body=body,
+    )
