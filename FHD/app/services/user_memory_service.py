@@ -168,12 +168,11 @@ class UserMemoryStore:
         configured_dir = os.environ.get("XCAGI_USER_MEMORY_DIR")
         memory_dir = Path(configured_dir or MEMORY_DIR)
         configured_path = os.environ.get("XCAGI_USER_MEMORY_JSON_PATH")
-        memory_path = Path(
+        self._memory_path = Path(
             configured_path
             or (memory_dir / "memory_store.json" if configured_dir else JSON_MEMORY_PATH)
         )
-        self._memory_path = memory_path
-        self._lock_path = memory_path.with_name(f"{memory_path.name}.lock")
+        self._lock_path = self._memory_path.with_name(f"{self._memory_path.name}.lock")
         self._transaction_lock = threading.RLock()
         self._transaction_state = threading.local()
         self._memory_cache: dict[str, UserMemory] = {}

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+from threading import Thread
 
 
 def _facade():
@@ -45,7 +46,7 @@ class __DatasetRagApplicationServicePart01MixinPart01Mixin:
         self._lock = DatasetStateLock(self)
         self._rebuild_owner = owner_id()
         self._rebuild_shutdown = False
-        self._rebuild_threads = set()
+        self._rebuild_threads: set[Thread] = set()
         self._max_concurrent_rebuild_jobs = _facade()._resolve_max_concurrent_rebuild_jobs(
             max_concurrent_rebuild_jobs
         )
