@@ -112,6 +112,29 @@ class IncidentEvent(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
 
 
+class IncidentInbox(Base):
+    """One durable incident for each stable upstream event identity."""
+
+    __tablename__ = "incident_inbox"
+    inbox_key = Column(String(192), primary_key=True)
+    incident_event_id = Column(
+        Integer, ForeignKey("incident_events.id"), nullable=False, unique=True
+    )
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
+
+
+class IncidentClaim(Base):
+    """SQL is the claim authority; Redis node heartbeats are advisory only."""
+
+    __tablename__ = "incident_claims"
+    event_id = Column(Integer, ForeignKey("incident_events.id"), primary_key=True)
+    owner_token = Column(String(64), nullable=False, default="")
+    generation = Column(Integer, nullable=False, default=0)
+    lease_until = Column(DateTime, nullable=False)
+    dispatch_state = Column(String(16), nullable=False, default="pending", index=True)
+    last_error = Column(String(512), nullable=False, default="")
+
+
 class EmployeeTriggerBinding(Base):
     __tablename__ = "employee_trigger_bindings"
     __table_args__ = (

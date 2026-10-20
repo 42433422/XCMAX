@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -7,6 +8,14 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _isolated_agent_usage_ledger(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    # These planner/event tests mock dispatch in this interpreter; the real spawned
+    # executor and tenant persistence are exercised by test_tool_process/tenant.
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
+        lambda: SimpleNamespace(execute=AgentToolExecutor().execute),
+    )
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "model_usage_ledger.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)

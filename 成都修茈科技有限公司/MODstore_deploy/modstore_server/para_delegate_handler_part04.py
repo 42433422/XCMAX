@@ -67,11 +67,39 @@ def _post_para_api_once(
         req.get("workspace_path") or h.os.environ.get("MODSTORE_PARA_WORKSPACE_PATH") or ""
     ).strip()
     task_id = str(req.get("para_task_id") or "").strip()
+    submission_started = False
+    dispatched: list = []
+    planned_devices: list[str] = []
+    dispatch_failures: list = []
     try:
         with _facade().httpx.Client(timeout=_facade()._api_timeout(), trust_env=False) as client:
             grant_task = str(req.get("para_task_id") or req.get("request_id") or "").strip()
             token_info = _facade()._get_para_token(client, base, grant_task)
             token = token_info["token"]
+            if task_id:
+                final = h._wait_for_para_task(client, base, token, task_id, req)
+                ok = bool(final.get("ok"))
+                return {
+                    "handler": "para_delegate",
+                    "ok": ok,
+                    "accepted": True,
+                    "completed": ok,
+                    "task_id": task_id,
+                    "source": "para_api",
+                    "status": final.get("status"),
+                    "para_result": final.get("snapshot"),
+                    "error": final.get("error") or "",
+                    "outcome": (
+                        "terminal"
+                        if ok
+                        or final.get("status") in {"para_task_failed", "para_task_merge_conflict"}
+                        else "unknown"
+                    ),
+                    "requires_reconciliation": not ok
+                    and final.get("status") not in {"para_task_failed", "para_task_merge_conflict"},
+                    "required_subtask_ids": req.get("required_subtask_ids") or [],
+                    **(req.get("execution_identity") or {}),
+                }
             base_prompt, grant = _attach_credential_grant(base_prompt, grant_task)
             tier, sel_devices, select_reason = _facade()._resolve_dispatch_devices(
                 client, base, token, req
@@ -96,7 +124,7 @@ def _post_para_api_once(
                     queued=True,
                 )
             total = len(sel_devices)
-            dispatched: list = []
+            planned_devices = [str(device.get("id") or "") for device in sel_devices]
             for index, device in enumerate(sel_devices):
                 device_id = str(device.get("id") or "").strip()
                 if not device_id:
@@ -129,9 +157,21 @@ def _post_para_api_once(
                 )
                 if not first_payload:
                     first_payload = payload
+                from modstore_server.node_coordinator import (
+                    assert_incident_claim,
+                    current_claim,
+                )
+
+                claim = current_claim()
+                if claim:
+                    assert_incident_claim(int(claim["event_id"]))
+                submission_started = True
                 resp = client.post(
                     f"{base}/api/tasks",
-                    headers={"Authorization": f"Bearer {token}"},
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Idempotency-Key": f"{req.get('request_id') or grant_task}:{device_id}",
+                    },
                     json=payload,
                 )
                 body = h._safe_json(resp)
@@ -141,6 +181,21 @@ def _post_para_api_once(
                     and bool(body.get("task") or body.get("subtask"))
                 )
                 if not ok:
+                    dispatch_failures.append(
+                        {
+                            "device_id": device_id,
+                            "status_code": resp.status_code,
+                            "error": (
+                                str(
+                                    body.get("error")
+                                    or body.get("detail")
+                                    or "Invalid dispatch receipt"
+                                )[:500]
+                                if isinstance(body, dict)
+                                else "Invalid dispatch receipt"
+                            ),
+                        }
+                    )
                     if not dispatched:
                         err_text = str(
                             body.get("error") or body.get("detail") or resp.text[:500]
@@ -158,6 +213,11 @@ def _post_para_api_once(
                             "status_code": resp.status_code,
                             "source": "para_api",
                             "failure_kind": "para_api",
+                            "outcome": "unknown",
+                            "requires_reconciliation": True,
+                            "retryable": False,
+                            "dispatch_failures": dispatch_failures,
+                            "planned_devices": planned_devices,
                             "para_tier": tier,
                             "request": h._public_request(req),
                             "response": response,
@@ -171,12 +231,28 @@ def _post_para_api_once(
                         }
                     continue
                 accepted = h._summarize_para_response(body)
+                accepted_task_id = str(accepted.get("task_id") or "").strip()
+                if (
+                    not accepted_task_id
+                    or not accepted.get("subtask_id")
+                    or (task_id and accepted_task_id != task_id)
+                ):
+                    return {
+                        "handler": "para_delegate",
+                        "ok": False,
+                        "accepted": bool(task_id),
+                        "completed": False,
+                        "status": "para_api_identity_mismatch",
+                        "outcome": "unknown",
+                        "requires_reconciliation": True,
+                        "retryable": False,
+                        "task_id": task_id,
+                        "planned_devices": planned_devices,
+                        "devices": dispatched,
+                        "error": "Para dispatch returned missing or conflicting task identity",
+                    }
                 if not task_id:
-                    task_id = str(accepted.get("task_id") or "").strip()
-                h._force_single_device_attempt(
-                    {**req, "device_id": device_id, "report_only": payload["report_only"]},
-                    accepted,
-                )
+                    task_id = accepted_task_id
                 dispatched.append(
                     {
                         "device_id": device_id,
@@ -210,6 +286,13 @@ def _post_para_api_once(
                 "device_scope": device_scope,
                 "request": h._public_request(req),
                 "devices": dispatched,
+                "planned_devices": planned_devices,
+                "required_subtask_ids": [
+                    str(device["subtask_id"]) for device in dispatched if device.get("subtask_id")
+                ],
+                "dispatch_failures": dispatch_failures,
+                "partial": bool(dispatch_failures) or len(dispatched) != len(planned_devices),
+                **(req.get("execution_identity") or {}),
             }
             if not should_wait:
                 return result
@@ -220,23 +303,71 @@ def _post_para_api_once(
                     "status": "para_api_missing_task_id",
                     "error": "Para API accepted but response missing task.id",
                 }
-            final = h._wait_for_para_task(client, base, token, task_id, req)
+            final = h._wait_for_para_task(
+                client,
+                base,
+                token,
+                task_id,
+                {
+                    **req,
+                    "required_subtask_ids": result["required_subtask_ids"],
+                    "planned_devices": result["planned_devices"],
+                },
+            )
+            complete = bool(final.get("ok")) and not result["partial"]
+            uncertain = final.get("status") not in {
+                "para_task_completed",
+                "para_task_merged",
+                "para_task_failed",
+                "para_task_merge_conflict",
+            }
             return {
                 **result,
-                "ok": bool(final.get("ok")),
-                "completed": bool(final.get("ok")),
-                "status": final.get("status"),
+                "ok": complete,
+                "completed": complete,
+                "status": "partial" if result["partial"] else final.get("status"),
+                "outcome": "unknown" if uncertain else "terminal",
+                "requires_reconciliation": uncertain,
+                "retryable": False if uncertain or result["partial"] else True,
                 "para_result": final.get("snapshot"),
-                "error": "" if final.get("ok") else str(final.get("error") or "Para task failed"),
+                "error": (
+                    ""
+                    if complete
+                    else str(final.get("error") or "Para required child dispatch incomplete")
+                ),
             }
     except RECOVERABLE_ERRORS as exc:
         result = h._outbox_response(
-            {**req, "para_task_id": task_id, "para_payload": first_payload},
+            {
+                **req,
+                "para_task_id": task_id,
+                "para_payload": first_payload,
+                "required_subtask_ids": [
+                    str(device["subtask_id"]) for device in dispatched if device.get("subtask_id")
+                ],
+                "planned_devices": planned_devices,
+                "dispatch_failures": dispatch_failures,
+                "replay_allowed": False,
+            },
             status="para_api_failed_outboxed",
             error=f"Para API 调用失败，已写入 outbox: {str(exc)[:500]}",
         )
-        if task_id:
-            result.update({"accepted": True, "task_id": task_id})
+        result.update(
+            accepted=bool(task_id),
+            task_id=task_id,
+            completed=False,
+            outcome="unknown",
+            requires_reconciliation=True,
+            retryable=False,
+            devices=dispatched,
+            planned_devices=planned_devices,
+            dispatch_failures=dispatch_failures,
+            required_subtask_ids=[
+                str(device["subtask_id"]) for device in dispatched if device.get("subtask_id")
+            ],
+            submission_started=submission_started,
+            **(req.get("execution_identity") or {}),
+        )
         return result
 
 
@@ -277,12 +408,28 @@ def _post_webhook(
             body = resp.json() if resp.content else {}
         except RECOVERABLE_ERRORS:
             body = {"raw": resp.text[:4000]}
-        ok = resp.status_code < 400 and bool(body.get("ok", resp.status_code < 300))
+        body = body if isinstance(body, dict) else {}
+        accepted = body.get("accepted") is True and bool(
+            body.get("task_id") or body.get("para_task_id")
+        )
+        completed = accepted and body.get("completed") is True and body.get("ok") is True
+        ok = resp.status_code < 400 and (completed or accepted)
         return {
             "handler": "para_delegate",
             "ok": ok,
             "status_code": resp.status_code,
             "source": "para_webhook",
+            "accepted": accepted,
+            "completed": completed,
+            "task_id": body.get("task_id") or body.get("para_task_id") or "",
+            "status": (
+                "para_task_completed"
+                if completed
+                else "para_task_accepted" if accepted else "para_webhook_unknown"
+            ),
+            "outcome": "terminal" if completed else "unknown",
+            "requires_reconciliation": not completed,
+            "retryable": False,
             "response": body,
             "request": _facade()._public_request(req),
             "error": "" if ok else str(body.get("error") or body.get("detail") or resp.text[:500]),

@@ -133,7 +133,10 @@ class TestRunEmployeeAgentLoop:
         assert result["output"] == "Hello, I can help with that."
         assert result["rounds"] == 1
 
-    @patch("app.application.tools.workflow.execute_workflow_tool", return_value='{"success": true}')
+    @patch(
+        "app.application.tools.workflow.execute_workflow_tool",
+        return_value='{"success": true}',
+    )
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")
     @patch("app.infrastructure.llm.client.require_api_key")
@@ -159,6 +162,7 @@ class TestRunEmployeeAgentLoop:
             tools=[{"type": "function", "function": {"name": "tool1"}}],
             max_iterations=2,
         )
+        assert mock_exec.call_count == 2
         assert result["max_iterations_reached"] is True
         assert result["ok"] is False
         assert result["exit_status"] == "max_iterations"
@@ -179,48 +183,6 @@ class TestRunEmployeeAgentLoop:
         assert result["ok"] is False
         assert result["error"] == "员工模型调用失败，请稍后重试"
         assert "timeout" not in result["error"]
-
-    @patch("app.application.tools.workflow.execute_workflow_tool", return_value='{"success": true}')
-    @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
-    @patch("app.infrastructure.llm.client.get_openai_compatible_client")
-    @patch("app.infrastructure.llm.client.require_api_key")
-    def test_tool_call_with_gate_blocked(self, mock_key, mock_client, mock_model, mock_exec):
-        mock_completion = MagicMock()
-        tc = MagicMock()
-        tc.id = "call_1"
-        tc.function.name = "dangerous_tool"
-        tc.function.arguments = '{"action": "delete"}'
-        msg = MagicMock()
-        msg.content = ""
-        msg.tool_calls = [tc]
-        mock_completion.choices = [MagicMock(message=msg)]
-
-        # Second iteration: no tool calls, text response
-        mock_completion2 = MagicMock()
-        msg2 = MagicMock()
-        msg2.content = "Tool was blocked"
-        msg2.tool_calls = None
-        mock_completion2.choices = [MagicMock(message=msg2)]
-
-        mock_client_instance = MagicMock()
-        mock_client_instance.chat.completions.create.side_effect = [
-            mock_completion,
-            mock_completion2,
-        ]
-        mock_client.return_value = mock_client_instance
-
-        gate = MagicMock(return_value={"ok": False, "reason": "not allowed"})
-
-        result = run_employee_agent_loop(
-            employee_id="emp1",
-            system_prompt="test",
-            task="do something",
-            tools=[{"type": "function", "function": {"name": "dangerous_tool"}}],
-            gate=gate,
-        )
-        assert result["ok"] is False
-        assert result["exit_status"] == "tool_blocked"
-        assert any(t.get("blocked") for t in result["tool_calls"])
 
     @patch(
         "app.application.tools.workflow.execute_workflow_tool",
@@ -261,7 +223,7 @@ class TestRunEmployeeAgentLoop:
             tools=[{"type": "function", "function": {"name": "tool1"}}],
         )
         assert result["ok"] is False
-        assert result["exit_status"] == "tool_failed"
+        assert result["exit_status"] == "unknown"
         assert result["tool_calls"][0]["success"] is False
 
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
@@ -294,36 +256,6 @@ class TestRunEmployeeAgentLoop:
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")
     @patch("app.infrastructure.llm.client.require_api_key")
-    def test_gate_error_fails_closed(self, mock_key, mock_client, mock_model):
-        tool_call = MagicMock()
-        tool_call.id = "call_gate"
-        tool_call.function.name = "tool1"
-        tool_call.function.arguments = "{}"
-        first = MagicMock(
-            choices=[MagicMock(message=MagicMock(content="", tool_calls=[tool_call]))]
-        )
-        second = MagicMock(
-            choices=[MagicMock(message=MagicMock(content="授权检查失败", tool_calls=None))]
-        )
-        mock_client.return_value.chat.completions.create.side_effect = [first, second]
-
-        with patch("app.application.tools.workflow.execute_workflow_tool") as execute:
-            result = run_employee_agent_loop(
-                employee_id="emp1",
-                system_prompt="test",
-                task="do something",
-                tools=[{"type": "function", "function": {"name": "tool1"}}],
-                gate=MagicMock(side_effect=RuntimeError("gate unavailable")),
-            )
-
-        execute.assert_not_called()
-        assert result["ok"] is False
-        assert result["exit_status"] == "tool_blocked"
-        assert result["tool_calls"][0]["reason"] == "工具授权检查失败，未执行"
-
-    @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
-    @patch("app.infrastructure.llm.client.get_openai_compatible_client")
-    @patch("app.infrastructure.llm.client.require_api_key")
     def test_default_system_prompt(self, mock_key, mock_client, mock_model):
         mock_completion = MagicMock()
         msg = MagicMock()
@@ -345,3 +277,107 @@ class TestRunEmployeeAgentLoop:
         call_args = mock_client_instance.chat.completions.create.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
         assert messages[0]["content"] == "你是智能员工助手。"
+
+
+@pytest.mark.parametrize(
+    "tools, verdict",
+    [
+        ([], {"ok": True}),
+        ([{"function": {"name": "other"}}], {"ok": True}),
+        ([{"function": {"name": "tool1"}}], {}),
+        ([{"function": {"name": "tool1"}}], None),
+        ([{"function": {"name": "tool1"}}], {"ok": "yes"}),
+        ([{"function": {"name": "tool1"}}], {"ok": False, "reason": "denied"}),
+        ([{"function": {"name": "tool1"}}], RuntimeError("gate unavailable")),
+    ],
+)
+def test_final_dispatch_requires_allowlisted_tool_and_valid_gate(tools, verdict):
+    call = MagicMock(id="call1")
+    call.function.name, call.function.arguments = "tool1", "{}"
+    messages = [
+        MagicMock(content="", tool_calls=[call]),
+        MagicMock(content="done", tool_calls=[]),
+    ]
+
+    def gate(name, args):
+        if isinstance(verdict, Exception):
+            raise verdict
+        return verdict
+
+    with (
+        patch("app.infrastructure.llm.client.require_api_key"),
+        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
+        patch("app.application.tools.workflow.execute_workflow_tool") as execute,
+    ):
+        client.return_value.chat.completions.create.side_effect = [
+            MagicMock(choices=[MagicMock(message=m)]) for m in messages
+        ]
+        result = run_employee_agent_loop(
+            employee_id="e",
+            system_prompt="",
+            task="t",
+            model="test",
+            tools=tools,
+            gate=gate,
+        )
+    execute.assert_not_called()
+    assert result["ok"] is False
+    assert result["exit_status"] == "tool_blocked"
+
+
+def _run_action_sequence(arguments, results):
+    calls = []
+    for index, raw in enumerate(arguments):
+        call = MagicMock(id=f"action-{index}")
+        call.function.name, call.function.arguments = "tool1", raw
+        calls.append(MagicMock(content="", tool_calls=[call]))
+    calls.append(MagicMock(content="done", tool_calls=[]))
+    with (
+        patch("app.infrastructure.llm.client.require_api_key"),
+        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
+        patch(
+            "app.application.tools.workflow.execute_workflow_tool", side_effect=results
+        ) as execute,
+    ):
+        client.return_value.chat.completions.create.side_effect = [
+            MagicMock(choices=[MagicMock(message=message)]) for message in calls
+        ]
+        result = run_employee_agent_loop(
+            employee_id="employee",
+            system_prompt="",
+            task="task",
+            model="test",
+            tools=[{"function": {"name": "tool1"}}],
+        )
+    return result, execute.call_count
+
+
+def test_corrected_arguments_supersede_only_unexecuted_validation_failure():
+    result, count = _run_action_sequence(["{broken", '{"path":"valid"}'], ['{"success":true}'])
+    assert count == 1 and result["ok"] is True
+    assert result["tool_calls"][0]["superseded_by"] == "action-1"
+    assert result["tool_calls"][0]["success"] is False
+
+
+def test_later_success_cannot_erase_an_executed_failure():
+    result, count = _run_action_sequence(
+        ["{}", '{"new":true}'], ['{"success":false,"error":"failed"}', '{"success":true}']
+    )
+    assert count == 2 and result["ok"] is False
+    assert not result["tool_calls"][0].get("superseded_by")
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        ConnectionError("lost receipt"),
+        "invalid tool receipt",
+        '{"success":false,"execution_state":"unknown"}',
+        '{"success":true,"status":"accepted"}',
+        '{"success":false,"retryable":false,"error":"denied"}',
+    ],
+)
+def test_unknown_or_nonretryable_action_cannot_replay(outcome):
+    result, count = _run_action_sequence(["{}", "{}"], [outcome, '{"success":true}'])
+    assert count == 1 and result["ok"] is False
+    assert result["retryable"] is False

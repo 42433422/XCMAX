@@ -88,7 +88,16 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
             }
         else:
             try:
-                output = self._tool_executor.execute(step, runtime_context=ctx)
+                from app.application.agent_orchestrator.tool_executor import (
+                    execute_with_tool_deadline,
+                )
+
+                output = execute_with_tool_deadline(
+                    self._tool_executor,
+                    step,
+                    runtime_context=ctx,
+                    timeout_seconds=float(getattr(spec, "timeout_seconds", 0) or 0),
+                )
             except _facade().RECOVERABLE_ERRORS:
                 _facade().logger.exception("agent tool execution failed")
                 output = {
@@ -97,6 +106,16 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
                     "message": "工具执行失败",
                 }
         step.output = dict(output or {})
+        if step.output.get("retryable") is False:
+            run.metadata["non_retryable"] = True
+        if step.output.get("outcome") == "unknown" or step.output.get("reconciliation_required"):
+            run.metadata["non_retryable"] = True
+            run.metadata["recovery"] = {
+                "state": "manual_reconciliation_required",
+                "error_code": str(step.output.get("error_code") or "tool_outcome_unknown"),
+                "step_ids": [step.step_id],
+                "idempotency_key": ctx["idempotency_key"],
+            }
         step.finished_at = _facade().utc_now_iso()
         step.duration_ms = int((_facade().time.perf_counter() - started) * 1000)
         tool_call.output = _facade().copy.deepcopy(step.output)
@@ -133,7 +152,11 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
         step.error = str(step.output.get("message") or step.output.get("error") or "tool failed")
         tool_call.status = "failed"
         tool_call.error = step.error
-        if str(step.output.get("error_code") or "") != "tool_billing_blocked":
+        if (
+            str(step.output.get("error_code") or "") != "tool_billing_blocked"
+            and not step.output.get("reconciliation_required")
+            and step.output.get("outcome") != "unknown"
+        ):
             self._record_tool_usage_refund(run, tool_call, reason=step.error)
         self._refresh_run_cost_metadata(run)
         run.add_event(

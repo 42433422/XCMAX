@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "scripts" / "dev" / "publish_ci_workflows_to_root.py"
@@ -80,3 +87,58 @@ def test_corporate_component_workflows_are_published_with_root_paths() -> None:
     assert "cache-dependency-path: 成都修茈科技有限公司/package-lock.json" in root_frontend[1]
     assert "working-directory: 成都修茈科技有限公司/vibe-coding" in vibe[1]
     assert "- '成都修茈科技有限公司/vibe-coding/**'" in vibe[1]
+
+
+@pytest.mark.parametrize("failed_workflow", ["", "fhd-security-full-scan.yml"])
+def test_nightly_dispatch_supplies_required_inputs_and_propagates_failure(
+    tmp_path: Path, failed_workflow: str
+) -> None:
+    source = REPO_ROOT / "FHD/.github/workflows/nightly-full.yml"
+    rendered = publisher._render_fhd(source)
+    assert rendered is not None
+    workflow = yaml.load(rendered[1], Loader=yaml.BaseLoader)
+    fanout = workflow["jobs"]["dispatch-nightly"]["steps"][-1]
+    assert fanout["env"]["RELEASE_SHA"] == "${{ steps.target.outputs.sha }}"
+    calls = tmp_path / "calls.jsonl"
+    gh = tmp_path / "gh"
+    gh.write_text(
+        f"#!{sys.executable}\nimport json, os, sys\n"
+        "with open(os.environ['CALLS'], 'a') as f: f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+        "sys.exit(1 if sys.argv[3] == os.environ['FAILED_WORKFLOW'] else 0)\n"
+    )
+    gh.chmod(0o700)
+    sha = "fd143dae58e26f01b9a9d86716abe7045fa1d507"
+    result = subprocess.run(
+        ["bash", "-c", fanout["run"]],
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "CALLS": str(calls),
+            "FAILED_WORKFLOW": failed_workflow,
+            "REF": "main",
+            "RELEASE_SHA": sha,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == (1 if failed_workflow else 0)
+    dispatched = [json.loads(line) for line in calls.read_text().splitlines()]
+    assert len(dispatched) == 7
+    for command in dispatched:
+        assert command[:2] == ["workflow", "run"]
+        assert command[3:5] == ["--ref", "main"]
+        supplied = dict(item.split("=", 1) for item in command[6::2])
+        target = yaml.load(
+            (REPO_ROOT / ".github/workflows" / command[2]).read_text(), Loader=yaml.BaseLoader
+        )
+        declaration = target["on"]["workflow_dispatch"] or {}
+        required = {
+            key
+            for key, spec in declaration.get("inputs", {}).items()
+            if spec.get("required") == "true" and "default" not in spec
+        }
+        assert required <= supplied.keys()
+        assert supplied == (
+            {"release_sha": sha} if command[2] == "fhd-security-full-scan.yml" else {}
+        )

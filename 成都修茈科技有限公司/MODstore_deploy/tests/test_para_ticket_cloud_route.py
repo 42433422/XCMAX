@@ -150,7 +150,6 @@ def test_transport_failures_do_not_create_a_second_task(monkeypatch, failure):
         "_allow_local_workdir": True,
         "_get_para_token": {"token": "test", "source": "test"},
         "_resolve_dispatch_devices": (1, devices, "offline"),
-        "_force_single_device_attempt": None,
     }.items():
         monkeypatch.setattr(mod, name, lambda *a, value=value: value)
     monkeypatch.setattr(mod, "_write_outbox", lambda req: outboxes.append(req) or "test-outbox")

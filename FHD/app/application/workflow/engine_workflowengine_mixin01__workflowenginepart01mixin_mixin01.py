@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable
 from contextvars import copy_context
 
 
@@ -59,6 +60,15 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         checkpointer: _facade().Any | None = None,
         resume_state: dict[str, _facade().Any] | None = None,
     ) -> _facade().WorkflowRunResult:
+        from app.application.workflow.types import validate_plan_graph
+
+        if error := validate_plan_graph(plan):
+            return _facade().WorkflowRunResult(
+                plan_id=plan.plan_id,
+                success=False,
+                final_context={"workflow_status": {"state": "blocked", "message": error}},
+                message=error,
+            )
         if resume_state is not None:
             runtime_context = dict(resume_state.get("runtime_context") or {})
             executed: set[str] = set(resume_state.get("executed", set()))
@@ -70,45 +80,43 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         schema = state_schema or self._default_state_schema
         node_results: list[_facade().NodeExecutionResult] = []
         pending: dict[str, _facade().WorkflowNode] = {
-            node.node_id: node for node in plan.nodes if node.node_id not in executed
+            node.node_id: node for node in plan.nodes if node.node_id not in executed | blocked
         }
-        stalled_rounds = 0
 
         def _is_write_node(node: _facade().WorkflowNode) -> bool:
             return node.risk == "high" or not node.idempotent
 
         def _ready(node: _facade().WorkflowNode) -> bool:
-            return node.node_id not in blocked and all(dep in executed for dep in node.depends_on)
+            state = self._routing_state(
+                node, plan, executed, blocked, runtime_context.get("node_outputs", {})
+            )
+            if state == "skipped":
+                blocked.add(node.node_id)
+            return bool(state == "ready")
 
         while pending:
-            stalled = True
-            progressed = False
-            while True:
-                ready_routers = [
-                    node
-                    for node in pending.values()
-                    if (node.branches or node.next is not None) and _ready(node)
-                ]
-                if not ready_routers:
-                    break
-                stalled = False
-                progressed = True
-                for node in ready_routers:
-                    result = self._run_node(node, runtime_context, max_retries=max_retries)
-                    self._record_result(
-                        result, runtime_context, schema, node_results, executed, pending
-                    )
-                    if not result.success:
-                        return self._fail_run(plan, node_results, runtime_context, result)
-                    self._advance_router(node, result.output, pending, blocked)
+            before = (len(executed), len(blocked))
+            ready_routers = [
+                node
+                for node in pending.values()
+                if (node.branches or node.next is not None) and _ready(node)
+            ]
+            for node in ready_routers:
+                if not _ready(node):
+                    continue
+                result = self._run_node(node, runtime_context, max_retries=max_retries)
+                self._record_result(
+                    result, runtime_context, schema, node_results, executed, pending
+                )
+                if not result.success:
+                    return self._fail_run(plan, node_results, runtime_context, result)
+                self._maybe_checkpoint(checkpointer, plan, runtime_context, executed, blocked)
             ready_non_routers = [
                 node
                 for node in pending.values()
                 if not (node.branches or node.next is not None) and _ready(node)
             ]
             if ready_non_routers:
-                stalled = False
-                progressed = True
                 read_nodes = [n for n in ready_non_routers if not _is_write_node(n)]
                 write_nodes = [n for n in ready_non_routers if _is_write_node(n)]
                 failed = self._run_ready_batch(
@@ -121,29 +129,30 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                     node_results,
                     executed,
                     pending,
+                    on_progress=lambda: self._maybe_checkpoint(
+                        checkpointer, plan, runtime_context, executed, blocked
+                    ),
                 )
                 if failed is not None:
                     return self._fail_run(plan, node_results, runtime_context, failed)
-            if progressed:
+            for node_id in blocked:
+                pending.pop(node_id, None)
+            if before == (len(executed), len(blocked)):
+                message = "工作流依赖无法继续解析: " + ",".join(pending)
+                runtime_context["workflow_status"] = {
+                    "state": "blocked",
+                    "unresolved_nodes": list(pending),
+                    "message": message,
+                }
+                return _facade().WorkflowRunResult(
+                    plan_id=plan.plan_id,
+                    success=False,
+                    node_results=node_results,
+                    final_context=runtime_context,
+                    message=message,
+                )
+            if not ready_routers and not ready_non_routers:
                 self._maybe_checkpoint(checkpointer, plan, runtime_context, executed, blocked)
-            if stalled:
-                stalled_rounds += 1
-                if stalled_rounds > 1:
-                    unresolved = ",".join(pending.keys())
-                    runtime_context["workflow_status"] = {
-                        "state": "blocked",
-                        "unresolved_nodes": list(pending.keys()),
-                        "message": f"工作流依赖无法继续解析: {unresolved}",
-                    }
-                    return _facade().WorkflowRunResult(
-                        plan_id=plan.plan_id,
-                        success=False,
-                        node_results=node_results,
-                        final_context=runtime_context,
-                        message=f"工作流依赖无法继续解析: {unresolved}",
-                    )
-            else:
-                stalled_rounds = 0
         runtime_context["workflow_status"] = {
             "state": "completed",
             "executed_nodes": list(executed),
@@ -238,7 +247,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         node_results: list[_facade().NodeExecutionResult] = []
         for tr in traces:
             node_id = str(tr.get("node_id", ""))
-            output = outputs.get(node_id, {})
+            output = tr.get("output", outputs.get(node_id, {}))
             node_results.append(
                 _facade().NodeExecutionResult(
                     node_id=node_id,
@@ -274,6 +283,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         node_results: list[_facade().NodeExecutionResult],
         executed: set[str],
         pending: dict[str, _facade().WorkflowNode],
+        on_progress: Callable[[], object] | None = None,
     ) -> _facade().NodeExecutionResult | None:
         """并发/串行执行就绪节点并归并上下文；返回首个失败节点结果，全部成功返回 None。"""
         batch_results: list[_facade().NodeExecutionResult] = []
@@ -304,12 +314,22 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         else:
             for node in read_nodes:
                 batch_results.append(self._run_node(node, runtime_context, max_retries=max_retries))
-        for node in write_nodes:
-            batch_results.append(self._run_node(node, runtime_context, max_retries=max_retries))
+        first_failure = None
         for result in batch_results:
+            self._record_result(result, runtime_context, schema, node_results, executed, pending)
+            if not result.success and first_failure is None:
+                first_failure = result
+        if on_progress and any(result.success for result in batch_results):
+            on_progress()
+        if first_failure is not None:
+            return first_failure
+        for node in write_nodes:
+            result = self._run_node(node, runtime_context, max_retries=max_retries)
             self._record_result(result, runtime_context, schema, node_results, executed, pending)
             if not result.success:
                 return result
+            if on_progress:
+                on_progress()
         return None
 
     def _record_result(
@@ -323,7 +343,8 @@ class __WorkflowEnginePart01MixinPart01Mixin:
     ) -> None:
         """记录节点结果并归并上下文（主线程统一执行，避免并发写冲突）。"""
         node_results.append(result)
-        executed.add(result.node_id)
+        if result.success:
+            executed.add(result.node_id)
         pending.pop(result.node_id, None)
         runtime_context.setdefault("node_outputs", {})
         runtime_context["node_outputs"][result.node_id] = result.output

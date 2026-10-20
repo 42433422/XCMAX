@@ -42,7 +42,7 @@ Available tools (injected via ctx by blueprints.py):
     read_workspace_file(path)          — read a file relative to workspace_root
     write_workspace_file(path,content) — write / create a file
     list_workspace_dir(path=".")       — list directory entries
-    run_sandboxed_python(code)         — run Python in subprocess (std-lib only, 10 s limit)
+    run_sandboxed_python(code)         — disabled until an isolated sandbox is available
     http_get(url, headers)             — HTTP GET (from existing ctx)
     http_post(url, json_body)          — HTTP POST (from existing ctx)
     call_llm(messages)                 — nested LLM call for sub-tasks
@@ -94,7 +94,7 @@ TOOL_PROTOCOL_HEADER = """你是一个能执行真实工作的 AI 员工。
   read_workspace_file      params: path(str)                                     — 读取工作区文件，最多返回 8000 字符
   write_workspace_file     params: path(str), content(str)                       — 写入（创建或覆盖）文件
   list_workspace_dir       params: path(str, default=".")                        — 列出目录条目（最多 50 项）
-  run_sandboxed_python     params: code(str)                                     — 在隔离子进程中运行纯 Python（标准库）
+  run_sandboxed_python     params: code(str)                                     — 未配置真实隔离沙箱，执行已禁用
   http_get                 params: url(str), headers(dict)                       — 发起 HTTP GET
   http_post                params: url(str), json_body(dict)                     — 发起 HTTP POST
 

@@ -13,6 +13,20 @@ class ClarificationAnswerError(ValueError):
     """The answer does not resolve the currently pending input request."""
 
 
+def find_waiting_step(run: AgentRun, *, approved_step_id: str = "") -> AgentStep | None:
+    """Select the pending interaction, optionally constrained to an approved step."""
+    wanted = str(approved_step_id or "").strip()
+    return next(
+        (
+            step
+            for step in run.steps
+            if step.status == "waiting_user"
+            and (not wanted or wanted in {step.step_id, step.node_id})
+        ),
+        None,
+    )
+
+
 def apply_clarification_answer(run: AgentRun, *, step_id: str, parameters: dict[str, Any]) -> None:
     """Fill missing required inputs without approving the resulting business action."""
     step = next((item for item in run.steps if item.step_id == step_id), None)

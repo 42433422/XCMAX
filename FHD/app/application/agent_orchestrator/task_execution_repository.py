@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 import threading
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
@@ -198,20 +197,19 @@ _task_execution_repository: TaskExecutionRepository | None = None
 
 
 def get_task_execution_repository() -> TaskExecutionRepository:
+    from app.application.agent_orchestrator.run_repository import agent_memory_mode_enabled
+
     global _task_execution_repository
     if _task_execution_repository is None:
-        try:
-            repository = SQLAlchemyTaskExecutionRepository()
-            repository.get("")
-            _task_execution_repository = repository
-        except RECOVERABLE_ERRORS as exc:
-            require_durable = os.environ.get(
-                "XCAGI_AGENT_RUN_REQUIRE_DURABLE", ""
-            ).strip().lower() in {"1", "true", "yes", "on"}
-            if require_durable:
-                raise RuntimeError("durable task execution queue unavailable") from exc
-            logger.warning("Task execution SQL queue unavailable, using memory: %s", exc)
+        if agent_memory_mode_enabled():
             _task_execution_repository = InMemoryTaskExecutionRepository()
+        else:
+            try:
+                repository = SQLAlchemyTaskExecutionRepository()
+                repository.get("")
+            except RECOVERABLE_ERRORS as exc:
+                raise RuntimeError("durable task execution queue unavailable") from exc
+            _task_execution_repository = repository
     return _task_execution_repository
 
 
