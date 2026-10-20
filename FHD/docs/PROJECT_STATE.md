@@ -2,7 +2,7 @@
 
 > **本文件的唯一职责：说真话。** 不写愿景、不写"已完成"除非有证据。
 > 给人看，也给 AI 员工看——它们照字面信这里的每一行，所以这里只许写实测。
-> 最后更新：2026-09-17
+> 最后更新：2026-10-20（本次仅更新九项审计追踪；其他历史记录按对应 SSOT 核实）
 
 ## 一句话定位
 
@@ -16,12 +16,6 @@
 - 事件名如 `ops.intake.customer_ticket` 走 MODstore 发布与派发；duty 触发绑定 incident_bus，不写 NeuroBus subscribe。
 - FHD NeuroBus 仍服务宿主域事件与 Mod 钩子，**不承担**客服工单 intake→派发→回写闭环。
 - 短注：[`architecture/CUSTOMER_TICKET_BUS_SSOT.md`](./architecture/CUSTOMER_TICKET_BUS_SSOT.md)
-
-## 两份幻觉，真相在中间
-
-- **架构图骗你往高看**：DDD 四层 / NeuroBus 全套可靠性 / 一套大脑三端 / SSOT 元框架——看着 8 分。
-- **文档骗你往低看**：写 deps 漂移 31、k8s 漂移 51，**实测全是 0**；写"企业版无向量搜索"，其实 SQLite 暴力余弦**早已实现**。
-- **真相在中间**：很多地方**实物比文档好，但比架构差**。
 
 ## 状态数字来源（禁止自评）
 
@@ -80,8 +74,20 @@ L0 物理基底    DB schema🟢(旁路封+冻结) · 租户隔离🟢 · runtim
 
 ## 仍未解决（别假装）
 
-- 客服 `customer_ticket`：已定轨 **MODstore `incident_bus`**（enrich + `routing_plan` 真派发 + handler_failed 按 event_type 可观测）；**生产积压率仍需实跑验收**
-- Para 多 CLI 已有 fallback，但「真改代码→验证→回写」端到端未稳定证明
+2026-10-20 九项审计追踪（仅登记未闭环事项，不代表实现或验收；保留历史 1.0.0.6 验收，不操作生产及客户数据）：
+
+| ID | 问题 | 状态与剩余证据 |
+|---|---|---|
+| 01 | 收款幂等与等额分期 | Open：[候选 #2449](https://github.com/42433422/XCMAX/pull/2449) 的 df6d3f9 尚未验收，仍有上传 P0 失败；迁移、并发收款与完整集成待证。 |
+| 02 | 离线桥接账号隔离 | Open：#2449 已有按用户/会话过滤的候选实现；切换账号、登出及真实归属验收未闭环。 |
+| 03 | Agent 工具截止时间 | Open：[候选 #2451](https://github.com/42433422/XCMAX/pull/2451) 部分实现预算与未知结果保护；发布头 b6e33db 有未修入的测试失败，通用同步永久挂起回收及完整 LLM/I/O 边界仍缺。 |
+| 04 | 调度恢复与 SLO | Open：恢复代码/测试不等于生产 SHA 绑定的 SLO 样本与积压恢复证明，仍需实际验收。 |
+| 05 | MODstore 间歇线程异常 | Open：需复现、定位并重复并发验证，单次重跑成功不能销项。 |
+| 06 | 覆盖率证据 | Open：当前覆盖率报告与验收提交 SHA 的对应关系仍需核实，不沿用旧报告。 |
+| 07 | 工单完整生命周期 | Open：MODstore incident_bus 已定轨（enrich + routing_plan 真派发、handler_failed 可观测），Para 已有 CLI fallback；[主线 #2440](https://github.com/42433422/XCMAX/pull/2440) 与 [ETA 候选 #2446](https://github.com/42433422/XCMAX/pull/2446) 不替代无上游替身的真改代码→验证→回写及生产积压验收。 |
+| 08 | 编号 Mixin 与动态导入 | Open：显式依赖和恢复类型检查的完整证据待补。 |
+| 09 | JWT 刷新跨进程状态 | Open：#2449 已有持久化候选；原子跨进程单次消费及迁移/真实环境验收待证。 |
+
 - 存量生产库若历史 `SKIP_ALEMBIC` 过，需一次 `alembic stamp/upgrade` 对齐（发版流程执行，非代码缺口）
 - 认知 Processor 已挂生产 intent（失败 fallback unified）；域事件样板仅采购订单创建→`order.created` 持久化，未宣称全域落地
 - 认知全栈补齐（2026-07-29）：SCM lite 因果/反事实、技能契约开放世界、策略向持续学习、软约束规划、白名单自我反思已落地（见 `docs/architecture/COGNITIVE_FULL_STACK_20260729.md`）；全域业务因果与跨行业适配器仍需扩样板
