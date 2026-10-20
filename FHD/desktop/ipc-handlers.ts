@@ -22,7 +22,8 @@ import {
 } from './updater'
 import { cancelPreparedRollback } from './rollback'
 import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity, installUpdate } from './desktop-install-update'
-import { desktopOfflineDbPath, queryOffline } from './data-bridge'
+import { desktopOfflineDbPath } from './data-bridge'
+import { queryOfflineForSession } from './data-bridge-session'
 import { deleteSecret, getSecret, listSecrets, setSecret } from './secure-store'
 import { reportRendererError } from './desktop-resilience'
 
@@ -139,18 +140,24 @@ export function registerDesktopIpcHandlers(): void {
     }
   )
 
-  // 原生本地数据桥（离线只读）：后端 HTTP 不可用时前端可直读本地 SQLite。
-  handleTrusted('xcagi:offline-query', (_event, params: unknown) => {
+  // Offline reads use the sender's current session cookie, never renderer-supplied user IDs.
+  handleTrusted('xcagi:offline-query', async (event, params: unknown) => {
     const p = (params && typeof params === 'object' ? params : {}) as {
       kind?: string
       keyword?: string
       limit?: number
     }
-    return queryOffline(desktopOfflineDbPath(), {
-      kind: String(p.kind || ''),
-      keyword: p.keyword,
-      limit: p.limit,
-    })
+    const result = await queryOfflineForSession(
+      event.sender.session,
+      desktopOfflineDbPath(),
+      { kind: String(p.kind || ''), keyword: p.keyword, limit: p.limit },
+      `http://127.0.0.1:${DEFAULT_PORT}/`,
+      (process.env.SESSION_COOKIE_NAME || 'session_id').trim(),
+    )
+    if (!isTrustedIpcSender(event, desktopRuntime.mainWindow)) {
+      return { ok: false, reason: 'untrusted_sender' }
+    }
+    return result
   })
 
   // 端侧密钥链（safeStorage）：敏感配置加密落盘，明文只驻内存。

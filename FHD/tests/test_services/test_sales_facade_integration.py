@@ -136,16 +136,18 @@ class TestFacadeDelegationExactlyOnce:
         m.assert_called_once()
         assert m.call_args.args[0] == 1
 
-    def test_payment_delegates_to_payment_service(self):
+    @pytest.mark.parametrize("key", [None, "receipt-retry-1"])
+    def test_payment_delegates_to_payment_service(self, key):
         with patch(
             "app.application.sales_app_service.payment", return_value={"success": True}
         ) as m:
-            result = SalesAppService().payment(1, 100.0)
+            result = SalesAppService().payment(1, 100.0, idempotency_key=key)
         assert result["success"] is True
         m.assert_called_once()
         kwargs = m.call_args.kwargs
         assert kwargs["sales_order_id"] == 1
         assert kwargs["amount"] == 100.0
+        assert kwargs["idempotency_key"] == key
 
     def test_refund_delegates_to_payment_service(self):
         with patch("app.application.sales_app_service.refund", return_value={"success": True}) as m:
@@ -183,13 +185,18 @@ class TestRouterRequiredParamsMatchSignatures:
         assert result["success"] is True
         m.assert_called_once_with(1)
 
-    def test_router_payment_passes_required_params(self):
+    @pytest.mark.parametrize("key", [None, "receipt-retry-1"])
+    def test_router_payment_passes_required_params(self, key):
         with patch.object(SalesAppService, "payment", return_value={"success": True}) as m:
             result = _registered_router_sales(
-                "payment", {"order_id": 1, "amount": 100.0}, {}, "shared", ""
+                "payment",
+                {"order_id": 1, "amount": 100.0, "idempotency_key": key},
+                {},
+                "shared",
+                "",
             )
         assert result["success"] is True
-        m.assert_called_once_with(1, 100.0)
+        m.assert_called_once_with(1, 100.0, idempotency_key=key)
 
     def test_router_refund_passes_required_params(self):
         with patch.object(SalesAppService, "refund", return_value={"success": True}) as m:

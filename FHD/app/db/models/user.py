@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -110,3 +110,12 @@ class Session(Base):
     tenant_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
 
     user: Mapped[User] = relationship("User", back_populates="sessions")
+
+
+class WebRefreshTokenUse(Base):
+    """Consumed web-refresh identifiers in the shared host database."""
+
+    __tablename__ = "web_refresh_token_uses"
+
+    jti: Mapped[str] = mapped_column(String(64), primary_key=True)
+    expires_at: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)

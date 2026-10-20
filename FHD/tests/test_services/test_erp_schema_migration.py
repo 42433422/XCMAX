@@ -278,9 +278,12 @@ class TestAlembicForwardUpgrade:
     def test_repair_revision_fixes_stamped_incomplete_products(self, _db_url: str) -> None:
         from sqlalchemy import create_engine
 
+        command.upgrade(_alembic_config(), "2026_08_13_tutorial_v2")
         engine = create_engine(_db_url)
         try:
             with engine.begin() as connection:
+                connection.execute(text("DROP TABLE products"))
+                connection.execute(text("DROP TABLE uom_units"))
                 connection.execute(
                     text(
                         "CREATE TABLE products ("
@@ -288,11 +291,17 @@ class TestAlembicForwardUpgrade:
                     )
                 )
                 connection.execute(text("CREATE TABLE uom_units (id INTEGER PRIMARY KEY)"))
+                connection.execute(text("INSERT INTO products VALUES (7, 'preserved-product', 1)"))
         finally:
             engine.dispose()
 
-        command.stamp(_alembic_config(), "2026_08_13_tutorial_v2")
         command.upgrade(_alembic_config(), "head")
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT id, name, tenant_id FROM products")).one() == (
+                7,
+                "preserved-product",
+                1,
+            )
 
         assert {
             "base_uom_id",
