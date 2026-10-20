@@ -248,10 +248,12 @@ def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(reader_case, 
 def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case, disposition):
     from datetime import datetime
 
-    from modstore_server.models import get_session_factory
+    from modstore_server.models import User, get_session_factory
     from modstore_server.models_cs import (
         CustomerServiceAction,
         CustomerServiceAuditLog,
+        CustomerServiceMessage,
+        CustomerServiceSession,
         CustomerServiceTicket,
     )
     from tests.test_customer_service_api import _as_user, _make_user
@@ -296,6 +298,19 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
                     {"created_at": old, "updated_at": old}
                 )
                 db.commit()
+        with get_session_factory()() as db:
+            original_session_id = db.get(CustomerServiceTicket, ticket_id).session_id
+            session = db.get(CustomerServiceSession, original_session_id)
+            original_owner = session.user_id
+            session.user_id = db.get(CustomerServiceTicket, ids[1]).user_id
+            db.commit()
+        denied = client.post(url, json=body)
+        assert denied.status_code == 409 and "原客服会话不可核验" in denied.json()["detail"]
+        with get_session_factory()() as db:
+            assert db.get(CustomerServiceTicket, ticket_id).status == "processing"
+            assert db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count() == 0
+            db.get(CustomerServiceSession, original_session_id).user_id = original_owner
+            db.commit()
         response = client.post(url, json=body)
         assert response.status_code == 200, response.text
         assert response.json()["ticket"]["status"] == disposition
@@ -317,6 +332,17 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
         audits = [a for a in detail["audit_logs"] if a["event_type"] == event]
         assert len(audits) == 1 and audits[0]["actor_user_id"] == admin.id
         assert client.post(url, json={**body, "note": "different close request"}).status_code == 409
+        with get_session_factory()() as db:
+            messages = db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).all()
+            assert len(messages) == 1 and messages[0].user_id == detail["ticket"]["user_id"]
+            assert body["note"] in messages[0].content
+            assert body["verification"] not in messages[0].content
+            owner = db.get(User, detail["ticket"]["user_id"])
+        with _as_user(owner):
+            visible = client.get(f"/api/customer-service/sessions/{detail['ticket']['session_id']}")
+            assert visible.status_code == 200
+            assert body["note"] in visible.json()["messages"][-1]["content"]
+            assert body["verification"] not in str(visible.json())
         if disposition == "expired":
             from modstore_server.customer_issue_intake import (
                 dispatch_issue_event,

@@ -168,6 +168,9 @@ def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request:
         if recent or ticket.intent == "custom_delivery":
             raise HTTPException(409, "仅可处置超过两个月且无后续活动的非定制旧单")
 
+    session = db.get(CustomerServiceSession, ticket.session_id)
+    if session is None or session.user_id != ticket.user_id:
+        raise HTTPException(409, "原客服会话不可核验，不能关闭工单")
     now = datetime.now(UTC)
     evidence = json_loads(ticket.evidence_json, {})
     resolution = evidence.get("resolution")
@@ -200,6 +203,19 @@ def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request:
             idempotency_key=key,
         )
     )
+    notice = f"工单 {ticket.ticket_no}：{'已过期不再处理（未修复，资金权益不变）' if expired else '管理员验收并关闭'}。{request['note'].strip()}"
+    db.add(
+        CustomerServiceMessage(
+            session_id=ticket.session_id,
+            ticket_id=ticket.id,
+            user_id=ticket.user_id,
+            role="assistant",
+            content=notice,
+            created_at=now,
+        )
+    )
+    setattr(session, "last_message", notice)
+    setattr(session, "updated_at", now)
     audit(
         db,
         actor=user,
