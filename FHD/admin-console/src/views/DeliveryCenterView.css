@@ -81,8 +81,8 @@
 .delivery-timeline li:not(:last-child)::after { content: ''; position: absolute; top: 14px; left: 32px; right: 6px; height: 1px; background: #cfdeeb; }
 .delivery-timeline li > span { z-index: 1; display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px; border-radius: 50%; background: #fff; border: 1px solid #ccdae8; }
 .delivery-timeline strong,.delivery-timeline small { display: block; }
-.delivery-timeline strong { color: #597087; font-size: 11px; }
-.delivery-timeline small { font-size: 9px; }
+.delivery-timeline strong { color: #597087; font-size: 12px; }
+.delivery-timeline small { font-size: 11px; }
 .delivery-timeline .done > span,.delivery-timeline .active > span { border-color: #4b91dc; background: #2f7ed7; color: #fff; }
 .delivery-timeline .done:not(:last-child)::after { background: #6fa5dc; }
 .delivery-timeline .active strong { color: #2469af; }
@@ -106,8 +106,8 @@
 .delivery-run { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
 .delivery-run > div { padding: 8px; border-radius: 9px; background: #f1f6fb; }
 .delivery-run span,.delivery-run strong { display: block; }
-.delivery-run span { color: var(--muted); font-size: 9px; }
-.delivery-run strong { margin-top: 2px; color: #355573; font-size: 11px; }
+.delivery-run span { color: var(--muted); font-size: 10px; }
+.delivery-run strong { margin-top: 2px; color: #355573; font-size: 12px; }
 .delivery-run__error { grid-column: 1/-1; margin: 0; padding: 8px; border-radius: 8px; background: #fff0f0; color: #a94343; font-size: 10px; white-space: pre-wrap; }
 
 .delivery-artifacts { margin: 0 18px 15px; padding: 13px; border: 1px solid #e0e9f2; border-radius: 12px; background: #f9fbfd; }
