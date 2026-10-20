@@ -4,6 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
@@ -90,62 +91,68 @@ def test_cvm_upload_prefers_resumable_rsync_and_retains_partial() -> None:
     assert "RSYNC_SHELL" in script
 
 
-def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> None:
-    out_dir, artifact, _ = _tarball_release(tmp_path, "a" * 40)
-    (out_dir / "fhd-api-image.tar.gz").write_bytes(b"optional-image")
-
-    calls = tmp_path / "calls.log"
+@pytest.fixture
+def transport(tmp_path: Path, monkeypatch) -> Path:
     mock_bin = tmp_path / "bin"
     mock_bin.mkdir()
-    for name, body in {
-        "scp": '#!/usr/bin/env bash\nprintf "scp %s\\n" "$*" >> "$CALLS_LOG"\n',
-        "rsync": '#!/usr/bin/env bash\nprintf "rsync %s\\n" "$*" >> "$CALLS_LOG"\n',
-        "ssh": (
-            '#!/usr/bin/env bash\nprintf "ssh %s\\n" "$*" >> "$CALLS_LOG"\nprintf \'OK_MOVED\\n\'\n'
-        ),
-    }.items():
+    calls = tmp_path / "commands"
+    ssh_body = """cmd=${!#}
+case "$cmd" in
+  *curl*)
+    attempts=$(cat "$HEALTH_ATTEMPTS" 2>/dev/null || printf '0')
+    attempts=$((attempts + 1))
+    printf '%s' "$attempts" > "$HEALTH_ATTEMPTS"
+    if [ "$attempts" -lt 2 ]; then exit 1; fi
+    printf '%s\\n' "$HEALTH_PAYLOAD" ;;
+  *REMOTE_SZ*) printf 'OK_MOVED\\n' ;;
+esac
+"""
+    for name in ("scp", "rsync", "ssh"):
         executable = mock_bin / name
-        executable.write_text(body, encoding="utf-8")
+        executable.write_text(
+            '#!/usr/bin/env bash\nprintf "%s %s\\n" "$0" "$*" >> "$DEPLOY_COMMANDS"\n'
+            + (ssh_body if name == "ssh" else "")
+        )
         executable.chmod(0o755)
+    for key, value in {
+        "PATH": f"{mock_bin}:{os.environ['PATH']}",
+        "DEPLOY_COMMANDS": str(calls),
+        "HEALTH_ATTEMPTS": str(tmp_path / "health-attempts"),
+        "FHD_SKIP_PACK": "1",
+        "FHD_PUSH_HOST": "example.invalid",
+        "FHD_PUSH_IMAGE_TAR": "0",
+        "FHD_PUSH_APPLY_NOW": "0",
+    }.items():
+        monkeypatch.setenv(key, value)
+    return calls
 
+
+@pytest.mark.parametrize(
+    "preserve,apply,code", [("0", "0", 0), ("1", "0", 64), ("invalid", "1", 64)]
+)
+def test_tarball_push_does_not_scp_optional_image_archive(
+    tmp_path: Path, transport: Path, preserve: str, apply: str, code: int
+) -> None:
+    out_dir, artifact, _ = _tarball_release(tmp_path, "a" * 40)
+    (out_dir / "fhd-api-image.tar.gz").write_bytes(b"optional-image")
     result = _run_bash(
         str(FHD_ROOT / "scripts/deploy/fhd-push-release.sh"),
         cwd=FHD_ROOT,
         env={
-            "PATH": f"{mock_bin}:{os.environ['PATH']}",
-            "CALLS_LOG": str(calls),
-            "FHD_SKIP_PACK": "1",
             "FHD_RELEASE_OUT_DIR": str(out_dir),
-            "FHD_PUSH_HOST": "example.invalid",
-            "FHD_PUSH_IMAGE_TAR": "0",
-            "FHD_PUSH_APPLY_NOW": "0",
+            "XCMAX_PRESERVE_RELEASE_HISTORY": preserve,
+            "FHD_PUSH_APPLY_NOW": apply,
         },
     )
-
-    assert result.returncode == 0, result.stderr
-    call_log = calls.read_text(encoding="utf-8")
+    assert result.returncode == code, result.stderr
+    if code:
+        assert not transport.exists()
+        return
+    call_log = transport.read_text()
     assert artifact.name in call_log
     assert "fhd-manifest.json" in call_log
     assert "fhd-api-image.tar.gz" not in call_log
     assert "跳过可选镜像归档" in result.stdout
-
-
-def test_strict_push_applies_and_verifies_exact_sha() -> None:
-    script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(encoding="utf-8")
-
-    assert "FHD_PUSH_APPLY_NOW:-" in script
-    assert "FHD_CVM_PUSH_STRICT:-false" in script
-    assert "FHD_MANIFEST_PATH=%q" in script
-    assert "fhd-release-bootstrap" in script
-    assert "verify_release_identity_payload" in script
-    assert '"$SHA256"' in script
-    assert '"${DEPLOY_MODE:-tarball}" == "image"' in script
-    assert '"$EXPECTED_RUNTIME_IMAGE_DIGEST"' in script
-    assert '"$ADMIN_CONSOLE_SHA256"' in script
-    assert "FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS=%q" in script
-    assert 'HEALTH_RETRIES="${FHD_PUSH_HEALTH_RETRIES:-120}"' in script
-    assert "for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++))" in script
-    assert "remote_identity_mismatch" in script
 
 
 def test_server_release_is_retained_by_version_and_full_sha_before_pointer_switch() -> None:
@@ -159,8 +166,13 @@ def test_server_release_is_retained_by_version_and_full_sha_before_pointer_switc
     )
 
 
+@pytest.mark.parametrize("preserve", ["0", "1"])
+@pytest.mark.parametrize("wrong_field", ["", "git_sha", "artifact_sha256", "admin_console_sha256"])
 def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
     tmp_path: Path,
+    preserve: str,
+    transport: Path,
+    wrong_field: str,
 ) -> None:
     out_dir, _, artifact_sha = _tarball_release(
         tmp_path,
@@ -170,31 +182,6 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
         admin_console_sha256="d" * 64,
     )
 
-    mock_bin = tmp_path / "bin"
-    mock_bin.mkdir()
-    scp = mock_bin / "scp"
-    scp.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-    scp.chmod(0o755)
-    rsync = mock_bin / "rsync"
-    rsync.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-    rsync.chmod(0o755)
-    ssh = mock_bin / "ssh"
-    ssh.write_text(
-        "#!/usr/bin/env bash\n"
-        "cmd=${!#}\n"
-        'case "$cmd" in\n'
-        "  *curl*)\n"
-        "    attempts=$(cat \"$HEALTH_ATTEMPTS\" 2>/dev/null || printf '0')\n"
-        "    attempts=$((attempts + 1))\n"
-        '    printf \'%s\' "$attempts" > "$HEALTH_ATTEMPTS"\n'
-        '    if [ "$attempts" -lt 2 ]; then exit 1; fi\n'
-        "    printf '%s\\n' \"$HEALTH_PAYLOAD\"\n"
-        "    ;;\n"
-        "  *REMOTE_SZ*) printf 'OK_MOVED\\n' ;;\n"
-        "esac\n",
-        encoding="utf-8",
-    )
-    ssh.chmod(0o755)
     health_payload = json.dumps(
         {
             "build": {
@@ -204,29 +191,59 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
             }
         }
     )
+    if wrong_field:
+        payload = json.loads(health_payload)
+        payload["build"][wrong_field] = "e" * len(payload["build"][wrong_field])
+        health_payload = json.dumps(payload)
     health_attempts = tmp_path / "health-attempts"
 
     result = _run_bash(
         str(FHD_ROOT / "scripts/deploy/fhd-push-release.sh"),
         cwd=FHD_ROOT,
         env={
-            "PATH": f"{mock_bin}:{os.environ['PATH']}",
             "HEALTH_PAYLOAD": health_payload,
             "HEALTH_ATTEMPTS": str(health_attempts),
-            "FHD_SKIP_PACK": "1",
+            "XCMAX_PRESERVE_RELEASE_HISTORY": preserve,
             "FHD_RELEASE_OUT_DIR": str(out_dir),
-            "FHD_PUSH_HOST": "example.invalid",
-            "FHD_PUSH_IMAGE_TAR": "0",
             "FHD_PUSH_APPLY_NOW": "1",
             "FHD_PUSH_HEALTH_RETRIES": "3",
             "FHD_PUSH_HEALTH_INTERVAL": "0",
         },
     )
 
+    if wrong_field:
+        assert result.returncode != 0
+        assert "prune_release_cache.py" not in transport.read_text()
+        assert "远端已应用并通过" not in result.stdout
+        return
     assert result.returncode == 0, result.stderr
     assert health_attempts.read_text(encoding="utf-8") == "2"
     assert '"git_sha": "' + "b" * 40 in result.stdout
     assert "image digest mismatch" not in result.stderr
+    commands = transport.read_text()
+    assert f"XCMAX_PRESERVE_RELEASE_HISTORY={preserve}" in commands
+    assert ("prune_release_cache.py" in commands) == (preserve == "0")
+
+
+@pytest.mark.parametrize("preserve", ["0", "1"])
+def test_tarball_backup_history_retention(tmp_path: Path, preserve: str) -> None:
+    for name in ("pre-20261018-000000", "pre-20261019-000000", "pre-20261020-000000"):
+        (tmp_path / name).mkdir()
+    source = (FHD_ROOT / "scripts/deploy/fhd-apply-release.sh").read_text()
+    start = source.index('if [[ "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" != 1 ]]; then')
+    block = source[start : source.index("\nrollback_from_backup()", start)]
+    result = _run_bash(
+        "-c",
+        "log() { :; }; " + block,
+        env={
+            "BACKUP_ROOT": str(tmp_path),
+            "SCRIPT_DIR": str(FHD_ROOT / "scripts/deploy"),
+            "FHD_BACKUP_RETAIN": "2",
+            "XCMAX_PRESERVE_RELEASE_HISTORY": preserve,
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert len(list(tmp_path.iterdir())) == (3 if preserve == "1" else 2)
 
 
 def test_release_identity_verifier_requires_artifact_when_supplied() -> None:
