@@ -31,6 +31,7 @@ class _UserMemoryServicePart02Mixin:
             return 0.5
         return match_count / total_count
 
+    @_facade().memory_store_transaction
     def add_feedback(
         self,
         user_id: str,

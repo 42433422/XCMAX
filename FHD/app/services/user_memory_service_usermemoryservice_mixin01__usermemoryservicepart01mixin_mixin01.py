@@ -25,6 +25,7 @@ class __UserMemoryServicePart01MixinPart01Mixin:
         self._initialized = True
         _facade().logger.info("用户记忆服务已初始化")
 
+    @_facade().memory_store_transaction
     def add_preference(self, user_id: str, key: str, value: _facade().Any) -> None:
         """
         添加用户偏好
@@ -158,6 +159,7 @@ class __UserMemoryServicePart01MixinPart01Mixin:
                 return (idx, record)
         return (-1, None)
 
+    @_facade().memory_store_transaction
     def propose_memory_candidate(
         self,
         user_id: str,
@@ -240,6 +242,7 @@ class __UserMemoryServicePart01MixinPart01Mixin:
         self._store.save_memory(user_id, memory)
         return {"success": True, "created": True, "candidate": dict(candidate)}
 
+    @_facade().memory_store_transaction
     def confirm_memory_candidate(
         self, user_id: str, memory_id: str, *, correction: dict[str, _facade().Any] | None = None
     ) -> dict[str, _facade().Any]:
@@ -301,6 +304,7 @@ class __UserMemoryServicePart01MixinPart01Mixin:
     ) -> dict[str, _facade().Any]:
         return self._set_memory_v2_status(user_id, memory_id, "deleted", reason=reason)
 
+    @_facade().memory_store_transaction
     def _set_memory_v2_status(
         self, user_id: str, memory_id: str, status: str, *, reason: str = ""
     ) -> dict[str, _facade().Any]:

@@ -189,6 +189,7 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
     import app.services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
+    monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
     memory_mod.reset_user_memory_service()
@@ -277,6 +278,7 @@ def test_memory_v2_routes_govern_blocked_source(
     import app.services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
+    monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
     memory_mod.reset_user_memory_service()
