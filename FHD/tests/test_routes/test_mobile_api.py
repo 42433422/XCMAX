@@ -416,57 +416,29 @@ class TestMobileMeLogic:
         assert expunged == [user]
 
     @pytest.mark.asyncio
-    async def test_get_mobile_user_prefers_admin_jwt_over_stale_user_role(self, monkeypatch):
+    async def test_get_mobile_user_rejects_admin_jwt_without_current_authority(self, monkeypatch):
+        from unittest.mock import Mock
+
         from fastapi import Request
 
-        stale_user = SimpleNamespace(
-            id=1,
-            username="admin",
-            display_name="管理员",
-            email="admin@local",
-            role="user",
-            is_active=True,
-            wx_avatar_url=None,
-        )
-        jwt_payload = {
+        payload = {
             "typ": "access",
             "user_id": 1,
             "session_id": "mobile-relay-test",
             "account_kind": "admin",
-            "username": "admin",
         }
-
-        class FakeQuery:
-            def filter(self, *args, **kwargs):
-                return self
-
-            def first(self):
-                return stale_user
-
-        class FakeDb:
-            def query(self, model):
-                return FakeQuery()
-
-        @contextmanager
-        def fake_get_db():
-            yield FakeDb()
-
         monkeypatch.setattr(
-            "app.fastapi_routes.mobile_api.verify_mobile_jwt",
-            lambda token: jwt_payload,
+            "app.fastapi_routes.mobile_api.verify_mobile_jwt", lambda token: payload
         )
+        authority = Mock(return_value=None)
         monkeypatch.setattr(
-            "app.fastapi_routes.mobile_api.user_id_from_mobile_bearer",
-            lambda authorization: 1,
+            "app.infrastructure.auth.mobile_session.current_mobile_admin", authority
         )
-        monkeypatch.setattr("app.db.session.get_db", fake_get_db)
-
-        request = Request({"type": "http", "headers": []})
-        result = await get_mobile_user(request, authorization="Bearer token")
-
-        assert result is not stale_user
-        assert result.role == "admin"
-        assert result.username == "admin"
+        result = await get_mobile_user(
+            Request({"type": "http", "headers": []}), authorization="Bearer token"
+        )
+        assert result is None
+        authority.assert_called_once_with(1, "mobile-relay-test")
 
     def test_user_public_dict_fields(self):
         user = MagicMock()
