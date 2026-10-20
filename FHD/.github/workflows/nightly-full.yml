@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           ref="${{ inputs.ref || 'main' }}"
           sha="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/${ref}" | cut -f1)"
-          if [ -z "${sha}" ]; then
+          if [[ ! "${sha}" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::无法解析 ${ref} 的 SHA"
             exit 1
           fi
@@ -51,6 +51,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ steps.target.outputs.ref }}
+          RELEASE_SHA: ${{ steps.target.outputs.sha }}
         run: |
           set -uo pipefail
           failed=""
@@ -64,7 +65,11 @@ jobs:
             fhd-ci-mobile-flutter.yml \
           ; do
             echo "==> dispatch ${wf} @ ${REF}"
-            if ! gh workflow run "${wf}" --ref "${REF}"; then
+            inputs=()
+            if [ "${wf}" = "fhd-security-full-scan.yml" ]; then
+              inputs=(-f "release_sha=${RELEASE_SHA}")
+            fi
+            if ! gh workflow run "${wf}" --ref "${REF}" "${inputs[@]}"; then
               failed="${failed} ${wf}"
             fi
           done

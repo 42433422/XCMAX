@@ -73,8 +73,7 @@ def test_multimodal_runtime_context_auto_plans_ingests_and_queries(
 
 
 def test_multimodal_excel_artifact_auto_plans_import_after_approval(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
     from app.application.dataset_rag_app_service import reset_dataset_rag_app_service_for_tests
@@ -171,8 +170,7 @@ def test_multimodal_excel_artifact_auto_plans_import_after_approval(
 
 
 def test_multimodal_pdf_artifact_auto_plans_document_export_after_approval(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
     from app.application.dataset_rag_app_service import reset_dataset_rag_app_service_for_tests

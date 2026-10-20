@@ -6,13 +6,16 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
+from contextvars import copy_context
 from typing import Any, Dict, List, Optional
 
 from modstore_server.employee_executor import execute_employee_task
 from modstore_server.incident_bus import _incident_payload as _payload  # noqa: F401
 from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch_incident_team
+from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.llm_failure_classifier import (
     FAILURE_KIND_ROLE_TIMEOUT,
 )
@@ -77,14 +80,16 @@ def _execute_employee_task_with_timeout(
     bench_llm_override: Any,
     timeout_seconds: int,
 ) -> Dict[str, Any]:
-    """Run execute_employee_task with a hard timeout so team dispatch can finish.
+    """Bound the waiting thread; a timeout does not cancel execution or its effects.
 
     Important: do not use ``with ThreadPoolExecutor`` here — its shutdown(wait=True)
     would block on the hung worker and defeat the timeout.
     """
 
     pool = ThreadPoolExecutor(max_workers=1)
+    context = copy_context()
     fut = pool.submit(
+        context.run,
         execute_employee_task,
         employee_id,
         task,
@@ -96,6 +101,31 @@ def _execute_employee_task_with_timeout(
         result = fut.result(timeout=max(15, int(timeout_seconds)))
         return result if isinstance(result, dict) else {"ok": False, "error": "invalid_result"}
     except FuturesTimeoutError:
+
+        def late_receipt(done):
+            try:
+                result = done.result()
+                if (
+                    isinstance(result, dict)
+                    and runtime_input.get("event_id")
+                    and runtime_input.get("attempt_id")
+                ):
+                    from modstore_server.incident_team_completion import (
+                        persist_late_role_result,
+                    )
+
+                    context.copy().run(
+                        persist_late_role_result,
+                        int(runtime_input["event_id"]),
+                        str(runtime_input.get("role") or ""),
+                        employee_id,
+                        str(runtime_input["attempt_id"]),
+                        result,
+                    )
+            except RECOVERABLE_ERRORS:
+                logger.warning("incident late worker result could not be read")
+
+        fut.add_done_callback(late_receipt)
         logger.warning("incident_team: role timed out")
         return {
             "ok": False,
@@ -104,6 +134,11 @@ def _execute_employee_task_with_timeout(
             "execution_status": "handler_failed",
             "error": f"{_ROLE_TIMEOUT_ERROR}{int(timeout_seconds)}s",
             "failure_kind": FAILURE_KIND_ROLE_TIMEOUT,
+            "outcome": "unknown",
+            "requires_reconciliation": True,
+            "retryable": False,
+            "attempt_id": runtime_input.get("attempt_id"),
+            "event_id": runtime_input.get("event_id"),
         }
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
@@ -380,24 +415,64 @@ def _retry_member(
         route = {"provider": "auto", "model": "auto", "reason": "router_error"}
         bench_override = None
 
-    return execute_employee_task(
+    from modstore_server.customer_issue_delivery_contract import (
+        execution_pending,
+        execution_succeeded,
+    )
+    from modstore_server.incident_team_completion import persist_role_attempt
+    from modstore_server.incident_team_dispatch import member_runtime_input
+
+    attempt_id = uuid.uuid4().hex
+    runtime_input = member_runtime_input(
+        employee_id=employee_id,
+        role=role,
+        event_id=event_id,
+        team_plan=team_plan,
+        payload=payload,
+        event_type=event_type,
+        source=source,
+        route=route,
+        attempt_id=attempt_id,
+        fix_result=fix_result,
+    )
+    runtime_input["is_transient_retry"] = True
+    row = {
+        "role": role,
+        "employee_id": employee_id,
+        "attempt_id": attempt_id,
+        "event_id": event_id,
+        "tenant_id": runtime_input.get("tenant_id"),
+        "status": "dispatching",
+        "ok": False,
+        "outcome": "unknown",
+        "verified_fix_attempt_id": runtime_input["revision"] if role == "verify" else "",
+    }
+    persist_role_attempt(event_id, row)
+    result = _execute_employee_task_with_timeout(
         employee_id,
         task,
-        {
-            "allow_high_risk_real_run": role in {"fix", "verify"},
-            "allow_medium_risk": True,
-            "incident": payload,
-            "incident_team": team_plan,
-            "is_transient_retry": True,
-            "model_route": route,
-            "role": role,
-            "source": source,
-            "suppress_lifecycle_events": True,
-            "unified_incident_bus": True,
-        },
-        user_id=uid,
+        runtime_input,
+        user_id=0,
         bench_llm_override=bench_override,
+        timeout_seconds=_role_timeout_seconds(role),
     )
+    result = {
+        **result,
+        "attempt_id": attempt_id,
+        "verified_fix_attempt_id": row["verified_fix_attempt_id"],
+    }
+    row.update(
+        handler_outputs=handler_output_digest(result),
+        ok=execution_succeeded(result),
+        status=(
+            "pending"
+            if execution_pending(result)
+            else "completed" if execution_succeeded(result) else "failed"
+        ),
+    )
+    row.pop("outcome", None)
+    persist_role_attempt(event_id, row, expected_attempt=attempt_id)
+    return result
 
 
 __all__ = ["build_incident_team", "dispatch_incident_team"]

@@ -85,17 +85,17 @@ class TestUserMemoryStore:
         store = UserMemoryStore(storage_type="json")
         assert store.get_memory("user1") is not None
 
-    def test_load_corrupt_json_resets_cache(self, monkeypatch, tmp_path):
-        """Load branch: file exists but JSON is invalid → cache reset."""
+    def test_load_corrupt_json_resets_cache_without_overwriting(self, monkeypatch, tmp_path):
         json_path = str(tmp_path / "memory_store.json")
+        original = b"{not valid json}"
         with open(json_path, "w", encoding="utf-8") as f:
-            f.write("{not valid json}")
+            f.write(original.decode("utf-8"))
         monkeypatch.setattr(user_memory_service, "MEMORY_DIR", str(tmp_path))
         monkeypatch.setattr(user_memory_service, "JSON_MEMORY_PATH", json_path)
         UserMemoryStore._instance = None
         store = UserMemoryStore(storage_type="json")
-        # Should not raise; cache should be empty
-        assert isinstance(store._memory_cache, dict)
+        assert store._memory_cache == {}
+        assert tmp_path.joinpath("memory_store.json").read_bytes() == original
 
     def test_save_creates_file(self, tmp_store):
         store, json_path = tmp_store
@@ -119,9 +119,10 @@ class TestUserMemoryStore:
         # File should NOT be created because storage_type is sqlite
         assert not os.path.exists(json_path)
 
-    def test_should_persist_returns_false_when_no_dirty(self, tmp_store):
-        store, _ = tmp_store
-        assert store._should_persist() is False
+    def test_save_memory_persists_without_dirty_tracking(self, tmp_store):
+        store, path = tmp_store
+        store.save_memory("persisted", store.get_memory("persisted"))
+        assert os.path.exists(path)
 
     def test_get_memory_creates_new_if_absent(self, tmp_store):
         store, _ = tmp_store

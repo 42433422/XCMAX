@@ -262,6 +262,7 @@ class __SalesAppServicePart01MixinPart01Mixin:
         partner_id: int | None = None,
         partner_name: str | None = None,
         reference: str | None = None,
+        idempotency_key: str | None = None,
         journal_date: _facade().Any = None,
         db: _facade().Any = None,
     ) -> dict[str, _facade().Any]:
@@ -275,6 +276,7 @@ class __SalesAppServicePart01MixinPart01Mixin:
             partner_id=partner_id,
             partner_name=partner_name,
             reference=reference,
+            idempotency_key=idempotency_key,
             journal_date=journal_date,
             db=db,
         )

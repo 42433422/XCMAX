@@ -225,7 +225,16 @@ def execute_duty_graph_programmatic(
                     user_id=int(created_by_user_id),
                     **exec_kw,
                 )
-                result = run_res if isinstance(run_res, dict) else {"result": run_res}
+                from modstore_server.employee_orchestrator import (
+                    _evaluate_execution_success,
+                )
+
+                result = (
+                    run_res if isinstance(run_res, dict) else {"error": "invalid result payload"}
+                )
+                succeeded, reason = _evaluate_execution_success(result)
+                if not succeeded:
+                    status, error_text = "failed", reason
                 llm_tokens = int(result.get("llm_tokens") or 0)
                 duration_ms = float(result.get("duration_ms") or 0.0)
                 if duration_ms <= 0:
@@ -301,12 +310,14 @@ def execute_duty_graph_programmatic(
         run_row.success_count = success_count
         run_row.failed_count = failed_count
         run_row.skipped_count = skipped_count
-        run_row.status = "failed" if failed_count > 0 else "completed"
+        run_row.status = (
+            "failed" if failed_count > 0 else ("blocked" if skipped_count > 0 else "completed")
+        )
         run_row.error = first_error
         run_row.completed_at = _facade().datetime.now(_facade().timezone.utc)
         session.commit()
         out = _facade()._serialize_run(session, run_id)
-        out["ok"] = True
+        out["ok"] = run_row.status == "completed"
         return out
 
 
@@ -344,7 +355,7 @@ def create_duty_graph_run(
         allow_high_risk_real_run=allow_high_risk_real_run,
         bench_llm_override=None,
     )
-    if not out.get("ok"):
+    if not out.get("ok") and not out.get("id"):
         msg = _facade()._as_str(out.get("error")) or "duty graph failed"
         code = 404 if "不存在" in msg else 400
         raise _facade().HTTPException(code, msg)

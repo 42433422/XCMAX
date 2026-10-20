@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import uuid
 from datetime import UTC, datetime
 from io import BytesIO
@@ -18,9 +17,7 @@ from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.customer_delivery_workbench_start import (
     _start_custom_delivery_run as _start_custom_delivery_run,
 )
-from modstore_server.customer_service_api import (
-    _visible_ticket_or_404,
-)
+from modstore_server.customer_service_api import _visible_ticket_or_404
 from modstore_server.customer_service_delivery_completion import (
     complete_delivery_if_ready,
 )
@@ -37,18 +34,12 @@ from modstore_server.customer_service_delivery_models import (
     custom_delivery_pricing_mode,
 )
 from modstore_server.customer_service_delivery_quality import custom_delivery_gate
-from modstore_server.customer_service_orchestrator import (
-    audit,
-    ticket_payload,
-)
+from modstore_server.customer_service_orchestrator import audit, ticket_payload
 from modstore_server.customer_service_tools import json_dumps
 from modstore_server.models import User
-from modstore_server.models_cs import (
-    CustomerServiceTicket,
-)
+from modstore_server.models_cs import CustomerServiceTicket
 
-logger = logging.getLogger(__name__)
-router = APIRouter()
+router: APIRouter = APIRouter()
 _get_current_user = get_current_user
 
 
@@ -64,6 +55,7 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         snapshot = (
             await get_workbench_session_snapshot(sid, int(ticket.user_id or 0)) if sid else None
         )
+        latest_snapshot = snapshot or {}
         item = dict(row)
         if snapshot:
             item["status"] = str(snapshot.get("status") or item.get("status") or "")
@@ -76,7 +68,6 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
                 snapshot.get("verified_artifacts") or item.get("verified_artifacts") or []
             )
             snapshot["verified_artifacts"] = item["verified_artifacts"]
-            latest_snapshot = snapshot
         runs.append(item)
 
     acceptance_status = str(evidence.get("acceptance_status") or "")
@@ -114,7 +105,9 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     elif acceptance_status == "internal_approved" and latest_snapshot:
         stage, label = "acceptance", "内部确认完成，待客户本人验收"
     elif not latest_snapshot:
-        stage, label = "queued", "已受理"
+        stage, label = (
+            ("rework", "生产会话已不可读取，请在原单返工") if run_rows else ("queued", "已受理")
+        )
     elif str(latest_snapshot.get("status") or "") == "error":
         stage, label = "rework", "生产失败，待返工"
     elif str(latest_snapshot.get("status") or "") == "done":
@@ -244,7 +237,9 @@ async def decide_custom_delivery(
         raise HTTPException(404, "定制交付工单不存在")
     evidence = _custom_delivery_evidence(ticket)
     if body.source_mode:
-        from modstore_server.customer_delivery_versioned import select_main_rework_source
+        from modstore_server.customer_delivery_versioned import (
+            select_main_rework_source,
+        )
 
         try:
             select_main_rework_source(evidence, int(user.id), body.action)

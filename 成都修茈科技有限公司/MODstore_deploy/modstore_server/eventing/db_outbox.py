@@ -1,25 +1,9 @@
 # mypy: disable-error-code="arg-type, assignment"
-"""Transactional event outbox backed by the application database.
+"""Transactional outbox with stable event identities and fenced SQL delivery claims.
 
-The legacy file outbox in :mod:`modstore_server.eventing.outbox` is kept as an
-append-only audit log; this module adds the missing transactional guarantee:
-business writes and the outbox row are committed in the same SQLAlchemy
-session, and a background dispatcher then drains pending rows to the
-business webhook (and any in-process subscriber).
-
-Design notes
-------------
-* Same DB as the rest of the application (``models.OutboxEvent``) so the
-  business transaction and the outbox insert succeed or fail together. No
-  silent two-phase write to the file system.
-* ``event_id`` is unique to make consumer-side replay idempotent. The
-  dispatcher uses ``stable_event_id`` from
-  :mod:`modstore_server.webhook_dispatcher` so retries always land on the
-  same id.
-* Status state machine: ``pending`` → ``dispatched`` (success) /
-  ``failed`` (terminal after exhausting retries). Failed rows are not
-  silently dropped — the admin webhook replay still works because the
-  envelope is reconstructed from the row.
+Business writes and enqueue share one transaction. Each delivery claims the row
+before sending. Expired incident intake resumes its unique inbox; uncertain
+external sends remain held for reconciliation instead of being blindly replayed.
 """
 
 from __future__ import annotations
@@ -29,11 +13,13 @@ import logging
 import os
 import threading
 import time
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Callable, Iterator
 
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -142,9 +128,18 @@ def enqueue(
         logger.debug("outbox enqueue idempotent skip event_id=%s", eid)
         return None
 
+    connection = session.connection()
+    driver = connection.connection.driver_connection
+    if driver is None:
+        raise RuntimeError("database connection unavailable")
+    if connection.dialect.name == "sqlite" and not driver.in_transaction:
+        connection.exec_driver_sql(
+            "BEGIN"
+        )  # RELEASE SAVEPOINT must not commit the business transaction.
     try:
-        session.add(row)
-        session.flush()
+        with session.begin_nested():
+            session.add(row)
+            session.flush()
     except IntegrityError:
         existing = session.query(OutboxEvent).filter(OutboxEvent.event_id == eid).first()
         if existing is None:
@@ -203,25 +198,128 @@ def fetch_pending(
         return [_row_to_record(r) for r in rows]
 
 
-def mark_dispatched(record_id: int) -> None:
-    with _session_scope() as session:
-        row = session.query(OutboxEvent).filter(OutboxEvent.id == record_id).first()
-        if row is None:
-            return
-        row.status = "dispatched"
-        row.last_error = ""
-        row.dispatched_at = datetime.now(UTC)
+def _database_time(session) -> datetime:
+    value = session.execute(select(func.current_timestamp())).scalar_one()
+    if not isinstance(value, datetime):
+        raise RuntimeError("database clock unavailable")
+    return value.replace(tzinfo=None)
 
 
-def mark_failed(record_id: int, error: str, *, terminal: bool) -> None:
+def claim_record(record_id: int, *, lease_seconds: int = 300) -> str:
+    token = uuid.uuid4().hex
     with _session_scope() as session:
-        row = session.query(OutboxEvent).filter(OutboxEvent.id == record_id).first()
-        if row is None:
+        won = (
+            session.query(OutboxEvent)
+            .filter(
+                OutboxEvent.id == record_id,
+                OutboxEvent.status == "pending",
+            )
+            .update(
+                {
+                    "status": "dispatching",
+                    "claim_token": token,
+                    "claim_until": _database_time(session)
+                    + timedelta(seconds=max(30, lease_seconds)),
+                },
+                synchronize_session=False,
+            )
+        )
+    return token if won else ""
+
+
+def recover_expired_claims() -> int:
+    """Only the incident inbox makes replay safe; other unknown sends stay held."""
+    with _session_scope() as session:
+        now = _database_time(session)
+        rows = (
+            session.query(OutboxEvent)
+            .filter(OutboxEvent.status == "dispatching", OutboxEvent.claim_until <= now)
+            .all()
+        )
+        recovered = 0
+        for row in rows:
+            try:
+                payload = json.loads(row.payload_json or "{}")
+            except json.JSONDecodeError:
+                payload = None
+            replayable = (
+                row.event_name == "ops.intake.customer_ticket"
+                and isinstance(payload, dict)
+                and payload.get("intake_source") != "private_mod_rework"
+            )
+            recovered += (
+                session.query(OutboxEvent)
+                .filter(
+                    OutboxEvent.id == row.id,
+                    OutboxEvent.status == "dispatching",
+                    OutboxEvent.claim_token == row.claim_token,
+                    OutboxEvent.claim_until <= now,
+                )
+                .update(
+                    {
+                        "status": "pending" if replayable else "uncertain",
+                        "claim_token": "",
+                        "claim_until": None,
+                        "last_error": (
+                            "previous delivery lease expired; resume original inbox identity"
+                            if replayable
+                            else "delivery outcome unknown; reconcile original event before replay"
+                        ),
+                    },
+                    synchronize_session=False,
+                )
+            )
+        return recovered
+
+
+def mark_dispatched(record_id: int, *, claim_token: str = "") -> bool:
+    with _session_scope() as session:
+        query = session.query(OutboxEvent).filter(OutboxEvent.id == record_id)
+        if claim_token:
+            query = query.filter(
+                OutboxEvent.claim_token == claim_token,
+                OutboxEvent.status == "dispatching",
+                OutboxEvent.claim_until > _database_time(session),
+            )
+        won = query.update(
+            {
+                "status": "dispatched",
+                "last_error": "",
+                "claim_token": "",
+                "claim_until": None,
+                "dispatched_at": datetime.now(UTC),
+            },
+            synchronize_session=False,
+        )
+
+    return bool(won)
+
+
+def mark_failed(record_id: int, error: str, *, terminal: bool, claim_token: str = "") -> None:
+    with _session_scope() as session:
+        query = session.query(OutboxEvent).filter(OutboxEvent.id == record_id)
+        if claim_token:
+            query = query.filter(
+                OutboxEvent.claim_token == claim_token,
+                OutboxEvent.status == "dispatching",
+                OutboxEvent.claim_until > _database_time(session),
+            )
+        won = query.update(
+            {
+                "attempts": OutboxEvent.attempts + 1,
+                "last_error": (error or "")[:1000],
+                "status": "failed" if terminal else "pending",
+                "claim_token": "",
+                "claim_until": None,
+            },
+            synchronize_session=False,
+        )
+        if not won:
             return
-        row.attempts = int(row.attempts or 0) + 1
-        row.last_error = (error or "")[:1000]
+        row = session.get(OutboxEvent, record_id, populate_existing=True)
+        if row is None:
+            raise RuntimeError("claimed outbox row disappeared")
         if terminal:
-            row.status = "failed"
             session.add(
                 OutboxDeadLetter(
                     source_outbox_id=int(row.id),
@@ -266,7 +364,12 @@ def drain(
     failed = 0
     skipped = 0
     max_attempts = _max_attempts()
+    recover_expired_claims()
     for record in fetch_pending(limit=limit):
+        token = claim_record(record.id)
+        if not token:
+            skipped += 1
+            continue
         if publish_to_neuro_bus:
             try:
                 neuro_bus.publish(record.to_domain_event())
@@ -285,18 +388,22 @@ def drain(
                 record.id,
                 str(exc),
                 terminal=record.attempts + 1 >= max_attempts,
+                claim_token=token,
             )
             failed += 1
             continue
         if result.get("ok"):
-            mark_dispatched(record.id)
-            sent += 1
+            if mark_dispatched(record.id, claim_token=token):
+                sent += 1
+            else:
+                skipped += 1
         elif result.get("skipped"):
             skipped += 1
             mark_failed(
                 record.id,
                 str(result.get("message") or "skipped"),
                 terminal=False,
+                claim_token=token,
             )
         else:
             failed += 1
@@ -304,6 +411,7 @@ def drain(
                 record.id,
                 str(result.get("message") or result.get("body") or "delivery failed"),
                 terminal=record.attempts + 1 >= max_attempts,
+                claim_token=token,
             )
     return {"sent": sent, "failed": failed, "skipped": skipped}
 
@@ -341,6 +449,9 @@ class OutboxDispatcherWorker:
         while not self._stop.is_set():
             try:
                 drain(limit=self.batch_size)
+                from modstore_server.customer_issue_intake import recover_pending_incidents
+
+                recover_pending_incidents(limit=self.batch_size)
             except RECOVERABLE_ERRORS:
                 logger.exception("outbox worker drain loop failed")
             self._stop.wait(self.interval_seconds)

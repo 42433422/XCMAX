@@ -361,7 +361,7 @@ def test_inventory_warehouses_lifecycle(
 
 
 def test_inventory_in_without_unit_price(
-    inventory_client: TestClient, mock_inventory_svc: MagicMock
+    inventory_client: TestClient, mock_inventory_svc: MagicMock, local_tools
 ) -> None:
     r = inventory_client.post(
         "/api/inventory/in",
@@ -382,7 +382,7 @@ def test_materials_create_missing_name_400(materials_client: TestClient) -> None
 
 
 def test_materials_create_maps_min_quantity(
-    materials_client: TestClient, mock_material_svc: MagicMock
+    materials_client: TestClient, mock_material_svc: MagicMock, local_tools
 ) -> None:
     r = materials_client.post(
         "/api/materials",
@@ -394,7 +394,7 @@ def test_materials_create_maps_min_quantity(
 
 
 def test_materials_create_service_failure_400(
-    materials_client: TestClient, mock_material_svc: MagicMock
+    materials_client: TestClient, mock_material_svc: MagicMock, local_tools
 ) -> None:
     mock_material_svc.create_material.return_value = {"success": False, "message": "duplicate"}
     r = materials_client.post("/api/materials", json={"name": "重复项"})
@@ -403,7 +403,7 @@ def test_materials_create_service_failure_400(
 
 
 def test_materials_create_exception_500(
-    materials_client: TestClient, mock_material_svc: MagicMock
+    materials_client: TestClient, mock_material_svc: MagicMock, local_tools
 ) -> None:
     mock_material_svc.create_material.side_effect = RuntimeError("db locked")
     r = materials_client.post("/api/materials", json={"name": "异常项"})
@@ -519,7 +519,7 @@ def test_customers_create_empty_name_400(customer_client: TestClient) -> None:
     assert r.status_code == 400
 
 
-def test_customers_update_default_path(customer_client: TestClient) -> None:
+def test_customers_update_default_path(customer_client: TestClient, local_tools) -> None:
     with (
         patch(
             "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
@@ -542,7 +542,7 @@ def test_customers_update_default_path(customer_client: TestClient) -> None:
     assert r.json()["data"]["unit_name"] == "新名称"
 
 
-def test_customers_delete_default_path(customer_client: TestClient) -> None:
+def test_customers_delete_default_path(customer_client: TestClient, local_tools) -> None:
     with (
         patch(
             "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
@@ -556,7 +556,7 @@ def test_customers_delete_default_path(customer_client: TestClient) -> None:
     assert r.json()["message"] == "已删除"
 
 
-def test_customers_batch_delete_skips_invalid(customer_client: TestClient) -> None:
+def test_customers_batch_delete_skips_invalid(customer_client: TestClient, local_tools) -> None:
     with (
         patch.object(customer_routes, "_customers_write_raise"),
         patch.object(customer_routes, "_customer_delete_unified"),
@@ -631,7 +631,7 @@ def test_purchase_inbounds_order_filter(
 
 
 def test_purchase_approve_custom_approver(
-    purchase_client: TestClient, mock_purchase_svc: MagicMock
+    purchase_client: TestClient, mock_purchase_svc: MagicMock, local_tools
 ) -> None:
     r = purchase_client.post(
         "/api/purchase/orders/5/approve",

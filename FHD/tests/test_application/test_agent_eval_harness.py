@@ -7,8 +7,13 @@ from evals.run_agent_eval import DEFAULT_TASKS_PATH, run_eval
 
 
 def test_agent_eval_harness_baseline_passes() -> None:
+    from app.application.agent_orchestrator import orchestrator
+
+    original_executor = orchestrator.AgentToolExecutor
     result = run_eval(DEFAULT_TASKS_PATH)
 
+    assert orchestrator.AgentToolExecutor is original_executor
+    assert result["execution_mode"] == "fixture_local"
     assert result["failed"] == 0, result
     assert result["passed"] == 120
     assert result["score"] == 1.0
@@ -28,6 +33,7 @@ def test_agent_eval_cli_prints_only_public_summary(monkeypatch, capsys) -> None:
     output = capsys.readouterr().out
     assert json.loads(output) == {
         "suite": "agent_platform_minimum",
+        "execution_mode": "fixture_local",
         "tasks_path": str(DEFAULT_TASKS_PATH),
         "total": 1,
         "passed": 1,

@@ -99,7 +99,9 @@ def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch) -> No
     assert run.tool_calls[0].cost_units == 1
 
 
-def test_generate_label_template_route_executes_agent_run(tmp_path, monkeypatch) -> None:
+def test_generate_label_template_route_executes_agent_run(
+    tmp_path, monkeypatch, local_tools
+) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")

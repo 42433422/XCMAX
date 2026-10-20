@@ -172,6 +172,7 @@ def run_document_template_agent(
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
+    from app.infrastructure.tenant_scope import current_tenant_id
 
     data = dict(body or {})
     registry = get_workflow_tool_registry()
@@ -205,6 +206,7 @@ def run_document_template_agent(
     )
     runtime_context = {
         "source": "document_template_route",
+        "tenant_id": current_tenant_id(),
         "route": route_path,
         "request_path": str(request.url.path),
         "user_id": user_id,

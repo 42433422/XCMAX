@@ -142,15 +142,14 @@ class TestComposeGates:
         g2 = lambda name, args: {"ok": True}  # noqa: E731
         assert compose_gates(g1, g2)("t", {})["ok"] is True
 
-    def test_gate_raising_recoverable_is_skipped(self):
+    def test_gate_raising_recoverable_blocks(self):
         def boom(name, args):
             raise ValueError("recoverable")
 
         g_ok = lambda name, args: {"ok": True}  # noqa: E731
         combined = compose_gates(boom, g_ok)
-        # boom 抛 ValueError（在 RECOVERABLE_ERRORS 内）→ 被跳过，最终放行
-        assert combined("t", {})["ok"] is True
+        assert combined("t", {})["ok"] is False
 
-    def test_verdict_missing_ok_defaults_true(self):
-        g = lambda name, args: {}  # noqa: E731
-        assert compose_gates(g)("t", {})["ok"] is True
+    @pytest.mark.parametrize("verdict", [{}, None, [], {"ok": 1}, {"ok": "yes"}])
+    def test_invalid_verdict_blocks(self, verdict):
+        assert compose_gates(lambda name, args: verdict)("t", {})["ok"] is False

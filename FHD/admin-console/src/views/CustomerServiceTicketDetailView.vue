@@ -12,7 +12,8 @@
           <div class="cs-hero-title">
             <span class="cs-kicker">客服原单 · 内部 ID {{ ticketId }}</span>
             <h2>{{ ticket.title || '（无标题）' }}</h2>
-            <button type="button" class="cs-btn" :disabled="saving || savingEta" @click="correctTitle">更正标题</button>
+            <button type="button" class="cs-btn" :disabled="saving || savingEta" @click="correctTitle()">更正标题</button>
+            <button v-if="canCorrectClassification" type="button" class="cs-btn" :disabled="saving || savingEta" @click="correctTitle(true)">纠正为平台功能问题</button>
             <code class="cs-ticket-no">{{ ticket.ticket_no }}</code>
           </div>
           <div class="cs-badges">
@@ -77,10 +78,11 @@
       </section>
 
       <form v-if="ticket.status === 'processing'" class="cs-card cs-close-form" @submit.prevent="closeTicket">
-        <h3 class="cs-card-title">验收并关闭</h3>
+        <h3 class="cs-card-title">处理原工单</h3>
+        <label>处置方式<select v-model="closeDisposition"><option value="resolved">实际验收已解决</option><option value="expired">已过期不再处理（未修复，不影响资金权益）</option></select></label>
         <label>处理结论<textarea v-model="closeNote" required minlength="8" maxlength="2000" /></label>
-        <label>实际验收证据<textarea v-model="closeVerification" required minlength="20" maxlength="4000" /></label>
-        <button class="cs-btn" type="submit" :disabled="saving || savingEta">记录管理员验收并关闭</button>
+        <label>{{ closeDisposition === 'expired' ? '过期与后续活跃需求核对记录' : '实际验收证据' }}<textarea v-model="closeVerification" required minlength="20" maxlength="4000" /></label>
+        <button class="cs-btn" type="submit" :disabled="saving || savingEta">记录管理员处置并关闭</button>
       </form>
 
       <section class="cs-card" aria-label="处理时间线">
@@ -149,11 +151,13 @@ const saving = ref(false)
 const expectedCompletionInput = ref('')
 const savingEta = ref(false), etaMessage = ref(''), etaError = ref('')
 const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref('')
+const closeDisposition = ref('resolved')
 let generation = 0
 
 const ticketId = computed(() => Number(String(route.params.ticketId ?? '')))
 const validId = computed(() => Number.isInteger(ticketId.value) && ticketId.value > 0)
 const ticket = computed<Row>(() => detail.value?.ticket || {})
+const canCorrectClassification = computed(() => ticket.value.status === 'processing' && !ticket.value.closed_at && ['account_support', 'general'].includes(String(ticket.value.intent)))
 const evidence = computed<Row>(() => Object.fromEntries(Object.entries(
   (ticket.value.evidence || {}) as Row,
 ).filter(([key]) => key !== 'support_bundle_base64')))
@@ -173,16 +177,17 @@ const message = (cause: unknown) => cause instanceof Error ? cause.message : Str
 
 function backToList() { void router.push({ name: 'customer-service-tickets' }) }
 
-watch([closeNote, closeVerification], () => { closeRequestId.value = '' })
+watch([closeNote, closeVerification, closeDisposition], () => { closeRequestId.value = '' })
 
 async function closeTicket() {
   const id = ticketId.value
-  if (saving.value || savingEta.value || ticket.value.status !== 'processing' || !window.confirm('确认已在目标版本完成实际验收，并关闭这张原工单？')) return
+  if (saving.value || savingEta.value || ticket.value.status !== 'processing' || !window.confirm(closeDisposition.value === 'expired' ? '确认已核对过期时间及后续需求？本次记为过期，未修复，不影响资金权益。' : '确认已在目标版本完成实际验收，并关闭这张原工单？')) return
   closeRequestId.value ||= crypto.randomUUID()
   saving.value = true
   try {
     await api.post(`/api/xcmax/admin/customer-service/tickets/${id}/close`, {
       request_id: closeRequestId.value, note: closeNote.value, verification: closeVerification.value,
+      disposition: closeDisposition.value,
     })
     if (ticketId.value === id) {
       closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''
@@ -192,14 +197,19 @@ async function closeTicket() {
   finally { saving.value = false }
 }
 
-async function correctTitle() {
-  if (saving.value || savingEta.value) return
+async function correctTitle(reclassify = false) {
+  if (saving.value || savingEta.value || (reclassify && !canCorrectClassification.value)) return
   const id = ticketId.value, expectedTitle = String(ticket.value.title || '')
-  const title = window.prompt('请输入此工单的正确标题', expectedTitle)?.trim()
-  if (!title || title === expectedTitle || saving.value) return
+  const title = reclassify ? expectedTitle : window.prompt('请输入此工单的正确标题', expectedTitle)?.trim()
+  const reason = reclassify ? window.prompt('将原单纠正为平台功能问题，保留编号、历史和资金记录。请输入修正原因（至少8字）')?.trim() : ''
+  if (reclassify && reason && reason.length < 8) { error.value = '分类修正原因至少8字，请重新填写'; return }
+  if (!title || (!reclassify && title === expectedTitle) || (reclassify && (!reason || reason.length < 8))) return
   saving.value = true
   try {
-    await api.put(`/api/xcmax/market-proxy/customer-service/tickets/${id}/title`, { title, expected_title: expectedTitle })
+    await api.put(`/api/xcmax/market-proxy/customer-service/tickets/${id}/title`, {
+      title, expected_title: expectedTitle,
+      ...(reclassify ? { intent: 'product_issue', expected_intent: ticket.value.intent, reason } : {}),
+    })
     if (ticketId.value === id) await load()
   } catch (cause) { if (ticketId.value === id) error.value = message(cause) }
   finally { saving.value = false }
@@ -248,7 +258,7 @@ async function load() {
   } catch (cause) { if (request === generation) error.value = message(cause) }
   finally { if (request === generation) loading.value = false }
 }
-watch(ticketId, () => { closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''; etaMessage.value = ''; etaError.value = ''; void load() }, { immediate: true })
+watch(ticketId, () => { closeDisposition.value = 'resolved'; closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''; etaMessage.value = ''; etaError.value = ''; void load() }, { immediate: true })
 onBeforeUnmount(() => { generation++ })
 </script>
 

@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import uuid
+from contextvars import copy_context
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from app.application.shipment_excel_etl_security import (
     resolve_etl_output_path,
     resolve_etl_path,
 )
+from app.application.tool_execution_deadline import build_http_helpers
 from app.mod_sdk.employee_specialized_tools import get_employee_tools, handle_specialized
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
@@ -63,31 +65,8 @@ def _build_enriched_ctx(employee_id: str, workspace_root: str) -> dict[str, Any]
         except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  LLM 调用边界：异常转结构化结果
             return {"ok": False, "error": repr(exc)}
 
-    async def _http_request(method: str, url: str, **kw: Any) -> dict[str, Any]:
-        try:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=kw.pop("timeout", 30)) as client:
-                resp = await client.request(method, url, **kw)
-                try:
-                    body = resp.json()
-                except RECOVERABLE_ERRORS:  # noqa: BLE001  JSON 解析失败降级为文本
-                    body = resp.text
-                return {"ok": resp.is_success, "status": resp.status_code, "body": body}
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  HTTP 调用边界：异常转结构化结果
-            return {"ok": False, "error": repr(exc)}
-
-    async def _http_get(url: str, **kw: Any) -> dict[str, Any]:
-        return await _http_request("GET", url, **kw)
-
-    async def _http_post(url: str, json_body: Any = None, **kw: Any) -> dict[str, Any]:
-        if json_body is not None:
-            kw["json"] = json_body
-        return await _http_request("POST", url, **kw)
-
     ctx["call_llm"] = _call_llm
-    ctx["http_get"] = _http_get
-    ctx["http_post"] = _http_post
+    ctx["http_get"], ctx["http_post"] = build_http_helpers()
     return ctx
 
 
@@ -150,7 +129,7 @@ def _run_maybe_async(fn, *args, **kwargs):
         import concurrent.futures
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(asyncio.run, out).result()
+            return pool.submit(copy_context().run, asyncio.run, out).result()
     return out
 
 
@@ -305,10 +284,7 @@ def _action_direct_python_module(
             payload[key] = reasoning[key]
     payload.setdefault("task", task)
     payload.setdefault("workspace_root", str(workspace_root or os.getcwd()))
-    # The generated employee modules require an input file, but their vendor
-    # converters can deterministically construct a document from user_request.
-    # Route that no-file case there instead of asking the model to improvise an
-    # input or attempting writes inside the installed application bundle.
+    # No-file document requests use deterministic vendor conversion.
     is_generate = "generate" in employee_id.lower()
     has_file = bool(str(payload.get("file_path") or payload.get("path") or "").strip())
     if is_generate and not has_file and str(payload.get("user_request") or "").strip():
@@ -456,7 +432,12 @@ def _actions_fhd(
             outputs.append({"handler": "llm_md", "output": reasoning.get("reasoning", "")})
         else:
             outputs.append(
-                {"handler": handler, "error": "unsupported handler in FHD local executor"}
+                {
+                    "handler": handler,
+                    "ok": False,
+                    "retryable": False,
+                    "error": "unsupported handler in FHD local executor",
+                }
             )
     return {
         "task": task,
@@ -467,13 +448,9 @@ def _actions_fhd(
 
 
 def _handlers_execution_ok(result: dict[str, Any]) -> bool:
-    outputs = result.get("outputs") if isinstance(result.get("outputs"), list) else []
-    if not outputs:
-        return True
-    for out in outputs:
-        if isinstance(out, dict) and out.get("ok") is False:
-            return False
-    return True
+    from app.application.employee_runtime.result_verifier import execution_result_error
+
+    return not execution_result_error(result)
 
 
 def execute_employee_task_local(
@@ -488,13 +465,14 @@ def execute_employee_task_local(
     """委托给 EmployeeAgent 执行本地 employee_pack，保持原返回契约。"""
     from app.application.employee_runtime.agent import EmployeeAgent
 
-    return EmployeeAgent(employee_id).run(
+    result: dict[str, Any] = EmployeeAgent(employee_id).run(
         task,
         input_data,
         user_id=user_id,
         workspace_root=workspace_root,
         session_id=session_id,
     )
+    return result
 
 
 __all__ = ["execute_employee_task_local"]

@@ -49,7 +49,9 @@ def build_write_approval_gate(
                 "risk_decision": decision.to_dict(),
             }
         try:
-            from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
+            from app.application.workflow.approval_gated_engine import (
+                ApprovalGatedEngine,
+            )
             from app.application.workflow.engine import WorkflowEngine
             from app.application.workflow.types import PlanGraph, WorkflowNode
             from resources.config.risk_actions_loader import get_action_risk
@@ -87,7 +89,10 @@ def build_write_approval_gate(
                 }
         except RECOVERABLE_ERRORS:
             logger.debug(
-                "write approval gate fallback emp=%s tool=%s", employee_id, name, exc_info=True
+                "write approval gate fallback emp=%s tool=%s",
+                employee_id,
+                name,
+                exc_info=True,
             )
 
         try:
@@ -115,8 +120,10 @@ def compose_gates(*gates: Any) -> Any:
             try:
                 verdict = g(tool_name, args)
             except RECOVERABLE_ERRORS:
-                continue
-            if not verdict.get("ok", True):
+                return {"ok": False, "reason": "工具授权检查失败，未执行"}
+            if not isinstance(verdict, dict) or type(verdict.get("ok")) is not bool:
+                return {"ok": False, "reason": "工具授权结果无效，未执行"}
+            if verdict["ok"] is not True:
                 return cast("dict[str, Any]", verdict)
         return {"ok": True}
 

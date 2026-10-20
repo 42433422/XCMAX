@@ -40,8 +40,7 @@ def _assert_product_run(
 
 
 def test_product_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
@@ -95,8 +94,7 @@ def test_product_mutation_routes_execute_through_agent_orchestrator(
 
 
 def test_product_compat_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     import app.application.excel_imports as excel_imports
 

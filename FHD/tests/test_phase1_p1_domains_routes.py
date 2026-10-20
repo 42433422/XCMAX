@@ -54,7 +54,9 @@ def test_system_printer_post_empty(system_client: TestClient) -> None:
 
 
 @patch("app.application.facades.session_facade.get_system_service")
-def test_system_printer_post_ok(mock_get: MagicMock, system_client: TestClient) -> None:
+def test_system_printer_post_ok(
+    mock_get: MagicMock, system_client: TestClient, local_tools
+) -> None:
     mock_get.return_value.set_default_printer.return_value = {"success": True}
     r = system_client.post("/api/system/printer", json={"printer_name": "HP"})
     assert r.status_code == 200
@@ -123,7 +125,7 @@ def test_products_batch_empty(mock_get: MagicMock, product_client: TestClient) -
 
 
 @patch("app.bootstrap.get_products_service")
-def test_products_update(mock_get: MagicMock, product_client: TestClient) -> None:
+def test_products_update(mock_get: MagicMock, product_client: TestClient, local_tools) -> None:
     mock_get.return_value.update_product.return_value = {"success": True}
     r = product_client.put("/api/products/1", json={"name": "N"})
     assert r.status_code == 200

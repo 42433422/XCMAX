@@ -1469,7 +1469,8 @@ class TestWorkflowEngineRunBatch:
         plan = _simple_plan(nodes=nodes)
         result = engine.run(plan)
         assert result.success is False
-        assert "依赖无法继续解析" in result.message
+        assert "形成环" in result.message
+        assert result.node_results == []
 
     def test_runtime_context_propagation(self):
         engine = _make_engine({"success": True, "data": []})
@@ -1481,7 +1482,8 @@ class TestWorkflowEngineRunBatch:
         engine = _make_engine()
         plan = _simple_plan(nodes=[])
         result = engine.run(plan)
-        assert result.success is True
+        assert result.success is False
+        assert "不能为空" in result.message
         assert result.node_results == []
 
 

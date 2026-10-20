@@ -18,18 +18,34 @@ import os
 import threading
 import uuid
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
+from functools import wraps
+from pathlib import Path
 from typing import Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.process_lock import exclusive_file_lock
 
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-MEMORY_DIR = os.path.join(BASE_DIR, "user_memory")
-JSON_MEMORY_PATH = os.path.join(MEMORY_DIR, "memory_store.json")
+MEMORY_DIR = os.environ.get("XCAGI_USER_MEMORY_DIR", os.path.join(BASE_DIR, "user_memory"))
+JSON_MEMORY_PATH = os.environ.get(
+    "XCAGI_USER_MEMORY_JSON_PATH", os.path.join(MEMORY_DIR, "memory_store.json")
+)
+
+
+def memory_store_transaction(method):
+    @wraps(method)
+    def wrapped(self, user_id, *args, **kwargs):
+        with self._store.transaction():
+            return method(self, user_id, *args, **kwargs)
+
+    return wrapped
+
 
 MAX_FEEDBACK_HISTORY = 100
 MAX_FREQUENT_ACTIONS = 20
@@ -149,57 +165,100 @@ class UserMemoryStore:
             return
 
         self.storage_type = storage_type
+        configured_dir = os.environ.get("XCAGI_USER_MEMORY_DIR")
+        memory_dir = Path(configured_dir or MEMORY_DIR)
+        configured_path = os.environ.get("XCAGI_USER_MEMORY_JSON_PATH")
+        self._memory_path = Path(
+            configured_path
+            or (memory_dir / "memory_store.json" if configured_dir else JSON_MEMORY_PATH)
+        )
+        self._lock_path = self._memory_path.with_name(f"{self._memory_path.name}.lock")
+        self._transaction_lock = threading.RLock()
+        self._transaction_state = threading.local()
         self._memory_cache: dict[str, UserMemory] = {}
-        self._cache_dirty: dict[str, bool] = {}
         self._load_all_memories()
         self._initialized = True
 
-    def _load_all_memories(self) -> None:
+    @contextmanager
+    def transaction(self):
+        depth = getattr(self._transaction_state, "depth", 0)
+        if depth:
+            yield
+            return
+        with self._transaction_lock:
+            if self.storage_type == "json":
+                with exclusive_file_lock(
+                    self._lock_path, blocking=True, timeout=60, reject_symlink=True
+                ):
+                    self._transaction_state.depth = 1
+                    try:
+                        self._load_all_memories(strict=True)
+                        yield
+                    finally:
+                        self._transaction_state.depth = 0
+            else:
+                self._transaction_state.depth = 1
+                try:
+                    yield
+                finally:
+                    self._transaction_state.depth = 0
+
+    def _load_all_memories(self, *, strict: bool = False) -> None:
         """加载所有用户记忆"""
-        if self.storage_type == "json" and os.path.exists(JSON_MEMORY_PATH):
+        self._memory_cache.clear()
+        if self.storage_type == "json" and self._memory_path.exists():
             try:
-                with open(JSON_MEMORY_PATH, encoding="utf-8") as f:
+                with self._memory_path.open(encoding="utf-8") as f:
                     data = json.load(f)
                     for user_id, memory_data in data.items():
                         self._memory_cache[user_id] = UserMemory.from_dict(memory_data)
-                logger.info("从 %s 加载了 %s 个用户记忆", JSON_MEMORY_PATH, len(self._memory_cache))
-            except RECOVERABLE_ERRORS as e:
-                logger.error("加载用户记忆失败: %s", e)
-                self._memory_cache = {}
+                logger.info(
+                    "从 %s 加载了 %s 个用户记忆", self._memory_path, len(self._memory_cache)
+                )
+            except RECOVERABLE_ERRORS as exc:
+                self._memory_cache.clear()
+                if strict:
+                    raise
+                logger.error("加载用户记忆失败: %s", exc)
 
     def _save_all_memories(self) -> None:
         """保存所有用户记忆到磁盘"""
         if self.storage_type != "json":
             return
 
-        try:
-            os.makedirs(MEMORY_DIR, exist_ok=True)
+        with self.transaction():
+            self._memory_path.parent.mkdir(parents=True, exist_ok=True)
             data = {user_id: memory.to_dict() for user_id, memory in self._memory_cache.items()}
-            with open(JSON_MEMORY_PATH, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            logger.debug("已保存 %s 个用户记忆到 %s", len(self._memory_cache), JSON_MEMORY_PATH)
-        except RECOVERABLE_ERRORS as e:
-            logger.error("保存用户记忆失败: %s", e)
+            temporary = self._memory_path.with_name(
+                f".{self._memory_path.name}.{uuid.uuid4().hex}.tmp"
+            )
+            try:
+                with os.fdopen(
+                    os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600),
+                    "w",
+                    encoding="utf-8",
+                ) as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(temporary, self._memory_path)
+            finally:
+                temporary.unlink(missing_ok=True)
+            logger.debug("已保存 %s 个用户记忆到 %s", len(self._memory_cache), self._memory_path)
 
     def get_memory(self, user_id: str) -> UserMemory | None:
         """获取用户记忆"""
-        if user_id not in self._memory_cache:
-            self._memory_cache[user_id] = UserMemory(user_id=user_id)
-        return self._memory_cache[user_id]
+        with self.transaction():
+            if user_id not in self._memory_cache:
+                self._memory_cache[user_id] = UserMemory(user_id=user_id)
+            return self._memory_cache[user_id]
 
     def save_memory(self, user_id: str, memory: UserMemory) -> None:
         """保存用户记忆"""
-        memory.updated_at = datetime.now().isoformat()
-        self._memory_cache[user_id] = memory
-        self._cache_dirty[user_id] = True
-
-        if self._should_persist():
+        with self.transaction():
+            memory.updated_at = datetime.now().isoformat()
+            self._memory_cache[user_id] = memory
             self._save_all_memories()
-            self._cache_dirty[user_id] = False
-
-    def _should_persist(self) -> bool:
-        """判断是否应该持久化"""
-        return any(self._cache_dirty.values())
 
 
 from app.services.user_memory_service_usermemoryservice_mixin01 import _UserMemoryServicePart01Mixin

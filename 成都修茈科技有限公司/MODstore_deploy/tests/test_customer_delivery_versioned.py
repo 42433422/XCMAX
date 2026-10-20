@@ -485,3 +485,37 @@ def test_original_ticket_rework_preserves_identity_and_source_choice(
     assert saved["delivery_artifacts"] == [] and saved["acceptance_status"] == "pending"
     assert ticket.status == "processing" and ticket.closed_at is None
     assert events[0]["event_type"] == "custom_delivery_rework_requested"
+
+
+@pytest.mark.parametrize(
+    "sessions,live,stage",
+    [
+        ([], False, "queued"),
+        (["missing"], False, "rework"),
+        (["old", "missing"], False, "rework"),
+        (["old"], True, "production"),
+    ],
+)
+def test_latest_missing_session_allows_original_ticket_rework(monkeypatch, sessions, live, stage):
+    from modstore_server import customer_service_delivery_api as api
+    from modstore_server import workbench_api
+
+    evidence = {"kind": "module", "runs": [{"session_id": sid} for sid in sessions]}
+    ticket = types.SimpleNamespace(
+        id=34, user_id=29, status="processing", evidence_json=json.dumps(evidence)
+    )
+
+    async def snapshot(sid, owner):
+        assert owner == 29
+        return (
+            {"status": "running" if live else "done", "artifact": {"mod_id": "old"}}
+            if sid == "old"
+            else None
+        )
+
+    monkeypatch.setattr(workbench_api, "get_workbench_session_snapshot", snapshot)
+    monkeypatch.setattr(api, "ticket_payload", lambda row: {"id": row.id})
+    result = asyncio.run(api._custom_delivery_payload(ticket))["custom_delivery"]
+    assert result["stage"] == stage
+    if stage == "rework":
+        assert not result["gate_ok"] and result["artifacts"] == []

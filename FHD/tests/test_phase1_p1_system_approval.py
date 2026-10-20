@@ -80,7 +80,9 @@ def test_performance_cache_stats(mock_get: MagicMock, system_client: TestClient)
 
 
 @patch("app.utils.performance.performance_initializer.get_performance_optimizer")
-def test_performance_cache_clear(mock_get: MagicMock, system_client: TestClient) -> None:
+def test_performance_cache_clear(
+    mock_get: MagicMock, system_client: TestClient, local_tools
+) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.post("/api/performance/cache/clear")
     assert r.status_code == 200

@@ -1,18 +1,28 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application.agent_orchestrator.run_models import AgentStep
-from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+from app.application.agent_orchestrator.tool_executor import (
+    AgentToolExecutor,
+    execute_with_tool_deadline,
+)
 from app.db.base import Base
 from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
 
 
-def test_fresh_thread_inventory_executor_writes_only_recorded_tenant(tmp_path, monkeypatch):
-    engine = create_engine(f"sqlite:///{tmp_path / 'tenants.db'}")
+@pytest.mark.parametrize("isolated", [False, True])
+def test_fresh_thread_inventory_executor_writes_only_recorded_tenant(
+    tmp_path, monkeypatch, isolated
+):
+    url = f"sqlite:///{tmp_path / 'tenants.db'}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "0")
+    engine = create_engine(url)
     factory = sessionmaker(bind=engine)
     Base.metadata.create_all(engine)
     identities = {}
@@ -38,9 +48,17 @@ def test_fresh_thread_inventory_executor_writes_only_recorded_tenant(tmp_path, m
         params={"model_number": "A100", "warehouse_name": "同名仓库", "quantity": 50},
     )
 
+    def dispatch(step, runtime_context):
+        executor = AgentToolExecutor()
+        if isolated:
+            return execute_with_tool_deadline(
+                executor, step, runtime_context=runtime_context, timeout_seconds=20
+            )
+        return executor.execute(step, runtime_context=runtime_context)
+
     def execute():
         assert current_tenant_id() is None
-        response = AgentToolExecutor().execute(step, runtime_context={"tenant_id": "2"})
+        response = dispatch(step, {"tenant_id": "2"})
         assert current_tenant_id() is None
         return response
 
@@ -48,13 +66,11 @@ def test_fresh_thread_inventory_executor_writes_only_recorded_tenant(tmp_path, m
         with ThreadPoolExecutor(max_workers=1) as pool:
             response = pool.submit(execute).result(timeout=20)
             # Reusing the same worker for an unscoped task must not inherit tenant 2.
-            unscoped = pool.submit(AgentToolExecutor().execute, step, runtime_context={}).result(
-                timeout=20
-            )
+            unscoped = pool.submit(dispatch, step, {}).result(timeout=25)
         assert response["success"], response
         assert unscoped["success"] is False
         product_id, warehouse_id = identities[2]
-        outbound = AgentToolExecutor().execute(
+        outbound = dispatch(
             AgentStep(
                 node_id="out",
                 tool_id="inventory",

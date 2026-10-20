@@ -534,14 +534,18 @@ def test_validate_tool_result_checks_output_schema() -> None:
     assert "download_url" in invalid.message
 
 
-def test_validate_tool_result_allows_structured_failure_without_success_payload_fields() -> None:
-    failed = validate_tool_result(
-        "business_db",
-        "read",
-        {"success": False, "message": "temporary database error"},
-    )
-
-    assert failed.ok is True
+@pytest.mark.parametrize(
+    "payload, accepted",
+    [
+        ({"success": False, "message": "temporary database error"}, True),
+        ({"success": True, "data": []}, True),
+        ({"success": True, "data": {}}, False),
+        ({"success": True, "data": None}, False),
+        ({"success": True}, False),
+    ],
+)
+def test_business_read_empty_data_is_present_but_still_typed(payload, accepted):
+    assert validate_tool_result("business_db", "read", payload).ok is accepted
 
 
 def test_validate_tool_spec_fixtures_pass_for_all_registry_actions() -> None:

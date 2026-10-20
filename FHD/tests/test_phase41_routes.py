@@ -357,7 +357,7 @@ def test_shipment_generate_service_failure(
 
 
 def test_shipment_generate_success(
-    shipment_client: TestClient, mock_shipment_svc: MagicMock
+    shipment_client: TestClient, mock_shipment_svc: MagicMock, local_tools
 ) -> None:
     payload = {
         "unit_name": "甲公司",

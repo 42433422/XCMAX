@@ -70,14 +70,14 @@ def system_client() -> TestClient:
 
 
 @patch("app.application.facades.session_facade.get_system_service")
-def test_system_startup_post(mock_get: MagicMock, system_client: TestClient) -> None:
+def test_system_startup_post(mock_get: MagicMock, system_client: TestClient, local_tools) -> None:
     mock_get.return_value.enable_startup.return_value = {"success": True}
     r = system_client.post("/api/system/startup")
     assert r.status_code == 200
 
 
 @patch("app.application.facades.session_facade.get_system_service")
-def test_system_startup_delete(mock_get: MagicMock, system_client: TestClient) -> None:
+def test_system_startup_delete(mock_get: MagicMock, system_client: TestClient, local_tools) -> None:
     mock_get.return_value.disable_startup.return_value = {"success": True}
     r = system_client.delete("/api/system/startup")
     assert r.status_code == 200
@@ -91,7 +91,9 @@ def test_database_backup(mock_get: MagicMock, system_client: TestClient) -> None
 
 
 @patch("app.application.facades.session_facade.get_database_service")
-def test_database_backup_delete(mock_get: MagicMock, system_client: TestClient) -> None:
+def test_database_backup_delete(
+    mock_get: MagicMock, system_client: TestClient, local_tools
+) -> None:
     mock_get.return_value.delete_backup.return_value = {"success": True}
     r = system_client.delete("/api/database/backup/2026-01-01.db")
     assert r.status_code == 200

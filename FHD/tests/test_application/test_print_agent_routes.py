@@ -34,8 +34,7 @@ def _assert_print_run(repo: InMemoryAgentRunRepository, run_id: str, action: str
 
 
 def test_print_routes_execute_side_effects_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     document = tmp_path / "document.pdf"
@@ -123,8 +122,7 @@ def test_print_routes_execute_side_effects_through_agent_orchestrator(
 
 
 def test_workflow_label_dispatch_route_executes_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     print_app = MagicMock()

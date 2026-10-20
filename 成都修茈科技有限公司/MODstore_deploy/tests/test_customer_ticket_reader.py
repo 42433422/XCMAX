@@ -198,14 +198,33 @@ def test_grants_fail_closed_and_revocation_is_immediate(reader_case, change):
     assert client.get("/api/customer-service/tickets", headers=headers).status_code == 401
 
 
-def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(reader_case, monkeypatch):
+@pytest.mark.parametrize("old_intent", [None, "account_support", "general"])
+def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(
+    reader_case, monkeypatch, old_intent
+):
     from modstore_server import customer_service_api
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceTicket
     from tests.test_customer_service_api import _as_user, _make_user
 
     client, headers, ids, *_ = reader_case
     ticket_id = ids[0]
     url = f"/api/customer-service/tickets/{ticket_id}/title"
+
+    def set_ticket(**values):
+        with get_session_factory()() as db:
+            db.query(CustomerServiceTicket).filter_by(id=ticket_id).update(values)
+            db.commit()
+
     body = {"title": "  员工图谱无法正常显示  ", "expected_title": "Ticket 0"}
+    if old_intent:
+        body.update(
+            title="Ticket 0",
+            intent="product_issue",
+            expected_intent=old_intent,
+            reason="原描述明确是软件功能故障，纠正误分类",
+        )
+        set_ticket(intent=old_intent)
 
     def forbidden(*args, **kwargs):
         raise AssertionError("metadata correction must not enter chat or dispatch")
@@ -219,34 +238,78 @@ def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(reader_case, 
         detail_url = f"/api/customer-service/tickets/{ticket_id}"
         original = client.get(detail_url).json()["ticket"]
         count = client.get("/api/customer-service/tickets").json()["total"]
+        stale_intent = "general" if old_intent == "account_support" else "account_support"
         for changes, status in [
             ({"title": " "}, 422),
             ({"title": "x" * 257}, 422),
             ({"status": "resolved"}, 422),
             ({"expected_title": "stale"}, 409),
+            *(
+                [
+                    ({"reason": "不足"}, 422),
+                    ({"expected_intent": None}, 422),
+                    ({"intent": None}, 422),
+                    ({"intent": "refund"}, 422),
+                    ({"expected_intent": stale_intent}, 409),
+                ]
+                if old_intent
+                else [({"reason": "未选择分类"}, 422)]
+            ),
         ]:
             assert client.put(url, json={**body, **changes}).status_code == status
+        if old_intent:
+            for values in (
+                {"status": "resolved"},
+                {"closed_at": datetime.now(UTC)},
+                {"intent": "refund"},
+            ):
+                set_ticket(**values)
+                assert client.put(url, json=body).status_code == 409
+                set_ticket(status="processing", closed_at=None, intent=old_intent)
         assert client.put(url.replace(str(ticket_id), "99999999"), json=body).status_code == 404
         response = client.put(url, json=body)
         assert response.status_code == 200, response.text
         assert response.json()["ticket"]["title"] == body["title"].strip()
+        assert response.json()["ticket"].get("intent") == ("product_issue" if old_intent else None)
         assert client.put(url, json=body).status_code == 200
         assert client.put(url, json={**body, "title": "another"}).status_code == 409
         detail = client.get(detail_url).json()
         current = detail["ticket"]
         original.pop("updated_at")
         current.pop("updated_at")
-        assert current == {**original, "title": body["title"].strip()}
+        assert current == {
+            **original,
+            "title": body["title"].strip(),
+            **({"intent": "product_issue"} if old_intent else {}),
+        }
         assert client.get("/api/customer-service/tickets").json()["total"] == count
-        audits = [r for r in detail["audit_logs"] if r["event_type"] == "ticket_title_corrected"]
+        event = "ticket_classification_corrected" if old_intent else "ticket_title_corrected"
+        audits = [r for r in detail["audit_logs"] if r["event_type"] == event]
         assert len(audits) == 1
         assert audits[0]["actor_user_id"] == admin.id and audits[0]["actor_type"] == "admin"
         assert audits[0]["detail"]["old_title"] == "Ticket 0"
+        if old_intent:
+            assert audits[0]["detail"] == {
+                "old_title": "Ticket 0",
+                "new_title": "Ticket 0",
+                "old_intent": old_intent,
+                "new_intent": "product_issue",
+                "reason": body["reason"],
+            }
 
 
-def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case):
-    from modstore_server.models import get_session_factory
-    from modstore_server.models_cs import CustomerServiceTicket
+@pytest.mark.parametrize("disposition", ["resolved", "expired"])
+def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case, disposition):
+    from datetime import datetime
+
+    from modstore_server.models import User, get_session_factory
+    from modstore_server.models_cs import (
+        CustomerServiceAction,
+        CustomerServiceAuditLog,
+        CustomerServiceMessage,
+        CustomerServiceSession,
+        CustomerServiceTicket,
+    )
     from tests.test_customer_service_api import _as_user, _make_user
 
     client, reader_headers, ids, *_ = reader_case
@@ -257,6 +320,7 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
         db.commit()
     url = f"/api/customer-service/tickets/{ticket_id}/close"
     body = {
+        "disposition": disposition,
         "request_id": str(uuid.uuid4()),
         "note": "修复已部署并完成原场景验收",
         "verification": "主线 SHA abc123；运行端页面正常显示，原复现步骤通过。",
@@ -274,12 +338,41 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
         assert updated.status_code == 200
         assert updated.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
         assert client.post(url, json={**body, "verification": "不足"}).status_code == 422
+        if disposition == "expired":
+            assert client.post(url, json=body).status_code == 409
+            with get_session_factory()() as db:
+                old = datetime(2026, 1, 1)
+                db.query(CustomerServiceTicket).filter_by(id=ticket_id).update(
+                    {"created_at": old, "updated_at": old}
+                )
+                db.query(CustomerServiceAuditLog).filter_by(ticket_id=ticket_id).update(
+                    {"created_at": old}
+                )
+                db.query(CustomerServiceAction).filter_by(ticket_id=ticket_id).update(
+                    {"created_at": old, "updated_at": old}
+                )
+                db.commit()
+        with get_session_factory()() as db:
+            original_session_id = db.get(CustomerServiceTicket, ticket_id).session_id
+            session = db.get(CustomerServiceSession, original_session_id)
+            original_owner = session.user_id
+            session.user_id = db.get(CustomerServiceTicket, ids[1]).user_id
+            db.commit()
+        denied = client.post(url, json=body)
+        assert denied.status_code == 409 and "原客服会话不可核验" in denied.json()["detail"]
+        with get_session_factory()() as db:
+            assert db.get(CustomerServiceTicket, ticket_id).status == "processing"
+            assert db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count() == 0
+            db.get(CustomerServiceSession, original_session_id).user_id = original_owner
+            db.commit()
         response = client.post(url, json=body)
         assert response.status_code == 200, response.text
-        assert response.json()["ticket"]["status"] == "resolved"
-        assert (
-            response.json()["ticket"]["evidence"]["resolution"]["verification_mode"]
-            == "admin_runtime"
+        assert response.json()["ticket"]["status"] == disposition
+        resolution = response.json()["ticket"]["evidence"]["resolution"]
+        assert resolution["repair_verified"] is (disposition == "resolved")
+        assert ("resolved_at" in resolution) is (disposition == "resolved")
+        assert response.json()["ticket"]["evidence"]["resolution"]["verification_mode"] == (
+            "admin_expiry" if disposition == "expired" else "admin_runtime"
         )
         assert client.post(url, json=body).json()["replayed"] is True
         detail = client.get(f"/api/customer-service/tickets/{ticket_id}").json()
@@ -289,6 +382,39 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
             sum(a["event_type"] == "expected_completion_updated" for a in detail["audit_logs"]) == 1
         )
         assert [a["action_type"] for a in detail["actions"]].count("ticket.close") == 1
-        audits = [a for a in detail["audit_logs"] if a["event_type"] == "admin_ticket_closed"]
+        event = "admin_ticket_expired" if disposition == "expired" else "admin_ticket_closed"
+        audits = [a for a in detail["audit_logs"] if a["event_type"] == event]
         assert len(audits) == 1 and audits[0]["actor_user_id"] == admin.id
         assert client.post(url, json={**body, "note": "different close request"}).status_code == 409
+        with get_session_factory()() as db:
+            messages = db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).all()
+            assert len(messages) == 1 and messages[0].user_id == detail["ticket"]["user_id"]
+            assert body["note"] in messages[0].content
+            assert body["verification"] not in messages[0].content
+            owner = db.get(User, detail["ticket"]["user_id"])
+        with _as_user(owner):
+            visible = client.get(f"/api/customer-service/sessions/{detail['ticket']['session_id']}")
+            assert visible.status_code == 200
+            assert body["note"] in visible.json()["messages"][-1]["content"]
+            assert body["verification"] not in str(visible.json())
+        if disposition == "expired":
+            from modstore_server.customer_issue_intake import (
+                dispatch_issue_event,
+                record_dispatch_failure,
+            )
+            from modstore_server.customer_service_orchestrator import (
+                apply_customer_ticket_incident_progress,
+            )
+
+            lineage = {"ticket_id": ticket_id, "user_id": detail["ticket"]["user_id"]}
+            assert (
+                dispatch_issue_event({"id": "late-event", "data": lineage})["reason"]
+                == "ticket_expired"
+            )
+            record_dispatch_failure(lineage, "late failure")
+            with get_session_factory()() as db:
+                assert apply_customer_ticket_incident_progress(db, ticket_id=ticket_id)["replayed"]
+                db.commit()
+            after = client.get(f"/api/customer-service/tickets/{ticket_id}").json()
+            assert after["ticket"]["status"] == "expired"
+            assert after["ticket"]["evidence"] == detail["ticket"]["evidence"]

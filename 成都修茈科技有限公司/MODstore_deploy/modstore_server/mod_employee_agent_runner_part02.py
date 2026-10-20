@@ -4,7 +4,14 @@
 from __future__ import annotations
 
 import importlib
+import os
+import stat
+from pathlib import Path
 
+from modstore_server.employee_change_request_verification import (
+    _guard_under_workspace,
+    _workspace_fd,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -12,13 +19,8 @@ def _facade():
     return importlib.import_module("modstore_server.mod_employee_agent_runner")
 
 
-def _guard_path(workspace_root: str, path: str) -> _facade().Optional[str]:
-    """Return resolved absolute path only if it stays inside workspace_root."""
-    resolved = _facade().os.path.normpath(_facade().os.path.join(workspace_root, path))
-    workspace_abs = _facade().os.path.abspath(workspace_root)
-    if not resolved.startswith(workspace_abs + _facade().os.sep) and resolved != workspace_abs:
-        return None
-    return resolved
+def _guard_path(workspace_root: str, path: str) -> str | None:
+    return _guard_under_workspace(workspace_root, path)
 
 
 async def tool_read_workspace_file(
@@ -44,7 +46,11 @@ async def tool_read_workspace_file(
                     return {"ok": False, "error": f"路径越界：{path!r}"}
                 if _facade().os.path.isfile(full):
                     try:
-                        content = _facade().Path(full).read_text(encoding="utf-8", errors="replace")
+                        with _workspace_fd(str(root), norm) as fd:
+                            with os.fdopen(
+                                os.dup(fd), "r", encoding="utf-8", errors="replace"
+                            ) as stream:
+                                content = stream.read()
                         truncated = len(content) > 8000
                         return {
                             "ok": True,
@@ -64,7 +70,9 @@ async def tool_read_workspace_file(
     if not _facade().os.path.isfile(resolved):
         return {"ok": False, "error": f"文件不存在：{path!r}"}
     try:
-        content = _facade().Path(resolved).read_text(encoding="utf-8", errors="replace")
+        with _workspace_fd(workspace_root, path) as fd:
+            with os.fdopen(os.dup(fd), "r", encoding="utf-8", errors="replace") as stream:
+                content = stream.read()
         truncated = len(content) > 8000
         return {
             "ok": True,
@@ -84,6 +92,8 @@ async def tool_write_workspace_file(
     ctx: _facade().Optional[_facade().Mapping[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
     ctx = ctx or {}
+    if ctx.get("read_only"):
+        return {"ok": False, "blocked": True, "error": "只读运行模式禁止写入"}
     resolved = _facade()._guard_path(workspace_root, path)
     if resolved is None:
         return {"ok": False, "error": f"路径越界：{path!r}"}
@@ -155,8 +165,10 @@ async def tool_write_workspace_file(
         except RECOVERABLE_ERRORS as exc:
             return {"ok": False, "error": str(exc)[:400]}
     try:
-        _facade().os.makedirs(_facade().os.path.dirname(resolved) or ".", exist_ok=True)
-        _facade().Path(resolved).write_text(content or "", encoding="utf-8")
+        with _workspace_fd(workspace_root, path, write=True) as fd:
+            with os.fdopen(os.dup(fd), "w", encoding="utf-8") as stream:
+                os.ftruncate(fd, 0)
+                stream.write(content or "")
         return {
             "ok": True,
             "path": path,
@@ -175,20 +187,30 @@ async def tool_list_workspace_dir(
     if not _facade().os.path.isdir(resolved):
         return {"ok": False, "error": f"目录不存在：{path!r}"}
     try:
-        skip = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
         entries = []
-        for name in sorted(_facade().os.listdir(resolved))[:50]:
-            if name in skip:
-                continue
-            full = _facade().os.path.join(resolved, name)
-            is_dir = _facade().os.path.isdir(full)
-            entries.append(
-                {
-                    "name": name,
-                    "type": "dir" if is_dir else "file",
-                    "size": 0 if is_dir else _facade().os.path.getsize(full),
-                }
-            )
+        with _workspace_fd(workspace_root, path, directory=True) as fd:
+            for name in sorted(os.listdir(fd))[:50]:
+                if name in {
+                    ".git",
+                    "node_modules",
+                    "__pycache__",
+                    ".venv",
+                    "venv",
+                    "dist",
+                    "build",
+                }:
+                    continue
+                info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                if stat.S_ISLNK(info.st_mode):
+                    continue
+                is_dir = stat.S_ISDIR(info.st_mode)
+                entries.append(
+                    {
+                        "name": name,
+                        "type": "dir" if is_dir else "file",
+                        "size": 0 if is_dir else info.st_size,
+                    }
+                )
         return {"ok": True, "path": path, "entries": entries, "count": len(entries)}
     except OSError as exc:
         return {"ok": False, "error": str(exc)[:300]}
@@ -197,36 +219,12 @@ async def tool_list_workspace_dir(
 async def tool_run_sandboxed_python(
     code: str, *, timeout: float = 10.0
 ) -> _facade().Dict[str, _facade().Any]:
-    """Run pure-stdlib Python in a subprocess with a hard time limit."""
-    danger = _facade().re.compile(
-        "\\b(import\\s+subprocess|import\\s+socket|import\\s+urllib|open\\s*\\(|__import__|exec\\s*\\(|eval\\s*\\(|compile\\s*\\(|os\\.system|shutil\\.rmtree)\\b"
-    )
-    if danger.search(code):
-        return {"ok": False, "error": "代码包含不允许的操作（网络/文件/exec/eval）"}
-    try:
-        proc = _facade().subprocess.run(
-            [_facade().sys.executable, "-c", code],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env={
-                k: v
-                for (k, v) in _facade().os.environ.items()
-                if k in ("PATH", "PYTHONPATH", "TEMP", "TMP")
-            },
-        )
-        return {
-            "ok": proc.returncode == 0,
-            "stdout": proc.stdout[:2000],
-            "stderr": proc.stderr[:500],
-            "returncode": proc.returncode,
-        }
-    except _facade().subprocess.TimeoutExpired:
-        return {"ok": False, "error": f"执行超时（{timeout:.0f}s）"}
-    except FileNotFoundError:
-        return {"ok": False, "error": "Python 运行时不可用"}
-    except RECOVERABLE_ERRORS as exc:
-        return {"ok": False, "error": str(exc)[:300]}
+    """Fail closed until a process/filesystem/network sandbox is available."""
+    return {
+        "ok": False,
+        "blocked": True,
+        "error": "Python execution requires an isolated sandbox",
+    }
 
 
 async def tool_scan_project_tree(
@@ -253,26 +251,33 @@ async def tool_scan_project_tree(
     ext_count: _facade().Dict[str, int] = {}
     total = 0
     truncated = False
-    for cur, dirs, files in _facade().os.walk(resolved):
-        dirs[:] = sorted((d for d in dirs if d not in skip_dirs))
-        rel_cur = _facade().os.path.relpath(cur, resolved).replace("\\", "/")
-        rel_cur = "" if rel_cur == "." else rel_cur
-        for fname in sorted(files):
-            if total >= max_files:
-                truncated = True
-                break
-            rel_path = f"{rel_cur}/{fname}".lstrip("/")
-            ext = _facade().os.path.splitext(fname)[1].lower() or "(no ext)"
-            size = 0
-            try:
-                size = _facade().os.path.getsize(_facade().os.path.join(cur, fname))
-            except OSError:
-                pass
-            entries.append({"path": rel_path, "ext": ext, "size": size})
-            ext_count[ext] = ext_count.get(ext, 0) + 1
-            total += 1
-        if truncated:
-            break
+    try:
+        with _workspace_fd(workspace_root, path, directory=True) as fd:
+            for cur, dirs, files, current_fd in os.fwalk(".", dir_fd=fd, follow_symlinks=False):
+                dirs[:] = sorted(
+                    d
+                    for d in dirs
+                    if d not in skip_dirs
+                    and not stat.S_ISLNK(
+                        os.stat(d, dir_fd=current_fd, follow_symlinks=False).st_mode
+                    )
+                )
+                for fname in sorted(files):
+                    info = os.stat(fname, dir_fd=current_fd, follow_symlinks=False)
+                    if not stat.S_ISREG(info.st_mode):
+                        continue
+                    if total >= max_files:
+                        truncated = True
+                        break
+                    rel_path = os.path.join(cur, fname).removeprefix("./")
+                    ext = os.path.splitext(fname)[1].lower() or "(no ext)"
+                    entries.append({"path": rel_path, "ext": ext, "size": info.st_size})
+                    ext_count[ext] = ext_count.get(ext, 0) + 1
+                    total += 1
+                if truncated:
+                    break
+    except OSError as exc:
+        return {"ok": False, "error": str(exc)[:300]}
     return {
         "ok": True,
         "root": path,
@@ -287,97 +292,48 @@ async def tool_scan_project_tree(
 async def tool_identify_file_types(
     workspace_root: str, path: str = "."
 ) -> _facade().Dict[str, _facade().Any]:
-    """Count file extensions under *path* within *workspace_root* (non-recursive limit 2000)."""
-    resolved = _facade()._guard_path(workspace_root, path)
-    if resolved is None:
-        return {"ok": False, "error": f"路径越界：{path!r}"}
-    if not _facade().os.path.isdir(resolved):
-        return {"ok": False, "error": f"目录不存在：{path!r}"}
-    skip_dirs = {
-        ".git",
-        "node_modules",
-        "__pycache__",
-        ".venv",
-        "venv",
-        "dist",
-        "build",
-    }
-    ext_count: _facade().Dict[str, int] = {}
-    total = 0
-    for cur, dirs, files in _facade().os.walk(resolved):
-        dirs[:] = [d for d in dirs if d not in skip_dirs]
-        for fname in files:
-            if total >= 2000:
-                break
-            ext = _facade().os.path.splitext(fname)[1].lower() or "(no ext)"
-            ext_count[ext] = ext_count.get(ext, 0) + 1
-            total += 1
+    result = await tool_scan_project_tree(workspace_root, path, max_files=2000)
+    if not result.get("ok"):
+        return result
     return {
         "ok": True,
         "path": path,
-        "total_files_counted": total,
-        "file_types": dict(sorted(ext_count.items(), key=lambda x: -x[1])),
+        "total_files_counted": result["total_files"],
+        "file_types": result["file_type_stats"],
     }
 
 
 async def tool_analyze_project_summary(
     workspace_root: str, path: str = "."
 ) -> _facade().Dict[str, _facade().Any]:
-    """Return a structured project summary using vibe-coding's analyze_project if available,
-    otherwise fall back to a lightweight manual scan."""
-    resolved = _facade()._guard_path(workspace_root, path)
-    if resolved is None:
-        return {"ok": False, "error": f"路径越界：{path!r}"}
-    if not _facade().os.path.isdir(resolved):
-        return {"ok": False, "error": f"目录不存在：{path!r}"}
-    try:
-        from vibe_coding.code_factory import analyze_project
-
-        analysis = analyze_project(resolved)
-        return {
-            "ok": True,
-            "path": path,
-            "root_name": analysis.root_name,
-            "top_level": analysis.top_level,
-            "languages": analysis.languages,
-            "tech_stack": analysis.tech_stack,
-            "entry_points": analysis.entry_points,
-            "config_files": analysis.config_files,
-            "readme_snippet": analysis.readme_snippet,
-            "manifests": analysis.manifests,
-            "git_info": analysis.git_info,
-        }
-    except ImportError:
-        pass
-    except RECOVERABLE_ERRORS as exc:
-        _facade().logger.warning("analyze_project failed, falling back: %s", exc)
-    top_level = sorted(_facade().os.listdir(resolved))[:40]
-    manifests: _facade().Dict[str, _facade().Any] = {}
+    listing = await tool_list_workspace_dir(workspace_root, path)
+    if not listing.get("ok"):
+        return listing
+    manifests = {}
     readme_snippet = ""
-    for mf in ("package.json", "pyproject.toml", "setup.cfg", "Cargo.toml"):
-        mp = _facade().os.path.join(resolved, mf)
-        if _facade().os.path.isfile(mp):
-            try:
-                content = _facade().Path(mp).read_text(encoding="utf-8", errors="replace")[:3000]
-                manifests[mf] = content
-            except OSError:
-                pass
-    for rf in ("README.md", "README.rst", "README.txt", "readme.md"):
-        rp = _facade().os.path.join(resolved, rf)
-        if _facade().os.path.isfile(rp):
-            try:
-                readme_snippet = (
-                    _facade().Path(rp).read_text(encoding="utf-8", errors="replace")[:800]
-                )
-            except OSError:
-                pass
-            break
+    for name in (
+        "package.json",
+        "pyproject.toml",
+        "setup.cfg",
+        "Cargo.toml",
+        "README.md",
+        "README.rst",
+        "README.txt",
+        "readme.md",
+    ):
+        result = await tool_read_workspace_file(workspace_root, os.path.join(path, name))
+        if result.get("ok"):
+            if name.lower().startswith("readme"):
+                if not readme_snippet:
+                    readme_snippet = result["content"][:800]
+            else:
+                manifests[name] = result["content"][:3000]
     return {
         "ok": True,
         "path": path,
-        "root_name": _facade().os.path.basename(resolved),
-        "top_level": top_level,
+        "root_name": Path(workspace_root, path).name,
+        "top_level": [entry["name"] for entry in listing["entries"]],
         "manifests": manifests,
         "readme_snippet": readme_snippet,
-        "note": "vibe-coding 未安装，使用轻量级扫描",
+        "note": "workspace no-follow scan",
     }

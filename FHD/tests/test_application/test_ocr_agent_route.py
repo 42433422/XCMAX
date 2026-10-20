@@ -17,8 +17,7 @@ def _client() -> TestClient:
 
 
 def test_ocr_recognize_route_executes_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     ocr_service = Mock()

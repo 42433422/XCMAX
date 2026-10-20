@@ -11,24 +11,32 @@ def _facade():
 
 
 class __WorkflowEnginePart01MixinPart02Mixin:
-    def _advance_router(
-        self,
-        node: _facade().WorkflowNode,
-        output: dict[str, _facade().Any],
-        pending: dict[str, _facade().WorkflowNode],
-        blocked: set[str],
-    ) -> str | None:
-        """按 output 决定条件边后继，并屏蔽未选中的分支目标；返回选中的 target node_id。
-
-        优先匹配 branches[].condition；无匹配则用 next；next 为空返回 None（正常结束）。
-        """
-        chosen = self._resolve_successor(node, output)
-        candidates = self._branch_candidates(node)
-        for cand in candidates:
-            if cand != chosen:
-                blocked.add(cand)
-                pending.pop(cand, None)
-        return chosen
+    @staticmethod
+    def _routing_state(node, plan, executed, blocked, outputs) -> str:
+        """Data dependencies are AND; incoming control edges select by OR."""
+        if node.node_id in blocked or any(dep in blocked for dep in node.depends_on):
+            return "skipped"
+        routers = [
+            source
+            for source in plan.nodes
+            if node.node_id in _facade().WorkflowEngine._branch_candidates(source)
+        ]
+        if any(dep not in executed for dep in node.depends_on) or any(
+            source.node_id not in executed | blocked for source in routers
+        ):
+            return "waiting"
+        if not isinstance(outputs, dict) or any(
+            source.node_id in executed and not isinstance(outputs.get(source.node_id), dict)
+            for source in routers
+        ):
+            return "waiting"  # Never guess a decision from an incomplete checkpoint.
+        excluded = routers and all(
+            source.node_id in blocked
+            or _facade().WorkflowEngine._resolve_successor(source, outputs[source.node_id])
+            != node.node_id
+            for source in routers
+        )
+        return "skipped" if excluded else "ready"
 
     @staticmethod
     def _resolve_successor(
@@ -65,12 +73,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
 
     @staticmethod
     def _branch_candidates(node: _facade().WorkflowNode) -> list[str]:
-        cands: list[str] = []
-        if node.next is not None:
-            cands.append(node.next)
-        for branch in node.branches:
-            cands.append(branch.target)
-        return cands
+        return ([node.next] if node.next is not None else []) + [b.target for b in node.branches]
 
     def _run_agentic_loop(
         self,

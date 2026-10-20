@@ -10,7 +10,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import logging
 import threading
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -27,6 +27,8 @@ from modstore_server.customer_service_orchestrator import (
 )
 from modstore_server.customer_service_api_helpers import (
     IntegrationBody,
+    TicketTitleBody,
+    correct_ticket_metadata,
     StandardBody,
     close_ticket_with_evidence,
     audit_payload as _audit_payload,
@@ -37,7 +39,7 @@ from modstore_server.customer_service_api_helpers import (
     visible_ticket_or_404 as _visible_ticket_or_404,
 )
 from modstore_server import customer_service_customer_view as customer_view
-from modstore_server.customer_service_tools import audit, json_dumps, json_loads
+from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models import User
 from modstore_server.customer_ticket_reader import TicketReader, reader_ticket, reader_detail
 from modstore_server.models_cs import (
@@ -86,16 +88,12 @@ class CustomerServiceChatBody(BaseModel):
     image_data_url: Optional[str] = Field(default=None, max_length=4_500_000)
 
 
-class TicketTitleBody(BaseModel, extra="forbid"):
-    title: str = Field(..., min_length=1, max_length=256)
-    expected_title: str = Field(..., max_length=256)
-
-
 class CustomerTicketEtaBody(BaseModel):
     expected_completion_at: Optional[datetime]
 
 
 class AdminTicketCloseBody(BaseModel, extra="forbid"):
+    disposition: Literal["resolved", "expired"] = "resolved"
     request_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
     note: str = Field(min_length=8, max_length=2000)
     verification: str = Field(min_length=20, max_length=4000)
@@ -272,33 +270,7 @@ async def correct_ticket_title(
     db: Session = Depends(get_db),
     user: User = Depends(_require_admin),
 ):
-    ticket = _visible_ticket_or_404(db, user, ticket_id)
-    title = body.title.strip()
-    if not title:
-        raise HTTPException(422, "工单标题不能为空")
-    if title != ticket.title:
-        changed = (
-            db.query(CustomerServiceTicket)
-            .filter(
-                CustomerServiceTicket.id == ticket_id,
-                CustomerServiceTicket.title == body.expected_title,
-            )
-            .update({"title": title}, synchronize_session=False)
-        )
-        if changed != 1:
-            db.rollback()
-            raise HTTPException(409, "工单标题已变化，请刷新后重试")
-        audit(
-            db,
-            actor=user,
-            actor_type="admin",
-            ticket_id=ticket_id,
-            session_id=ticket.session_id,
-            event_type="ticket_title_corrected",
-            detail={"old_title": body.expected_title, "new_title": title},
-        )
-        db.commit()
-    return {"ticket": {"id": ticket_id, "title": title}}
+    return correct_ticket_metadata(db, user, ticket_id, body)
 
 
 @router.post("/tickets/{ticket_id}/close")

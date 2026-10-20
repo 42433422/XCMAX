@@ -322,7 +322,7 @@ class TestPrintRoutesSaveSelection:
         assert r.status_code == 400
         assert "标签打印机" in r.json()["message"]
 
-    def test_save_selection_success(self, print_client: TestClient):
+    def test_save_selection_success(self, print_client: TestClient, local_tools):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
             svc.return_value.get_printers.return_value = {"printers": [{"name": "P1"}]}
             svc.return_value.save_printer_selection.return_value = {"success": True}
@@ -336,7 +336,7 @@ class TestPrintRoutesSaveSelection:
         assert data["success"] is True
         assert data["doc"] == "P1"
 
-    def test_save_selection_exception(self, print_client: TestClient):
+    def test_save_selection_exception(self, print_client: TestClient, local_tools):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
             svc.return_value.get_printers.side_effect = RuntimeError("boom")
             r = print_client.put("/api/print/printer-selection", json={})
@@ -355,7 +355,7 @@ class TestPrintRoutesDocument:
         assert r.status_code == 400
         assert "文件不存在" in r.json()["message"]
 
-    def test_print_document_success(self, print_client: TestClient, tmp_path: Path):
+    def test_print_document_success(self, print_client: TestClient, tmp_path: Path, local_tools):
         document = tmp_path / "x.pdf"
         document.write_bytes(b"%PDF")
         with (
@@ -384,7 +384,7 @@ class TestPrintRoutesDocument:
             r = print_client.post("/api/print/document", json={"file_path": str(document)})
         assert r.status_code == 400
 
-    def test_print_document_exception(self, print_client: TestClient, tmp_path: Path):
+    def test_print_document_exception(self, print_client: TestClient, tmp_path: Path, local_tools):
         document = tmp_path / "x.pdf"
         document.write_bytes(b"%PDF")
         with (
@@ -459,7 +459,7 @@ class TestPrintRoutesLabel:
         assert r.status_code == 400
         assert "过期或无效" in r.json()["message"]
 
-    def test_print_label_require_confirm_valid_token(self, print_client: TestClient):
+    def test_print_label_require_confirm_valid_token(self, print_client: TestClient, local_tools):
         print_routes._print_confirm_cache.clear()
         token = print_routes._create_print_confirm_token(
             {"file_path": "/tmp/x.pdf", "copies": 2, "printer_name": "P1"}
@@ -488,7 +488,7 @@ class TestPrintRoutesLabel:
             )
         assert r.status_code == 400
 
-    def test_print_label_exception(self, print_client: TestClient):
+    def test_print_label_exception(self, print_client: TestClient, local_tools):
         with (
             patch("app.fastapi_routes.print_routes._svc") as svc,
             patch("os.path.exists", return_value=True),
@@ -506,7 +506,7 @@ class TestPrintRoutesOtherEndpoints:
         r = print_client.post("/api/print/test", json={})
         assert r.status_code == 400
 
-    def test_test_printer_post_success(self, print_client: TestClient):
+    def test_test_printer_post_success(self, print_client: TestClient, local_tools):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
             svc.return_value.test_printer.return_value = {"success": True}
             r = print_client.post("/api/print/test", json={"printer_name": "P1"})
@@ -563,7 +563,7 @@ class TestPrintRoutesWorkflowLabel:
         assert r.status_code == 200
         assert r.json()["skipped"] is True
 
-    def test_dispatch_lookup_error_still_prints(self, print_client: TestClient):
+    def test_dispatch_lookup_error_still_prints(self, print_client: TestClient, local_tools):
         with (
             patch("app.application.print_app_service.get_print_application_service") as get_svc,
             patch("app.application.get_product_app_service") as get_prod,
@@ -592,7 +592,7 @@ class TestPrintRoutesWorkflowLabel:
             )
         assert r.status_code == 400
 
-    def test_dispatch_exception(self, print_client: TestClient):
+    def test_dispatch_exception(self, print_client: TestClient, local_tools):
         with patch("app.application.print_app_service.get_print_application_service") as get_svc:
             get_svc.return_value.print_single_label.side_effect = RuntimeError("boom")
             r = print_client.post(
@@ -990,7 +990,8 @@ class TestDecideProcessorWithPolicy:
             ),
             patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
             patch(
-                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(0, 0.9)
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(0, 0.9),
             ),
             patch("app.neuro_bus.routing.policy_router.append_routing_decision"),
         ):
@@ -1036,7 +1037,8 @@ class TestDecideProcessorWithPolicy:
             ),
             patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
             patch(
-                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(1, 0.9)
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(1, 0.9),
             ),
             patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
         ):
@@ -1055,7 +1057,8 @@ class TestDecideProcessorWithPolicy:
             ),
             patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
             patch(
-                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(2, 0.9)
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(2, 0.9),
             ),
             patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
         ):
@@ -1075,7 +1078,8 @@ class TestDecideProcessorWithPolicy:
                 return_value={"lang": "zh"},
             ) as feat_mock,
             patch(
-                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(0, 0.9)
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(0, 0.9),
             ),
             patch("app.neuro_bus.routing.policy_router.append_routing_decision"),
         ):
@@ -1119,7 +1123,8 @@ class TestDecideProcessorWithPolicy:
             ),
             patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
             patch(
-                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(1, 0.7)
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(1, 0.7),
             ),
             patch("app.neuro_bus.routing.policy_router.random.random", return_value=0.5),
             patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
@@ -1182,7 +1187,8 @@ class TestDecideProcessorWithPolicy:
             ),
             patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
             patch(
-                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(0, 0.9)
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(0, 0.9),
             ),
             patch("app.neuro_bus.routing.policy_router.random.random", return_value=0.001),
             patch("app.neuro_bus.routing.policy_router.append_routing_decision"),
@@ -1200,7 +1206,8 @@ class TestDecideProcessorWithPolicy:
             ),
             patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
             patch(
-                "app.neuro_bus.routing.policy_router.predict_with_confidence", return_value=(0, 0.9)
+                "app.neuro_bus.routing.policy_router.predict_with_confidence",
+                return_value=(0, 0.9),
             ),
             patch("app.neuro_bus.routing.policy_router.append_routing_decision"),
         ):
@@ -1844,6 +1851,11 @@ class TestSeedIndustryMod:
 
 
 class TestInstallIndustrySeedWithFallback:
+    @pytest.fixture(autouse=True)
+    def isolated_industry_root(self, tmp_path, monkeypatch):
+        manager = MagicMock(mods_root=str(tmp_path))
+        monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: manager)
+
     @pytest.mark.asyncio
     async def test_success_from_seed(self, monkeypatch):
         monkeypatch.setattr(

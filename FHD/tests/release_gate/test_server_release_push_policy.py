@@ -347,7 +347,23 @@ def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
 
 def test_deploy_validates_autonomy_without_rewriting_server_configuration(tmp_path: Path) -> None:
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text())
+    events = workflow.get("on", workflow.get(True))
+    preserve = events["workflow_dispatch"]["inputs"]["preserve_release_history"]
+    assert (preserve["type"], preserve["default"]) == ("boolean", False)
     steps = workflow["jobs"]["cvm-rolling"]["steps"]
+    apply = next(s for s in steps if s["name"] == "SSH rolling restart / apply")
+    assert apply["env"]["PRESERVE_RELEASE_HISTORY"] == (
+        "${{ inputs.preserve_release_history && '1' || '0' }}"
+    )
+    assert (
+        'case "${PRESERVE_RELEASE_HISTORY}" in 0|1) export XCMAX_PRESERVE_RELEASE_HISTORY='
+        in apply["run"]
+    )
+    assert 'export FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS="360"' in apply["run"]
+    updater = (FHD_ROOT / "scripts/deploy/fhd-auto-update.sh").read_text()
+    assert 'case "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" in 0|1)' in updater
+    assert '"XCMAX_PRESERVE_RELEASE_HISTORY=${XCMAX_PRESERVE_RELEASE_HISTORY:-0}"' in updater
+    assert 'if XCMAX_PRESERVE_RELEASE_HISTORY="${XCMAX_PRESERVE_RELEASE_HISTORY:-0}"' in updater
     check = next(
         s for s in steps if s["name"] == "Validate existing autonomy runtime configuration"
     )

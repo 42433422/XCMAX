@@ -258,13 +258,9 @@ def get_tool_action_spec(tool_id: str, action: str) -> ToolActionSpecV2 | None:
 
 
 def _is_empty(value: Any) -> bool:
-    if value is None:
-        return True
     if isinstance(value, str):
-        return not value.strip()
-    if isinstance(value, (list, tuple, dict)):
-        return len(value) == 0
-    return False
+        value = value.strip()
+    return value is None or (isinstance(value, (str, list, tuple, dict)) and not value)
 
 
 def _type_matches(value: Any, expected: str) -> bool:
@@ -296,12 +292,14 @@ def _validate_schema_payload(
     if subject == "工具输出" and payload.get("success") is False:
         required = [key for key in (required or []) if str(key) == "success"]
     for key in required or []:
-        if _is_empty(payload.get(str(key))):
+        if _is_empty(payload.get(str(key))) and not (
+            subject == "工具输出" and isinstance(payload.get(str(key)), (list, dict))
+        ):
             return False, f"{subject} 缺少字段：{key}"
 
     properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
     for key, prop in (properties or {}).items():
-        if key not in payload or _is_empty(payload.get(key)):
+        if key not in payload or payload.get(key) is None:
             continue
         if not isinstance(prop, dict):
             continue
