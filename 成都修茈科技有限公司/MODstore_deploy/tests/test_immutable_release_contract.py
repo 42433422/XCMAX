@@ -278,7 +278,10 @@ def test_stopped_service_resolves_current_release_catalog(tmp_path: Path) -> Non
     assert stale.stdout.strip() == str(fallback)
 
 
-def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) -> None:
+@pytest.mark.parametrize("preserve", ["0", "1"])
+def test_release_retention_prunes_only_verified_sha_directories(
+    tmp_path: Path, preserve: str
+) -> None:
     source_root = tmp_path / "source"
     release_base = tmp_path / "xcmax"
     releases = release_base / "releases"
@@ -293,7 +296,9 @@ def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) 
     for position, sha in enumerate(shas, start=1):
         release = releases / sha
         release.mkdir()
-        (release / ".xcmax-release.json").write_text(json.dumps({"git_sha": sha}), encoding="utf-8")
+        (release / ".xcmax-release.json").write_text(
+            json.dumps({"git_sha": sha}), encoding="utf-8"
+        )
         os.utime(release, (position, position))
 
     malformed_sha = "f" * 40
@@ -330,6 +335,7 @@ def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) 
             "XCMAX_RELEASE_BASE": str(release_base),
             "XCMAX_RELEASE_LOCK": str(tmp_path / "release.lock"),
             "XCMAX_RELEASE_PRUNE_ONLY": "1",
+            "XCMAX_PRESERVE_RELEASE_HISTORY": preserve,
             "XCMAX_RELEASES_TO_KEEP": "3",
             "XCMAX_SOURCE_ROOT": str(source_root),
             "XCMAX_TARGET_SHA": shas[1],
@@ -340,11 +346,15 @@ def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) 
 
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     remaining = {item.name for item in releases.iterdir()}
-    assert remaining.intersection(shas) == {shas[0], shas[1], shas[-1]}
+    expected = set(shas) if preserve == "1" else {shas[0], shas[1], shas[-1]}
+    assert remaining.intersection(shas) == expected
     assert malformed_sha in remaining
     assert unrelated.name in remaining
-    assert "release retention complete kept=3 removed=3 limit=3" in result.stdout
-    assert "skipping unverified release directory" in result.stdout
+    if preserve == "1":
+        assert "preserving all release history" in result.stdout
+    else:
+        assert "release retention complete kept=3 removed=3 limit=3" in result.stdout
+        assert "skipping unverified release directory" in result.stdout
 
 
 def test_release_retention_rejects_unsafe_limit(tmp_path: Path) -> None:

@@ -1,26 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
+case "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" in 0|1) ;; *) echo "XCMAX_PRESERVE_RELEASE_HISTORY must be 0 or 1" >&2; exit 64 ;; esac
 
-# 本机：打包 FHD API 发布物并原子 scp 到 update 服务器（供 cron 拉取式应用）。
-#
-# 用法（FHD 根目录或任意目录）:
-#   bash scripts/deploy/fhd-push-release.sh
-#
-# 环境变量:
-#   FHD_SKIP_PACK=1              跳过 pack（使用已有 dist/deploy 产物）
-#   FHD_PUSH_HOST                默认 119.27.178.147
-#   FHD_PUSH_USER                默认 root
-#   FHD_RELEASE_CHANNEL          stable（prod）| staging；决定默认远端目录
-#   FHD_PUSH_REMOTE_DIR          默认 /var/www/update/releases/<channel>/server
-#   FHD_PUSH_SSH_KEY             SSH 私钥路径（默认 ~/.ssh/id_rsa 等）
-#   FHD_RELEASE_OUT_DIR          与 pack 脚本一致
-#   FHD_PUSH_IMAGE_TAR           auto（仅 image 模式）| 1（强制）| 0（跳过）
-#   FHD_PUSH_APPLY_NOW           1 上传后立刻远端应用并验证；strict CI 默认 1
-#   FHD_PUSH_REMOTE_DEPLOY_ROOT  默认 /opt/fhd-full
-#   FHD_PUSH_HEALTH_URL          远端本机健康地址，默认 http://127.0.0.1:5100/api/health?lite=true
-#   FHD_PUSH_APPLY_LOCK_WAIT_SECONDS  严格发布等待远端 updater 锁，默认 360
-#   FHD_PUSH_HEALTH_RETRIES      exact-SHA 健康轮询次数，默认 120
-#   FHD_PUSH_HEALTH_INTERVAL     健康轮询间隔秒数，默认 3
+# 打包并原子上传；部署通道与服务器配置见 docs/CI_SSOT.md。
+# FHD_PUSH_APPLY_NOW=1 上传后应用并校验 exact SHA；默认由服务器 cron 应用。
+# XCMAX_PRESERVE_RELEASE_HISTORY=1 本次保留全部历史，须同时立即应用。
+# FHD_PUSH_IMAGE_TAR=auto 仅 image 模式上传镜像，1 强制、0 跳过。
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 FHD_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
@@ -71,6 +56,11 @@ case "$APPLY_NOW" in
     exit 1
     ;;
 esac
+
+if [[ "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" == 1 && "$APPLY_NOW" != 1 ]]; then
+  echo "[err] preserving release history requires FHD_PUSH_APPLY_NOW=1" >&2
+  exit 64
+fi
 
 deploy_emit bootstrap started "host=$HOST channel=$CHANNEL remote_dir=$REMOTE_DIR"
 
@@ -285,29 +275,20 @@ if [[ "$APPLY_NOW" == "1" ]]; then
   APPLY_LOCK_WAIT_SECONDS="${FHD_PUSH_APPLY_LOCK_WAIT_SECONDS:-360}"
   HEALTH_RETRIES="${FHD_PUSH_HEALTH_RETRIES:-120}"
   HEALTH_INTERVAL="${FHD_PUSH_HEALTH_INTERVAL:-3}"
-  case "$APPLY_LOCK_WAIT_SECONDS" in
-    '' | *[!0-9]*)
-      echo "[err] FHD_PUSH_APPLY_LOCK_WAIT_SECONDS 必须为非负整数" >&2
-      exit 64
-      ;;
-  esac
-  case "$HEALTH_RETRIES" in
-    '' | *[!0-9]* | 0)
-      echo "[err] FHD_PUSH_HEALTH_RETRIES 必须为正整数" >&2
-      exit 64
-      ;;
-  esac
-  case "$HEALTH_INTERVAL" in
-    '' | *[!0-9]*)
-      echo "[err] FHD_PUSH_HEALTH_INTERVAL 必须为非负整数" >&2
-      exit 64
-      ;;
-  esac
+  for setting in APPLY_LOCK_WAIT_SECONDS HEALTH_RETRIES HEALTH_INTERVAL; do
+    case "${!setting}" in
+      '' | *[!0-9]*) echo "[err] FHD_PUSH_$setting 必须为非负整数" >&2; exit 64 ;;
+    esac
+  done
+  if [[ "$HEALTH_RETRIES" -eq 0 ]]; then
+    echo "[err] FHD_PUSH_HEALTH_RETRIES 必须为正整数" >&2
+    exit 64
+  fi
   REMOTE_MANIFEST="${REMOTE_DIR}/fhd-manifest.json"
   REMOTE_TARBALL="${REMOTE_DIR}/${ARTIFACT}"
   printf -v APPLY_COMMAND \
-    'set -euo pipefail; BOOTSTRAP=$(mktemp -d /tmp/fhd-release-bootstrap.XXXXXX); trap '\''rm -rf -- "$BOOTSTRAP"'\'' EXIT; tar -xzf %q -C "$BOOTSTRAP" ./scripts/deploy; test -x "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"; FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS=%q FHD_MANIFEST_PATH=%q FHD_ARTIFACT_DIR=%q FHD_DEPLOY_ROOT=%q bash "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"' \
-    "$REMOTE_TARBALL" "$APPLY_LOCK_WAIT_SECONDS" "$REMOTE_MANIFEST" "$REMOTE_DIR" "$REMOTE_DEPLOY_ROOT"
+    'set -euo pipefail; BOOTSTRAP=$(mktemp -d /tmp/fhd-release-bootstrap.XXXXXX); trap '\''rm -rf -- "$BOOTSTRAP"'\'' EXIT; tar -xzf %q -C "$BOOTSTRAP" ./scripts/deploy; test -x "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"; XCMAX_PRESERVE_RELEASE_HISTORY=%q FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS=%q FHD_MANIFEST_PATH=%q FHD_ARTIFACT_DIR=%q FHD_DEPLOY_ROOT=%q bash "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"' \
+    "$REMOTE_TARBALL" "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" "$APPLY_LOCK_WAIT_SECONDS" "$REMOTE_MANIFEST" "$REMOTE_DIR" "$REMOTE_DEPLOY_ROOT"
 
   deploy_emit apply started "host=$HOST git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"
   if ! "${SSH[@]}" "$REMOTE" "$APPLY_COMMAND"; then
@@ -351,13 +332,13 @@ if [[ "$APPLY_NOW" == "1" ]]; then
   deploy_emit verify ok "git_sha=$GIT_SHA"
   deploy_emit apply ok "host=$HOST git_sha=$GIT_SHA"
 
-  # Cleanup is intentionally post-verify: failed or unverified releases retain
-  # every rollback artifact. Once the exact SHA is live, bound old immutable
-  # tarballs, abandoned partial uploads, and full-tree rollback snapshots.
-  REMOTE_PRUNER="${REMOTE_DEPLOY_ROOT}/scripts/deploy/prune_release_cache.py"
-  if ! "${SSH[@]}" "$REMOTE" \
-      "python3 '$REMOTE_PRUNER' --release-dir '$REMOTE_DIR' --backup-dir '/opt/fhd-full-backups' --current-artifact '$ARTIFACT' --retain-releases 8 --retain-backups 5 --part-max-age-hours 24"; then
-    echo "[warn] release cache cleanup failed after verified deploy; runtime remains healthy" >&2
+  # Bound successful release history only when this invocation permits pruning.
+  if [[ "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" != 1 ]]; then
+    REMOTE_PRUNER="${REMOTE_DEPLOY_ROOT}/scripts/deploy/prune_release_cache.py"
+    if ! "${SSH[@]}" "$REMOTE" \
+        "python3 '$REMOTE_PRUNER' --release-dir '$REMOTE_DIR' --backup-dir '/opt/fhd-full-backups' --current-artifact '$ARTIFACT' --retain-releases 8 --retain-backups 5 --part-max-age-hours 24"; then
+      echo "[warn] release cache cleanup failed after verified deploy; runtime remains healthy" >&2
+    fi
   fi
 fi
 
