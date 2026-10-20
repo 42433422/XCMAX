@@ -489,4 +489,3 @@ onUnmounted(() => {
 </script>
 
 <style scoped src="./im-messenger/im-messenger.css"></style>
-<style scoped src="./ImMessengerResponsive.css"></style>
