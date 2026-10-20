@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.desktop_runtime import configure_desktop_environment
-from app.fastapi_app import create_fastapi_app
+from app.fastapi_app import factory
 from app.security.lan_config import reset_lan_config_cache
 from app.security.lan_settings_store import LanSettingsOverride
 
@@ -34,7 +34,8 @@ def fast_start_client(monkeypatch, tmp_path):
         keep_deferred_routes_pending,
     )
 
-    app = create_fastapi_app()
+    monkeypatch.setattr(factory, "_app_singleton", None)
+    app = factory.create_fastapi_app()
     assert getattr(app.state, "deferred_routes_pending", False) is True
     with TestClient(app) as client:
         yield client, app

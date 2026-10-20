@@ -35,7 +35,7 @@
 | 入口 | 执行 owner / 事务台账 | 重试与结果合同 |
 |---|---|---|
 | FHD `agent_orchestrator/unified_task.py` | `task_background.py`；`run_sql_repository.py` 与 `task_execution_sql_repository.py`（均在 `FHD/app/application/agent_orchestrator/`） | Run/Step 与队列租约归属；unknown 不等于失败可重派；生产持久化初始化失败拒接 |
-| FHD `app/di/registry.py` 的 workflow runtime | `app/application/workflow/runtime/`；checkpoint bridge | legacy 默认，其他模式显式配置；支持条件图的引擎执行条件，不支持的 AgentStep 入口拒绝该计划 |
+| FHD `app/di/registry.py` 的 workflow runtime | `app/application/workflow/runtime/`；checkpoint bridge | legacy 默认，其他模式显式配置；Workflow 与 AgentStep 入口共享条件/依赖规则，审批续跑保留分支决策；未选分支不执行 |
 | FHD `xcmax_admin_part03_part01.py:local_employee_execute` | `employee_runtime/executor.py`；`run_ledger.py` 的租户日志（分别位于 routes 与 application） | 单次请求执行一次；工具授权在最终 dispatch；error/accepted/unknown 不得 verified；业务完成另需独立 readback |
 | MODstore `customer_issue_intake.py` → `incident_bus.py` | outbox、唯一 incident 与 dispatch claim；`incident_team_dispatch.py` | 保留 event/task/attempt 身份；已受理或结果未知只核对原任务；新 fix 使旧 verify 失效 |
 | MODstore `admin_duty_graph_api_part02.py` / `employee_orchestrator.py` | 持久 DutyRun/节点或动态图运行记录 | 下游仅接受成功依赖；失败、跳过、pending 分开；传统 workflow 必须到达 end 才能成功 |

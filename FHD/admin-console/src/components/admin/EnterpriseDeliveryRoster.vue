@@ -230,7 +230,6 @@ function formatDate(value: string): string {
 .delivery-state.is-pending-install { color: #b26225; }
 .delivery-state.is-pending-first-login { color: #6c50a7; }
 .enterprise-roster__state small { color: #7a8b9c; font-size: 8px; }
-.enterprise-roster__state button { border: 1px solid #d5a071; border-radius: 8px; background: #fff7ef; color: #a65d26; padding: 6px 8px; font-size: 9px; font-weight: 700; cursor: pointer; }
 .enterprise-roster__empty { padding: 22px; border: 1px dashed #c7d8e8; border-radius: 11px; color: #718399; text-align: center; }
 @media (max-width: 1100px) { .enterprise-roster__grid article { grid-template-columns: 38px 1fr 1fr; } .enterprise-roster__proof,.enterprise-roster__state { grid-column: 2 / -1; justify-items: start; text-align: left; } }
 @media (max-width: 760px) { .enterprise-roster__toolbar { align-items: stretch; flex-direction: column; } .enterprise-roster__grid article { grid-template-columns: 38px 1fr; } .enterprise-roster__plan,.enterprise-roster__proof,.enterprise-roster__state { grid-column: 2; } }

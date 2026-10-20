@@ -201,6 +201,12 @@ async def local_employee_execute(
     body: dict[str, _facade().Any] = _facade().Body(default_factory=dict),
 ):
     """管理端本机员工执行入口：绕开远端代理，直接调用 FHD employee_runtime。"""
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import execute_with_tool_deadline
+    from app.application.agent_orchestrator.tool_spec import (
+        DEFAULT_TIMEOUT_SECONDS,
+        get_tool_action_spec,
+    )
     from app.application.auth_permission_resolver import require_allowed
     from app.application.employee_runtime.executor import execute_employee_task_local
     from app.application.employee_runtime.result_verifier import (
@@ -267,15 +273,26 @@ async def local_employee_execute(
         user_id=user_id or None,
     )
     payload["run_id"] = run_id
+
     # A whole-task replay can repeat successful writes before a later failure.
     # Repairs belong to the same action/run, not a new execution of the request.
-    result = execute_employee_task_local(
-        pid,
-        task,
-        payload,
-        user_id=user_id,
-        workspace_root=str(body.get("workspace_root") or "").strip() or None,
-        session_id=sid,
+    class LocalInvocation:
+        def execute(self, _step, *, runtime_context):
+            return execute_employee_task_local(
+                pid,
+                task,
+                payload,
+                user_id=user_id,
+                workspace_root=str(body.get("workspace_root") or "").strip() or None,
+                session_id=sid,
+            )
+
+    spec = get_tool_action_spec("employee", "execute")
+    result = execute_with_tool_deadline(
+        LocalInvocation(),
+        AgentStep(node_id=str(run_id), tool_id="employee", action="execute"),
+        runtime_context={"tenant_id": tenant_id, "user_id": user_id, "session_id": sid},
+        timeout_seconds=spec.timeout_seconds if spec else DEFAULT_TIMEOUT_SECONDS,
     )
     result = (
         result

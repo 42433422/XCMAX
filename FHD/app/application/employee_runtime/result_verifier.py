@@ -37,10 +37,13 @@ def execution_result_error(data: dict[str, Any]) -> str:
     """Inspect canonical result envelopes, never infer success from HTTP delivery."""
     if data.get("error"):
         return str(data["error"])
-    state = str(data.get("execution_state") or data.get("status") or "")
+    states = {
+        str(data.get(key) or "").strip().lower() for key in ("execution_state", "status", "outcome")
+    }
     if (
-        state in {"unknown", "pending", "accepted", "running", "failed", "blocked", "cancelled"}
+        states & {"unknown", "pending", "accepted", "running", "failed", "blocked", "cancelled"}
         or data.get("reconciliation_required")
+        or data.get("requires_reconciliation")
         or data.get("pending_approval")
     ):
         return str(data.get("message") or "员工执行尚未完成")
@@ -65,9 +68,13 @@ def execution_result_error(data: dict[str, Any]) -> str:
 
 def execution_result_requires_reconciliation(data: dict[str, Any]) -> bool:
     """Preserve unknown identity through the same envelopes used by verification."""
-    state = str(data.get("execution_state") or data.get("status") or "")
-    if state in {"unknown", "accepted", "pending", "running"} or data.get(
-        "reconciliation_required"
+    states = {
+        str(data.get(key) or "").strip().lower() for key in ("execution_state", "status", "outcome")
+    }
+    if (
+        states & {"unknown", "accepted", "pending", "running"}
+        or data.get("reconciliation_required")
+        or data.get("requires_reconciliation")
     ):
         return True
     children = [data.get("result"), data.get("output")]

@@ -63,6 +63,10 @@ def test_success_wrapper_cannot_hide_nested_error_or_unfinished_action():
         {"error": "private failure"},
         {"success": False},
         {"status": "unknown"},
+        {"status": "completed", "outcome": "unknown"},
+        {"execution_state": "completed", "status": "unknown"},
+        {"outcome": " UNKNOWN "},
+        {"requires_reconciliation": True},
         {"status": "accepted"},
         {"reconciliation_required": True},
     ):
@@ -71,3 +75,15 @@ def test_success_wrapper_cannot_hide_nested_error_or_unfinished_action():
             "result": {"summary": "done", "outputs": [{"ok": True, "output": child}]},
         }
         assert verify_employee_run_result("employee", result)[0] is False
+
+
+def test_unknown_identity_variants_are_not_verified_and_require_reconciliation():
+    from app.application.employee_runtime.result_verifier import (
+        execution_result_requires_reconciliation,
+    )
+
+    for marker in ({"outcome": "unknown"}, {"requires_reconciliation": True}):
+        child = {"success": True, "status": "completed", "summary": "done", **marker}
+        for result in (child, {"success": True, "result": {"outputs": [{"output": child}]}}):
+            assert verify_employee_run_result("employee", result)[0] is False
+            assert execution_result_requires_reconciliation(result) is True

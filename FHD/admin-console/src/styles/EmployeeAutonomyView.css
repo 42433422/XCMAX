@@ -103,9 +103,7 @@
 }
 .table-card { overflow-x: auto; }
 .data-table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: 13px; }
-.data-table th, .data-table td {
-  text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef2f7;
-}
+.data-table th, .data-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef2f7; }
 .empty { padding: 28px; text-align: center; color: #94a3b8; }
 .empty.compact { padding: 12px 4px; }
 .link { border: none; background: none; color: #1890ff; cursor: pointer; }

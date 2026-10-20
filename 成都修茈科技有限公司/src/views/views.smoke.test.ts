@@ -9,7 +9,6 @@ import AdminDatabaseView from './AdminDatabaseView.vue'
 import AdminView from './AdminView.vue'
 import AiStoreView from './AiStoreView.vue'
 import CatalogDetailView from './CatalogDetailView.vue'
-import DbViewerView from './DbViewerView.vue'
 import HomeView from './HomeView.vue'
 import LoginByEmailView from './LoginByEmailView.vue'
 import LoginView from './LoginView.vue'
@@ -118,6 +117,16 @@ beforeEach(() => {
   apiMockState.calls = []
 })
 
+describe('market administrator overview', () => {
+  it('shows the full catalog total from the admin status endpoint', async () => {
+    apiMockState.responses.adminStatus = { total_catalog_items: 327, total_users: 58 }
+    const { wrapper } = await mountView(AdminView, '/admin/overview')
+    expect(wrapper.text()).toContain('市场商品总数')
+    expect(wrapper.text()).toContain('327')
+    expect(wrapper.text()).toContain('58')
+  })
+})
+
 const cases = [
   ['app', App, '/'],
   ['home', HomeView, '/'],
@@ -134,7 +143,6 @@ const cases = [
   ['MOD authoring', ModAuthoringView, '/repository/mod/demo'],
   ['admin', AdminView, '/admin'],
   ['admin database', AdminDatabaseView, '/admin/database'],
-  ['database viewer', DbViewerView, '/admin/database'],
   ['checkout', PaymentCheckoutView, '/checkout/order-1'],
   ['order detail', OrderDetailView, '/order/order-1'],
 ] as const
@@ -254,13 +262,11 @@ describe('application views', () => {
   it.each(cases)('keeps %s renderable when its API is unavailable', async (_name, component, path) => {
     apiMockState.reject = true
     localStorage.setItem('modstore_token', 'test-token')
-    const consoleError = _name === 'database viewer' ? vi.spyOn(console, 'error').mockImplementation(() => undefined) : null
     const { wrapper } = await mountView(component, path, false)
     await flushPromises()
 
     expect(wrapper.exists()).toBe(true)
     wrapper.unmount()
-    consoleError?.mockRestore()
   })
 
   it('covers payment plan checkout decisions', async () => {
@@ -458,7 +464,7 @@ describe('customer and administrator UI boundaries', () => {
       if (admin) {
         await wrapper.findAll('.mode-tab')[1]!.trigger('click')
         await flushPromises()
-        expect(router.currentRoute.value.path).toBe('/admin/database')
+        expect(router.currentRoute.value.path).toBe('/admin/overview')
         expect(wrapper.text()).toContain('管理员模式')
         await wrapper.findAll('.mode-tab')[0]!.trigger('click')
         await flushPromises()
@@ -486,13 +492,13 @@ describe('customer and administrator UI boundaries', () => {
     wrapper.unmount()
   })
 
-  it.each([AdminDatabaseView, DbViewerView])('renders populated ledgers without dropping negative balances or escaping status', async (component) => {
+  it('renders populated ledgers without dropping negative balances or escaping status', async () => {
     const users = [{ id: 1, username: '<script>admin</script>', email: '', is_admin: true }, { id: 2, username: 'customer', email: 'a@example.com', is_admin: false, created_at: '2026-10-07T00:00:00Z' }]
     const wallets = [{ id: 1, user_id: 1, balance: 12.5 }, { id: 2, user_id: 2, balance: -5, updated_at: '2026-10-07T00:00:00Z' }]
     const catalog = [{ id: 1, name: 'Free MOD', pkg_id: 'free', price: 0 }, { id: 2, name: 'Paid MOD', pkg_id: 'paid', price: 12.5, downloads: 3, created_at: '2026-10-07T00:00:00Z' }]
     const transactions = [{ id: 1, user_id: 1, amount: 12.5, status: 'completed', description: '' }, { id: 2, user_id: 2, amount: -5, status: 'pending', description: 'refund', created_at: '2026-10-07T00:00:00Z' }]
     apiMockState.responses = { me: { is_admin: true }, adminListUsers: { users, items: users }, adminListWallets: { items: wallets }, adminListCatalog: { items: catalog }, adminListTransactions: { items: transactions } }
-    const { wrapper } = await mountView(component, '/admin/database')
+    const { wrapper } = await mountView(AdminDatabaseView, '/admin/database')
     expect(wrapper.findAll('tbody tr')).toHaveLength(8)
     expect(wrapper.text()).toContain('¥-5.00')
     expect(wrapper.text()).toContain('¥12.50')

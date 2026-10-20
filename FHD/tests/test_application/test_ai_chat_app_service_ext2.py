@@ -663,7 +663,10 @@ class TestTryHandleDynamicWorkflowExtended:
         ):
             result = service._try_handle_dynamic_workflow("u1", "随便聊聊", "pro", ctx, {})
         assert result is not None
-        assert result["success"] is True
+        service.workflow_planner.plan.assert_called_once()
+        assert result["success"] is False  # 空图不能冒充执行成功。
+        assert result["data"]["action"] == "workflow_failed"
+        assert result["data"]["data"]["tool_call_count"] == 0
 
     def test_pro_pending_workflow_approval_required(self):
         service = _make_service()

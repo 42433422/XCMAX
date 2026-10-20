@@ -93,6 +93,9 @@ def test_http_run_history_is_scoped_even_for_admin(ledger, monkeypatch):
         ({"success": False, "result": {"outputs": [{"execution_state": "unknown"}]}}, "unknown"),
         ({"success": False, "pending_approval": True}, "awaiting_approval"),
         (None, "unknown"),
+        ({"success": True, "summary": "done", "outcome": "unknown"}, "unknown"),
+        ({"success": True, "summary": "done", "requires_reconciliation": True}, "unknown"),
+        ("wrapped_http_timeout", "unknown"),
     ],
 )
 def test_http_execution_does_not_replay_or_accept_body_identity(
@@ -100,8 +103,12 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
 ):
     from unittest.mock import Mock
 
-    from app.application import auth_permission_resolver, session_account_meta
-    from app.application.employee_runtime import executor, result_verifier
+    from app.application import (
+        auth_permission_resolver,
+        session_account_meta,
+        tool_execution_deadline,
+    )
+    from app.application.employee_runtime import executor
     from app.fastapi_routes.domains.misc import helpers
     from app.fastapi_routes.xcmax_admin import local_employee_execute
     from app.infrastructure.auth import dependencies
@@ -116,11 +123,18 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
         lambda sid, user: {"tenant_id": 1, "account_kind": "admin"},
     )
     monkeypatch.setattr(auth_permission_resolver, "require_allowed", lambda **kwargs: None)
-    execute = Mock(return_value=outcome)
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+
+    def invoke(*args, **kwargs):
+        budget = tool_execution_deadline._DEADLINE.get()
+        assert budget is not None  # Real admin route must establish the trusted budget.
+        if outcome == "wrapped_http_timeout":
+            budget.uncertain.append({"kind": "http_timeout", "method": "POST"})
+            return {"success": True, "summary": "claimed done"}
+        return outcome
+
+    execute = Mock(side_effect=invoke)
     monkeypatch.setattr(executor, "execute_employee_task_local", execute)
-    monkeypatch.setattr(
-        result_verifier, "verify_employee_run_result", lambda *args: (False, "failed")
-    )
     app = FastAPI()
     app.add_api_route("/execute/{employee_id}", local_employee_execute, methods=["POST"])
     with TestClient(app) as client:
@@ -145,7 +159,8 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
     assert execute.call_args.kwargs["user_id"] == 7
     assert execute.call_args.kwargs["session_id"] == "trusted-session"
 
-    assert ledger.list_employee_run_logs("same", tenant_id=1)[0]["status"] == expected
+    record = ledger.list_employee_run_logs("same", tenant_id=1)[0]
+    assert record["status"] == expected and not record["verified"]
     payload = execute.call_args.args[2]
     assert payload["user_id"] == 7 and payload["session_id"] == "trusted-session"
     assert payload["tenant_id"] == 1 and "_runtime_context" not in payload
