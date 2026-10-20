@@ -9,7 +9,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import psutil
 
@@ -118,7 +118,7 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
     if result:
         with invocation_deadline(deadline) as budget:
             budget.uncertain.extend(result["uncertain"])
-        return result["output"]
+        return cast(dict[str, Any], result["output"])
     if not armed:
         return {"success": False, "error_code": "tool_worker_not_started", "retryable": False}
     return {"outcome": "unknown", "error_code": "tool_worker_incomplete", "retryable": False}
