@@ -21,6 +21,8 @@
 #   OPS_FHD_ENV         默认 /root/fhd-full.env（取 DATABASE_URL）
 #   OPS_MODSTORE_ENV    默认 /etc/xcmax/modstore.env
 #   OPS_PG_DUMP_CONTAINER_IMAGE 可选；宿主 pg_dump 版本不匹配时用该镜像导出
+#   OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE 可选；未设置时支付库使用宿主 pg_dump/pg_restore，
+#     避免用较新的通用导出镜像生成目标 PostgreSQL 无法读取的归档
 #   OPS_MODSTORE_DIR    默认 /root/XCMAX/成都修茈科技有限公司/MODstore_deploy
 #   OPS_MODSTORE_DB     默认 $OPS_MODSTORE_DIR/modstore.db（可显式指定）
 #   OPS_COS_BUCKET      可选，如 xcmax-backup-1250000000
@@ -123,55 +125,38 @@ PY
 }
 
 backup_pg_url() {
-  local label="$1" filename="$2" url="$3"
-  if [[ "$DRY_RUN" == "1" ]]; then
-    log "[dry-run] 将导出 $label PostgreSQL → $filename（URL 已脱敏）"
-    return
-  fi
-  local out="$DEST/$filename"
+  local label="$1" filename="$2" url="$3" policy="${4:-default}" out="$DEST/$2"
+  [[ "$DRY_RUN" == 1 ]] && { log "[dry-run] 将导出 $label PostgreSQL → $filename（URL 已脱敏）"; return; }
   local pg_image="${OPS_PG_DUMP_CONTAINER_IMAGE:-}"
-  if [[ -n "$pg_image" ]]; then
-    if ! command -v docker >/dev/null 2>&1; then
-      fail "已配置 OPS_PG_DUMP_CONTAINER_IMAGE，但 docker 不可用"
-      return
+  [[ "$policy" == payment ]] && pg_image="${OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE:-}"
+  if [[ "$policy" == payment ]]; then
+    local server_version client_version server_major client_major
+    command -v psql >/dev/null 2>&1 || { fail "$label 无法检查数据库版本：缺少 psql"; return; }
+    server_version="$(psql --no-password "$url" -XAtc 'show server_version_num' 2>>"$LOG")" || { fail "$label 无法读取 PostgreSQL 服务端版本"; return; }
+    if [[ -n "$pg_image" ]]; then
+      command -v docker >/dev/null 2>&1 || { fail "$label 已配置支付导出镜像但 docker 不可用"; return; }
+      client_version="$(docker run --rm --network none --entrypoint pg_dump "$pg_image" --version 2>>"$LOG")" || { fail "$label 无法读取支付导出镜像版本"; return; }
+    else
+      command -v pg_dump >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1 || { fail "$label 缺少匹配的 pg_dump/pg_restore 或 OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE"; return; }
+      client_version="$(pg_dump --version 2>>"$LOG")" || { fail "$label 无法读取支付导出客户端版本"; return; }
     fi
-    if ! printf '%s\n' "$url" | docker run --rm -i --network host \
-      --entrypoint sh "$pg_image" -ceu \
-      'IFS= read -r url; exec pg_dump --no-password -Fc -d "$url"' \
-      >"$out" 2>>"$LOG"; then
-      fail "$label pg_dump 失败（容器镜像 $pg_image）"
-      return
-    fi
-  elif command -v pg_dump >/dev/null 2>&1; then
-    if ! pg_dump --no-password -Fc -d "$url" -f "$out" 2>>"$LOG"; then
-      fail "$label pg_dump 失败（本机客户端）"
-      return
-    fi
-  else
-    # 没装 pg 客户端：尝试用 postgres 容器内的 pg_dump
-    local container
-    container="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -im1 postgres || true)"
-    if [[ -z "$container" ]]; then
-      fail "$label pg_dump 不可用且未发现 postgres 容器——装 postgresql-client 或配置导出镜像"
-      return
-    fi
-    if ! docker exec "$container" pg_dump -Fc -d "$url" > "$out" 2>>"$LOG"; then
-      fail "$label pg_dump 失败（容器 $container）"
-      return
-    fi
+    client_version="${client_version##* }"
+    [[ "$server_version" =~ ^[0-9]+$ ]] || { fail "$label 返回了无效的 PostgreSQL 服务端版本"; return; }
+    if (( server_version >= 100000 )); then server_major=$((server_version / 10000)); else server_major="$((server_version / 10000)).$(((server_version / 100) % 100))"; fi
+    if [[ "$client_version" == 9.* ]]; then client_major="$(cut -d. -f1-2 <<<"$client_version")"; else client_major="${client_version%%.*}"; fi
+    [[ "$client_major" == "$server_major" ]] || { fail "$label 导出客户端版本 $client_major 与数据库版本 $server_major 不匹配"; return; }
   fi
-  # 验证：能列出目录才算真备份
   if [[ -n "$pg_image" ]]; then
-    if ! docker run --rm -i --network none --entrypoint pg_restore \
-      "$pg_image" --list <"$out" >/dev/null 2>>"$LOG"; then
-      fail "$filename 验证失败（容器 pg_restore --list）"
-      return
-    fi
-  elif command -v pg_restore >/dev/null 2>&1; then
-    if ! pg_restore --list "$out" >/dev/null 2>>"$LOG"; then
-      fail "$filename 验证失败（pg_restore --list）"
-      return
-    fi
+    printf '%s\n' "$url" | docker run --rm -i --network host --entrypoint sh "$pg_image" -ceu 'IFS= read -r url; exec pg_dump --no-password -Fc -d "$url"' >"$out" 2>>"$LOG" || { fail "$label pg_dump 失败（容器镜像 $pg_image）"; return; }
+    docker run --rm -i --network none --entrypoint pg_restore "$pg_image" --list <"$out" >/dev/null 2>>"$LOG" || { fail "$filename 验证失败（容器 pg_restore --list）"; return; }
+  elif command -v pg_dump >/dev/null 2>&1; then
+    pg_dump --no-password -Fc -d "$url" -f "$out" 2>>"$LOG" || { fail "$label pg_dump 失败（本机客户端）"; return; }
+    command -v pg_restore >/dev/null 2>&1 && pg_restore --list "$out" >/dev/null 2>>"$LOG" || { fail "$filename pg_restore --list 验证失败"; return; }
+  else
+    local container="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -im1 postgres || true)"
+    [[ -n "$container" ]] || { fail "$label 缺少 pg_dump 且没有可用 Postgres 容器"; return; }
+    docker exec "$container" pg_dump -Fc -d "$url" >"$out" 2>>"$LOG" || { fail "$label pg_dump 失败（容器 $container）"; return; }
+    docker exec "$container" pg_restore --list "$out" >/dev/null 2>>"$LOG" || { fail "$filename 容器 pg_restore --list 验证失败"; return; }
   fi
   log "$label PG 备份完成: $(du -h "$out" | cut -f1)"
 }
@@ -214,7 +199,7 @@ backup_modstore_pg() {
   if [[ -z "$payment_url" ]]; then
     fail "未在 $MODSTORE_ENV 找到 JAVA_DATABASE_URL"
   else
-    backup_pg_url "支付服务" "payment_pg.dump" "$payment_url"
+    backup_pg_url "支付服务" "payment_pg.dump" "$payment_url" payment
   fi
 }
 
