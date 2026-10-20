@@ -392,7 +392,7 @@ def _planner_fallback_patches():
     )
 
 
-def test_create_get_and_list_agent_run() -> None:
+def test_create_get_and_list_agent_run(local_tools) -> None:
     get_agent_run_repository().clear()
     clear_consumed_approval_grants_for_tests()
     client = _client()
@@ -406,7 +406,7 @@ def test_create_get_and_list_agent_run() -> None:
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "data": [{"model_number": "XG-5003"}]},
-        ),
+        ) as execute_tool,
     ):
         response = client.post(
             "/api/agent/runs",
@@ -418,6 +418,7 @@ def test_create_get_and_list_agent_run() -> None:
         )
         completed_run = _drain_background_run(response.json()["data"]["run_id"])
 
+    execute_tool.assert_called_once()
     assert response.status_code == 202
     payload = response.json()
     assert payload["success"] is True

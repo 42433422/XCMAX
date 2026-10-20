@@ -1,5 +1,5 @@
 {
-  "lines": 2317261,
+  "lines": 2317298,
   "updated": "2026-10-20",
-  "note": "用户2026-10-20 20:28 UTC明确要求执行附件架构方案。A1.2首批关闭移动管理历史JWT重建和当前宿主会话撤权绕过，真实管理员access/refresh与Cookie/会话头/实际管理路由正反测试76项通过。必要净增450行：生产辅助及调用净81，新增安全回归385，既有单测改造净-18，CHANGELOG+2。2316811至2317261；删除的是已由真实数据库反例替代的错误JWT提权假设及无效mock设置，不删除有效权限断言。独立于A1.1预算，合并时应重新实测并集；未自动合并/部署/改真实角色/创建凭据，旧无Session admin relay和仅市场历史标记兼容须独立验收。"
+  "note": "A1.2 CI regression correction: retain authorization assertions; isolate OIDC full factory from cached bootstrap and parent-mocked agent tool contract; 37 additional test lines, 154 forward and 81 reverse tests passed. User explicitly approved code and draft PR updates on 2026-10-20."
 }
