@@ -3,6 +3,9 @@
 The shared host database, not a process-local set, is authoritative for refresh
 replay prevention. Deploy the additive replay-table migration before enabling
 JWT authentication. Database errors fail closed; there is no memory fallback.
+Legacy refresh tokens require a new login: their consumed identities cannot be
+recovered from old process memory. Drain all old refresh workers at cutover;
+mixed deployments or rollback to the memory implementation are not replay-safe.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ WEB_JWT_ISS = "xcagi-web"
 WEB_JWT_ALG = "HS256"
 WEB_ACCESS_TTL_HOURS = 12
 WEB_REFRESH_TTL_HOURS = 336
+_REFRESH_PROTOCOL = "durable-v1"
 _FALLBACK_SECRET = secrets.token_urlsafe(48)
 
 
@@ -61,6 +65,8 @@ def _issue(
         "exp": now + ttl_hours * 3600,
         "jti": uuid.uuid4().hex,
     }
+    if typ == "refresh":
+        payload["refresh_protocol"] = _REFRESH_PROTOCOL
     if session_id:
         payload["session_id"] = session_id
     return jwt.encode(payload, _secret_key(), algorithm=WEB_JWT_ALG)
@@ -133,7 +139,11 @@ def _consume_refresh_jti(db: Any, jti: str, expires_at: int, now: int) -> bool:
 
 def refresh_web_access_token(refresh_token: str) -> dict[str, str] | None:
     payload = verify_web_jwt(refresh_token)
-    if not payload or payload.get("typ") != "refresh":
+    if (
+        not payload
+        or payload.get("typ") != "refresh"
+        or payload.get("refresh_protocol") != _REFRESH_PROTOCOL
+    ):
         return None
     jti, expires_at, user_id = payload.get("jti"), payload.get("exp"), payload.get("user_id")
     if (

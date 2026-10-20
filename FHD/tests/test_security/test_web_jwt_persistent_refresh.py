@@ -74,6 +74,10 @@ def test_refresh_binding_and_replay(replay_db):
     rotated = w.refresh_web_access_token(tokens["refresh_token"])
     assert rotated is not None
     assert all(
+        w.verify_web_jwt(item["refresh_token"])["refresh_protocol"] == "durable-v1"
+        for item in (tokens, rotated)
+    )
+    assert all(
         w.verify_web_jwt(token)["session_id"] == "bound-session" for token in rotated.values()
     )
     assert w.refresh_web_access_token(tokens["refresh_token"]) is None
@@ -126,3 +130,17 @@ def test_invalid_claim_cannot_be_consumed(replay_db, jti, expiry):
     with scope() as db:
         assert not w._consume_refresh_jti(db, jti, expiry, 100)
         assert db.execute(text("SELECT COUNT(*) FROM web_refresh_token_uses")).scalar_one() == 0
+
+
+@pytest.mark.parametrize("protocol", [None, "memory-v0", 1])
+def test_legacy_refresh_is_rejected_before_rotation_or_storage(replay_db, monkeypatch, protocol):
+    tokens = w.issue_web_tokens(user_id=7, session_id="bound-session")
+    claims = w.verify_web_jwt(tokens["refresh_token"])
+    claims.pop("refresh_protocol", None)
+    if protocol is not None:
+        claims["refresh_protocol"] = protocol
+    legacy = jwt.encode(claims, w._secret_key(), algorithm=w.WEB_JWT_ALG)
+    monkeypatch.setattr(w, "issue_web_tokens", lambda **kw: pytest.fail("must not rotate legacy"))
+    monkeypatch.setattr("app.db.session.get_host_db", lambda: pytest.fail("must not open store"))
+    assert w.refresh_web_access_token(legacy) is None
+    assert w.verify_web_jwt(tokens["access_token"])["typ"] == "access"

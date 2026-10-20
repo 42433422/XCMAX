@@ -79,7 +79,7 @@ L0 物理基底    DB schema🟢(旁路封+冻结) · 租户隔离🟢 · runtim
 | 06 | 覆盖率证据 | Open：当前覆盖率报告与验收提交 SHA 的对应关系仍需核实，不沿用旧报告。 |
 | 07 | 工单完整生命周期 | Open：MODstore incident_bus 已定轨（enrich + routing_plan 真派发、handler_failed 可观测），Para 已有 CLI fallback；[主线 #2440](https://github.com/42433422/XCMAX/pull/2440) 与 [主线 ETA #2446](https://github.com/42433422/XCMAX/pull/2446) 不替代无上游替身的真改代码→验证→回写及生产积压验收。 |
 | 08 | 编号 Mixin 与动态导入 | Open：显式依赖和恢复类型检查的完整证据待补。 |
-| 09 | JWT 刷新跨进程状态 | Open：#2449 已有持久化候选；原子跨进程单次消费及迁移/真实环境验收待证。 |
+| 09 | JWT 刷新跨进程状态 | Open：#2449 持久化及拒旧刷新协议候选；旧 refresh 需重新登录，旧 access 按原有效期处理。上线须获批并排空旧刷新进程，不得混部或回滚旧实现；真实环境验收待证。 |
 
 - 存量生产库若历史 `SKIP_ALEMBIC` 过，需一次 `alembic stamp/upgrade` 对齐（发版流程执行，非代码缺口）
 - 认知 Processor 已挂生产 intent（失败 fallback unified）；域事件样板仅采购订单创建→`order.created` 持久化，未宣称全域落地
