@@ -249,11 +249,11 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
     from modstore_server.models_cs import CustomerServiceTicket
     from tests.test_customer_service_api import _as_user, _make_user
 
-    client, _, ids, *_ = reader_case
+    client, reader_headers, ids, *_ = reader_case
     ticket_id = ids[0]
     with get_session_factory()() as db:
         row = db.query(CustomerServiceTicket).filter_by(id=ticket_id).one()
-        row.evidence_json = "{}"
+        row.evidence_json = '{"prior": "keep"}'
         db.commit()
     url = f"/api/customer-service/tickets/{ticket_id}/close"
     body = {
@@ -261,10 +261,18 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
         "note": "修复已部署并完成原场景验收",
         "verification": "主线 SHA abc123；运行端页面正常显示，原复现步骤通过。",
     }
+    eta_url = f"/api/customer-service/tickets/{ticket_id}/expected-completion"
+    eta = {"expected_completion_at": "2026-10-21T11:30:00+08:00"}
+    assert client.patch(eta_url, json=eta, headers=reader_headers).status_code == 403
+    assert client.post(url, json=body, headers=reader_headers).status_code == 403
     with _as_user(_make_user("close_customer")):
         assert client.post(url, json=body).status_code == 403
+        assert client.patch(eta_url, json=eta).status_code == 403
     admin = _make_user("close_admin", admin=True)
     with _as_user(admin):
+        updated = client.patch(eta_url, json=eta)
+        assert updated.status_code == 200
+        assert updated.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
         assert client.post(url, json={**body, "verification": "不足"}).status_code == 422
         response = client.post(url, json=body)
         assert response.status_code == 200, response.text
@@ -275,6 +283,11 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
         )
         assert client.post(url, json=body).json()["replayed"] is True
         detail = client.get(f"/api/customer-service/tickets/{ticket_id}").json()
+        assert detail["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
+        assert detail["ticket"]["evidence"]["prior"] == "keep"
+        assert (
+            sum(a["event_type"] == "expected_completion_updated" for a in detail["audit_logs"]) == 1
+        )
         assert [a["action_type"] for a in detail["actions"]].count("ticket.close") == 1
         audits = [a for a in detail["audit_logs"] if a["event_type"] == "admin_ticket_closed"]
         assert len(audits) == 1 and audits[0]["actor_user_id"] == admin.id

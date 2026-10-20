@@ -97,3 +97,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   .cs-steps li { font-size: 11px; }
   .cs-pager { flex-direction: column; align-items: flex-start; }
 }
+.cs-eta-editor { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.cs-eta-editor label { flex-basis:100%; }
+.cs-eta-editor input { min-height:36px; padding:6px 8px; }

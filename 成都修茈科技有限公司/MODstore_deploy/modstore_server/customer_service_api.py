@@ -9,6 +9,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 import logging
 import threading
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,11 +26,14 @@ from modstore_server.customer_service_orchestrator import (
     ticket_payload,
 )
 from modstore_server.customer_service_api_helpers import (
+    IntegrationBody,
+    StandardBody,
     close_ticket_with_evidence,
     audit_payload as _audit_payload,
     integration_payload as _integration_payload,
     own_session_or_404 as _own_session_or_404,
     standard_payload as _standard_payload,
+    update_expected_completion as _update_expected_completion,
     visible_ticket_or_404 as _visible_ticket_or_404,
 )
 from modstore_server import customer_service_customer_view as customer_view
@@ -87,21 +91,14 @@ class TicketTitleBody(BaseModel, extra="forbid"):
     expected_title: str = Field(..., max_length=256)
 
 
+class CustomerTicketEtaBody(BaseModel):
+    expected_completion_at: Optional[datetime]
+
+
 class AdminTicketCloseBody(BaseModel, extra="forbid"):
     request_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
     note: str = Field(min_length=8, max_length=2000)
     verification: str = Field(min_length=20, max_length=4000)
-
-
-class StandardBody(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    scenario: str = Field(default="general", max_length=64)
-    description: str = Field(default="", max_length=4000)
-    rules: Dict[str, Any] = Field(default_factory=dict)
-    action_policy: Dict[str, Any] = Field(default_factory=dict)
-    auto_enabled: bool = True
-    risk_level: str = Field(default="low", max_length=16)
-    priority: int = 100
 
 
 def _configuration_values(body: BaseModel) -> Dict[str, Any]:
@@ -119,16 +116,6 @@ def _configuration_values(body: BaseModel) -> Dict[str, Any]:
         if name in values:
             values[name] = values[name] or default
     return values
-
-
-class IntegrationBody(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    integration_type: str = Field(default="openapi", max_length=32)
-    connector_id: Optional[int] = None
-    workflow_id: Optional[int] = None
-    scenario: str = Field(default="general", max_length=64)
-    config: Dict[str, Any] = Field(default_factory=dict)
-    enabled: bool = True
 
 
 @router.post("/chat")
@@ -352,6 +339,17 @@ async def ticket_detail(
             [_audit_payload(a) for a in related(CustomerServiceAuditLog)] if user.is_admin else []
         ),
     }
+
+
+@router.patch("/tickets/{ticket_id}/expected-completion", dependencies=[Depends(_require_admin)])
+async def update_ticket_expected_completion(
+    ticket_id: int,
+    body: CustomerTicketEtaBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
+):
+    ticket = _update_expected_completion(db, ticket_id, user, body.expected_completion_at)
+    return {"ticket": ticket_payload(ticket)}
 
 
 @router.get("/actions")

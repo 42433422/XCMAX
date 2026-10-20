@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from modstore_server.customer_service_orchestrator import ticket_payload
@@ -20,6 +21,27 @@ from modstore_server.models_cs import (
     CustomerServiceStandard,
     CustomerServiceTicket,
 )
+
+
+class StandardBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    scenario: str = Field(default="general", max_length=64)
+    description: str = Field(default="", max_length=4000)
+    rules: Dict[str, Any] = Field(default_factory=dict)
+    action_policy: Dict[str, Any] = Field(default_factory=dict)
+    auto_enabled: bool = True
+    risk_level: str = Field(default="low", max_length=16)
+    priority: int = 100
+
+
+class IntegrationBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    integration_type: str = Field(default="openapi", max_length=32)
+    connector_id: Optional[int] = None
+    workflow_id: Optional[int] = None
+    scenario: str = Field(default="general", max_length=64)
+    config: Dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
 
 
 def own_session_or_404(db: Session, user: User, session_id: int) -> CustomerServiceSession:
@@ -40,6 +62,29 @@ def visible_ticket_or_404(db: Session, user: User, ticket_id: int) -> CustomerSe
     ):
         return row
     raise HTTPException(404, "客服工单不存在")
+
+
+def update_expected_completion(
+    db: Session, ticket_id: int, user: User, value: datetime | None
+) -> CustomerServiceTicket:
+    ticket = visible_ticket_or_404(db, user, ticket_id)
+    value = (
+        value.replace(tzinfo=UTC)
+        if value and value.tzinfo is None
+        else (value.astimezone(UTC) if value else None)
+    )
+    ticket.expected_completion_at = value  # type: ignore[assignment]
+    audit(
+        db,
+        event_type="expected_completion_updated",
+        detail={"expected_completion_at": value.isoformat() if value else None},
+        actor=user,
+        ticket_id=ticket.id,
+        actor_type="admin",
+    )
+    db.commit()
+    db.refresh(ticket)
+    return ticket
 
 
 def standard_payload(
