@@ -135,14 +135,12 @@ from app.mod_sdk.employee_specialized_tools_part03_part02 import (
 from app.mod_sdk.employee_specialized_tools_part03_part03 import (
     tool_query_codex_usage as tool_query_codex_usage,
 )
-from app.mod_sdk.employee_specialized_tools_part04 import (get_employee_tools as get_employee_tools,
-                                                           handle_specialized as handle_specialized,
-                                                           list_all_tool_names as
-                                                           list_all_tool_names,
-                                                           tool_query_trae_usage as
-                                                           tool_query_trae_usage)
-
-# fmt: on
+from app.mod_sdk.employee_specialized_tools_part04 import (
+    get_employee_tools as get_employee_tools,
+    handle_specialized as handle_specialized,
+    list_all_tool_names as list_all_tool_names,
+    tool_query_trae_usage as tool_query_trae_usage,
+)
 
 _CODE_WRITE_TOOLS_LAZY: frozenset[str] | None = None
 
