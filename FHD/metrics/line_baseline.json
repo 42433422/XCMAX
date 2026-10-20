@@ -1,5 +1,5 @@
 {
-  "lines": 2317223,
+  "lines": 2317153,
   "updated": "2026-10-20",
-  "note": "A1.4同一授权与必要测试预算：补齐两个既有图片测试文件的精确private/no-store断言，替换public/宽松or合同且保留媒体与尺寸验证，净减2行至2317223；相对main必要净增412。继承本分支414行例外的真实安全/授权分支范围，不新增权限，不自动合并部署，旧缓存与GET刷新CSRF仍待独立验收。"
+  "note": "Preserve the reviewed a1-admin-surfaces security slice while incorporating main 3f646df lock and release fixes; recompute actual line count with the updated main counting policy. No security assertions removed. Draft-only changes approved by user."
 }

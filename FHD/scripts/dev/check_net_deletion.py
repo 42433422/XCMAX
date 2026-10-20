@@ -41,7 +41,7 @@ SKIP_DIR_NAMES = {
 SKIP_FILE_NAMES = {
     "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml",
     "poetry.lock", "uv.lock", "Gemfile.lock", "Cargo.lock", "composer.lock",
-    "Pipfile.lock", "flake.lock",
+    "Pipfile.lock", "flake.lock", "requirements.lock.txt", "requirements-server-api.lock.txt",
 }
 
 # 指标 / 遥测 / 报告目录：随 CI 与运行时持续追加，非代码或文档。
