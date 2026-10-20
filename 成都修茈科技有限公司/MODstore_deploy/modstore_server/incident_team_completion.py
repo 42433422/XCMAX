@@ -171,7 +171,7 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
             ticket_id = int(payload.get("ticket_id") or 0)
             ticket = db.get(CustomerServiceTicket, ticket_id, with_for_update=True)
             if ticket is not None:
-                evidence = json.loads(ticket.evidence_json or "{}")
+                evidence = json.loads(str(ticket.evidence_json or "{}"))
                 resolution = evidence.get("resolution") or {}
                 if ticket.user_id != int(payload.get("user_id") or 0) or resolution.get(
                     "incident_event_id"
@@ -220,7 +220,9 @@ def _resume_pending_verify(event_id: int) -> None:
         with incident_claim_scope(event_id):
             with get_session_factory()() as db:
                 event = db.get(IncidentEvent, event_id)
-                payload = json.loads(event.payload_json or "{}")
+                if event is None:
+                    return
+                payload = json.loads(str(event.payload_json or "{}"))
                 claim = payload.get("_team_claim") or {}
                 rows = claim.get("team") or []
                 by_role = {row.get("role"): row for row in rows}
@@ -230,7 +232,9 @@ def _resume_pending_verify(event_id: int) -> None:
                 ticket_id = int(payload.get("ticket_id") or 0)
                 ticket = db.get(CustomerServiceTicket, ticket_id)
                 if ticket is not None:
-                    resolution = json.loads(ticket.evidence_json or "{}").get("resolution") or {}
+                    resolution = (
+                        json.loads(str(ticket.evidence_json or "{}")).get("resolution") or {}
+                    )
                     if (
                         ticket.user_id != int(payload.get("user_id") or 0)
                         or ticket.status in {"resolved", "closed", "reopened"}
@@ -238,7 +242,7 @@ def _resume_pending_verify(event_id: int) -> None:
                         or resolution.get("incident_event_id") not in (None, event_id)
                     ):
                         return
-                event_type, source = event.event_type, event.source
+                event_type, source = str(event.event_type), str(event.source)
                 plan = claim.get("plan") or {
                     "team": [
                         {"role": row.get("role"), "employee_id": row.get("employee_id")}
@@ -258,11 +262,15 @@ def _resume_pending_verify(event_id: int) -> None:
             with get_session_factory()() as db:
                 assert_incident_claim(event_id, session=db)
                 event = db.get(IncidentEvent, event_id)
-                payload = json.loads(event.payload_json or "{}")
+                if event is None:
+                    return
+                payload = json.loads(str(event.payload_json or "{}"))
                 claim = payload.get("_team_claim") or {}
                 rows = claim.get("team") or []
                 claim["ok"] = team_succeeded(rows)
-                event.payload_json = json.dumps(payload, ensure_ascii=False)
+                db.query(IncidentEvent).filter(IncidentEvent.id == event_id).update(
+                    {"payload_json": json.dumps(payload, ensure_ascii=False)}
+                )
                 ticket_id = int(payload.get("ticket_id") or 0)
                 ticket = db.get(CustomerServiceTicket, ticket_id)
                 if (
@@ -311,7 +319,7 @@ def persist_role_attempt(event_id: int, row: Dict[str, Any], *, expected_attempt
         if event is None:
             raise ValueError("incident not found")
         original = event.payload_json
-        payload = json.loads(event.payload_json or "{}")
+        payload = json.loads(str(event.payload_json or "{}"))
         claim = payload.setdefault("_team_claim", {"ok": False, "team": []})
         rows = claim.setdefault("team", [])
         previous = next((item for item in rows if item.get("role") == row.get("role")), None)

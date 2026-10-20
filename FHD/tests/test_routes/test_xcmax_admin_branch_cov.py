@@ -929,8 +929,8 @@ class TestLocalEmployeeExecuteBranches:
             )
         assert resp.status_code == 200
 
-    def test_invalid_user_id_defaults_to_zero(self, client: TestClient):
-        """Lines 1213-1214: invalid user_id → 0."""
+    def test_invalid_body_user_id_keeps_authenticated_owner(self, client: TestClient):
+        """Untrusted request identity never overrides the authenticated owner."""
         with ExitStack() as stack:
             for cm in _local_employee_execute_session_patches():
                 stack.enter_context(cm)
@@ -964,7 +964,7 @@ class TestLocalEmployeeExecuteBranches:
             )
         assert resp.status_code == 200
         args, kwargs = mock_exec.call_args
-        assert kwargs["user_id"] == 0
+        assert kwargs["user_id"] == 1
 
     def test_approved_write_propagated_to_payload(self, client: TestClient):
         """Lines 1207-1209: approved_write/allow_write/write_token/approval_token propagated."""

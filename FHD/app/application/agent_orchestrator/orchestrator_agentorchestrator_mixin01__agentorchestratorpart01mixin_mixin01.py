@@ -10,6 +10,7 @@ from app.application.agent_orchestrator.clarification import (
     pause_for_clarification,
 )
 from app.application.agent_orchestrator.param_references import refuse_unresolved_step
+from app.application.workflow.types import plan_to_dict, skip_unselected_step
 
 
 def _facade():
@@ -341,11 +342,7 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         run.plan_id = plan.plan_id
         run.intent = plan.intent
         plan_metadata = dict(plan.metadata or {})
-        run.metadata["plan"] = {
-            "todo_steps": list(plan.todo_steps or []),
-            "risk_level": plan.risk_level,
-            "metadata": plan_metadata,
-        }
+        run.metadata["plan"] = plan_to_dict(plan)
         self._attach_memory_recall(run, plan_metadata.get("memory_recall"))
         from app.application.workflow.types import step_plan_nodes
 
@@ -408,7 +405,7 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         for step in run.steps:
             if self._apply_requested_control(run):
                 return
-            if step.status == "completed":
+            if step.status == "completed" or skip_unselected_step(run, step):
                 continue
             if any(dep not in completed_node_ids for dep in step.depends_on):
                 run.status = "blocked"

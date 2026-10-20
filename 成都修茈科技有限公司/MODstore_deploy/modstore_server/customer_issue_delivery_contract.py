@@ -135,7 +135,7 @@ def execution_requires_reconciliation(result: Any) -> bool:
     return any(
         execution_requires_reconciliation(row)
         for key in ("outputs", "results")
-        for row in (result.get(key) if isinstance(result.get(key), list) else [])
+        for row in (result[key] if isinstance(result.get(key), list) else [])
         if isinstance(row, dict)
     )
 

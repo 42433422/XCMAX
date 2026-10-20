@@ -153,11 +153,9 @@ def _wait_for_para_task(
                 ),
                 "snapshot": _facade()._task_result_snapshot(body),
             }
-        task = (
-            body.get("task")
-            if isinstance(body, dict) and isinstance(body.get("task"), dict)
-            else {}
-        )
+        task = body.get("task") if isinstance(body, dict) else None
+        if not isinstance(task, dict):
+            task = {}
         status = str(task.get("status") or "").strip()
         if str(task.get("id") or "") != task_id:
             return {

@@ -343,21 +343,53 @@ def validate_plan_graph(plan: PlanGraph) -> str | None:
 
 
 def step_plan_nodes(plan: PlanGraph) -> tuple[list[WorkflowNode], str | None]:
-    """Validate graph takeover and order nodes for a runtime without conditional routing."""
+    """Validate and topologically order data dependencies and conditional routing."""
     error = validate_plan_graph(plan) if plan.nodes else None
-    if not error and any(node.branches or node.next is not None for node in plan.nodes):
-        error = "conditional plans require the workflow engine; step runtime cannot execute them"
     if error:
         return [], error
+    predecessors = {node.node_id: set(node.depends_on) for node in plan.nodes}
+    for node in plan.nodes:
+        for target in [node.next, *(branch.target for branch in node.branches)]:
+            if target is not None:
+                predecessors[target].add(node.node_id)
     ordered: list[WorkflowNode] = []
     remaining = list(plan.nodes)
     completed: set[str] = set()
     while remaining:
-        ready = [node for node in remaining if all(dep in completed for dep in node.depends_on)]
+        ready = [node for node in remaining if predecessors[node.node_id] <= completed]
         ordered.extend(ready)
         completed.update(node.node_id for node in ready)
         remaining = [node for node in remaining if node.node_id not in completed]
     return ordered, None
+
+
+def skip_unselected_step(run: Any, step: Any) -> bool:
+    """Reconstruct routing from persisted plan and outputs, including after approval."""
+    from app.application.workflow.engine import WorkflowEngine
+
+    graph = plan_from_dict(run.metadata.get("plan"))
+    if graph is None or not graph.nodes:
+        return False  # Older persisted runs contain dependency-only AgentSteps.
+    steps = {item.node_id: item for item in run.steps}
+    routers = [
+        node
+        for node in graph.nodes
+        if step.node_id in [node.next, *(branch.target for branch in node.branches)]
+    ]
+    excluded = bool(routers) and all(
+        steps[node.node_id].status == "skipped"
+        or (
+            steps[node.node_id].status == "completed"
+            and WorkflowEngine._resolve_successor(node, steps[node.node_id].output) != step.node_id
+        )
+        for node in routers
+    )
+    if not excluded and not any(steps[dep].status == "skipped" for dep in step.depends_on):
+        return False
+    step.status = "skipped"
+    step.error = "conditional route not selected"
+    run.add_event("step.skipped", step.error, {"step_id": step.step_id})
+    return True
 
 
 def _find_conditional_cycle(nodes: list[WorkflowNode], node_ids: set[str]) -> str | None:
