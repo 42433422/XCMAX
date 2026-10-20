@@ -65,8 +65,13 @@ def test_real_adapter_reaps_hung_tool_and_child_then_reuses_executor(tmp_path, b
     assert time.monotonic() - start < budget + 3
     if budget == 2 and not receipt.exists():
         code = result.get("reconciliation_evidence", result).get("error_code")
-        assert code == "tool_worker_not_started" and result["retryable"] is False, result
-        write_deadline = time.monotonic()
+        assert result["retryable"] is False
+        if code == "tool_worker_incomplete":
+            # Ready/start can complete before the grandchild writes its receipt.
+            assert result["outcome"] == "unknown" and result["reconciliation_required"]
+        else:
+            assert code == "tool_worker_not_started", result
+        write_deadline = start + 2 * budget + 3
     else:
         assert result.get("outcome") == "unknown" and result["retryable"] is False, result
         worker_pid, child_pid, write_deadline = json.loads(receipt.read_text())
