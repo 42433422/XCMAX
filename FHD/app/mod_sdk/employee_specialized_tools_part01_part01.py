@@ -76,18 +76,11 @@ async def _api_call(
 ) -> dict[str, _facade().Any]:
     if _facade().httpx is None:
         return {"ok": False, "error": "httpx 未安装"}
+    from app.application.tool_execution_deadline import build_http_request
+
     base = (api_base or _facade()._DEFAULT_API_BASE).rstrip("/")
     url = f"{base}{path}" if path.startswith("/") else f"{base}/{path}"
-    try:
-        async with _facade().httpx.AsyncClient(timeout=kw.pop("timeout", 30)) as client:
-            resp = await client.request(method, url, **kw)
-            try:
-                body = resp.json()
-            except _facade().RECOVERABLE_ERRORS:
-                body = resp.text
-            return {"ok": resp.is_success, "status": resp.status_code, "body": body}
-    except _facade().RECOVERABLE_ERRORS as exc:
-        return {"ok": False, "error": repr(exc)}
+    return await build_http_request(_facade().httpx.AsyncClient)(method, url, **kw)
 
 
 async def tool_run_pytest(

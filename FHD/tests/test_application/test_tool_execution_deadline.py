@@ -171,9 +171,11 @@ def test_employee_http_helpers_use_captured_budget_without_network(monkeypatch, 
     assert asyncio.run(fresh["http_get"]("https://stub.invalid"))["ok"]
 
 
+@pytest.mark.parametrize("timeout_kind", ["transport", "budget"])
+@pytest.mark.parametrize("specialized", [False, True])
 @pytest.mark.parametrize("claimed_success", [False, True, "raises"])
 def test_employee_cannot_hide_early_http_timeout_from_outer_invocation(
-    monkeypatch, claimed_success
+    monkeypatch, claimed_success, specialized, timeout_kind
 ):
     import asyncio
 
@@ -187,6 +189,8 @@ def test_employee_cannot_hide_early_http_timeout_from_outer_invocation(
 
     async def request(self, *args, **kwargs):
         calls.append(args)
+        if timeout_kind == "budget":
+            await asyncio.sleep(10)
         raise httpx.ReadTimeout("response unknown")
 
     class Client:
@@ -204,13 +208,25 @@ def test_employee_cannot_hide_early_http_timeout_from_outer_invocation(
 
     def execute(step, *, runtime_context):
         ctx = employee._build_enriched_ctx("stub", "/tmp")
-        output = asyncio.run(ctx["http_post"]("https://stub.invalid", {"secret": "not-in-receipt"}))
+        from app.mod_sdk.employee_specialized_tools import _api_call
+
+        request = (
+            _api_call(
+                "POST", "/probe", api_base="https://stub.invalid", json={"secret": "not-in-receipt"}
+            )
+            if specialized
+            else ctx["http_post"]("https://stub.invalid", {"secret": "not-in-receipt"})
+        )
+        output = asyncio.run(request)
         if claimed_success == "raises":
             raise ValueError("employee processing failed after unknown request")
         return {"success": claimed_success, "data": {"output": output}}
 
     result = execute_with_tool_deadline(
-        SimpleNamespace(execute=execute), _step(), runtime_context={}, timeout_seconds=30
+        SimpleNamespace(execute=execute),
+        _step(),
+        runtime_context={},
+        timeout_seconds=0.05 if timeout_kind == "budget" else 30,
     )
     assert len(calls) == 1 and result["outcome"] == "unknown"
     assert result["retryable"] is False and result["reconciliation_required"]
@@ -221,7 +237,8 @@ def test_employee_cannot_hide_early_http_timeout_from_outer_invocation(
         assert result["reconciliation_evidence"]["success"] is claimed_success
 
 
-def test_existing_http_helper_obeys_shorter_current_scope(monkeypatch):
+@pytest.mark.parametrize("specialized", [False, True])
+def test_existing_http_helper_obeys_shorter_current_scope(monkeypatch, specialized):
     import asyncio
 
     import httpx
@@ -233,7 +250,14 @@ def test_existing_http_helper_obeys_shorter_current_scope(monkeypatch):
     with invocation_deadline(time.monotonic() + 100):
         get, _ = build_http_helpers()
         with invocation_deadline(time.monotonic() - 1):
-            assert asyncio.run(get("https://stub.invalid"))["outcome"] == "not_started"
+            from app.mod_sdk.employee_specialized_tools import _api_call
+
+            request = (
+                _api_call("DELETE", "/probe", api_base="https://stub.invalid")
+                if specialized
+                else get("https://stub.invalid")
+            )
+            assert asyncio.run(request)["outcome"] == "not_started"
     assert calls == []
 
 

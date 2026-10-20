@@ -39,9 +39,9 @@ def invocation_deadline(deadline: float) -> Iterator[InvocationBudget]:
         _DEADLINE.reset(token)
 
 
-def build_http_helpers() -> tuple[
-    Callable[..., Awaitable[dict[str, Any]]], Callable[..., Awaitable[dict[str, Any]]]
-]:
+def build_http_request(
+    client_factory: Callable[..., Any] | None = None,
+) -> Callable[..., Awaitable[dict[str, Any]]]:
     # Capture before employee coroutines move to a helper thread/event loop.
     invocation = _DEADLINE.get()
 
@@ -52,7 +52,9 @@ def build_http_helpers() -> tuple[
             return {"ok": False, "error": "invocation deadline expired", "outcome": "not_started"}
         try:
             async with asyncio.timeout(budget):
-                async with httpx.AsyncClient(timeout=kw.pop("timeout", 30)) as client:
+                async with (client_factory or httpx.AsyncClient)(
+                    timeout=kw.pop("timeout", 30)
+                ) as client:
                     resp = await client.request(method, url, **kw)
                     try:
                         body = resp.json()
@@ -72,6 +74,14 @@ def build_http_helpers() -> tuple[
             }
         except RECOVERABLE_ERRORS as exc:
             return {"ok": False, "error": repr(exc)}
+
+    return request
+
+
+def build_http_helpers() -> tuple[
+    Callable[..., Awaitable[dict[str, Any]]], Callable[..., Awaitable[dict[str, Any]]]
+]:
+    request = build_http_request()
 
     async def get(url: str, **kw: Any) -> dict[str, Any]:
         return await request("GET", url, **kw)
