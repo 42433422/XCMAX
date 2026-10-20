@@ -739,7 +739,7 @@ def test_summarize_truncates_long_text() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_agent_tools_import_error_returns_none() -> None:
+def test_build_agent_tools_import_error_denies() -> None:
     agent = EmployeeAgent("emp-1")
     # 将 sys.modules 中模块设为 None 强制触发 ImportError
     with patch.dict(
@@ -747,16 +747,16 @@ def test_build_agent_tools_import_error_returns_none() -> None:
         {"app.application.employee_runtime.tool_scope": None},
     ):
         out = agent._build_agent_tools({}, {})
-    assert out is None
+    assert out == []
 
 
-def test_build_agent_tools_recoverable_error_returns_none() -> None:
+def test_build_agent_tools_recoverable_error_denies() -> None:
     agent = EmployeeAgent("emp-1")
     import app.application.employee_runtime.tool_scope as ts_mod
 
     with patch.object(ts_mod, "resolve_employee_tools", side_effect=RuntimeError("boom")):
         out = agent._build_agent_tools({}, {})
-    assert out is None
+    assert out == []
 
 
 def test_build_agent_tools_success_returns_tools() -> None:
@@ -774,7 +774,7 @@ def test_build_agent_tools_success_returns_tools() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_agent_gate_all_imports_fail_returns_none() -> None:
+def test_build_agent_gate_all_imports_fail_denies() -> None:
     agent = EmployeeAgent("emp-1")
     with patch.dict(
         "sys.modules",
@@ -784,39 +784,22 @@ def test_build_agent_gate_all_imports_fail_returns_none() -> None:
         },
     ):
         out = agent._build_agent_gate({}, {}, None, {})
-    assert out is None
+    assert out("t", {})["ok"] is False
 
 
-def test_build_agent_gate_workspace_guard_only() -> None:
-    agent = EmployeeAgent("emp-1")
-    mock_ws_gate = MagicMock(name="ws_gate")
-    import app.application.employee_runtime.workspace_guard as ws_mod
-
-    with (
-        patch.object(ws_mod, "build_employee_gate", return_value=mock_ws_gate),
-        patch.dict(
-            "sys.modules",
-            {"app.application.employee_runtime.write_approval": None},
-        ),
-    ):
-        out = agent._build_agent_gate({}, {}, "/ws", {})
-    # compose_gates 也不可用 → 返回 ws_gate or write_gate = ws_gate
-    assert out is mock_ws_gate
-
-
-def test_build_agent_gate_recoverable_error_in_workspace_guard() -> None:
-    agent = EmployeeAgent("emp-1")
-    import app.application.employee_runtime.workspace_guard as ws_mod
-    import app.application.employee_runtime.write_approval as wa_mod
-
-    with (
-        patch.object(ws_mod, "build_employee_gate", side_effect=RuntimeError("ws boom")),
-        patch.object(wa_mod, "build_write_approval_gate", return_value=None),
-        patch.object(wa_mod, "compose_gates", return_value="composed"),
-    ):
-        out = agent._build_agent_gate({}, {}, None, {})
-    # ws_gate 失败 → None；write_gate 成功 → None；compose_gates 成功
-    assert out == "composed"
+@pytest.mark.parametrize(
+    "target",
+    [
+        "workspace_guard.build_employee_gate",
+        "write_approval.build_write_approval_gate",
+        "write_approval.compose_gates",
+    ],
+)
+@pytest.mark.parametrize("error", [ImportError("unavailable"), RuntimeError("failed")])
+def test_build_agent_gate_partial_failure_denies(target, error):
+    with patch("app.application.employee_runtime." + target, side_effect=error):
+        gate = EmployeeAgent("emp-1")._build_agent_gate({}, {}, None, {})
+    assert gate("t", {})["ok"] is False
 
 
 def test_build_agent_gate_compose_success() -> None:
@@ -973,7 +956,13 @@ def test_perceive_success_returns_pipeline_result() -> None:
 def test_run_blocked_by_risk_gate_returns_blocked_result() -> None:
     agent = EmployeeAgent("emp-1")
     pack = {"pack_id": "emp-1", "version": "1.0.0", "manifest": {}, "pack_dir": "/tmp"}
-    gate = {"ok": False, "blocked": True, "risk_level": "high", "reason": "r", "detail": "d"}
+    gate = {
+        "ok": False,
+        "blocked": True,
+        "risk_level": "high",
+        "reason": "r",
+        "detail": "d",
+    }
     with (
         patch(
             "app.application.employee_runtime.agent.load_employee_pack_from_disk",
@@ -983,7 +972,10 @@ def test_run_blocked_by_risk_gate_returns_blocked_result() -> None:
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["echo"],
@@ -1060,7 +1052,10 @@ def test_run_direct_python_fast_path_success() -> None:
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["direct_python"],
@@ -1135,7 +1130,10 @@ def test_run_cognition_failed_returns_cognition_failed_result() -> None:
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["echo"],  # 非 direct_python
@@ -1189,7 +1187,10 @@ def test_run_interactive_chat_cognition_failed_returns_degraded_reply() -> None:
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["echo"],
@@ -1244,7 +1245,10 @@ def test_run_interactive_chat_returns_reasoning_without_action_handlers() -> Non
         "pack_dir": "/tmp/emp-1",
     }
     gate = {"ok": True, "risk_level": "low", "reason": "low"}
-    reasoning = {"reasoning": "我是静态站内容编辑员，可以帮你检查页面文案。", "input": {}}
+    reasoning = {
+        "reasoning": "我是静态站内容编辑员，可以帮你检查页面文案。",
+        "input": {},
+    }
     with (
         patch(
             "app.application.employee_runtime.agent.load_employee_pack_from_disk",
@@ -1254,7 +1258,10 @@ def test_run_interactive_chat_returns_reasoning_without_action_handlers() -> Non
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["direct_python"],
@@ -1321,7 +1328,10 @@ def test_run_collaboration_context_returns_reasoning_without_action_handlers() -
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["direct_python"],
@@ -1387,7 +1397,10 @@ def test_run_collaboration_context_cognition_error_degrades_to_context() -> None
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["direct_python"],
@@ -1464,7 +1477,10 @@ def test_run_full_success_with_agent_handler() -> None:
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["agent"],
@@ -1547,7 +1563,10 @@ def test_run_handler_fails_publishes_trigger() -> None:
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["echo"],
@@ -1624,7 +1643,10 @@ def test_run_handler_fails_trigger_publish_recoverable_error_swallowed() -> None
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["echo"],
@@ -1702,7 +1724,10 @@ def test_run_upstream_collaboration_injects_payload() -> None:
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["echo"],
@@ -1778,7 +1803,10 @@ def test_run_workspace_root_injected_into_payload() -> None:
             "app.application.employee_runtime.agent.parse_employee_config_v2",
             return_value={},
         ),
-        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._normalize_actions_cfg",
+            return_value={},
+        ),
         patch(
             "app.application.employee_runtime.agent._ex._handler_list",
             return_value=["echo"],

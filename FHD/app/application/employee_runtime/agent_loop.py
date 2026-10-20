@@ -1,17 +1,4 @@
-"""员工多轮工具调用循环（OpenAI function-calling ReAct）。
-
-替换旧的单轮 ``agent_runner._chat_completion``：员工 ``agent`` handler 现在可以
-跨多轮调用工具（来自工作流工具注册表），并对每次 tool_call 套一个可选 gate
-（P1 接入 WorkspaceGuard + risk_gate）。
-
-复用既有积木：
-- LLM 客户端：``app.infrastructure.llm.client.get_openai_compatible_client``
-- 工具执行：``app.application.tools.workflow.execute_workflow_tool``
-- 工具清单：``app.application.tools.workflow.get_workflow_tool_registry``
-
-同步实现（沿用 legacy_chat_adapter 的同步 OpenAI 客户端），由 executor 同步调用。
-无 API Key / offline 时优雅降级（返回 degraded 标记，不抛错）。
-"""
+"""员工多轮工具循环：最终派发限制在公布的工具集，授权异常及无效结果拒绝执行。"""
 
 from __future__ import annotations
 
@@ -78,14 +65,7 @@ def _parse_args(raw: str) -> dict[str, Any]:
 
 
 def _parse_tool_args(raw: str) -> tuple[dict[str, Any], str | None]:
-    """Parse one model function-call payload without silently executing bad JSON.
-
-    ``_parse_args`` is kept as the historic, lenient helper used by callers and
-    tests.  An agent loop has a different safety contract: malformed arguments
-    are an invalid tool call, not an invitation to execute the tool with an
-    empty object.  The model receives a structured error and can repair the
-    call on a later round.
-    """
+    """Reject malformed model arguments; keep _parse_args for legacy callers."""
 
     try:
         data = json.loads(raw or "{}")
@@ -97,14 +77,7 @@ def _parse_tool_args(raw: str) -> tuple[dict[str, Any], str | None]:
 
 
 def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
-    """Return ``(success, error, verified)`` for a workflow tool result.
-
-    The legacy workflow surface predates a uniform output schema.  A structured
-    ``success`` field is authoritative; an explicit error/token request is a
-    failure or unfinished action.  Older read-only tools that return a useful
-    object without either field remain compatible but are marked unverified in
-    the trace, rather than being mistaken for proof of a consequential action.
-    """
+    """Return success/error/verified; legacy data-only responses remain unverified."""
 
     try:
         payload = json.loads(raw)
@@ -199,6 +172,7 @@ def run_employee_agent_loop(
 
     mdl = model or resolve_chat_model()
     tool_specs = tools if tools is not None else default_employee_tools()
+    allowed_tools = {(spec.get("function") or {}).get("name") for spec in tool_specs}
     user_payload = json.dumps({"task": task, "input": input_data or {}}, ensure_ascii=False)[:12000]
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt or "你是智能员工助手。"},
@@ -248,7 +222,10 @@ def run_employee_agent_loop(
         try:
             # 统一 Agent Runtime 计量接缝：员工多轮循环每轮 LLM 用量入账
             # （best-effort；计费不受 XCAGI_AGENT_RUNTIME_HOOKS 开关限制）。
-            from app.application.agent_runtime.pipeline import completion_usage, meter_llm_call
+            from app.application.agent_runtime.pipeline import (
+                completion_usage,
+                meter_llm_call,
+            )
 
             meter_llm_call(
                 source="employee_agent_loop",
@@ -355,47 +332,55 @@ def run_employee_agent_loop(
                     "repeat_count": repeat_limit,
                 }
 
-            if gate is not None:
-                try:
-                    verdict = gate(tool_name, args)
-                except RECOVERABLE_ERRORS:
-                    logger.exception("employee tool gate failed closed: %s", tool_name)
-                    verdict = {"ok": False, "reason": "工具授权检查失败，未执行"}
-                if not verdict.get("ok", True):
-                    reason = str(verdict.get("reason") or "blocked by employee gate")
-                    tool_trace.append(
-                        {
-                            "tool": tool_name,
-                            "args": args,
-                            "blocked": True,
-                            "success": False,
-                            "reason": reason,
-                            "pending_approval": bool(verdict.get("pending_approval")),
-                            "approval_request_ids": list(verdict.get("approval_request_ids") or []),
-                        }
-                    )
-                    trajectory.append(
-                        {
-                            "round": rounds,
-                            "event": "tool",
-                            "tool": tool_name,
-                            "args": args,
-                            "blocked": True,
-                            "success": False,
-                            "result": reason,
-                        }
-                    )
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tc_id,
-                            "content": json.dumps(
-                                {"success": False, "blocked": True, "reason": reason},
-                                ensure_ascii=False,
-                            ),
-                        }
-                    )
-                    continue
+            verdict: dict[str, Any] = {
+                "ok": False,
+                "reason": "工具不在员工授权白名单，未执行",
+            }
+            if tool_name in allowed_tools:
+                verdict = {"ok": True}
+                if gate is not None:
+                    try:
+                        verdict = gate(tool_name, args)
+                    except RECOVERABLE_ERRORS:
+                        logger.exception("employee tool gate failed closed: %s", tool_name)
+                        verdict = {"ok": False, "reason": "工具授权检查失败，未执行"}
+            if not isinstance(verdict, dict) or type(verdict.get("ok")) is not bool:
+                verdict = {"ok": False, "reason": "工具授权结果无效，未执行"}
+            if verdict["ok"] is not True:
+                reason = str(verdict.get("reason") or "blocked by employee gate")
+                tool_trace.append(
+                    {
+                        "tool": tool_name,
+                        "args": args,
+                        "blocked": True,
+                        "success": False,
+                        "reason": reason,
+                        "pending_approval": bool(verdict.get("pending_approval")),
+                        "approval_request_ids": list(verdict.get("approval_request_ids") or []),
+                    }
+                )
+                trajectory.append(
+                    {
+                        "round": rounds,
+                        "event": "tool",
+                        "tool": tool_name,
+                        "args": args,
+                        "blocked": True,
+                        "success": False,
+                        "result": reason,
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": json.dumps(
+                            {"success": False, "blocked": True, "reason": reason},
+                            ensure_ascii=False,
+                        ),
+                    }
+                )
+                continue
 
             try:
                 from app.application.tools.workflow import execute_workflow_tool
@@ -428,7 +413,11 @@ def run_employee_agent_loop(
                 }
             )
             messages.append(
-                {"role": "tool", "tool_call_id": tc_id, "content": str(result_raw)[:8000]}
+                {
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": str(result_raw)[:8000],
+                }
             )
 
     return {
