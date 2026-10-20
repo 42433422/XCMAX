@@ -22,18 +22,14 @@ from modstore_server.models_cs import (
 )
 
 
-def own_session_or_404(
-    db: Session, user: User, session_id: int
-) -> CustomerServiceSession:
+def own_session_or_404(db: Session, user: User, session_id: int) -> CustomerServiceSession:
     row = db.get(CustomerServiceSession, session_id)
     if row is None or row.user_id != user.id:
         raise HTTPException(404, "客服会话不存在")
     return row
 
 
-def visible_ticket_or_404(
-    db: Session, user: User, ticket_id: int
-) -> CustomerServiceTicket:
+def visible_ticket_or_404(db: Session, user: User, ticket_id: int) -> CustomerServiceTicket:
     from modstore_server.customer_ticket_reader import TicketReader
 
     row = db.get(CustomerServiceTicket, ticket_id)
@@ -50,10 +46,13 @@ def standard_payload(
     row: CustomerServiceStandard, *, include_policy: bool = False
 ) -> dict[str, Any]:
     payload = {
-        **{
-            name: getattr(row, name)
-            for name in ["id", "name", "scenario", "description", "auto_enabled", "risk_level", "priority"]
-        },
+        "id": row.id,
+        "name": row.name,
+        "scenario": row.scenario,
+        "description": row.description,
+        "auto_enabled": row.auto_enabled,
+        "risk_level": row.risk_level,
+        "priority": row.priority,
         "rules": json_loads(row.rules_json, {}),
         "created_at": row.created_at.isoformat() if row.created_at else "",
         "updated_at": row.updated_at.isoformat() if row.updated_at else "",
@@ -65,11 +64,15 @@ def standard_payload(
 
 def integration_payload(row: CustomerServiceIntegration) -> dict[str, Any]:
     return {
-        **{
-            name: getattr(row, name)
-            for name in ["id", "name", "integration_type", "connector_id", "workflow_id", "scenario", "enabled", "created_by"]
-        },
+        "id": row.id,
+        "name": row.name,
+        "integration_type": row.integration_type,
+        "connector_id": row.connector_id,
+        "workflow_id": row.workflow_id,
+        "scenario": row.scenario,
         "config": json_loads(row.config_json, {}),
+        "enabled": row.enabled,
+        "created_by": row.created_by,
         "created_at": row.created_at.isoformat() if row.created_at else "",
         "updated_at": row.updated_at.isoformat() if row.updated_at else "",
     }
@@ -84,9 +87,7 @@ def audit_payload(row: CustomerServiceAuditLog) -> dict[str, Any]:
     }
 
 
-def close_ticket_with_evidence(
-    db: Session, user: User, ticket_id: int, request: dict[str, str]
-):
+def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request: dict[str, str]):
     ticket = visible_ticket_or_404(db, user, ticket_id)
     key = f"admin-ticket-close:{ticket_id}:{request['request_id']}"
     existing = db.query(CustomerServiceAction).filter_by(idempotency_key=key).first()
@@ -116,7 +117,12 @@ def close_ticket_with_evidence(
     )
     evidence["resolution"] = resolution
     db.query(CustomerServiceTicket).filter_by(id=ticket_id).update(
-        {"evidence_json": json_dumps(evidence), "status": "resolved", "closed_at": now, "updated_at": now}
+        {
+            "evidence_json": json_dumps(evidence),
+            "status": "resolved",
+            "closed_at": now,
+            "updated_at": now,
+        }
     )
     db.add(
         CustomerServiceAction(
@@ -127,9 +133,7 @@ def close_ticket_with_evidence(
             target_id=str(ticket.id),
             status="completed",
             request_json=json_dumps(request),
-            result_json=json_dumps(
-                {"status": "resolved", "closed_at": now.isoformat()}
-            ),
+            result_json=json_dumps({"status": "resolved", "closed_at": now.isoformat()}),
             idempotency_key=key,
         )
     )

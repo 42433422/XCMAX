@@ -111,7 +111,11 @@ def _configuration_values(body: BaseModel) -> Dict[str, Any]:
             values[name] = value.strip()
         elif name in {"rules", "action_policy", "config"}:
             values[name + "_json"] = json_dumps(values.pop(name))
-    for name, default in (("scenario", "general"), ("risk_level", "low"), ("integration_type", "openapi")):
+    for name, default in (
+        ("scenario", "general"),
+        ("risk_level", "low"),
+        ("integration_type", "openapi"),
+    ):
         if name in values:
             values[name] = values[name] or default
     return values
