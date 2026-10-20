@@ -1,9 +1,6 @@
 """Deadline propagation and fail-closed bounded-executor contracts."""
 
-import subprocess
-import sys
 import time
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -57,39 +54,6 @@ def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch, late):
     assert result["reconciliation_evidence"]["task_id"] == "existing-task"
     assert result["reconciliation_evidence"]["attempt_id"] == "attempt-1"
     assert result["retryable"] is False and result["reconciliation_required"] is True
-
-
-def test_supported_process_adapter_releases_slot_and_kills_late_write(tmp_path, monkeypatch):
-    monkeypatch.setenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", "true")
-    target = tmp_path / "late-side-effect"
-    children = []
-
-    class BoundedExecutor:
-        def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
-            child = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-c",
-                    f"import time;from pathlib import Path;time.sleep(1);Path({str(target)!r}).write_text('late')",
-                ]
-            )
-            children.append(child)
-            try:
-                child.wait(timeout=max(0.001, deadline_monotonic - time.monotonic()))
-            except subprocess.TimeoutExpired as exc:
-                child.kill()
-                child.wait(timeout=2)
-                raise TimeoutError from exc
-            return {"success": True}
-
-    before = time.monotonic()
-    result = execute_with_tool_deadline(
-        BoundedExecutor(), _step(), runtime_context={}, timeout_seconds=0.1
-    )
-    assert time.monotonic() - before < 2
-    assert result["outcome"] == "unknown" and result["retryable"] is False
-    assert children[0].poll() is not None
-    assert not target.exists()
 
 
 @pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf")])

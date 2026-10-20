@@ -22,6 +22,11 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
 
 
 class AgentToolExecutor:
+    def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
+        from app.application.agent_orchestrator.tool_process import execute_isolated
+
+        return execute_isolated(self, step, runtime_context, deadline_monotonic)
+
     def execute(
         self,
         step: AgentStep,
@@ -125,8 +130,8 @@ def execute_with_tool_deadline(
 ) -> dict[str, Any]:
     """Propagate a deadline; strict deployments reject executors lacking a bounded adapter.
 
-    This deliberately does not move SQL/Mod transactions into an unrelated process.
-    The optional ``execute_with_deadline`` adapter owns cancellation/isolation.
+    The built-in adapter opens fresh SQL/Mod scopes in its spawned worker.
+    Custom ``execute_with_deadline`` adapters own their cancellation/isolation.
     """
     timeout = float(timeout_seconds)
     if not math.isfinite(timeout) or timeout <= 0:
