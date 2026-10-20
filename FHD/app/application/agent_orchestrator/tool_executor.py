@@ -128,11 +128,7 @@ class AgentToolExecutor:
 def execute_with_tool_deadline(
     executor: Any, step: AgentStep, *, runtime_context: dict[str, Any], timeout_seconds: float
 ) -> dict[str, Any]:
-    """Propagate a deadline; strict deployments reject executors lacking a bounded adapter.
-
-    The built-in adapter opens fresh SQL/Mod scopes in its spawned worker.
-    Custom ``execute_with_deadline`` adapters own their cancellation/isolation.
-    """
+    """Propagate deadlines; workers restore scopes, strict custom adapters must be bounded."""
     timeout = float(timeout_seconds)
     if not math.isfinite(timeout) or timeout <= 0:
         return {"success": False, "error_code": "invalid_tool_timeout", "retryable": False}

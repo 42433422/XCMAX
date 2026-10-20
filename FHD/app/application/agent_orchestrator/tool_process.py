@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import multiprocessing
 import os
 import shutil
@@ -46,8 +47,7 @@ def _reap(process) -> bool:
     try:
         root = psutil.Process(process.pid)
         root.suspend()
-        # Freeze parents before collecting descendants, preventing ordinary tools
-        # from racing cleanup by spawning another child while being collected.
+        # Freeze parents before collecting descendants to stop ordinary spawn races.
         for _ in range(2):
             for child in root.children(recursive=True):
                 if child not in children:
@@ -102,8 +102,8 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
             start.set()
             if done.wait(max(0, deadline - time.monotonic())):
                 result = json.loads(Path(folder, "result").read_text(encoding="utf-8"))
-    except (OSError, RuntimeError, ValueError):
-        pass
+    except (OSError, RuntimeError, ValueError) as exc:
+        logging.getLogger(__name__).warning("tool worker boundary failed: %s", type(exc).__name__)
     finally:
         if process.pid is not None:
             clean = _reap(process)
