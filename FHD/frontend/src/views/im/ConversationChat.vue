@@ -104,19 +104,8 @@ function onInput(ev: Event): void {
 }
 </script>
 
+<style scoped src="./ImChatCommon.css"></style>
 <style scoped>
-.im-chat-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--xc-color-border, #e6e9ef);
-  font-weight: 600;
-  color: var(--xc-color-text, #1f2329);
-}
-.im-chat-title {
-  font-size: 15px;
-}
 .im-cs-controls {
   margin-left: auto;
   display: inline-flex;
@@ -259,31 +248,5 @@ function onInput(ev: Event): void {
 .im-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-.im-avatar {
-  flex: none;
-  flex-basis: 38px;
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
-  min-height: 38px;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: linear-gradient(135deg, #5b8def, #0052d9);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 600;
-}
-.im-avatar--sm {
-  flex-basis: 30px;
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
-  font-size: 13px;
 }
 </style>

@@ -19,6 +19,16 @@ async function setup() {
 }
 beforeEach(() => { vi.mocked(apiFetch).mockReset().mockImplementation(async () => response()) })
 
+it('keeps ticket descriptions collapsed so the messenger remains visible', async () => {
+  const { wrapper } = await setup()
+  expect(wrapper.get('details').attributes('open')).toBeUndefined()
+  expect(wrapper.get('summary').text()).toBe('问题工单处理结果（1）')
+  expect(apiFetch).toHaveBeenCalledTimes(1)
+  ;(wrapper.get('details').element as HTMLDetailsElement).open = true
+  expect(wrapper.get('article').text()).toContain('保存订单失败')
+  wrapper.unmount()
+})
+
 it('never confirms automatically; accepts only an explicit customer result', async () => {
   const { wrapper } = await setup()
   expect(apiFetch).toHaveBeenCalledTimes(1)
