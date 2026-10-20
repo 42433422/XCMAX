@@ -242,3 +242,40 @@ def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(reader_case, 
         assert len(audits) == 1
         assert audits[0]["actor_user_id"] == admin.id and audits[0]["actor_type"] == "admin"
         assert audits[0]["detail"]["old_title"] == "Ticket 0"
+
+
+def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case):
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceTicket
+    from tests.test_customer_service_api import _as_user, _make_user
+
+    client, _, ids, *_ = reader_case
+    ticket_id = ids[0]
+    with get_session_factory()() as db:
+        row = db.query(CustomerServiceTicket).filter_by(id=ticket_id).one()
+        row.evidence_json = "{}"
+        db.commit()
+    url = f"/api/customer-service/tickets/{ticket_id}/close"
+    body = {
+        "request_id": str(uuid.uuid4()),
+        "note": "修复已部署并完成原场景验收",
+        "verification": "主线 SHA abc123；运行端页面正常显示，原复现步骤通过。",
+    }
+    with _as_user(_make_user("close_customer")):
+        assert client.post(url, json=body).status_code == 403
+    admin = _make_user("close_admin", admin=True)
+    with _as_user(admin):
+        assert client.post(url, json={**body, "verification": "不足"}).status_code == 422
+        response = client.post(url, json=body)
+        assert response.status_code == 200, response.text
+        assert response.json()["ticket"]["status"] == "resolved"
+        assert (
+            response.json()["ticket"]["evidence"]["resolution"]["verification_mode"]
+            == "admin_runtime"
+        )
+        assert client.post(url, json=body).json()["replayed"] is True
+        detail = client.get(f"/api/customer-service/tickets/{ticket_id}").json()
+        assert [a["action_type"] for a in detail["actions"]].count("ticket.close") == 1
+        audits = [a for a in detail["audit_logs"] if a["event_type"] == "admin_ticket_closed"]
+        assert len(audits) == 1 and audits[0]["actor_user_id"] == admin.id
+        assert client.post(url, json={**body, "note": "different close request"}).status_code == 409
