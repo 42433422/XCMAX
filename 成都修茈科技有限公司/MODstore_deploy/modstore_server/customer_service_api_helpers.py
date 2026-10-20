@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from calendar import monthrange
 from datetime import UTC, datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -24,6 +24,14 @@ from modstore_server.models_cs import (
     CustomerServiceStandard,
     CustomerServiceTicket,
 )
+
+
+class TicketTitleBody(BaseModel, extra="forbid"):
+    title: str = Field(..., min_length=1, max_length=256)
+    expected_title: str = Field(..., max_length=256)
+    intent: Literal["product_issue"] | None = None
+    expected_intent: Literal["account_support", "general"] | None = None
+    reason: str = Field(default="", max_length=2000)
 
 
 class StandardBody(BaseModel):
@@ -230,3 +238,58 @@ def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request:
     )
     db.commit()
     return {"ticket": ticket_payload(ticket), "replayed": False}
+
+
+def correct_ticket_metadata(
+    db: Session, user: User, ticket_id: int, body: TicketTitleBody
+) -> dict[str, Any]:
+    ticket = visible_ticket_or_404(db, user, ticket_id)
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(422, "工单标题不能为空")
+    correction = body.intent is not None
+    if correction:
+        if body.expected_intent is None or len(body.reason.strip()) < 8:
+            raise HTTPException(422, "分类修正须提供原分类和至少8字的原因")
+        if ticket.status != "processing" or ticket.closed_at:
+            raise HTTPException(409, "只能纠正处理中且未关闭的原工单分类")
+    elif body.expected_intent is not None or body.reason.strip():
+        raise HTTPException(422, "分类修正参数不完整")
+    updates = {"title": title, **({"intent": body.intent} if correction else {})}
+    if any(getattr(ticket, key) != value for key, value in updates.items()):
+        filters = [
+            CustomerServiceTicket.id == ticket_id,
+            CustomerServiceTicket.title == body.expected_title,
+        ]
+        if correction:
+            filters += [
+                CustomerServiceTicket.intent == body.expected_intent,
+                CustomerServiceTicket.status == "processing",
+                CustomerServiceTicket.closed_at.is_(None),
+            ]
+        changed = (
+            db.query(CustomerServiceTicket)
+            .filter(*filters)
+            .update(updates, synchronize_session=False)
+        )
+        if changed != 1:
+            db.rollback()
+            raise HTTPException(409, "工单标题、分类或状态已变化，请刷新后重试")
+        detail = {"old_title": body.expected_title, "new_title": title}
+        if correction:
+            detail.update(
+                old_intent=body.expected_intent,
+                new_intent=body.intent,
+                reason=body.reason.strip(),
+            )
+        audit(
+            db,
+            actor=user,
+            actor_type="admin",
+            ticket_id=ticket_id,
+            session_id=ticket.session_id,
+            event_type=f"ticket_{'classification' if correction else 'title'}_corrected",
+            detail=detail,
+        )
+        db.commit()
+    return {"ticket": {"id": ticket_id, **updates}}
