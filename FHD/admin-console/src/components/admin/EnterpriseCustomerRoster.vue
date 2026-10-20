@@ -175,7 +175,6 @@ function stageLabel(stage: string): string {
 .enterprise-customer-roster__identity strong { color: #294a68; font-size: 12px; }
 .enterprise-customer-roster__identity span,.enterprise-customer-roster__path span,.enterprise-customer-roster__entitlement span { margin-top: 3px; color: #718399; font-size: 10px; }
 .enterprise-customer-roster__path strong,.enterprise-customer-roster__entitlement strong { color: #3d5d7b; font-size: 11px; }
-.enterprise-customer-roster__grid button { border: 1px solid #d5a071; border-radius: 8px; background: #fff7ef; color: #a65d26; padding: 7px 9px; font-size: 10px; font-weight: 700; cursor: pointer; }
 .enterprise-customer-roster__standard-mark { color: #2b8061; font-size: 10px; white-space: nowrap; }
 .enterprise-customer-roster__empty { padding: 22px; border: 1px dashed #c7d8e8; border-radius: 11px; color: #718399; text-align: center; }
 @media (max-width: 1100px) { .enterprise-customer-roster__grid article { grid-template-columns: 38px 1fr 1fr; } .enterprise-customer-roster__entitlement,.enterprise-customer-roster__grid button,.enterprise-customer-roster__standard-mark { grid-column: 2 / -1; } }

@@ -260,11 +260,6 @@ onMounted(() => {
 .page-header h2 { margin: 0 0 4px; font-size: 20px; }
 .page-header p { margin: 0; color: #64748b; font-size: 13px; }
 .header-actions { display: flex; gap: 8px; }
-.btn {
-  border: 1px solid #d0d7e2; background: #fff; border-radius: 8px;
-  padding: 8px 12px; cursor: pointer; font-size: 13px;
-}
-.btn-primary { background: #1890ff; border-color: #1890ff; color: #fff; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .banner-error, .banner-ok {
   border-radius: 8px; padding: 10px 12px; margin: 0; font-size: 13px;
@@ -276,9 +271,6 @@ onMounted(() => {
 }
 @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
 .kpi, .card {
-  background: rgba(255,255,255,0.92);
-  border: 1px solid rgba(15,76,129,0.1);
-  border-radius: 14px;
   padding: 14px;
 }
 .kpi-label { color: #64748b; font-size: 12px; }

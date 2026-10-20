@@ -130,8 +130,6 @@ watch(() => props.ticket, hydrate, { immediate: true })
 .delivery-commerce__grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; }
 .delivery-commerce__grid label { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid #dfe9f2; border-radius: 10px; background: #fff; }
 .delivery-commerce__grid label > span { color: #466884; font-size: 10px; font-weight: 800; }
-.delivery-commerce__grid input,.delivery-commerce__grid select { min-width: 0; border: 1px solid #d1dfec; border-radius: 7px; background: #fff; color: #294b68; padding: 7px 8px; font-size: 10px; }
-.delivery-commerce__grid button { border: 0; border-radius: 7px; background: #2f7ed7; color: #fff; padding: 7px 8px; font-size: 10px; font-weight: 700; cursor: pointer; }
 .delivery-commerce__grid button:disabled { opacity: .5; cursor: wait; }
 @media (max-width: 1100px) { .delivery-commerce__grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 760px) { .delivery-commerce__grid { grid-template-columns: 1fr; } }

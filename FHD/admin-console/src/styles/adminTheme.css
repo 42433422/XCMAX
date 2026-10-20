@@ -1,8 +1,4 @@
-/*
- * 管理端统一视觉基线（只在 /admin 构建中加载）。
- * 只调整页头、间距、字号、对比度和焦点样式；不改布局结构和业务组件行为。
- * 主色沿用 #1677ff，正文 #172033，次要文字 #64748b（白底对比度 ≥ 4.5:1）。
- */
+/* Shared /admin visual tokens. Component styles retain semantic colors and layout. */
 #app .page-content > .page-header {
   display: flex;
   align-items: center;
@@ -12,12 +8,43 @@
   margin: 0 0 16px;
 }
 
+#app {
+  --admin-primary: #1677ff; --admin-text: #172033; --admin-muted: #64748b;
+  --admin-border: #d7dee9; --admin-control-radius: 8px; --admin-card-radius: 12px;
+  --admin-control-size: 13px; --admin-card-shadow: 0 1px 3px rgba(23, 32, 51, 0.08);
+  --admin-warning-bg: #fff7ef; --admin-warning-border: #d5a071; --admin-warning-text: #a65d26;
+}
+#app .page-content { color: var(--admin-text); font-size: 14px; }
+#app .page-content :is(button, [role="button"], .btn, .cs-btn) {
+  min-height: 32px; border-radius: var(--admin-control-radius); font-family: inherit;
+  font-size: var(--admin-control-size); line-height: 1.4;
+}
+#app .page-content :is(.btn, .cs-btn) { padding: 8px 12px; border: 1px solid var(--admin-border); background: #fff; color: var(--admin-text); cursor: pointer; }
+#app .page-content :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-width: 0; min-height: 36px; padding: 8px 10px; border-color: var(--admin-border); border-radius: var(--admin-control-radius);
+  color: var(--admin-text); font-family: inherit; font-size: var(--admin-control-size);
+}
+#app .page-content :is(.admin-card, .cs-card, .card, .kpi, .overall-card, .attention-card, .live-card, .truth-card, .dimension-card) {
+  border-color: var(--admin-border); border-radius: var(--admin-card-radius);
+  background-color: #fff; box-shadow: var(--admin-card-shadow);
+}
+#app .page-content :is(.btn-primary, .cs-btn-primary, .refresh-button, .delivery-commerce__grid button) {
+  min-height: 36px; padding: 8px 12px; border-color: var(--admin-primary);
+  background: var(--admin-primary); color: #fff; box-shadow: 0 2px 6px rgba(22, 119, 255, 0.18);
+}
+#app .page-content :is(.enterprise-customer-roster__grid, .enterprise-roster__state) button {
+  border: 1px solid var(--admin-warning-border); border-radius: var(--admin-control-radius);
+  background: var(--admin-warning-bg); color: var(--admin-warning-text); padding: 7px 9px;
+  font-weight: 700; cursor: pointer;
+}
+#app .page-content .attention-card.clear { border-color: rgba(33, 152, 97, 0.3); }
+
 #app .page-content > .page-header h2 {
   margin: 0;
   font-size: 20px;
   font-weight: 700;
   line-height: 1.35;
-  color: #172033;
+  color: var(--admin-text);
   letter-spacing: 0;
 }
 
@@ -28,9 +55,8 @@
   flex-wrap: wrap;
 }
 
-#app .page-content .empty-hint,
-#app .page-content .muted {
-  color: #64748b;
+#app .page-content :is(.empty-hint, .muted) {
+  color: var(--admin-muted);
 }
 
 #app .page-content table th {
@@ -39,7 +65,7 @@
 }
 
 #app .page-content :is(button, a, input, select, textarea, summary, [role="tab"]):focus-visible {
-  outline: 2px solid #1677ff;
+  outline: 2px solid var(--admin-primary);
   outline-offset: 2px;
 }
 
