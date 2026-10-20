@@ -11,21 +11,14 @@
 .cs-page-head { margin-bottom: 16px; }
 .cs-page-head h2 { margin: 0 0 4px; font-size: 22px; color: var(--cs-text); }
 .cs-page-head p, .cs-hint, .cs-sub, .cs-state { margin: 0; color: var(--cs-muted); font-size: 12px; }
-.cs-card {
-  margin: 0 0 16px; padding: 18px 20px; border: 1px solid var(--cs-card-border); border-radius: 16px;
-  background: rgba(255, 255, 255, .96); box-shadow: 0 4px 18px rgba(15, 76, 129, .07); box-sizing: border-box;
-}
+.cs-card { margin: 0 0 16px; padding: 18px 20px; box-sizing: border-box; }
 .cs-card-title { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 15px; color: var(--cs-text); }
 .cs-count { padding: 0 8px; border-radius: 999px; background: var(--cs-accent-soft); color: var(--cs-accent); font-size: 12px; }
 .cs-state { padding: 20px 0; text-align: center; }
 .cs-toolbar { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; padding: 14px 20px; }
 .cs-search { display: flex; flex: 1 1 320px; flex-direction: column; gap: 6px; color: var(--cs-muted); font-size: 12px; }
-.cs-search input { height: 34px; padding: 0 12px; border: 1px solid #d0d7e2; border-radius: 8px; font-size: 13px; color: var(--cs-text); background: #fff; }
 .cs-search input:focus { outline: none; border-color: var(--cs-accent); box-shadow: 0 0 0 3px var(--cs-accent-soft); }
-.cs-btn {
-  height: 34px; padding: 0 14px; border: 1px solid #d0d7e2; border-radius: 8px; background: #fff;
-  color: var(--cs-text); font-size: 13px; cursor: pointer; white-space: nowrap;
-}
+.cs-btn { white-space: nowrap; }
 .cs-btn:hover:not(:disabled) { border-color: var(--cs-accent); color: var(--cs-accent); }
 .cs-btn:disabled { opacity: .55; cursor: not-allowed; }
 .cs-btn-primary { border-color: var(--cs-accent); background: var(--cs-accent); color: #fff; }
@@ -97,3 +90,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   .cs-steps li { font-size: 11px; }
   .cs-pager { flex-direction: column; align-items: flex-start; }
 }
+.cs-eta-editor { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.cs-eta-editor label { flex-basis:100%; }
+.cs-eta-editor input { min-height:36px; padding:6px 8px; }

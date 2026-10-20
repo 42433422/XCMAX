@@ -301,3 +301,25 @@ def _collect_cursor_usage() -> dict[str, _facade().Any]:
             )
         ),
     }
+
+
+@_facade().router.patch(
+    "/admin/customer-service/tickets/{ticket_id}/expected-completion", response_model=None
+)
+async def admin_update_customer_ticket_expected_completion(
+    request: _facade().Request, ticket_id: int
+):
+    try:
+        body = await request.json()
+    except _facade().RECOVERABLE_ERRORS:
+        body = None
+    if not isinstance(body, dict):
+        return _facade().JSONResponse(
+            {"success": False, "message": "请求内容无效"}, status_code=422
+        )
+    return await _customer_ticket_proxy(
+        request,
+        f"/api/customer-service/tickets/{ticket_id}/expected-completion",
+        method="PATCH",
+        json_body=body,
+    )

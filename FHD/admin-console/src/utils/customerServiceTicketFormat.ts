@@ -67,7 +67,10 @@ const RESOLUTION_STATE: LabelMap = {
   awaiting_verification: ['待客户验证', 'warning'], verified: ['已验证', 'success'],
   resolved: ['客户确认已解决', 'success'], reopened: ['已重新打开', 'warning'], closed: ['已关闭', 'neutral'],
 }
-export const resolutionStateBadge = (value: unknown) => badgeFrom(RESOLUTION_STATE, value, 'warning')
+export const resolutionStateBadge = (value: unknown, mode?: unknown): Badge =>
+  value === 'resolved' && mode === 'admin_runtime'
+    ? { label: '管理员验收已关闭', tone: 'success', raw: 'resolved' }
+    : badgeFrom(RESOLUTION_STATE, value, 'warning')
 
 const DECISION: LabelMap = {
   accepted: ['已受理', 'info'], approved: ['已批准', 'success'], rejected: ['已拒绝', 'danger'],

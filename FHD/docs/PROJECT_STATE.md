@@ -11,10 +11,9 @@
 
 ## 客服闭环总线 SSOT（勿混）
 
-**客服工单闭环的事件总线 SSOT = MODstore `incident_bus` + `incident_team`（intake-dispatcher / user-customer-service-officer 等），不是 FHD NeuroBus。**
+**客服工单闭环的事件总线 SSOT = MODstore `incident_bus` + `incident_team`（intake-dispatcher / user-customer-service-officer 等），不是 FHD NeuroBus。** FHD NeuroBus 继续服务宿主域事件与 Mod 钩子，不承担客服工单 intake→派发→回写闭环。
 
 - 事件名如 `ops.intake.customer_ticket` 走 MODstore 发布与派发；duty 触发绑定 incident_bus，不写 NeuroBus subscribe。
-- FHD NeuroBus 仍服务宿主域事件与 Mod 钩子，**不承担**客服工单 intake→派发→回写闭环。
 - 短注：[`architecture/CUSTOMER_TICKET_BUS_SSOT.md`](./architecture/CUSTOMER_TICKET_BUS_SSOT.md)
 
 ## 状态数字来源（禁止自评）
@@ -55,12 +54,6 @@
 
 > L0–L2 差价已收回大半。下一刀在**业务闭环**（客服 incident_bus 执行串、handler_failed、Para 真修通）。
 
-### 客服闭环定轨（2026-07-24）
-
-- **SSOT**：MODstore `incident_bus` + incident team（见 [`architecture/CUSTOMER_TICKET_BUS_SSOT.md`](architecture/CUSTOMER_TICKET_BUS_SSOT.md)）
-- **不是** FHD NeuroBus 订阅轨；duty 合同经 binding 落到 incident，不经 `bus.subscribe`
-- 执行体：`intake-dispatcher.routing_plan` → incident_bus 下游派发；publish 边界强制 enrich
-
 ## SSOT 全景（从最底层往上）
 
 ```
@@ -84,7 +77,7 @@ L0 物理基底    DB schema🟢(旁路封+冻结) · 租户隔离🟢 · runtim
 | 04 | 调度恢复与 SLO | Open：恢复代码/测试不等于生产 SHA 绑定的 SLO 样本与积压恢复证明，仍需实际验收。 |
 | 05 | MODstore 间歇线程异常 | Open：需复现、定位并重复并发验证，单次重跑成功不能销项。 |
 | 06 | 覆盖率证据 | Open：当前覆盖率报告与验收提交 SHA 的对应关系仍需核实，不沿用旧报告。 |
-| 07 | 工单完整生命周期 | Open：MODstore incident_bus 已定轨（enrich + routing_plan 真派发、handler_failed 可观测），Para 已有 CLI fallback；[主线 #2440](https://github.com/42433422/XCMAX/pull/2440) 与 [ETA 候选 #2446](https://github.com/42433422/XCMAX/pull/2446) 不替代无上游替身的真改代码→验证→回写及生产积压验收。 |
+| 07 | 工单完整生命周期 | Open：MODstore incident_bus 已定轨（enrich + routing_plan 真派发、handler_failed 可观测），Para 已有 CLI fallback；[主线 #2440](https://github.com/42433422/XCMAX/pull/2440) 与 [主线 ETA #2446](https://github.com/42433422/XCMAX/pull/2446) 不替代无上游替身的真改代码→验证→回写及生产积压验收。 |
 | 08 | 编号 Mixin 与动态导入 | Open：显式依赖和恢复类型检查的完整证据待补。 |
 | 09 | JWT 刷新跨进程状态 | Open：#2449 已有持久化候选；原子跨进程单次消费及迁移/真实环境验收待证。 |
 

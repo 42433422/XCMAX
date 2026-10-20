@@ -21,7 +21,7 @@ SAFE_REPLY = "我是小C。工单已有处理进展，值班人员正在继续�
 TICKET_KEYS = (
     "id", "user_id", "session_id", "ticket_no", "title", "intent", "issue_domain",
     "issue_domain_label", "subject_type", "subject_id", "status", "priority", "summary",
-    "decision_status", "created_at", "updated_at", "closed_at", "lifecycle_stage",
+    "decision_status", "created_at", "updated_at", "closed_at", "expected_completion_at", "lifecycle_stage",
     "lifecycle_label", "lifecycle_steps",
 )  # fmt: skip
 EVIDENCE_KEYS = ("source_ref", "issue_domain", "issue_domain_label", "reason")
