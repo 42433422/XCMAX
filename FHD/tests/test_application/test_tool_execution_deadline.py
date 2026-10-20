@@ -26,17 +26,23 @@ def test_strict_deadline_mode_refuses_unbounded_executor_before_side_effect(monk
     assert calls == []
 
 
-def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch):
+@pytest.mark.parametrize("late", [False, True])
+def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch, late):
     from app.application.agent_orchestrator import tool_executor as tools
 
     monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
-    moments = iter((10.0, 12.0))
+    moments = iter((10.0, 12.0 if late else 10.5))
     monkeypatch.setattr(tools.time, "monotonic", lambda: next(moments))
     seen = []
 
     def execute(step, *, runtime_context):
         seen.append(runtime_context)
-        return {"success": True}
+        return {
+            "success": late,
+            "outcome": "completed" if late else "unknown",
+            "task_id": "existing-task",
+            "attempt_id": "attempt-1",
+        }
 
     result = execute_with_tool_deadline(
         SimpleNamespace(execute=execute),
@@ -48,6 +54,8 @@ def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch):
     assert seen[0]["tenant_id"] == 7
     assert seen[0]["deadline_utc"]
     assert result["outcome"] == "unknown"
+    assert result["reconciliation_evidence"]["task_id"] == "existing-task"
+    assert result["reconciliation_evidence"]["attempt_id"] == "attempt-1"
     assert result["retryable"] is False and result["reconciliation_required"] is True
 
 

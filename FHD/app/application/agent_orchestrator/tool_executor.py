@@ -153,6 +153,7 @@ def execute_with_tool_deadline(
             "retryable": False,
             "message": "工具缺少可取消/隔离的有界执行适配器，已拒绝执行",
         }
+    result: Any = None
     try:
         result = (
             bounded(step, runtime_context=context, deadline_monotonic=deadline)
@@ -172,6 +173,7 @@ def execute_with_tool_deadline(
     return {
         "success": False,
         "error_code": "tool_timeout_unknown",
+        "reconciliation_evidence": result if isinstance(result, dict) else {},
         "outcome": "unknown",
         "retryable": False,
         "reconciliation_required": True,
