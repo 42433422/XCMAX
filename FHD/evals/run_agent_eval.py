@@ -58,9 +58,13 @@ def load_tasks(path: Path = DEFAULT_TASKS_PATH) -> list[dict[str, Any]]:
 
 
 def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
-    # Evaluation must never share or mutate a developer/installed runtime data root.
-    # Several route-level tasks intentionally exercise persistence, so isolate every
-    # default store (JSON, SQLite and desktop data) for the whole suite.
+    # Offline parent-process mocks are contracts, not process/runtime acceptance.
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    class FixtureToolExecutor(AgentToolExecutor):
+        def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
+            return self.execute(step, runtime_context=runtime_context)
+
     with tempfile.TemporaryDirectory(prefix="xcagi-agent-eval-") as tmp_dir:
         tmp_path = Path(tmp_dir)
         isolated_env = {
@@ -70,12 +74,19 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
             "DATASET_RAG_VECTOR_INDEX_PATH": str(tmp_path / "dataset-rag" / "vectors.sqlite3"),
             "MODEL_USAGE_LEDGER_PATH": str(tmp_path / "model-usage.json"),
         }
-        with patch.dict(os.environ, isolated_env, clear=False):
+        with (
+            patch.dict(os.environ, isolated_env, clear=False),
+            patch(
+                "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
+                FixtureToolExecutor,
+            ),
+        ):
             results = [run_task(task) for task in load_tasks(path)]
     passed = sum(1 for result in results if result["passed"])
     total = len(results)
     return {
         "suite": "agent_platform_minimum",
+        "execution_mode": "fixture_local",
         "tasks_path": str(path),
         "total": total,
         "passed": passed,
@@ -5238,7 +5249,7 @@ def _patched_llm_env(env: dict[str, str]) -> Iterator[None]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run offline agent platform eval tasks.")
+    parser = argparse.ArgumentParser(description="Run offline agent contract fixtures.")
     parser.add_argument(
         "--tasks",
         type=Path,
@@ -5250,10 +5261,8 @@ def main(argv: list[str] | None = None) -> int:
     public_summary = {
         "suite": "agent_platform_minimum",
         "tasks_path": str(args.tasks),
-        "total": int(result["total"]),
-        "passed": int(result["passed"]),
-        "failed": int(result["failed"]),
-        "score": float(result["score"]),
+        "execution_mode": "fixture_local",
+        **{key: result[key] for key in ("total", "passed", "failed", "score")},
     }
     print(json.dumps(public_summary, ensure_ascii=False, indent=2))
     return 0 if result["failed"] == 0 else 1
