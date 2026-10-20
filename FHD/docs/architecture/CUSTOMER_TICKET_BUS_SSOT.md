@@ -1,6 +1,6 @@
 # 客服工单总线 SSOT
 
-> 更新日期：2026-10-10
+> 更新日期：2026-10-20
 
 ## 定轨
 
@@ -15,6 +15,8 @@
 | 客户决定 | 桌面 `POST /api/mod-store/issue-runtime/{id}/decision` → `POST /api/customer-service/issues/{id}/decision`：「已解决」才关单，「重新打开」回到处理中并重新投递 |
 
 ## 验收
+
+代码修复工单沿用原编号，每单独立 PR（仅一个活跃集成 PR），进度回写须绑定 PR 链接、提交 SHA、验证和阻塞。合入 `main`、使用主线构建并验收原问题后才可报告修复完成；客户正常确认后关单。只读诊断无代码修改时记录证据，不虚建 PR。共同验收条款唯一维护于 `config/duty_employee_work_contracts.json#defaults.acceptance`，运行加载器合并到全部岗位的派工与定时任务合同；这是派工验收要求，不能将写入配置等同于已部署或自动强制拦截。
 
 一张 `CS*` 工单：`dispatched_count > 0`，`_cs_progress.lifecycle_*` 非空，且非全员 `handler_failed`。真实闭环按 [ticket-loop.run.json](../evidence/e2e/final-acceptance-1.0.0.5/ticket-loop.run.json) 53 项与 [gates.json](../evidence/e2e/final-acceptance-1.0.0.5/gates.json) 闸门 17–23 判定；目前只有本机集成证据 [ticket-loop-local-20261006](../evidence/e2e/ticket-loop-local-20261006/run.jsonl)，未闭环。
 
