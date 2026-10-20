@@ -12,7 +12,8 @@
           <div class="cs-hero-title">
             <span class="cs-kicker">客服原单 · 内部 ID {{ ticketId }}</span>
             <h2>{{ ticket.title || '（无标题）' }}</h2>
-            <button type="button" class="cs-btn" :disabled="saving || savingEta" @click="correctTitle">更正标题</button>
+            <button type="button" class="cs-btn" :disabled="saving || savingEta" @click="correctTitle()">更正标题</button>
+            <button v-if="canCorrectClassification" type="button" class="cs-btn" :disabled="saving || savingEta" @click="correctTitle(true)">纠正为平台功能问题</button>
             <code class="cs-ticket-no">{{ ticket.ticket_no }}</code>
           </div>
           <div class="cs-badges">
@@ -156,6 +157,7 @@ let generation = 0
 const ticketId = computed(() => Number(String(route.params.ticketId ?? '')))
 const validId = computed(() => Number.isInteger(ticketId.value) && ticketId.value > 0)
 const ticket = computed<Row>(() => detail.value?.ticket || {})
+const canCorrectClassification = computed(() => ticket.value.status === 'processing' && !ticket.value.closed_at && ['account_support', 'general'].includes(String(ticket.value.intent)))
 const evidence = computed<Row>(() => Object.fromEntries(Object.entries(
   (ticket.value.evidence || {}) as Row,
 ).filter(([key]) => key !== 'support_bundle_base64')))
@@ -195,14 +197,19 @@ async function closeTicket() {
   finally { saving.value = false }
 }
 
-async function correctTitle() {
-  if (saving.value || savingEta.value) return
+async function correctTitle(reclassify = false) {
+  if (saving.value || savingEta.value || (reclassify && !canCorrectClassification.value)) return
   const id = ticketId.value, expectedTitle = String(ticket.value.title || '')
-  const title = window.prompt('请输入此工单的正确标题', expectedTitle)?.trim()
-  if (!title || title === expectedTitle || saving.value) return
+  const title = reclassify ? expectedTitle : window.prompt('请输入此工单的正确标题', expectedTitle)?.trim()
+  const reason = reclassify ? window.prompt('将原单纠正为平台功能问题，保留编号、历史和资金记录。请输入修正原因（至少8字）')?.trim() : ''
+  if (reclassify && reason && reason.length < 8) { error.value = '分类修正原因至少8字，请重新填写'; return }
+  if (!title || (!reclassify && title === expectedTitle) || (reclassify && (!reason || reason.length < 8))) return
   saving.value = true
   try {
-    await api.put(`/api/xcmax/market-proxy/customer-service/tickets/${id}/title`, { title, expected_title: expectedTitle })
+    await api.put(`/api/xcmax/market-proxy/customer-service/tickets/${id}/title`, {
+      title, expected_title: expectedTitle,
+      ...(reclassify ? { intent: 'product_issue', expected_intent: ticket.value.intent, reason } : {}),
+    })
     if (ticketId.value === id) await load()
   } catch (cause) { if (ticketId.value === id) error.value = message(cause) }
   finally { saving.value = false }
