@@ -1,15 +1,5 @@
 # ruff: noqa: F401, I001
-"""AI 员工专属工具调用库。
-
-为 52 个编制员工提供真实的专属工具实现（subprocess / httpx / 文件操作），
-而非仅靠 LLM system_prompt 驱动。工具按域分组，每个员工按职责注册 2-4 个工具。
-
-设计原则：
-- 真实执行：跑真实命令（pytest/ruff/mypy/git）、调真实内部 API、读写真实文件
-- 只读优先：涉及写操作的工具需 payload.confirm=True 二次确认
-- 零侵入员工 .py：specialized handler 在 executor 层拦截，不修改 52 个员工文件
-- 安全边界：subprocess 限定白名单命令，httpx 只打本机/白名单 host
-"""
+"""职责分组工具的公共兼容入口；写入及命令/网络访问保留实现中的授权门禁。"""
 
 from __future__ import annotations
 
