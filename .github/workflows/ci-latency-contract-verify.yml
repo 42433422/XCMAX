@@ -1,25 +1,22 @@
-name: CI latency closure candidate verification
+name: CI closure verified-object handoff
 'on':
   push:
     branches: ['ci/latency-contract-verify-20261022']
 permissions:
-  contents: read
+  contents: write
+  actions: read
 jobs:
-  verify:
+  handoff:
     if: github.repository == '42433422/XCMAX' && github.ref == 'refs/heads/ci/latency-contract-verify-20261022'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     env:
       TARGET_SHA: ef06416e9e0e8ceedcdffc72ad977ffdb2afee3d
-      MAIN_SHA: aff192308fd3e82afc8258e44958c22a1b8dac62
-      XCAGI_SKIP_LEGACY_COMPAT_ROUTES: '1'
-      INTENT_BENCHMARK_RUN: '1'
-      XCAGI_SKIP_INTENT_LLM: '1'
-    services:
-      redis:
-        image: redis:7-alpine
-        ports: ['6379:6379']
-        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+      MAIN_SHA: 3c687cbe993bbfbb58c15df9e069205e7580e3bb
+      OLD_MAIN_SHA: aff192308fd3e82afc8258e44958c22a1b8dac62
+      VERIFIED_RUN: '39691945179'
+      VERIFIED_WORKFLOW_SHA: 33024bd0e3b74cc4880904d5962db88199b86b06
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,147 +24,162 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
-      - name: Verify source identity and dependency paths
-        run: |
-          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
-          test -f FHD/frontend/package-lock.json
-          test -f FHD/requirements-server-api.txt
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
-          cache: pip
-          cache-dependency-path: |
-            FHD/requirements-server-api.txt
-            FHD/deploy/requirements-dev.txt
-            FHD/pyproject.toml
-            FHD/packages/**/pyproject.toml
-      - name: Install matching backend dependencies
-        working-directory: FHD
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-server-api.txt
-          pip install -r deploy/requirements-dev.txt
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: FHD/frontend/package-lock.json
-      - name: Install real runtime Mod compiler
-        working-directory: FHD/frontend
-        run: npm ci --no-audit --no-fund
-      - name: Reproduce causal pair before repairing test isolation
-        working-directory: FHD
-        run: |
-          python - <<'PY'
-          import os, subprocess, sys, xml.etree.ElementTree as ET
-          from pathlib import Path
-          out = Path(os.environ['RUNNER_TEMP']) / 'ci-closure-candidate'
-          out.mkdir()
-          command = [sys.executable,'-m','pytest','tests/test_infrastructure/test_mod_manager_branch_cov3.py::TestEnsureModApiReady::test_employee_pack_uses_employee_route_registry','tests/test_routes/test_auth_subscription_register.py','-q','--tb=short','--junitxml='+str(out/'causal-before.xml')]
-          result = subprocess.run(command,capture_output=True,text=True,timeout=180)
-          (out/'causal-before.txt').write_text(result.stdout+result.stderr)
-          print(result.stdout,result.stderr,flush=True)
-          failed = [n.get('name') for n in ET.parse(out/'causal-before.xml').iter('testcase') if n.find('failure') is not None]
-          assert result.returncode == 1 and set(failed) == {'test_subscription_status_requires_login','test_subscription_status_trial','test_register_enriches_tenant_id'}, failed
-          PY
-      - name: Repair only stale contracts and the leaking unit-test boundary
-        run: |
-          python - <<'PY'
-          import re
-          from pathlib import Path
-          p = Path('FHD/tests/test_ci/test_backend_shards.py')
-          text = p.read_text()
-          old = 'prerequisites = {"guard-temp-scripts", "ssot-drift-gate", "classify"}'
-          assert text.count(old) == 1
-          text = text.replace(old,'prerequisites = {"guard-temp-scripts", "classify"}')
-          old = 'assert set(gate["needs"]) == {"classify", "backend-quality", "backend-test-shard"}'
-          assert text.count(old) == 1
-          text = text.replace(old,'assert set(gate["needs"]) == prerequisites | {\n        "ssot-drift-gate", "backend-quality", "backend-test-shard"\n    }')
-          text, count = re.subn(r'(?m)^( +)CLASSIFY="success",$',lambda m:m[1]+'GUARD="success",\n'+m[1]+'SSOT="success",\n'+m[0],text)
-          assert count == 2
-          p.write_text(text)
-          p = Path('FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py')
-          text = p.read_text()
-          start = text.index('    def test_employee_pack_uses_employee_route_registry(')
-          end = text.index('    @pytest.mark.parametrize',start)
-          case = text[start:end]
-          old = '            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as gmm,\n'
-          assert case.count(old) == 1
-          case = case.replace(old,old+'            patch("app.fastapi_app.get_fastapi_app", return_value=object()) as get_app,\n')
-          old = '            register.assert_called_once()\n'
-          assert case.count(old) == 1
-          case = case.replace(old,'            get_app.assert_called_once_with()\n            register.assert_called_once_with(get_app.return_value, mm, "artifact-generator")\n')
-          p.write_text(text[:start]+case+text[end:])
-          p = Path('FHD/CHANGELOG.md')
-          text = p.read_text()
-          old = '- 自动检查可与配置一致性校验并行启动，减少等待；配置校验失败时仍禁止通过和发布。'
-          assert text.count(old) == 1
-          p.write_text(text.replace(old,old+'同步分片门禁测试的守卫输入，并隔离员工包单测对应用单例的影响，避免认证路由测试受执行顺序干扰。'))
-          PY
-          python -m ruff format FHD/tests/test_ci/test_backend_shards.py FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py
-          python -m ruff check FHD/tests/test_ci/test_backend_shards.py FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py
-          git diff --check
-      - name: Verify causal pair and all affected contracts
-        working-directory: FHD
+      - name: Install isolated contract verification tools
+        run: python -m pip install 'pytest<10' pyyaml 'ruff>=0.8,<0.16'
+      - name: Require successful exact candidate and identical test census
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python -m pytest tests/test_infrastructure/test_mod_manager_branch_cov3.py tests/test_routes/test_auth_subscription_register.py -q --tb=short --junitxml="$RUNNER_TEMP/ci-closure-candidate/causal-after.xml"
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. python -m pytest --noconftest -c /dev/null -p no:cacheprovider tests/test_ci/test_backend_shards.py tests/test_ci/test_workflow_gate_contracts.py tests/release_gate/test_admin_console_release_policy.py::test_fhd_release_chain_carries_and_verifies_admin_identity -q --junitxml="$RUNNER_TEMP/ci-closure-candidate/contracts.xml"
-          cd ..
-          python -m scripts.dev.test_change_classifier
-          python scripts/dev/publish_ci_workflows_to_root.py --check
-      - name: Commit candidate locally and verify repository accounting
+          python - <<'PY'
+          import hashlib, io, json, os, time, urllib.error, urllib.parse, urllib.request, zipfile
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          api = 'https://api.github.com/repos/42433422/XCMAX/'
+          headers = {'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(api+path,headers=headers),timeout=45) as response:
+                  return json.load(response)
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs): return None
+          def archive(artifact):
+              opener = urllib.request.build_opener(NoRedirect)
+              try:
+                  response = opener.open(urllib.request.Request(api+'actions/artifacts/'+str(artifact['id'])+'/zip',headers=headers),timeout=45)
+              except urllib.error.HTTPError as exc:
+                  assert exc.code == 302, exc.code
+                  url = exc.headers['Location']; parts = urllib.parse.urlsplit(url)
+                  assert parts.scheme == 'https' and parts.hostname and (parts.hostname.endswith('.blob.core.windows.net') or parts.hostname.endswith('.githubusercontent.com'))
+                  response = urllib.request.urlopen(url,timeout=60)
+              with response: raw = response.read(100_000_001)
+              assert len(raw) <= 100_000_000
+              assert artifact['digest'] == 'sha256:'+hashlib.sha256(raw).hexdigest()
+              return zipfile.ZipFile(io.BytesIO(raw))
+          run_id = os.environ['VERIFIED_RUN']
+          for attempt in range(40):
+              run = get('actions/runs/'+run_id)
+              assert run['head_sha'] == os.environ['VERIFIED_WORKFLOW_SHA']
+              assert run['head_branch'] == 'ci/latency-contract-verify-20261022'
+              if run['status'] == 'completed': break
+              time.sleep(15)
+          assert run['status'] == 'completed' and run['conclusion'] == 'success', (run['status'],run['conclusion'])
+          items = get('actions/runs/'+run_id+'/artifacts?per_page=100')['artifacts']
+          candidates = [a for a in items if a['name'] == 'ci-closure-candidate-'+run_id and not a['expired']]
+          assert len(candidates) == 1
+          artifact = candidates[0]
+          new = archive(artifact)
+          old = archive(get('actions/artifacts/12386734666'))
+          def census(z):
+              root = ET.fromstring(z.read('full.xml'))
+              nodes = list(root.iter('testcase'))
+              ids = [n.get('classname','')+'::'+n.get('name','') for n in nodes]
+              skipped = {i for i,n in zip(ids,nodes) if n.find('skipped') is not None}
+              failed = {i for i,n in zip(ids,nodes) if n.find('failure') is not None or n.find('error') is not None}
+              return ids,skipped,failed
+          old_ids,old_skip,old_fail = census(old)
+          ids,skip,fail = census(new)
+          assert len(ids) == len(old_ids) == 4337 and sorted(ids) == sorted(old_ids)
+          assert skip == old_skip and len(skip) == 12 and len(old_fail) == 6 and not fail
+          manifest = json.loads(new.read('full.json'))
+          assert manifest['exitstatus'] == 0 and manifest['index'] == 7 and manifest['total'] == 8
+          info = json.loads(new.read('verification.json'))
+          assert info['source_base'] == os.environ['TARGET_SHA'] and info['main_base'] == os.environ['OLD_MAIN_SHA']
+          expected = {'FHD/tests/test_ci/test_backend_shards.py','FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py','FHD/CHANGELOG.md','FHD/metrics/line_baseline.json'}
+          assert len(info['files']) == 4 and {f['path'] for f in info['files']} == expected
+          pinned = {'FHD/tests/test_ci/test_backend_shards.py':'f11c51cfadc5753b4ca3e006f05fb2bc376571c2','FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py':'511147cef0b808c83fb300dbe626c29a8d93a7b1'}
+          for item in info['files']:
+              raw = new.read('candidate/'+item['path'])
+              blob = hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+              assert item['sha256'] == hashlib.sha256(raw).hexdigest() and item['blob'] == blob
+              assert item['path'] not in pinned or pinned[item['path']] == blob
+              Path(item['path']).write_bytes(raw)
+          out = Path(os.environ['RUNNER_TEMP'])/'ci-closure-handoff'; out.mkdir()
+          receipt = {'verified_run':int(run_id),'verified_artifact':artifact['id'],'verified_artifact_digest':artifact['digest'],'candidate_tree':info['tree'],'test_count':len(ids),'passed':len(ids)-len(skip),'skipped':len(skip),'failures':0,'original_failures_resolved':len(old_fail),'elapsed':manifest['elapsed']}
+          (out/'receipt.json').write_text(json.dumps(receipt,indent=2))
+          print('VERIFIED_CENSUS',json.dumps(receipt),flush=True)
+          PY
+      - name: Reconcile only the inspected upstream changes
         run: |
           set -euo pipefail
           git config user.name 'CI verification'
           git config user.email 'ci-verification@users.noreply.github.com'
-          git add FHD/tests/test_ci/test_backend_shards.py FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py FHD/CHANGELOG.md
-          git commit -m 'test(ci): close stale shard contracts and isolate employee pack app lookup'
-          (cd FHD && python scripts/dev/check_net_deletion.py --update --force --reason '按用户2026-10-22继续闭环指令，修复第7分片六项失败：补齐旧门禁契约与合法守卫输入，隔离员工包单测真实应用单例并加强参数断言；不减测试、不降覆盖率、不改产品运行时。')
-          git add FHD/metrics/line_baseline.json
-          git commit -m 'chore(ci): record measured regression repair line accounting'
+          git add FHD/tests/test_ci/test_backend_shards.py FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py FHD/CHANGELOG.md FHD/metrics/line_baseline.json
+          git commit -m 'test(ci): verified shard seven closure candidate'
+          python - <<'PY'
+          import json,os,subprocess
+          from pathlib import Path
+          out=Path(os.environ['RUNNER_TEMP'])/'ci-closure-handoff'
+          receipt=json.loads((out/'receipt.json').read_text())
+          assert subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip()==receipt['candidate_tree']
+          main,old=os.environ['MAIN_SHA'],os.environ['OLD_MAIN_SHA']
+          subprocess.run(['git','fetch','--no-tags','origin',main],check=True)
+          delta=set(subprocess.check_output(['git','diff','--name-only',old,main],text=True).splitlines())
+          allowed={'FHD/CHANGELOG.md','成都修茈科技有限公司/package.json','成都修茈科技有限公司/package-lock.json'}
+          assert delta==allowed,delta
+          heading='## Unreleased（1.0.0.6 候选，尚未发布）\n\n'
+          entry='- 自动检查可与配置一致性校验并行启动，减少等待；配置校验失败时仍禁止通过和发布。同步分片门禁测试的守卫输入，并隔离员工包单测对应用单例的影响，避免认证路由测试受执行顺序干扰。\n\n'
+          previous=subprocess.check_output(['git','show',old+':FHD/CHANGELOG.md']).decode()
+          assert previous.count(heading)==1
+          assert Path('FHD/CHANGELOG.md').read_text()==previous.replace(heading,heading+entry,1)
+          result=subprocess.run(['git','merge','--no-commit','--no-ff',main],capture_output=True,text=True)
+          print(result.stdout,result.stderr,flush=True)
+          assert result.returncode in (0,1)
+          conflicts=set(subprocess.check_output(['git','diff','--name-only','--diff-filter=U'],text=True).splitlines())
+          assert conflicts <= {'FHD/CHANGELOG.md'},conflicts
+          newest=subprocess.check_output(['git','show',main+':FHD/CHANGELOG.md']).decode()
+          assert newest.count(heading)==1 and entry not in newest
+          Path('FHD/CHANGELOG.md').write_text(newest.replace(heading,heading+entry,1))
+          for path in allowed-{'FHD/CHANGELOG.md'}:
+              assert Path(path).read_bytes()==subprocess.check_output(['git','show',main+':'+path])
+          subprocess.run(['git','add','FHD/CHANGELOG.md'],check=True)
+          subprocess.run(['git','commit','-m','Merge inspected main snapshot preserving upstream notes and dependency changes'],check=True)
+          PY
+      - name: Verify reconciled contracts and repository preflight
+        run: |
+          set -euo pipefail
+          PYTHONPATH=FHD python -m pytest --noconftest -c /dev/null -p no:cacheprovider FHD/tests/test_ci/test_backend_shards.py FHD/tests/test_ci/test_workflow_gate_contracts.py FHD/tests/release_gate/test_admin_console_release_policy.py::test_fhd_release_chain_carries_and_verifies_admin_identity -q
+          python -m scripts.dev.test_change_classifier
+          python -m ruff check FHD/tests/test_ci/test_backend_shards.py FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py
+          python -m ruff format --check FHD/tests/test_ci/test_backend_shards.py FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py
+          python scripts/dev/publish_ci_workflows_to_root.py --check
           (cd FHD && python scripts/dev/push_preflight.py --fix --base "$MAIN_SHA")
           (cd FHD && python scripts/dev/ssot_cli.py gate)
           git diff --exit-code
           git diff --check "$MAIN_SHA" HEAD
-          echo "BACKEND_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-      - name: Re-run complete original shard seven with coverage collection
-        working-directory: FHD
+      - name: Store verified blobs only; never update a branch or deployment
         env:
-          BACKEND_SHARD_INDEX: '7'
-          BACKEND_SHARD_TOTAL: '8'
-          BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          export BACKEND_SHARD_MANIFEST="$RUNNER_TEMP/ci-closure-candidate/full.json"
-          python -m pytest tests/ -v -p scripts.ci.backend_shards --cov --cov-branch --cov-fail-under=0 --cov-report= --junitxml="$RUNNER_TEMP/ci-closure-candidate/full.xml" > "$RUNNER_TEMP/ci-closure-candidate/full.txt" 2>&1
-          tail -n 25 "$RUNNER_TEMP/ci-closure-candidate/full.txt"
-      - name: Export exact verified candidate files and tree
-        run: |
-          set -euo pipefail
-          git diff --exit-code
           python - <<'PY'
-          import hashlib, json, os, shutil, subprocess
+          import base64,hashlib,json,os,subprocess,urllib.request
           from pathlib import Path
-          out = Path(os.environ['RUNNER_TEMP']) / 'ci-closure-candidate'
-          expected = {'FHD/tests/test_ci/test_backend_shards.py','FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py','FHD/CHANGELOG.md','FHD/metrics/line_baseline.json'}
-          changed = set(subprocess.check_output(['git','diff','--name-only',os.environ['TARGET_SHA'],'HEAD'],text=True).splitlines())
-          assert changed == expected, changed
-          info = {'source_base':os.environ['TARGET_SHA'],'main_base':os.environ['MAIN_SHA'],'local_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'files':[]}
-          for name in sorted(expected):
-              p = Path(name); raw = p.read_bytes()
-              dest = out / 'candidate' / name
-              dest.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(p,dest)
-              info['files'].append({'path':name,'blob':subprocess.check_output(['git','hash-object',name],text=True).strip(),'sha256':hashlib.sha256(raw).hexdigest()})
-          (out/'verification.json').write_text(json.dumps(info,indent=2,ensure_ascii=False))
-          print('VERIFIED_CANDIDATE',json.dumps(info,ensure_ascii=False),flush=True)
+          out=Path(os.environ['RUNNER_TEMP'])/'ci-closure-handoff'
+          receipt=json.loads((out/'receipt.json').read_text())
+          target,main=os.environ['TARGET_SHA'],os.environ['MAIN_SHA']
+          expected={'.github/workflows/fhd-ci-cd.yml','FHD/.github/workflows/ci-cd.yml','FHD/CHANGELOG.md','docs/CI_SSOT.md','FHD/metrics/line_baseline.json','FHD/tests/test_ci/test_workflow_gate_contracts.py','FHD/tests/release_gate/test_admin_console_release_policy.py','FHD/tests/test_ci/test_backend_shards.py','FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py'}
+          assert set(subprocess.check_output(['git','diff','--name-only',main,'HEAD'],text=True).splitlines())==expected
+          changed=subprocess.check_output(['git','diff','--name-only',target,'HEAD'],text=True).splitlines()
+          elements=[]
+          for name in changed:
+              raw=Path(name).read_bytes()
+              blob=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+              payload=json.dumps({'content':base64.b64encode(raw).decode(),'encoding':'base64'}).encode()
+              request=urllib.request.Request('https://api.github.com/repos/42433422/XCMAX/git/blobs',data=payload,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'},method='POST')
+              with urllib.request.urlopen(request,timeout=45) as response: stored=json.load(response)
+              assert stored['sha']==blob
+              elements.append({'path':name,'mode':'100644','type':'blob','sha':blob})
+          receipt.update({'target':target,'main':main,'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'base_tree':subprocess.check_output(['git','rev-parse',target+'^{tree}'],text=True).strip(),'elements':elements,'baseline':json.loads(Path('FHD/metrics/line_baseline.json').read_text()),'refs_modified':False})
+          (out/'receipt.json').write_text(json.dumps(receipt,indent=2,ensure_ascii=False))
+          print('VERIFIED_OBJECT_HANDOFF',json.dumps(receipt,ensure_ascii=False),flush=True)
           PY
-      - name: Retain candidate verification evidence
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: ci-closure-candidate-${{ github.run_id }}
-          path: ${{ runner.temp }}/ci-closure-candidate/
+          name: ci-closure-handoff-${{ github.run_id }}
+          path: ${{ runner.temp }}/ci-closure-handoff/
           if-no-files-found: error
           retention-days: 7
       - name: Clean only this disposable checkout
