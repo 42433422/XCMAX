@@ -50,7 +50,13 @@ def main():
                     return result.returncode
                 destination.mkdir(parents=True, exist_ok=True)
                 recovered = destination / dmg.name
-                if recovered.is_symlink() or (destination / "recovery-receipt.json").is_symlink():
+                receipt_path = destination / "recovery-receipt.json"
+                if (
+                    recovered.is_symlink()
+                    or receipt_path.is_symlink()
+                    or recovered.exists()
+                    or receipt_path.exists()
+                ):
                     return result.returncode
                 shutil.copyfile(dmg, recovered)
                 with recovered.open("rb") as handle:
@@ -69,7 +75,7 @@ def main():
                 }
                 if action == "staple":
                     receipt["stapler_exit_code"] = result.returncode
-                (destination / "recovery-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+                receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
         return result.returncode
     return 0
 

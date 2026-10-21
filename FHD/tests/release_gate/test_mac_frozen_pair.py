@@ -509,6 +509,7 @@ def test_staple_retry_is_bounded_and_failure_artifact_is_unpublishable(
         "parent_symlink",
         "ancestor_symlink",
         "recovery_symlink",
+        "existing_artifact",
         "wrong_name",
         "bad_sha",
     ],
@@ -540,6 +541,11 @@ def test_staple_recovery_does_not_copy_unrelated_paths(tmp_path, monkeypatch, un
         link.symlink_to(target, target_is_directory=True)
     if unsafe == "recovery_symlink":
         (tmp_path / "release-staple-recovery").symlink_to(directory, target_is_directory=True)
+    if unsafe == "existing_artifact":
+        previous = tmp_path / "release-staple-recovery" / f"{SHA}-arm64"
+        previous.mkdir(parents=True)
+        (previous / dmg.name).write_bytes(b"previous candidate")
+        (previous / "recovery-receipt.json").write_text("previous receipt")
     monkeypatch.setattr(staple.sys, "argv", ["staple", str(dmg)])
     monkeypatch.setattr(
         staple.subprocess,
@@ -548,9 +554,14 @@ def test_staple_recovery_does_not_copy_unrelated_paths(tmp_path, monkeypatch, un
     )
     assert staple.main() == 65
     recovery = tmp_path / "release-staple-recovery"
-    assert not recovery.exists() or (
-        unsafe == "recovery_symlink" and not (directory / f"{SHA}-arm64").exists()
-    )
+    if unsafe == "existing_artifact":
+        previous = recovery / f"{SHA}-arm64"
+        assert (previous / dmg.name).read_bytes() == b"previous candidate"
+        assert (previous / "recovery-receipt.json").read_text() == "previous receipt"
+    else:
+        assert not recovery.exists() or (
+            unsafe == "recovery_symlink" and not (directory / f"{SHA}-arm64").exists()
+        )
 
 
 def test_staple_recovery_keeps_macos_hard_gates_and_separate_artifact():
