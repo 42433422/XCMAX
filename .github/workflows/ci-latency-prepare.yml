@@ -1,0 +1,293 @@
+name: CI latency isolated preparation
+'on':
+  create: null
+permissions:
+  contents: read
+jobs:
+  validate:
+    if: github.repository == '42433422/XCMAX' && github.ref == 'refs/heads/ci/latency-prepare-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE_SHA: c8c9c90ca47cbde6361c94b11cf5c94815b53147
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ env.BASE_SHA }}
+        fetch-depth: 0
+        persist-credentials: false
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.11'
+    - name: Inspect scoped instructions and prepare verification tools
+      run: |
+        set -euo pipefail
+        for file in FHD/AGENTS.md FHD/.github/AGENTS.md FHD/.github/workflows/AGENTS.md FHD/tests/AGENTS.md FHD/tests/test_ci/AGENTS.md docs/AGENTS.md .github/AGENTS.md .github/workflows/AGENTS.md; do
+          if test -f "$file"; then cat "$file"; echo "Scoped instructions require review before patching"; exit 1; fi
+        done
+        python -m pip install pytest pyyaml ruff
+    - name: Verify baseline, apply bounded change, test and preflight
+      run: |
+        cat > "$RUNNER_TEMP/apply_ci_latency.py" <<'PY_PATCH'
+        from pathlib import Path
+        import re
+        import subprocess
+
+        ROOT = Path.cwd()
+        SOURCE = ROOT / 'FHD/.github/workflows/ci-cd.yml'
+        TEST = ROOT / 'FHD/tests/test_ci/test_workflow_gate_contracts.py'
+
+
+        def replace_once(text, old, new):
+            if text.count(old) != 1:
+                raise RuntimeError(f'Expected exactly one anchor: {old!r}')
+            return text.replace(old, new, 1)
+
+
+        def modify_job(text, name, transform):
+            pattern = rf'(?ms)^  {re.escape(name)}:\n.*?(?=^  [a-zA-Z0-9_-]+:\n|\Z)'
+            matches = list(re.finditer(pattern, text))
+            if len(matches) != 1:
+                raise RuntimeError(f'Expected exactly one job: {name}')
+            match = matches[0]
+            return text[:match.start()] + transform(match.group()) + text[match.end():]
+
+
+        def transform_workflow(text):
+            for name in ('backend-quality', 'backend-test-shard', 'frontend-quality',
+                         'frontend-test-shard', 'frontend-e2e', 'pack-verify'):
+                text = modify_job(text, name, lambda block: replace_once(
+                    block, 'needs: [guard-temp-scripts, ssot-drift-gate, classify]',
+                    'needs: [guard-temp-scripts, classify]'))
+            text = replace_once(text,
+                '# Cheap guards precede expensive work; quality and shards then run in parallel.',
+                '# SSOT runs alongside tests; aggregate gates still require every guard to succeed.')
+            for side in ('backend', 'frontend'):
+                def aggregate(block, side=side):
+                    block = replace_once(block,
+                        f'needs: [classify, {side}-quality, {side}-test-shard]',
+                        f'needs: [guard-temp-scripts, ssot-drift-gate, classify, {side}-quality, {side}-test-shard]')
+                    block = replace_once(block,
+                        '          CLASSIFY: \x24{{ needs.classify.result }}',
+                        '          GUARD: \x24{{ needs.guard-temp-scripts.result }}\n'
+                        '          SSOT: \x24{{ needs.ssot-drift-gate.result }}\n'
+                        '          CLASSIFY: \x24{{ needs.classify.result }}')
+                    return replace_once(block,
+                        '          test "$CLASSIFY" = success',
+                        '          test "$GUARD" = success\n'
+                        '          test "$SSOT" = success\n'
+                        '          test "$CLASSIFY" = success')
+                text = modify_job(text, f'{side}-test', aggregate)
+            return text
+
+
+        def transform_tests(text):
+            text = replace_once(text,
+                '@pytest.fixture(scope="module", params=["backend-test", "frontend-test"])',
+                '@pytest.fixture(scope="module", params=[\n'
+                '    (path, name)\n'
+                '    for path in ("FHD/.github/workflows/ci-cd.yml", ".github/workflows/fhd-ci-cd.yml")\n'
+                '    for name in ("backend-test", "frontend-test")\n'
+                '])')
+            text = replace_once(text,
+                '    jobs = yaml.safe_load((ROOT / "FHD/.github/workflows/ci-cd.yml").read_text())["jobs"]\n'
+                '    job = jobs[request.param]',
+                '    path, name = request.param\n'
+                '    jobs = yaml.safe_load((ROOT / path).read_text())["jobs"]\n'
+                '    job = jobs[name]')
+            text = replace_once(text, '        "CLASSIFY": "success",',
+                                '        "GUARD": "success",\n        "SSOT": "success",\n        "CLASSIFY": "success",')
+            text = replace_once(text,
+                '    prerequisites = {"classify", "guard-temp-scripts", "ssot-drift-gate"}',
+                '    prerequisites = {"classify", "guard-temp-scripts"}')
+            text = replace_once(text,
+                '    for name in ("backend-test", "frontend-test"):\n'
+                '        prerequisite = jobs[name]["steps"][0]',
+                '    for name in ("backend-test", "frontend-test"):\n'
+                '        assert {"guard-temp-scripts", "ssot-drift-gate"} <= set(jobs[name]["needs"])\n'
+                '        assert not jobs[name].get("continue-on-error", False)\n'
+                '        prerequisite = jobs[name]["steps"][0]\n'
+                '        assert prerequisite["env"]["GUARD"] == "\x24{{ needs.guard-temp-scripts.result }}"\n'
+                '        assert prerequisite["env"]["SSOT"] == "\x24{{ needs.ssot-drift-gate.result }}"')
+            text += '''\n\n@pytest.mark.parametrize("guard", ["GUARD", "SSOT"])
+        @pytest.mark.parametrize("state", ["failure", "cancelled", "skipped", "", "unknown"])
+        @pytest.mark.parametrize("irrelevant", [False, True])
+        def test_parallel_guard_must_pass_even_when_suite_is_irrelevant(gate, guard, state, irrelevant):
+            changes = {guard: state}
+            if irrelevant:
+                changes.update(SHOULD_RUN="false", SKIP="true", SHARDS="skipped")
+            assert run_gate(gate, **changes) != 0
+        '''
+            return text
+
+
+        def main():
+            SOURCE.write_text(transform_workflow(SOURCE.read_text(encoding='utf-8')), encoding='utf-8')
+            TEST.write_text(transform_tests(TEST.read_text(encoding='utf-8')), encoding='utf-8')
+            subprocess.run(['python', 'scripts/dev/publish_ci_workflows_to_root.py', '--apply'], check=True)
+            doc = ROOT / 'docs/CI_SSOT.md'
+            doc.write_text(doc.read_text(encoding='utf-8') + '''\n### CI 延迟优化：SSOT 并行、最终门禁不变
+
+        后端质量/分片、前端质量/分片、mock E2E 与打包只等待临时脚本守卫和分类；
+        SSOT 独立运行，不再阻挡这些任务启动。`backend-test`、`frontend-test` 仍以
+        `always()` 汇合，并显式要求临时脚本守卫和 SSOT 均为 `success`；失败、取消、
+        跳过、缺失或未知状态都拒绝，包括分类为无需执行测试的分支。
+        合并保护名称、发布依赖、测试全集、覆盖率阈值及完整 Git 历史要求保持不变。
+        这是执行顺序优化，不代表三分钟目标已达成；耗时按同一提交的实际 CI 记录验收。
+        ''', encoding='utf-8')
+            log = ROOT / 'FHD/CHANGELOG.md'
+            text = log.read_text(encoding='utf-8')
+            match = re.search(r'(?m)^## Unreleased[^\n]*\n', text)
+            if not match:
+                raise RuntimeError('Unreleased changelog anchor missing')
+            text = text[:match.end()] + '\n- 自动检查可与配置一致性校验并行启动，减少等待；配置校验失败时仍禁止通过和发布。\n' + text[match.end():]
+            log.write_text(text, encoding='utf-8')
+
+
+        if __name__ == '__main__':
+            main()
+        PY_PATCH
+        set -euo pipefail
+        git config core.quotepath false
+        export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+        python -m pytest --noconftest -c /dev/null FHD/tests/test_ci/test_workflow_gate_contracts.py -q
+        python "$RUNNER_TEMP/apply_ci_latency.py"
+        python -m ruff format FHD/tests/test_ci/test_workflow_gate_contracts.py
+        python -m ruff check FHD/tests/test_ci/test_workflow_gate_contracts.py
+        python -m pytest --noconftest -c /dev/null FHD/tests/test_ci/test_workflow_gate_contracts.py -q
+        python scripts/dev/publish_ci_workflows_to_root.py --check
+        python scripts/dev/test_change_classifier.py
+        python - <<'PY'
+        import subprocess
+        from pathlib import Path
+        allowed={'.github/workflows/fhd-ci-cd.yml','FHD/.github/workflows/ci-cd.yml','FHD/tests/test_ci/test_workflow_gate_contracts.py','docs/CI_SSOT.md','FHD/CHANGELOG.md'}
+        changed=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+        assert changed == allowed, changed
+        subprocess.run(['git','add','--',*sorted(changed)],check=True)
+        subprocess.run(['git','-c','user.name=CI validation','-c','user.email=ci-validation@users.noreply.github.com','commit','-m','ci: run SSOT alongside tests while preserving fail-closed gates'],check=True)
+        PY
+        cd FHD
+        python scripts/dev/check_net_deletion.py --update --force --reason '用户于2026-10-22授权执行CI加速：仅解除SSOT启动串行依赖，新增源与生成工作流的守卫失败/取消/跳过/缺失负向回归及既有CI文档；不降低覆盖率、不删除有效断言，实际行数差随PR披露。'
+        cd ..
+        python - <<'PY'
+        import subprocess
+        subprocess.run(['git','add','--','FHD/metrics/line_baseline.json'],check=True)
+        subprocess.run(['git','-c','user.name=CI validation','-c','user.email=ci-validation@users.noreply.github.com','commit','-m','chore(ci): record bounded guard regression line budget'],check=True)
+        PY
+        cd FHD
+        if ! python scripts/dev/push_preflight.py --fix --base "$BASE_SHA"; then
+          cd ..
+          python - <<'PY'
+        import subprocess
+        changed=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()
+        assert changed and all(p.startswith('成都修茈科技有限公司/capabilities/') or p=='成都修茈科技有限公司/data/capabilities.json' for p in changed),changed
+        subprocess.run(['git','add','--',*changed],check=True)
+        subprocess.run(['git','-c','user.name=CI validation','-c','user.email=ci-validation@users.noreply.github.com','commit','-m','chore(ssot): regenerate capability evidence after CI change'],check=True)
+        PY
+          cd FHD
+        fi
+        python scripts/dev/push_preflight.py --fix --base "$BASE_SHA"
+        cd ..
+        python scripts/dev/publish_ci_workflows_to_root.py --check
+        python -m pytest --noconftest -c /dev/null FHD/tests/test_ci/test_workflow_gate_contracts.py -q
+
+        git diff --check "$BASE_SHA" HEAD
+        git diff --stat "$BASE_SHA" HEAD
+        python - <<'PY'
+        import base64, json, os, subprocess
+        from pathlib import Path
+
+        def git(*args):
+            return subprocess.check_output(['git', *args])
+        base=os.environ['BASE_SHA']
+        commits=[]
+        for sha in git('rev-list','--reverse',f'{base}..HEAD').decode().splitlines():
+            raw=git('cat-file','commit',sha).decode()
+            headers,message=raw.split('\n\n',1)
+            meta={line.split(' ',1)[0]:line.split(' ',1)[1] for line in headers.splitlines()}
+            parent=meta['parent']
+            paths=git('diff','--name-only','-z',parent,sha).decode().strip('\0').split('\0')
+            files=[]
+            for path in paths:
+                blob=git('rev-parse',f'{sha}:{path}').decode().strip()
+                mode=git('ls-tree',sha,'--',path).decode().split()[0]
+                files.append({'path':path,'mode':mode,'sha':blob,'content':base64.b64encode(git('cat-file','blob',blob)).decode()})
+            def identity(which):
+                fmt='%an%x00%ae%x00%aI' if which=='author' else '%cn%x00%ce%x00%cI'
+                name,email,date=git('show','-s',f'--format={fmt}',sha).decode().strip().split('\0')
+                return {'name':name,'email':email,'date':date}
+            commits.append({'sha':sha,'tree':meta['tree'],'parent':parent,'message':message,'author':identity('author'),'committer':identity('committer'),'files':files})
+        out=Path(os.environ['RUNNER_TEMP'])/'ci-latency-candidate.json'
+        out.write_text(json.dumps({'base':base,'commits':commits},ensure_ascii=False),encoding='utf-8')
+        print('TESTED_CANDIDATE_SHA='+git('rev-parse','HEAD').decode().strip())
+        print('TESTED_TREE_SHA='+git('rev-parse','HEAD^{tree}').decode().strip())
+        PY
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ci-latency-candidate
+        path: ${{ runner.temp }}/ci-latency-candidate.json
+        if-no-files-found: error
+        retention-days: 3
+    - name: Clean only this disposable checkout
+      if: always()
+      run: |
+        mkdir -p "$RUNNER_TEMP/latency-clean-home" "$RUNNER_TEMP/latency-clean-tmp"
+        HOME="$RUNNER_TEMP/latency-clean-home" XCMAX_CLEAN_TMP_ROOT="$RUNNER_TEMP/latency-clean-tmp" python3 scripts/dev/clean_agent_workspace.py
+        df -h .
+  publish-candidate-objects:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/download-artifact@v8
+      with:
+        name: ci-latency-candidate
+        path: candidate
+    - name: Store verified Git objects only; do not update refs
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        python - <<'PY_PUBLISH'
+        import base64, hashlib, json, os, urllib.request
+        from pathlib import Path
+        base='c8c9c90ca47cbde6361c94b11cf5c94815b53147'
+        repo='42433422/XCMAX'
+        allowed={'.github/workflows/fhd-ci-cd.yml','FHD/.github/workflows/ci-cd.yml','FHD/tests/test_ci/test_workflow_gate_contracts.py','docs/CI_SSOT.md','FHD/CHANGELOG.md','FHD/metrics/line_baseline.json'}
+        data=json.loads(Path('candidate/ci-latency-candidate.json').read_text())
+        assert data['base']==base and 1<=len(data['commits'])<=4
+
+        def api(path,payload=None):
+            assert path.startswith('/git/commits') or path.startswith('/git/trees') or path=='/git/blobs'
+            body=None if payload is None else json.dumps(payload).encode()
+            req=urllib.request.Request(f'https://api.github.com/repos/{repo}{path}',data=body,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json'})
+            with urllib.request.urlopen(req,timeout=60) as resp:
+                return json.load(resp)
+        parent=base
+        tree=api('/git/commits/'+base)['tree']['sha']
+        for commit in data['commits']:
+            assert commit['parent']==parent
+            entries=[]
+            for item in commit['files']:
+                p=item['path']
+                assert '..' not in p.split('/') and not p.startswith('/')
+                assert p in allowed or p.startswith('成都修茈科技有限公司/capabilities/') or p=='成都修茈科技有限公司/data/capabilities.json',p
+                assert item['mode']=='100644'
+                raw=base64.b64decode(item['content'],validate=True)
+                assert hashlib.sha1(f'blob {len(raw)}\0'.encode()+raw).hexdigest()==item['sha']
+                blob=api('/git/blobs',{'content':item['content'],'encoding':'base64'})
+                assert blob['sha']==item['sha']
+                entries.append({'path':p,'mode':item['mode'],'type':'blob','sha':blob['sha']})
+            tree=api('/git/trees',{'base_tree':tree,'tree':entries})['sha']
+            assert tree==commit['tree'],(tree,commit['tree'])
+            result=api('/git/commits',{'message':commit['message'],'tree':tree,'parents':[parent],'author':commit['author'],'committer':commit['committer']})
+            assert result['sha']==commit['sha'],(result['sha'],commit['sha'])
+            parent=result['sha']
+        print('CANDIDATE_SHA='+parent)
+        print('TREE_SHA='+tree)
+        print('No repository reference, branch, pull request, deployment, or protection rule was modified by this job.')
+        with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+            f.write(f'Validated candidate: `{parent}`\n\nTree: `{tree}`\n\nNo references were updated.\n')
+        PY_PUBLISH
