@@ -84,6 +84,7 @@ def _run_purchase_agent(
             "agent_status": "failed",
         }
 
+    params = {key: value for key, value in params.items() if key not in {"tenant_id", "tenantId"}}
     node_id = f"purchase_{action}"
     user_id = _purchase_agent_user_id(request, params)
     plan = PlanGraph(
@@ -109,6 +110,7 @@ def _run_purchase_agent(
         "route": route_path,
         "request_path": str(request.url.path),
         "user_id": user_id,
+        "tenant_id": getattr(request.state, "tenant_id", None),
         "route_confirmed": True,
         "service_source": "fastapi_purchase_route",
     }
