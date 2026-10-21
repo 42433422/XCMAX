@@ -392,6 +392,7 @@ jobs:
       skip: ${{ needs.backend-quality.outputs.skip }}
     env:
       BACKEND_SHARD_TOTAL: "4"
+      BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
       BACKEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
     steps:
       - name: Validate prerequisites and skip semantics
