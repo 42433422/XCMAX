@@ -7,12 +7,10 @@ import { ADMIN_HOST_ROUTE_RECORDS } from '../../../admin-console/src/adminHostRo
 import { ADMIN_OPERATOR_MENU_ITEMS, ADMIN_OPERATOR_ROUTE_NAMES } from '../../../admin-console/src/constants/adminOperatorNav'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 
-const { list, detail, updateEta, push, route, put, post, prompt } = vi.hoisted(() => ({
-  post: vi.fn(), put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), prompt: vi.fn(), route: { params: {} as Record<string, string> },
-}))
+const { list, detail, updateEta, push, route, put, post, prompt, confirm } = vi.hoisted(() => ({ post: vi.fn(), put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), prompt: vi.fn(), confirm: vi.fn(), route: { params: {} as Record<string, string> }, }))
 vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail, updateCustomerTicketExpectedCompletion: updateEta } }))
 vi.mock('@/api/core', () => ({ default: { put, post } }))
-vi.mock('@/utils/appDialog', () => ({ appPrompt: prompt }))
+vi.mock('@/utils/appDialog', () => ({ appConfirm: confirm, appPrompt: prompt }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => route }))
 
 const ticket = {
@@ -104,21 +102,19 @@ describe('customer service ticket detail', () => {
   it.each(['resolved', 'expired'])('keeps %s disposition and retry identity distinct from ETA', async (disposition) => {
     const processing = { ...payload, ticket: { ...ticket, status: 'processing', intent: 'account_support' } }
     detail.mockResolvedValue(processing)
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    let decide!: (accepted: boolean) => void; confirm.mockReturnValueOnce(new Promise(resolve => { decide = resolve })).mockResolvedValue(true)
     const wrapper = mountDetail(); await flushPromises()
-    await wrapper.find('.cs-close-form select').setValue(disposition)
-    expect(wrapper.find('form.cs-eta-editor').exists()).toBe(true)
+    await wrapper.find('.cs-close-form select').setValue(disposition); expect(wrapper.find('form.cs-eta-editor').exists()).toBe(true)
     await wrapper.findAll('.cs-close-form textarea')[0].setValue('修复已部署并完成原场景验收')
     await wrapper.findAll('.cs-close-form textarea')[1].setValue('主线 SHA abc123，目标版本已按原步骤运行并核实结果。')
-    await wrapper.find('.cs-close-form').trigger('submit'); expect(post).not.toHaveBeenCalled()
-    confirm.mockReturnValue(true)
-    let reject!: (error: Error) => void
-    post.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail }))
-    await wrapper.find('.cs-close-form').trigger('submit')
-    await wrapper.find('.cs-close-form').trigger('submit')
+    const closeForm = wrapper.find('.cs-close-form'), cancelled = closeForm.trigger('submit'); await flushPromises(); await closeForm.trigger('submit')
+    expect(confirm).toHaveBeenCalledOnce(); expect(post).not.toHaveBeenCalled(); decide(false); await cancelled
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining(disposition === 'expired' ? '确认已核对过期时间及后续需求' : '确认已在目标版本完成实际验收'), { title: '确认管理员处置', confirmText: '记录并关闭', cancelText: '返回检查', danger: true })
+    let reject!: (error: Error) => void; post.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail }))
+    const submitting = closeForm.trigger('submit'); await flushPromises(); await closeForm.trigger('submit'); await closeForm.trigger('submit')
     await wrapper.find('form.cs-eta-editor').trigger('submit')
-    expect(post).toHaveBeenCalledTimes(1); expect(updateEta).not.toHaveBeenCalled()
-    const original = post.mock.calls[0]
+    expect(confirm).toHaveBeenCalledTimes(2); expect(post).toHaveBeenCalledTimes(1); expect(updateEta).not.toHaveBeenCalled()
+    await submitting; const original = post.mock.calls[0]
     reject(new Error('network response unknown')); await flushPromises()
     await wrapper.findAll('button').find(button => button.text() === '重试详情')!.trigger('click'); await flushPromises()
     expect((wrapper.findAll('.cs-close-form textarea')[0].element as HTMLTextAreaElement).value).toBe('修复已部署并完成原场景验收')
@@ -130,7 +126,7 @@ describe('customer service ticket detail', () => {
     expect(original[1].disposition).toBe(disposition)
     expect(wrapper.text()).toContain(disposition === 'expired' ? '已过期不再处理（未修复）' : '管理员验收已关闭'); expect(wrapper.text()).not.toContain('客户确认已解决')
     expect(wrapper.find('.cs-close-form').exists()).toBe(false)
-    wrapper.unmount(); confirm.mockRestore()
+    wrapper.unmount()
   })
   it('does not apply an old ETA save result after navigating to another ticket', async () => {
     let complete!: (value: unknown) => void

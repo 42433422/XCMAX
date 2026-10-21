@@ -137,7 +137,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import api from '@/api/core'
-import { appPrompt } from '@/utils/appDialog'
+import { appConfirm, appPrompt } from '@/utils/appDialog'
 import {
   auditItems, buildTimeline, formatBeijingTime, intentLabel, parseServerTime, prettyJson, priorityLabel, resolutionStateBadge,
   routeLabel, submitterTypeLabel, teamMembers, ticketStatusBadge, yesNoBadge, type Row,
@@ -181,10 +181,11 @@ watch([ticketId, requiresCustomerAcceptance], () => { closeDisposition.value = r
 
 async function closeTicket() {
   const id = ticketId.value
-  if (saving.value || savingEta.value || ticket.value.status !== 'processing' || !window.confirm(closeDisposition.value === 'expired' ? '确认已核对过期时间及后续需求？本次记为过期，未修复，不影响资金权益。' : '确认已在目标版本完成实际验收，并关闭这张原工单？')) return
-  closeRequestId.value ||= crypto.randomUUID()
+  if (saving.value || savingEta.value || ticket.value.status !== 'processing') return
   saving.value = true
   try {
+    if (!await appConfirm(closeDisposition.value === 'expired' ? '确认已核对过期时间及后续需求？本次记为过期，未修复，不影响资金权益。' : '确认已在目标版本完成实际验收，并关闭这张原工单？', { title: '确认管理员处置', confirmText: '记录并关闭', cancelText: '返回检查', danger: true }) || ticketId.value !== id || ticket.value.status !== 'processing') return
+    closeRequestId.value ||= crypto.randomUUID()
     await api.post(`/api/xcmax/admin/customer-service/tickets/${id}/close`, {
       request_id: closeRequestId.value, note: closeNote.value, verification: closeVerification.value,
       disposition: closeDisposition.value,
