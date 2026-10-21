@@ -77,7 +77,7 @@ jobs:
           python - <<'PY'
           import json, os, subprocess
           from pathlib import Path
-          expected = {'.github/workflows/fhd-ci-cd.yml','FHD/.github/workflows/ci-cd.yml','FHD/CHANGELOG.md','FHD/docs/CI_SSOT.md','FHD/metrics/line_baseline.json','FHD/tests/test_ci/test_workflow_gate_contracts.py','FHD/tests/release_gate/test_admin_console_release_policy.py'}
+          expected = {'.github/workflows/fhd-ci-cd.yml','FHD/.github/workflows/ci-cd.yml','FHD/CHANGELOG.md','docs/CI_SSOT.md','FHD/metrics/line_baseline.json','FHD/tests/test_ci/test_workflow_gate_contracts.py','FHD/tests/release_gate/test_admin_console_release_policy.py'}
           changed = set(subprocess.check_output(['git','diff','--name-only',os.environ['MAIN_SHA'],'HEAD'],text=True).splitlines())
           assert changed == expected, f'Unexpected scope: {changed}'
           print('VERIFIED_MERGE_TREE',subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),flush=True)
