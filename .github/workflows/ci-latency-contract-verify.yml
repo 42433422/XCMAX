@@ -129,14 +129,31 @@ jobs:
           cd ..
           python -m scripts.dev.test_change_classifier
           python scripts/dev/publish_ci_workflows_to_root.py --check
-      - name: Commit locally, regenerate measured line budget and run preflight
+      - name: Commit local merge and generator-only capability date reconciliation
         run: |
           set -euo pipefail
           git add FHD/tests/test_ci/test_backend_shards.py
           git commit -m 'Merge pinned main and close backend shard contract regressions'
           test "$(git rev-parse HEAD^1)" = "$TARGET_SHA"
           test "$(git rev-parse HEAD^2)" = "$MAIN_SHA"
-          (cd FHD && python scripts/dev/check_net_deletion.py --update --force --reason '用户2026-10-22要求完整闭环CI并行改造；保留最终SSOT硬门禁与完整测试，补齐三项旧分片契约及守卫输入；沿用已合入主线的路由隔离修复，不改产品权限、不降覆盖率。')
+          python '成都修茈科技有限公司/scripts/build_capability_center.py'
+          python - <<'PY'
+          import os,re,subprocess
+          from pathlib import Path
+          out=Path(os.environ['RUNNER_TEMP'])/'ci-current-main'
+          names={'ai-chat-core','erp-inventory-warehouse','erp-sales-order','erp-shipment','erp-uom','ind-modstore-pay','pay-alipay','pay-backend-bridge'}
+          allowed={'成都修茈科技有限公司/capabilities/feature/'+n+'.html' for n in names}
+          changed=set(subprocess.check_output(['git','diff','--name-only','-z']).decode().strip('\0').split('\0'))-{''}
+          assert changed==allowed,changed
+          for name in sorted(changed):
+              before=subprocess.check_output(['git','show','HEAD:'+name]).decode();after=Path(name).read_text()
+              assert re.sub(r'\d{4}-\d{2}-\d{2}','DATE',before)==re.sub(r'\d{4}-\d{2}-\d{2}','DATE',after),name
+              assert len(before.splitlines())==len(after.splitlines()),name
+          (out/'generated-date-reconciliation.patch').write_bytes(subprocess.check_output(['git','diff','--',*sorted(changed)]))
+          subprocess.run(['git','add','--',*sorted(changed)],check=True)
+          subprocess.run(['git','commit','-m','docs: regenerate upstream capability dates without changing content'],check=True)
+          PY
+          (cd FHD && python scripts/dev/check_net_deletion.py --update --force --reason '用户2026-10-22要求完整闭环CI并行改造；保留最终SSOT硬门禁与完整测试，补齐三项旧分片契约及守卫输入，净增39行；沿用主线路由隔离修复，八份能力页面仅生成器同步合入日期且不增行，不改产品权限、不降覆盖率。')
           git add FHD/metrics/line_baseline.json
           git commit -m 'chore(ci): record measured closure regression accounting'
           (cd FHD && python scripts/dev/push_preflight.py --fix --base "$MAIN_SHA")
@@ -154,6 +171,7 @@ jobs:
           out=Path(os.environ['RUNNER_TEMP'])/'ci-current-main'
           target,main=os.environ['TARGET_SHA'],os.environ['MAIN_SHA']
           expected={'.github/workflows/fhd-ci-cd.yml','FHD/.github/workflows/ci-cd.yml','FHD/CHANGELOG.md','docs/CI_SSOT.md','FHD/metrics/line_baseline.json','FHD/tests/test_ci/test_workflow_gate_contracts.py','FHD/tests/release_gate/test_admin_console_release_policy.py','FHD/tests/test_ci/test_backend_shards.py'}
+          expected|={'成都修茈科技有限公司/capabilities/feature/'+n+'.html' for n in ('ai-chat-core','erp-inventory-warehouse','erp-sales-order','erp-shipment','erp-uom','ind-modstore-pay','pay-alipay','pay-backend-bridge')}
           changed=set(subprocess.check_output(['git','diff','--name-only','-z',main,'HEAD']).decode().strip('\0').split('\0'))
           assert changed==expected,changed
           results={}
@@ -170,7 +188,7 @@ jobs:
               assert stored['sha']==blob
               elements.append({'path':name,'mode':'100644','type':'blob','sha':blob})
               destination=out/'candidate'/name;destination.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(name,destination)
-          receipt={'target':target,'main':main,'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'base_tree':subprocess.check_output(['git','rev-parse',main+'^{tree}'],text=True).strip(),'elements':elements,'tests':results,'baseline':json.loads(Path('FHD/metrics/line_baseline.json').read_text()),'refs_modified':False,'upstream_isolation_retained':True}
+          receipt={'target':target,'main':main,'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'base_tree':subprocess.check_output(['git','rev-parse',main+'^{tree}'],text=True).strip(),'elements':elements,'tests':results,'baseline':json.loads(Path('FHD/metrics/line_baseline.json').read_text()),'refs_modified':False,'upstream_isolation_retained':True,'generated_pages':'eight date-only generator updates, zero line growth'}
           (out/'receipt.json').write_text(json.dumps(receipt,indent=2,ensure_ascii=False))
           print('VERIFIED_OBJECT_HANDOFF',json.dumps(receipt,ensure_ascii=False),flush=True)
           PY
