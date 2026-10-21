@@ -1,4 +1,4 @@
-name: CI latency remaining-failure diagnosis
+name: CI latency shard-isolation diagnosis
 'on':
   push:
     branches: ['ci/latency-contract-verify-20261022']
@@ -8,7 +8,7 @@ jobs:
   diagnose:
     if: github.repository == '42433422/XCMAX' && github.ref == 'refs/heads/ci/latency-contract-verify-20261022'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       TARGET_SHA: ef06416e9e0e8ceedcdffc72ad977ffdb2afee3d
       XCAGI_SKIP_LEGACY_COMPAT_ROUTES: '1'
@@ -26,6 +26,26 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+      - name: Snapshot all test-side app entry points
+        run: |
+          python - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          out = Path(os.environ['RUNNER_TEMP']) / 'app-entry-sources'
+          out.mkdir()
+          for p in Path('FHD/tests').rglob('*.py'):
+              text = p.read_text()
+              if any(s in text for s in ('get_fastapi_app', 'get_test_fastapi_app', 'XCAGI_DESKTOP_FAST_START', 'create_fastapi_app')):
+                  dest = out / p
+                  dest.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(p, dest)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-entry-sources-${{ github.run_id }}
+          path: ${{ runner.temp }}/app-entry-sources/
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
@@ -35,90 +55,84 @@ jobs:
             FHD/deploy/requirements-dev.txt
             FHD/pyproject.toml
             FHD/packages/**/pyproject.toml
-      - name: Install the same backend dependencies
+      - name: Install matching backend dependencies
         working-directory: FHD
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
           pip install -r deploy/requirements-dev.txt
-      - name: Preserve relevant instructions and test assembly sources
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install real runtime Mod compiler
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Install observation hooks outside the product tree
         run: |
-          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
-          mkdir -p "$RUNNER_TEMP/ci-closure-evidence/sources"
-          python - <<'PY'
-          import os, shutil
+          mkdir -p "$RUNNER_TEMP/ci-isolation-evidence"
+          cat > "$RUNNER_TEMP/ci-isolation-evidence/trace_app.py" <<'PY'
+          import json, os, sys, traceback
           from pathlib import Path
-          dest = Path(os.environ['RUNNER_TEMP']) / 'ci-closure-evidence' / 'sources'
-          files = {Path('AGENTS.md'), Path('FHD/tests/conftest.py'), Path('FHD/tests/fixtures/app_factory.py'), Path('FHD/tests/test_ci/test_backend_shards.py'), Path('FHD/app/fastapi_app/factory.py'), Path('FHD/app/fastapi_routes/__init__.py'), Path('FHD/app/fastapi_routes/domains/auth/routes.py')}
-          for parent in ('FHD', 'FHD/tests', 'FHD/tests/test_ci', 'FHD/tests/fixtures', 'FHD/tests/test_routes', 'FHD/tests/test_fastapi_app'):
-              files.add(Path(parent) / 'AGENTS.md')
-          for p in Path('FHD/tests').rglob('*.py'):
-              text = p.read_text(encoding='utf-8')
-              if any(token in text for token in ('_app_singleton', 'create_fastapi_app', 'register_all_routes', 'app.routes.clear', 'app.router.routes')):
-                  files.add(p)
-          for p in sorted(files):
-              if p.is_file():
-                  out = dest / p
-                  out.parent.mkdir(parents=True, exist_ok=True)
-                  shutil.copyfile(p, out)
-          print('DIAGNOSTIC_SOURCE_FILES', len(list(dest.rglob('*.py'))))
+          import pytest
+          output = Path(os.environ['RUNNER_TEMP']) / 'ci-isolation-evidence' / 'app-transitions.jsonl'
+          current = 'collection'
+          previous = None
+          def snapshot():
+              module = sys.modules.get('app.fastapi_app.factory')
+              app = getattr(module, '_app_singleton', None)
+              routes = getattr(app, 'routes', []) if app is not None else []
+              auth = sorted((str(getattr(r, 'path', '')), str(sorted(getattr(r,'methods',[]) or []))) for r in routes if '/auth/' in str(getattr(r,'path','')))
+              return {'id':id(app) if app is not None else None,'type':type(app).__name__,'pending':str(getattr(getattr(app,'state',None),'deferred_routes_pending',None)),'routes':len(routes),'auth':auth,'fast_start':os.environ.get('XCAGI_DESKTOP_FAST_START')}
+          def record(phase, node):
+              global previous
+              state = snapshot()
+              if state != previous or 'test_auth_subscription_register' in node:
+                  with output.open('a') as f: f.write(json.dumps({'phase':phase,'node':node,'state':state})+'\n')
+                  previous = state
+          def pytest_runtest_logstart(nodeid, location):
+              global current
+              current = nodeid
+              record('before', nodeid)
+          def pytest_runtest_logfinish(nodeid, location):
+              record('after', nodeid)
+          def pytest_sessionstart(session):
+              import app.fastapi_app.factory as factory
+              real = factory.create_fastapi_app
+              def observed(*a,**kw):
+                  with output.open('a') as f: f.write(json.dumps({'phase':'factory-call','node':current,'fast_start':os.environ.get('XCAGI_DESKTOP_FAST_START'),'stack':traceback.format_stack(limit=18)})+'\n')
+                  return real(*a,**kw)
+              factory.create_fastapi_app = observed
           PY
-      - name: Reproduce and align all backend CI contracts
+      - name: Reproduce complete shard seven with original assertions
         working-directory: FHD
         env:
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
-          PYTHONPATH: .
+          BACKEND_SHARD_INDEX: '7'
+          BACKEND_SHARD_TOTAL: '8'
+          BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
+          BACKEND_SOURCE_SHA: ef06416e9e0e8ceedcdffc72ad977ffdb2afee3d
         run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          export PYTHONPATH="$RUNNER_TEMP/ci-isolation-evidence:${PYTHONPATH:-}"
+          export BACKEND_SHARD_MANIFEST="$RUNNER_TEMP/ci-isolation-evidence/full.json"
           python - <<'PY'
-          import os, re, subprocess, sys
+          import os, subprocess, sys
           from pathlib import Path
-          out = Path(os.environ['RUNNER_TEMP']) / 'ci-closure-evidence'
-          path = Path('tests/test_ci/test_backend_shards.py')
-          command = [sys.executable, '-m', 'pytest', '--noconftest', '-c', '/dev/null', '-p', 'no:cacheprovider', str(path), '-q', '--tb=short']
-          before = subprocess.run(command, capture_output=True, text=True)
-          (out / 'contracts-before.txt').write_text(before.stdout + before.stderr)
-          print('CONTRACTS_BEFORE', before.returncode, before.stdout[-5000:], flush=True)
-          assert before.returncode == 1 and '3 failed' in before.stdout, 'Unexpected baseline contract failure set'
-          text = path.read_text()
-          old = 'prerequisites = {"guard-temp-scripts", "ssot-drift-gate", "classify"}'
-          assert text.count(old) == 1
-          text = text.replace(old, 'prerequisites = {"guard-temp-scripts", "classify"}')
-          old = 'assert set(gate["needs"]) == {"classify", "backend-quality", "backend-test-shard"}'
-          assert text.count(old) == 1
-          text = text.replace(old, 'assert set(gate["needs"]) == prerequisites | {\n        "ssot-drift-gate", "backend-quality", "backend-test-shard"\n    }')
-          text, count = re.subn(r'(?m)^( +)CLASSIFY="success",$', lambda m: m[1]+'GUARD="success",\n'+m[1]+'SSOT="success",\n'+m[0], text)
-          assert count == 2, count
-          path.write_text(text)
-          subprocess.run([sys.executable, '-m', 'ruff', 'format', str(path)], check=True)
-          after = subprocess.run(command, capture_output=True, text=True)
-          (out / 'contracts-after.txt').write_text(after.stdout + after.stderr)
-          print('CONTRACTS_AFTER', after.returncode, after.stdout[-5000:], flush=True)
-          assert after.returncode == 0
-          (out / 'candidate_test_backend_shards.py').write_text(path.read_text())
+          out = Path(os.environ['RUNNER_TEMP']) / 'ci-isolation-evidence'
+          command = [sys.executable,'-m','pytest','tests/','-v','-p','scripts.ci.backend_shards','-p','trace_app','--cov','--cov-branch','--cov-fail-under=0','--cov-report=','--junitxml='+str(out/'full.xml')]
+          with (out/'pytest.txt').open('w') as log:
+              result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=840)
+          print('DIAGNOSTIC_PYTEST_EXIT',result.returncode,flush=True)
+          print((out/'pytest.txt').read_text()[-20000:],flush=True)
           PY
-      - name: Compare isolated and all-collected auth tests without changing assertions
-        working-directory: FHD
-        run: |
-          python - <<'PY'
-          import json, os, subprocess, sys
-          from pathlib import Path
-          out = Path(os.environ['RUNNER_TEMP']) / 'ci-closure-evidence'
-          cases = [('auth-alone', ['tests/test_routes/test_auth_subscription_register.py']), ('auth-all-collection', ['tests/', '-k', 'test_subscription_status_requires_login or test_subscription_status_trial or test_register_enriches_tenant_id'])]
-          results = {}
-          for name, args in cases:
-              command = [sys.executable, '-m', 'pytest', *args, '-q', '--tb=short', '--junitxml='+str(out / (name+'.xml'))]
-              result = subprocess.run(command, capture_output=True, text=True, timeout=240)
-              (out / (name+'.txt')).write_text(result.stdout+result.stderr)
-              print(name, result.returncode, result.stdout[-16000:], flush=True)
-              results[name] = result.returncode
-          (out / 'diagnosis.json').write_text(json.dumps(results, indent=2))
-          PY
-      - name: Upload diagnostic evidence, not product acceptance
+      - name: Retain observation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-closure-diagnosis-${{ github.run_id }}
-          path: ${{ runner.temp }}/ci-closure-evidence/
+          name: app-isolation-trace-${{ github.run_id }}
+          path: ${{ runner.temp }}/ci-isolation-evidence/
           if-no-files-found: error
           retention-days: 7
       - name: Clean only this disposable checkout
