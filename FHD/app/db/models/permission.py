@@ -64,6 +64,7 @@ class _RoleSeed(TypedDict):
 
 
 DEFAULT_PERMISSIONS: list[_PermissionSeed] = [
+    {"name": "退款本人所属订单", "code": "model_payment.refund", "module": "payment"},
     {"name": "查看客户", "code": "customer.view", "module": "customer"},
     {"name": "编辑客户", "code": "customer.edit", "module": "customer"},
     {"name": "查看产品", "code": "product.view", "module": "product"},

@@ -207,7 +207,7 @@ const {
               <span>权限范围（逗号分隔）</span>
               <input v-model="draft.scopesCsv" type="text" placeholder="mod:sync,catalog:read" />
               <small class="dt-field__hint">
-                本地 Mod 同步请至少包含 <code>mod:sync</code>；读取 Catalog 建议同时包含 <code>catalog:read</code>。
+                当前明确支持 <code>mod:sync</code>；其他 scope 名称不表示通用接口已开放，空 scope 不授予全部权限。
                 <br />
                 可选：
                 <button v-for="s in SCOPE_HINTS" :key="s" type="button" class="dt-field__chip" @click="addScope(s)">
@@ -249,8 +249,7 @@ const {
   -H "Authorization: Bearer {{ justCreated.token }}" \
   -H "Content-Type: application/json" \
   -d '{"mod_ids":["example-mod"]}'</code></pre>
-            <pre v-else class="dt-just__sample-code"><code>curl https://&lt;your-domain&gt;/api/employees/ \
-  -H "Authorization: Bearer {{ justCreated.token }}"</code></pre>
+            <p v-else class="dt-just__sample-code">此 Token 尚无已启用接口示例；请使用具有明确 scope 合同的能力，不能用于通用账号或管理接口。</p>
           </div>
           <footer class="dt-modal__foot">
             <button class="dt__btn" type="button" @click="copyJustCreated">

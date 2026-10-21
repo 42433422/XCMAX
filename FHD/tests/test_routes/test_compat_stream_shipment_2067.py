@@ -63,7 +63,9 @@ def test_stream_entry_creates_order_with_explicit_quantity_and_price(
         "message": "发货单生成成功",
         "doc_name": "发货单_2067.xlsx",
     }
-    body = chat_helpers.XcagiCompatChatBody(message=ISSUE_MESSAGE, user_id="u-2067")
+    body = chat_helpers.XcagiCompatChatBody(
+        message=ISSUE_MESSAGE.replace("数量24", "数量24kg"), user_id="u-2067"
+    )
     with patch("app.bootstrap.get_shipment_app_service", return_value=shipment_svc):
         raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
 
@@ -74,7 +76,8 @@ def test_stream_entry_creates_order_with_explicit_quantity_and_price(
     assert kwargs["unit_name"] == "客户闭环验收客户"
     (product,) = kwargs["products"]
     assert product["name"] == "客户闭环测试商品A"
-    assert product["quantity_tins"] == 24
+    assert product["quantity"] == 24
+    assert product["unit"] == "kg"
     assert product["unit_price"] == 3.5
     document = events[-1]["result"]["data"]["data"]["document"]
     assert document["doc_name"] == "发货单_2067.xlsx"
@@ -143,3 +146,21 @@ def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, cas
         if case in {"absent", "expired"}
         else "u-cancel" in service._pending_workflows
     )
+
+
+def test_stream_missing_spec_requests_clarification_without_document(monkeypatch):
+    from app.application.shipment_app_service import ShipmentApplicationService
+
+    _no_llm(monkeypatch)
+    service = AIChatApplicationService()
+    monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
+    generator = MagicMock()
+    shipment = ShipmentApplicationService(MagicMock(), generator, MagicMock())
+    body = chat_helpers.XcagiCompatChatBody(message=ISSUE_MESSAGE, user_id="u-2292")
+    with patch("app.bootstrap.get_shipment_app_service", return_value=shipment):
+        raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
+    result = _events(raw)[-1]["result"]
+    assert result["success"] is False
+    assert "计量单位" in result["response"]
+    assert "已生成" not in result["response"]
+    generator.generate.assert_not_called()

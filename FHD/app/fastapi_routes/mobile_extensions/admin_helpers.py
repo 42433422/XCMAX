@@ -324,6 +324,27 @@ def _mobile_session_meta(request: Request) -> dict[str, Any]:
     return jwt_meta
 
 
+def _has_current_mobile_admin_session(request: Request, user: Any) -> bool:
+    from app.infrastructure.auth.dependencies import session_id_from_request
+    from app.infrastructure.auth.mobile_session import ADMIN_ACCOUNT_KINDS, current_mobile_admin
+    from app.security.mobile_jwt import verify_mobile_jwt
+
+    uid = getattr(user, "id", None)
+    authorization = request.headers.get("Authorization") or ""
+    if authorization.startswith("Bearer "):
+        payload = verify_mobile_jwt(authorization[7:].strip()) or {}
+        if (
+            payload.get("typ") != "access"
+            or str(payload.get("account_kind") or "").strip().lower() not in ADMIN_ACCOUNT_KINDS
+            or str(payload.get("user_id")) != str(uid)
+        ):
+            return False
+        sid = payload.get("session_id")
+    else:
+        sid = session_id_from_request(request)
+    return current_mobile_admin(uid, sid) is not None
+
+
 def _require_mobile_admin(request: Request, user: Any) -> tuple[dict[str, Any], Any | None]:
     from fastapi.responses import JSONResponse
 
@@ -335,10 +356,7 @@ def _require_mobile_admin(request: Request, user: Any) -> tuple[dict[str, Any], 
             status_code=401,
         )
     meta = _mobile_session_meta(request) or {}
-    role = str(getattr(user, "role", "") or "").strip()
-    jwt_or_session_admin = meta.get("account_kind") == "admin" and (
-        bool(meta.get("market_is_admin")) or role in {"admin", "super_admin", "owner"}
-    )
+    jwt_or_session_admin = _has_current_mobile_admin_session(request, user)
     if not jwt_or_session_admin:
         return meta, JSONResponse(
             format_mobile_response(None, "需要管理端管理员账号", success=False, code=403),
@@ -367,9 +385,8 @@ def _require_mobile_admin_or_enterprise(
         account_kind = "enterprise" if role == "enterprise" else "personal"
     if account_kind == "enterprise":
         return meta, None
-    if account_kind in {"admin", "admin_portal"} and (
-        bool(meta.get("market_is_admin"))
-        or role in {"admin", "admin_portal", "super_admin", "owner"}
+    if account_kind in {"admin", "admin_portal"} and _has_current_mobile_admin_session(
+        request, user
     ):
         return meta, None
     return meta, JSONResponse(

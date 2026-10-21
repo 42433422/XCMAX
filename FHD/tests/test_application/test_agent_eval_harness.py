@@ -15,8 +15,15 @@ def test_agent_eval_harness_baseline_passes() -> None:
     assert orchestrator.AgentToolExecutor is original_executor
     assert result["execution_mode"] == "fixture_local"
     assert result["failed"] == 0, result
-    assert result["passed"] == 120
+    assert result["passed"] == 121
     assert result["score"] == 1.0
+    missing_spec = next(
+        row
+        for row in result["results"]
+        if row["id"] == "business_shipment_create_missing_spec_rejects_before_publish"
+    )
+    assert missing_spec["details"]["response"]["error_code"] == "SHIPMENT_SPEC_REQUIRED"
+    assert missing_spec["details"]["publish_call_count"] == 0
 
 
 def test_agent_eval_cli_prints_only_public_summary(monkeypatch, capsys) -> None:

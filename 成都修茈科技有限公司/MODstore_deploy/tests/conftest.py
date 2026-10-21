@@ -87,6 +87,11 @@ def isolated_modstore(tmp_path, monkeypatch):
     monkeypatch.setattr("modstore_server.app.project_root", lambda: project_home)
 
     from modstore_server.app import app
+    from modstore_server.models import init_db
+
+    # Another fixture can import the app while pointing at its own temporary DB.
+    # App import is cached; ensure the client uses an initialized current DB too.
+    init_db()
 
     return {
         "client": TestClient(app),

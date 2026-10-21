@@ -9,7 +9,7 @@ import uuid
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
-from modstore_server.auth_service import generate_pat, resolve_pat_identity, resolve_user_from_pat
+from modstore_server.auth_service import generate_pat, resolve_pat_identity
 from modstore_server.models import DeveloperToken, User, get_session_factory
 
 
@@ -38,7 +38,8 @@ def test_account_delete_revokes_access_and_refresh_without_touching_other_user(c
             )
         )
         session.commit()
-    assert resolve_user_from_pat(pat) is not None
+    identity = resolve_pat_identity(pat)
+    assert identity is not None and identity.user.id == first_user["id"]
 
     deleted = client.post(
         "/api/auth/account/delete", json={"password": password}, headers=first_headers
@@ -52,7 +53,6 @@ def test_account_delete_revokes_access_and_refresh_without_touching_other_user(c
         assert active.deleted_at is None
 
     assert client.get("/api/auth/export", headers=first_headers).status_code == 401
-    assert resolve_user_from_pat(pat) is None
     assert resolve_pat_identity(pat) is None
     assert client.post("/api/auth/refresh", json={"refresh_token": refresh}).status_code == 401
     assert (

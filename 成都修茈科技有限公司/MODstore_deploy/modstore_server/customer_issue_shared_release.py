@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 import re
+from copy import deepcopy
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Callable, Iterable
 
 import httpx
 from fastapi import HTTPException
@@ -26,6 +27,27 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.release_convergence import _fetch_json
 
 _API = "https://api.github.com/repos/42433422/XCMAX"
+
+
+class _ReleaseProofBatch:
+    """A single read batch shares detached GitHub snapshots, never customer verdicts."""
+
+    def __init__(self) -> None:
+        self._snapshots: dict[str, Any] = {}
+
+    def read(self, key: str, fetch: Callable[[], Any]) -> Any:
+        if key not in self._snapshots:
+            self._snapshots[key] = deepcopy(fetch())
+        return deepcopy(self._snapshots[key])
+
+
+def bind_shared_release_batch(
+    db: Any, tickets: Iterable[Any], host_sha: str
+) -> Iterable[tuple[Any, dict[str, Any] | None]]:
+    """Reuse proof reads only within this batch; keep each ticket's lineage checks."""
+    proofs = _ReleaseProofBatch()
+    for ticket in tickets:
+        yield ticket, bind_shared_release(db, ticket, host_sha, proofs=proofs)
 
 
 def _pulls_for_commit(head: str) -> list[dict[str, Any]]:
@@ -91,17 +113,27 @@ def record_worker_repair(db: Any, ticket: Any, event_id: int, rows: list[dict[st
     db.flush()
 
 
-def _merged_repair(cr: Any, host_sha: str) -> dict[str, Any] | None:
+def _merged_repair(
+    cr: Any, host_sha: str, *, proofs: _ReleaseProofBatch | None = None
+) -> dict[str, Any] | None:
     """GitHub, not employee output, proves merge identity and required CI."""
     head = str(cr.staged_commit_sha or "")
     if cr.status != "applied" or not re.fullmatch(r"[0-9a-f]{40}", head):
         return None
-    pulls = _pulls_for_commit(head)
+
+    def fetch(url: str) -> Any:
+        return proofs.read(url, lambda: _fetch_json(url)) if proofs else _fetch_json(url)
+
+    pulls = (
+        proofs.read(f"{_API}/commits/{head}/pulls", lambda: _pulls_for_commit(head))
+        if proofs
+        else _pulls_for_commit(head)
+    )
     if not isinstance(pulls, list):
         return None
     for hint in pulls:
         number = int(hint.get("number") or 0)
-        pr = _fetch_json(f"{_API}/pulls/{number}")
+        pr = fetch(f"{_API}/pulls/{number}")
         merge_sha = str(pr.get("merge_commit_sha") or "")
         if (
             not pr.get("merged")
@@ -111,11 +143,11 @@ def _merged_repair(cr: Any, host_sha: str) -> dict[str, Any] | None:
             or not re.fullmatch(r"[0-9a-f]{40}", merge_sha)
         ):
             continue
-        protection = _fetch_json(f"{_API}/branches/main/protection/required_status_checks")
+        protection = fetch(f"{_API}/branches/main/protection/required_status_checks")
         required = set(protection.get("contexts") or []) | {
             row["context"] for row in protection.get("checks", []) if row.get("context")
         }
-        checks = _fetch_json(f"{_API}/commits/{head}/check-runs?per_page=100")
+        checks = fetch(f"{_API}/commits/{head}/check-runs?per_page=100")
         rows = checks.get("check_runs") or []
         if not required or int(checks.get("total_count") or 0) != len(rows):
             continue
@@ -128,7 +160,7 @@ def _merged_repair(cr: Any, host_sha: str) -> dict[str, Any] | None:
         }
         if not required.issubset(passed):
             continue
-        compare = _fetch_json(f"{_API}/compare/{merge_sha}...{host_sha}")
+        compare = fetch(f"{_API}/compare/{merge_sha}...{host_sha}")
         if (
             compare.get("status") not in {"ahead", "identical"}
             or (compare.get("merge_base_commit") or {}).get("sha") != merge_sha
@@ -144,7 +176,9 @@ def _merged_repair(cr: Any, host_sha: str) -> dict[str, Any] | None:
     return None
 
 
-def bind_shared_release(db: Any, ticket: Any, host_sha: str) -> dict[str, Any] | None:
+def bind_shared_release(
+    db: Any, ticket: Any, host_sha: str, *, proofs: _ReleaseProofBatch | None = None
+) -> dict[str, Any] | None:
     evidence = json_loads(ticket.evidence_json, {})
     resolution = issue_resolution(ticket, evidence)
     private_prerequisite = resolution.get("route") == "private_mod" and evidence.get(
@@ -158,29 +192,49 @@ def bind_shared_release(db: Any, ticket: Any, host_sha: str) -> dict[str, Any] |
     if not release:
         return None
     existing = resolution.get("release_target") or {}
-    if existing.get("host_sha") == host_sha and existing.get(
-        "signed_metadata_sha256"
-    ) == release.get("signed_metadata_sha256"):
+    shared_link = None
+    if resolution.get("shared_repair_action_id"):
+        from modstore_server.customer_issue_shared_repairs import active_shared_repair
+
+        shared_link = active_shared_repair(db, ticket)
+    if (
+        existing.get("host_sha") == host_sha
+        and existing.get("signed_metadata_sha256") == release.get("signed_metadata_sha256")
+        and (
+            not resolution.get("shared_repair_action_id")
+            or (shared_link and existing.get("action_id") == shared_link["action_id"])
+        )
+    ):
         return existing
     actions = (
         db.query(CustomerServiceAction)
         .filter_by(
             ticket_id=ticket.id,
             user_id=ticket.user_id,
-            action_type="issue.repair.result",
             status="completed",
+        )
+        .filter(
+            CustomerServiceAction.action_type.in_(["issue.repair.result", "issue.repair.shared"])
         )
         .filter(CustomerServiceAction.id > int(resolution.get("reopen_after_action_id") or 0))
         .order_by(CustomerServiceAction.id.desc())
         .all()
     )
     for action in actions:
+        if action.action_type == "issue.repair.shared" and (
+            not shared_link or shared_link["action_id"] != action.id
+        ):
+            continue
         cr = db.get(EmployeeChangeRequest, int(action.target_id))
         request = json_loads(action.request_json, {})
         if cr is None or cr.source_employee_id != request.get("worker_id"):
             continue
         try:
-            repair = _merged_repair(cr, host_sha)
+            repair = (
+                _merged_repair(cr, host_sha, proofs=proofs)
+                if proofs
+                else _merged_repair(cr, host_sha)
+            )
         except BOUNDARY_ERRORS:
             continue
         if not repair:
@@ -222,10 +276,6 @@ def record_shared_runtime(
     evidence = json_loads(ticket.evidence_json, {})
     if issue_resolution(ticket, evidence).get("route") != "shared_core":
         raise HTTPException(409, "本工单仍需私有产物运行验证，宿主前置修复不能完成交付")
-    target = bind_shared_release(db, ticket, str(body.get("host_sha") or ""))
-    if not target:
-        raise HTTPException(409, "尚无包含本工单修复且通过主线发布核验的宿主")
-    evidence = json_loads(ticket.evidence_json, {})
     records = evidence.get("host_receipts") or []
     digest = canonical_sha256(body)
     prior = next(
@@ -238,6 +288,10 @@ def record_shared_runtime(
         return {"replayed": True, "record": prior}
     if ticket.status in {"resolved", "closed", "expired"}:
         raise HTTPException(409, "该工单已完成，新的问题请通过原交付返工入口受理")
+    target = bind_shared_release(db, ticket, str(body.get("host_sha") or ""))
+    if not target:
+        raise HTTPException(409, "尚无包含本工单修复且通过主线发布核验的宿主")
+    evidence = json_loads(ticket.evidence_json, {})
     if not body.get("receipt_id") or not body.get("client_instance_id"):
         raise HTTPException(409, "缺少稳定回执或客户端标识")
     if any(

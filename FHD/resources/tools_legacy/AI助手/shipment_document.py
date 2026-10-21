@@ -255,6 +255,9 @@ class ShipmentDocumentGenerator:
             if purchase_unit is None and parsed_data.get("purchase_unit"):
                 purchase_unit = self._get_purchase_unit_info(parsed_data["purchase_unit"])
 
+            from app.domain.shipment.shipment_quantities import validate_shipment_products
+
+            validate_shipment_products(parsed_data.get("products") or [parsed_data])
             # 2. 生成订单编号
             order_number = (custom_order_number or "").strip() or self._generate_order_number()
 
@@ -452,9 +455,7 @@ class ShipmentDocumentGenerator:
                 self._write_cell(worksheet, row, 9, round(kg_value * unit_price, 2))
 
         # 第15行：合计行的数量/件 (E15公式保持SUM(E4:E14))
-        if total_quantity_tins > 0 and not self._write_cell(
-            worksheet, 15, 5, total_quantity_tins
-        ):
+        if total_quantity_tins > 0 and not self._write_cell(worksheet, 15, 5, total_quantity_tins):
             self._write_total_by_header(worksheet, ("数量/件", "数量"), 15, total_quantity_tins)
 
         # 第15行：数量/KG 合计与「合计」标签——模板行被清空后按表头列补回，
@@ -622,6 +623,8 @@ class ShipmentDocumentGenerator:
 
     def _prepare_products(self, parsed_data: Dict, order_number: str) -> List[Dict]:
         """准备产品数据 - 支持多产品"""
+        from app.domain.shipment.shipment_quantities import resolve_shipment_quantity
+
         products = []
 
         # 从parsed_data中获取产品列表
@@ -629,14 +632,15 @@ class ShipmentDocumentGenerator:
 
         # 如果有products列表，遍历处理
         if product_list:
-            for p in product_list:
+            for index, p in enumerate(product_list, 1):
+                tins, kg, spec = resolve_shipment_quantity(p, row_index=index)
                 product = {
                     "order_number": order_number,
                     "model_number": p.get("model_number", ""),
                     "name": p.get("name", ""),
-                    "quantity_kg": p.get("quantity_kg", 0),
-                    "quantity_tins": p.get("quantity_tins", 0),
-                    "tin_spec": p.get("tin_spec", 10.0),
+                    "quantity_kg": kg,
+                    "quantity_tins": tins,
+                    "tin_spec": spec,
                     "unit_price": p.get("unit_price", 0),
                     "amount": p.get("amount", 0),
                 }
@@ -644,13 +648,14 @@ class ShipmentDocumentGenerator:
                     products.append(product)
         else:
             # 兼容单产品旧逻辑
+            tins, kg, spec = resolve_shipment_quantity(parsed_data, row_index=1)
             product = {
                 "order_number": order_number,
                 "model_number": parsed_data.get("model_number", ""),
                 "name": parsed_data.get("product_name", ""),
-                "quantity_kg": parsed_data.get("quantity_kg", 0),
-                "quantity_tins": parsed_data.get("quantity_tins", 0),
-                "tin_spec": parsed_data.get("tin_spec", 10.0),
+                "quantity_kg": kg,
+                "quantity_tins": tins,
+                "tin_spec": spec,
                 "unit_price": parsed_data.get("unit_price", 0),
                 "amount": parsed_data.get("amount", 0),
             }

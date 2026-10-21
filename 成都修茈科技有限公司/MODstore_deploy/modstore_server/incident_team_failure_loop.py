@@ -20,6 +20,7 @@ from modstore_server.customer_issue_delivery_contract import (
     execution_requires_reconciliation,
     execution_succeeded,
 )
+from modstore_server.incident_team_escalation import request_incident_escalation
 from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.llm_failure_classifier import (
     FAILURE_KIND_MODEL_UNSUPPORTED,
@@ -285,11 +286,34 @@ def run_failure_loop(
             kind, category = categorize(error)
             fu.update(last_category=category, error=error[:500])
         if not fu["ok"] and not fu.get("requires_reconciliation"):
-            fu["action"] = fu["action"] or "retry_disabled_escalated"
-            fu["escalated_to"] = ESCALATE_TO
+            fu["action"] = fu["action"] or "escalation_requested"
             fu["need_human"] = True
             fu["reason"] = (
                 f"{category} 失败，已自动处理 {fu['attempts']}/{limit} 轮未恢复：{error[:200]}"
+            )
+            receipt = request_incident_escalation(
+                event_id=event_id,
+                role=role,
+                category=category,
+                reason=fu["reason"],
+                attempted_actions={
+                    key: fu.get(key)
+                    for key in ("action", "attempts", "max_rounds", "last_category")
+                },
+            )
+            accepted = (
+                receipt.get("accepted") is True
+                and bool(receipt.get("task_id"))
+                and receipt.get("state") in {"accepted", "completed"}
+            )
+            fu.update(
+                escalation_key=receipt.get("key") or "",
+                escalation_state=receipt.get("state") or "unknown",
+                escalation_task_id=receipt.get("task_id") or "",
+                escalation_accepted=accepted,
+                escalation_error=receipt.get("error") or "",
+                escalation_updated_at=receipt.get("updated_at") or "",
+                escalated_to=ESCALATE_TO if accepted else "",
             )
             logger.warning(
                 "incident_team: escalate event_id=%s role=%s category=%s attempts=%s",
@@ -353,6 +377,12 @@ def loop_summary(follow_ups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         "max_rounds",
         "action",
         "ok",
+        "escalation_key",
+        "escalation_state",
+        "escalation_task_id",
+        "escalation_accepted",
+        "escalation_error",
+        "escalation_updated_at",
     )
     return [
         {**{k: fu.get(k) for k in keys}, "escalated_to": fu.get("escalated_to") or "",

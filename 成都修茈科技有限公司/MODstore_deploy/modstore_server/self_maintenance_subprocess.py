@@ -19,11 +19,13 @@ def terminate_subprocess(
     *,
     grace_seconds: float = 0.25,
     process_group: bool = False,
-) -> None:
-    """Reap the child and, when explicitly owned, its POSIX process group."""
+) -> set[int]:
+    """Reap owned processes and report signals sent while the child was alive."""
     owns_group = process_group and os.name == "posix"
+    signals_sent: set[int] = set()
 
     def send(sig: int) -> None:
+        was_alive = proc.poll() is None
         try:
             if owns_group:
                 os.killpg(proc.pid, sig)
@@ -32,6 +34,10 @@ def terminate_subprocess(
                     proc.terminate()
                 else:
                     proc.kill()
+            else:
+                return
+            if was_alive:
+                signals_sent.add(int(sig))
         except ProcessLookupError:
             pass
 
@@ -47,6 +53,7 @@ def terminate_subprocess(
         if proc.poll() is None:
             proc.kill()
         proc.wait(timeout=max(grace_seconds, 1.0))
+    return signals_sent
 
 
 class _ExcerptReader:
@@ -146,10 +153,18 @@ def run_cmd_excerpt(
                 )
             if capped_at is not None and now >= capped_at + 1.0:
                 terminated_by_us = rc is None
-                terminate_subprocess(proc, process_group=True)
+                cleanup_signals = terminate_subprocess(proc, process_group=True)
                 rc = proc.returncode
                 if rc != 0 and not (
-                    terminated_by_us and rc in {-int(signal.SIGTERM), 128 + int(signal.SIGTERM)}
+                    terminated_by_us
+                    and cleanup_signals
+                    and (
+                        -rc in cleanup_signals
+                        or (
+                            int(signal.SIGTERM) in cleanup_signals
+                            and rc == 128 + int(signal.SIGTERM)
+                        )
+                    )
                 ):
                     raise RuntimeError(f"command failed ({rc}): {' '.join(args)}\n{excerpt}")
                 return excerpt

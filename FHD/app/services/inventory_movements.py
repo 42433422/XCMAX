@@ -43,21 +43,25 @@ def _positive_id(value: Any) -> int | None:
     return number if number > 0 else None
 
 
-def _stock_out_warehouse_id(db: Any, warehouse_id: Any) -> tuple[int | None, str]:
+def _stock_out_warehouse_id(db: Any, warehouse_id: Any) -> tuple[int | None, str, str]:
     """整数仓库编号原样使用；符号/名称只在当前租户内唯一匹配时才解析（#2288）。"""
     numeric = _positive_id(warehouse_id)
     if numeric is not None:
-        return numeric, ""
+        return numeric, "", ""
     text = str(warehouse_id or "").strip()
     query = db.query(_facade().Warehouse).filter(_facade().Warehouse.status == "active")
     if text.casefold() not in _DEFAULT_WAREHOUSE_ALIASES:
         query = query.filter(_facade().Warehouse.name == text)
     rows = query.limit(2).all() if text else []
     if len(rows) == 1:
-        return int(rows[0].id), ""
+        return int(rows[0].id), "", ""
     if not rows and text.casefold() in _DEFAULT_WAREHOUSE_ALIASES:
-        return None, "当前企业还没有可用仓库：请先在「库存管理」点击「初始化默认仓库」并为产品入库"
-    return None, "无法确定出库仓库：请说明从哪个仓库出库"
+        return (
+            None,
+            "当前企业还没有可用仓库：请先在「库存管理」点击「初始化默认仓库」并为产品入库",
+            "inventory_warehouse_missing",
+        )
+    return None, "无法确定出库仓库：请说明从哪个仓库出库", "invalid_warehouse_reference"
 
 
 class InventoryMovementsMixin:
@@ -229,11 +233,13 @@ class InventoryMovementsMixin:
             }
         with _facade().get_db() as db, worker_write_guard(db):
             try:
-                resolved_warehouse_id, problem = _stock_out_warehouse_id(db, warehouse_id)
+                resolved_warehouse_id, problem, error_code = _stock_out_warehouse_id(
+                    db, warehouse_id
+                )
                 if resolved_warehouse_id is None:
                     return {
                         "success": False,
-                        "error_code": "invalid_warehouse_reference",
+                        "error_code": error_code,
                         "message": problem,
                     }
                 query = db.query(_facade().InventoryLedger).filter(
@@ -247,7 +253,11 @@ class InventoryMovementsMixin:
                     query = query.filter(_facade().InventoryLedger.location_id == location_id)
                 ledger = query.first()
                 if not ledger:
-                    return {"success": False, "message": "库存不足或库存记录不存在"}
+                    return {
+                        "success": False,
+                        "error_code": "inventory_insufficient_stock",
+                        "message": "库存不足或库存记录不存在",
+                    }
                 now = datetime.now()
                 ledger.quantity = float(ledger.quantity) - quantity
                 ledger.available_quantity = float(ledger.available_quantity) - quantity

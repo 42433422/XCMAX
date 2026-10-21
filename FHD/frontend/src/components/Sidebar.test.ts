@@ -57,6 +57,11 @@ describe('Sidebar customer navigation and runtime status', () => {
     expect(view.text()).toContain('v1.0.0.5')
     expect(api.checkDeployUpdates).not.toHaveBeenCalled()
     expect(api.pullSync).not.toHaveBeenCalled()
+    const health = view.get('.runtime-health-button')
+    expect(health.get('time').attributes('datetime')).toBe('2026-10-07T12:00:00.000Z')
+    expect(health.text()).toContain('最近检测')
+    expect(health.attributes('aria-label')).toContain('最近检测')
+    expect(health.attributes('title')).toContain('2026')
   })
 
   it('routes settings from the visible button and suppresses rapid duplicate selections', async () => {
@@ -76,7 +81,8 @@ describe('Sidebar customer navigation and runtime status', () => {
     vi.mocked(fetch).mockRejectedValue(new Error('offline'))
     const view = await openSidebar()
     const health = view.get('.runtime-health-button')
-    expect(health.text()).not.toBe('系统正常')
+    expect(health.get('[role="status"]').text()).not.toBe('系统正常')
+    expect(health.get('time').attributes('datetime')).toBe('2026-10-07T12:00:00.000Z')
     await health.trigger('click')
     expect(view.emitted('change-view')).toEqual([['settings']])
   })

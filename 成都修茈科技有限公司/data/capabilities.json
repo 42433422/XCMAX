@@ -4037,7 +4037,7 @@
             },
             {
               "id": "pay-backend-bridge",
-              "name": "支付后端桥接（json / postgres / modstore）",
+              "name": "支付后端配置与桥接入口",
               "status": "verified",
               "platforms": [
                 "web"
@@ -4052,7 +4052,7 @@
                   "accepted_count": 1
                 }
               ],
-              "summary": "按配置选择支付后端并桥接。",
+              "summary": "支持本地 JSON 与市场桥接；PostgreSQL 订单后端尚未实现。历史验收仅覆盖配置和接口行为，不代表 PostgreSQL 持久化或本次权限修复已获生产验收。",
               "featured": false,
               "evidence_ref": "pay-alipay",
               "evidence_ref_name": "支付宝支付与回调"

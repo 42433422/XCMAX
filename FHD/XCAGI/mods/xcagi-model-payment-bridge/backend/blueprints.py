@@ -38,12 +38,13 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/model-payment/checkout")
     def mod_checkout(
+        request: Request,
         body: dict[str, Any] = Body(default_factory=dict),
         user_agent: str | None = Header(default=None),
     ):
         from app.mod_sdk.host_services import checkout
 
-        return checkout(body, user_agent)
+        return checkout(request=request, body=body, user_agent=user_agent)
 
     @router.post("/model-payment/notify/alipay")
     async def mod_alipay_notify(request: Request):
@@ -64,28 +65,30 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return entitlements()
 
     @router.get("/model-payment/query/{out_trade_no}")
-    def mod_query_trade(out_trade_no: str):
+    def mod_query_trade(request: Request, out_trade_no: str):
         from app.mod_sdk.host_services import query_trade
 
-        return query_trade(out_trade_no)
+        return query_trade(request=request, out_trade_no=out_trade_no)
 
     @router.post("/model-payment/refund")
-    def mod_refund(body: dict[str, Any] = Body(default_factory=dict)):
+    def mod_refund(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
         from app.mod_sdk.host_services import refund_trade
 
-        return refund_trade(body)
+        return refund_trade(request=request, body=body)
 
     @router.post("/model-payment/close")
-    def mod_close(body: dict[str, Any] = Body(default_factory=dict)):
+    def mod_close(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
         from app.mod_sdk.host_services import close_trade
 
-        return close_trade(body)
+        return close_trade(request=request, body=body)
 
     @router.get("/model-payment/refund/query")
-    def mod_refund_query(out_trade_no: str, out_request_no: str | None = None):
+    def mod_refund_query(request: Request, out_trade_no: str, out_request_no: str | None = None):
         from app.mod_sdk.host_services import refund_query
 
-        return refund_query(out_trade_no, out_request_no)
+        return refund_query(
+            request=request, out_trade_no=out_trade_no, out_request_no=out_request_no
+        )
 
     app.include_router(router)
 

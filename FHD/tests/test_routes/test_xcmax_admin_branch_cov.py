@@ -173,7 +173,7 @@ class TestDigestLocalOrProxyQueryParseContinue:
     """Cover the continue branches in query string parsing loops."""
 
     @pytest.mark.asyncio
-    async def test_daily_digests_query_with_unknown_params_continues(self):
+    async def test_daily_digests_query_with_unknown_params_continues(self, digest_admin_branch):
         """Lines 185->182: query parts that don't start with limit= or offset= are skipped."""
         req = _mock_request()
         svc_result = {"items": []}
@@ -199,7 +199,9 @@ class TestDigestLocalOrProxyQueryParseContinue:
         assert result == svc_result
 
     @pytest.mark.asyncio
-    async def test_action_items_stats_query_with_unknown_params_continues(self):
+    async def test_action_items_stats_query_with_unknown_params_continues(
+        self, digest_admin_branch
+    ):
         """Lines 200->197: query parts that don't start with kind= or day= are skipped."""
         req = _mock_request()
         stats_result = {"total": 10}
@@ -221,7 +223,7 @@ class TestDigestLocalOrProxyQueryParseContinue:
         assert result == stats_result
 
     @pytest.mark.asyncio
-    async def test_action_items_list_query_with_unknown_params_continues(self):
+    async def test_action_items_list_query_with_unknown_params_continues(self, digest_admin_branch):
         """Lines 209->206: query parts that don't start with kind= or day= are skipped."""
         req = _mock_request()
         list_result = {"items": []}

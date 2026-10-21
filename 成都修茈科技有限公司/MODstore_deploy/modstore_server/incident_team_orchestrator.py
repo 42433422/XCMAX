@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import uuid
@@ -16,6 +15,7 @@ from modstore_server.employee_executor import execute_employee_task
 from modstore_server.incident_bus import _incident_payload as _payload  # noqa: F401
 from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch_incident_team
 from modstore_server.incident_team_handler_digest import handler_output_digest
+from modstore_server.incident_team_handoff import format_role_handoff
 from modstore_server.llm_failure_classifier import (
     FAILURE_KIND_ROLE_TIMEOUT,
 )
@@ -271,6 +271,10 @@ def _task_for_role(
     scout_result: Optional[Dict[str, Any]] = None,
     fix_result: Optional[Dict[str, Any]] = None,
 ) -> str:
+    from modstore_server.incident_model_router import route_for_incident
+
+    budget = route_for_incident(event_type=event_type, payload=payload, role=role).get("budget", {})
+    handoff_chars = int(budget.get("handoff_chars") or 4000)
     summary = str(payload.get("summary") or event_type or "incident")
     base = (
         f"你是事故处理小组的 {role}。事件类型：{event_type}。问题摘要：{summary}。\n"
@@ -321,12 +325,12 @@ def _task_for_role(
             "python scripts/dev/push_preflight.py --fix，按提示补 CHANGELOG、提交重生成的能力中心页面、"
             "显式写原因更新净删除基线，直到全部通过再 push。"
             f"{ownership_text}"
-            f"\n排查结果：{json.dumps(scout_result or {}, ensure_ascii=False)[:4000]}"
+            f"\n排查交接（摘要仅供上下文，完成结论须核对原任务凭证）：{format_role_handoff(scout_result, 'scout', max_chars=handoff_chars)}"
         )
     return base + (
         "你的任务是验证修复或恢复路径。用 PASS/FAIL 开头，并给出证据和剩余风险。"
-        f"\n排查结果：{json.dumps(scout_result or {}, ensure_ascii=False)[:3000]}"
-        f"\n修复结果：{json.dumps(fix_result or {}, ensure_ascii=False)[:3000]}"
+        f"\n排查交接：{format_role_handoff(scout_result, 'scout', max_chars=min(2400, handoff_chars))}"
+        f"\n修复交接（按引用核对真实凭证）：{format_role_handoff(fix_result, 'fix', max_chars=handoff_chars)}"
     )
 
 

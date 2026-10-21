@@ -166,7 +166,10 @@ async def _digest_local_or_proxy(
     *,
     json_body: dict[str, _facade().Any] | None = None,
 ):
-    """日更读接口：本地 MODstore → 市场代理 → 直连生产 xcmax 存档（三选一回退）。"""
+    """日更读接口：先验管理会话，任何来源均不可借服务凭据绕过拒绝。"""
+    denied = _facade()._require_market_admin_session(request)
+    if denied is not None:
+        return denied
     from app.application.modstore_local_client import prefer_local_modstore
 
     if prefer_local_modstore() and method.upper() == "GET":
@@ -237,6 +240,8 @@ async def _digest_local_or_proxy(
         json_body=json_body,
         require_admin_session=not prefer_local_modstore(),
     )
+    if isinstance(proxied, _facade().JSONResponse) and proxied.status_code in {401, 403}:
+        return proxied
     if method.upper() == "GET" and (
         _facade()._is_daily_digest_list_path(path) or _facade()._is_daily_digest_detail_path(path)
     ):

@@ -268,20 +268,32 @@ def test_payment_proxy_post_json_response_contracts(monkeypatch: pytest.MonkeyPa
 def test_checkout_and_metering_contracts() -> None:
     assert modstore_payment_proxy.proxy_checkout(plan_id="")["success"] is False
     with patch.object(modstore_payment_proxy, "_post_json", return_value=(None, "sign down")):
-        assert modstore_payment_proxy.proxy_checkout(plan_id="pro")["error"] == "sign down"
+        assert (
+            modstore_payment_proxy.proxy_checkout(plan_id="pro", auth_token="synthetic-token")[
+                "error"
+            ]
+            == "sign down"
+        )
 
     with patch.object(
         modstore_payment_proxy,
         "_post_json",
         side_effect=[({"signature": "s"}, None), (None, "checkout down")],
     ):
-        assert modstore_payment_proxy.proxy_checkout(plan_id="pro")["error"] == "checkout down"
+        assert (
+            modstore_payment_proxy.proxy_checkout(plan_id="pro", auth_token="synthetic-token")[
+                "error"
+            ]
+            == "checkout down"
+        )
     with patch.object(
         modstore_payment_proxy,
         "_post_json",
         side_effect=[({"signature": "s"}, None), ({"order": "o"}, None)],
     ) as post:
-        result = modstore_payment_proxy.proxy_checkout(plan_id="pro", channel=" ")
+        result = modstore_payment_proxy.proxy_checkout(
+            plan_id="pro", channel=" ", auth_token="synthetic-token"
+        )
     assert result == {"success": True, "data": {"order": "o"}}
     assert "pay_channel" not in post.call_args_list[1].kwargs["payload"]
 

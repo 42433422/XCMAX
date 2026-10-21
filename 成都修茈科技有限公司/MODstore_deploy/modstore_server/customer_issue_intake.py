@@ -140,6 +140,11 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
         ticket = db.get(CustomerServiceTicket, int(payload["ticket_id"]))
         if ticket is not None and ticket.status == "expired":
             return {"ok": True, "skipped": True, "reason": "ticket_expired"}
+        if ticket is not None and ticket.user_id == int(payload["user_id"]):
+            from modstore_server.customer_issue_shared_repairs import active_shared_repair
+
+            if active_shared_repair(db, ticket):
+                return {"ok": True, "skipped": True, "reason": "shared_repair_reused"}
     if payload.get("intake_source") == "private_mod_rework":
         from modstore_server.customer_issue_private_factory import (
             dispatch_private_rework,

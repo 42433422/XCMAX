@@ -336,7 +336,9 @@ class AIChatWorkflowResponseMixin:
                 node_params = node_params_by_id.get(str(item.node_id), {})
                 lines.extend(self._format_workflow_tool_success_line(item, node_params))
             else:
-                lines.append(f"- {item.node_id}: 失败（{_PUBLIC_WORKFLOW_FAILURE}）")
+                lines.append(
+                    f"- {item.node_id}: 失败（{public_step_error(item, allow_reference_message=False) or _PUBLIC_WORKFLOW_FAILURE}）"
+                )
                 retryable = getattr(item, "retryable", True)
                 retryable = retryable if isinstance(retryable, bool) else True
                 try:
@@ -377,7 +379,8 @@ class AIChatWorkflowResponseMixin:
                             "message": (
                                 self._workflow_output_message(r.output)
                                 if r.success
-                                else _PUBLIC_WORKFLOW_FAILURE
+                                else public_step_error(r, allow_reference_message=False)
+                                or _PUBLIC_WORKFLOW_FAILURE
                             ),
                             "output_preview": self._workflow_output_preview(r.output)
                             if r.success

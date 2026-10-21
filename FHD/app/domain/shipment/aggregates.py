@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from app.domain.shipment.shipment_quantities import resolve_shipment_quantity
 from app.legacy.domain.legacy_vo import ContactInfo, Money, OrderNumber, Quantity
 
 
@@ -40,10 +41,23 @@ class ShipmentItem:
 
     @classmethod
     def from_dict(cls, data: dict) -> "ShipmentItem":
-        quantity = Quantity.from_tins_and_spec(
-            tins=data.get("quantity_tins", 0),
-            spec_per_tin=data.get("tin_spec", data.get("spec_per_tin", 10.0)),
+        tins, kg, spec = resolve_shipment_quantity(data)
+        return cls._from_quantities(data, Quantity(tins, kg, spec))
+
+    @classmethod
+    def from_record(cls, data: dict) -> "ShipmentItem":
+        """Restore stored quantities and amounts without applying new-order policy."""
+        spec = data.get("tin_spec", data.get("spec_per_tin"))
+        tins = data.get("quantity_tins") or 0
+        kg = data.get("quantity_kg")
+        # A missing historical field is not permission to invent a conversion.
+        return cls._from_quantities(
+            {**data, "amount": data.get("amount") or 0, "unit_price": data.get("unit_price") or 0},
+            Quantity(tins, kg, spec),
         )
+
+    @classmethod
+    def _from_quantities(cls, data: dict, quantity: Quantity) -> "ShipmentItem":
         unit_price = Money(data.get("unit_price", 0))
         amount = Money(data["amount"]) if "amount" in data else unit_price * quantity.kg
 

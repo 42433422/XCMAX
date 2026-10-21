@@ -219,7 +219,7 @@ class TestCreateShipment:
         repo = DummyRepository()
         svc = ShipmentApplicationService(repository=repo)
         items = [
-            {"product_name": "", "quantity_tins": 1},  # invalid: empty name
+            {"product_name": "", "quantity_tins": 1, "tin_spec": 10},  # invalid: empty name
             {
                 "product_name": "产品A",
                 "quantity_tins": 1,
@@ -969,13 +969,12 @@ class TestCalculateTotals:
         assert result["total_kg"] == 0.0
         assert result["total_amount"] == 0.0
 
-    def test_missing_fields_default_to_zero(self):
+    def test_missing_quantity_requires_clarification(self):
+        from app.domain.shipment.shipment_quantities import ShipmentQuantityValidationError
+
         svc = ShipmentApplicationService(repository=DummyRepository())
-        items = [{}]
-        result = svc.calculate_totals(items)
-        assert result["total_tins"] == 0
-        assert result["total_kg"] == 0.0
-        assert result["total_amount"] == 0.0
+        with pytest.raises(ShipmentQuantityValidationError):
+            svc.calculate_totals([{}])
 
 
 # ---------------------------------------------------------------------------
@@ -991,7 +990,7 @@ class TestGenerateShipmentDocument:
         )
         result = svc.generate_shipment_document(
             unit_name="测试单位",
-            products=[{"name": "产品A"}],
+            products=[{"name": "产品A", "quantity_kg": 2}],
         )
         assert result["success"] is False
         assert "document_generator" in result["message"]
@@ -1004,7 +1003,7 @@ class TestGenerateShipmentDocument:
             document_generator=doc_gen,
             record_store=record_store,
         )
-        products = [{"product_name": "产品A", "quantity_tins": 1}]
+        products = [{"product_name": "产品A", "quantity_tins": 1, "tin_spec": 10}]
         result = svc.generate_shipment_document(
             unit_name="测试单位",
             products=products,
@@ -1023,7 +1022,7 @@ class TestGenerateShipmentDocument:
         )
         result = svc.generate_shipment_document(
             unit_name="测试单位",
-            products=[{"name": "产品A"}],
+            products=[{"name": "产品A", "quantity_kg": 2}],
         )
         assert result["success"] is True
         assert "record_id" not in result
@@ -1038,7 +1037,7 @@ class TestGenerateShipmentDocument:
         )
         result = svc.generate_shipment_document(
             unit_name="测试单位",
-            products=[{"name": "产品A"}],
+            products=[{"name": "产品A", "quantity_kg": 2}],
         )
         assert result["success"] is False
         assert len(record_store.recorded) == 0
@@ -1054,7 +1053,7 @@ class TestGenerateShipmentDocument:
         )
         result = svc.generate_shipment_document(
             unit_name="测试单位",
-            products=[{"name": "产品A"}],
+            products=[{"name": "产品A", "quantity_kg": 2}],
         )
         assert result["success"] is True
 
@@ -1068,7 +1067,7 @@ class TestGenerateShipmentDocument:
         )
         result = svc.generate_shipment_document(
             unit_name="测试单位",
-            products=[{"name": "产品A"}],
+            products=[{"name": "产品A", "quantity_kg": 2}],
         )
         assert result["success"] is True
         # No record_id/order_id should be set when record_id is None
@@ -1092,7 +1091,7 @@ class TestGenerateShipmentDocument:
         ):
             result = svc.generate_shipment_document(
                 unit_name="测试单位",
-                products=[{"name": "产品A"}],
+                products=[{"name": "产品A", "quantity_kg": 2}],
                 strict_template=True,
             )
         assert result["success"] is False

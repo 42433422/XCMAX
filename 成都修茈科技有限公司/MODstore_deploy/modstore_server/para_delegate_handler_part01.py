@@ -104,6 +104,17 @@ def _build_request(
     from modstore_server.customer_ticket_triage import para_triage_hook
 
     input_data = para_triage_hook(input_data, employee_id=employee_id)
+    budget = {}
+    if input_data.get("_trusted_incident_team_execution") is True:
+        from modstore_server.incident_model_router import route_for_incident
+
+        role = str(input_data.get("role") or "")
+        route = route_for_incident(
+            event_type=str(input_data.get("event_type") or ""),
+            payload=input_data.get("incident") or {},
+            role=role,
+        )
+        budget = {"role": role, **route.get("budget", {})} if route.get("budget") else {}
     workspace_root = _facade()._project_root(input_data)
     mode = _facade()._mode_for_employee(employee_id, input_data)
     report_only = _facade()._coerce_bool(
@@ -137,6 +148,9 @@ def _build_request(
         },
         "created_at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         "source": "modstore_employee_loop",
+        "execution_budget": budget,
+        "codex_model_candidates": budget.get("codex_model_candidates")
+        or input_data.get("codex_model_candidates"),
         "employee_id": employee_id,
         "mode": mode,
         "report_only": report_only,
@@ -184,6 +198,7 @@ def _public_request(
             "branch",
             "device_id",
             "report_only",
+            "execution_budget",
         )
     }
 
@@ -220,6 +235,14 @@ def _allow_local_workdir() -> bool:
     return _facade()._env_bool("MODSTORE_PARA_ALLOW_LOCAL_WORKDIR", "0")
 
 
+def insert_before_loop_context(prompt: str, addition: str) -> str:
+    """Keep the server's final policy block after credentials and unit scopes."""
+    head, marker, context = prompt.rpartition("\nMODstore loop context:\n")
+    if not marker:
+        return prompt + "\n" + addition
+    return head + "\n" + addition + marker + context
+
+
 def _build_para_prompt(req: _facade().Dict[str, _facade().Any]) -> str:
     mode = str(req.get("mode") or "code")
     prompt = str(req.get("prompt") or req.get("task") or "").strip()
@@ -245,6 +268,24 @@ def _build_para_prompt(req: _facade().Dict[str, _facade().Any]) -> str:
     from modstore_server.codex_model_attempts import codex_model_candidates_line
 
     context += [line for line in (codex_model_candidates_line(req),) if line]
+    budget = req.get("execution_budget")
+    if isinstance(budget, dict) and budget:
+        context.append(
+            "- incident_execution_budget: "
+            + _facade().json.dumps(
+                {
+                    k: budget[k]
+                    for k in ("role", "context_chars", "output_tokens", "reasoning_effort")
+                    if k in budget
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
+        context.append(
+            f"- output_guidance: 结论与证据引用控制在约 {budget['output_tokens']} tokens 内；"
+            "执行器回执须区分请求预算与实际应用，CLI 输出 token 上限未强制。"
+        )
     if report_only:
         return "MODSTORE_REPORT_ONLY=1\nreport_only=true\n\n" + prompt + "\n" + "\n".join(context)
     return prompt + "\n" + "\n".join(context)

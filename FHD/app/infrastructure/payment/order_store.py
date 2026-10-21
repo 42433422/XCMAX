@@ -70,6 +70,7 @@ def record_checkout_pending(
     amount_cents: int,
     amount_yuan: str,
     local_user_id: int | None = None,
+    tenant_id: int | None = None,
 ) -> None:
     """预下单成功后写入待支付订单。"""
     with _lock:
@@ -77,6 +78,7 @@ def record_checkout_pending(
         orders: dict[str, Any] = data["orders"]
         row: dict[str, Any] = {
             "out_trade_no": out_trade_no,
+            "tenant_id": tenant_id,
             "plan_id": plan_id,
             "amount_cents": int(amount_cents),
             "amount_yuan": amount_yuan,
@@ -284,7 +286,13 @@ def update_order_status(
         o["status"] = status
         o["updated_at"] = _utc_iso()
         if extra:
-            o.update(extra)
+            o.update(
+                {
+                    k: v
+                    for k, v in extra.items()
+                    if k not in {"local_user_id", "tenant_id", "out_trade_no"}
+                }
+            )
         _atomic_write(order_store_path(), data)
         return dict(o)
 
@@ -300,8 +308,7 @@ def count_orders() -> int:
 def json_store_has_unmigrated_orders() -> bool:
     """本地 JSON 订单文件是否仍存有订单。
 
-    在 PostgreSQL 后端下用于提示：JSON 文件里仍有遗留订单待迁移
-    （见 ``scripts/migrate_fhd_json_orders_to_postgres.py``）。
+    历史兼容查询，仅判断本地 JSON，不表示 PostgreSQL 迁移已实现。
     文件不存在或无订单时返回 ``False``。
     """
     if not order_store_path().is_file():

@@ -6,7 +6,11 @@ from typing import Optional
 
 from fastapi import Depends, Header, HTTPException, Request
 
-from modstore_server.application.auth import AuthApplicationService, AuthenticationError
+from modstore_server.application.auth import (
+    AuthApplicationService,
+    AuthenticationError,
+    ScopeAuthorizationError,
+)
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import User
 
@@ -23,6 +27,8 @@ def get_current_user(
         return resolve_reader(raw[7:], request)  # type: ignore[return-value]
     try:
         return AuthApplicationService().current_user_from_authorization(authorization)
+    except ScopeAuthorizationError as e:
+        raise HTTPException(403, str(e)) from e
     except AuthenticationError as e:
         raise HTTPException(401, str(e)) from e
 
