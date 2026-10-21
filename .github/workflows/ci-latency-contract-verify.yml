@@ -1,91 +1,126 @@
-name: CI latency main reconciliation verification
+name: CI latency remaining-failure diagnosis
 'on':
   push:
     branches: ['ci/latency-contract-verify-20261022']
 permissions:
   contents: read
 jobs:
-  reconcile:
+  diagnose:
     if: github.repository == '42433422/XCMAX' && github.ref == 'refs/heads/ci/latency-contract-verify-20261022'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      TARGET_SHA: ec843482bc5e75461fcd1bea9188de8545ff556f
-      MAIN_SHA: aff192308fd3e82afc8258e44958c22a1b8dac62
-      PREVIOUS_MERGE: 9d6351c14d3e7ddba632b35ec7491859e52a2137
-      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+      TARGET_SHA: ef06416e9e0e8ceedcdffc72ad977ffdb2afee3d
+      XCAGI_SKIP_LEGACY_COMPAT_ROUTES: '1'
+      INTENT_BENCHMARK_RUN: '1'
+      XCAGI_SKIP_INTENT_LLM: '1'
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TARGET_SHA }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
-      - name: Install isolated verification tools
-        run: python -m pip install 'pytest<10' pyyaml 'ruff>=0.8,<0.16'
-      - name: Reconcile exact main and regenerate maintained-line accounting
-        shell: bash
+          cache: pip
+          cache-dependency-path: |
+            FHD/requirements-server-api.txt
+            FHD/deploy/requirements-dev.txt
+            FHD/pyproject.toml
+            FHD/packages/**/pyproject.toml
+      - name: Install the same backend dependencies
+        working-directory: FHD
         run: |
-          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r requirements-server-api.txt
+          pip install -r deploy/requirements-dev.txt
+      - name: Preserve relevant instructions and test assembly sources
+        run: |
           test "$(git rev-parse HEAD)" = "$TARGET_SHA"
-          git fetch --no-tags origin "$MAIN_SHA" "$PREVIOUS_MERGE"
-          git config user.name 'CI verification'
-          git config user.email 'ci-verification@users.noreply.github.com'
+          mkdir -p "$RUNNER_TEMP/ci-closure-evidence/sources"
           python - <<'PY'
-          import json, os, subprocess
+          import os, shutil
           from pathlib import Path
-          target, main = os.environ['TARGET_SHA'], os.environ['MAIN_SHA']
-          result = subprocess.run(['git','merge','--no-commit','--no-ff',main], text=True, capture_output=True)
-          print(result.stdout, result.stderr, flush=True)
-          assert result.returncode in (0,1), 'Unexpected merge error'
-          conflicts = set(subprocess.check_output(['git','diff','--name-only','--diff-filter=U'], text=True).splitlines())
-          assert conflicts == {'FHD/metrics/line_baseline.json'}, f'Unreviewed merge conflicts: {conflicts}'
-          print('MERGE_CONFLICTS', sorted(conflicts), flush=True)
-          changelog = 'FHD/CHANGELOG.md'
-          expected_log = subprocess.check_output(['git','show',os.environ['PREVIOUS_MERGE']+':'+changelog])
-          assert Path(changelog).read_bytes() == expected_log, 'Must preserve both CI and upstream admin release notes'
-          for name in ['FHD/admin-console/src/views/CustomerServiceTickets.css','ops/releases/c8c9c90ca47cbde6361c94b11cf5c94815b53147.json']:
-              assert Path(name).read_bytes() == subprocess.check_output(['git','show',main+':'+name]), f'Upstream file modified: {name}'
-          baseline = Path('FHD/metrics/line_baseline.json')
-          baseline.write_bytes(subprocess.check_output(['git','show',main+':'+str(baseline)]))
-          assert json.loads(baseline.read_text())['lines'] == 2319215
-          reason = '合入main aff19230并保留其已批准的精确SHA发布记录；按用户2026-10-22继续执行CI提速授权，登记本PR并行守卫与真实负向回归净增31行（2319215→2319246），不变更覆盖率门槛、不新增部署授权。'
-          subprocess.run(['python','scripts/dev/check_net_deletion.py','--update','--force','--reason',reason],cwd='FHD',check=True)
-          assert json.loads(baseline.read_text())['lines'] == 2319246, 'Unexpected scope growth'
-          subprocess.run(['git','add','FHD/CHANGELOG.md','FHD/metrics/line_baseline.json'],check=True)
-          assert not subprocess.check_output(['git','diff','--name-only','--diff-filter=U'],text=True).strip()
-          subprocess.run(['git','commit','-m','Merge current main into CI parallel gates; preserve upstream release record'],check=True)
-          parents = subprocess.check_output(['git','show','-s','--format=%P','HEAD'],text=True).split()
-          assert parents == [target,main], parents
+          dest = Path(os.environ['RUNNER_TEMP']) / 'ci-closure-evidence' / 'sources'
+          files = {Path('AGENTS.md'), Path('FHD/tests/conftest.py'), Path('FHD/tests/fixtures/app_factory.py'), Path('FHD/tests/test_ci/test_backend_shards.py'), Path('FHD/app/fastapi_app/factory.py'), Path('FHD/app/fastapi_routes/__init__.py'), Path('FHD/app/fastapi_routes/domains/auth/routes.py')}
+          for parent in ('FHD', 'FHD/tests', 'FHD/tests/test_ci', 'FHD/tests/fixtures', 'FHD/tests/test_routes', 'FHD/tests/test_fastapi_app'):
+              files.add(Path(parent) / 'AGENTS.md')
+          for p in Path('FHD/tests').rglob('*.py'):
+              text = p.read_text(encoding='utf-8')
+              if any(token in text for token in ('_app_singleton', 'create_fastapi_app', 'register_all_routes', 'app.routes.clear', 'app.router.routes')):
+                  files.add(p)
+          for p in sorted(files):
+              if p.is_file():
+                  out = dest / p
+                  out.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(p, out)
+          print('DIAGNOSTIC_SOURCE_FILES', len(list(dest.rglob('*.py'))))
           PY
-      - name: Verify reconciled tree and all unchanged gate contracts
-        shell: bash
+      - name: Reproduce and align all backend CI contracts
+        working-directory: FHD
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+          PYTHONPATH: .
         run: |
-          set -euo pipefail
-          python -m pytest --noconftest -c /dev/null -p no:cacheprovider FHD/tests/test_ci/test_workflow_gate_contracts.py FHD/tests/release_gate/test_admin_console_release_policy.py::test_fhd_release_chain_carries_and_verifies_admin_identity -q
-          python -m scripts.dev.test_change_classifier
-          python -m ruff check FHD/tests/release_gate/test_admin_console_release_policy.py FHD/tests/test_ci/test_workflow_gate_contracts.py
-          python -m ruff format --check FHD/tests/release_gate/test_admin_console_release_policy.py FHD/tests/test_ci/test_workflow_gate_contracts.py
-          python scripts/dev/publish_ci_workflows_to_root.py --check
-          (cd FHD && python scripts/dev/push_preflight.py --fix --base "$MAIN_SHA")
-          git diff --exit-code
-          (cd FHD && python scripts/dev/ssot_cli.py gate)
-          git diff --exit-code
-          git diff --check "$MAIN_SHA" HEAD
           python - <<'PY'
-          import json, os, subprocess
+          import os, re, subprocess, sys
           from pathlib import Path
-          expected = {'.github/workflows/fhd-ci-cd.yml','FHD/.github/workflows/ci-cd.yml','FHD/CHANGELOG.md','docs/CI_SSOT.md','FHD/metrics/line_baseline.json','FHD/tests/test_ci/test_workflow_gate_contracts.py','FHD/tests/release_gate/test_admin_console_release_policy.py'}
-          changed = set(subprocess.check_output(['git','diff','--name-only',os.environ['MAIN_SHA'],'HEAD'],text=True).splitlines())
-          assert changed == expected, f'Unexpected scope: {changed}'
-          print('VERIFIED_MERGE_TREE',subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),flush=True)
-          print('VERIFIED_BASELINE',Path('FHD/metrics/line_baseline.json').read_text(),flush=True)
-          print('DIFF_FROM_PREVIOUS_MERGE',subprocess.check_output(['git','diff','--raw',os.environ['PREVIOUS_MERGE'],'HEAD'],text=True),flush=True)
-          for name in sorted(changed | {'ops/releases/c8c9c90ca47cbde6361c94b11cf5c94815b53147.json','FHD/admin-console/src/views/CustomerServiceTickets.css'}):
-              print('VERIFIED_BLOB',json.dumps({'path':name,'sha':subprocess.check_output(['git','hash-object',name],text=True).strip()}),flush=True)
+          out = Path(os.environ['RUNNER_TEMP']) / 'ci-closure-evidence'
+          path = Path('tests/test_ci/test_backend_shards.py')
+          command = [sys.executable, '-m', 'pytest', '--noconftest', '-c', '/dev/null', '-p', 'no:cacheprovider', str(path), '-q', '--tb=short']
+          before = subprocess.run(command, capture_output=True, text=True)
+          (out / 'contracts-before.txt').write_text(before.stdout + before.stderr)
+          print('CONTRACTS_BEFORE', before.returncode, before.stdout[-5000:], flush=True)
+          assert before.returncode == 1 and '3 failed' in before.stdout, 'Unexpected baseline contract failure set'
+          text = path.read_text()
+          old = 'prerequisites = {"guard-temp-scripts", "ssot-drift-gate", "classify"}'
+          assert text.count(old) == 1
+          text = text.replace(old, 'prerequisites = {"guard-temp-scripts", "classify"}')
+          old = 'assert set(gate["needs"]) == {"classify", "backend-quality", "backend-test-shard"}'
+          assert text.count(old) == 1
+          text = text.replace(old, 'assert set(gate["needs"]) == prerequisites | {\n        "ssot-drift-gate", "backend-quality", "backend-test-shard"\n    }')
+          text, count = re.subn(r'(?m)^( +)CLASSIFY="success",$', lambda m: m[1]+'GUARD="success",\n'+m[1]+'SSOT="success",\n'+m[0], text)
+          assert count == 2, count
+          path.write_text(text)
+          subprocess.run([sys.executable, '-m', 'ruff', 'format', str(path)], check=True)
+          after = subprocess.run(command, capture_output=True, text=True)
+          (out / 'contracts-after.txt').write_text(after.stdout + after.stderr)
+          print('CONTRACTS_AFTER', after.returncode, after.stdout[-5000:], flush=True)
+          assert after.returncode == 0
+          (out / 'candidate_test_backend_shards.py').write_text(path.read_text())
           PY
+      - name: Compare isolated and all-collected auth tests without changing assertions
+        working-directory: FHD
+        run: |
+          python - <<'PY'
+          import json, os, subprocess, sys
+          from pathlib import Path
+          out = Path(os.environ['RUNNER_TEMP']) / 'ci-closure-evidence'
+          cases = [('auth-alone', ['tests/test_routes/test_auth_subscription_register.py']), ('auth-all-collection', ['tests/', '-k', 'test_subscription_status_requires_login or test_subscription_status_trial or test_register_enriches_tenant_id'])]
+          results = {}
+          for name, args in cases:
+              command = [sys.executable, '-m', 'pytest', *args, '-q', '--tb=short', '--junitxml='+str(out / (name+'.xml'))]
+              result = subprocess.run(command, capture_output=True, text=True, timeout=240)
+              (out / (name+'.txt')).write_text(result.stdout+result.stderr)
+              print(name, result.returncode, result.stdout[-16000:], flush=True)
+              results[name] = result.returncode
+          (out / 'diagnosis.json').write_text(json.dumps(results, indent=2))
+          PY
+      - name: Upload diagnostic evidence, not product acceptance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-closure-diagnosis-${{ github.run_id }}
+          path: ${{ runner.temp }}/ci-closure-evidence/
+          if-no-files-found: error
+          retention-days: 7
       - name: Clean only this disposable checkout
         if: always()
         run: |
