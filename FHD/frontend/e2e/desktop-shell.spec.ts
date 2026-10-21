@@ -18,15 +18,14 @@ test.describe('Desktop shell contract', () => {
   })
 
   test('app shell renders (Electron-equivalent web shell)', async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(window, 'xcagiDesktop', { value: {} }))
     await installE2eShellMocks(page)
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
     await expect(page.locator('#app')).toBeVisible()
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
-    const health = await page.evaluate(async () => {
-      const r = await fetch('/api/health')
-      return r.status
-    })
-    expect(health).toBeLessThan(500)
+    await page.evaluate(() => { window.requestAnimationFrame = () => 1 })
+    await page.getByRole('button', { name: '系统设置', exact: true }).first().click()
+    await expect(page.locator('#view-settings')).toBeVisible()
   })
 
   test('Electron IPC：window.xcagi.invoke("open-modal") 触发 modal 打开', async ({ page }) => {
