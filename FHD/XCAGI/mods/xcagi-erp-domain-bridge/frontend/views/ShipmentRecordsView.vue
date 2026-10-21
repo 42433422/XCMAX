@@ -457,9 +457,8 @@ function onTemplatesUpdated() {
 
 onActivated(loadUnits);
 onMounted(() => {
-  loadTemplateOptions();
-  window.addEventListener('xcagi:shipment-record-updated', onShipmentRecordUpdated);
-  window.addEventListener('xcagi:templates-updated', onTemplatesUpdated);
+  loadTemplateOptions(); loadUnits();
+  window.addEventListener('xcagi:shipment-record-updated', onShipmentRecordUpdated); window.addEventListener('xcagi:templates-updated', onTemplatesUpdated);
 });
 
 onBeforeUnmount(() => {
