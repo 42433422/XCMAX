@@ -136,6 +136,11 @@ def refresh_mobile_access_token(refresh_token: str) -> dict[str, str] | None:
     sid = payload.get("session_id")
     if uid is None or not sid:
         return None
+    from app.infrastructure.auth.mobile_session import ADMIN_ACCOUNT_KINDS, current_mobile_admin
+
+    if str(payload.get("account_kind") or "").strip().lower() in ADMIN_ACCOUNT_KINDS:
+        if current_mobile_admin(uid, sid) is None:
+            return None
     exp = int(payload.get("exp") or 0)
     ttl = max(1, exp - int(time.time())) if exp else MOBILE_REFRESH_TTL_HOURS * 3600
     _mark_refresh_jti_used(jti, ttl)

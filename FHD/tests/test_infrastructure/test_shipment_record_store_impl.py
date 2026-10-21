@@ -117,33 +117,16 @@ class TestRecordDocumentGeneration:
         assert result["success"] is True
         assert result["record_id"] == 7
 
-    def test_empty_products_uses_defaults(self):
-        mock_db = _setup_db_with_record(1)
-        with patch(
-            "app.infrastructure.persistence.shipment_record_store_impl.get_db",
-            return_value=_mock_db_ctx(mock_db),
-        ):
-            result = self._svc().record_document_generation(
-                unit_name="Acme",
-                unit_id=None,
-                products=[],
-                document_result={},
-            )
-        assert result["success"] is True
+    @pytest.mark.parametrize("products", [[], None])
+    def test_empty_products_rejected_without_write(self, products):
+        from app.domain.shipment.shipment_quantities import ShipmentQuantityValidationError
 
-    def test_none_products_uses_defaults(self):
-        mock_db = _setup_db_with_record(1)
-        with patch(
-            "app.infrastructure.persistence.shipment_record_store_impl.get_db",
-            return_value=_mock_db_ctx(mock_db),
-        ):
-            result = self._svc().record_document_generation(
-                unit_name="Acme",
-                unit_id=None,
-                products=None,
-                document_result={},
-            )
-        assert result["success"] is True
+        with patch("app.infrastructure.persistence.shipment_record_store_impl.get_db") as db:
+            with pytest.raises(ShipmentQuantityValidationError):
+                self._svc().record_document_generation(
+                    unit_name="Acme", unit_id=None, products=products, document_result={}
+                )
+        db.assert_not_called()
 
     def test_product_name_fallback_to_product_name_key(self):
         mock_db = _setup_db_with_record(1)
@@ -154,7 +137,7 @@ class TestRecordDocumentGeneration:
             self._svc().record_document_generation(
                 unit_name="Acme",
                 unit_id=1,
-                products=[{"product_name": "FromAltKey"}],
+                products=[{"product_name": "FromAltKey", "quantity_kg": 2}],
                 document_result={},
             )
         added = mock_db.add.call_args[0][0]
@@ -169,7 +152,7 @@ class TestRecordDocumentGeneration:
             self._svc().record_document_generation(
                 unit_name="Acme",
                 unit_id=1,
-                products=[{"型号": "X-100"}],
+                products=[{"型号": "X-100", "quantity_kg": 2}],
                 document_result={},
             )
         added = mock_db.add.call_args[0][0]
@@ -184,7 +167,7 @@ class TestRecordDocumentGeneration:
             self._svc().record_document_generation(
                 unit_name="Acme",
                 unit_id=1,
-                products=[{"quantity": 7}],
+                products=[{"quantity": 7, "unit": "桶", "tin_spec": 2}],
                 document_result={},
             )
         added = mock_db.add.call_args[0][0]
@@ -262,7 +245,7 @@ class TestRecordDocumentGeneration:
             self._svc().record_document_generation(
                 unit_name="Acme",
                 unit_id=1,
-                products=[{"price": 9.0}],
+                products=[{"price": 9.0, "quantity_kg": 2}],
                 document_result={},
             )
         added = mock_db.add.call_args[0][0]
@@ -292,7 +275,7 @@ class TestRecordDocumentGeneration:
             self._svc().record_document_generation(
                 unit_name="Acme",
                 unit_id=1,
-                products=[{}],
+                products=[{"quantity_kg": 2}],
                 document_result={},
             )
         added = mock_db.add.call_args[0][0]
@@ -307,7 +290,7 @@ class TestRecordDocumentGeneration:
             self._svc().record_document_generation(
                 unit_name="Acme",
                 unit_id=1,
-                products=[{}],
+                products=[{"quantity_kg": 2}],
                 document_result={},
                 raw_text="some raw text",
             )

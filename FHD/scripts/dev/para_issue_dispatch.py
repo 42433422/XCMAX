@@ -52,6 +52,8 @@ class DispatchResult:
     ok: bool = False
     status: str = "init"
     reason: str = ""
+    notification_error: str = ""
+    request_key: str = ""
     executor: str = "para"
     tool: str = "cursor"
     control_task_id: str = ""
@@ -71,7 +73,9 @@ def _now() -> str:
 def _write_report(result: DispatchResult) -> None:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     path = REPORT_DIR / f"para_issue_dispatch_{result.issue_number}.json"
-    path.write_text(json.dumps(asdict(result), ensure_ascii=False, indent=2), encoding="utf-8")
+    pending = path.with_suffix(".tmp")
+    pending.write_text(json.dumps(asdict(result), ensure_ascii=False, indent=2), encoding="utf-8")
+    pending.replace(path)
 
 
 def _finish(result: DispatchResult, status: str, reason: str, code: int) -> None:
@@ -128,7 +132,9 @@ def branch_from_execution(execution: dict[str, Any]) -> tuple[str, str]:
     """Return (branch, head_sha) from Para's execution snapshot."""
     branch, head = "", ""
     for report in execution.get("reports") or []:
-        content = report.get("content") if isinstance(report, dict) else None
+        content = (
+            (report.get("report") or report.get("content")) if isinstance(report, dict) else None
+        )
         try:
             data = json.loads(content) if isinstance(content, str) else (content or {})
         except ValueError:
@@ -143,12 +149,22 @@ def branch_from_execution(execution: dict[str, Any]) -> tuple[str, str]:
     return branch, head
 
 
-def _comment(repo: str, issue_number: int, token: str, body: str) -> None:
-    impl._gh_post(
-        f"https://api.github.com/repos/{repo}/issues/{issue_number}/comments",
-        token,
-        {"body": body},
-    )
+def _comment(result: DispatchResult, token: str, body: str) -> None:
+    """A notification failure must not abandon an already dispatched task."""
+    try:
+        response = impl._gh_post(
+            f"https://api.github.com/repos/{result.repo}/issues/{result.issue_number}/comments",
+            token,
+            {"body": body},
+        )
+        error = response.get("_error")
+        if not error:
+            return
+        result.notification_error = f"HTTP {error}"
+    except (OSError, ValueError) as exc:
+        result.notification_error = type(exc).__name__
+    _write_report(result)
+    print(f"[para-dispatch] comment unavailable: {result.notification_error}")
 
 
 def _branch_head(repo: str, branch: str, token: str) -> str:
@@ -165,6 +181,7 @@ def _branch_head(repo: str, branch: str, token: str) -> str:
 def run(args: argparse.Namespace) -> None:
     repo, number = args.repo, int(args.issue_number)
     result = DispatchResult(issue_number=number, repo=repo, started_at=_now(), tool=args.tool)
+    _write_report(result)
     try:
         issue = impl._fetch_issue(repo, number, args.token)
     except urllib.error.URLError as exc:
@@ -194,6 +211,9 @@ def run(args: argparse.Namespace) -> None:
         "tool": args.tool,
         "github_issue": number,
     }
+    result.status = "dispatching"
+    result.request_key = request["request_key"]
+    _write_report(result)
     try:
         task = client.create(request)
     except urllib.error.HTTPError as exc:
@@ -201,12 +221,15 @@ def run(args: argparse.Namespace) -> None:
     except urllib.error.URLError as exc:
         _finish(result, "para_unavailable", f"派单接口不可达：{exc.reason}", 5)
     result.control_task_id = str(task.get("id") or "")
+    result.status = "dispatched"
+    result.para_task_id = str(task.get("para_task_id") or "")
+    result.final_state = str(task.get("state") or "")
+    _write_report(result)
     run_url = (
         f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{repo}/actions/runs/{run_id}"
     )
     _comment(
-        repo,
-        number,
+        result,
         args.token,
         f"🛠️ 已交给 **Para** 修复（不调用任何 LLM key）。\n\n"
         f"- 控制任务：`{result.control_task_id}`\n- 工具：`{args.tool}`\n"
@@ -218,18 +241,18 @@ def run(args: argparse.Namespace) -> None:
         try:
             task = client.get(result.control_task_id)
         except (urllib.error.URLError, ValueError) as exc:
-            print(f"[para-dispatch] poll error: {exc}")
+            print(f"[para-dispatch] poll error: {type(exc).__name__}")
             task = {"state": "", "execution": {}}
         state = str(task.get("state") or "")
         result.para_task_id = str(task.get("para_task_id") or result.para_task_id)
+        result.final_state = state
+        _write_report(result)
         print(f"[para-dispatch] state={state} para_task={result.para_task_id or '-'}")
         if state in TERMINAL_STATES:
             break
         if time.monotonic() > deadline:
-            result.final_state = state
             _comment(
-                repo,
-                number,
+                result,
                 args.token,
                 f"⏱️ Para 任务 `{result.para_task_id or result.control_task_id}` "
                 f"在 {args.timeout_minutes} 分钟内未结束（当前状态 `{state}`）。",
@@ -237,15 +260,20 @@ def run(args: argparse.Namespace) -> None:
             _finish(result, "timeout", f"Para 任务未在时限内结束：{state}", 7)
         time.sleep(args.poll_seconds)
 
-    result.final_state = state
     if state != "execution_completed":
-        reason = str(task.get("reason") or "")
+        execution = task.get("execution") or {}
+        # Reports can contain raw executor output. Keep it out of public issues;
+        # the Para task id correlates the private report for investigation.
+        reports = execution.get("reports") or []
+        applied = sum(isinstance(r, dict) and r.get("applied") == 1 for r in reports)
+        reason = str(
+            task.get("reason") or f"executor_reason_unavailable (applied_reports={applied})"
+        )
         _comment(
-            repo,
-            number,
+            result,
             args.token,
             f"❌ Para 任务 `{result.para_task_id or result.control_task_id}` 结束状态 "
-            f"`{state}`（{reason or '无原因'}），未生成 PR。",
+            f"`{state}`（{reason}），未生成 PR。请凭任务号核查执行器回执。",
         )
         _finish(result, "para_failed", f"{state}: {reason}", 7)
 
@@ -254,8 +282,7 @@ def run(args: argparse.Namespace) -> None:
     result.branch, result.head_sha = branch, head or remote_head
     if not branch or not remote_head:
         _comment(
-            repo,
-            number,
+            result,
             args.token,
             f"⚠️ Para 任务 `{result.para_task_id}` 已完成，但 GitHub 上找不到它推送的分支"
             f"（`{branch or '未回报'}`），未生成 PR。",
@@ -290,6 +317,7 @@ def run(args: argparse.Namespace) -> None:
     )
     result.pr_url = str(pr.get("html_url") or "")
     result.pr_number = int(pr.get("number") or 0)
+    _write_report(result)
     if not result.pr_number:
         _finish(result, "pr_failed", f"创建 PR 失败：{pr.get('_error')}", 6)
     impl._gh_post(
@@ -298,8 +326,7 @@ def run(args: argparse.Namespace) -> None:
         {"labels": ["ai-generated", "para"]},
     )
     _comment(
-        repo,
-        number,
+        result,
         args.token,
         f"✅ Para 修复完成。\n\n- Para 任务：`{result.para_task_id}`\n"
         f"- 分支：`{branch}` @ `{result.head_sha[:12]}`\n- PR：{result.pr_url}\n\n"

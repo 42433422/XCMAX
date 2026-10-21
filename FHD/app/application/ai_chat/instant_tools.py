@@ -418,6 +418,7 @@ class AIChatInstantToolsMixin:
                     raw_text=order_text,
                 )
                 response_data["data"]["data"] = {"document": doc_result}
+                response_data["success"] = bool(doc_result.get("success"))
 
                 if doc_result.get("success"):
                     doc_name = doc_result.get("doc_name") or ""
@@ -427,6 +428,7 @@ class AIChatInstantToolsMixin:
                 else:
                     response_data["response"] = doc_result.get("message", "生成发货单失败")
             else:
+                response_data["success"] = False
                 response_data["response"] = parsed.get("message", "订单解析失败")
         except RECOVERABLE_ERRORS:
             logger.exception("自动执行 shipment_generate 失败")

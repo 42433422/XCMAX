@@ -203,7 +203,7 @@ def test_business_shipment_create_route_runs_through_agent_orchestrator(
             "/api/business/shipment/create",
             json={
                 "unit_name": "ACME Trading",
-                "items": [{"sku": "sku-1", "qty": 2}],
+                "items": [{"sku": "sku-1", "quantity_tins": 2, "tin_spec": 10}],
                 "contact_person": "Lee",
                 "contact_phone": "13800000000",
             },
@@ -219,7 +219,7 @@ def test_business_shipment_create_route_runs_through_agent_orchestrator(
         "shipment.created",
         {
             "unit_name": "ACME Trading",
-            "items": [{"sku": "sku-1", "qty": 2}],
+            "items": [{"sku": "sku-1", "quantity_tins": 2, "tin_spec": 10}],
             "contact_person": "Lee",
             "contact_phone": "13800000000",
         },

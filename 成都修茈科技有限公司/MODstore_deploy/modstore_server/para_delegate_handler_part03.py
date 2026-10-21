@@ -4,12 +4,82 @@
 from __future__ import annotations
 
 import importlib
+import json
+import re
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
     return importlib.import_module("modstore_server.para_delegate_handler")
+
+
+def _independent_check_plan(req):
+    """Validate read-only units against the saved server plan, never customer input."""
+    raw = req.get("raw_input") or {}
+    units = raw.get("independent_checks")
+    if not units:
+        return [], ""
+    role = raw.get("role")
+    if (
+        not raw.get("_trusted_incident_team_execution")
+        or not raw.get("_incident_continuation")
+        or role not in {"scout", "verify"}
+        or req.get("report_only") is not True
+        or not isinstance(units, list)
+        or not 1 <= len(units) <= 8
+    ):
+        raise ValueError("Independent checks require a durable read-only incident role")
+    from modstore_server.models import IncidentEvent, get_session_factory
+    from modstore_server.node_coordinator import assert_incident_claim
+
+    event_id = int(raw.get("event_id") or 0)
+    with get_session_factory()() as db:
+        assert_incident_claim(event_id, session=db)
+        event = db.get(IncidentEvent, event_id)
+        if event is None:
+            raise ValueError("Independent check incident does not exist")
+        claim = json.loads(event.payload_json or "{}").get("_team_claim") or {}
+        plan = claim.get("plan") or {}
+        row = next((r for r in claim.get("team") or [] if r.get("role") == role), {})
+        if (
+            plan.get("execution_schema") != 2
+            or (plan.get("independent_checks") or {}).get(role) != units
+            or not row.get("attempt_id")
+            or row.get("attempt_id") != raw.get("attempt_id")
+        ):
+            raise ValueError("Independent check plan or attempt does not match the incident")
+        fix = next((r for r in claim.get("team") or [] if r.get("role") == "fix"), {})
+        fixed = {
+            str(output.get("merge_commit_sha") or "")
+            for output in (fix.get("handler_outputs") or {}).get("outputs") or []
+            if output.get("merge_commit_sha")
+        }
+    ids, revisions = set(), set()
+    for unit in units:
+        if (
+            not isinstance(unit, dict)
+            or unit.get("read_only") is not True
+            or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(unit.get("unit_id") or ""))
+            or unit["unit_id"] in ids
+            or not str(unit.get("prompt") or "").strip()
+            or len(str(unit.get("prompt") or "")) > 4000
+            or unit.get("depends_on")
+        ):
+            raise ValueError(
+                "Checks need distinct IDs, bounded prompts and independent read-only scope"
+            )
+        ids.add(unit["unit_id"])
+        if unit.get("source_revision"):
+            revisions.add(str(unit["source_revision"]))
+    if not revisions and role == "verify":
+        revisions = fixed
+    if len(revisions) != 1 or not re.fullmatch(r"[0-9a-fA-F]{40}", next(iter(revisions), "")):
+        raise ValueError("Independent checks require one immutable source revision")
+    revision = next(iter(revisions))
+    if role == "verify" and (not fix.get("ok") or fixed != {revision}):
+        raise ValueError("Verification checks must target the completed fix revision")
+    return units, revision
 
 
 def _normalize_tool_name(name: str) -> str:
@@ -42,10 +112,10 @@ def _excluded_tools(req: _facade().Dict[str, _facade().Any]) -> set[str]:
     for key in ("_para_exclude_tools", "para_exclude_tools"):
         blob = raw.get(key)
         if isinstance(blob, (list, tuple, set)):
-            excluded.update((str(item or "").strip() for item in blob if str(item or "").strip()))
+            excluded.update(str(item or "").strip() for item in blob if str(item or "").strip())
     top = req.get("_para_exclude_tools")
     if isinstance(top, (list, tuple, set)):
-        excluded.update((str(item or "").strip() for item in top if str(item or "").strip()))
+        excluded.update(str(item or "").strip() for item in top if str(item or "").strip())
     return {item for item in excluded if item in _facade()._VALID_DEV_TOOLS}
 
 
@@ -113,7 +183,7 @@ def _is_cli_runtime_failure(
         "executable not found",
         "is not recognized",
     )
-    return any((token in text for token in needles))
+    return any(token in text for token in needles)
 
 
 def _device_discovery_enabled() -> bool:
@@ -193,11 +263,9 @@ def _select_local_device_with_fallback(
     ordered: list = []
     if local_id:
         ordered.extend(
-            (
-                item
-                for item in devices
-                if isinstance(item, dict) and str(item.get("id") or "") == local_id
-            )
+            item
+            for item in devices
+            if isinstance(item, dict) and str(item.get("id") or "") == local_id
         )
     else:
         primary = [item for item in devices if isinstance(item, dict) and item.get("isPrimary")]
@@ -264,7 +332,7 @@ def _resolve_tier(req: _facade().Dict[str, _facade().Any]) -> int:
         if len(specific) > 1:
             return 2
     text = f"{req.get('task') or ''} {req.get('prompt') or ''}"
-    if any((m in text for m in ("多设备", "所有设备", "全部设备", "调用所有设备", "跨设备"))):
+    if any(m in text for m in ("多设备", "所有设备", "全部设备", "调用所有设备", "跨设备")):
         return 2
     return 1
 
@@ -400,7 +468,7 @@ def _multi_device_prompt(
         return base_prompt
     label = device.get("name") or device.get("id") or f"设备{index + 1}"
     suffix = f"\n\n你是第 {index + 1}/{total} 台工作设备（{label}）。请承担可独立完成的部分，避免与其它设备改同一批文件；提交到调度器分配的分支并回写日志。"
-    return base_prompt + suffix
+    return _facade().insert_before_loop_context(base_prompt, suffix)
 
 
 def _para_subtask_title(req: _facade().Dict[str, _facade().Any], index: int, total: int) -> str:

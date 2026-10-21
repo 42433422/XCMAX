@@ -7,15 +7,14 @@
   GET /api/xcmax/aibiz/surface-image  — 单页 PNG 直出（terminal/index/view）
   GET /api/xcmax/aibiz/surface-page   — 单页元数据（含 b64 / saved 路径）
 
-实现委托 ``app.application.aibiz_web_terminal_service``；鉴权在 service 内解析
-（当前会话 market JWT → XCAGI_AIBIZ_MARKET_* 服务账号 → 演示号回退）。
+平台审计入口先校验管理会话，再委托服务解析上游凭据；服务账号不是调用者授权。
 """
 
 from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from app.application.aibiz_web_terminal_service import (
@@ -26,7 +25,20 @@ from app.application.aibiz_web_terminal_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/xcmax/aibiz", tags=["aibiz-terminal"])
+
+def _require_aibiz_admin(request: Request) -> None:
+    from app.fastapi_routes.xcmax_admin_auth import require_market_admin_session
+
+    denied = require_market_admin_session(request)
+    if denied is not None:
+        raise HTTPException(denied.status_code, "需要有效的管理端会话")
+
+
+router = APIRouter(
+    prefix="/api/xcmax/aibiz",
+    tags=["aibiz-terminal"],
+    dependencies=[Depends(_require_aibiz_admin)],
+)
 
 
 @router.get("/web-terminal")

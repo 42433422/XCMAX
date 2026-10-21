@@ -2390,6 +2390,7 @@ class TestEnsureModApiReady:
             encoding="utf-8",
         )
         with (
+            patch("app.fastapi_app.get_fastapi_app") as get_app,
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
             patch(
                 "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
@@ -2411,7 +2412,8 @@ class TestEnsureModApiReady:
             gmm.return_value = mm
             assert ensure_mod_api_ready("artifact-generator") is True
             mm.load_mod.assert_not_called()
-            register.assert_called_once()
+            get_app.assert_called_once()
+            register.assert_called_once_with(get_app.return_value, mm, "artifact-generator")
 
     @pytest.mark.parametrize("requires_http", [True, False])
     def test_already_registered_returns_true(self, requires_http) -> None:

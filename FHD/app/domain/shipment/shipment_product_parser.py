@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.domain.shipment.shipment_quantities import resolve_shipment_quantity
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -101,11 +102,9 @@ def prepare_parsed_products(
         name = p.get("name") or p.get("product_name", "")
         model_number = p.get("model_number", "") or p.get("型号", "")
 
-        quantity_tins = p.get("quantity_tins")
-        if quantity_tins is None:
-            quantity_tins = p.get("quantity", 0)
-
-        tin_spec = p.get("tin_spec") or p.get("spec") or p.get("weight_per_unit") or 10.0
+        quantity_tins, quantity_kg, tin_spec = resolve_shipment_quantity(
+            p, row_index=len(parsed_products) + 1
+        )
 
         if not model_number:
             sku_match = match_product("", str(name or ""), tin_spec, db_products)
@@ -125,12 +124,6 @@ def prepare_parsed_products(
         if unit_price is None:
             unit_price = matched.get("price") if matched else p.get("price", 0)
 
-        quantity_kg = p.get("quantity_kg")
-        if quantity_kg is None:
-            quantity_kg = (_to_float_or_none(quantity_tins) or 0) * (
-                _to_float_or_none(tin_spec) or 0
-            )
-
         amount = p.get("amount")
         if amount is None:
             amount = (_to_float_or_none(unit_price) or 0) * (_to_float_or_none(quantity_kg) or 0)
@@ -141,7 +134,7 @@ def prepare_parsed_products(
                 "name": name,
                 "quantity_kg": quantity_kg,
                 "quantity_tins": int(quantity_tins or 0),
-                "tin_spec": float(tin_spec or 10.0),
+                "tin_spec": tin_spec,
                 "unit_price": float(unit_price or 0),
                 "amount": float(amount or 0),
             }

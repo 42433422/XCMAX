@@ -1464,7 +1464,11 @@ class TestBusinessEventRouter:
             return_value=True,
         ):
             result = _registered_router_business_event(
-                "shipment_create", {"unit_name": "acme"}, _ctx(), "normal", ""
+                "shipment_create",
+                {"unit_name": "acme", "items": [{"name": "p", "quantity_kg": 2}]},
+                _ctx(),
+                "normal",
+                "",
             )
             assert result["success"] is True
 
@@ -1474,7 +1478,11 @@ class TestBusinessEventRouter:
             return_value=False,
         ):
             result = _registered_router_business_event(
-                "shipment_create", {"unit_name": "acme"}, _ctx(), "normal", ""
+                "shipment_create",
+                {"unit_name": "acme", "items": [{"name": "p", "quantity_kg": 2}]},
+                _ctx(),
+                "normal",
+                "",
             )
             assert result["published"] is False and result["success"] is True
 

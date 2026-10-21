@@ -109,14 +109,13 @@ def owned_run(
     requested_binding = principal.mod_authorization or {}
     run_mod = str(binding.get("mod_id") or "")
     requested_mod = str(requested_binding.get("mod_id") or "")
-    # 仅当 run 侧确有 Mod 绑定时才要求严格相等：legacy/compat 执行路径创建的 run
-    # 未写入 runtime_context._mod_authorization（run_mod 为空），此时若仍要求它与
-    # 请求头注入的 active-mod 相等，用户将读不到**自己创建的** run（M9/M10）。
-    # 无绑定时退化为下方的「用户 + 租户」归属校验，未放宽任何跨用户/跨租户边界。
+    # Legacy unbound runs still require the authenticated owner and tenant.
+    # Platform administration is not a grant to access customer task data.
     same_mod = (not run_mod) or run_mod == requested_mod
-    if not same_mod or (
-        not principal.is_admin
-        and (run.user_id != principal.user_id or tenant_id_of_run(run) != principal.tenant_id)
+    if (
+        not same_mod
+        or run.user_id != principal.user_id
+        or tenant_id_of_run(run) != principal.tenant_id
     ):
         return None, JSONResponse(
             {"success": False, "message": "无权访问该 agent run"}, status_code=403

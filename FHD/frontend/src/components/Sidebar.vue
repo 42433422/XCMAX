@@ -76,12 +76,16 @@
           <button
             type="button"
             class="runtime-health-button"
-            :title="runtimeHealth.detail"
-            :aria-label="`${runtimeHealth.text}，打开系统设置`"
+            :title="`${runtimeHealth.detail}；${runtimeHealthCheck.title}`"
+            :aria-label="`${runtimeHealth.text}，${runtimeHealthCheck.text}，打开系统设置`"
             @click="selectView(settingsMenuItem.key)"
           >
             <span class="status-dot" :class="runtimeHealth.tone" aria-hidden="true"></span>
-            <span role="status">{{ runtimeHealth.text }}</span>
+            <span class="runtime-health-labels">
+              <span role="status">{{ runtimeHealth.text }}</span>
+              <time v-if="runtimeHealthCheck.iso" :datetime="runtimeHealthCheck.iso">{{ runtimeHealthCheck.text }}</time>
+              <span v-else class="runtime-health-unchecked">{{ runtimeHealthCheck.text }}</span>
+            </span>
           </button>
           <DesktopAppUpdatePrompt />
           <span
@@ -173,7 +177,7 @@ const {
   syncAdminDeployStatusPolling,
 } = useSidebarAdminDeployStatus()
 
-const { sidebarAppVersionText, sidebarAppVersionTitle, runtimeHealth, startHealthPolling, stopHealthPolling } = useSidebarAppVersion({
+const { sidebarAppVersionText, sidebarAppVersionTitle, runtimeHealth, runtimeHealthCheck, startHealthPolling, stopHealthPolling } = useSidebarAppVersion({
   shouldShowAdminDeployStatus,
 })
 

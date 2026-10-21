@@ -72,10 +72,9 @@ jobs:
           KEY_FILE="${RUNNER_TEMP}/scheduler_watchdog_key"
           printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
+          trap 'rm -f "$KEY_FILE"' EXIT
 
-          # 远端命令：curl health endpoint，解析 JSON，判定完整注册 + 运行 + 待执行任务
-          # 任一不满足 → 视为卡死，重启服务（除非 dry_run=true）
-          # 远端通过 echo "::MARKER::value" 输出，runner 端解析后写入 $GITHUB_OUTPUT
+          # Emit health separately from restart: missing SSH output is unknown.
           REMOTE_CMD=$(cat <<'EOF'
           set -uo pipefail
           URL="${HEALTH_URL:-http://127.0.0.1:9990/api/xcmax/scheduler/health}"
@@ -83,127 +82,119 @@ jobs:
           TIMEOUT="${CURL_TIMEOUT:-20}"
           DRY="${DRY_RUN:-false}"
 
-          resp="$(curl -sS --max-time "$TIMEOUT" -w '\n__HTTP_CODE__%{http_code}' "$URL" 2>/dev/null || true)"
-          code="$(printf '%s' "$resp" | sed -n 's/.*__HTTP_CODE__//p' | tail -n1)"
-          body="$(printf '%s' "$resp" | sed 's/__HTTP_CODE__[0-9]*$//')"
+          probe() {
+            resp="$(curl -sS --max-time "$TIMEOUT" -w '\n__HTTP_CODE__%{http_code}' "$URL" 2>/dev/null || true)"
+            code="$(printf '%s' "$resp" | sed -n 's/.*__HTTP_CODE__//p' | tail -n1)"
+            body="$(printf '%s' "$resp" | sed 's/__HTTP_CODE__[0-9]*$//')"
+            reason="http=${code:-unknown}"
+            [ "$code" = "200" ] || return 1
+            reason="$(printf '%s' "$body" | python3 -c '
+          import json, sys
+          payload = json.load(sys.stdin)
+          data = payload.get("data") or {}
+          pending = data.get("pending_job_count")
+          checks = {
+              "ok": payload.get("ok") is True,
+              **{key: data.get(key) is True for key in (
+                  "scheduler_running", "registration_complete", "runtime_healthy")},
+              "pending_jobs": type(pending) is int and pending >= 1,
+              "required_jobs": data.get("missing_required_jobs") == [],
+              "runtime_jobs": data.get("unhealthy_runtime_jobs") == [],
+          }
+          print("healthy" if all(checks.values()) else "unhealthy",
+                " ".join(f"{key}={value}" for key, value in checks.items()))
+          ' 2>/dev/null)" || reason="invalid_health_response"
+            [ "${reason%% *}" = "healthy" ]
+          }
 
-          echo "--- raw response ---"
-          echo "http_code=$code"
-          printf '%s' "$body" | head -c 4000
-          echo
-          echo "--- end raw ---"
-
-          ok=0
-          reason=""
-          if [ -z "$code" ] || [ "$code" = "000" ]; then
-            reason="curl failed (service unreachable on $URL)"
-          elif [ "$code" != "200" ]; then
-            reason="http=$code (expected 200)"
-          else
-            # 解析 JSON（python3 在 CVM 上一定有）
-            running="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str((d.get("data") or {}).get("scheduler_running", False)).lower())' 2>/dev/null || echo "parse_fail")"
-            healthy="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(d.get("ok", False)).lower())' 2>/dev/null || echo "parse_fail")"
-            complete="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str((d.get("data") or {}).get("registration_complete", False)).lower())' 2>/dev/null || echo "parse_fail")"
-            runtime_healthy="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str((d.get("data") or {}).get("runtime_healthy", False)).lower())' 2>/dev/null || echo "parse_fail")"
-            pending="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("data") or {}).get("pending_job_count", -1))' 2>/dev/null || echo "-1")"
-            missing="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len((d.get("data") or {}).get("missing_required_jobs") or []))' 2>/dev/null || echo "-1")"
-            stale="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len((d.get("data") or {}).get("unhealthy_runtime_jobs") or []))' 2>/dev/null || echo "-1")"
-            echo "healthy=$healthy scheduler_running=$running registration_complete=$complete runtime_healthy=$runtime_healthy pending_job_count=$pending missing_required_jobs=$missing unhealthy_runtime_jobs=$stale"
-            if [ "$healthy" = "true" ] && [ "$running" = "true" ] && [ "$complete" = "true" ] && [ "$runtime_healthy" = "true" ] && [ "$pending" -ge 1 ] && [ "$missing" -eq 0 ] && [ "$stale" -eq 0 ] 2>/dev/null; then
-              ok=1
-            else
-              reason="healthy=$healthy scheduler_running=$running registration_complete=$complete runtime_healthy=$runtime_healthy pending_job_count=$pending missing_required_jobs=$missing unhealthy_runtime_jobs=$stale"
-            fi
-          fi
-
-          if [ "$ok" = "1" ]; then
-            echo "HEALTHY"
-            echo "::restart_triggered::false"
-            echo "::reason::"
+          echo "::restart_triggered::false"
+          if probe; then
+            echo "::health::healthy"
+            echo "::reason::$reason"
             exit 0
           fi
-
-          echo "UNHEALTHY: $reason"
-          echo "::restart_triggered::true"
+          echo "::health::unhealthy"
           echo "::reason::$reason"
-
           if [ "$DRY" = "true" ]; then
-            echo "[dry-run] would have run: systemctl restart $SVC"
+            echo "[dry-run] would restart $SVC; no action taken"
             exit 0
           fi
-
-          echo "[restart] systemctl restart $SVC"
-          systemctl restart "$SVC"
-          code2="000"
-          ok2="false"
+          if ! systemctl restart "$SVC"; then
+            echo "::reason::restart_failed; $reason"
+            exit 1
+          fi
+          echo "::restart_triggered::true"
           for _attempt in $(seq 1 24); do
             sleep 5
-            resp2="$(curl -sS --max-time "$TIMEOUT" -w '\n__HTTP_CODE__%{http_code}' "$URL" 2>/dev/null || true)"
-            code2="$(printf '%s' "$resp2" | sed -n 's/.*__HTTP_CODE__//p' | tail -n1)"
-            body2="$(printf '%s' "$resp2" | sed 's/__HTTP_CODE__[0-9]*$//')"
-            ok2="$(printf '%s' "$body2" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(d.get("ok", False)).lower())' 2>/dev/null || echo "parse_fail")"
-            if [ "$code2" = "200" ] && [ "$ok2" = "true" ]; then
-              break
+            if probe; then
+              echo "::health::healthy"
+              echo "::reason::post_restart $reason; awaiting next independent probe"
+              exit 0
             fi
           done
-          echo "post-restart http=$code2 ok=$ok2"
-          if [ "$code2" = "200" ] && [ "$ok2" = "true" ]; then
-            echo "RECOVERED"
-          else
-            echo "STILL_UNHEALTHY after restart (http=$code2 ok=$ok2) — needs human investigation"
-          fi
+          echo "::reason::still_unhealthy_after_restart; $reason"
           EOF
           )
 
           # 通过 SSH 在 CVM 上执行；环境变量通过 ssh 命令前置 export 传入
           # 注意：不用 ssh -tt（不需要 TTY），让远端 stdout 直接喂给本步的 stdout
+          ssh_status=0
           ssh_output="$(ssh -i "$KEY_FILE" \
             -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=30 \
             "${USER}@${HOST}" \
-            "HEALTH_URL='$HEALTH_URL' SERVICE_NAME='$SERVICE_NAME' CURL_TIMEOUT='$CURL_TIMEOUT' DRY_RUN='$DRY_RUN' bash -s" <<< "$REMOTE_CMD" 2>&1 || true)"
+            "HEALTH_URL='$HEALTH_URL' SERVICE_NAME='$SERVICE_NAME' CURL_TIMEOUT='$CURL_TIMEOUT' DRY_RUN='$DRY_RUN' bash -s" <<< "$REMOTE_CMD" 2>&1)" || ssh_status=$?
 
           echo "$ssh_output"
 
           # 解析远端输出的 ::marker:: 行，写入 $GITHUB_OUTPUT
           restart_triggered="$(printf '%s\n' "$ssh_output" | sed -n 's/^::restart_triggered:://p' | tail -n1)"
           reason="$(printf '%s\n' "$ssh_output" | sed -n 's/^::reason:://p' | tail -n1)"
-          [ -n "$restart_triggered" ] || restart_triggered="false"
+          health="$(printf '%s\n' "$ssh_output" | sed -n 's/^::health:://p' | tail -n1)"
+          [ -n "$restart_triggered" ] || restart_triggered="unknown"
+          [ -n "$health" ] || health="unknown"
+          if [ "$ssh_status" -ne 0 ]; then
+            health="unknown"
+            reason="ssh_or_remote_failed=$ssh_status; $reason"
+          fi
           [ -n "$reason" ] || reason="unknown (marker not found in ssh output)"
 
           {
+            echo "health=$health"
             echo "restart_triggered=${restart_triggered}"
             echo "reason<<EOF"
             printf '%s\n' "$reason"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-          echo "final: restart_triggered=$restart_triggered reason=$reason"
+          echo "final: health=$health restart_triggered=$restart_triggered reason=$reason"
 
       - name: Open or update incident issue
-        if: steps.probe.outputs.restart_triggered == 'true'
+        if: inputs.dry_run != true && steps.probe.outputs.health != '' && (steps.probe.outputs.health != 'healthy' || steps.probe.outputs.restart_triggered == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           REASON: ${{ steps.probe.outputs.reason }}
+          HEALTH: ${{ steps.probe.outputs.health }}
+          RESTARTED: ${{ steps.probe.outputs.restart_triggered }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
         run: |
           set -uo pipefail
-          gh label create scheduler-watchdog --description "调度器卡死自动重启事故" --color B60205 --force || true
-          BODY="$(printf 'modstore-scheduler 探测失败，已自动重启。\n\n- **服务**: %s\n- **原因**: %s\n- **健康端点**: %s\n- **运行**: %s/%s/actions/runs/%s\n\n处置手册: 见 docs/runbooks/release-checklist.md 调度器章节' \
-            "$SERVICE_NAME" "$REASON" "${HEALTH_URL}" "$GITHUB_SERVER_URL" "$GH_REPO" "$GITHUB_RUN_ID")"
+          gh label create scheduler-watchdog --description "调度器健康检查与处置事故" --color B60205 --force || true
+          BODY="$(printf '调度器探测/处置回执；重启后的健康结果需下轮独立探测确认。\n\n- **健康状态**: %s\n- **重启命令成功**: %s\n- **服务**: %s\n- **原因**: %s\n- **健康端点**: %s\n- **运行**: %s/%s/actions/runs/%s\n\n处置手册: 见 docs/runbooks/release-checklist.md 调度器章节' \
+            "$HEALTH" "$RESTARTED" "$SERVICE_NAME" "$REASON" "${HEALTH_URL}" "$GITHUB_SERVER_URL" "$GH_REPO" "$GITHUB_RUN_ID")"
           EXISTING="$(gh issue list --label scheduler-watchdog --state open --json number --jq '.[0].number // ""')"
           if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body "仍在故障 ($(date -u '+%Y-%m-%d %H:%M UTC')): $REASON"
+            gh issue comment "$EXISTING" --body "$BODY"
           else
             gh issue create \
-              --title "🔴 modstore-scheduler 卡死已自动重启" \
+              --title "🔴 modstore-scheduler 健康异常待复核" \
               --label scheduler-watchdog \
               --body "$BODY"
           fi
 
       - name: Close incident on recovery
-        if: steps.probe.outputs.restart_triggered != 'true'
+        if: inputs.dry_run != true && steps.probe.outputs.health == 'healthy' && steps.probe.outputs.restart_triggered == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -211,6 +202,12 @@ jobs:
           set -uo pipefail
           EXISTING="$(gh issue list --label scheduler-watchdog --state open --json number --jq '.[0].number // ""')"
           if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body "✅ 调度器恢复健康 ($(date -u '+%Y-%m-%d %H:%M UTC'))，自动关闭。"
+            gh issue comment "$EXISTING" --body "✅ 调度器独立健康检查通过 ($(date -u '+%Y-%m-%d %H:%M UTC'))，自动关闭。"
             gh issue close "$EXISTING"
           fi
+
+      - name: Fail when health is unverified
+        if: always() && steps.probe.outputs.health != 'healthy'
+        run: |
+          echo "::error::Scheduler health is unhealthy or unknown; incident remains open."
+          exit 1

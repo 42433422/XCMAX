@@ -23,6 +23,40 @@ def _disable_lan_guard(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_lan_config_cache()
 
 
+@pytest.fixture
+def client(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
+    from app.config import TestingConfig
+    from app.fastapi_app import factory
+
+    # Preserve another suite's singleton, but never reuse its partial bootstrap app.
+    monkeypatch.setattr(factory, "_app_singleton", factory._app_singleton)
+    monkeypatch.setenv("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
+    monkeypatch.setattr(
+        "app.fastapi_app.mod_startup.bootstrap_mod_extensions_sync", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        "app.fastapi_app.mod_startup.schedule_background_mod_load", lambda app: None
+    )
+    cached = None
+    if getattr(request, "param", None) == "cached-bootstrap":
+        monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "1")
+        cached = factory.create_fastapi_app(TestingConfig, enable_cors=False)
+        assert cached.state.deferred_routes_pending is True
+    monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "0")
+    app = factory.create_fastapi_app(TestingConfig, enable_cors=False)
+    assert app is not cached
+    test_client = TestClient(app, raise_server_exceptions=False)
+    try:
+        yield test_client
+    finally:
+        test_client.close()
+
+
+@pytest.mark.parametrize("client", ["cached-bootstrap"], indirect=True)
+def test_oidc_contract_ignores_preexisting_bootstrap_singleton(client: TestClient):
+    assert client.get("/api/auth/oidc/status").status_code == 200
+
+
 def test_oidc_status_disabled(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("XCAGI_OIDC_ENABLED", raising=False)
     resp = client.get("/api/auth/oidc/status")

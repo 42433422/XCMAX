@@ -266,7 +266,7 @@ class TestDigestLocalOrProxyBranches:
     """Hit the missing branches in _digest_local_or_proxy."""
 
     @pytest.mark.asyncio
-    async def test_prefer_local_post_falls_through_to_proxy(self):
+    async def test_prefer_local_post_falls_through_to_proxy(self, digest_admin_branch):
         """Lines 175: prefer_local=True but method POST → skips local, goes to proxy."""
         req = _mock_request()
         proxy_result = {"proxied": True}
@@ -284,7 +284,7 @@ class TestDigestLocalOrProxyBranches:
         assert result == proxy_result
 
     @pytest.mark.asyncio
-    async def test_prefer_local_false_uses_proxy_with_admin_session(self):
+    async def test_prefer_local_false_uses_proxy_with_admin_session(self, digest_admin_branch):
         """Lines 216-222: prefer_local=False → require_admin_session=True."""
         req = _mock_request()
         proxy_result = {"ok": True}
@@ -304,7 +304,7 @@ class TestDigestLocalOrProxyBranches:
         assert kwargs.get("require_admin_session") is True
 
     @pytest.mark.asyncio
-    async def test_daily_digests_with_limit_offset_params(self):
+    async def test_daily_digests_with_limit_offset_params(self, digest_admin_branch):
         """Lines 183-187: path has limit= and offset= query params parsed correctly."""
         req = _mock_request()
         svc_result = {"items": []}
@@ -328,7 +328,7 @@ class TestDigestLocalOrProxyBranches:
         assert result == svc_result
 
     @pytest.mark.asyncio
-    async def test_daily_digests_artifacts_path(self):
+    async def test_daily_digests_artifacts_path(self, digest_admin_branch):
         """Lines 188-190: path ends with /artifacts."""
         req = _mock_request()
         arts_result = {"artifacts": []}
@@ -348,7 +348,7 @@ class TestDigestLocalOrProxyBranches:
         assert result == arts_result
 
     @pytest.mark.asyncio
-    async def test_action_items_stats_with_params(self):
+    async def test_action_items_stats_with_params(self, digest_admin_branch):
         """Lines 194-202: action-items/stats path with kind and day."""
         req = _mock_request()
         stats_result = {"total": 10}
@@ -368,7 +368,7 @@ class TestDigestLocalOrProxyBranches:
         assert result == stats_result
 
     @pytest.mark.asyncio
-    async def test_action_items_list_with_params(self):
+    async def test_action_items_list_with_params(self, digest_admin_branch):
         """Lines 203-211: action-items list path with kind and day."""
         req = _mock_request()
         list_result = {"items": []}
@@ -388,7 +388,7 @@ class TestDigestLocalOrProxyBranches:
         assert result == list_result
 
     @pytest.mark.asyncio
-    async def test_local_digest_raises_returns_502(self):
+    async def test_local_digest_raises_returns_502(self, digest_admin_branch):
         """Lines 212-214: RECOVERABLE_ERRORS in local path → 502."""
         req = _mock_request()
         with (

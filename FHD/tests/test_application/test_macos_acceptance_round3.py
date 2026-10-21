@@ -93,7 +93,11 @@ def test_shipment_create_records_the_unit(monkeypatch) -> None:
         "app.neuro_bus.application_neuro_bridge.publish_neuro_event", lambda *_a, **_k: True
     )
     result = _registered_router_business_event(
-        "shipment_create", {"unit_name": "MAC验收出货客户", "items": []}, {}, "admin", ""
+        "shipment_create",
+        {"unit_name": "MAC验收出货客户", "items": [{"product_name": "Paint", "quantity_kg": 2}]},
+        {},
+        "admin",
+        "",
     )
     assert result["published"] is True and result["record_id"] == 42
     assert seen["unit"] == "MAC验收出货客户"

@@ -57,9 +57,17 @@ async def get_mobile_user(
     from app.db.session import get_db
 
     authorization_value = authorization or ""
-    jwt_payload = None
+    jwt_payload = {}
     if authorization_value.startswith("Bearer "):
-        jwt_payload = verify_mobile_jwt(authorization_value[7:].strip())
+        jwt_payload = verify_mobile_jwt(authorization_value[7:].strip()) or {}
+    from app.infrastructure.auth.mobile_session import ADMIN_ACCOUNT_KINDS, current_mobile_admin
+
+    if str((jwt_payload or {}).get("account_kind") or "").strip().lower() in ADMIN_ACCOUNT_KINDS:
+        if (jwt_payload or {}).get("typ") != "access":
+            return None
+        user = current_mobile_admin(jwt_payload.get("user_id"), jwt_payload.get("session_id"))
+        _bind_mobile_user_tenant_to_request(request, user)
+        return user
     uid = user_id_from_mobile_bearer(authorization_value)
     if uid is None and authorization_value.startswith("Bearer "):
         fallback_user = _mobile_user_from_jwt_payload(jwt_payload or {})
@@ -72,15 +80,6 @@ async def get_mobile_user(
             with get_db() as db:
                 user = db.query(User).filter(User.id == uid).first()
                 if user and user.is_active:
-                    jwt_account_kind = (
-                        str((jwt_payload or {}).get("account_kind") or "").strip().lower()
-                    )
-                    jwt_admin = jwt_account_kind in {"admin", "admin_portal"}
-                    user_role = str(getattr(user, "role", "") or "").strip()
-                    if jwt_admin and user_role not in {"admin", "super_admin", "owner"}:
-                        fallback = _mobile_user_from_jwt_payload(jwt_payload or {})
-                        if fallback is not None:
-                            return fallback
                     _ = (
                         user.id,
                         user.username,
@@ -104,6 +103,8 @@ async def get_mobile_user(
     from app.infrastructure.auth.dependencies import resolve_session_user
 
     user = resolve_session_user(request)
+    if user is not None and not getattr(user, "is_active", False):
+        user = None
     _bind_mobile_user_tenant_to_request(request, user)
     return user
 

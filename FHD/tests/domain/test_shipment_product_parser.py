@@ -41,7 +41,9 @@ def test_match_product_prefers_longest_contained_name() -> None:
 
 def test_prepare_parsed_products_accepts_ai_shipment_fields() -> None:
     rows = prepare_parsed_products(
-        input_products=[{"product_name": "QA-M4-10006", "quantity": 2, "weight_per_unit": 0.2}],
+        input_products=[
+            {"product_name": "QA-M4-10006", "quantity": 2, "unit": "件", "weight_per_unit": 0.2}
+        ],
         db_products=[dict(_DB[0], model_number="QA-M4-10006")],
     )
     row = rows[0]

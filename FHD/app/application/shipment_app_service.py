@@ -13,6 +13,11 @@ from app.application.ports import (
 )
 from app.application.shipment_document_workflows import ShipmentDocumentWorkflowMixin
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
+from app.domain.shipment.shipment_quantities import (
+    ShipmentQuantityValidationError,
+    resolve_shipment_quantity,
+    validate_shipment_products,
+)
 from app.legacy.domain.legacy_vo import ContactInfo
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -62,6 +67,7 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
         系统主键仍由仓储分配（历史兼容）。
         """
         try:
+            validate_shipment_products(items_data)
             contact_info = ContactInfo(person=contact_person, phone=contact_phone)
             shipment = Shipment.create(unit_name=unit_name, contact_info=contact_info)
 
@@ -108,6 +114,8 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
                 "shipment": payload,
             }
 
+        except ShipmentQuantityValidationError as exc:
+            return exc.result()
         except RECOVERABLE_ERRORS:
             logger.exception("创建发货单失败")
             return {"success": False, "message": "创建失败"}
@@ -315,9 +323,7 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
         total_kg = 0.0
 
         for item_data in items_data:
-            tins = item_data.get("quantity_tins", 0)
-            spec = item_data.get("tin_spec", 10.0)
-            kg = tins * spec
+            tins, kg, _ = resolve_shipment_quantity(item_data)
             price = item_data.get("unit_price", 0)
 
             total_tins += tins

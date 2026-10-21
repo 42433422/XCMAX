@@ -118,7 +118,7 @@ class TestShipmentApplicationService:
 
         result = app_service.generate_shipment_document(
             unit_name="测试单位",
-            products=[{"product_name": "产品A", "quantity": 1}],
+            products=[{"product_name": "产品A", "quantity_kg": 1}],
         )
 
         assert result["success"] is True
@@ -211,7 +211,7 @@ class TestShipmentAppServiceGenerate:
         )
         result = app_service.generate_shipment_document(
             unit_name="测试单位",
-            products=[{"product_name": "产品A", "quantity": 1}],
+            products=[{"product_name": "产品A", "quantity_kg": 1}],
         )
 
         assert result["success"] is True

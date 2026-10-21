@@ -58,15 +58,13 @@ class Quantity:
             primary = 0
         if secondary is None:
             secondary = 0.0
-        if spec is None:
-            spec = 10.0
         if primary < 0:
             raise ValueError("桶数不能为负数")
         if secondary < 0:
             raise ValueError("重量不能为负数")
         self.primary = int(primary)
         self.secondary = float(secondary)
-        self.spec = float(spec)
+        self.spec = float(spec) if spec is not None else None
         self._industry_config = industry_config or get_current_industry_config()
 
     @property
@@ -80,7 +78,7 @@ class Quantity:
         return self.secondary
 
     @property
-    def spec_per_tin(self) -> float:
+    def spec_per_tin(self) -> float | None:
         """涂料行业兼容：获取每桶规格"""
         return self.spec
 
@@ -157,9 +155,14 @@ class Quantity:
         }
 
     @classmethod
-    def from_tins_and_spec(cls, tins: int, spec_per_tin: float = 10.0) -> "Quantity":
+    def from_tins_and_spec(cls, tins: int, spec_per_tin: float) -> "Quantity":
         """涂料行业兼容工厂方法"""
-        return cls(primary=tins, secondary=tins * spec_per_tin, spec=spec_per_tin)
+        from app.domain.shipment.shipment_quantities import resolve_shipment_quantity
+
+        primary, secondary, spec = resolve_shipment_quantity(
+            {"quantity_tins": tins, "tin_spec": spec_per_tin}
+        )
+        return cls(primary=primary, secondary=secondary, spec=spec)
 
     @classmethod
     def from_primary_and_spec(cls, primary: int, spec: float) -> "Quantity":
@@ -183,9 +186,13 @@ class Quantity:
 
         primary = data.get(primary_field, data.get("tins", data.get("primary", 0)))
         secondary = data.get(secondary_field, data.get("kg", data.get("secondary", 0.0)))
-        spec = data.get(spec_field, data.get("spec_per_tin", data.get("spec", 10.0)))
+        spec = data.get(spec_field, data.get("spec_per_tin", data.get("spec")))
 
-        return cls(primary=int(primary), secondary=float(secondary), spec=float(spec))
+        return cls(
+            primary=int(primary),
+            secondary=float(secondary),
+            spec=float(spec) if spec is not None else None,
+        )
 
 
 @dataclass(frozen=True)

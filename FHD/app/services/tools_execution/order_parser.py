@@ -16,6 +16,7 @@ from app.services.tools_execution.order_parser_helpers import (
     parse_cn_number,
     retail_quantity_price_order,
     strip_bill_keywords,
+    structured_order_result,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -29,6 +30,9 @@ _ORDER_SCHEMA = {
         "model_number": {"type": "string"},
         "tin_spec": {"type": "string"},
         "quantity_tins": {"type": "string"},
+        "quantity_kg": {"type": "string"},
+        "quantity": {"type": "string"},
+        "unit": {"type": "string"},
     },
 }
 
@@ -351,7 +355,7 @@ def _parse_order_text(order_text: str) -> dict:
                             "products": [
                                 {
                                     "name": product_name,
-                                    "tin_spec": 10.0,
+                                    "unit": unit_or_measure,
                                 }
                             ],
                         }
@@ -374,7 +378,7 @@ def _parse_order_text(order_text: str) -> dict:
                             if not model_number:
                                 return {"success": False, "message": "解析数字失败（型号无法识别）"}
 
-                            spec = float(groups[3]) if len(groups) > 3 else 10.0
+                            parsed_spec = float(groups[3]) if len(groups) > 3 else None
                         except RECOVERABLE_ERRORS:
                             return {"success": False, "message": "解析数字失败"}
 
@@ -386,7 +390,7 @@ def _parse_order_text(order_text: str) -> dict:
                                     "name": "",
                                     "model_number": model_number,
                                     "quantity_tins": quantity,
-                                    "tin_spec": spec,
+                                    "tin_spec": parsed_spec,
                                 }
                             ],
                         }
@@ -425,7 +429,8 @@ def _parse_order_text(order_text: str) -> dict:
 
                 prompt = (
                     "请从下面中文订单口语中抽取 JSON 字段："
-                    "unit_name, model_number, tin_spec, quantity_tins。"
+                    "unit_name, model_number, tin_spec, quantity_tins, quantity_kg, quantity, unit。"
+                    "仅提取原文明示的值；件数不能当公斤，缺规格不得补成10或1。"
                     "仅返回 JSON，不要解释，不要 markdown。\n"
                     f"文本：{text}"
                 )
@@ -446,36 +451,7 @@ def _parse_order_text(order_text: str) -> dict:
                 except RECOVERABLE_ERRORS:
                     structured = None
                 if structured is not None:
-                    parsed = structured.data
-                    ai_unit = cleanup_unit_name(str(parsed.get("unit_name", "")).strip())
-                    ai_model = str(parsed.get("model_number", "")).strip()
-                    ai_spec_raw = str(parsed.get("tin_spec", "")).strip()
-                    ai_qty_raw = str(parsed.get("quantity_tins", "")).strip()
-                    ai_spec = parse_cn_number(ai_spec_raw) if ai_spec_raw else None
-                    ai_qty = parse_cn_number(ai_qty_raw) if ai_qty_raw else None
-
-                    missing_prompt = build_missing_prompt(
-                        unit_name=ai_unit,
-                        model_number=ai_model or None,
-                        tin_spec=ai_spec,
-                        quantity_tins=int(ai_qty) if ai_qty else None,
-                    )
-                    if missing_prompt:
-                        return {"success": False, "message": missing_prompt}
-
-                    if ai_unit and ai_model and ai_spec and ai_qty:
-                        return {
-                            "success": True,
-                            "unit_name": ai_unit,
-                            "products": [
-                                {
-                                    "name": "",
-                                    "model_number": ai_model,
-                                    "quantity_tins": int(ai_qty),
-                                    "tin_spec": float(ai_spec),
-                                }
-                            ],
-                        }
+                    return structured_order_result(structured.data)
         except RECOVERABLE_ERRORS as ai_err:
             logger.warning("AI 结构化抽取兜底失败，回退规则流程: %s", ai_err)
 
