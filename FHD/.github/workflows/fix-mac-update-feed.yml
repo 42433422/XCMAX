@@ -42,7 +42,7 @@ jobs:
           [[ "$ARM_RUN" =~ ^[1-9][0-9]*$ && "$X64_RUN" =~ ^[1-9][0-9]*$ ]]
           test "$ARM_RUN" != "$X64_RUN"
           test "$(git rev-parse HEAD)" = "$BUILD_SHA"
-          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$BUILD_SHA"
+          relation="$(gh api "repos/$GITHUB_REPOSITORY/compare/$BUILD_SHA...main" --jq .status)"; case "$relation" in ahead|identical) ;; *) exit 1 ;; esac
           if [ "$PUBLISH" = true ]; then
             test "$ENABLED" = true
             test "$AUTHORIZED_SHA" = "$BUILD_SHA"
@@ -128,7 +128,7 @@ jobs:
           FHD_PUSH_HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
         run: |
           set -euo pipefail
-          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$BUILD_SHA"
+          relation="$(gh api "repos/$GITHUB_REPOSITORY/compare/$BUILD_SHA...main" --jq .status)"; case "$relation" in ahead|identical) ;; *) exit 1 ;; esac
           bash scripts/package/publish-macos-download-center.sh "$PRODUCT_VERSION" "$BUILD_SHA" "$PAIR_OUTPUT" --publish
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
