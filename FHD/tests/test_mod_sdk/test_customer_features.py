@@ -205,8 +205,7 @@ def test_shared_runtime_conversion_routes_are_all_guarded(monkeypatch, tmp_path)
         "app.infrastructure.auth.dependencies.get_logged_in_user", lambda _: SimpleNamespace(id=99)
     )
     monkeypatch.setattr(
-        "app.infrastructure.mods.install_receipts.read_verified_install",
-        lambda *_args, **_kwargs: None,
+        "app.infrastructure.mods.install_receipts.read_verified_install", lambda _: None
     )
     router = APIRouter()
     module.register(
