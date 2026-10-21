@@ -579,7 +579,7 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
 
 
   it.each([['custom-1', undefined], ['taiyangniao-pro', 'sunbird-attendance-custom']])('runBootstrap：客户包 %s 安装实际运行包', async (modId, runtimeModId) => {
-    const missing = createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: [modId], groups: [{ id: 'custom', title: '客户包', hint: '', items: [{ mod_id: modId, runtime_mod_id: runtimeModId, label: '客户包', tier: 'account_custom', required: true, installed: false }] }] })
+    const missing = createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: [modId], groups: [{ id: 'custom', title: '客户包', hint: '', items: [{ mod_id: modId, runtime_mod_id: runtimeModId, delivery_status: runtimeModId ? 'delivered' : undefined, label: '客户包', tier: 'account_custom', required: true, installed: false }] }] })
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: missing,
@@ -790,7 +790,7 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
   })
 
   it('explains pending custom delivery after the host is ready', async () => {
-    const groups = [{ id: 'account_custom', items: [{ label: 'Pending workflow', installed: false }, { label: 'Delivered workflow', installed: true }] }]
+    const groups = [{ id: 'account_custom', items: [{ label: 'Pending workflow', installed: false, delivery_deferred: true, delivery_status: 'production' }, { label: 'Delivered workflow', installed: true }] }]
     const { wrapper } = await mountComponent({ baseline: createBaselinePlan({ baseline_ready: true, groups }) })
     expect(await (wrapper.vm as any).runBootstrap()).toBe(true)
     expect(mockContainer.appAlert).toHaveBeenCalledWith(expect.stringContaining('Pending workflow'))
@@ -816,6 +816,48 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     expect(mockContainer.patchWorkspacePrefs).not.toHaveBeenCalled()
     expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
     expect(mockContainer.installHostFoundation).not.toHaveBeenCalled()
+  })
+
+  it.each(['production', 'testing', 'acceptance', 'rework', 'partial'])('does not install or seed deferred private delivery (%s)', async (status) => {
+    const baseline = createBaselinePlan({
+      baseline_ready: true,
+      missing_account_custom_mod_ids: ['private'],
+      deferred_account_custom_mod_ids: ['private'],
+      account_delivery_seed_packages: [{ mod_id: 'runtime-private' }],
+      groups: [{ id: 'account_custom', title: '客户包', hint: '', items: [{
+        mod_id: 'private', runtime_mod_id: 'runtime-private', label: 'Pending private',
+        tier: 'account_custom', required: false, installed: false,
+        delivery_status: status, delivery_deferred: true,
+      }] }],
+    })
+    const { wrapper } = await mountComponent({ route: { step: 'host-pack' }, baseline })
+    expect(wrapper.text()).toContain('待供应商交付')
+    expect(await (wrapper.vm as any).runBootstrap()).toBe(true)
+    expect(mockContainer.installHostFoundation).toHaveBeenCalledOnce()
+    await press(wrapper, '进入我的工作空间')
+    expect(mockContainer.installPrivateMod).not.toHaveBeenCalled()
+    expect(mockContainer.installMod).not.toHaveBeenCalled()
+    expect(mockContainer.installCustomerDeliverySeed).not.toHaveBeenCalled()
+    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
+  })
+
+  it('keeps delivered-but-missing private installation failure blocking', async () => {
+    const baseline = createBaselinePlan({ baseline_ready: false,
+      missing_required_mod_ids: ['private'], missing_account_custom_mod_ids: ['private'],
+      groups: [{ id: 'account_custom', title: '客户包', hint: '', items: [{
+        mod_id: 'private', runtime_mod_id: 'runtime-private', label: 'Delivered private',
+        tier: 'account_custom', required: true, installed: false,
+        delivery_status: 'delivered', delivery_deferred: false,
+      }] }],
+    })
+    const { wrapper } = await mountComponent({ route: { step: 'host-pack' }, baseline })
+    mockContainer.installPrivateMod.mockResolvedValue({ success: false, message: 'download failed' })
+    expect(wrapper.text()).toContain('已交付，待安装')
+    await press(wrapper, '进入我的工作空间')
+    expect(mockContainer.installPrivateMod).toHaveBeenCalledWith('private')
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    expect(mockContainer.appAlert.mock.calls.flat().join(' ')).toContain('download failed')
+    expect(mockContainer.appAlert.mock.calls.flat().join(' ')).not.toContain('待供应商交付')
   })
 
 })
