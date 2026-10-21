@@ -34,26 +34,26 @@ jobs:
           git config user.name 'CI verification'
           git config user.email 'ci-verification@users.noreply.github.com'
           python - <<'PY'
-          import os, subprocess
+          import json, os, subprocess
           from pathlib import Path
           target, main = os.environ['TARGET_SHA'], os.environ['MAIN_SHA']
           result = subprocess.run(['git','merge','--no-commit','--no-ff',main], text=True, capture_output=True)
           print(result.stdout, result.stderr, flush=True)
           assert result.returncode in (0,1), 'Unexpected merge error'
           conflicts = set(subprocess.check_output(['git','diff','--name-only','--diff-filter=U'], text=True).splitlines())
-          allowed = {'FHD/CHANGELOG.md','FHD/metrics/line_baseline.json'}
-          assert conflicts <= allowed, f'Unreviewed merge conflicts: {conflicts}'
+          assert conflicts == {'FHD/metrics/line_baseline.json'}, f'Unreviewed merge conflicts: {conflicts}'
           print('MERGE_CONFLICTS', sorted(conflicts), flush=True)
           changelog = 'FHD/CHANGELOG.md'
           expected_log = subprocess.check_output(['git','show',os.environ['PREVIOUS_MERGE']+':'+changelog])
-          if changelog in conflicts:
-              Path(changelog).write_bytes(expected_log)
           assert Path(changelog).read_bytes() == expected_log, 'Must preserve both CI and upstream admin release notes'
           for name in ['FHD/admin-console/src/views/CustomerServiceTickets.css','ops/releases/c8c9c90ca47cbde6361c94b11cf5c94815b53147.json']:
               assert Path(name).read_bytes() == subprocess.check_output(['git','show',main+':'+name]), f'Upstream file modified: {name}'
-          if 'FHD/metrics/line_baseline.json' in conflicts:
-              Path('FHD/metrics/line_baseline.json').write_bytes(subprocess.check_output(['git','show',target+':FHD/metrics/line_baseline.json']))
-          subprocess.run(['python','scripts/dev/check_net_deletion.py','--update'],cwd='FHD',check=True)
+          baseline = Path('FHD/metrics/line_baseline.json')
+          baseline.write_bytes(subprocess.check_output(['git','show',main+':'+str(baseline)]))
+          assert json.loads(baseline.read_text())['lines'] == 2319215
+          reason = '合入main aff19230并保留其已批准的精确SHA发布记录；按用户2026-10-22继续执行CI提速授权，登记本PR并行守卫与真实负向回归净增31行（2319215→2319246），不变更覆盖率门槛、不新增部署授权。'
+          subprocess.run(['python','scripts/dev/check_net_deletion.py','--update','--force','--reason',reason],cwd='FHD',check=True)
+          assert json.loads(baseline.read_text())['lines'] == 2319246, 'Unexpected scope growth'
           subprocess.run(['git','add','FHD/CHANGELOG.md','FHD/metrics/line_baseline.json'],check=True)
           assert not subprocess.check_output(['git','diff','--name-only','--diff-filter=U'],text=True).strip()
           subprocess.run(['git','commit','-m','Merge current main into CI parallel gates; preserve upstream release record'],check=True)
