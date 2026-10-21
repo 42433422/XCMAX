@@ -38,7 +38,6 @@ usePrivateDeliverySync()
     </MainLayout>
   </div>
 </template>
-
 <style>
 .app-shell {
   opacity: 1;
