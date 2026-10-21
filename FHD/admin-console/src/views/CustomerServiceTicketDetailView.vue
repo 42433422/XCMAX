@@ -162,7 +162,10 @@ const canCorrectClassification = computed(() => ticket.value.status === 'process
 const evidence = computed<Row>(() => Object.fromEntries(Object.entries(
   (ticket.value.evidence || {}) as Row,
 ).filter(([key]) => key !== 'support_bundle_base64')))
-const requiresCustomerAcceptance = computed(() => ['product_issue', 'custom_delivery'].includes(String(ticket.value.intent)) || evidence.value.delivery_managed_by === 'custom_delivery')
+const requiresCustomerAcceptance = computed(() => ['product_issue', 'custom_delivery'].includes(String(ticket.value.intent))
+  || evidence.value.delivery_managed_by === 'custom_delivery'
+  || String(evidence.value.issue_domain || '') === 'custom'
+  || String(evidence.value.source || '') === 'private_mod_rework')
 const resolution = computed(() => {
   const value = evidence.value.resolution
   return value && typeof value === 'object' ? value as Row : null
@@ -180,7 +183,7 @@ const message = (cause: unknown) => cause instanceof Error ? cause.message : Str
 function backToList() { void router.push({ name: 'customer-service-tickets' }) }
 
 watch([closeNote, closeVerification, closeDisposition], () => { closeRequestId.value = '' })
-watch(ticket, () => { closeDisposition.value = requiresCustomerAcceptance.value ? 'expired' : 'resolved' })
+watch([ticketId, requiresCustomerAcceptance], () => { closeDisposition.value = requiresCustomerAcceptance.value ? 'expired' : 'resolved' })
 
 async function closeTicket() {
   const id = ticketId.value

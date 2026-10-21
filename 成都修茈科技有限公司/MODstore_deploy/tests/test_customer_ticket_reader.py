@@ -344,6 +344,10 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
                     json={**body, "request_id": str(uuid.uuid4())},
                 )
                 assert guarded.status_code == 409
+                status = client.get(f"/api/customer-service/tickets/{protected_id}").json()[
+                    "ticket"
+                ]["status"]
+                assert status == "processing"
         updated = client.patch(eta_url, json=eta)
         assert updated.status_code == 200
         assert updated.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
