@@ -137,6 +137,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import api from '@/api/core'
+import { appPrompt } from '@/utils/appDialog'
 import {
   auditItems, buildTimeline, formatBeijingTime, intentLabel, parseServerTime, prettyJson, priorityLabel, resolutionStateBadge,
   routeLabel, submitterTypeLabel, teamMembers, ticketStatusBadge, yesNoBadge, type Row,
@@ -145,13 +146,9 @@ import {
 type Detail = { ticket: Row; decisions: Row[]; actions: Row[]; audit_logs: Row[] }
 const route = useRoute()
 const router = useRouter()
-const detail = ref<Detail | null>(null)
-const loading = ref(false), error = ref('')
-const saving = ref(false)
-const expectedCompletionInput = ref('')
+const detail = ref<Detail | null>(null), loading = ref(false), error = ref(''), saving = ref(false), expectedCompletionInput = ref('')
 const savingEta = ref(false), etaMessage = ref(''), etaError = ref('')
-const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref('')
-const closeDisposition = ref('resolved')
+const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref(''), closeDisposition = ref('resolved')
 let generation = 0
 
 const ticketId = computed(() => Number(String(route.params.ticketId ?? '')))
@@ -203,8 +200,8 @@ async function closeTicket() {
 async function correctTitle(reclassify = false) {
   if (saving.value || savingEta.value || (reclassify && !canCorrectClassification.value)) return
   const id = ticketId.value, expectedTitle = String(ticket.value.title || '')
-  const title = reclassify ? expectedTitle : window.prompt('请输入此工单的正确标题', expectedTitle)?.trim()
-  const reason = reclassify ? window.prompt('将原单纠正为平台功能问题，保留编号、历史和资金记录。请输入修正原因（至少8字）')?.trim() : ''
+  const title = reclassify ? expectedTitle : (await appPrompt('请输入此工单的正确标题', expectedTitle))?.trim()
+  const reason = reclassify ? (await appPrompt('将原单纠正为平台功能问题，保留编号、历史和资金记录。请输入修正原因（至少8字）'))?.trim() : ''
   if (reclassify && reason && reason.length < 8) { error.value = '分类修正原因至少8字，请重新填写'; return }
   if (!title || (!reclassify && title === expectedTitle) || (reclassify && (!reason || reason.length < 8))) return
   saving.value = true
