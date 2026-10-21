@@ -30,11 +30,11 @@ def test_shared_document_sequence_and_restart(allocator):
     generator = loaded.ShipmentDocumentGenerator(
         db_path=str(folder / "products.db"), output_dir=str(folder)
     )
-    doc1 = generator.generate_document("", {"products": [{"name": "first"}]})
+    doc1 = generator.generate_document("", {"products": [{"name": "first", "quantity_kg": 2}]})
     from app.application.shipment_app_service import ShipmentApplicationService
 
     preview = ShipmentApplicationService.reserve_order_number()
-    doc2 = generator.generate_document("", {"products": [{"name": "second"}]})
+    doc2 = generator.generate_document("", {"products": [{"name": "second", "quantity_kg": 2}]})
     assert [doc1.order_number, preview["order_number"], doc2.order_number] == [
         f"{preview['year_month']}-{i:05d}A" for i in (1, 2, 3)
     ]
@@ -46,7 +46,7 @@ def test_shared_document_sequence_and_restart(allocator):
             "-c",
             "from app.legacy.documents.legacy_shipment_document import load_legacy_shipment_document_generator as load; "
             "import os; g=load(caller_file=__file__ if '__file__' in globals() else 'test').ShipmentDocumentGenerator("
-            "output_dir=os.environ['XCAGI_DATA_DIR']); print(g.generate_document('', {'products': [{'name': 'restart'}]}).order_number)",
+            "output_dir=os.environ['XCAGI_DATA_DIR']); print(g.generate_document('', {'products': [{'name': 'restart', 'quantity_kg': 2}]}).order_number)",
         ],
         env=env,
         text=True,
@@ -89,7 +89,7 @@ def test_failure_creates_no_document(allocator, monkeypatch):
         lambda: create_engine(f"sqlite:///{folder / 'missing' / 'bad.db'}"),
     )
     with pytest.raises(Exception, match="unable to open database"):
-        generator.generate_document("", {"products": [{"name": "failed"}]})
+        generator.generate_document("", {"products": [{"name": "failed", "quantity_kg": 2}]})
     assert not list(folder.glob("*.xlsx"))
 
 

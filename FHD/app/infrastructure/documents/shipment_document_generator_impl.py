@@ -21,6 +21,10 @@ from app.application.ports.shipment_document_generator import ShipmentDocumentGe
 from app.db.models import Product
 from app.db.session import get_db
 from app.domain.shipment.shipment_product_parser import prepare_parsed_products
+from app.domain.shipment.shipment_quantities import (
+    ShipmentQuantityValidationError,
+    validate_shipment_products,
+)
 from app.infrastructure.lookups.purchase_unit_resolver import (
     resolve_purchase_unit,
 )
@@ -205,7 +209,7 @@ class SimpleLabelGenerator:
 
             tin_spec = product_data.get("tin_spec", 0)
             product_data.get("quantity_tins", 0)
-            specification = f"{tin_spec}±0.1KG/桶" if tin_spec else "20±0.1KG/桶"
+            specification = f"{tin_spec}±0.1KG/桶" if tin_spec else "按实际公斤数计量"
             draw.text((45, y_spec + 12), "产品规格", font=date_font, fill=self.text_color)
             draw.text((210, y_spec + 12), specification, font=date_font, fill=self.text_color)
             draw.text((520, y_spec + 12), "检验员", font=date_font, fill=self.text_color)
@@ -303,6 +307,10 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         template_name: str | None = None,
         order_number: str | None = None,
     ) -> dict[str, Any]:
+        try:
+            validate_shipment_products(products)
+        except ShipmentQuantityValidationError as exc:
+            return exc.result()
         # 1) 统一单位名来源：purchase_units 主库
         resolved = resolve_purchase_unit(unit_name)
         if not resolved:
