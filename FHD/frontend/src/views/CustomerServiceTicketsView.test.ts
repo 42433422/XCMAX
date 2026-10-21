@@ -96,8 +96,12 @@ describe('customer service ticket list', () => {
 })
 
 describe('customer service ticket detail', () => {
+  it.each([{ issue_domain: 'custom' }, { source: 'private_mod_rework' }])('requires customer acceptance for private Mod evidence %o', async evidence => {
+    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, status: 'processing', intent: 'general', evidence } }); const wrapper = mountDetail(); await flushPromises()
+    expect(wrapper.find('.cs-close-form select').exists()).toBe(false); expect(wrapper.text()).toContain('过期与后续活跃需求核对记录'); wrapper.unmount()
+  })
   it.each(['resolved', 'expired'])('keeps %s disposition and retry identity distinct from ETA', async (disposition) => {
-    const processing = { ...payload, ticket: { ...ticket, status: 'processing' } }
+    const processing = { ...payload, ticket: { ...ticket, status: 'processing', intent: 'account_support' } }
     detail.mockResolvedValue(processing)
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const wrapper = mountDetail(); await flushPromises()
