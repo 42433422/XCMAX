@@ -2,7 +2,7 @@
 
 **GitHub Actions 唯一调度入口**：[`.github/workflows/`](../.github/workflows/)
 
-子目录 `FHD/.github/workflows/`、`MODstore_deploy/.github/workflows/` 仅保留 **README 指针**与 Issue/PR 模板，**不会**被 GitHub 执行。
+`FHD/.github/workflows/` 与 `MODstore_deploy/.github/workflows/` 保存实现源，**不会**被 GitHub 直接执行。修改后运行 `python scripts/dev/publish_ci_workflows_to_root.py`，以根目录生成副本调度；`--check` 校验两者一致。
 
 ## CI / PR 提速执行 SSOT（2026-09-28 立即生效）
 
@@ -178,6 +178,38 @@ PR Fast CI
 
 否则默认继续执行本 SSOT。普通 bug fix 的目标为「修改 → 快测 → PR 验证 → 合并」尽量在分钟级完成，开发速度以**有效修复数量 / 单位时间**衡量，而非「跑了多少次 CI」。
 
+## 分片执行与耗时观测（2026-10-21）
+
+本轮保留现有 11 个 required checks、测试全集及覆盖率基线，调整工作流依赖与报告成本。`backend-test`、`frontend-test` 仍是最终聚合门禁；质量检查与分片同时开始，均先等待 `guard-temp-scripts`、`SSOT Drift Gate` 和分类完成。聚合使用 `always()`，分类失败、质量失败、分片缺失或取消不能变成成功。
+
+| 环节 | 执行与验证口径 |
+| --- | --- |
+| 统一分类 | `change_classifier.py --all` 只读一次 diff；绑定实际 checkout SHA。PR 使用 merge SHA；base/head 只负责分类。diff 缺失或为空时全跑。 |
+| 后端分片 | 默认 8 片，最多同时 8 片；手动 `backend_shards` 可选 4/8/16/24。按现有模块耗时分配；全集、选中项、结果、run/attempt/source、文件哈希全部验证。 |
+| 后端安装 | 保留现有 requirements 安装口径，pip 缓存显式绑定服务端、开发及本地包声明。每片保存解析后的依赖版本，未切换到不同版本的 uv 锁文件。 |
+| 后端报告 | stdlib 先验证所有证据及工具链，再只安装分片实际使用的 coverage 版本。full/behavior 数据隔离生成 JSON，保留 XML 和两道 ratchet；HTML 仅手动 `--html`。逐阶段耗时保存在 `backend-aggregate-timings.json`。 |
+| 前端分片 | 4 片 Vitest；原生 blob/V8 合并后再执行原全局阈值及 `--require-frontend`。验证完整文件集合、片号唯一、身份及原始报告哈希。ESLint、any 棘轮及现有 advisory vue-tsc 在质量任务执行。 |
+| 下游验证 | mock E2E 与打包提前开始；容器扫描等待实际打包产物。镜像发布仍等待前后端聚合、E2E、安全、容器扫描、打包和架构检查。 |
+| 无关变更 | 只有有效分类、正确源码、质量任务成功且分片明确 skipped 时，聚合才接受 skip；空输出或未知状态均失败。 |
+
+### 比较时间的方法
+
+计时范围是同一提交全部 required checks 完成，并包含排队与环境准备。若没有真实事件接收时间，使用最早 workflow `created_at` 作代理起点并标注；不得把一次手动主工作流结果当成全部 11 项的耗时。PR head、被测试的 merge source、base、各 workflow run/attempt 分别保留。
+
+从 `FHD/` 运行离线分析：
+
+```bash
+python scripts/ci/measure_required_checks.py snapshot.json --output report.json
+```
+
+`snapshot.json` 包含 `repository`、`head_sha`、`event`，PR 额外提供 `pull_request_number`、`base_sha`；`required` 是分支 API 的 `protection.required_status_checks`（含 App 绑定），`runs` 为各 run 原始对象，`checks` 为完整 check-runs 响应，`jobs` 为各 run 完整 jobs 响应。分页须收齐，可传完整分页数组。可选 `observed_at`、`cache_state`；只有真实调用方记录才填写 `triggered_at` 与 `trigger_kind`。
+
+工具按 check ID 与 job/run 身份关联，拒绝跨 SHA、旧 attempt、重复、缺页或错误 App 的替代结果。证据不完整会输出报告并退出 1，不把未知状态算作成功；报告不是合并授权或测试源码证明。合并后 GitHub 可能清空 run 的 PR 关联，旧样本只能保留 observed 耗时，不能补造关联。
+
+历史样本 [PR #2494](https://github.com/42433422/XCMAX/pull/2494) 的 11 项观察完成时间为 **23 分 30 秒**，仅作单样本参照。新的提速幅度和“三分钟”目标以本分支真实 PR 结果验证，不由分片数推算成已达成。比较时同时记录冷/热缓存与 runner 分钟，避免用更多计算量掩盖排队。
+
+本次变更涉及分片选集及覆盖率汇总，PR 需完成一次实际全集验证，确认模块隔离、文件全集及合并覆盖率等价；仅跑小 fixture 无法发现全部模块的顺序依赖，留到合并后的 Nightly 会让有风险的门禁先进入 main。该验证针对共享 CI 改造，不扩大普通业务修复的默认范围。
+
 ## 仓库 git 历史说明（2026-08-01）
 
 本仓当前工作区的 git 历史**始于 2026-07-21**（首个 commit `1b6ae8560`，`fix(deploy): bootstrap FHD staging on single CVM`）。
@@ -318,7 +350,9 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 
 > 合入顺序与**快车道**（小修复类 PR 可优先于主序列合入的条件、判定权与合入后流程）以仓根 [AGENTS.md](../AGENTS.md#合入顺序与快车道2026-10-19-0337-用户定) 为准；快车道不豁免下列 required checks。
 
-已通过 API 配置（2026-06-13，2026-07 发版红线扩展，2026-08-05 校正为 GitHub 实配 11 项）：required status checks 含 `guard-temp-scripts`、`arch-fitness`、`security-scan`、`gitleaks`、`analyze (python)`、`analyze (javascript-typescript)`、`SSOT Drift Gate`、`Release gate (hard block)`、`backend-test`、`frontend-test`、**`mutation-smoke`**（变异测试 kill rate ≥80%，作用域 app/di + app/contexts，2026-08-05 实测 **93.02%**，80/86）；`vue-tsc` / `mypy` / `build:strict` 已在 `frontend-test` / `backend-test` 内硬失败。**覆盖率门禁**（2026-08-05 诚实化；2026-09-01 D2-5 起 `coverage_ramp` stub 82 个已全部去前缀迁出为契约测试，总口径=真实行为口径，floor **78% 行 / 69% 分支**，只升不降）：`backend-test` 内以 `coverage_ratchet.py --check --behavior --require-backend` 为唯一硬 gate（行为口径，stub 清零后 `-m 'not coverage_ramp'` 等价于全量）；`frontend-test` 内以 `coverage_ratchet.py --check --require-frontend` 硬阻断前端覆盖率回退。本地等价：`bash FHD/scripts/dev/release_verify.sh`。
+GitHub 实配 11 项 required status checks（2026-10-21 API 复核）：`guard-temp-scripts`、`arch-fitness`、`security-scan`、`gitleaks`、`analyze (python)`、`analyze (javascript-typescript)`、`SSOT Drift Gate`、`Release gate (hard block)`、`backend-test`、`frontend-test`、`mutation-smoke`。本轮不调整此清单或 App 绑定。
+
+`backend-quality` 的 mypy/lint 失败由 `backend-test` 汇总阻断；`frontend-quality` 的 ESLint/any 棘轮失败由 `frontend-test` 汇总阻断。普通 CI 的 vue-tsc 保持 advisory；发布验证中的严格构建仍按原流程执行。后端同时检查 full 和 behavior 两个口径；前端在合并原生覆盖率后执行全局阈值与 ratchet。数值以 `FHD/metrics/coverage_ratchet_baseline.json` 及测试配置为准，不在此复制历史地板值。本地发布验证入口为 `bash FHD/scripts/dev/release_verify.sh`。
 
 **文档新鲜度门禁**（2026-09-09 起，`arch-fitness` job 内硬阻断，check 名仍为 `arch-fitness`）：`docs_ssot_lint.py --strict`（SSOT 声明与登记表一致）、`verify_doc_versions.py`（docs 版本表述对齐 `VERSION.md` 锚点）、`verify_doc_claims.py`（文档覆盖率数字必须源于 SSOT 快照）、`gen_claimed_vs_actual.py --check`（`CLAIMED_VS_ACTUAL.md` 与 `metrics/` 一致；日更 metrics 由 `fhd-slo-metrics-collect.yml` 同步重生成该文档）。
 
