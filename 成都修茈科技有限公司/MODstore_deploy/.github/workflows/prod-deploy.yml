@@ -12,7 +12,7 @@ on:
       preserve_release_history:
         description: Keep all local and DR release history for this invocation
         type: boolean
-        default: true
+        default: false
       require_platform_key:
         description: Fail when platform LLM key is missing
         required: false
