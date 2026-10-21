@@ -6,6 +6,7 @@ import VirtualCursorOverlay from '@/components/aiopen/VirtualCursorOverlay.vue'
 import RouteFallbackPanel from '@/components/shell/RouteFallbackPanel.vue'
 import RouteErrorBoundary from '@/components/shell/RouteErrorBoundary.vue'
 import { clearRouteChunkError, isUnmatchedRoute, routeChunkErrorPath } from '@/utils/routeLoadState'
+import { isDesktopShell } from '@/utils/desktopShell'
 import { useAppBoot } from '@/composables/useAppBoot'
 import { usePrivateDeliverySync } from '@/composables/usePrivateDeliverySync'
 
@@ -22,12 +23,12 @@ usePrivateDeliverySync()
     <router-view v-if="hideChrome" />
     <MainLayout v-else>
       <router-view v-slot="{ Component, route }">
-        <transition v-if="!isAdminConsoleSpa()" name="route-fade" mode="out-in">
+        <transition v-if="!isAdminConsoleSpa() && !isDesktopShell()" name="route-fade" mode="out-in">
           <keep-alive :max="12">
             <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
           </keep-alive>
         </transition>
-        <!-- 管理端不用 out-in 过渡：它依赖 requestAnimationFrame，后台/被遮挡的窗口里会卡在旧页面，表现为地址变了内容不变或空白。 -->
+        <!-- 管理端与桌面壳不用 out-in：后台窗口的 requestAnimationFrame 可能暂停并卡住旧页面。 -->
         <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
         <RouteErrorBoundary v-else :path="route.fullPath">
