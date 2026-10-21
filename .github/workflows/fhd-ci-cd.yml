@@ -392,7 +392,6 @@ jobs:
           retention-days: 7
 
   backend-test:
-    # Preserve the required check and downstream skip contract. Missing shards fail closed.
     needs: [backend-quality, backend-test-shard]
     if: always()
     runs-on: ubuntu-latest
