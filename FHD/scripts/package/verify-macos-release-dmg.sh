@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 dmg="${1:?DMG path required}"
 version="${2:?Product version required}"
 sha="${3:?Git SHA required}"
@@ -12,7 +13,7 @@ if [[ "${signature}" == *Signature=adhoc* ]]; then
   exit 1
 fi
 codesign --verify --verbose=2 "${dmg}"
-xcrun stapler validate "${dmg}"
+python3 "${ROOT}/scripts/package/staple-macos-dmg.py" --validate-only "${dmg}"
 spctl -a -vv -t open --context context:primary-signature "${dmg}"
 mount_dir="$(mktemp -d)"
 cleanup_mount() {
@@ -37,5 +38,5 @@ PY
 backend="${app}/Contents/Resources/backend/xcagi-backend"
 test -x "${backend}"
 "${backend}" --verify-frozen-critical-runtime
-xcrun stapler validate "${app}"
+python3 "${ROOT}/scripts/package/staple-macos-dmg.py" --validate-only "${app}"
 spctl -a -vv -t exec "${app}"

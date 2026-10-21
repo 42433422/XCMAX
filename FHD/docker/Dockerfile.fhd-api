@@ -43,7 +43,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     XCAGI_GIT_SHA=${XCAGI_GIT_SHA}
 
 RUN apk upgrade --no-cache \
-    && apk add --no-cache 'ca-certificates-bundle>=20260909-r3' python-3.11 curl \
+    && apk add --no-cache python-3.11 curl 'ca-certificates-bundle>=20260909-r3' \
     && addgroup -S appuser \
     && adduser -S -G appuser -h /home/appuser -s /bin/sh appuser
 

@@ -501,6 +501,45 @@ def test_staple_retry_is_bounded_and_failure_artifact_is_unpublishable(
         assert not recovery.exists()
 
 
+@pytest.mark.parametrize("kind", ["dmg", "app"])
+def test_validate_only_retries_without_stapling_or_modifying_release_app(tmp_path, monkeypatch, kind):
+    module_spec = importlib.util.spec_from_file_location(
+        "staple_validate_only", FHD / "scripts/package/staple-macos-dmg.py"
+    )
+    staple = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(staple)
+    monkeypatch.setattr(staple, "ROOT", tmp_path)
+    monkeypatch.setenv("XCAGI_BUILD_SHA", SHA)
+    release = tmp_path / "release" / "xcagi-v1.0.0.6" / "enterprise"
+    release.mkdir(parents=True)
+    artifact = (
+        release / "XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg"
+        if kind == "dmg"
+        else release / "XCAGI.app"
+    )
+    artifact.mkdir() if kind == "app" else artifact.write_bytes(b"verified candidate")
+    original = artifact.read_bytes() if kind == "dmg" else None
+    monkeypatch.setattr(staple.sys, "argv", ["staple", "--validate-only", str(artifact)])
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        assert command == ["xcrun", "stapler", "validate", str(artifact)]
+        error = "NSURLErrorDomain Code=-1005" if len(calls) == 1 else ""
+        return subprocess.CompletedProcess(command, 68 if len(calls) == 1 else 0, "", error)
+
+    monkeypatch.setattr(staple.subprocess, "run", run)
+    monkeypatch.setattr(staple.time, "sleep", lambda _: None)
+    assert staple.main() == 0
+    assert len(calls) == 2
+    recovery = tmp_path / "release-staple-recovery" / f"{SHA}-arm64"
+    if kind == "dmg":
+        assert artifact.read_bytes() == original
+        assert not recovery.exists()
+    else:
+        assert not (tmp_path / "release-staple-recovery").exists()
+
+
 @pytest.mark.parametrize(
     "unsafe",
     [
@@ -572,7 +611,11 @@ def test_staple_recovery_keeps_macos_hard_gates_and_separate_artifact():
     finalize = (FHD / "scripts/package/finalize-macos-dmg.sh").read_text()
     assert 'spctl -a -vv -t open --context context:primary-signature "${DMG_PATH}"' in finalize
     staple = (FHD / "scripts/package/staple-macos-dmg.py").read_text()
-    assert 'for action in ("staple", "validate")' in staple
+    assert '(("validate",) if validate_only else ("staple", "validate"))' in staple
+    assert "--validate-only" in staple
+    verify = (FHD / "scripts/package/verify-macos-release-dmg.sh").read_text()
+    assert 'staple-macos-dmg.py" --validate-only "${dmg}"' in verify
+    assert 'staple-macos-dmg.py" --validate-only "${app}"' in verify
     workflow = (FHD / ".github/workflows/release-desktop-mac-ota.yml").read_text()
     assert "if: ${{ failure() }}" in workflow
     assert "mac-staple-recovery-{0}-{1}" in workflow

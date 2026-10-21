@@ -392,7 +392,7 @@ def _planner_fallback_patches():
     )
 
 
-def test_create_get_and_list_agent_run() -> None:
+def test_create_get_and_list_agent_run(local_tools) -> None:
     get_agent_run_repository().clear()
     clear_consumed_approval_grants_for_tests()
     client = _client()
@@ -406,7 +406,7 @@ def test_create_get_and_list_agent_run() -> None:
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "data": [{"model_number": "XG-5003"}]},
-        ),
+        ) as mock_execute,
     ):
         response = client.post(
             "/api/agent/runs",
@@ -429,6 +429,10 @@ def test_create_get_and_list_agent_run() -> None:
     assert run["intent"] == "business_db_read"
     assert run["metadata"]["runtime_context"]["source"] == "route-test"
     assert "run.completed" in [event["event_type"] for event in run["events"]]
+    mock_execute.assert_called_once()
+    assert mock_execute.call_args.args[:2] == ("business_db", "read")
+    assert mock_execute.call_args.args[2]["_runtime_context"]["run_id"] == run["run_id"]
+    assert run["tool_calls"][0]["output"]["data"] == [{"model_number": "XG-5003"}]
 
     get_response = client.get(f"/api/agent/runs/{run['run_id']}")
     assert get_response.status_code == 200

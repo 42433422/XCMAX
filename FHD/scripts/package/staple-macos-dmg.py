@@ -16,8 +16,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def main():
-    dmg = Path(sys.argv[1]).absolute()
-    for action in ("staple", "validate"):
+    validate_only = len(sys.argv) == 3 and sys.argv[1] == "--validate-only"
+    if len(sys.argv) != (3 if validate_only else 2):
+        print("usage: staple-macos-dmg.py [--validate-only] <DMG-or-app>", file=sys.stderr)
+        return 64
+    dmg = Path(sys.argv[-1]).absolute()
+    for action in (("validate",) if validate_only else ("staple", "validate")):
         result = None
         for attempt in range(3):
             command = ["xcrun", "stapler", action, str(dmg)]
