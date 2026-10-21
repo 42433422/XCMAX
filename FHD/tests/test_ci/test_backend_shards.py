@@ -13,14 +13,9 @@ import pytest
 import yaml
 
 from scripts.ci.backend_shards import partition, profile, seal, verify
+from tests.test_ci.backend_shard_fixtures import IDENTITY, make_artifacts
 
 ROOT = Path(__file__).resolve().parents[2]
-IDENTITY = {
-    "GITHUB_SHA": "a" * 40,
-    "GITHUB_RUN_ID": "1",
-    "GITHUB_RUN_ATTEMPT": "1",
-    "BACKEND_SOURCE_SHA": "a" * 40,
-}
 
 
 @pytest.fixture(autouse=True)
@@ -54,48 +49,15 @@ def test_invalid_collection(nodes, total):
         partition(nodes, total)
 
 
-@pytest.fixture(scope="module", params=[2, 4])
+@pytest.fixture(scope="module", params=[2, 4, 8])
 def artifacts(tmp_path_factory, request):
-    root = tmp_path_factory.mktemp("shards")
-    for index in range(1, request.param + 1):
-        directory = root / f"shard-{index}"
-        directory.mkdir()
-        nodes = [f"test_{n}.py::test_a" for n in range(4)]
-        selected = partition(nodes, request.param)[index - 1]
-        data = dict(
-            IDENTITY,
-            index=index,
-            total=request.param,
-            partition_profile="count-v1",
-            mode="full",
-            full=nodes,
-            selected=selected,
-            exitstatus=0,
-            collection_errors=[],
-            collection_skips=[],
-            subtests=[],
-            reports={
-                n: [
-                    {"when": phase, "outcome": "passed", "duration": 0.1}
-                    for phase in ("setup", "call", "teardown")
-                ]
-                for n in selected
-            },
-        )
-        for mode in ("full", "behavior"):
-            data["mode"] = mode
-            (directory / f"{mode}.json").write_text(json.dumps(data))
-            (directory / f".coverage.{mode}").write_bytes(b"coverage-test")
-            (directory / f"{mode}.xml").write_text("<testsuite/>")
-        seal(directory)
-    return root
+    return make_artifacts(tmp_path_factory.mktemp("shards"), request.param)
 
 
 def test_exact_complete_artifacts_pass(artifacts):
-    assert verify(artifacts, len(list(artifacts.iterdir())), "full", IDENTITY)["collected"] == 4
-    assert verify(artifacts, len(list(artifacts.iterdir())), "behavior", IDENTITY)["outcomes"] == {
-        "passed": 4
-    }
+    total = len(list(artifacts.iterdir()))
+    assert verify(artifacts, total, "full", IDENTITY)["collected"] == max(4, total)
+    assert verify(artifacts, total, "behavior", IDENTITY)["outcomes"] == {"passed": max(4, total)}
 
 
 @pytest.mark.parametrize(
@@ -103,11 +65,13 @@ def test_exact_complete_artifacts_pass(artifacts):
     [
         "missing",
         "foreign_sha",
+        "foreign_run",
         "attempt",
         "failed",
         "cancelled",
         "collection",
         "duplicate_index",
+        "boolean_index",
         "collection_skip",
         "unexpected_artifact",
         "omitted",
@@ -119,6 +83,8 @@ def test_exact_complete_artifacts_pass(artifacts):
         "subtest",
         "profile",
         "total",
+        "toolchain",
+        "manifest_symlink",
     ],
 )
 def test_bad_evidence_fails_closed(artifacts, tmp_path, fault):
@@ -131,6 +97,8 @@ def test_bad_evidence_fails_closed(artifacts, tmp_path, fault):
         shutil.rmtree(root / "shard-2")
     elif fault == "foreign_sha":
         data["BACKEND_SOURCE_SHA"] = "b" * 40
+    elif fault == "foreign_run":
+        data["GITHUB_RUN_ID"] = "2"
     elif fault == "attempt":
         data["GITHUB_RUN_ATTEMPT"] = "2"
     elif fault in ("failed", "cancelled"):
@@ -143,6 +111,8 @@ def test_bad_evidence_fails_closed(artifacts, tmp_path, fault):
         (root / "unexpected").mkdir()
     elif fault == "duplicate_index":
         data["index"] = 2
+    elif fault == "boolean_index":
+        data["index"] = True
     elif fault == "omitted":
         data["selected"] = []
     elif fault == "extra":
@@ -157,19 +127,27 @@ def test_bad_evidence_fails_closed(artifacts, tmp_path, fault):
         data["total"] = 3
     elif fault == "subtest":
         data["subtests"] = [{"nodeid": node, "outcome": "failed"}]
+    elif fault == "toolchain":
+        (root / "shard-1/report-toolchain.json").write_text('{"coverage":"1.0","python":"3.11"}')
+    elif fault == "manifest_symlink":
+        pass
     else:
         (root / "shard-1" / (".coverage.full" if fault == "coverage" else "full.xml")).write_text(
             "changed"
         )
     path.write_text(json.dumps(data))
+    if fault == "manifest_symlink":
+        target = tmp_path / "foreign-manifest.json"
+        path.rename(target)
+        path.symlink_to(target)
     with pytest.raises(ValueError):
         verify(root, len(list(artifacts.iterdir())), "full", IDENTITY)
 
 
-@pytest.mark.parametrize("total", [2, 4])
+@pytest.mark.parametrize("total", [4, 8])
 def test_real_pytest_shards(tmp_path, total):
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
-    for name in ("a", "b", "c", "d"):
+    for name in "abcdefgh":
         (tmp_path / f"test_{name}.py").write_text(
             "import pytest\ndef test_pass(): assert True\n@pytest.mark.skip(reason='expected')\ndef test_skip(): pass\n"
         )
@@ -195,10 +173,10 @@ def test_real_pytest_shards(tmp_path, total):
         )
         assert result.returncode == 0, result.stdout + result.stderr
         evidence = json.loads(manifest.read_text())
-        assert len(evidence["selected"]) == 8 // total
-        assert len(evidence["reports"]) == 8 // total
+        assert len(evidence["selected"]) == 16 // total
+        assert len(evidence["reports"]) == 16 // total
         all_nodes.extend(evidence["selected"])
-    assert len(set(all_nodes)) == len(all_nodes) == 8
+    assert len(set(all_nodes)) == len(all_nodes) == 16
 
 
 def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
@@ -206,19 +184,24 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
     quality, shard, gate = (
         jobs[name] for name in ("backend-quality", "backend-test-shard", "backend-test")
     )
-    assert set(quality["needs"]) == {"guard-temp-scripts", "ssot-drift-gate"}
-    assert shard["needs"] == "backend-quality"
+    prerequisites = {"guard-temp-scripts", "ssot-drift-gate", "classify"}
+    assert set(quality["needs"]) == set(shard["needs"]) == prerequisites
+    assert shard["if"] == "needs.classify.outputs.backend == 'true'"
     assert shard["runs-on"] == "ubuntu-latest"
-    assert shard["strategy"] == {"fail-fast": False, "matrix": {"shard": [1, 2, 3, 4]}}
-    assert set(gate["needs"]) == {"backend-quality", "backend-test-shard"}
+    assert shard["strategy"] == {
+        "fail-fast": False,
+        "max-parallel": 8,
+        "matrix": "${{ fromJSON(needs.classify.outputs.backend_matrix) }}",
+    }
+    assert set(gate["needs"]) == {"classify", "backend-quality", "backend-test-shard"}
     assert gate["if"] == "always()"
-    assert gate["outputs"]["skip"] == "${{ needs.backend-quality.outputs.skip }}"
+    assert gate["outputs"]["skip"] == "${{ needs.classify.outputs.backend_skip }}"
     preflight = gate["steps"][0]
     assert preflight["working-directory"] == "."
     assert 'test "$QUALITY" = success' in preflight["run"]
     assert 'test "$SHARDS" = skipped' in preflight["run"]
     assert 'test "$SHARDS" = success' in preflight["run"]
-    text = json.dumps(quality) + json.dumps(gate)
+    text = json.dumps(quality)
     for required in (
         "ruff check",
         "ruff format",
@@ -226,13 +209,28 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
         "guard_coverage_floor.py",
         "count_coverage_ramp_stubs.py",
         "test_bloat_report.py",
-        "--behavior --require-backend",
-        "--check --require-backend",
     ):
         assert required in text
+    commands = "\n".join(step.get("run", "") for step in gate["steps"])
+    assert "scripts/ci/backend_shard_aggregate.py shards" in commands
+    assert "requirements-dev.txt" not in commands
+    download, verify_step, install, aggregate = (
+        next(index for index, step in enumerate(gate["steps"]) if token in json.dumps(step))
+        for token in (
+            "actions/download-artifact@",
+            "backend_shards.py verify",
+            "pip install",
+            "backend_shard_aggregate.py",
+        )
+    )
+    assert download < verify_step < install < aggregate
+    assert (
+        gate["steps"][install]["env"]["COVERAGE_VERSION"]
+        == "${{ steps.verify.outputs.coverage_version }}"
+    )
 
 
-@pytest.mark.parametrize("total", [2, 4])
+@pytest.mark.parametrize("total", [4, 8])
 def test_real_coverage_union_matches_serial(tmp_path, total, monkeypatch):
     timings = tmp_path / "timings.json"
     timings.write_text(
@@ -242,7 +240,8 @@ def test_real_coverage_union_matches_serial(tmp_path, total, monkeypatch):
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
     (tmp_path / ".coveragerc").write_text("[run]\nbranch = true\nsource = demo\n")
     (tmp_path / "demo.py").write_text("def pick(n):\n    if n:\n        return 1\n    return 0\n")
-    for name, value in (("a", 1), ("b", 0), ("c", 1), ("d", 0)):
+    for index, name in enumerate("abcdefgh"):
+        value = index % 2
         (tmp_path / f"test_{name}.py").write_text(
             f"from demo import pick\ndef test_pick(): assert pick({value}) == {value}\n"
         )
@@ -293,7 +292,7 @@ def test_real_coverage_union_matches_serial(tmp_path, total, monkeypatch):
         shutil.copy(directory / "full.xml", directory / "behavior.xml")
         shutil.copy(directory / ".coverage.full", directory / ".coverage.behavior")
         seal(directory)
-    assert verify(tmp_path / "evidence", total, "full", IDENTITY)["collected"] == 4
+    assert verify(tmp_path / "evidence", total, "full", IDENTITY)["collected"] == 8
     run(
         [
             sys.executable,
@@ -324,17 +323,64 @@ def test_real_coverage_union_matches_serial(tmp_path, total, monkeypatch):
         ("success", "skipped", "false", False),
         ("success", "failure", "false", False),
         ("success", "success", "true", False),
+        ("success", "success", "", False),
+        ("success", "success", "unknown", False),
     ],
 )
 def test_aggregate_shell_result_semantics(quality, shards, skip, passed):
     jobs = yaml.safe_load((ROOT / ".github/workflows/ci-cd.yml").read_text())["jobs"]
     result = subprocess.run(
         ["bash", "-e", "-c", jobs["backend-test"]["steps"][0]["run"]],
-        env=dict(os.environ, QUALITY=quality, SHARDS=shards, SKIP=skip),
+        env=dict(
+            os.environ,
+            CLASSIFY="success",
+            VALID="true",
+            SOURCE_SHA="a" * 40,
+            EXPECTED_SOURCE_SHA="a" * 40,
+            QUALITY=quality,
+            SHARDS=shards,
+            SHOULD_RUN="false" if skip == "true" else "true",
+            SKIP=skip,
+        ),
         capture_output=True,
         timeout=10,
     )
     assert (result.returncode == 0) == passed
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("CLASSIFY", "failure"),
+        ("CLASSIFY", "cancelled"),
+        ("CLASSIFY", "skipped"),
+        ("VALID", "false"),
+        ("VALID", ""),
+        ("SOURCE_SHA", "b" * 40),
+        ("SOURCE_SHA", ""),
+    ],
+)
+def test_aggregate_shell_rejects_unbound_classification(field, value):
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci-cd.yml").read_text())["jobs"]
+    env = dict(
+        os.environ,
+        CLASSIFY="success",
+        VALID="true",
+        SOURCE_SHA="a" * 40,
+        EXPECTED_SOURCE_SHA="a" * 40,
+        QUALITY="success",
+        SHARDS="skipped",
+        SHOULD_RUN="false",
+        SKIP="true",
+    )
+    env[field] = value
+    result = subprocess.run(
+        ["bash", "-e", "-c", jobs["backend-test"]["steps"][0]["run"]],
+        env=env,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode != 0
 
 
 def test_behavior_marker_is_applied_before_sharding(tmp_path):
@@ -420,17 +466,24 @@ def test_weighted_real_collection_and_profile_integrity(tmp_path, monkeypatch):
     assert profile()[1] != identity
 
 
-def test_four_way_production_configuration():
+def test_dynamic_production_configuration_keeps_full_and_behavior():
     jobs = yaml.safe_load((ROOT / ".github/workflows/ci-cd.yml").read_text())["jobs"]
     shard, gate = (jobs[n] for n in ("backend-test-shard", "backend-test"))
     assert not {"backend-four-shard", "backend-four-test", "backend-shard-comparison"} & jobs.keys()
-    assert shard["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
     assert shard["runs-on"] == gate["runs-on"] == "ubuntu-latest"
-    assert shard["env"]["BACKEND_SHARD_TOTAL"] == gate["env"]["BACKEND_SHARD_TOTAL"] == "4"
+    assert (
+        shard["env"]["BACKEND_SHARD_TOTAL"]
+        == gate["env"]["BACKEND_SHARD_TOTAL"]
+        == "${{ needs.classify.outputs.backend_total }}"
+    )
     assert shard["env"]["BACKEND_TIMINGS_FILE"] == gate["env"]["BACKEND_TIMINGS_FILE"]
     assert shard["env"]["BACKEND_TIMINGS_FILE"] == "metrics/backend_test_timings.json"
-    assert "for n in 1 2 3 4;" in json.dumps(gate)
     assert gate["if"] == "always()"
-    assert "--behavior --require-backend" in json.dumps(gate)
-    assert "--check --require-backend" in json.dumps(gate)
+    command = next(
+        step["run"] for step in shard["steps"] if "Run complete suite" in step.get("name", "")
+    )
+    assert command.count("--cov --cov-branch --cov-fail-under=0") == 2
+    assert "-m 'not coverage_ramp'" in command
+    assert "backend_shards.py seal shard-evidence" in command
+    assert shard["steps"][-1]["with"]["include-hidden-files"] is True
     assert "backend-shard-${{" in json.dumps(shard) and "backend-shard-${{" in json.dumps(gate)
