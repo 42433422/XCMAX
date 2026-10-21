@@ -79,7 +79,7 @@
 
       <form v-if="ticket.status === 'processing'" class="cs-card cs-close-form" @submit.prevent="closeTicket">
         <h3 class="cs-card-title">处理原工单</h3>
-        <label>处置方式<select v-model="closeDisposition"><option value="resolved">实际验收已解决</option><option value="expired">已过期不再处理（未修复，不影响资金权益）</option></select></label>
+        <p v-if="requiresCustomerAcceptance" class="cs-hint">产品问题与定制交付须由原客户通过运行回执或原工单决策验收；管理员只能按旧单规则记录过期。</p><label v-else>处置方式<select v-model="closeDisposition"><option value="resolved">实际验收已解决</option><option value="expired">已过期不再处理（未修复，不影响资金权益）</option></select></label>
         <label>处理结论<textarea v-model="closeNote" required minlength="8" maxlength="2000" /></label>
         <label>{{ closeDisposition === 'expired' ? '过期与后续活跃需求核对记录' : '实际验收证据' }}<textarea v-model="closeVerification" required minlength="20" maxlength="4000" /></label>
         <button class="cs-btn" type="submit" :disabled="saving || savingEta">记录管理员处置并关闭</button>
@@ -137,6 +137,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import api from '@/api/core'
+import { appConfirm, appPrompt } from '@/utils/appDialog'
 import {
   auditItems, buildTimeline, formatBeijingTime, intentLabel, parseServerTime, prettyJson, priorityLabel, resolutionStateBadge,
   routeLabel, submitterTypeLabel, teamMembers, ticketStatusBadge, yesNoBadge, type Row,
@@ -145,13 +146,9 @@ import {
 type Detail = { ticket: Row; decisions: Row[]; actions: Row[]; audit_logs: Row[] }
 const route = useRoute()
 const router = useRouter()
-const detail = ref<Detail | null>(null)
-const loading = ref(false), error = ref('')
-const saving = ref(false)
-const expectedCompletionInput = ref('')
+const detail = ref<Detail | null>(null), loading = ref(false), error = ref(''), saving = ref(false), expectedCompletionInput = ref('')
 const savingEta = ref(false), etaMessage = ref(''), etaError = ref('')
-const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref('')
-const closeDisposition = ref('resolved')
+const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref(''), closeDisposition = ref('resolved')
 let generation = 0
 
 const ticketId = computed(() => Number(String(route.params.ticketId ?? '')))
@@ -161,6 +158,8 @@ const canCorrectClassification = computed(() => ticket.value.status === 'process
 const evidence = computed<Row>(() => Object.fromEntries(Object.entries(
   (ticket.value.evidence || {}) as Row,
 ).filter(([key]) => key !== 'support_bundle_base64')))
+const customDelivery = computed(() => evidence.value.delivery_managed_by === 'custom_delivery' || evidence.value.issue_domain === 'custom' || evidence.value.source === 'private_mod_rework')
+const requiresCustomerAcceptance = computed(() => ['product_issue', 'custom_delivery'].includes(String(ticket.value.intent)) || customDelivery.value)
 const resolution = computed(() => {
   const value = evidence.value.resolution
   return value && typeof value === 'object' ? value as Row : null
@@ -178,13 +177,15 @@ const message = (cause: unknown) => cause instanceof Error ? cause.message : Str
 function backToList() { void router.push({ name: 'customer-service-tickets' }) }
 
 watch([closeNote, closeVerification, closeDisposition], () => { closeRequestId.value = '' })
+watch([ticketId, requiresCustomerAcceptance], () => { closeDisposition.value = requiresCustomerAcceptance.value ? 'expired' : 'resolved' })
 
 async function closeTicket() {
   const id = ticketId.value
-  if (saving.value || savingEta.value || ticket.value.status !== 'processing' || !window.confirm(closeDisposition.value === 'expired' ? '确认已核对过期时间及后续需求？本次记为过期，未修复，不影响资金权益。' : '确认已在目标版本完成实际验收，并关闭这张原工单？')) return
-  closeRequestId.value ||= crypto.randomUUID()
+  if (saving.value || savingEta.value || ticket.value.status !== 'processing') return
   saving.value = true
   try {
+    if (!await appConfirm(closeDisposition.value === 'expired' ? '确认已核对过期时间及后续需求？本次记为过期，未修复，不影响资金权益。' : '确认已在目标版本完成实际验收，并关闭这张原工单？', { title: '确认管理员处置', confirmText: '记录并关闭', cancelText: '返回检查', danger: true }) || ticketId.value !== id || ticket.value.status !== 'processing') return
+    closeRequestId.value ||= crypto.randomUUID()
     await api.post(`/api/xcmax/admin/customer-service/tickets/${id}/close`, {
       request_id: closeRequestId.value, note: closeNote.value, verification: closeVerification.value,
       disposition: closeDisposition.value,
@@ -200,8 +201,8 @@ async function closeTicket() {
 async function correctTitle(reclassify = false) {
   if (saving.value || savingEta.value || (reclassify && !canCorrectClassification.value)) return
   const id = ticketId.value, expectedTitle = String(ticket.value.title || '')
-  const title = reclassify ? expectedTitle : window.prompt('请输入此工单的正确标题', expectedTitle)?.trim()
-  const reason = reclassify ? window.prompt('将原单纠正为平台功能问题，保留编号、历史和资金记录。请输入修正原因（至少8字）')?.trim() : ''
+  const title = reclassify ? expectedTitle : (await appPrompt('请输入此工单的正确标题', expectedTitle))?.trim()
+  const reason = reclassify ? (await appPrompt('将原单纠正为平台功能问题，保留编号、历史和资金记录。请输入修正原因（至少8字）'))?.trim() : ''
   if (reclassify && reason && reason.length < 8) { error.value = '分类修正原因至少8字，请重新填写'; return }
   if (!title || (!reclassify && title === expectedTitle) || (reclassify && (!reason || reason.length < 8))) return
   saving.value = true

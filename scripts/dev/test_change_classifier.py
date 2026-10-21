@@ -8,9 +8,13 @@ macOS 不算 Windows）与 fail-open 口径。
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from scripts.dev.change_classifier import CATEGORY_MODE, RELEVANT, decide
 from scripts.dev.change_classifier import main as classifier_main
@@ -128,6 +132,53 @@ class CliContractTests(unittest.TestCase):
         # 无 base/head → 取不到 diff → fail-open 全量。
         self.assertIn("run=true", lines)
         self.assertIn("skip=false", lines)
+
+    def test_all_categories_share_one_diff_and_bind_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
+            "GITHUB_OUTPUT": str(Path(tmp) / "outputs"),
+            "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2",
+        }), patch("scripts.dev.change_classifier._changed_files", return_value=FRONTEND_ONLY) as diff:
+            report = Path(tmp) / "classification.json"
+            source = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+            self.assertEqual(classifier_main([
+                "--all", "--base", "base", "--head", "head", "--source-sha", source,
+                "--report", str(report),
+            ]), 0)
+            data = json.loads(report.read_text())
+            diff.assert_called_once_with("base", "head")
+            self.assertEqual(set(data["decisions"]), set(CATEGORY_MODE))
+            self.assertFalse(data["decisions"]["backend"])
+            self.assertTrue(data["decisions"]["frontend"])
+            self.assertEqual(data["source_sha"], source)
+            self.assertNotEqual(data["source_sha"], data["pr_head_sha"])
+            self.assertEqual(data["run_attempt"], "2")
+            outputs = (Path(tmp) / "outputs").read_text()
+            self.assertIn("backend_skip=true\n", outputs)
+            self.assertIn("frontend_skip=false\n", outputs)
+            self.assertIn("valid=true\n", outputs)
+
+    def test_unavailable_diff_runs_every_category(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "classification.json"
+            self.assertEqual(classifier_main([
+                "--all", "--base", "missing-base-ref", "--head", "missing-head-ref",
+                "--report", str(report),
+            ]), 0)
+            data = json.loads(report.read_text())
+            self.assertTrue(all(data["decisions"].values()))
+            self.assertEqual(data["reason"], "empty_or_unavailable_diff_run_all")
+
+    def test_wrong_source_cannot_emit_valid_skip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
+            "GITHUB_OUTPUT": str(Path(tmp) / "outputs"),
+        }):
+            with self.assertRaises(SystemExit):
+                classifier_main(["--all", "--source-sha", "0" * 40])
+            self.assertFalse((Path(tmp) / "outputs").exists())
+
+    def test_source_binding_is_not_silently_ignored_by_legacy_mode(self) -> None:
+        with self.assertRaises(SystemExit):
+            classifier_main(["--category", "backend", "--source-sha", "a" * 40])
 
 
 # —— CI 加速专项 2026-10-12 清单回归测试（计划 Task 6，TDD）——

@@ -159,7 +159,7 @@ jobs:
         with:
           name: ${{ format('mac-acceptance-{0}-{1}', inputs.release_sha, inputs.architecture || 'arm64') }}
           path: FHD/release/xcagi-v${{ github.event.inputs.version }}/enterprise
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
 
       - name: Preserve failed staple candidate for diagnosis only
@@ -170,5 +170,5 @@ jobs:
           path: |
             FHD/release-staple-recovery/${{ inputs.release_sha }}-${{ inputs.architecture || 'arm64' }}/XCAGI-Enterprise-${{ inputs.version }}-mac-${{ inputs.architecture || 'arm64' }}.dmg
             FHD/release-staple-recovery/${{ inputs.release_sha }}-${{ inputs.architecture || 'arm64' }}/recovery-receipt.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30

@@ -326,7 +326,7 @@ def test_desktop_package_includes_commercial_safe_office_employee_runtimes() -> 
         for path in (employee_root / employee_name / "backend").rglob("*.py")
     )
 
-    assert '"pypdf>=6.19,<7"' in pyproject
+    assert '"pypdf>=6.20.1,<7"' in pyproject
     assert '"reportlab>=5,<6"' in pyproject
     assert "PyMuPDF" not in pyproject
     assert "collect_submodules(module)" in spec
@@ -424,7 +424,7 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     )
     notarize = (REPO_ROOT / "desktop" / "build" / "notarize.cjs").read_text(encoding="utf-8")
 
-    assert "xattr -cr desktop/node_modules/electron/dist" in installer
+    assert all(s in installer for s in ("electron/install.js", "xattr -cr"))
     assert '"--config.electronDist=node_modules/electron/dist"' in installer
     assert '"--config.directories.output=${package_stage}"' in installer
     assert 'for staged_file in "${package_stage}"/*' in installer

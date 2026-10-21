@@ -132,6 +132,20 @@ class PreflightTest(unittest.TestCase):
         self.assertNotIn('PRIVATE_BACKUP_CONTENT', str(records))
         self.assertEqual(sum(Path(c[0]).name in ('pg_restore', 'gzip', 'tar') and c[-1] != '--version' for c in calls), 5)
 
+    def test_manifest_summary_counts_and_redacts_entries(self):
+        def setup(path):
+            manifest = self.backup_fixture(path) / 'MANIFEST.txt'
+            lines = manifest.read_text().splitlines()[:-1]
+            manifest.write_text('\n'.join(lines + [lines[0], '0' * 64 + '  ./customer_secret.dump', 'invalid SECRET']) + '\n')
+        code, records, _ = self.run_probe(setup)
+        self.assertEqual(code, 1)
+        summary = next(r['value'] for r in records if r['check'] == 'manifest_summary')
+        self.assertEqual(summary, {'line_count': 7, 'format_valid_count': 6, 'allowlisted_count': 5,
+                                   'duplicate_count': 1, 'unknown_name_count': 1, 'invalid_format_count': 1,
+                                   'missing_expected_count': 1})
+        self.assertTrue(all(secret not in str(records) for secret in
+                            ('customer_secret.dump', 'SECRET', '0' * 64, 'PRIVATE_BACKUP_CONTENT')))
+
     def test_invalid_backup_is_never_verified(self):
         for case in ('checksum', 'extra_path', 'duplicate', 'missing', 'symlink', 'stale'):
             with self.subTest(case=case):
@@ -201,8 +215,7 @@ class PreflightTest(unittest.TestCase):
                 self.assertEqual(len(headers), 3)
                 self.assertTrue(all(r['version'] == [1, 15, 0] for r in headers))
                 versions = [r['value'] for r in records if r['check'].endswith('_host_candidate')]
-                self.assertEqual([r['version'] for r in versions], ['16.4', '16.4'])
-                self.assertEqual([r['path'] for r in versions], ['/usr/bin/pg_restore', '/usr/bin/pg_dump'])
+                self.assertEqual([(r['version'], r['path']) for r in versions], [('16.4', '/usr/bin/pg_restore')])
                 self.assertNotIn('SECRET', str(records))
                 self.assertNotIn('PRIVATE_BACKUP_CONTENT', str(records))
                 self.assertNotIn('vendor build', str(records))

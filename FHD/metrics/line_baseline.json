@@ -1,5 +1,5 @@
 {
-  "lines": 2316931,
-  "updated": "2026-10-20",
-  "note": "Issue2290: preserve generic handling of unknown/private tool errors while adding fixed inventory-only recovery guidance in Agent and legacy workflows. Necessary regression cases cover real SQLite no-write failures, both formatters, forged codes and desktop summary; existing valid assertions retained."
+  "lines": 2319405,
+  "updated": "2026-10-21",
+  "note": "整合 #2473 至 d14d676b，保留库存失败固定安全指引与真实无写入反例，不删除既有测试；净增为原候选必要回归。"
 }

@@ -1,41 +1,12 @@
 #!/usr/bin/env bash
-# XCMAX 夜间备份：FHD/Modstore/支付 PostgreSQL + MODstore SQLite + 关键配置 → 本地轮转 + 异地。
-#
-# 产物（/var/backups/xcmax/daily/<UTC日期>/）：
-#   fhd_pg.dump          pg_dump -Fc（自带压缩，可 pg_restore 单库恢复）
-#   modstore_pg.dump     MODstore 主 PostgreSQL
-#   payment_pg.dump      支付服务 PostgreSQL
-#   modstore_sqlite.db.gz  SQLite 在线备份（sqlite3 backup API，不脏读）
-#   configs.tar.gz       /root/fhd-full.env、MODstore .env、nginx、systemd 单元、crontab（0600，含秘密）
-#   MANIFEST.txt         各产物 sha256 与字节数
-#
-# 轮转：daily 保 7 份；每周日复制到 weekly/ 保 4 份；每月 1 号复制到 monthly/ 保 6 份。
-# 异地：
-#   - 设置 OPS_BACKUP_SSH_TARGET 时，用专用密钥推送到温备机 incoming；
-#   - 装了 coscmd 且设置 OPS_COS_BUCKET 时上传当日目录（腾讯云 COS）。
-# 验证：pg_restore --list、gzip -t、tar -tzf、sqlite PRAGMA quick_check 全过才算成功。
-# 失败：任何一步失败 → notify.py 发 crit 告警（哨兵还有 26h 新鲜度兜底）。
-#
-# 环境（/etc/xcmax-ops.env，由 cron 行 source）：
-#   OPS_BACKUP_DIR      默认 /var/backups/xcmax
-#   OPS_FHD_ENV         默认 /root/fhd-full.env（取 DATABASE_URL）
-#   OPS_MODSTORE_ENV    默认 /etc/xcmax/modstore.env
-#   OPS_PG_DUMP_CONTAINER_IMAGE 可选；宿主 pg_dump 版本不匹配时用该镜像导出
-#   OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE 可选；未设置时支付库使用宿主 pg_dump/pg_restore，
-#     避免用较新的通用导出镜像生成目标 PostgreSQL 无法读取的归档
-#   OPS_MODSTORE_DIR    默认 /root/XCMAX/成都修茈科技有限公司/MODstore_deploy
-#   OPS_MODSTORE_DB     默认 $OPS_MODSTORE_DIR/modstore.db（可显式指定）
-#   OPS_COS_BUCKET      可选，如 xcmax-backup-1250000000
-#   OPS_BACKUP_SSH_TARGET 可选，如 xcmaxdr@43.138.211.142
-#   OPS_BACKUP_SSH_KEY  SSH 温备专用私钥
-#   OPS_BACKUP_SSH_DEST 接收端目录，默认 /srv/xcmax-dr/incoming
-#   OPS_BACKUP_EXTRA    可选，空格分隔的额外备份路径（如上传目录）
-#
-# 用法：xcmax_backup.sh [--dry-run]
+# Nightly FHD/Modstore/payment and configuration snapshots; daily UTC directories rotate locally and may copy offsite.
+# Each MANIFEST covers only the artifacts produced by that run; stale files remain untouched and unlisted.
+# PostgreSQL, SQLite, gzip and tar artifacts are validated before publishing the manifest.
+# Runtime options and defaults are in ops/env.example; use xcmax_backup.sh [--dry-run].
 
 set -uo pipefail
 
-OPS_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &>/dev/null && pwd)"
+OPS_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/.." &>/dev/null && pwd)"
 NOTIFY="python3 ${OPS_ROOT}/lib/notify.py"
 
 BACKUP_DIR="${OPS_BACKUP_DIR:-/var/backups/xcmax}"
@@ -50,6 +21,12 @@ TRANSFER_LOCK="${OPS_DR_TRANSFER_LOCK:-/run/lock/xcmax-dr-transfer.lock}"
 TRANSFER_WAIT_SECONDS="${OPS_DR_TRANSFER_WAIT_SECONDS:-1800}"
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
+RELEASE_TARGET_SHA=""
+if [[ "${1:-}" == "--modstore-release" ]]; then
+  [[ $# == 2 && "$2" =~ ^[0-9a-f]{40}$ ]] || { echo "usage: $0 --modstore-release <40-char-main-sha>" >&2; exit 64; }
+  RELEASE_TARGET_SHA="$2"
+fi
+BACKUP_TOOL_VERSION=""
 
 mkdir -p "$LOG_DIR"
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
@@ -57,8 +34,8 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 if command -v flock >/dev/null 2>&1; then
   exec 9>"$LOCK"
   if ! flock -n 9; then
-    log "另一实例运行中，跳过"
-    exit 0
+    log "另一实例运行中，发布快照中止"
+    [[ -z "$RELEASE_TARGET_SHA" ]] && exit 0 || exit 1
   fi
 fi
 
@@ -69,16 +46,6 @@ fail() {
 }
 
 TODAY="$(date -u +%Y%m%d)"
-DEST="${BACKUP_DIR}/daily/${TODAY}"
-
-if [[ "$DRY_RUN" == "1" ]]; then
-  log "[dry-run] 目标目录: $DEST"
-else
-  mkdir -p "$DEST"
-  chmod 700 "$BACKUP_DIR" "$BACKUP_DIR/daily" "$DEST" 2>/dev/null || true
-  # 同日重跑先撤销旧清单；只有本轮所有产物成功后才重新发布。
-  rm -f "$DEST/MANIFEST.txt"
-fi
 
 # ----------------------------------------------------------- PostgreSQL
 extract_database_url() {
@@ -129,22 +96,30 @@ backup_pg_url() {
   [[ "$DRY_RUN" == 1 ]] && { log "[dry-run] 将导出 $label PostgreSQL → $filename（URL 已脱敏）"; return; }
   local pg_image="${OPS_PG_DUMP_CONTAINER_IMAGE:-}"
   [[ "$policy" == payment ]] && pg_image="${OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE:-}"
-  if [[ "$policy" == payment ]]; then
-    local server_version client_version server_major client_major
+  if [[ "$policy" == payment || "$policy" == release ]]; then
+    local server_version client_version server_major client_major restore_version restore_major
     command -v psql >/dev/null 2>&1 || { fail "$label 无法检查数据库版本：缺少 psql"; return; }
     server_version="$(psql --no-password "$url" -XAtc 'show server_version_num' 2>>"$LOG")" || { fail "$label 无法读取 PostgreSQL 服务端版本"; return; }
     if [[ -n "$pg_image" ]]; then
       command -v docker >/dev/null 2>&1 || { fail "$label 已配置支付导出镜像但 docker 不可用"; return; }
       client_version="$(docker run --rm --network none --entrypoint pg_dump "$pg_image" --version 2>>"$LOG")" || { fail "$label 无法读取支付导出镜像版本"; return; }
+      restore_version="$(docker run --rm --network none --entrypoint pg_restore "$pg_image" --version 2>>"$LOG")" || { fail "$label 无法读取归档校验镜像版本"; return; }
     else
       command -v pg_dump >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1 || { fail "$label 缺少匹配的 pg_dump/pg_restore 或 OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE"; return; }
       client_version="$(pg_dump --version 2>>"$LOG")" || { fail "$label 无法读取支付导出客户端版本"; return; }
+      restore_version="$(pg_restore --version 2>>"$LOG")" || { fail "$label 无法读取归档校验客户端版本"; return; }
     fi
     client_version="${client_version##* }"
     [[ "$server_version" =~ ^[0-9]+$ ]] || { fail "$label 返回了无效的 PostgreSQL 服务端版本"; return; }
     if (( server_version >= 100000 )); then server_major=$((server_version / 10000)); else server_major="$((server_version / 10000)).$(((server_version / 100) % 100))"; fi
     if [[ "$client_version" == 9.* ]]; then client_major="$(cut -d. -f1-2 <<<"$client_version")"; else client_major="${client_version%%.*}"; fi
     [[ "$client_major" == "$server_major" ]] || { fail "$label 导出客户端版本 $client_major 与数据库版本 $server_major 不匹配"; return; }
+    if [[ "$policy" == release ]]; then
+      restore_version="${restore_version##* }"
+      restore_major="${restore_version%%.*}"
+      [[ "$restore_major" == "$server_major" ]] || { fail "$label 归档校验客户端版本 $restore_major 与数据库版本 $server_major 不匹配"; return; }
+      BACKUP_TOOL_VERSION="pg_dump $client_version; pg_restore $restore_version; PostgreSQL $server_major"
+    fi
   fi
   if [[ -n "$pg_image" ]]; then
     printf '%s\n' "$url" | docker run --rm -i --network host --entrypoint sh "$pg_image" -ceu 'IFS= read -r url; exec pg_dump --no-password -Fc -d "$url"' >"$out" 2>>"$LOG" || { fail "$label pg_dump 失败（容器镜像 $pg_image）"; return; }
@@ -194,8 +169,9 @@ backup_modstore_pg() {
   if [[ -z "$modstore_url" ]]; then
     fail "未在 $MODSTORE_ENV 找到 DATABASE_URL"
   else
-    backup_pg_url "MODstore" "modstore_pg.dump" "$modstore_url"
+    backup_pg_url "MODstore" "modstore_pg.dump" "$modstore_url" "${RELEASE_TARGET_SHA:+release}"
   fi
+  [[ -n "$RELEASE_TARGET_SHA" ]] && return
   if [[ -z "$payment_url" ]]; then
     fail "未在 $MODSTORE_ENV 找到 JAVA_DATABASE_URL"
   else
@@ -295,7 +271,35 @@ backup_configs() {
 # ---------------------------------------------------------- 轮转 + 异地
 write_manifest() {
   [[ "$DRY_RUN" == "1" ]] && return
-  (cd "$DEST" && sha256sum ./* 2>/dev/null | grep -v MANIFEST > MANIFEST.txt) || true
+  local -a files=(modstore_pg.dump payment_pg.dump modstore_sqlite.db.gz configs.tar.gz)
+  if [[ -s "$DEST/fhd_pg.dump" ]]; then
+    files+=(fhd_pg.dump)
+  elif [[ -s "$DEST/fhd_sqlite.db.gz" ]]; then
+    files+=(fhd_sqlite.db.gz)
+  else
+    fail "FHD backup output missing"
+    return 1
+  fi
+  local pending="$DEST/MANIFEST.txt.tmp"
+  if ! (cd "$DEST" && sha256sum "${files[@]}" > "$pending") ||
+    ! mv -f "$pending" "$DEST/MANIFEST.txt"; then
+    fail "MANIFEST generation failed"
+    return 1
+  fi
+}
+
+backup_modstore_release() {
+  DEST="${BACKUP_DIR}/modstore-release/${RELEASE_TARGET_SHA}/$(date -u +%Y%m%dT%H%M%SZ)-$$"
+  mkdir -p "$(dirname "$DEST")" && mkdir "$DEST" || { fail "MODstore snapshot path unavailable"; return 1; }
+  chmod 700 "$BACKUP_DIR" "$(dirname "$DEST")" "$DEST" 2>/dev/null || true
+  backup_modstore_pg
+  [[ ${#FAILURES[@]} == 0 ]] || return 1
+  (cd "$DEST" && sha256sum modstore_pg.dump > MANIFEST.txt && sha256sum -c MANIFEST.txt >/dev/null) \
+    || { fail "MODstore release manifest/hash validation failed"; return 1; }
+  (umask 077; printf 'scope=modstore-postgres\ntarget_sha=%s\ncreated_at=%s\ntool_versions=%s\narchive_validation=pg_restore --list passed\n' \
+    "$RELEASE_TARGET_SHA" "$(date -u +%FT%TZ)" "$BACKUP_TOOL_VERSION" > "$DEST/release-backup.txt") \
+    || { fail "MODstore release receipt could not be written"; return 1; }
+  log "MODstore pre-migration snapshot validated: target=$RELEASE_TARGET_SHA dir=$DEST tools=$BACKUP_TOOL_VERSION"
 }
 
 rotate() {
@@ -372,16 +376,28 @@ offsite_ssh() {
 
 # ------------------------------------------------------------------ main
 log "===== 备份开始 (dry-run=$DRY_RUN) ====="
+if [[ -n "$RELEASE_TARGET_SHA" ]]; then
+  backup_modstore_release || exit 1
+  exit 0
+fi
+
+DEST="${BACKUP_DIR}/daily/${TODAY}"
+if [[ "$DRY_RUN" == "1" ]]; then
+  log "[dry-run] 目标目录: $DEST"
+else
+  mkdir -p "$DEST"
+  chmod 700 "$BACKUP_DIR" "$BACKUP_DIR/daily" "$DEST" 2>/dev/null || true
+  # 同日重跑先撤销旧清单；只有本轮所有产物成功后才重新发布。
+  rm -f "$DEST/MANIFEST.txt"
+fi
+
 backup_fhd_pg
 backup_modstore_pg
 backup_modstore_sqlite
 backup_configs
 
 if [[ ${#FAILURES[@]} -eq 0 ]]; then
-  write_manifest
-  rotate
-  offsite_ssh
-  offsite_cos
+  if write_manifest; then rotate; offsite_ssh; offsite_cos; fi
 else
   log "备份产物存在失败，跳过 MANIFEST、轮转和异地推送"
 fi

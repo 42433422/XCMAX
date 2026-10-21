@@ -25,7 +25,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     && pip install --no-cache-dir --target /opt/site-packages --upgrade \
         'wheel>=0.46.2' 'jaraco.context>=6.1.0' 'setuptools>=78.0.0'
 
-FROM cgr.dev/chainguard/wolfi-base@sha256:96ff486b326d15db16aa1fbd41a17043a557bebf76d2c0ac932e717534025940 AS production
+FROM cgr.dev/chainguard/wolfi-base@sha256:81211e15a86ea1d5357f284482af45730c51de45eaf10ad9ce205d6bfc2df323 AS production
 
 ARG XCAGI_GIT_SHA=""
 
@@ -43,7 +43,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     XCAGI_GIT_SHA=${XCAGI_GIT_SHA}
 
 RUN apk upgrade --no-cache \
-    && apk add --no-cache python-3.11 curl \
+    && apk add --no-cache python-3.11 curl 'ca-certificates-bundle>=20260909-r3' \
     && addgroup -S appuser \
     && adduser -S -G appuser -h /home/appuser -s /bin/sh appuser
 
