@@ -1,0 +1,103 @@
+name: CI latency release-contract verification
+'on':
+  push:
+    branches: ['ci/latency-contract-verify-20261022']
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == '42433422/XCMAX' && github.ref == 'refs/heads/ci/latency-contract-verify-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TARGET_SHA: a25e915680765efcb20f60b87d1a5e5a13124383
+      BASE_SHA: c8c9c90ca47cbde6361c94b11cf5c94815b53147
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install isolated verification tools
+        run: python -m pip install 'pytest<10' pyyaml 'ruff>=0.8,<0.16'
+      - name: Reproduce failure, align contract, and verify negative cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test "$(git rev-parse HEAD^{tree})" = de7d63316d5dbe65dc7d48ee55eb9ec970c4c50e
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          import yaml
+          test = Path('FHD/tests/release_gate/test_admin_console_release_policy.py')
+          command = ['python', '-m', 'pytest', '--noconftest', '-c', '/dev/null', '-p', 'no:cacheprovider', str(test) + '::test_fhd_release_chain_carries_and_verifies_admin_identity', '-q', '--tb=short']
+          before = subprocess.run(command, text=True, capture_output=True)
+          print(before.stdout, before.stderr, flush=True)
+          assert before.returncode == 1 and 'ssot-drift-gate' in before.stdout, 'Expected original dependency contract failure'
+          old = '    assert set(jobs["pack-verify"]["needs"]) == {\n        "guard-temp-scripts",\n        "ssot-drift-gate",\n        "classify",\n    }\n'
+          new = '    assert set(jobs["pack-verify"]["needs"]) == {"guard-temp-scripts", "classify"}\n    for gate in ("backend-test", "frontend-test"):\n        assert "ssot-drift-gate" in jobs[gate]["needs"]\n'
+          source = test.read_text()
+          assert source.count(old) == 1, 'Unexpected source; refusing speculative edit'
+          test.write_text(source.replace(old, new), encoding='utf-8')
+          subprocess.run(command, check=True)
+          workflow = Path('FHD/.github/workflows/ci-cd.yml')
+          original = workflow.read_text()
+          for job, dependency in [('pack-verify', 'classify'), ('backend-test', 'ssot-drift-gate'), ('frontend-test', 'ssot-drift-gate'), ('docker-build-fhd-api', 'backend-test')]:
+              try:
+                  data = yaml.safe_load(original)
+                  data['jobs'][job]['needs'].remove(dependency)
+                  workflow.write_text(yaml.safe_dump(data), encoding='utf-8')
+                  result = subprocess.run(command, text=True, capture_output=True)
+                  assert result.returncode == 1 and 'AssertionError' in result.stdout, (job, dependency, result.stdout, result.stderr)
+                  print('EXPECTED_REJECTION', job, dependency, flush=True)
+              finally:
+                  workflow.write_text(original, encoding='utf-8')
+          PY
+          python -m pytest --noconftest -c /dev/null -p no:cacheprovider FHD/tests/test_ci/test_workflow_gate_contracts.py FHD/tests/release_gate/test_admin_console_release_policy.py::test_fhd_release_chain_carries_and_verifies_admin_identity -q
+          python -m scripts.dev.test_change_classifier
+          python -m ruff check FHD/tests/release_gate/test_admin_console_release_policy.py FHD/tests/test_ci/test_workflow_gate_contracts.py
+          python -m ruff format --check FHD/tests/release_gate/test_admin_console_release_policy.py FHD/tests/test_ci/test_workflow_gate_contracts.py
+          python scripts/dev/publish_ci_workflows_to_root.py --check
+          git diff --check
+      - name: Commit locally and run repository preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'CI verification'
+          git config user.email 'ci-verification@users.noreply.github.com'
+          git add FHD/tests/release_gate/test_admin_console_release_policy.py
+          git commit -m 'test(ci): align early pack contract with final SSOT gates'
+          (cd FHD && python scripts/dev/check_net_deletion.py --update)
+          (cd FHD && python scripts/dev/push_preflight.py --fix --base "$BASE_SHA")
+          python - <<'PY'
+          import subprocess
+          allowed = {'FHD/metrics/line_baseline.json'}
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          assert changed <= allowed, f'Unexpected generated changes: {changed}'
+          PY
+          git add FHD/metrics/line_baseline.json
+          if ! git diff --cached --quiet; then git commit -m 'chore(ci): record net deletion from contract reconciliation'; fi
+          (cd FHD && python scripts/dev/push_preflight.py --fix --base "$BASE_SHA")
+          git diff --exit-code
+          git diff --check "$BASE_SHA" HEAD
+          echo VERIFIED_TREE=$(git rev-parse HEAD^{tree})
+          git diff --stat "$TARGET_SHA" HEAD
+          git diff "$TARGET_SHA" HEAD -- FHD/tests/release_gate/test_admin_console_release_policy.py FHD/metrics/line_baseline.json
+          python - <<'PY'
+          import hashlib, json, subprocess
+          from pathlib import Path
+          for name in ('FHD/tests/release_gate/test_admin_console_release_policy.py', 'FHD/metrics/line_baseline.json'):
+              raw = Path(name).read_bytes()
+              print('VERIFIED_FILE', json.dumps({'path': name, 'blob_sha': subprocess.check_output(['git','hash-object',name],text=True).strip(), 'sha256':hashlib.sha256(raw).hexdigest(), 'content':raw.decode()}, ensure_ascii=False), flush=True)
+          PY
+      - name: Clean only this disposable checkout
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/latency-clean-home" "$RUNNER_TEMP/latency-clean-tmp"
+          HOME="$RUNNER_TEMP/latency-clean-home" XCMAX_CLEAN_TMP_ROOT="$RUNNER_TEMP/latency-clean-tmp" python3 scripts/dev/clean_agent_workspace.py
+          df -h .
