@@ -146,6 +146,7 @@ def test_digest_redacts_secrets_and_drops_raw_payload():
     ],
 )
 def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, completed, terminal):
+    monkeypatch.setenv("MODSTORE_INCIDENT_TEAM_HANDLER_FAILED_FOLLOWUP", "0")
     from modstore_server.models_cs import (
         CustomerServiceAction,
         CustomerServiceMessage,
@@ -268,9 +269,24 @@ def test_dispatch_persists_handler_outputs_and_team_ok(fresh_db, monkeypatch, co
         monkeypatch.setattr(
             "modstore_server.incident_team_orchestrator.execute_employee_task",
             lambda employee_id, *a, **kw: (
-                _employee_result([PARA_OK])
-                if employee_id == "verify-1" and terminal == "completed"
-                else pytest.fail("不能重派原scout/fix或已关闭工单")
+                _employee_result(
+                    [
+                        PARA_OK,
+                        *(
+                            [
+                                {
+                                    "handler": "change_request",
+                                    "ok": True,
+                                    "change_request_id": cr_id,
+                                }
+                            ]
+                            if employee_id == "fix-1"
+                            else []
+                        ),
+                    ]
+                )
+                if employee_id in {"fix-1", "verify-1"} and terminal == "completed"
+                else pytest.fail("不能重派已执行的scout或已关闭工单")
             ),
         )
         if terminal == "missing":

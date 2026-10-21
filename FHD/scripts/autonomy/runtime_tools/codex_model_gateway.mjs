@@ -8,7 +8,7 @@
  *   日志只写变量名，从不写值。
  * - 遇到“模型不支持 / 模型不存在 / 额度耗尽”换下一个候选重试同一任务；其他失败原样返回，
  *   交给既有的执行器回退链 / 超时逻辑（不在这里重复实现）。
- * - DEVFLEET_CODEX_MODEL_GATEWAY=0 关闭网关，恢复旧行为（不传 -m）。
+ * - DEVFLEET_CODEX_MODEL_GATEWAY=0 关闭自动降级；角色显式模型仍作为单候选传给 CLI。
  */
 
 export const DEFAULT_CODEX_MODEL_CANDIDATES = Object.freeze(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
@@ -53,10 +53,38 @@ export function modelGatewayEnabled(env = process.env) {
   return asText(env.DEVFLEET_CODEX_MODEL_GATEWAY).trim() !== '0';
 }
 
-/** 从 Para 派发提示里取 `codex_model_candidates: a,b,c`（派发侧可按工单下发）。 */
+/** Only the final dispatcher context supplies controls; quoted task text cannot override it. */
+function loopContext(prompt) {
+  const text = asText(prompt);
+  const headers = [...text.matchAll(/^MODstore loop context:\s*$/gm)];
+  const header = headers.at(-1);
+  if (!header) return null;
+  const tail = text.slice(header.index + header[0].length);
+  const fields = new Map();
+  for (const line of tail.split(/\r?\n/).filter((value) => value.trim())) {
+    const field = line.match(/^- ([a-z_]+):\s*(.*)$/);
+    if (!field || fields.has(field[1])) {
+      if (/^- incident_execution_budget:/m.test(tail)) throw new Error('invalid_incident_execution_context');
+      return null;
+    }
+    fields.set(field[1], field[2]);
+  }
+  return { start: header.index, fields };
+}
+
+/** Keep trusted executor evidence before, rather than inside, the control suffix. */
+export function insertBeforeLoopContext(prompt, extra = '') {
+  const text = asText(prompt);
+  if (!extra) return text;
+  const context = loopContext(text);
+  return context
+    ? `${text.slice(0, context.start)}${extra}\n\n${text.slice(context.start)}`
+    : `${text}${extra}`;
+}
+
+/** 从规范末尾 Para context 取候选，忽略工单正文里同名文本。 */
 export function modelCandidatesFromPrompt(prompt) {
-  const match = asText(prompt).match(/^\s*-?\s*codex_model_candidates\s*[:=]\s*(.+)$/im);
-  return match ? splitModels(match[1]) : [];
+  return splitModels(loopContext(prompt)?.fields.get('codex_model_candidates'));
 }
 
 export function codexModelCandidates({ env = process.env, prompt = '', reportOnly = false } = {}) {
@@ -64,7 +92,82 @@ export function codexModelCandidates({ env = process.env, prompt = '', reportOnl
   const fromEnv = splitModels(env.DEVFLEET_CODEX_MODEL_CANDIDATES);
   const base = fromPrompt.length ? fromPrompt : fromEnv.length ? fromEnv : [...DEFAULT_CODEX_MODEL_CANDIDATES];
   const review = reportOnly ? splitModels(env.DEVFLEET_CODEX_REVIEW_MODEL) : [];
-  return dedupe([...review, ...base]);
+  return dedupe(fromPrompt.length ? base : [...review, ...base]);
+}
+
+export function checkIncidentExecutionBudget(prompt, { reservedChars = 0 } = {}) {
+  const raw = loopContext(prompt)?.fields.get('incident_execution_budget');
+  if (!raw) return null;
+  let requested;
+  try {
+    const value = JSON.parse(raw);
+    if (!value || !['scout', 'fix', 'verify'].includes(value.role)
+        || !Number.isSafeInteger(value.context_chars) || value.context_chars < 1
+        || !Number.isSafeInteger(value.output_tokens) || value.output_tokens < 1
+        || !['low', 'medium', 'high'].includes(value.reasoning_effort)) {
+      throw new Error('invalid');
+    }
+    requested = Object.fromEntries(
+      ['role', 'context_chars', 'output_tokens', 'reasoning_effort'].map((key) => [key, value[key]]),
+    );
+  } catch {
+    throw new Error('invalid_incident_execution_budget');
+  }
+  const actualChars = [...asText(prompt)].length;
+  const receipt = {
+    requested,
+    applied: { context_chars_limit: requested.context_chars },
+    context_chars_actual: actualChars,
+    context_chars_reserved: reservedChars,
+    context_limit_enforced: true,
+    output_limit_enforced: false,
+  };
+  if (actualChars + reservedChars > requested.context_chars) {
+    const error = new Error('incident_context_budget_exceeded');
+    error.budgetReceipt = { ...receipt, status: 'rejected' };
+    throw error;
+  }
+  return receipt;
+}
+
+/** These are real CLI arguments. No unsupported max-output setting is invented. */
+export function codexExecutionConfig({ prompt = '', env = process.env, reportOnly = false } = {}) {
+  const receipt = checkIncidentExecutionBudget(prompt);
+  const requestedEffort = receipt?.requested.reasoning_effort
+    || (reportOnly ? asText(env.DEVFLEET_CODEX_REVIEW_EFFORT).trim() : '');
+  const effort = ['low', 'medium', 'high'].includes(requestedEffort) ? requestedEffort : '';
+  return {
+    receipt,
+    effort,
+    args: ['exec', '--sandbox', 'workspace-write', '--ephemeral',
+      ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : [])],
+  };
+}
+
+/** Record exact submitted CLI controls on both success and failure, without prompt text. */
+export async function runCodexBudgetedAttempt({ execution, model = '', run, log = () => {} }) {
+  const args = [...execution.args, ...(model ? ['-m', model] : []), '-'];
+  const receipt = {
+    ...(execution.receipt || { requested: null, output_limit_enforced: false }),
+    application_scope: 'codex_cli_arguments',
+    applied: {
+      ...execution.receipt?.applied,
+      model_cli: model || null,
+      reasoning_effort_cli: execution.effort || null,
+    },
+  };
+  const emit = (status) => log(
+    `incident_execution_budget_receipt=${JSON.stringify({ ...receipt, status })}`,
+    status === 'completed' ? 'info' : 'warn',
+  );
+  try {
+    const output = await run(args);
+    emit(asText(output).startsWith('[codex exit=') ? 'failed' : 'completed');
+    return output;
+  } catch (error) {
+    emit('invocation_error');
+    throw error;
+  }
 }
 
 /** 返回鉴权方式与给子进程的 env；不读写任何文件，不输出密钥值。 */

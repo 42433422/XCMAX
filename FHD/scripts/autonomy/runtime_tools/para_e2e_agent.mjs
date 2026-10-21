@@ -12,12 +12,17 @@ import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { probeTools } from './tool_preflight.mjs';
 import {
+  checkIncidentExecutionBudget,
+  codexExecutionConfig,
   codexModelCandidates,
   createModelAvailability,
   formatModelsTried,
+  insertBeforeLoopContext,
+  modelCandidatesFromPrompt,
   modelGatewayEnabled,
   probeModels,
   resolveCodexAuth,
+  runCodexBudgetedAttempt,
   runWithModelFallback,
 } from './codex_model_gateway.mjs';
 import { createCredentialVault, parseCredentialGrant } from './credential_vault.mjs';
@@ -350,22 +355,18 @@ async function probeCodexModel(model, env) {
 }
 
 async function runCodexAgent(taskDir, prompt, log = () => {}) {
-  // Speed lever: report-only (review/QA) tasks may use a faster model and/or
-  // lower reasoning effort, leaving the code step untouched.
   const isReportOnly = String(prompt || '').toLowerCase().includes('modstore_report_only=1');
-  const baseArgs = ['exec', '--sandbox', 'workspace-write', '--ephemeral'];
-  if (isReportOnly) {
-    const roEffort = process.env.DEVFLEET_CODEX_REVIEW_EFFORT?.trim();
-    if (roEffort) baseArgs.push('-c', `model_reasoning_effort="${roEffort}"`);
-  }
+  const execution = codexExecutionConfig({ prompt, reportOnly: isReportOnly });
   const codexEnv = toolEnv(prompt, 'codex');
+  const invoke = (model, env) => runCodexBudgetedAttempt({
+    execution, model, log,
+    run: (args) => spawnCodexOnce(taskDir, prompt, { args, env }),
+  });
   if (!modelGatewayEnabled()) {
-    // 网关关闭：旧行为（report-only 可选 DEVFLEET_CODEX_REVIEW_MODEL，否则不传 -m）。
-    const roModel = isReportOnly ? process.env.DEVFLEET_CODEX_REVIEW_MODEL?.trim() : '';
-    return spawnCodexOnce(taskDir, prompt, {
-      args: [...baseArgs, ...(roModel ? ['-m', roModel] : []), '-'],
-      env: codexEnv,
-    });
+    // Disabling fallback does not erase an explicit role's selected model.
+    const model = modelCandidatesFromPrompt(prompt)[0]
+      || (isReportOnly ? process.env.DEVFLEET_CODEX_REVIEW_MODEL?.trim() : '');
+    return invoke(model, codexEnv);
   }
   // 密钥库（#2416）决定子进程可见的密钥；网关只在其结果上选择 API Key / ChatGPT 登录。
   const auth = resolveCodexAuth(codexEnv);
@@ -383,13 +384,18 @@ async function runCodexAgent(taskDir, prompt, log = () => {}) {
     candidates,
     availability: codexModelAvailability,
     runAttempt: async (model) => {
-      const output = await spawnCodexOnce(taskDir, prompt, { args: [...baseArgs, '-m', model, '-'], env: auth.childEnv });
+      const output = await invoke(model, auth.childEnv);
       return { ok: !String(output || '').startsWith('[codex exit='), output };
     },
     log,
   });
   const tried = formatModelsTried(result.attempts);
   codexModelAttemptsByTaskDir.set(taskDir, tried);
+  if (execution.receipt && result.attempts.every((attempt) => attempt.status === 'skipped')) {
+    log(`incident_execution_budget_receipt=${JSON.stringify({
+      ...execution.receipt, status: 'no_available_model', application_scope: 'context_gate',
+    })}`, 'warn');
+  }
   log(`codex model gateway result: model=${result.model || 'none'} ${tried}${result.exhausted ? ' (候选耗尽)' : ''}`, result.ok ? 'info' : 'warn');
   return result.output;
 }
@@ -1240,6 +1246,29 @@ async function failTask(ws, task, content) {
 async function handleTask(ws, task) {
   let taskDir = null;
   try {
+  // Budget refusal precedes workspace fetches, credential grants and model probes.
+  const reportOnly = isReportOnlyTask(task);
+  const targetBranch = reportOnlyTargetBranch(task);
+  const baseBranch = (task?.base_branch || 'main').trim() || 'main';
+  const reservedEvidence = targetBranch ? reportOnlyRefEvidencePrompt({
+    verified_at: '9999-12-31T23:59:59.999Z', base_branch: baseBranch,
+    base_ref: `refs/remotes/origin/${baseBranch}`, base_sha: '0'.repeat(64),
+    target_branch: targetBranch, target_ref: `refs/remotes/origin/${targetBranch}`,
+    target_sha: '0'.repeat(64), target_source: 'bareRepo',
+  }) : '';
+  try {
+    const receipt = checkIncidentExecutionBudget(task.description, {
+      reservedChars: reservedEvidence ? [...reservedEvidence].length + 2 : 0,
+    });
+    if (receipt) codexTaskLog(ws, task)(
+      `incident_execution_budget_receipt=${JSON.stringify({ ...receipt, status: 'validated' })}`,
+    );
+  } catch (error) {
+    await failTask(ws, task, `${error.message}; incident_execution_budget_receipt=${JSON.stringify(
+      error.budgetReceipt || { status: 'rejected', output_limit_enforced: false },
+    )}`);
+    return;
+  }
   send(ws, {
     type: 'task_progress',
     task_id: task.task_id,
@@ -1248,7 +1277,6 @@ async function handleTask(ws, task) {
     status: 'running',
   });
   taskDir = await prepareWorkspace(task);
-  const reportOnly = isReportOnlyTask(task);
   const reportOnlyRefEvidence = reportOnly
     ? await prepareReportOnlyTargetBranch(taskDir, task)
     : null;
@@ -1259,7 +1287,10 @@ async function handleTask(ws, task) {
       `${JSON.stringify(reportOnlyRefEvidence, null, 2)}\n`,
     );
   }
-  const executionPrompt = `${task.description}${reportOnlyRefEvidencePrompt(reportOnlyRefEvidence)}`;
+  const executionPrompt = insertBeforeLoopContext(
+    task.description, reportOnlyRefEvidencePrompt(reportOnlyRefEvidence),
+  );
+  checkIncidentExecutionBudget(executionPrompt);
   writeFileSync(
     join(taskDir, '.devfleet', 'TASK.md'),
     `# DevFleet 任务\n\n## 标题\n${task.title}\n\n## 要求\n${executionPrompt}\n\n## 工作分支\n${task.work_branch}\n`,

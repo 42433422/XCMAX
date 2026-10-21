@@ -28,6 +28,7 @@ def execution_succeeded(result: Any) -> bool:
             "orchestrator_failed",
             "skipped",
             "pending",
+            "planned",
             "running",
             "queued",
             "unknown",
@@ -251,6 +252,8 @@ def record_team_progress(
                         row.get("ok")
                         or row.get("status")
                         in {
+                            "planned",
+                            "dispatching",
                             "pending",
                             "skipped_fix_unfinished",
                             "verification_invalidated",

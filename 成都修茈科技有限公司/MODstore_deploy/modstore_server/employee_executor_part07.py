@@ -27,6 +27,8 @@ def execute_employee_task(
     t0 = _facade().time.perf_counter()
     payload = dict(input_data or {})
     payload.pop("_trusted_duty_contract_execution", None)
+    if int(user_id or 0) > 0:
+        payload.pop("_trusted_incident_team_execution", None)
     detail_log = _facade()._executor_detail_log_enabled()
     recovery_meta: _facade().Dict[str, _facade().Any] = {}
     _facade().logger.info(

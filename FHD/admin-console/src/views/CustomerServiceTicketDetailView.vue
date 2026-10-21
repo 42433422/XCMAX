@@ -52,6 +52,32 @@
         <p class="cs-quote">{{ ticket.summary || '原单未记录正文' }}</p>
       </section>
 
+      <section class="cs-card" aria-label="执行总览">
+        <h3 class="cs-card-title">执行总览</h3>
+        <p v-if="!overview" class="cs-state">暂无执行总览证据，请查看原单进度记录。</p>
+        <template v-else>
+          <dl class="cs-facts">
+            <div><dt>当前卡点</dt><dd>{{ overview.blocker }}</dd></div>
+            <div><dt>当前责任方</dt><dd>{{ overview.responsible }}</dd></div>
+            <div><dt>产品工作单</dt><dd>{{ overview.workOrder }}</dd></div>
+            <div><dt>最近进展</dt><dd>{{ overview.progress }} · {{ overview.progressAt }}</dd></div>
+            <div><dt>下一步</dt><dd>{{ overview.next }}</dd></div>
+            <div><dt>修复核验来源</dt><dd>{{ overview.verificationSource }}</dd></div>
+            <div><dt>正式版本与客户确认</dt><dd>{{ overview.release }} · {{ overview.customer }}</dd></div>
+          </dl>
+          <p v-if="!overview.receipts.length" class="cs-hint">当前事件尚无可核验的任务接单回执。</p>
+          <ul v-else class="cs-chips" aria-label="实际接单凭证">
+            <li v-for="receipt in overview.receipts" :key="receipt.key">
+              {{ receipt.kind }} · {{ receipt.role }} · <code>{{ receipt.taskId }}</code>
+              <span class="cs-badge" :class="`is-${receipt.badge.tone}`">{{ receipt.badge.label }}</span>
+            </li>
+          </ul>
+        </template>
+      </section>
+
+      <CustomerServiceSharedRepair v-if="ticket.status === 'processing' && ticket.intent === 'product_issue' && !customDelivery"
+        :key="ticketId" :ticket-id="ticketId" @linked="load" />
+
       <section class="cs-card">
         <h3 class="cs-card-title">处理结论</h3>
         <p v-if="!resolution" class="cs-state">暂无处理结论记录</p>
@@ -138,12 +164,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import api from '@/api/core'
 import { appPrompt } from '@/utils/appDialog'
+import CustomerServiceSharedRepair from './CustomerServiceSharedRepair.vue'
 import {
-  auditItems, buildTimeline, formatBeijingTime, intentLabel, parseServerTime, prettyJson, priorityLabel, resolutionStateBadge,
+  auditItems, buildTimeline, executionOverview, formatBeijingTime, intentLabel, parseServerTime, prettyJson, priorityLabel, resolutionStateBadge,
   routeLabel, submitterTypeLabel, teamMembers, ticketStatusBadge, yesNoBadge, type Row,
 } from '../utils/customerServiceTicketFormat'
 
-type Detail = { ticket: Row; decisions: Row[]; actions: Row[]; audit_logs: Row[] }
+type Detail = { ticket: Row; decisions: Row[]; actions: Row[]; audit_logs: Row[]; execution_overview?: Row }
 const route = useRoute()
 const router = useRouter()
 const detail = ref<Detail | null>(null), loading = ref(false), error = ref(''), saving = ref(false), expectedCompletionInput = ref('')
@@ -165,6 +192,7 @@ const resolution = computed(() => {
   return value && typeof value === 'object' ? value as Row : null
 })
 const status = computed(() => ticketStatusBadge(ticket.value))
+const overview = computed(() => executionOverview(detail.value?.execution_overview))
 const steps = computed(() => (Array.isArray(ticket.value.lifecycle_steps) ? ticket.value.lifecycle_steps : []) as Row[])
 const resolutionState = computed(() => resolutionStateBadge(resolution.value?.state, resolution.value?.verification_mode))
 const repairVerified = computed(() => yesNoBadge(resolution.value?.repair_verified, '修复已验证', '修复未验证'))

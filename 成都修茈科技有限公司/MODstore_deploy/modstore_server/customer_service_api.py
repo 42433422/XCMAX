@@ -299,7 +299,10 @@ async def ticket_detail(
 
     decisions = [decision_payload(d) for d in related(CustomerServiceDecision, True)]
     actions = [action_payload(a) for a in related(CustomerServiceAction)]
+    from modstore_server.customer_ticket_execution import ticket_execution_overview
+
     return {
+        **({"execution_overview": ticket_execution_overview(db, ticket)} if user.is_admin else {}),
         "ticket": (
             ticket_payload(ticket) if user.is_admin else customer_view.customer_ticket_row(ticket)
         ),

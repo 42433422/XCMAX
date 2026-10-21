@@ -1,11 +1,11 @@
-"""Reconcile original tasks; start only verification previously blocked on a pending fix."""
+"""Read original task receipts and advance durable dependency-ready incident roles."""
 
 from __future__ import annotations
 
 import json
 import logging
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any
 
 from modstore_server.codex_model_attempts import parse_codex_models_tried
 from modstore_server.customer_issue_delivery_contract import (
@@ -54,6 +54,7 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
                 | IncidentEvent.payload_json.contains('"requires_reconciliation": true')
                 | IncidentEvent.payload_json.contains('"status": "unknown"')
                 | IncidentEvent.payload_json.contains('"status": "dispatching"')
+                | IncidentEvent.payload_json.contains('"continuation_pending": true')
             )
 
         def page(after=0):
@@ -102,7 +103,10 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
                     status = str(task.get("status") or "")
                     if status in {"completed", "merged", "failed", "merge_conflict"}:
                         ok = para_task_succeeded(
-                            task, task_id, output.get("required_subtask_ids")
+                            task,
+                            task_id,
+                            output.get("required_subtask_ids"),
+                            output.get("planned_devices"),
                         ) and not output.get("partial")
                         snapshot = _task_result_snapshot({"task": task})
                         output.update(
@@ -158,6 +162,7 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
                         else "completed" if row["ok"] else "failed"
                     )
         if rows == claim.get("team"):
+            _resume_pending_verify(eid)
             continue
         claim.update(
             team=rows,
@@ -202,98 +207,21 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
             db.commit()
             changed += 1
         _resume_pending_verify(eid)
-    return {"changed": changed}
+    from modstore_server.incident_team_escalation import reconcile_incident_escalations
+
+    escalations = reconcile_incident_escalations(event_id=event_id, limit=limit, fetcher=fetcher)
+    return {"changed": changed, "escalations": escalations}
 
 
 def _resume_pending_verify(event_id: int) -> None:
-    """After original fix readback, run only the verification that never started."""
-    from modstore_server.customer_service_orchestrator import (
-        apply_customer_ticket_incident_progress,
-    )
-    from modstore_server.incident_team_orchestrator import _retry_member
-    from modstore_server.node_coordinator import (
-        assert_incident_claim,
-        incident_claim_scope,
-    )
+    """Compatibility entry point: every unstarted role resumes from the saved plan."""
+    from modstore_server.incident_team_execution import advance_team
 
     try:
-        with incident_claim_scope(event_id):
-            with get_session_factory()() as db:
-                event = db.get(IncidentEvent, event_id)
-                if event is None:
-                    return
-                payload = json.loads(str(event.payload_json or "{}"))
-                claim = payload.get("_team_claim") or {}
-                rows = claim.get("team") or []
-                by_role = {row.get("role"): row for row in rows}
-                verify, fix = by_role.get("verify", {}), by_role.get("fix", {})
-                if not fix.get("ok") or verify.get("status") != "skipped_fix_unfinished":
-                    return
-                ticket_id = int(payload.get("ticket_id") or 0)
-                ticket = db.get(CustomerServiceTicket, ticket_id)
-                if ticket is not None:
-                    resolution = (
-                        json.loads(str(ticket.evidence_json or "{}")).get("resolution") or {}
-                    )
-                    if (
-                        ticket.user_id != int(payload.get("user_id") or 0)
-                        or ticket.status in {"resolved", "closed", "reopened"}
-                        or resolution.get("state") in {"closed", "reopened"}
-                        or resolution.get("incident_event_id") not in (None, event_id)
-                    ):
-                        return
-                event_type, source = str(event.event_type), str(event.source)
-                plan = claim.get("plan") or {
-                    "team": [
-                        {"role": row.get("role"), "employee_id": row.get("employee_id")}
-                        for row in rows
-                    ]
-                }
-            _retry_member(
-                event_id=event_id,
-                member={"role": "verify", "employee_id": verify.get("employee_id")},
-                team_plan=plan,
-                payload=payload,
-                event_type=event_type,
-                source=source,
-                uid=0,
-                prev_results=by_role,
-            )
-            with get_session_factory()() as db:
-                assert_incident_claim(event_id, session=db)
-                event = db.get(IncidentEvent, event_id)
-                if event is None:
-                    return
-                payload = json.loads(str(event.payload_json or "{}"))
-                claim = payload.get("_team_claim") or {}
-                rows = claim.get("team") or []
-                claim["ok"] = team_succeeded(rows)
-                db.query(IncidentEvent).filter(IncidentEvent.id == event_id).update(
-                    {"payload_json": json.dumps(payload, ensure_ascii=False)}
-                )
-                ticket_id = int(payload.get("ticket_id") or 0)
-                ticket = db.get(CustomerServiceTicket, ticket_id)
-                if (
-                    ticket is not None
-                    and ticket.user_id == int(payload.get("user_id") or 0)
-                    and ticket.status not in {"resolved", "closed", "reopened"}
-                ):
-                    apply_customer_ticket_incident_progress(
-                        db,
-                        ticket_id=ticket_id,
-                        event_id=event_id,
-                        team_ok=claim["ok"],
-                        team_rows=rows,
-                    )
-                    from modstore_server.customer_issue_shared_release import (
-                        record_worker_repair,
-                    )
-
-                    record_worker_repair(db, ticket, event_id, rows)
-                db.commit()
+        advance_team(event_id)
     except RECOVERABLE_ERRORS:
-        # The persisted intent remains unknown; never launch a second verification.
-        return
+        # Existing dispatch intents remain fenced; recovery never replays them.
+        logging.getLogger(__name__).warning("incident continuation deferred event=%s", event_id)
 
 
 def register_completion_job(scheduler, *, track_job):
@@ -307,9 +235,48 @@ def register_completion_job(scheduler, *, track_job):
         max_instances=1,
         misfire_grace_time=300,
     )
+    from modstore_server.para_task_events import start_task_event_listener
+
+    listener = start_task_event_listener()
+    if listener is not None and hasattr(scheduler, "add_listener"):
+        from apscheduler.events import EVENT_SCHEDULER_SHUTDOWN
+
+        scheduler.add_listener(lambda event: listener.stop(), EVENT_SCHEDULER_SHUTDOWN)
 
 
-def persist_role_attempt(event_id: int, row: Dict[str, Any], *, expected_attempt: str = "") -> None:
+def reconcile_task_notification(task_id=None, *, fetcher=None):
+    """A live hint only selects persisted task IDs; status in the event is never proof."""
+    if task_id is None:
+        return reconcile_pending_teams(fetcher=fetcher)
+    with get_session_factory()() as db:
+        candidates = [
+            (event.id, json.loads(event.payload_json or "{}"))
+            for event in db.query(IncidentEvent)
+            .filter(IncidentEvent.payload_json.contains(task_id, autoescape=True))
+            .order_by(IncidentEvent.id)
+            .limit(100)
+        ]
+    matched = []
+    for event_id, payload in candidates:
+        claim = payload.get("_team_claim") or {}
+        receipts = [
+            output
+            for row in claim.get("team") or []
+            for output in (row.get("handler_outputs") or {}).get("outputs") or []
+            if output.get("handler") == "para_delegate"
+        ]
+        receipts += list((claim.get("escalations") or {}).values())
+        if any(
+            isinstance(receipt, dict)
+            and str(receipt.get("task_id") or receipt.get("para_task_id") or "") == task_id
+            for receipt in receipts
+        ):
+            reconcile_pending_teams(event_id=event_id, fetcher=fetcher)
+            matched.append(event_id)
+    return {"matched_events": matched}
+
+
+def persist_role_attempt(event_id: int, row: dict[str, Any], *, expected_attempt: str = "") -> None:
     """Commit intent before execution and its receipt only under current ownership."""
     from modstore_server.node_coordinator import assert_incident_claim
 
@@ -338,7 +305,13 @@ def persist_role_attempt(event_id: int, row: Dict[str, Any], *, expected_attempt
             row = {
                 **{
                     key: previous.get(key)
-                    for key in ("verified_fix_attempt_id", "event_id", "tenant_id")
+                    for key in (
+                        "verified_fix_attempt_id",
+                        "event_id",
+                        "tenant_id",
+                        "route",
+                        "check_units",
+                    )
                 },
                 **row,
             }
@@ -364,7 +337,7 @@ def persist_role_attempt(event_id: int, row: Dict[str, Any], *, expected_attempt
 
 
 def persist_late_role_result(
-    event_id: int, role: str, employee_id: str, attempt_id: str, result: Dict[str, Any]
+    event_id: int, role: str, employee_id: str, attempt_id: str, result: dict[str, Any]
 ) -> None:
     from contextvars import Context
 
@@ -392,6 +365,8 @@ def persist_late_role_result(
             save()
         except IncidentClaimLost:
             Context().run(save)  # receipt-only reconciliation under a new live owner
+        # A late worker must not share its original owner token to dispatch new work.
+        Context().run(_resume_pending_verify, event_id)
     except RECOVERABLE_ERRORS:
         logging.getLogger(__name__).warning(
             "incident late receipt requires external readback event=%s role=%s",

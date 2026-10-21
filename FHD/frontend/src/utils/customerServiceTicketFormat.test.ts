@@ -1,9 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import {
-  auditItems, buildTimeline, formatBeijingTime, parseServerTime, resolutionStateBadge, runStatusBadge, submitterTypeLabel, ticketStatusBadge, yesNoBadge,
+  auditItems, buildTimeline, executionOverview, formatBeijingTime, parseServerTime, resolutionStateBadge, runStatusBadge, submitterTypeLabel, ticketStatusBadge, yesNoBadge,
 } from '../../../admin-console/src/utils/customerServiceTicketFormat'
 
 describe('customer service ticket formatting', () => {
+  it('does not turn assignment, an absent task id or unknown results into accepted work', () => {
+    expect(executionOverview(undefined)).toBeNull()
+    const overview = executionOverview({ receipts: [
+      { state: 'requested', accepted: false, role: 'fix' },
+      { state: 'accepted', accepted: true, task_id: '' },
+      { state: 'unknown', accepted: true, task_id: 'await-result', requires_reconciliation: true },
+      { state: 'completed', accepted: true, task_id: 'done-task', completed: true },
+    ] })!
+    expect(overview.receipts.map(row => row.badge.label)).toEqual([
+      '尚无真实接单凭证', '尚无真实接单凭证', '接单结果待对账', '已接单并完成',
+    ])
+    expect(overview.progressAt).toBe('时间未记录')
+    expect(overview.workOrder).toBe('未关联产品工作单')
+  })
   it('treats zone-less server times as UTC and renders Beijing time', () => {
     expect(formatBeijingTime('2026-10-16T04:41:57.835690')).toBe('2026-10-16 12:41:57')
     expect(formatBeijingTime('2026-10-16 16:00:00')).toBe('2026-10-17 00:00:00')

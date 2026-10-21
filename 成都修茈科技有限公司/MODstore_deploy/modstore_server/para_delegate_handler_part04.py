@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import importlib
 
-from modstore_server.dot_ticket_dispatch import prepare_dolt_ticket_payload
+from modstore_server.dot_ticket_dispatch import (
+    DoltIncidentContractError,
+    prepare_dolt_ticket_payload,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -23,13 +26,29 @@ def _attach_credential_grant(prompt: str, task_id: str) -> _facade().Any:
     grant = credential_vault.issue_task_grant(
         task_id, credential_vault.default_grant_scopes(), purpose="para_dispatch"
     )
-    return prompt + "\n" + grant.prompt_line(), grant
+    return _facade().insert_before_loop_context(prompt, grant.prompt_line()), grant
 
 
 def _post_para_api_once(
     req: _facade().Dict[str, _facade().Any],
 ) -> _facade().Dict[str, _facade().Any]:
     h = _facade()
+    from modstore_server.para_delegate_handler_part03 import _independent_check_plan
+
+    try:
+        units, check_revision = (
+            _independent_check_plan(req) if not req.get("para_task_id") else ([], "")
+        )
+    except (ValueError, TypeError) as exc:
+        return {
+            "handler": "para_delegate",
+            "ok": False,
+            "accepted": False,
+            "queued": False,
+            "retryable": False,
+            "status": "blocked_independent_checks",
+            "error": str(exc),
+        }
     base = h._api_base()
     if not base:
         return h._outbox_response(
@@ -45,7 +64,7 @@ def _post_para_api_once(
             error="缺少 repo_url；已拒绝让 Para 使用工作设备本地目录，避免污染设备工作区。请配置 MODSTORE_PARA_REPO_URL 或在任务输入里提供 repo_url；如确实要使用设备本地目录，显式设置 MODSTORE_PARA_ALLOW_LOCAL_WORKDIR=1。",
             queued=False,
         )
-    branch = str(req.get("branch") or "main").strip() or "main"
+    branch = check_revision or str(req.get("branch") or "main").strip() or "main"
     report_only = bool(req.get("report_only"))
     if repo_url and (not report_only) and (not h._allow_local_workdir()):
         git_check = h._git_preflight_branch(repo_url, branch)
@@ -60,7 +79,7 @@ def _post_para_api_once(
     first_payload: dict[str, object] = {}
     max_attempts = h._resolve_max_attempts(req)
     mode = str(req.get("mode") or "").strip().lower()
-    auto_merge = bool(req.get("auto_merge"))
+    auto_merge = bool(req.get("auto_merge")) and not units
     if not auto_merge and mode in {"verify", "review", "report"} and (report_only is False):
         auto_merge = h._coerce_bool(req.get("auto_merge_on_complete"), False)
     workspace_path = str(
@@ -101,8 +120,17 @@ def _post_para_api_once(
                     **(req.get("execution_identity") or {}),
                 }
             base_prompt, grant = _attach_credential_grant(base_prompt, grant_task)
+            selection = req
+            if units:
+                selection = {
+                    **req,
+                    "raw_input": {
+                        **(req.get("raw_input") or {}),
+                        "max_devices": len(units),
+                    },
+                }
             tier, sel_devices, select_reason = _facade()._resolve_dispatch_devices(
-                client, base, token, req
+                client, base, token, selection
             )
             if not sel_devices:
                 raw = req.get("raw_input") or {}
@@ -123,9 +151,36 @@ def _post_para_api_once(
                     error=select_reason or "未发现在线可用 Para 工作设备（executorReady）",
                     queued=True,
                 )
-            total = len(sel_devices)
-            planned_devices = [str(device.get("id") or "") for device in sel_devices]
-            for index, device in enumerate(sel_devices):
+            raw = req.get("raw_input") or {}
+            if raw.get("_incident_continuation") and not units:
+                sel_devices = sel_devices[:1]  # A repair has one writer.
+            if units and any(
+                h._normalize_tool_name(str(device.get("_selected_tool") or "")) == "dolt"
+                for device in sel_devices
+            ):
+                # The dot ticket wrapper replaces prompts and cannot preserve unit scope.
+                if grant is not None:
+                    from modstore_server.cred_vault import revoke_task_grants
+
+                    revoke_task_grants(grant.task_id, reason="para_check_scope_unsupported")
+                return {
+                    "handler": "para_delegate",
+                    "ok": False,
+                    "accepted": False,
+                    "queued": False,
+                    "retryable": False,
+                    "status": "blocked_independent_checks",
+                    "error": "dolt ticket routing cannot preserve independent read-only check scope",
+                }
+            assignments = (
+                [(sel_devices[index % len(sel_devices)], unit) for index, unit in enumerate(units)]
+                if units
+                else [(device, None) for device in sel_devices]
+            )
+            total = len(assignments)
+            planned_devices = [str(device.get("id") or "") for device, _ in assignments]
+            prepared = []
+            for index, (device, unit) in enumerate(assignments):
                 device_id = str(device.get("id") or "").strip()
                 if not device_id:
                     continue
@@ -138,6 +193,21 @@ def _post_para_api_once(
                     "report_only": report_only,
                     "max_attempts": max_attempts,
                 }
+                if unit:
+                    payload.update(
+                        subtask_title=f"check:{unit['unit_id']} {unit.get('title') or ''}"[:240],
+                        prompt=h.insert_before_loop_context(
+                            base_prompt,
+                            "独立只读检查 "
+                            + unit["unit_id"]
+                            + "，源码版本 "
+                            + check_revision
+                            + "。只执行本项检查并返回证据；禁止修复、提交、合并或操作客户数据。\n"
+                            + str(unit["prompt"]),
+                        ),
+                        report_only=True,
+                        max_attempts=1,
+                    )
                 selected_tool = str(device.get("_selected_tool") or "").strip()
                 if selected_tool:
                     payload["tool_name"] = selected_tool
@@ -152,11 +222,50 @@ def _post_para_api_once(
                 if task_id:
                     payload["task_id"] = task_id
                 # 派给 dot（dolt）的客服工单：控制标记 + 模式 + 脱敏；其他工具不变。
-                payload = prepare_dolt_ticket_payload(
-                    req, payload, _facade()._normalize_tool_name(selected_tool)
-                )
+                try:
+                    payload = prepare_dolt_ticket_payload(
+                        req, payload, _facade()._normalize_tool_name(selected_tool)
+                    )
+                except DoltIncidentContractError as exc:
+                    if grant is not None:
+                        from modstore_server.cred_vault import revoke_task_grants
+
+                        revoke_task_grants(grant.task_id, reason="dolt_incident_contract")
+                    return {
+                        "handler": "para_delegate",
+                        "ok": False,
+                        "accepted": False,
+                        "queued": False,
+                        "retryable": False,
+                        "status": "blocked_dolt_incident_contract",
+                        "error": str(exc),
+                    }
                 if not first_payload:
                     first_payload = payload
+                prepared.append((device, unit, selected_tool, payload))
+            budget = req.get("execution_budget") or {}
+            limit = int(budget.get("context_chars") or 0)
+            largest = max((len(str(item[3]["prompt"])) for item in prepared), default=0)
+            if limit and largest > limit:
+                if grant is not None:
+                    from modstore_server.cred_vault import revoke_task_grants
+
+                    revoke_task_grants(grant.task_id, reason="para_context_budget")
+                return {
+                    "handler": "para_delegate",
+                    "ok": False,
+                    "accepted": False,
+                    "queued": False,
+                    "retryable": False,
+                    "status": "blocked_context_budget",
+                    "error": f"Final execution context has {largest} characters; budget allows {limit}",
+                    "requested_execution_budget": budget,
+                }
+            # All scopes and final prompts are validated before the first child POST.
+            for device, unit, selected_tool, payload in prepared:
+                device_id = str(device["id"])
+                if task_id:
+                    payload["task_id"] = task_id
                 from modstore_server.node_coordinator import (
                     assert_incident_claim,
                     current_claim,
@@ -170,7 +279,10 @@ def _post_para_api_once(
                     f"{base}/api/tasks",
                     headers={
                         "Authorization": f"Bearer {token}",
-                        "Idempotency-Key": f"{req.get('request_id') or grant_task}:{device_id}",
+                        "Idempotency-Key": (
+                            f"{req.get('request_id') or grant_task}:{device_id}"
+                            + (f":{unit['unit_id']}" if unit else "")
+                        ),
                     },
                     json=payload,
                 )
@@ -236,6 +348,9 @@ def _post_para_api_once(
                     not accepted_task_id
                     or not accepted.get("subtask_id")
                     or (task_id and accepted_task_id != task_id)
+                    or any(
+                        row.get("subtask_id") == accepted.get("subtask_id") for row in dispatched
+                    )
                 ):
                     return {
                         "handler": "para_delegate",
@@ -246,6 +361,7 @@ def _post_para_api_once(
                         "outcome": "unknown",
                         "requires_reconciliation": True,
                         "retryable": False,
+                        "partial": True,
                         "task_id": task_id,
                         "planned_devices": planned_devices,
                         "devices": dispatched,
@@ -259,6 +375,7 @@ def _post_para_api_once(
                         "device_name": accepted.get("device_name") or device.get("name"),
                         "subtask_id": accepted.get("subtask_id"),
                         "tool_name": selected_tool or h._dev_tool(),
+                        **({"unit_id": unit["unit_id"]} if unit else {}),
                     }
                 )
             if not dispatched:
@@ -365,6 +482,7 @@ def _post_para_api_once(
             required_subtask_ids=[
                 str(device["subtask_id"]) for device in dispatched if device.get("subtask_id")
             ],
+            partial=bool(planned_devices) and len(dispatched) < len(planned_devices),
             submission_started=submission_started,
             **(req.get("execution_identity") or {}),
         )
@@ -390,6 +508,15 @@ def _post_webhook(
     req: _facade().Dict[str, _facade().Any],
 ) -> _facade().Dict[str, _facade().Any]:
     url = _facade()._webhook_url()
+    if url and (req.get("raw_input") or {}).get("independent_checks"):
+        return {
+            "handler": "para_delegate",
+            "ok": False,
+            "accepted": False,
+            "retryable": False,
+            "status": "blocked_independent_checks",
+            "error": "Explicit check groups require the Para task receipt protocol",
+        }
     if not url:
         raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
         hops = raw.get("_ticket_route") if isinstance(raw.get("_ticket_route"), list) else []
@@ -461,4 +588,23 @@ def dispatch_para_delegate(
     req = _facade()._build_request(
         task=task, input_data=dict(input_data or {}), employee_id=employee_id
     )
-    return _facade()._post_webhook(req)
+    budget = req.get("execution_budget") or {}
+    limit = budget.get("context_chars")
+    if limit and not req.get("para_task_id"):
+        size = len(_facade()._build_para_prompt(req))
+        if size > int(limit):
+            return {
+                "handler": "para_delegate",
+                "ok": False,
+                "accepted": False,
+                "queued": False,
+                "retryable": False,
+                "status": "blocked_context_budget",
+                "error": f"Execution context has {size} characters; budget allows {limit}",
+                "execution_budget": budget,
+                "requested_execution_budget": budget,
+            }
+    result = _facade()._post_webhook(req)
+    if budget and isinstance(result, dict):
+        result["requested_execution_budget"] = budget
+    return result
