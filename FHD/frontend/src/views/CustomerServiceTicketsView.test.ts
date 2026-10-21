@@ -7,11 +7,12 @@ import { ADMIN_HOST_ROUTE_RECORDS } from '../../../admin-console/src/adminHostRo
 import { ADMIN_OPERATOR_MENU_ITEMS, ADMIN_OPERATOR_ROUTE_NAMES } from '../../../admin-console/src/constants/adminOperatorNav'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 
-const { list, detail, updateEta, push, route, put, post } = vi.hoisted(() => ({
-  post: vi.fn(), put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), route: { params: {} as Record<string, string> },
+const { list, detail, updateEta, push, route, put, post, prompt } = vi.hoisted(() => ({
+  post: vi.fn(), put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), prompt: vi.fn(), route: { params: {} as Record<string, string> },
 }))
 vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail, updateCustomerTicketExpectedCompletion: updateEta } }))
 vi.mock('@/api/core', () => ({ default: { put, post } }))
+vi.mock('@/utils/appDialog', () => ({ appPrompt: prompt }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => route }))
 
 const ticket = {
@@ -148,7 +149,7 @@ describe('customer service ticket detail', () => {
   it.each([false, true])('corrects original-ticket metadata with CAS and refreshed audit (classification=%s)', async classification => {
     const before = { ...ticket, ...(classification ? { status: 'processing', intent: 'account_support' } : {}) }
     const title = classification ? before.title : '员工图谱无法正常显示', reason = '原描述明确是软件功能故障，纠正误分类'
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValue(classification ? reason : `  ${title}  `)
+    prompt.mockResolvedValueOnce(classification ? reason : `  ${title}  `)
     detail.mockResolvedValueOnce({ ...payload, ticket: before }).mockResolvedValueOnce({ ...payload, ticket: { ...before, title, intent: 'product_issue' }, audit_logs: [{ event_type: classification ? 'ticket_classification_corrected' : 'ticket_title_corrected', detail: { old_title: before.title, new_title: title, ...(classification ? { old_intent: before.intent, new_intent: 'product_issue', reason } : {}) } }] })
     const wrapper = mountDetail(); await flushPromises()
     await wrapper.findAll('button').find(row => row.text() === (classification ? '纠正为平台功能问题' : '更正标题'))!.trigger('click'); await flushPromises()
@@ -156,7 +157,8 @@ describe('customer service ticket detail', () => {
     expect(wrapper.find('h2').text()).toBe(title)
     for (const part of classification ? ['纠正工单分类', '分类：账号支持 → 产品问题', reason] : ['更正工单标题', '标题：平台功能问题 → 员工图谱无法正常显示']) expect(wrapper.text()).toContain(part)
     expect(wrapper.findAll('button').some(row => row.text() === '纠正为平台功能问题')).toBe(false)
-    wrapper.unmount(); prompt.mockRestore()
+    expect(prompt).toHaveBeenCalledOnce()
+    wrapper.unmount()
   })
   it('lets an admin set the customer-visible expected completion time', async () => {
     const wrapper = mountDetail(); await flushPromises()
