@@ -16,11 +16,25 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
   const healthAppVersion = ref('')
   const healthData = ref(null)
   const connection = ref('checking')
+  const lastCheckedAt = ref(null)
   const runtimeHealth = computed(() => runtimeHealthPresentation(healthData.value, connection.value))
   let pollTimer = null
   let controller = null
   let pendingRequest = null
   let stopped = false
+  let lifecycle = 0
+  let requestTimeout = null
+  let failureCount = 0
+  let nextRetryAt = 0
+  const runtimeHealthCheck = computed(() => {
+    if (lastCheckedAt.value === null) return { iso: '', text: '尚未检测', title: '尚未检测' }
+    const date = new Date(lastCheckedAt.value)
+    return {
+      iso: date.toISOString(),
+      text: `最近检测 ${date.toLocaleTimeString('zh-CN', { hour12: false })}`,
+      title: `最近检测 ${date.toLocaleString('zh-CN', { hour12: false })}`,
+    }
+  })
 
   const sidebarAppVersionText = computed(() => {
     if (shouldShowAdminDeployStatus.value) return ''
@@ -32,40 +46,59 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
     return ver ? `当前版本 ${displayVersion(ver)}` : '当前应用版本'
   })
 
-  function refreshHealthAppVersion() {
+  function refreshHealthAppVersion({ respectBackoff = false } = {}) {
+    if (stopped) return Promise.resolve()
     if (pendingRequest) return pendingRequest
+    if (respectBackoff && Date.now() < nextRetryAt) return Promise.resolve()
+    const epoch = lifecycle
     controller = new AbortController()
     const requestController = controller
     const timeout = setTimeout(() => requestController.abort(), 8_000)
-    pendingRequest = (async () => {
+    requestTimeout = timeout
+    pendingRequest = Promise.resolve().then(async () => {
       try {
+        if (stopped || epoch !== lifecycle) return
         const res = await fetch(buildFullApiUrl('/api/health'), {
           credentials: 'include', cache: 'no-store', signal: requestController.signal,
         })
         if (!res.ok && res.status !== 503) throw new Error('Health request failed')
         const data = await res.json()
-        if (stopped) return
+        if (stopped || epoch !== lifecycle) return
+        if (requestController.signal.aborted) throw new Error('Health request timed out')
         healthData.value = data
         connection.value = 'ready'
         healthAppVersion.value = String(data?.version || '').trim()
+        failureCount = 0
+        nextRetryAt = 0
+        lastCheckedAt.value = Date.now()
       } catch {
-        if (!stopped) connection.value = 'offline'
+        if (!stopped && epoch === lifecycle) {
+          connection.value = 'offline'
+          lastCheckedAt.value = Date.now()
+          failureCount = Math.min(failureCount + 1, 4)
+          nextRetryAt = Date.now() + Math.min(30_000 * 2 ** failureCount, 300_000)
+        }
       } finally {
         clearTimeout(timeout)
-        controller = null
-        pendingRequest = null
+        if (epoch === lifecycle) {
+          controller = null
+          requestTimeout = null
+          pendingRequest = null
+        }
       }
-    })()
+    })
     return pendingRequest
   }
 
   function refreshWhenVisible() {
-    if (!document.hidden) void refreshHealthAppVersion()
+    if (!document.hidden) void refreshHealthAppVersion({ respectBackoff: true })
   }
 
   function startHealthPolling() {
     stopped = false
     if (pollTimer !== null) return
+    failureCount = 0
+    nextRetryAt = 0
     void refreshHealthAppVersion()
     pollTimer = setInterval(refreshWhenVisible, 30_000)
     document.addEventListener('visibilitychange', refreshWhenVisible)
@@ -74,9 +107,14 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
 
   function stopHealthPolling() {
     stopped = true
+    lifecycle += 1
     if (pollTimer !== null) clearInterval(pollTimer)
     pollTimer = null
     controller?.abort()
+    controller = null
+    pendingRequest = null
+    if (requestTimeout !== null) clearTimeout(requestTimeout)
+    requestTimeout = null
     document.removeEventListener('visibilitychange', refreshWhenVisible)
     window.removeEventListener('online', refreshWhenVisible)
   }
@@ -86,6 +124,7 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
     sidebarAppVersionTitle,
     refreshHealthAppVersion,
     runtimeHealth,
+    runtimeHealthCheck,
     startHealthPolling,
     stopHealthPolling,
   }
