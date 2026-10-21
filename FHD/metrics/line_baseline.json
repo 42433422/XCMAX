@@ -1,5 +1,5 @@
 {
-  "lines": 2328928,
+  "lines": 2329034,
   "updated": "2026-10-21",
-  "note": "Six remaining issue fixes (#1773/#1776/#1778/#1782/#1783/#1840): additive safe CSV, exact IPC boundaries, UTC defaults and executable/submodule/routing regression gates; preserve existing tests and generated Mod SSOT mirrors. Market workflow is now actually generated and follows the existing exclusion rule."
+  "note": "PR #2519 follow-up for #1783: fail-closed Paddle model tar extraction plus 12 real adversarial/archive CLI tests, on top of the six previously documented issue fixes. No test deletion or filter fallback."
 }
