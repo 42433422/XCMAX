@@ -1,28 +1,13 @@
-"""
-采购管理 API 路由
-
-来源：从 legacy_inventory.py 中 /api/purchase/* 端点迁出。
-读取端点复用 inventory facade 暴露的 PurchaseService；写入端点通过 AgentOrchestrator
-进入 purchase.* ToolSpecV2 工具后再调用同一服务，不再保留平行 ``*_v2`` 应用服务。
-
-覆盖：
-- /api/purchase/suppliers*    供应商 CRUD
-- /api/purchase/orders*       采购订单 CRUD + 审批/取消
-- /api/purchase/inbounds*     采购入库单 CRUD
-- /api/purchase/summary       采购汇总
-"""
+"""采购路由：查询走 PurchaseService，写入经过统一 Agent runtime。"""
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Body, Query, Request
 
 from app.application.workflow.types import normalize_workflow_risk
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["purchase"])
 
@@ -112,6 +97,9 @@ def _run_purchase_agent(
         "route_confirmed": True,
         "service_source": "fastapi_purchase_route",
     }
+    tenant_id = getattr(request.state, "tenant_id", None)
+    if tenant_id is not None:
+        runtime_context["tenant_id"] = str(tenant_id)
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
         user_id=user_id,
@@ -129,9 +117,6 @@ def _run_purchase_agent(
         if continued is not None:
             run = continued
     return _agent_node_output(run, node_id)
-
-
-# ──────────────────────────── 供应商 ────────────────────────────
 
 
 @router.get("/api/purchase/suppliers")
@@ -184,9 +169,6 @@ def purchase_supplier_delete(request: Request, supplier_id: int):
         params={"supplier_id": supplier_id},
         route_path="/api/purchase/suppliers/{supplier_id}",
     )
-
-
-# ──────────────────────────── 采购订单 ────────────────────────────
 
 
 @router.get("/api/purchase/orders")
@@ -263,9 +245,6 @@ def purchase_orders_cancel(request: Request, order_id: int):
     )
 
 
-# ──────────────────────────── 采购入库 ────────────────────────────
-
-
 @router.get("/api/purchase/inbounds")
 def purchase_inbounds(
     supplier_id: int | None = Query(default=None),
@@ -295,9 +274,6 @@ def purchase_inbounds_post(request: Request, body: dict[str, Any] = Body(default
         params=dict(body or {}),
         route_path="/api/purchase/inbounds",
     )
-
-
-# ──────────────────────────── 汇总 ────────────────────────────
 
 
 @router.get("/api/purchase/summary")

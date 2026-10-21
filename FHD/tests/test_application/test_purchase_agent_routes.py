@@ -13,6 +13,12 @@ from app.fastapi_routes import purchase as purchase_routes
 def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(purchase_routes, "_svc", lambda: fake_service)
     app = FastAPI()
+
+    @app.middleware("http")
+    async def authenticated_tenant(request, call_next):
+        request.state.tenant_id = 42
+        return await call_next(request)
+
     app.include_router(purchase_routes.router)
     return TestClient(app, raise_server_exceptions=False)
 
@@ -27,6 +33,7 @@ def _assert_purchase_run(repo: InMemoryAgentRunRepository, run_id: str, action: 
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.purchase.{action}"
     assert run.tool_calls[0].cost_units == 2
+    assert run.metadata["runtime_context"]["tenant_id"] == "42"
     assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
         event.event_type for event in run.events
     }

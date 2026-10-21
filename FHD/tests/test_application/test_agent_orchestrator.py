@@ -169,8 +169,15 @@ def test_agent_tool_executor_rejects_invalid_runtime_tenant_scope(tenant_id):
     mock_execute.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "tool_id,action,params",
+    [
+        ("inventory", "stock_in", {"product_id": 1, "warehouse_id": 2, "quantity": 50}),
+        ("purchase", "create_supplier", {"name": "供应商"}),
+    ],
+)
 @pytest.mark.parametrize("tenant_id", [7, "7", True, 1.5, "invalid"])
-def test_inventory_tool_restores_and_validates_runtime_tenant(tenant_id):
+def test_sql_tool_restores_and_validates_runtime_tenant(tool_id, action, params, tenant_id):
     from app.application.agent_orchestrator.run_models import AgentStep
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
     from app.infrastructure.tenant_scope import current_tenant_id
@@ -183,9 +190,9 @@ def test_inventory_tool_restores_and_validates_runtime_tenant(tenant_id):
 
     step = AgentStep(
         node_id="in",
-        tool_id="inventory",
-        action="stock_in",
-        params={"product_id": 1, "warehouse_id": 2, "quantity": 50},
+        tool_id=tool_id,
+        action=action,
+        params=params,
     )
     with patch(
         "app.application.facades.tools_facade.execute_registered_workflow_tool", side_effect=execute
