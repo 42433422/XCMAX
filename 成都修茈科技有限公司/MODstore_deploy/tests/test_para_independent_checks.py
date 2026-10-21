@@ -285,3 +285,30 @@ def test_mixed_dolt_check_group_is_rejected_before_any_child_post(check_request,
         result = h._post_para_api_once(check_request)
     assert result["status"] == "blocked_independent_checks"
     assert client.posted_tasks == [] and revoked == ["attempt-1"]
+
+
+def test_preparation_failure_keeps_original_scope_and_submits_nothing(check_request, monkeypatch):
+    from modstore_server import para_delegate_handler_part04 as dispatch_impl
+
+    client = _IntegClient([_online_codex("w1"), _online_codex("w2")])
+    monkeypatch.setattr(h.httpx, "Client", lambda *a, **kw: client)
+    prepared, saved = [], []
+
+    def transform(req, payload, tool):
+        if prepared:
+            raise OSError("synthetic second payload failure")
+        prepared.append(payload)
+        return payload
+
+    monkeypatch.setattr(dispatch_impl, "prepare_dolt_ticket_payload", transform)
+    monkeypatch.setattr(
+        h,
+        "_outbox_response",
+        lambda request, **kwargs: saved.append(request) or {"ok": False},
+    )
+    with incident_claim_scope(check_request["raw_input"]["event_id"]):
+        result = h._post_para_api_once(check_request)
+    assert client.posted_tasks == [] and result["submission_started"] is False
+    assert saved[0]["planned_devices"] == ["w1", "w2"]
+    assert saved[0]["para_payload"] == prepared[0]
+    assert result["requires_reconciliation"] and not result["accepted"]

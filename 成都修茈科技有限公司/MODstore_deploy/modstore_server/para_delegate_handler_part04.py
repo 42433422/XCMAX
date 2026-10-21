@@ -5,11 +5,14 @@ from __future__ import annotations
 
 import importlib
 
-from modstore_server.dot_ticket_dispatch import (
-    DoltIncidentContractError,
-    prepare_dolt_ticket_payload,
-)
+from modstore_server.dot_ticket_dispatch import prepare_dolt_ticket_payload
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.para_delegate_task_payloads import (
+    PreparedTaskGroup,
+    prepare_task_group,
+    task_payload_options,
+    validated_check_units,
+)
 
 
 def _facade():
@@ -33,22 +36,9 @@ def _post_para_api_once(
     req: _facade().Dict[str, _facade().Any],
 ) -> _facade().Dict[str, _facade().Any]:
     h = _facade()
-    from modstore_server.para_delegate_handler_part03 import _independent_check_plan
-
-    try:
-        units, check_revision = (
-            _independent_check_plan(req) if not req.get("para_task_id") else ([], "")
-        )
-    except (ValueError, TypeError) as exc:
-        return {
-            "handler": "para_delegate",
-            "ok": False,
-            "accepted": False,
-            "queued": False,
-            "retryable": False,
-            "status": "blocked_independent_checks",
-            "error": str(exc),
-        }
+    units, check_revision, blocked = validated_check_units(req)
+    if blocked is not None:
+        return blocked
     base = h._api_base()
     if not base:
         return h._outbox_response(
@@ -76,19 +66,11 @@ def _post_para_api_once(
                 queued=True,
             )
     base_prompt = h._build_para_prompt(req)
-    first_payload: dict[str, object] = {}
-    max_attempts = h._resolve_max_attempts(req)
-    mode = str(req.get("mode") or "").strip().lower()
-    auto_merge = bool(req.get("auto_merge")) and not units
-    if not auto_merge and mode in {"verify", "review", "report"} and (report_only is False):
-        auto_merge = h._coerce_bool(req.get("auto_merge_on_complete"), False)
-    workspace_path = str(
-        req.get("workspace_path") or h.os.environ.get("MODSTORE_PARA_WORKSPACE_PATH") or ""
-    ).strip()
+    payload_group = PreparedTaskGroup()
+    options = task_payload_options(req, units)
     task_id = str(req.get("para_task_id") or "").strip()
     submission_started = False
     dispatched: list = []
-    planned_devices: list[str] = []
     dispatch_failures: list = []
     try:
         with _facade().httpx.Client(timeout=_facade()._api_timeout(), trust_env=False) as client:
@@ -151,118 +133,21 @@ def _post_para_api_once(
                     error=select_reason or "未发现在线可用 Para 工作设备（executorReady）",
                     queued=True,
                 )
-            raw = req.get("raw_input") or {}
-            if raw.get("_incident_continuation") and not units:
-                sel_devices = sel_devices[:1]  # A repair has one writer.
-            if units and any(
-                h._normalize_tool_name(str(device.get("_selected_tool") or "")) == "dolt"
-                for device in sel_devices
-            ):
-                # The dot ticket wrapper replaces prompts and cannot preserve unit scope.
-                if grant is not None:
-                    from modstore_server.cred_vault import revoke_task_grants
-
-                    revoke_task_grants(grant.task_id, reason="para_check_scope_unsupported")
-                return {
-                    "handler": "para_delegate",
-                    "ok": False,
-                    "accepted": False,
-                    "queued": False,
-                    "retryable": False,
-                    "status": "blocked_independent_checks",
-                    "error": "dolt ticket routing cannot preserve independent read-only check scope",
-                }
-            assignments = (
-                [(sel_devices[index % len(sel_devices)], unit) for index, unit in enumerate(units)]
-                if units
-                else [(device, None) for device in sel_devices]
+            prepare_task_group(
+                req,
+                sel_devices,
+                base_prompt=base_prompt,
+                units=units,
+                check_revision=check_revision,
+                options=options,
+                grant=grant,
+                group=payload_group,
+                transform=prepare_dolt_ticket_payload,
             )
-            total = len(assignments)
-            planned_devices = [str(device.get("id") or "") for device, _ in assignments]
-            prepared = []
-            for index, (device, unit) in enumerate(assignments):
-                device_id = str(device.get("id") or "").strip()
-                if not device_id:
-                    continue
-                payload: dict[str, object] = {
-                    "device_id": device_id,
-                    "title": str(req.get("title") or "MODstore loop task").strip(),
-                    "prompt": h._multi_device_prompt(base_prompt, device, index, total),
-                    "branch": branch,
-                    "subtask_title": h._para_subtask_title(req, index, total),
-                    "report_only": report_only,
-                    "max_attempts": max_attempts,
-                }
-                if unit:
-                    payload.update(
-                        subtask_title=f"check:{unit['unit_id']} {unit.get('title') or ''}"[:240],
-                        prompt=h.insert_before_loop_context(
-                            base_prompt,
-                            "独立只读检查 "
-                            + unit["unit_id"]
-                            + "，源码版本 "
-                            + check_revision
-                            + "。只执行本项检查并返回证据；禁止修复、提交、合并或操作客户数据。\n"
-                            + str(unit["prompt"]),
-                        ),
-                        report_only=True,
-                        max_attempts=1,
-                    )
-                selected_tool = str(device.get("_selected_tool") or "").strip()
-                if selected_tool:
-                    payload["tool_name"] = selected_tool
-                if repo_url:
-                    payload["repo_url"] = repo_url
-                if auto_merge:
-                    payload["auto_merge"] = True
-                if workspace_path:
-                    payload["workspace_path"] = workspace_path
-                if isinstance(req.get("depends_on"), list) and req.get("depends_on"):
-                    payload["depends_on"] = req.get("depends_on")
-                if task_id:
-                    payload["task_id"] = task_id
-                # 派给 dot（dolt）的客服工单：控制标记 + 模式 + 脱敏；其他工具不变。
-                try:
-                    payload = prepare_dolt_ticket_payload(
-                        req, payload, _facade()._normalize_tool_name(selected_tool)
-                    )
-                except DoltIncidentContractError as exc:
-                    if grant is not None:
-                        from modstore_server.cred_vault import revoke_task_grants
-
-                        revoke_task_grants(grant.task_id, reason="dolt_incident_contract")
-                    return {
-                        "handler": "para_delegate",
-                        "ok": False,
-                        "accepted": False,
-                        "queued": False,
-                        "retryable": False,
-                        "status": "blocked_dolt_incident_contract",
-                        "error": str(exc),
-                    }
-                if not first_payload:
-                    first_payload = payload
-                prepared.append((device, unit, selected_tool, payload))
-            budget = req.get("execution_budget") or {}
-            limit = int(budget.get("context_chars") or 0)
-            largest = max((len(str(item[3]["prompt"])) for item in prepared), default=0)
-            if limit and largest > limit:
-                if grant is not None:
-                    from modstore_server.cred_vault import revoke_task_grants
-
-                    revoke_task_grants(grant.task_id, reason="para_context_budget")
-                return {
-                    "handler": "para_delegate",
-                    "ok": False,
-                    "accepted": False,
-                    "queued": False,
-                    "retryable": False,
-                    "status": "blocked_context_budget",
-                    "error": f"Final execution context has {largest} characters; budget allows {limit}",
-                    "requested_execution_budget": budget,
-                }
+            if payload_group.blocked is not None:
+                return payload_group.blocked
             # All scopes and final prompts are validated before the first child POST.
-            for device, unit, selected_tool, payload in prepared:
+            for device, unit, selected_tool, payload in payload_group.payloads:
                 device_id = str(device["id"])
                 if task_id:
                     payload["task_id"] = task_id
@@ -329,7 +214,7 @@ def _post_para_api_once(
                             "requires_reconciliation": True,
                             "retryable": False,
                             "dispatch_failures": dispatch_failures,
-                            "planned_devices": planned_devices,
+                            "planned_devices": payload_group.planned_devices,
                             "para_tier": tier,
                             "request": h._public_request(req),
                             "response": response,
@@ -363,7 +248,7 @@ def _post_para_api_once(
                         "retryable": False,
                         "partial": True,
                         "task_id": task_id,
-                        "planned_devices": planned_devices,
+                        "planned_devices": payload_group.planned_devices,
                         "devices": dispatched,
                         "error": "Para dispatch returned missing or conflicting task identity",
                     }
@@ -384,7 +269,7 @@ def _post_para_api_once(
 
                     revoke_task_grants(grant.task_id, reason="para_no_subtask_created")
                 return _facade()._outbox_response(
-                    {**req, "para_payload": first_payload},
+                    {**req, "para_payload": payload_group.first_payload},
                     status="para_api_no_subtask_created",
                     error="Para API 未创建任何 subtask",
                 )
@@ -403,12 +288,13 @@ def _post_para_api_once(
                 "device_scope": device_scope,
                 "request": h._public_request(req),
                 "devices": dispatched,
-                "planned_devices": planned_devices,
+                "planned_devices": payload_group.planned_devices,
                 "required_subtask_ids": [
                     str(device["subtask_id"]) for device in dispatched if device.get("subtask_id")
                 ],
                 "dispatch_failures": dispatch_failures,
-                "partial": bool(dispatch_failures) or len(dispatched) != len(planned_devices),
+                "partial": bool(dispatch_failures)
+                or len(dispatched) != len(payload_group.planned_devices),
                 **(req.get("execution_identity") or {}),
             }
             if not should_wait:
@@ -458,11 +344,11 @@ def _post_para_api_once(
             {
                 **req,
                 "para_task_id": task_id,
-                "para_payload": first_payload,
+                "para_payload": payload_group.first_payload,
                 "required_subtask_ids": [
                     str(device["subtask_id"]) for device in dispatched if device.get("subtask_id")
                 ],
-                "planned_devices": planned_devices,
+                "planned_devices": payload_group.planned_devices,
                 "dispatch_failures": dispatch_failures,
                 "replay_allowed": False,
             },
@@ -477,12 +363,13 @@ def _post_para_api_once(
             requires_reconciliation=True,
             retryable=False,
             devices=dispatched,
-            planned_devices=planned_devices,
+            planned_devices=payload_group.planned_devices,
             dispatch_failures=dispatch_failures,
             required_subtask_ids=[
                 str(device["subtask_id"]) for device in dispatched if device.get("subtask_id")
             ],
-            partial=bool(planned_devices) and len(dispatched) < len(planned_devices),
+            partial=bool(payload_group.planned_devices)
+            and len(dispatched) < len(payload_group.planned_devices),
             submission_started=submission_started,
             **(req.get("execution_identity") or {}),
         )
