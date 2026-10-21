@@ -62,9 +62,7 @@ from modstore_server.employee_config_v2 import (
 from modstore_server.industry_taxonomy import get_industry_tree
 from modstore_server.models import get_session_factory
 from modstore_server.vector_store import insert_embedding as insert_embedding
-from modstore_server.vector_store import (
-    query_similar,
-)
+from modstore_server.vector_store import query_similar
 
 router = APIRouter(prefix="/v1", tags=["catalog"])
 

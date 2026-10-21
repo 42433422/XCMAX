@@ -61,10 +61,7 @@ from modstore_server.script_workflow_models import (
     CommitSessionBody,
 )
 from modstore_server.script_workflow_models import EditWithAiBody as EditWithAiBody
-from modstore_server.script_workflow_models import (
-    FeedbackBody,
-    UpdateWorkflowBody,
-)
+from modstore_server.script_workflow_models import FeedbackBody, UpdateWorkflowBody
 from modstore_server.script_workflow_models import WorkflowSummary as WorkflowSummary
 from modstore_server.workbench_script_runner import DEFAULT_SCRIPT_AGENT_ITERATIONS
 

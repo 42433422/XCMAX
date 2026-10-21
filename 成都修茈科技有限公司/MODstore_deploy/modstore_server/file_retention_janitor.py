@@ -21,9 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from modstore_server.file_retention_support import build_report_md as _build_report_md
 from modstore_server.file_retention_support import format_bytes as _format_bytes
-from modstore_server.file_retention_support import (
-    prune_notifications,
-)
+from modstore_server.file_retention_support import prune_notifications
 from modstore_server.file_retention_support import (
     record_retention_runtime as _record_retention_runtime,
 )

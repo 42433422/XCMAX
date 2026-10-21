@@ -43,23 +43,16 @@ from modstore_server.strategic_layer import (
     seed_default_boundaries,
 )
 from modstore_server.strategic_layer_models import CancelMeetingRequest as CancelMeetingRequest
-from modstore_server.strategic_layer_models import (
-    CompleteExecutionRequest,
-)
+from modstore_server.strategic_layer_models import CompleteExecutionRequest
 from modstore_server.strategic_layer_models import ConcludeMeetingRequest as ConcludeMeetingRequest
-from modstore_server.strategic_layer_models import (
-    DecisionReviewRequest,
-)
+from modstore_server.strategic_layer_models import DecisionReviewRequest
 from modstore_server.strategic_layer_models import (
     GenerateMonthlyReportRequest as GenerateMonthlyReportRequest,
 )
 from modstore_server.strategic_layer_models import (
     GenerateWeeklyReportRequest as GenerateWeeklyReportRequest,
 )
-from modstore_server.strategic_layer_models import (
-    ProposeDecisionRequest,
-    ReviewDecisionRequest,
-)
+from modstore_server.strategic_layer_models import ProposeDecisionRequest, ReviewDecisionRequest
 from modstore_server.strategic_layer_models import ScheduleMeetingRequest as ScheduleMeetingRequest
 from modstore_server.strategic_layer_models import (
     StartExecutionRequest,
@@ -68,9 +61,7 @@ from modstore_server.strategic_layer_models import (
 from modstore_server.strategic_layer_models import (
     UpdateActionItemRequest as UpdateActionItemRequest,
 )
-from modstore_server.strategic_layer_models import (
-    WithdrawRequest,
-)
+from modstore_server.strategic_layer_models import WithdrawRequest
 
 logger = logging.getLogger(__name__)
 
