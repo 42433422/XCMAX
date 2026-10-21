@@ -220,7 +220,9 @@ def test_frozen_pair_preserves_bytes_and_refuses_mismatch(tmp_path, fault):
         assert "Verification complete; public metadata may have been read" in result.stdout
 
 
-@pytest.mark.parametrize("guard", ["approved", "disabled", "wrong-owner-sha", "failed-check", "not-on-main"])
+@pytest.mark.parametrize(
+    "guard", ["approved", "disabled", "wrong-owner-sha", "failed-check", "not-on-main"]
+)
 def test_publication_requires_explicit_owner_authorization_and_current_checks(tmp_path, guard):
     import yaml
 
@@ -488,11 +490,17 @@ def test_staple_retry_is_bounded_and_failure_artifact_is_unpublishable(
     assert staple.main() == expected
     assert len(invoked) == calls and slept == delays
     if expected:
-        assert {p.name for p in recovery.iterdir()} == {dmg.name, "recovery-receipt.json", "AuthKey.p8"}
+        assert {p.name for p in recovery.iterdir()} == {
+            dmg.name,
+            "recovery-receipt.json",
+            "AuthKey.p8",
+        }
         assert (recovery / dmg.name).read_bytes() == dmg.read_bytes()
         receipt = json.loads((recovery / "recovery-receipt.json").read_text())
         action = "validate" if codes[0] == 0 else "staple"
-        assert receipt["publishable"] is False and receipt["status"] == f"{action}_failed_unverified"
+        assert (
+            receipt["publishable"] is False and receipt["status"] == f"{action}_failed_unverified"
+        )
         assert receipt["source_sha"] == SHA and receipt["failed_operation"] == action
         assert receipt["operation_exit_code"] == expected
         assert receipt.get("stapler_exit_code") == (expected if action == "staple" else None)
@@ -502,7 +510,9 @@ def test_staple_retry_is_bounded_and_failure_artifact_is_unpublishable(
 
 
 @pytest.mark.parametrize("kind", ["dmg", "app"])
-def test_validate_only_retries_without_stapling_or_modifying_release_app(tmp_path, monkeypatch, kind):
+def test_validate_only_retries_without_stapling_or_modifying_release_app(
+    tmp_path, monkeypatch, kind
+):
     module_spec = importlib.util.spec_from_file_location(
         "staple_validate_only", FHD / "scripts/package/staple-macos-dmg.py"
     )
