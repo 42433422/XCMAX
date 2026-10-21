@@ -6,10 +6,14 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Body, Header, Request
+from fastapi import APIRouter, Body, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.errors import ErrorCode, PaymentError
+from app.fastapi_routes.model_payment_authorization import (
+    owned_payment_order,
+    require_local_payment_backend,
+)
 from app.fastapi_routes.model_payment_plans import DEMO_PLANS as _DEMO_PLANS
 from app.infrastructure.billing.saas_plans import (
     list_saas_plans,
@@ -27,7 +31,7 @@ from app.infrastructure.payment.payment_sot import (
     model_payment_backend,
     modstore_payment_hint,
 )
-from app.utils.operational_errors import INFRA_TRANSIENT, RECOVERABLE_ERRORS
+from app.utils.operational_errors import INFRA_TRANSIENT
 
 logger = logging.getLogger(__name__)
 
@@ -90,15 +94,23 @@ def checkout(
     body: dict[str, Any] = Body(default_factory=dict),
     user_agent: str | None = Header(default=None),
 ):
+    from app.infrastructure.auth.dependencies import get_logged_in_user, session_id_from_request
+
+    checkout_user = get_logged_in_user(request)
+    local_user_id = int(checkout_user.id)
     if is_modstore_payment_sot():
+        from app.infrastructure.payment.modstore_payment_proxy import checkout_session_token
+
+        market_token = checkout_session_token(session_id_from_request(request), local_user_id)
+        if not market_token:
+            raise HTTPException(status_code=401, detail="请先绑定当前会话的市场账号")
         channel = str(body.get("channel") or "alipay").strip().lower()
         plan_id = str(body.get("plan_id") or "").strip()
-        uid = int(body.get("market_user_id") or 0)
         proxy_failed = False
         if plan_id:
             from app.infrastructure.payment.modstore_payment_proxy import proxy_checkout
 
-            proxied = proxy_checkout(plan_id=plan_id, channel=channel, market_user_id=uid)
+            proxied = proxy_checkout(plan_id=plan_id, channel=channel, auth_token=market_token)
             if proxied.get("success"):
                 return JSONResponse({"success": True, "data": proxied.get("data")})
             proxy_failed = True
@@ -114,6 +126,7 @@ def checkout(
             },
             status_code=409,
         )
+    require_local_payment_backend()
     if is_json_legacy_payment_sot():
         import os
 
@@ -123,12 +136,13 @@ def checkout(
                 {
                     "success": False,
                     "message": (
-                        "检测到 PostgreSQL DATABASE_URL，请将 MODEL_PAYMENT_BACKEND 设为 postgres；"
+                        "检测到 PostgreSQL DATABASE_URL；本地 PostgreSQL 订单后端尚未实现，"
+                        "请使用已绑定账号的市场支付（MODEL_PAYMENT_BACKEND=modstore）。"
                         f"JSON 订单存储将于 {MODEL_PAYMENT_JSON_DEPRECATED_AFTER} 后废弃。"
                     ),
                     "data": {
-                        "migrate_script": "scripts/migrate_fhd_json_orders_to_postgres.py",
-                        "docs": "docs/guides/PAYMENT_SOT.md",
+                        "supported_backend": "modstore",
+                        "postgres_order_store_available": False,
                     },
                 },
                 status_code=409,
@@ -213,20 +227,13 @@ def checkout(
         pay_res.get("type"),
     )
     try:
-        from app.infrastructure.auth.dependencies import resolve_session_user
-
-        checkout_user = resolve_session_user(request)
-        local_user_id = int(checkout_user.id) if checkout_user is not None else None
-    except (TypeError, ValueError, AttributeError):
-        local_user_id = None
-
-    try:
         mp_orders.record_checkout_pending(
             out_trade_no=order_id,
             plan_id=plan_id,
             amount_cents=int(plan["amount_cents"]),
             amount_yuan=amount_yuan,
             local_user_id=local_user_id,
+            tenant_id=checkout_user.tenant_id,
         )
     except OSError as e:
         logger.exception("[model-payment] 写入本地订单失败（notify 将无法幂等关联）: %s", e)
@@ -254,6 +261,8 @@ async def alipay_trade_notify(request: Request):
     支付宝异步通知（需在开放平台配置 notify_url 指向本地址的公网 URL）。
     验签通过后返回纯文本 success；请勿在本接口中信任未验签参数做发货。
     """
+    if is_fhd_postgres_payment_sot():
+        return PlainTextResponse("fail", status_code=503)
     if not is_local_model_payment_sot():
         return PlainTextResponse("fail", status_code=410)
     try:
@@ -317,13 +326,9 @@ def diagnostics():
     data["sot_backend"] = backend
     data["store_path"] = str(mp_orders.order_store_path())
     if is_fhd_postgres_payment_sot():
-        data["db_table"] = "model_payment_orders"
-        try:
-            data["order_count"] = mp_orders.count_orders()
-            data["json_migration_pending"] = mp_orders.json_store_has_unmigrated_orders()
-        except RECOVERABLE_ERRORS:
-            logger.exception("model payment diagnostics count failed")
-            data["order_count_error"] = "unavailable"
+        data["db_table"] = None
+        data["backend_available"] = False
+        data["backend_error"] = "postgres_order_store_not_implemented"
     return JSONResponse({"success": True, "data": data})
 
 
@@ -339,6 +344,7 @@ def entitlements():
             },
             status_code=409,
         )
+    require_local_payment_backend()
     items = mp_orders.list_entitlements()
     return JSONResponse(
         {"success": True, "data": {"entitlements": items, "backend": model_payment_backend()}}
@@ -373,10 +379,10 @@ def usage(limit: int = 50, run_id: str = "", user_id: str = ""):
 
 
 @router.get("/query/{out_trade_no}")
-def query_trade(out_trade_no: str):
+def query_trade(request: Request, out_trade_no: str):
     """alipay.trade.query：查询交易状态。同时返回本地订单快照。"""
+    local = owned_payment_order(request, out_trade_no)
     res = mp_ali.query_order(out_trade_no=out_trade_no)
-    local = mp_orders.get_order(out_trade_no)
     if not res["success"]:
         return JSONResponse(
             {
@@ -397,7 +403,7 @@ def query_trade(out_trade_no: str):
 
 
 @router.post("/refund")
-def refund_trade(body: dict[str, Any] = Body(default_factory=dict)):
+def refund_trade(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
     """alipay.trade.refund：发起退款。body: out_trade_no, refund_amount, out_request_no?, refund_reason?"""
     out_trade_no = str(body.get("out_trade_no") or "").strip()
     refund_amount = str(body.get("refund_amount") or "").strip()
@@ -411,6 +417,7 @@ def refund_trade(body: dict[str, Any] = Body(default_factory=dict)):
             {"success": False, "message": "refund_amount 必填（元）"}, status_code=400
         )
 
+    owned_payment_order(request, out_trade_no, permission="model_payment.refund")
     res = mp_ali.refund_order(
         out_trade_no=out_trade_no,
         refund_amount=refund_amount,
@@ -443,17 +450,20 @@ def refund_trade(body: dict[str, Any] = Body(default_factory=dict)):
 
 
 @router.post("/close")
-def close_trade(body: dict[str, Any] = Body(default_factory=dict)):
+def close_trade(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
     """alipay.trade.close：关闭未付款交易。body: out_trade_no 或 trade_no。"""
     out_trade_no = str(body.get("out_trade_no") or "").strip() or None
     trade_no = str(body.get("trade_no") or "").strip() or None
-    if not out_trade_no and not trade_no:
+    if not out_trade_no:
         return JSONResponse(
-            {"success": False, "message": "out_trade_no 与 trade_no 至少提供一个"},
+            {"success": False, "message": "out_trade_no 必填，不能仅按支付商交易号关闭"},
             status_code=400,
         )
 
-    res = mp_ali.close_order(out_trade_no=out_trade_no, trade_no=trade_no)
+    local = owned_payment_order(request, out_trade_no)
+    if trade_no and trade_no != local.get("trade_no"):
+        raise HTTPException(status_code=404, detail="订单不存在")
+    res = mp_ali.close_order(out_trade_no=out_trade_no, trade_no=None)
     if not res["success"]:
         return JSONResponse({"success": False, "message": res.get("message") or "关闭交易失败"})
 
@@ -468,10 +478,11 @@ def close_trade(body: dict[str, Any] = Body(default_factory=dict)):
 
 
 @router.get("/refund/query")
-def refund_query(out_trade_no: str, out_request_no: str | None = None):
+def refund_query(request: Request, out_trade_no: str, out_request_no: str | None = None):
     """alipay.trade.fastpay.refund.query：退款查询。不传 out_request_no 则默认等于 out_trade_no。"""
     if not out_trade_no:
         return JSONResponse({"success": False, "message": "out_trade_no 必填"}, status_code=400)
+    owned_payment_order(request, out_trade_no)
     res = mp_ali.query_refund(out_trade_no=out_trade_no, out_request_no=out_request_no)
     if not res["success"]:
         return JSONResponse({"success": False, "message": res.get("message") or "退款查询失败"})

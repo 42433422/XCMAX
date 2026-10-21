@@ -24,6 +24,10 @@ from modstore_server.incident_team_orchestrator import (
 @pytest.fixture(autouse=True)
 def _no_backoff(monkeypatch):
     monkeypatch.setenv("MODSTORE_INCIDENT_TEAM_RETRY_BACKOFF_SEC", "0")
+    monkeypatch.setattr(
+        "modstore_server.incident_team_escalation._dispatch_review",
+        lambda data: {"accepted": False, "status": "blocked_no_online_para_device"},
+    )
 
 
 @pytest.fixture
@@ -164,9 +168,9 @@ def test_transient_retry_limit_zero_disables_retry(monkeypatch):
     assert len(follow_ups) == 1
     fu = follow_ups[0]
     assert fu["failure_kind"] == "transient"
-    # transient_retry_limit=0 → 不重试，直接升级终极员工（不静默停摆）
-    assert fu["action"] == "retry_disabled_escalated"
-    assert fu["escalated_to"] == "ultimate_employee"
+    # 没有真实接单回执时只请求升级，不能宣称终极员工已经接单。
+    assert fu["action"] == "escalation_requested"
+    assert fu["escalated_to"] == "" and fu["escalation_accepted"] is False
     assert retry_calls == []
 
 
@@ -199,7 +203,8 @@ def test_code_failure_retries_with_feedback_until_limit_then_escalates(monkeypat
     assert fu["attempts"] == 3 and len(calls) == 3
     assert calls[0]["feedback"].startswith("AssertionError")
     assert "CI 失败" in calls[1]["feedback"]
-    assert fu["escalated_to"] == "ultimate_employee" and fu["need_human"] is True
+    assert fu["escalated_to"] == "" and fu["need_human"] is True
+    assert fu["escalation_accepted"] is False
     assert "3/3" in fu["reason"]
 
 
@@ -252,7 +257,8 @@ def test_environment_failure_backs_off(monkeypatch):
     )
     assert follow_ups[0]["category"] == "environment"
     assert sleeps == [5, 10, 20]
-    assert follow_ups[0]["escalated_to"] == "ultimate_employee"
+    assert follow_ups[0]["escalated_to"] == ""
+    assert follow_ups[0]["escalation_accepted"] is False
 
 
 def test_no_handler_failures_returns_empty_followups(monkeypatch):
@@ -415,7 +421,8 @@ def test_dispatch_incident_team_writes_followups_to_payload(fresh_db, admin_user
     assert fu["last_category"] == "code"
     assert fu["action"] == "code_retry_with_feedback"
     assert fu["ok"] is False  # retry 仍失败
-    assert fu["attempts"] == 3 and fu["escalated_to"] == "ultimate_employee"
+    assert fu["attempts"] == 3 and fu["escalated_to"] == ""
+    assert fu["escalation_accepted"] is False
 
     with sf() as s:
         ev2 = s.get(models.IncidentEvent, event_id)
@@ -575,7 +582,7 @@ def test_fix_timeout_skips_verify_and_fails_closed(fresh_db, admin_user, monkeyp
     assert calls == [("scout-1", 480), ("fix-1", 1920)]
     assert retry_calls == []
     by_role = {row["role"]: row for row in result["results"]}
-    assert by_role["verify"]["status"] == "skipped_fix_unfinished"
+    assert by_role["verify"]["status"] == "planned"
     assert [fu["action"] for fu in result["follow_ups"]] == ["role_timeout_no_retry_need_human"]
 
 
@@ -714,6 +721,10 @@ def test_repair_loop_written_to_ticket_admin_only(fresh_db, admin_user):
             "action": "code_retry_with_feedback",
             "ok": False,
             "escalated_to": "ultimate_employee",
+            "escalation_key": "escalation-test",
+            "escalation_state": "accepted",
+            "escalation_task_id": "review-40",
+            "escalation_accepted": True,
             "reason": "code 失败，已自动处理 3/3 轮未恢复：CI 失败",
         }
         _write_repair_loop(s, ticket, 40, [fu])

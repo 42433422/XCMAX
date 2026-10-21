@@ -30,23 +30,21 @@ def test_script_and_workflow_do_not_reference_llm_keys():
     assert "PR_CREATE_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}" in workflow
 
 
-def test_branch_prefers_pushed_report():
+@pytest.mark.parametrize("field", ["report", "content"])
+def test_branch_prefers_pushed_report(field):
     execution = {
         "reports": [
-            {"content": json.dumps({"branch": "devfleet/a", "pushed": False})},
-            {
-                "content": json.dumps(
-                    {"branch": "devfleet/b", "pushed": True, "commit_sha": "c" * 40}
-                )
-            },
+            {field: json.dumps({"branch": "devfleet/a", "pushed": False})},
+            {field: json.dumps({"branch": "devfleet/b", "pushed": True, "commit_sha": "c" * 40})},
         ],
         "subtasks": [{"branch_name": "devfleet/sub"}],
     }
     assert mod.branch_from_execution(execution) == ("devfleet/b", "c" * 40)
 
 
-def test_branch_falls_back_to_subtask():
-    execution = {"reports": [{"content": "not json"}], "subtasks": [{"branch_name": "x/y"}]}
+@pytest.mark.parametrize("field", ["report", "content"])
+def test_branch_falls_back_to_subtask(field):
+    execution = {"reports": [{field: "not json"}], "subtasks": [{"branch_name": "x/y"}]}
     assert mod.branch_from_execution(execution) == ("x/y", "")
 
 
@@ -131,8 +129,22 @@ def test_completed_task_opens_pr(issue, monkeypatch):
     assert "Refs #5" in pulls[0]["body"] and "Closes #" not in pulls[0]["body"]
 
 
-def test_failed_task_exits_7(issue, monkeypatch):
+@pytest.mark.parametrize("reason", ["boom", ""])
+@pytest.mark.parametrize("notification_failure", [None, "http", "network"])
+def test_failed_task_keeps_receipt_when_comments_fail(
+    issue, monkeypatch, tmp_path, capsys, reason, notification_failure
+):
     monkeypatch.setenv("MODSTORE_PARA_DISPATCH_TOKEN", "x" * 40)
+    report = tmp_path / "para_issue_dispatch_5.json"
+
+    if notification_failure:
+
+        def fail_comment(*args):
+            if notification_failure == "network":
+                raise OSError("private connection details")
+            return {"_error": 403, "_body": "private response details"}
+
+        monkeypatch.setattr(mod.impl, "_gh_post", fail_comment)
 
     class Client:
         def __init__(self, base, token):
@@ -142,9 +154,45 @@ def test_failed_task_exits_7(issue, monkeypatch):
             return {"id": "ctl1"}
 
         def get(self, task_id):
-            return {"state": "failed", "reason": "boom", "para_task_id": "p1", "execution": {}}
+            assert json.loads(report.read_text())["control_task_id"] == "ctl1"
+            return {
+                "state": "failed",
+                "reason": reason,
+                "para_task_id": "p1",
+                "execution": {"reports": [{"applied": 1, "report": "private executor logs"}]},
+            }
 
     monkeypatch.setattr(mod, "DispatchClient", Client)
     with pytest.raises(SystemExit) as exc:
         mod.run(_args())
     assert exc.value.code == 7
+    receipt = json.loads(report.read_text())
+    assert receipt["status"] == "para_failed" and receipt["para_task_id"] == "p1"
+    assert receipt["finished_at"] and receipt["ok"] is False
+    assert (
+        receipt["reason"]
+        == f"failed: {reason or 'executor_reason_unavailable (applied_reports=1)'}"
+    )
+    assert bool(receipt["notification_error"]) is bool(notification_failure)
+    assert "private" not in report.read_text() + capsys.readouterr().out
+    assert not any(url.endswith("/pulls") for url, _ in issue)
+
+
+def test_interruption_keeps_latest_task_identity(issue, monkeypatch, tmp_path):
+    monkeypatch.setenv("MODSTORE_PARA_DISPATCH_TOKEN", "x" * 40)
+    monkeypatch.setattr(mod.DispatchClient, "create", lambda *a: {"id": "ctl1"})
+    monkeypatch.setattr(
+        mod.DispatchClient, "get", lambda *a: {"state": "running", "para_task_id": "p1"}
+    )
+
+    def interrupt(*args):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(mod.time, "sleep", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        mod.run(_args())
+    receipt = json.loads((tmp_path / "para_issue_dispatch_5.json").read_text())
+    assert (receipt["control_task_id"], receipt["para_task_id"]) == ("ctl1", "p1")
+    assert receipt["request_key"].startswith("gh-issue-5-run-")
+    assert receipt["final_state"] == "running"
+    assert not receipt["ok"] and not receipt["finished_at"]

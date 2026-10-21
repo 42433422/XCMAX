@@ -29,7 +29,7 @@
 
 ## Scope 与 Mod / 模型
 
-推荐 scope 见 `modstore_server/developer_scopes.py`：`mod:sync`、`llm:use` 与既有 `catalog:read`、`employee:execute` 等组合，用于 Mod 同步与通过平台 Token 配置/调用模型能力（路由级强制校验将逐步对齐）。
+本节派生自[账号体系 SSOT](https://github.com/42433422/XCMAX/blob/main/FHD/docs/account_system_ssot.md#04-modstore-pat-能力边界)。导出不会扩大原 scope，也不把 PAT 变成登录 JWT。当前明确支持 `mod:sync` 的专用同步接口；`llm:use`、`employee:execute` 等可存储名称不表示通用模型/员工接口已开放。导出和审计接口要求登录 JWT。
 
 ## Python 解密示例（桌面侧）
 

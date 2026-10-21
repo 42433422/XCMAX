@@ -213,6 +213,8 @@ def reader_ticket(db, row) -> dict:
 
 
 def reader_detail(db, row, reader: TicketReader) -> dict:
+    from modstore_server.customer_ticket_execution import ticket_execution_overview
+
     audits = (
         db.query(CustomerServiceAuditLog)
         .filter_by(ticket_id=row.id)
@@ -221,6 +223,7 @@ def reader_detail(db, row, reader: TicketReader) -> dict:
     )
     return {
         "ticket": reader_ticket(db, row),
+        "execution_overview": ticket_execution_overview(db, row),
         "scope": reader.scope(),
         "timeline": [
             {

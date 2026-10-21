@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.customer_issue_delivery_contract import issue_resolution, repair_verification
 from modstore_server.customer_issue_intake import enqueue_issue, request_identity
+from modstore_server.customer_issue_shared_repairs import router as shared_repairs_router
 from modstore_server.customer_service_customer_view import customer_issue_row as _issue_row
 from modstore_server.customer_service_customer_view import customer_ticket_row
 from modstore_server.customer_service_orchestrator import CLOSED_CUSTOMER_ISSUE_STATES as _CLOSED
@@ -35,6 +36,7 @@ from modstore_server.models_cs import (
 from modstore_server.work_order_api import record_customer_decision, route_customer_issue
 
 router = APIRouter()
+router.include_router(shared_repairs_router)
 
 
 def _wake_owner_intake(ticket_id: int, source: str) -> None:
@@ -261,7 +263,7 @@ def pending_issue_runtime(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    from modstore_server.customer_issue_shared_release import bind_shared_release
+    from modstore_server.customer_issue_shared_release import bind_shared_release_batch
 
     rows = (
         db.query(CustomerServiceTicket)
@@ -272,8 +274,7 @@ def pending_issue_runtime(
         .all()
     )
     items = []
-    for row in rows:
-        target = bind_shared_release(db, row, host_sha)
+    for row, target in bind_shared_release_batch(db, rows, host_sha):
         evidence = json_loads(row.evidence_json, {})
         resolution = evidence.get("resolution") or {}
         if resolution.get("route") != "shared_core":

@@ -295,12 +295,12 @@ def extract_explicit_unit_name(text: str) -> str:
 _RETAIL_QTY_PRICE = re.compile(
     r"^(?P<unit>.{1,80}?)\s*(?:发货单|送货单|出货单)\s*[:：]\s*"
     r"(?P<product>.{1,120}?)\s+数量\s*(?P<qty>\d{1,12}(?:\.\d{1,4})?)"
-    r"(?:\s*[\u4e00-\u9fffA-Za-z]{1,4})?\s+单价\s*(?P<price>\d{1,12}(?:\.\d{1,4})?)\s*$"
+    r"(?:\s*(?P<measure>[\u4e00-\u9fffA-Za-z]{1,4}))?\s+单价\s*(?P<price>\d{1,12}(?:\.\d{1,4})?)\s*$"
 )
 
 
 def retail_quantity_price_order(text: str) -> dict | None:
-    """显式「客户 发货单：商品 数量N 单价P」按件数计价，不套工业默认规格。"""
+    """显式「客户 发货单：商品 数量N 单价P」保留原始计量单位，出单前必须验证规格。"""
     match = _RETAIL_QTY_PRICE.match((text or "").strip())
     if match is None:
         return None
@@ -311,15 +311,15 @@ def retail_quantity_price_order(text: str) -> dict | None:
     price = float(match.group("price"))
     if quantity <= 0 or price < 0:
         return None
+    measure = (match.group("measure") or "").lower()
     return {
         "success": True,
         "unit_name": unit_name,
         "products": [
             {
                 "name": match.group("product").strip(),
-                "quantity_tins": quantity,
-                "quantity_kg": quantity,
-                "tin_spec": 1.0,
+                "quantity": quantity,
+                "unit": measure,
                 "unit_price": price,
                 "amount": quantity * price,
             }
@@ -349,7 +349,7 @@ def loose_order_fallback(text: str) -> dict | None:
     return {
         "success": True,
         "unit_name": unit,
-        "products": [{"name": product_name, "quantity_tins": 1, "tin_spec": 10.0}],
+        "products": [{"name": product_name, "quantity_tins": 1}],
     }
 
 
@@ -377,3 +377,63 @@ def normalize_model_number_token(model_token: str) -> str:
         elif ch == "-":
             out.append(ch)
     return "".join(out)
+
+
+def structured_order_result(parsed: dict) -> dict:
+    """Keep explicitly extracted mass distinct from package count."""
+    from app.domain.shipment.shipment_quantities import (
+        ShipmentQuantityValidationError,
+        resolve_shipment_quantity,
+    )
+
+    unit = cleanup_unit_name(str(parsed.get("unit_name") or "").strip())
+    model = str(parsed.get("model_number") or "").strip()
+    product = {
+        key: parsed[key]
+        for key in ("quantity_kg", "quantity", "unit", "quantity_unit")
+        if parsed.get(key) not in (None, "")
+    }
+    for key in ("quantity_tins", "tin_spec"):
+        if parsed.get(key) not in (None, ""):
+            product[key] = parse_cn_number(str(parsed[key]))
+            if product[key] is None or isinstance(parsed[key], bool):
+                return ShipmentQuantityValidationError("SHIPMENT_SPEC_INVALID").result()
+    if product.get("quantity_kg") is not None or str(
+        product.get("unit") or product.get("quantity_unit") or ""
+    ).strip().lower() in {"kg", "公斤", "千克"}:
+        if not unit or not model:
+            return {"success": False, "message": "请补充客户名称和产品型号"}
+        try:
+            tins, kg, spec = resolve_shipment_quantity(product)
+        except ShipmentQuantityValidationError as exc:
+            return exc.result()
+        return {
+            "success": True,
+            "unit_name": unit,
+            "products": [
+                {
+                    "name": "",
+                    "model_number": model,
+                    "quantity_tins": tins,
+                    "quantity_kg": kg,
+                    "tin_spec": spec,
+                }
+            ],
+        }
+    missing = build_missing_prompt(
+        unit_name=unit,
+        model_number=model or None,
+        tin_spec=product.get("tin_spec"),
+        quantity_tins=product.get("quantity_tins"),
+    )
+    if missing:
+        return {"success": False, "message": missing}
+    try:
+        resolve_shipment_quantity(product)
+    except ShipmentQuantityValidationError as exc:
+        return exc.result()
+    return {
+        "success": True,
+        "unit_name": unit,
+        "products": [{"name": "", "model_number": model, **product}],
+    }

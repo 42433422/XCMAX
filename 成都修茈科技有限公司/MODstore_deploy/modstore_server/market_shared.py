@@ -85,7 +85,9 @@ def _optional_current_user(
         return None
     try:
         return _get_current_user(authorization)
-    except HTTPException:
+    except HTTPException as exc:
+        if exc.status_code != 401:
+            raise
         return None
 
 

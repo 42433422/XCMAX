@@ -7,9 +7,11 @@ import { ADMIN_HOST_ROUTE_RECORDS } from '../../../admin-console/src/adminHostRo
 import { ADMIN_OPERATOR_MENU_ITEMS, ADMIN_OPERATOR_ROUTE_NAMES } from '../../../admin-console/src/constants/adminOperatorNav'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 
-const { list, detail, updateEta, push, route, put, post, prompt, confirm } = vi.hoisted(() => ({ post: vi.fn(), put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), prompt: vi.fn(), confirm: vi.fn(), route: { params: {} as Record<string, string> }, }))
+const { list, detail, updateEta, push, route, put, post, get, prompt, confirm } = vi.hoisted(() => ({
+  get: vi.fn(), post: vi.fn(), put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), prompt: vi.fn(), confirm: vi.fn(), route: { params: {} as Record<string, string> },
+}))
 vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail, updateCustomerTicketExpectedCompletion: updateEta } }))
-vi.mock('@/api/core', () => ({ default: { put, post } }))
+vi.mock('@/api/core', () => ({ default: { get, put, post } }))
 vi.mock('@/utils/appDialog', () => ({ appConfirm: confirm, appPrompt: prompt }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => route }))
 
@@ -95,6 +97,46 @@ describe('customer service ticket list', () => {
 })
 
 describe('customer service ticket detail', () => {
+  it('shows separate product progress, the actual review receipt and next step', async () => {
+    detail.mockResolvedValue({ ...payload, execution_overview: {
+      work_order: { binding: 'verified', id: 'WO-PUBLIC', status: 'in_dev' }, blocker: 'review_in_progress',
+      responsible: { label: 'grok_bot' }, last_progress: { at: '2026-10-21T12:00:00Z', label: '复核任务回执更新' },
+      next_step: { label: '跟进已接单的复核任务' },
+      verification: { source: 'customer_decision', release_bound: false, customer_confirmed: true },
+      receipts: [{ kind: 'escalation', role: 'fix', task_id: 'task-real-12', state: 'accepted', accepted: true, completed: false }],
+    } })
+    const wrapper = mountDetail(); await flushPromises()
+    const overview = wrapper.find('[aria-label="执行总览"]')
+    expect(overview.text()).toContain('WO-PUBLIC · 开发中')
+    expect(overview.text()).toContain('task-real-12')
+    expect(overview.text()).toContain('已真实接单')
+    expect(overview.text()).toContain('原客户直接确认')
+    expect(overview.text()).toContain('未记录正式版本绑定')
+    expect(overview.text()).toContain('2026-10-21 20:00:00')
+    wrapper.unmount()
+  })
+  it('requires an explicit root-cause confirmation and retains the link request on retry', async () => {
+    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, status: 'processing' } })
+    get.mockResolvedValue({ items: [{ source_ticket_id: 10, source_action_id: 11, ticket_no: 'CS-SOURCE', change_request_id: 12, repair_head_sha: 'a'.repeat(40) }], match_sha256: 'b'.repeat(64) })
+    post.mockRejectedValueOnce(new Error('请求超时')).mockResolvedValue({ success: true })
+    const wrapper = mountDetail(); await flushPromises()
+    const section = wrapper.find('[aria-label="同根因公共修复"]')
+    await section.find('button').trigger('click'); await flushPromises()
+    expect(get).toHaveBeenCalledWith('/api/xcmax/market-proxy/customer-service/issues/42/shared-repair-candidates')
+    await section.find('select').setValue('11')
+    await section.find('textarea').setValue('已核对相同源版本和相同问题根因')
+    await section.find('form').trigger('submit'); await flushPromises()
+    expect(post).not.toHaveBeenCalled()
+    await section.find('input[type="checkbox"]').setValue(true)
+    await section.find('form').trigger('submit'); await flushPromises()
+    const body = post.mock.calls[0][1]
+    expect(body).toMatchObject({ source_ticket_id: 10, source_action_id: 11, confirmed_same_root_cause: true, match_sha256: 'b'.repeat(64) })
+    expect(body.request_id).toBeTruthy()
+    await section.find('form').trigger('submit'); await flushPromises()
+    expect(post.mock.calls[1][1]).toEqual(body)
+    expect(detail).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
   it.each([{ issue_domain: 'custom' }, { source: 'private_mod_rework' }])('requires customer acceptance for private Mod evidence %o', async evidence => {
     detail.mockResolvedValue({ ...payload, ticket: { ...ticket, status: 'processing', intent: 'general', evidence } }); const wrapper = mountDetail(); await flushPromises()
     expect(wrapper.find('.cs-close-form select').exists()).toBe(false); expect(wrapper.text()).toContain('过期与后续活跃需求核对记录'); wrapper.unmount()

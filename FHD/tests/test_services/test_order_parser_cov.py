@@ -1124,7 +1124,8 @@ def test_retail_quantity_price_keeps_explicit_count_and_price():
     assert parsed["unit_name"] == "MAC验收0929客户"
     product = parsed["products"][0]
     assert product["name"] == "MAC验收0929产品13687"
-    assert product["quantity_kg"] == 2
-    assert product["tin_spec"] == 1.0
+    assert product["quantity"] == 2
+    assert "quantity_kg" not in product
+    assert "tin_spec" not in product
     assert product["unit_price"] == 12.5
     assert product["amount"] == 25.0

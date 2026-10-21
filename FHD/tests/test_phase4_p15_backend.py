@@ -103,12 +103,12 @@ def test_png_http_response_cacheable() -> None:
     resp = svc._png_http_response(_png(10, 10), view="thumb")
     assert isinstance(resp, Response)
     assert resp.media_type == "image/png"
-    assert "immutable" in resp.headers["Cache-Control"]
+    assert resp.headers["Cache-Control"] == "private, no-store"
 
 
 def test_png_http_response_non_cacheable() -> None:
     resp = svc._png_http_response(_png(10, 10), view="other")
-    assert "no-cache" in resp.headers["Cache-Control"]
+    assert resp.headers["Cache-Control"] == "private, no-store"
 
 
 # ---------------------------------------------------------------------------

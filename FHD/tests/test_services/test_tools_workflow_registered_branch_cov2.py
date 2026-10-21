@@ -114,7 +114,7 @@ class TestBusinessEventRouter:
         ):
             result = _registered_router_business_event(
                 "shipment_create",
-                {"unit_name": "Co", "items": [{"id": 1}]},
+                {"unit_name": "Co", "items": [{"id": 1, "quantity_kg": 2}]},
                 {},
                 "admin",
                 "",
@@ -127,7 +127,9 @@ class TestBusinessEventRouter:
             "app.neuro_bus.application_neuro_bridge.publish_neuro_event",
             return_value=False,
         ):
-            result = _registered_router_business_event("shipment_create", {}, {}, "admin", "")
+            result = _registered_router_business_event(
+                "shipment_create", {"items": [{"quantity_kg": 2}]}, {}, "admin", ""
+            )
         assert result["success"] is False
         assert result["published"] is False
 
