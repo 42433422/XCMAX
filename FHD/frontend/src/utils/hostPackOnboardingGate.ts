@@ -68,24 +68,13 @@ export function shouldRouteToHostPackOnboarding(toName: string | symbol | null |
   return !HOST_PACK_ONBOARDING_EXEMPT_ROUTE_NAMES.has(name)
 }
 
-/**
- * 进入工作空间的就绪判定：宿主基础线（core+host，即 `required_mod_ids`）装齐即可进入。
- * 账号定制项（L3）由供应商私有交付产出，未交付时不得把客户堵在门外——其状态仍由
- * `missing_account_custom_mod_ids` / `full_stack_ready` 表达，界面按「待供应商交付」
- * 提示并允许稍后在扩展市场重试。只有产品侧可安装项缺失才算未就绪。
- */
+/** Only account-scoped server readiness may defer an undelivered private package. */
 export function isOnboardingEntryReady(
-  plan: Pick<
-    IndustryBaselinePlan,
+  plan: Pick<IndustryBaselinePlan,
     'baseline_ready' | 'missing_required_mod_ids' | 'missing_account_custom_mod_ids'
   > | null | undefined,
 ): boolean {
-  if (!plan) return false
-  if (plan.baseline_ready === true) return true
-  const missingRequired = plan.missing_required_mod_ids || []
-  if (!missingRequired.length) return false
-  const vendorDelivered = new Set(plan.missing_account_custom_mod_ids || [])
-  return missingRequired.every((id) => vendorDelivered.has(id))
+  return plan?.baseline_ready === true && !(plan.missing_required_mod_ids || []).length
 }
 
 export function markHostPackSkippedThisSession(): void {

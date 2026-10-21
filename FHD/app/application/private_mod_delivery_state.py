@@ -102,23 +102,28 @@ def _state_path() -> Path:
     from app.desktop_runtime.paths import get_desktop_data_dir
 
     root = get_desktop_data_dir() / "data" / "private_mod_delivery"
-    root.mkdir(parents=True, exist_ok=True)
     return root / "state.json"
 
 
-def _read_state() -> dict[str, Any]:
+def _read_state(*, strict: bool = False) -> dict[str, Any]:
     path = _state_path()
-    if not path.is_file():
-        return {"schema_version": 1, "accounts": {}}
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"schema_version": 1, "accounts": {}}
     except (OSError, json.JSONDecodeError):
+        if strict:
+            raise
         logger.warning("私有 Mod 交付状态文件不可读，将使用空状态: %s", path)
         return {"schema_version": 1, "accounts": {}}
     if not isinstance(raw, dict):
+        if strict:
+            raise ValueError("Invalid delivery state")
         return {"schema_version": 1, "accounts": {}}
     accounts = raw.get("accounts")
     if not isinstance(accounts, dict):
+        if strict:
+            raise ValueError("Invalid delivery accounts")
         raw["accounts"] = {}
     raw.setdefault("schema_version", 1)
     return raw
@@ -343,18 +348,23 @@ def account_projects(
     mod_ids: list[str] | set[str] | tuple[str, ...] | None = None,
     *,
     names: dict[str, str] | None = None,
+    strict: bool = False,
 ) -> list[dict[str, Any]]:
     """读取某个账号的私有 Mod 项目状态，不为只读查询写入默认项目。"""
     targets = {str(mod_id or "").strip() for mod_id in (mod_ids or []) if str(mod_id or "").strip()}
     with _STATE_LOCK:
-        state = _read_state()
+        state = _read_state(strict=True) if strict else _read_state()
         scope = state.get("accounts", {}).get(scope_key, {})
         stored = scope.get("projects", {}) if isinstance(scope, dict) else {}
+        if strict and (not isinstance(scope, dict) or not isinstance(stored, dict)):
+            raise ValueError("Invalid delivery project scope")
         if not targets and isinstance(stored, dict):
             targets = {str(mod_id).strip() for mod_id in stored if str(mod_id).strip()}
         result: list[dict[str, Any]] = []
         for mod_id in sorted(targets):
             project = stored.get(mod_id) if isinstance(stored, dict) else None
+            if strict and mod_id in stored and not isinstance(project, dict):
+                raise ValueError("Invalid delivery project")
             if isinstance(project, dict):
                 result.append(json.loads(json.dumps(project, ensure_ascii=False)))
                 continue
@@ -377,9 +387,11 @@ def export_account_state(scope_key: str) -> dict[str, Any]:
         projects = scope.get("projects", {}) if isinstance(scope, dict) else {}
         return {
             "schema_version": 1,
-            "projects": json.loads(json.dumps(projects, ensure_ascii=False))
-            if isinstance(projects, dict)
-            else {},
+            "projects": (
+                json.loads(json.dumps(projects, ensure_ascii=False))
+                if isinstance(projects, dict)
+                else {}
+            ),
         }
 
 
