@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Export immutable lockfile pins under one stable detector/correlator.
-
-Image and host scans remain required; all uv platform versions are included.
-"""
+"""Export immutable lockfile pins under one stable detector/correlator."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import posixpath
 import re
 import subprocess
 import tomllib
@@ -48,6 +46,23 @@ def parse_pins(content: str, *, multiple_versions: bool = False) -> dict[str, di
     return resolved
 
 
+def expand_editable_projects(root: Path, sha: str, content: str) -> str:
+    """Resolve pip-compile editable local packages from the same commit."""
+
+    def resolve(match):
+        package_dir = posixpath.normpath(posixpath.join("FHD/XCAGI", match[1]))
+        if not package_dir.startswith("FHD/packages/"):
+            raise ValueError("editable package must stay under FHD/packages")
+        project = tomllib.loads(
+            subprocess.check_output(
+                ["git", "show", f"{sha}:{package_dir}/pyproject.toml"], cwd=root
+            ).decode("utf-8")
+        )["project"]
+        return f"{project['name']}=={project['version']}"
+
+    return re.sub(r"(?m)^-e\s+(\.\.?/[A-Za-z0-9_./-]+)\s*$", resolve, content)
+
+
 def build_snapshot(root: Path, sha: str, job_id: str) -> dict:
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("sha must be a full lowercase Git commit SHA")
@@ -64,6 +79,8 @@ def build_snapshot(root: Path, sha: str, job_id: str) -> dict:
             content = "\n".join(
                 f"{p['name']}=={p['version']}" for p in tomllib.loads(content)["package"]
             )
+        elif filename == LOCKFILES[0]:
+            content = expand_editable_projects(root, sha, content)
         manifests[filename] = {
             "name": filename,
             "file": {"source_location": filename},
