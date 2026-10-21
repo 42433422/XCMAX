@@ -339,9 +339,17 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
                 with get_session_factory()() as db:
                     db.get(CustomerServiceTicket, protected_id).intent = intent
                     db.commit()
-                guarded = client.post(f"/api/customer-service/tickets/{protected_id}/close", json={**body, "request_id": str(uuid.uuid4())})
+                guarded = client.post(
+                    f"/api/customer-service/tickets/{protected_id}/close",
+                    json={**body, "request_id": str(uuid.uuid4())},
+                )
                 assert guarded.status_code == 409
-                assert client.get(f"/api/customer-service/tickets/{protected_id}").json()["ticket"]["status"] == "processing"
+                assert (
+                    client.get(f"/api/customer-service/tickets/{protected_id}").json()["ticket"][
+                        "status"
+                    ]
+                    == "processing"
+                )
         updated = client.patch(eta_url, json=eta)
         assert updated.status_code == 200
         assert updated.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
