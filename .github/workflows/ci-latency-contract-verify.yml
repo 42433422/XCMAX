@@ -1,16 +1,17 @@
-name: CI latency shard-isolation diagnosis
+name: CI latency closure candidate verification
 'on':
   push:
     branches: ['ci/latency-contract-verify-20261022']
 permissions:
   contents: read
 jobs:
-  diagnose:
+  verify:
     if: github.repository == '42433422/XCMAX' && github.ref == 'refs/heads/ci/latency-contract-verify-20261022'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       TARGET_SHA: ef06416e9e0e8ceedcdffc72ad977ffdb2afee3d
+      MAIN_SHA: aff192308fd3e82afc8258e44958c22a1b8dac62
       XCAGI_SKIP_LEGACY_COMPAT_ROUTES: '1'
       INTENT_BENCHMARK_RUN: '1'
       XCAGI_SKIP_INTENT_LLM: '1'
@@ -26,26 +27,6 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
-      - name: Snapshot all test-side app entry points
-        run: |
-          python - <<'PY'
-          import os, shutil
-          from pathlib import Path
-          out = Path(os.environ['RUNNER_TEMP']) / 'app-entry-sources'
-          out.mkdir()
-          for p in Path('FHD/tests').rglob('*.py'):
-              text = p.read_text()
-              if any(s in text for s in ('get_fastapi_app', 'get_test_fastapi_app', 'XCAGI_DESKTOP_FAST_START', 'create_fastapi_app')):
-                  dest = out / p
-                  dest.parent.mkdir(parents=True, exist_ok=True)
-                  shutil.copyfile(p, dest)
-          PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app-entry-sources-${{ github.run_id }}
-          path: ${{ runner.temp }}/app-entry-sources/
-          if-no-files-found: error
-          retention-days: 7
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
@@ -69,70 +50,119 @@ jobs:
       - name: Install real runtime Mod compiler
         working-directory: frontend
         run: npm ci --no-audit --no-fund
-      - name: Install observation hooks outside the product tree
+      - name: Reproduce causal pair before repairing test isolation
+        working-directory: FHD
         run: |
-          mkdir -p "$RUNNER_TEMP/ci-isolation-evidence"
-          cat > "$RUNNER_TEMP/ci-isolation-evidence/trace_app.py" <<'PY'
-          import json, os, sys, traceback
+          python - <<'PY'
+          import os, subprocess, sys, xml.etree.ElementTree as ET
           from pathlib import Path
-          import pytest
-          output = Path(os.environ['RUNNER_TEMP']) / 'ci-isolation-evidence' / 'app-transitions.jsonl'
-          current = 'collection'
-          previous = None
-          def snapshot():
-              module = sys.modules.get('app.fastapi_app.factory')
-              app = getattr(module, '_app_singleton', None)
-              routes = getattr(app, 'routes', []) if app is not None else []
-              auth = sorted((str(getattr(r, 'path', '')), str(sorted(getattr(r,'methods',[]) or []))) for r in routes if '/auth/' in str(getattr(r,'path','')))
-              return {'id':id(app) if app is not None else None,'type':type(app).__name__,'pending':str(getattr(getattr(app,'state',None),'deferred_routes_pending',None)),'routes':len(routes),'auth':auth,'fast_start':os.environ.get('XCAGI_DESKTOP_FAST_START')}
-          def record(phase, node):
-              global previous
-              state = snapshot()
-              if state != previous or 'test_auth_subscription_register' in node:
-                  with output.open('a') as f: f.write(json.dumps({'phase':phase,'node':node,'state':state})+'\n')
-                  previous = state
-          def pytest_runtest_logstart(nodeid, location):
-              global current
-              current = nodeid
-              record('before', nodeid)
-          def pytest_runtest_logfinish(nodeid, location):
-              record('after', nodeid)
-          def pytest_sessionstart(session):
-              import app.fastapi_app.factory as factory
-              real = factory.create_fastapi_app
-              def observed(*a,**kw):
-                  with output.open('a') as f: f.write(json.dumps({'phase':'factory-call','node':current,'fast_start':os.environ.get('XCAGI_DESKTOP_FAST_START'),'stack':traceback.format_stack(limit=18)})+'\n')
-                  return real(*a,**kw)
-              factory.create_fastapi_app = observed
+          out = Path(os.environ['RUNNER_TEMP']) / 'ci-closure-candidate'
+          out.mkdir()
+          command = [sys.executable,'-m','pytest','tests/test_infrastructure/test_mod_manager_branch_cov3.py::TestEnsureModApiReady::test_employee_pack_uses_employee_route_registry','tests/test_routes/test_auth_subscription_register.py','-q','--tb=short','--junitxml='+str(out/'causal-before.xml')]
+          result = subprocess.run(command,capture_output=True,text=True,timeout=180)
+          (out/'causal-before.txt').write_text(result.stdout+result.stderr)
+          print(result.stdout,result.stderr,flush=True)
+          failed = [n.get('name') for n in ET.parse(out/'causal-before.xml').iter('testcase') if n.find('failure') is not None]
+          assert result.returncode == 1 and set(failed) == {'test_subscription_status_requires_login','test_subscription_status_trial','test_register_enriches_tenant_id'}, failed
           PY
-      - name: Reproduce complete shard seven with original assertions
+      - name: Repair only stale contracts and the leaking unit-test boundary
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          p = Path('FHD/tests/test_ci/test_backend_shards.py')
+          text = p.read_text()
+          old = 'prerequisites = {"guard-temp-scripts", "ssot-drift-gate", "classify"}'
+          assert text.count(old) == 1
+          text = text.replace(old,'prerequisites = {"guard-temp-scripts", "classify"}')
+          old = 'assert set(gate["needs"]) == {"classify", "backend-quality", "backend-test-shard"}'
+          assert text.count(old) == 1
+          text = text.replace(old,'assert set(gate["needs"]) == prerequisites | {\n        "ssot-drift-gate", "backend-quality", "backend-test-shard"\n    }')
+          text, count = re.subn(r'(?m)^( +)CLASSIFY="success",$',lambda m:m[1]+'GUARD="success",\n'+m[1]+'SSOT="success",\n'+m[0],text)
+          assert count == 2
+          p.write_text(text)
+          p = Path('FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py')
+          text = p.read_text()
+          start = text.index('    def test_employee_pack_uses_employee_route_registry(')
+          end = text.index('    @pytest.mark.parametrize',start)
+          case = text[start:end]
+          old = '            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as gmm,\n'
+          assert case.count(old) == 1
+          case = case.replace(old,old+'            patch("app.fastapi_app.get_fastapi_app", return_value=object()) as get_app,\n')
+          old = '            register.assert_called_once()\n'
+          assert case.count(old) == 1
+          case = case.replace(old,'            get_app.assert_called_once_with()\n            register.assert_called_once_with(get_app.return_value, mm, "artifact-generator")\n')
+          p.write_text(text[:start]+case+text[end:])
+          p = Path('FHD/CHANGELOG.md')
+          text = p.read_text()
+          old = '- 自动检查可与配置一致性校验并行启动，减少等待；配置校验失败时仍禁止通过和发布。'
+          assert text.count(old) == 1
+          p.write_text(text.replace(old,old+'同步分片门禁测试的守卫输入，并隔离员工包单测对应用单例的影响，避免认证路由测试受执行顺序干扰。'))
+          PY
+          python -m ruff format FHD/tests/test_ci/test_backend_shards.py FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py
+          python -m ruff check FHD/tests/test_ci/test_backend_shards.py FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py
+          git diff --check
+      - name: Verify causal pair and all affected contracts
+        working-directory: FHD
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_infrastructure/test_mod_manager_branch_cov3.py tests/test_routes/test_auth_subscription_register.py -q --tb=short --junitxml="$RUNNER_TEMP/ci-closure-candidate/causal-after.xml"
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. python -m pytest --noconftest -c /dev/null -p no:cacheprovider tests/test_ci/test_backend_shards.py tests/test_ci/test_workflow_gate_contracts.py tests/release_gate/test_admin_console_release_policy.py::test_fhd_release_chain_carries_and_verifies_admin_identity -q --junitxml="$RUNNER_TEMP/ci-closure-candidate/contracts.xml"
+          cd ..
+          python -m scripts.dev.test_change_classifier
+          python scripts/dev/publish_ci_workflows_to_root.py --check
+      - name: Commit candidate locally and verify repository accounting
+        run: |
+          set -euo pipefail
+          git config user.name 'CI verification'
+          git config user.email 'ci-verification@users.noreply.github.com'
+          git add FHD/tests/test_ci/test_backend_shards.py FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py FHD/CHANGELOG.md
+          git commit -m 'test(ci): close stale shard contracts and isolate employee pack app lookup'
+          (cd FHD && python scripts/dev/check_net_deletion.py --update --force --reason '按用户2026-10-22继续闭环指令，修复第7分片六项失败：补齐旧门禁契约与合法守卫输入，隔离员工包单测真实应用单例并加强参数断言；不减测试、不降覆盖率、不改产品运行时。')
+          git add FHD/metrics/line_baseline.json
+          git commit -m 'chore(ci): record measured regression repair line accounting'
+          (cd FHD && python scripts/dev/push_preflight.py --fix --base "$MAIN_SHA")
+          (cd FHD && python scripts/dev/ssot_cli.py gate)
+          git diff --exit-code
+          git diff --check "$MAIN_SHA" HEAD
+          echo "BACKEND_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Re-run complete original shard seven with coverage collection
         working-directory: FHD
         env:
           BACKEND_SHARD_INDEX: '7'
           BACKEND_SHARD_TOTAL: '8'
           BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
-          BACKEND_SOURCE_SHA: ef06416e9e0e8ceedcdffc72ad977ffdb2afee3d
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
-          export PYTHONPATH="$RUNNER_TEMP/ci-isolation-evidence:${PYTHONPATH:-}"
-          export BACKEND_SHARD_MANIFEST="$RUNNER_TEMP/ci-isolation-evidence/full.json"
+          export BACKEND_SHARD_MANIFEST="$RUNNER_TEMP/ci-closure-candidate/full.json"
+          python -m pytest tests/ -v -p scripts.ci.backend_shards --cov --cov-branch --cov-fail-under=0 --cov-report= --junitxml="$RUNNER_TEMP/ci-closure-candidate/full.xml" > "$RUNNER_TEMP/ci-closure-candidate/full.txt" 2>&1
+          tail -n 25 "$RUNNER_TEMP/ci-closure-candidate/full.txt"
+      - name: Export exact verified candidate files and tree
+        run: |
+          set -euo pipefail
+          git diff --exit-code
           python - <<'PY'
-          import os, subprocess, sys
+          import hashlib, json, os, shutil, subprocess
           from pathlib import Path
-          out = Path(os.environ['RUNNER_TEMP']) / 'ci-isolation-evidence'
-          command = [sys.executable,'-m','pytest','tests/','-v','-p','scripts.ci.backend_shards','-p','trace_app','--cov','--cov-branch','--cov-fail-under=0','--cov-report=','--junitxml='+str(out/'full.xml')]
-          with (out/'pytest.txt').open('w') as log:
-              result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=840)
-          print('DIAGNOSTIC_PYTEST_EXIT',result.returncode,flush=True)
-          print((out/'pytest.txt').read_text()[-20000:],flush=True)
+          out = Path(os.environ['RUNNER_TEMP']) / 'ci-closure-candidate'
+          expected = {'FHD/tests/test_ci/test_backend_shards.py','FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py','FHD/CHANGELOG.md','FHD/metrics/line_baseline.json'}
+          changed = set(subprocess.check_output(['git','diff','--name-only',os.environ['TARGET_SHA'],'HEAD'],text=True).splitlines())
+          assert changed == expected, changed
+          info = {'source_base':os.environ['TARGET_SHA'],'main_base':os.environ['MAIN_SHA'],'local_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'files':[]}
+          for name in sorted(expected):
+              p = Path(name); raw = p.read_bytes()
+              dest = out / 'candidate' / name
+              dest.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(p,dest)
+              info['files'].append({'path':name,'blob':subprocess.check_output(['git','hash-object',name],text=True).strip(),'sha256':hashlib.sha256(raw).hexdigest()})
+          (out/'verification.json').write_text(json.dumps(info,indent=2,ensure_ascii=False))
+          print('VERIFIED_CANDIDATE',json.dumps(info,ensure_ascii=False),flush=True)
           PY
-      - name: Retain observation evidence
+      - name: Retain candidate verification evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-isolation-trace-${{ github.run_id }}
-          path: ${{ runner.temp }}/ci-isolation-evidence/
+          name: ci-closure-candidate-${{ github.run_id }}
+          path: ${{ runner.temp }}/ci-closure-candidate/
           if-no-files-found: error
           retention-days: 7
       - name: Clean only this disposable checkout
