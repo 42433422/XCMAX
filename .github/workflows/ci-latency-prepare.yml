@@ -1,0 +1,82 @@
+name: CI latency isolated preparation retry
+'on':
+  create: null
+permissions:
+  contents: read
+jobs:
+  validate:
+    if: github.repository == '42433422/XCMAX' && github.ref == 'refs/heads/ci/latency-prepare-20261022-v2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE_SHA: c8c9c90ca47cbde6361c94b11cf5c94815b53147
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ env.BASE_SHA }}
+        fetch-depth: 0
+        persist-credentials: false
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.11'
+    - name: Install isolated verification tools
+      run: python -m pip install pytest pyyaml ruff
+    - name: Execute immutable preparation with corrected test entrypoint
+      run: |
+        python - <<'PY'
+        import hashlib, subprocess, yaml
+        raw = subprocess.check_output(['git','show','f84ecf5dfcf74c86468f09e3b4b29950c69efbfd:.github/workflows/ci-latency-prepare.yml'])
+        assert hashlib.sha1(f'blob {len(raw)}\0'.encode()+raw).hexdigest() == '9b5564c99a7be246bad295f27164bf69e40bb6c6'
+        job = yaml.safe_load(raw)['jobs']['validate']
+        names = {'Inspect scoped instructions and prepare verification tools', 'Verify baseline, apply bounded change, test and preflight'}
+        for step in job['steps']:
+            if step.get('name') not in names:
+                continue
+            run = step['run'].replace('python scripts/dev/test_change_classifier.py', 'python -m scripts.dev.test_change_classifier')
+            run = run.replace('python -m pytest --noconftest -c /dev/null', 'python -m pytest -p no:cacheprovider --noconftest -c /dev/null')
+            subprocess.run(['bash','-euo','pipefail','-c',run], check=True)
+        PY
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ci-latency-candidate
+        path: ${{ runner.temp }}/ci-latency-candidate.json
+        if-no-files-found: error
+        retention-days: 3
+    - name: Clean only this disposable checkout
+      if: always()
+      run: |
+        mkdir -p "$RUNNER_TEMP/latency-clean-home" "$RUNNER_TEMP/latency-clean-tmp"
+        HOME="$RUNNER_TEMP/latency-clean-home" XCMAX_CLEAN_TMP_ROOT="$RUNNER_TEMP/latency-clean-tmp" python3 scripts/dev/clean_agent_workspace.py
+        df -h .
+  publish-candidate-objects:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: f84ecf5dfcf74c86468f09e3b4b29950c69efbfd
+        fetch-depth: 1
+        persist-credentials: false
+    - uses: actions/download-artifact@v8
+      with:
+        name: ci-latency-candidate
+        path: candidate
+    - name: Install YAML reader
+      run: python -m pip install pyyaml
+    - name: Store exact validated objects without updating any ref
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        python - <<'PY'
+        import hashlib, subprocess, yaml
+        raw = subprocess.check_output(['git','show','f84ecf5dfcf74c86468f09e3b4b29950c69efbfd:.github/workflows/ci-latency-prepare.yml'])
+        assert hashlib.sha1(f'blob {len(raw)}\0'.encode()+raw).hexdigest() == '9b5564c99a7be246bad295f27164bf69e40bb6c6'
+        steps = yaml.safe_load(raw)['jobs']['publish-candidate-objects']['steps']
+        scripts = [s['run'] for s in steps if s.get('name') == 'Store verified Git objects only; do not update refs']
+        assert len(scripts) == 1
+        subprocess.run(['bash','-euo','pipefail','-c',scripts[0]],check=True)
+        PY
