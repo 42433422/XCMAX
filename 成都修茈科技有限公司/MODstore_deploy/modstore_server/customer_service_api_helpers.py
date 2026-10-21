@@ -139,12 +139,21 @@ def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request:
     ticket = visible_ticket_or_404(db, user, ticket_id)
     disposition = request.get("disposition", "resolved")
     expired = disposition == "expired"
+    evidence = json_loads(ticket.evidence_json, {})
+    from modstore_server.customer_issue_delivery_contract import issue_resolution
+
+    if not expired and (
+        ticket.intent == "product_issue"
+        or issue_resolution(ticket, evidence).get("route") == "private_mod"
+        or evidence.get("delivery_managed_by") == "custom_delivery"
+    ):
+        raise HTTPException(409, "产品问题和定制交付必须由原客户通过运行回执或原工单决策完成验收")
     key = f"admin-ticket-close:{ticket_id}:{request['request_id']}"
     existing = db.query(CustomerServiceAction).filter_by(idempotency_key=key).first()
     if existing:
         previous = json_loads(existing.request_json, {})
         previous.setdefault("disposition", "resolved")
-        if previous != {"disposition": "resolved", **request}:
+        if previous != {**request, "disposition": disposition}:
             raise HTTPException(409, "同一关单请求标识不能用于不同内容")
         if ticket.status != disposition or not ticket.closed_at:
             raise HTTPException(409, "原工单状态已变化，不能重放关单结果")
@@ -180,7 +189,6 @@ def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request:
     if session is None or session.user_id != ticket.user_id:
         raise HTTPException(409, "原客服会话不可核验，不能关闭工单")
     now = datetime.now(UTC)
-    evidence = json_loads(ticket.evidence_json, {})
     resolution = evidence.get("resolution")
     if not isinstance(resolution, dict):
         resolution = {}

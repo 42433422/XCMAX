@@ -1,25 +1,2 @@
 # 客服工单总线 SSOT
-
-> 更新日期：2026-10-20
-
-## 定轨
-
-客服工单闭环的执行总线是 **MODstore `incident_bus` + incident team**，不是 FHD NeuroBus。
-
-| 环节 | 位置 |
-|------|------|
-| 发布 | `modstore_server/customer_service_api.py` → `ops.intake.customer_ticket`（publish 前 enrich） |
-| 编排 | `incident_team_orchestrator`（scout/fix/verify）+ binding 派发 |
-| 入口员工 | `intake-dispatcher` 产出 `routing_plan`；`incident_bus` 消费并派发 `proposed_owner` |
-| 回写 | `apply_customer_ticket_incident_progress` → 用户可见 lifecycle |
-| 客户决定 | 桌面 `POST /api/mod-store/issue-runtime/{id}/decision` → `POST /api/customer-service/issues/{id}/decision`：「已解决」才关单，「重新打开」回到处理中并重新投递 |
-
-## 验收
-
-代码修复工单沿用原编号，每单独立 PR（仅一个活跃集成 PR），进度回写须绑定 PR 链接、提交 SHA、验证和阻塞。合入 `main`、使用主线构建并验收原问题后才可报告修复完成；客户正常确认后关单。只读诊断无代码修改时记录证据，不虚建 PR。共同验收条款唯一维护于 `config/duty_employee_work_contracts.json#defaults.acceptance`，运行加载器合并到全部岗位的派工与定时任务合同；这是派工验收要求，不能将写入配置等同于已部署或自动强制拦截。
-
-一张 `CS*` 工单：`dispatched_count > 0`，`_cs_progress.lifecycle_*` 非空，且非全员 `handler_failed`。真实闭环按 [ticket-loop.run.json](../evidence/e2e/final-acceptance-1.0.0.5/ticket-loop.run.json) 53 项与 [gates.json](../evidence/e2e/final-acceptance-1.0.0.5/gates.json) 闸门 17–23 判定；目前只有本机集成证据 [ticket-loop-local-20261006](../evidence/e2e/ticket-loop-local-20261006/run.jsonl)，未闭环。
-
-「发版解决问题」必须走 Para：总账 `processor_policy` 规定 AI 处理相关条目（17–27、41、48、49，对应闸门 19）判 PASS 时，每张工单的 `processing` 必须含一次 `para_delegate` 成功完成（accepted、completed、ok 且有 Para 任务号），且不得出现 `agent`、`vibe_*`、`cursor_delegate`、`direct_python`、`llm_md` 等本地回退；检测到回退即判 FAIL。校验脚本 [`ticket_loop_ledger_check.py`](../../scripts/release/ticket_loop_ledger_check.py) 同时拦截无 `observed_at`/证据的 PASS、缺冻结版本/双租户账号/工单号的 PASS，以及来源条目未全 PASS 的 GREEN 闸门。
-
-同账号、同 source_ref/WO、同需求正文的跨版本支持补报追加到 `support_reports`，保留原附件、上下文及历史 outbox；新增同单事件携带本次支持包。重复补报幂等，不同正文或账号不得覆盖原案；闭单新补报须先由客户正常重开。
+> 更新日期：2026-10-21。MODstore `incident_bus` + incident team 是工单执行总线：`customer_service_api.py` 发布并 enrich，`incident_team_orchestrator` / `intake-dispatcher` 派发，`apply_customer_ticket_incident_progress` 回写 lifecycle；不是 FHD NeuroBus。员工进度不能结案。产品问题由原客户经桌面 `POST /api/mod-store/issue-runtime/{id}/decision` → `POST /api/customer-service/issues/{id}/decision` 确认或重开；定制交付须通过正式产物、运行和客户验收回执。管理员不能把这两类工单标为已解决；仅两个月以上且无后续活动的旧单可过期关闭，并须标明未修复、资金权益不变。代码修复沿用原工单号，每单一个集成 PR；回写 PR、SHA、验证与阻塞。完成须合入 `main`、用主线构建复验并取得原客户验收；只读诊断记证据，不虚建 PR。共同验收条款唯一维护于 `config/duty_employee_work_contracts.json#defaults.acceptance`，写入不等于已部署或已强制执行。每张 `CS*` 工单须有 `dispatched_count > 0`、非空 `_cs_progress.lifecycle_*` 且非全员 `handler_failed`。完整验收按 [ticket-loop.run.json](../evidence/e2e/final-acceptance-1.0.0.5/ticket-loop.run.json) 53 项及 [gates.json](../evidence/e2e/final-acceptance-1.0.0.5/gates.json) 闸门 17–23；当前只有本机 [ticket-loop-local-20261006](../evidence/e2e/ticket-loop-local-20261006/run.jsonl)，尚未闭环。总账 `processor_policy` 的 AI 条目 17–27、41、48、49（闸门 19）须有 Para `accepted`、`completed`、`ok` 和任务号；出现 `agent`、`vibe_*`、`cursor_delegate`、`direct_python`、`llm_md` 等回退即失败。[`ticket_loop_ledger_check.py`](../../scripts/release/ticket_loop_ledger_check.py) 拒绝缺观察时间/证据、冻结版本、双租户账号、工单号或未通过来源项的 PASS/GREEN。同账号、同 source_ref/WO、同正文的跨版本补报追加到 `support_reports`，保留附件、上下文、outbox 并幂等；不同正文/账号不得覆盖，闭单后补报须由客户先重开。
