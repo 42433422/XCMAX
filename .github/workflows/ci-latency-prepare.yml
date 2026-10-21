@@ -1,6 +1,8 @@
 name: CI latency isolated preparation retry
 'on':
   create: null
+  push:
+    branches: ['ci/latency-prepare-20261022-v2']
 permissions:
   contents: read
 jobs:
@@ -35,6 +37,25 @@ jobs:
                 continue
             run = step['run'].replace('python scripts/dev/test_change_classifier.py', 'python -m scripts.dev.test_change_classifier')
             run = run.replace('python -m pytest --noconftest -c /dev/null', 'python -m pytest -p no:cacheprovider --noconftest -c /dev/null')
+            if step.get('name') == 'Verify baseline, apply bounded change, test and preflight':
+                correction = r'''python - <<'PY_DOC'
+        from pathlib import Path
+        p = Path('docs/CI_SSOT.md')
+        text = p.read_text(encoding='utf-8')
+        old = '质量检查与分片同时开始，均先等待 `guard-temp-scripts`、`SSOT Drift Gate` 和分类完成。'
+        new = '质量检查与分片只等待 `guard-temp-scripts` 和分类完成；`SSOT Drift Gate` 同时运行，两个最终聚合门禁仍显式要求守卫与 SSOT 均成功。'
+        assert text.count(old) == 1
+        text = text.replace(old, new, 1)
+        text = text.replace('只有有效分类、正确源码、质量任务成功且分片明确 skipped 时，聚合才接受 skip', '只有守卫和 SSOT 均成功、有效分类、正确源码、质量任务成功且分片明确 skipped 时，聚合才接受 skip', 1)
+        marker = '\n### CI 延迟优化：SSOT 并行、最终门禁不变\n'
+        assert text.count(marker) == 1
+        text = text.split(marker)[0].rstrip() + '\n'
+        p.write_text(text, encoding='utf-8')
+        PY_DOC
+        '''
+                anchor = 'python -m ruff format FHD/tests/test_ci/test_workflow_gate_contracts.py'
+                assert run.count(anchor) == 1
+                run = run.replace(anchor, correction + anchor, 1)
             subprocess.run(['bash','-euo','pipefail','-c',run], check=True)
         PY
     - uses: actions/upload-artifact@v4
@@ -49,34 +70,41 @@ jobs:
         mkdir -p "$RUNNER_TEMP/latency-clean-home" "$RUNNER_TEMP/latency-clean-tmp"
         HOME="$RUNNER_TEMP/latency-clean-home" XCMAX_CLEAN_TMP_ROOT="$RUNNER_TEMP/latency-clean-tmp" python3 scripts/dev/clean_agent_workspace.py
         df -h .
-  publish-candidate-objects:
+  retain-candidate-blobs:
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: f84ecf5dfcf74c86468f09e3b4b29950c69efbfd
-        fetch-depth: 1
-        persist-credentials: false
     - uses: actions/download-artifact@v8
       with:
         name: ci-latency-candidate
         path: candidate
-    - name: Install YAML reader
-      run: python -m pip install pyyaml
-    - name: Store exact validated objects without updating any ref
+    - name: Retain verified content blobs only for connector submission
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         python - <<'PY'
-        import hashlib, subprocess, yaml
-        raw = subprocess.check_output(['git','show','f84ecf5dfcf74c86468f09e3b4b29950c69efbfd:.github/workflows/ci-latency-prepare.yml'])
-        assert hashlib.sha1(f'blob {len(raw)}\0'.encode()+raw).hexdigest() == '9b5564c99a7be246bad295f27164bf69e40bb6c6'
-        steps = yaml.safe_load(raw)['jobs']['publish-candidate-objects']['steps']
-        scripts = [s['run'] for s in steps if s.get('name') == 'Store verified Git objects only; do not update refs']
-        assert len(scripts) == 1
-        subprocess.run(['bash','-euo','pipefail','-c',scripts[0]],check=True)
+        import base64, hashlib, json, os, urllib.request
+        from pathlib import Path
+        data = json.loads(Path('candidate/ci-latency-candidate.json').read_text())
+        assert data['base'] == 'c8c9c90ca47cbde6361c94b11cf5c94815b53147'
+        allowed = {'.github/workflows/fhd-ci-cd.yml', 'FHD/.github/workflows/ci-cd.yml', 'FHD/tests/test_ci/test_workflow_gate_contracts.py', 'docs/CI_SSOT.md', 'FHD/CHANGELOG.md', 'FHD/metrics/line_baseline.json'}
+        for commit in data['commits']:
+            print('LOCAL_TESTED_COMMIT', commit['sha'], 'TREE', commit['tree'])
+            for item in commit['files']:
+                p = item['path']
+                assert '..' not in p.split('/') and not p.startswith('/')
+                assert p in allowed or p.startswith('成都修茈科技有限公司/capabilities/') or p == '成都修茈科技有限公司/data/capabilities.json'
+                assert item['mode'] == '100644'
+                raw = base64.b64decode(item['content'], validate=True)
+                assert hashlib.sha1(f'blob {len(raw)}\0'.encode()+raw).hexdigest() == item['sha']
+                payload = json.dumps({'content': item['content'], 'encoding': 'base64'}).encode()
+                req = urllib.request.Request('https://api.github.com/repos/42433422/XCMAX/git/blobs', data=payload, headers={'Authorization': 'Bearer '+os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'})
+                with urllib.request.urlopen(req, timeout=60) as response:
+                    blob = json.load(response)
+                assert blob['sha'] == item['sha']
+                print(json.dumps({'path': p, 'mode': item['mode'], 'type': 'blob', 'sha': blob['sha']}, ensure_ascii=False))
+        print('No tree, commit, ref, pull request, protection, or deployment was changed.')
         PY
