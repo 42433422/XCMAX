@@ -85,8 +85,14 @@ def call_statuses(monkeypatch, value=None, row=None):
     )
     monkeypatch.setattr(
         "app.mod_sdk.customer_delivery.delivery_for_account_custom_mod",
-        lambda mid: row
-        or {"delivery_mode": "private_mod", "customer_account": "test-owner", "market_user_id": 7},
+        lambda mid: (
+            row
+            or {
+                "delivery_mode": "private_mod",
+                "customer_account": "test-owner",
+                "market_user_id": 7,
+            }
+        ),
     )
     return delivery_statuses_for_session("current-session")
 
