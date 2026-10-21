@@ -106,12 +106,24 @@ def _analyze(snapshot: dict) -> dict:
         if check_id in by_check:
             raise ValueError("Multiple jobs claim the same check run")
         by_check[check_id] = job
+        # GitHub may timestamp an unassigned skipped job's start after its end.
+        # Require explicit runner metadata; missing evidence is not zero cost.
+        if (
+            job.get("status") == "completed"
+            and job.get("conclusion") == "skipped"
+            and job.get("steps") == []
+            and "runner_id" in job
+            and "runner_name" in job
+            and job.get("runner_id") in (None, 0)
+            and not job.get("runner_name")
+        ):
+            continue
         if job.get("started_at") and job.get("completed_at"):
             duration = (_time(job["completed_at"]) - _time(job["started_at"])).total_seconds()
             if duration < 0:
                 raise ValueError("Negative job duration")
             runner_seconds += duration
-        elif job.get("conclusion") != "skipped":
+        else:
             resource_incomplete = True
     history_complete = all(
         seen_attempts[run_id] == set(range(1, run["run_attempt"] + 1))

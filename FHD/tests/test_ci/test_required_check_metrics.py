@@ -104,6 +104,72 @@ class RequiredCheckMetricsTests(unittest.TestCase):
         data["triggered_at"] = timestamp(5)
         self.assertEqual(analyze_snapshot(data)["status"], "invalid")
 
+    def test_unassigned_skipped_api_job_has_zero_runner_cost(self):
+        data = snapshot()
+        baseline = analyze_snapshot(data)["completed_runner_minutes_observed"]
+        # PR #2506 migration-progress-badge: GitHub returned start 18:24:19Z,
+        # completion 18:24:18Z, no steps and null runner metadata.
+        skipped = {
+            **data["jobs"][0]["jobs"][0],
+            "id": 2000,
+            "name": "migration-progress-badge",
+            "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/2000",
+            "conclusion": "skipped",
+            "created_at": timestamp(1),
+            "started_at": timestamp(1),
+            "completed_at": timestamp(0),
+            "steps": [],
+            "runner_id": None,
+            "runner_name": None,
+        }
+        data["jobs"][0]["jobs"].append(skipped)
+        data["jobs"][0]["total_count"] += 1
+        for runner_id, runner_name in ((None, None), (0, "")):
+            with self.subTest(runner_id=runner_id, runner_name=runner_name):
+                skipped.update(runner_id=runner_id, runner_name=runner_name)
+                report = analyze_snapshot(data)
+                self.assertEqual(report["status"], "success")
+                self.assertTrue(report["runner_cost_complete"])
+                self.assertEqual(report["completed_runner_minutes_observed"], baseline)
+        for changes in (
+            {"runner_id": 123},
+            {"runner_name": "allocated-runner"},
+            {"steps": [{"name": "Set up job", "conclusion": "success"}]},
+            {"status": "in_progress"},
+            {"conclusion": "success"},
+        ):
+            with self.subTest(changes=changes):
+                data["jobs"][0]["jobs"][-1] = {**skipped, **changes}
+                self.assertEqual(analyze_snapshot(data)["status"], "invalid")
+        for missing in ("runner_id", "runner_name"):
+            with self.subTest(missing=missing):
+                partial = {**skipped}
+                del partial[missing]
+                data["jobs"][0]["jobs"][-1] = partial
+                self.assertEqual(analyze_snapshot(data)["status"], "invalid")
+        del skipped["runner_id"], skipped["runner_name"]
+        data["jobs"][0]["jobs"][-1] = skipped
+        self.assertEqual(analyze_snapshot(data)["status"], "invalid")
+        skipped.update(started_at=None, completed_at=None)
+        self.assertFalse(analyze_snapshot(data)["runner_cost_complete"])
+
+    def test_unassigned_skipped_required_job_is_still_unsuccessful(self):
+        data = snapshot()
+        check, job = data["checks"]["check_runs"][0], data["jobs"][0]["jobs"][0]
+        check.update(conclusion="skipped", completed_at=timestamp(0))
+        job.update(
+            conclusion="skipped",
+            started_at=timestamp(1),
+            completed_at=timestamp(0),
+            steps=[],
+            runner_id=None,
+            runner_name=None,
+        )
+        report = analyze_snapshot(data)
+        self.assertEqual(report["status"], "not_successful")
+        self.assertTrue(report["measurement_complete"])
+        self.assertIsNone(report["success_seconds"])
+
     def test_merged_pr_without_run_association_is_observation_only(self):
         data = snapshot()
         for run in data["runs"]:
