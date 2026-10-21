@@ -378,7 +378,7 @@ def _parse_order_text(order_text: str) -> dict:
                             if not model_number:
                                 return {"success": False, "message": "解析数字失败（型号无法识别）"}
 
-                            spec = float(groups[3]) if len(groups) > 3 else None
+                            parsed_spec = float(groups[3]) if len(groups) > 3 else None
                         except RECOVERABLE_ERRORS:
                             return {"success": False, "message": "解析数字失败"}
 
@@ -390,7 +390,7 @@ def _parse_order_text(order_text: str) -> dict:
                                     "name": "",
                                     "model_number": model_number,
                                     "quantity_tins": quantity,
-                                    "tin_spec": spec,
+                                    "tin_spec": parsed_spec,
                                 }
                             ],
                         }

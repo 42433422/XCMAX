@@ -2567,7 +2567,7 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
         body.setdefault("new_quantity", 18)
     else:
         body.setdefault("unit_name", "ACME Trading")
-        body.setdefault("items", [{"sku": "sku-1", "qty": 2}])
+        body.setdefault("items", [{"sku": "sku-1", "quantity_tins": 2, "tin_spec": 10}])
         body.setdefault("contact_person", "Lee")
         body.setdefault("contact_phone", "13800000000")
 
@@ -2606,7 +2606,7 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
                     return_value=inventory_domain,
                 )
             )
-            stack.enter_context(
+            publish = stack.enter_context(
                 patch(
                     "app.neuro_bus.application_neuro_bridge.publish_neuro_event",
                     return_value=bool(task.get("mock_publish_result", True)),
@@ -2625,6 +2625,11 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
     _check_equal(checks, "payload.event", payload.get("event"), expected.get("event"))
     _check_equal(checks, "payload.published", payload.get("published"), expected.get("published"))
+    for name, actual in (
+        ("error_code", payload.get("error_code")),
+        ("publish_call_count", publish.call_count),
+    ):
+        _check_equal(checks, name, actual, expected.get(name), skip_when_expected_missing=True)
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -2646,6 +2651,7 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
         checks,
         {
             "response": payload,
+            "publish_call_count": publish.call_count,
             "run": run.to_dict() if run is not None else None,
             "print_call_count": print_domain.emit_job_submitted.call_count,
             "inventory_call_count": inventory_domain.emit_stock_changed.call_count,

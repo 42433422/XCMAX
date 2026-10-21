@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from typing import Any
 
 
@@ -81,6 +82,6 @@ def resolve_shipment_quantity(
     return int(tins), kg, spec
 
 
-def validate_shipment_products(products: list[dict[str, Any]]) -> None:
+def validate_shipment_products(products: Sequence[Any]) -> None:
     for index, product in enumerate(products or [], 1):
         resolve_shipment_quantity(product, row_index=index)
