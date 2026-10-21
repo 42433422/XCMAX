@@ -50,7 +50,6 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
 def _inventory_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
     return str(
         request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
         or payload.get("user_id")
         or payload.get("userId")
         or "inventory-route"
@@ -102,6 +101,7 @@ def _run_inventory_agent(
         "route": route_path,
         "request_path": str(request.url.path),
         "user_id": user_id,
+        "tenant_id": getattr(request.state, "tenant_id", None),
         "route_confirmed": True,
         "service_source": "fastapi_inventory_route",
     }
