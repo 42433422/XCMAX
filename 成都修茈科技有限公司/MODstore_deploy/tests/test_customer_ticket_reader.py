@@ -335,19 +335,16 @@ def test_admin_close_requires_evidence_and_is_audited_and_idempotent(reader_case
     admin = _make_user("close_admin", admin=True)
     with _as_user(admin):
         if disposition == "resolved":
-            for protected_id, intent in zip(ids[1:], ("product_issue", "custom_delivery")):
-                with get_session_factory()() as db:
+            with get_session_factory()() as db:
+                for protected_id, intent in zip(ids[1:], ("product_issue", "custom_delivery")):
                     db.get(CustomerServiceTicket, protected_id).intent = intent
-                    db.commit()
-                guarded = client.post(
-                    f"/api/customer-service/tickets/{protected_id}/close",
-                    json={**body, "request_id": str(uuid.uuid4())},
-                )
+                db.commit()
+            for protected_id in ids[1:]:
+                ticket_url = f"/api/customer-service/tickets/{protected_id}"
+                request_body = {**body, "request_id": str(uuid.uuid4())}
+                guarded = client.post(f"{ticket_url}/close", json=request_body)
                 assert guarded.status_code == 409
-                status = client.get(f"/api/customer-service/tickets/{protected_id}").json()[
-                    "ticket"
-                ]["status"]
-                assert status == "processing"
+                assert client.get(ticket_url).json()["ticket"]["status"] == "processing"
         updated = client.patch(eta_url, json=eta)
         assert updated.status_code == 200
         assert updated.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"

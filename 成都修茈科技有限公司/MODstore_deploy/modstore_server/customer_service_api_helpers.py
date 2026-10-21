@@ -142,10 +142,9 @@ def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request:
     evidence = json_loads(ticket.evidence_json, {})
     from modstore_server.customer_issue_delivery_contract import issue_resolution
 
-    custom = issue_resolution(ticket, evidence).get("route") == "private_mod"
     if not expired and (
         ticket.intent == "product_issue"
-        or custom
+        or issue_resolution(ticket, evidence).get("route") == "private_mod"
         or evidence.get("delivery_managed_by") == "custom_delivery"
     ):
         raise HTTPException(409, "产品问题和定制交付必须由原客户通过运行回执或原工单决策完成验收")

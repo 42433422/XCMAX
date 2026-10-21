@@ -79,8 +79,7 @@
 
       <form v-if="ticket.status === 'processing'" class="cs-card cs-close-form" @submit.prevent="closeTicket">
         <h3 class="cs-card-title">处理原工单</h3>
-        <p v-if="requiresCustomerAcceptance" class="cs-hint">产品问题与定制交付须由原客户通过运行回执或原工单决策验收；管理员只能按旧单规则记录过期。</p>
-        <label v-else>处置方式<select v-model="closeDisposition"><option value="resolved">实际验收已解决</option><option value="expired">已过期不再处理（未修复，不影响资金权益）</option></select></label>
+        <p v-if="requiresCustomerAcceptance" class="cs-hint">产品问题与定制交付须由原客户通过运行回执或原工单决策验收；管理员只能按旧单规则记录过期。</p><label v-else>处置方式<select v-model="closeDisposition"><option value="resolved">实际验收已解决</option><option value="expired">已过期不再处理（未修复，不影响资金权益）</option></select></label>
         <label>处理结论<textarea v-model="closeNote" required minlength="8" maxlength="2000" /></label>
         <label>{{ closeDisposition === 'expired' ? '过期与后续活跃需求核对记录' : '实际验收证据' }}<textarea v-model="closeVerification" required minlength="20" maxlength="4000" /></label>
         <button class="cs-btn" type="submit" :disabled="saving || savingEta">记录管理员处置并关闭</button>
@@ -162,10 +161,8 @@ const canCorrectClassification = computed(() => ticket.value.status === 'process
 const evidence = computed<Row>(() => Object.fromEntries(Object.entries(
   (ticket.value.evidence || {}) as Row,
 ).filter(([key]) => key !== 'support_bundle_base64')))
-const requiresCustomerAcceptance = computed(() => ['product_issue', 'custom_delivery'].includes(String(ticket.value.intent))
-  || evidence.value.delivery_managed_by === 'custom_delivery'
-  || String(evidence.value.issue_domain || '') === 'custom'
-  || String(evidence.value.source || '') === 'private_mod_rework')
+const customDelivery = computed(() => evidence.value.delivery_managed_by === 'custom_delivery' || evidence.value.issue_domain === 'custom' || evidence.value.source === 'private_mod_rework')
+const requiresCustomerAcceptance = computed(() => ['product_issue', 'custom_delivery'].includes(String(ticket.value.intent)) || customDelivery.value)
 const resolution = computed(() => {
   const value = evidence.value.resolution
   return value && typeof value === 'object' ? value as Row : null
