@@ -435,3 +435,51 @@ def test_schema_and_shared_validator_support_same_explicit_aliases(fields):
     product = {"name": "p", "unit_price": 3, **fields}
     validate([product], _SHIPMENT_PRODUCTS_SCHEMA)
     assert missing_shipment_fields({"unit_name": "张三", "products": [product]}) == []
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("quantity_tins", 1.5),
+        ("quantity_tins", True),
+        ("quantity_tins", "invalid"),
+        ("quantity_kg", float("inf")),
+        ("quantity_kg", True),
+    ],
+)
+def test_product_source_does_not_hide_invalid_quantity_fields(field, value):
+    from app.application.shipment_inputs import missing_shipment_call_fields
+
+    product = {
+        "product_name": "Paint",
+        "quantity_tins": 1,
+        "tin_spec": 10,
+        "unit_price": 1,
+        field: value,
+    }
+    payload = {"unit_name": "Co", "products": [product], "product_source_node": "lookup"}
+    assert missing_shipment_call_fields("shipment_records", "create", payload) == [
+        f"products.0.{field}"
+    ]
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"quantity_tins": None, "quantity": 1.5, "unit": "桶", "tin_spec": 10},
+        {"quantity_kg": None, "quantity": float("inf"), "unit": "kg"},
+    ],
+)
+def test_quantity_error_uses_actual_non_null_source(item):
+    from app.application.shipment_inputs import missing_shipment_call_fields
+
+    payload = {
+        "unit_name": "Co",
+        "product_source_node": "lookup",
+        "products": [{"product_name": "Paint", "unit_price": 1, **item}],
+    }
+    for tool, action, params in [
+        ("shipment_records", "create", payload),
+        ("business_db", "write", {"entity": "shipment_records", "payload": payload}),
+    ]:
+        assert missing_shipment_call_fields(tool, action, params) == ["products.0.quantity"]

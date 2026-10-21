@@ -15,7 +15,8 @@ def shipment_quantity_hint(code: str) -> str:
 
 
 class ShipmentQuantityValidationError(ValueError):
-    def __init__(self, code: str, row_index: int | None = None):
+    def __init__(self, code: str, row_index: int | None = None, *, field: str = "tin_spec"):
+        self.field = field
         self.code = code
         self.row_index = row_index
         hint = shipment_quantity_hint(code)
@@ -38,18 +39,20 @@ def resolve_shipment_quantity(
     if not isinstance(product, dict):
         raise ShipmentQuantityValidationError("SHIPMENT_SPEC_INVALID", row_index)
 
-    def number(value: Any, *, positive: bool = False) -> float:
+    def number(value: Any, *, positive: bool = False, field: str = "tin_spec") -> float:
         try:
             parsed = float(value)
         except (ValueError, TypeError, OverflowError):
-            raise ShipmentQuantityValidationError("SHIPMENT_SPEC_INVALID", row_index) from None
+            raise ShipmentQuantityValidationError(
+                "SHIPMENT_SPEC_INVALID", row_index, field=field
+            ) from None
         if (
             isinstance(value, bool)
             or not math.isfinite(parsed)
             or parsed < 0
             or (positive and parsed == 0)
         ):
-            raise ShipmentQuantityValidationError("SHIPMENT_SPEC_INVALID", row_index)
+            raise ShipmentQuantityValidationError("SHIPMENT_SPEC_INVALID", row_index, field=field)
         return parsed
 
     specs = [
@@ -71,14 +74,17 @@ def resolve_shipment_quantity(
     primary = product.get("quantity_tins")
     if primary is None:
         primary = 0 if unit in {"kg", "公斤", "千克"} else product.get("quantity", 0)
-    tins = number(0 if primary is None else primary)
+    quantity_field = "quantity_tins" if product.get("quantity_tins") is not None else "quantity"
+    tins = number(0 if primary is None else primary, field=quantity_field)
     if not tins.is_integer():
-        raise ShipmentQuantityValidationError("SHIPMENT_SPEC_INVALID", row_index)
+        raise ShipmentQuantityValidationError(
+            "SHIPMENT_SPEC_INVALID", row_index, field=quantity_field
+        )
     if kg is None:
         if spec is None:
             raise ShipmentQuantityValidationError("SHIPMENT_SPEC_REQUIRED", row_index)
         kg = tins * spec
-    kg = number(kg)
+    kg = number(kg, field="quantity_kg" if product.get("quantity_kg") is not None else "quantity")
     return int(tins), kg, spec
 
 

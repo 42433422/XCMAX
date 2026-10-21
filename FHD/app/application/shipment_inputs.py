@@ -37,8 +37,8 @@ def missing_shipment_fields(params: dict[str, Any]) -> list[str]:
                     if item.get("quantity_kg") is not None
                     else f"products.{index}.quantity_tins"
                 )
-        except ShipmentQuantityValidationError:
-            missing.append(f"products.{index}.tin_spec")
+        except ShipmentQuantityValidationError as exc:
+            missing.append(f"products.{index}.{exc.field}")
             if (
                 not item.get("quantity_tins")
                 and not item.get("quantity_kg")
