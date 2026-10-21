@@ -1,37 +1,8 @@
 #!/usr/bin/env bash
-# XCMAX 夜间备份：FHD/Modstore/支付 PostgreSQL + MODstore SQLite + 关键配置 → 本地轮转 + 异地。
-#
-# 产物（/var/backups/xcmax/daily/<UTC日期>/）：
-#   fhd_pg.dump          pg_dump -Fc（自带压缩，可 pg_restore 单库恢复）
-#   modstore_pg.dump     MODstore 主 PostgreSQL
-#   payment_pg.dump      支付服务 PostgreSQL
-#   modstore_sqlite.db.gz  SQLite 在线备份（sqlite3 backup API，不脏读）
-#   configs.tar.gz       /root/fhd-full.env、MODstore .env、nginx、systemd 单元、crontab（0600，含秘密）
-#   MANIFEST.txt         各产物 sha256 与字节数
-#
-# 轮转：daily 保 7 份；每周日复制到 weekly/ 保 4 份；每月 1 号复制到 monthly/ 保 6 份。
-# 异地：
-#   - 设置 OPS_BACKUP_SSH_TARGET 时，用专用密钥推送到温备机 incoming；
-#   - 装了 coscmd 且设置 OPS_COS_BUCKET 时上传当日目录（腾讯云 COS）。
-# 验证：pg_restore --list、gzip -t、tar -tzf、sqlite PRAGMA quick_check 全过才算成功。
-# 失败：任何一步失败 → notify.py 发 crit 告警（哨兵还有 26h 新鲜度兜底）。
-#
-# 环境（/etc/xcmax-ops.env，由 cron 行 source）：
-#   OPS_BACKUP_DIR      默认 /var/backups/xcmax
-#   OPS_FHD_ENV         默认 /root/fhd-full.env（取 DATABASE_URL）
-#   OPS_MODSTORE_ENV    默认 /etc/xcmax/modstore.env
-#   OPS_PG_DUMP_CONTAINER_IMAGE 可选；宿主 pg_dump 版本不匹配时用该镜像导出
-#   OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE 可选；未设置时支付库使用宿主 pg_dump/pg_restore，
-#     避免用较新的通用导出镜像生成目标 PostgreSQL 无法读取的归档
-#   OPS_MODSTORE_DIR    默认 /root/XCMAX/成都修茈科技有限公司/MODstore_deploy
-#   OPS_MODSTORE_DB     默认 $OPS_MODSTORE_DIR/modstore.db（可显式指定）
-#   OPS_COS_BUCKET      可选，如 xcmax-backup-1250000000
-#   OPS_BACKUP_SSH_TARGET 可选，如 xcmaxdr@43.138.211.142
-#   OPS_BACKUP_SSH_KEY  SSH 温备专用私钥
-#   OPS_BACKUP_SSH_DEST 接收端目录，默认 /srv/xcmax-dr/incoming
-#   OPS_BACKUP_EXTRA    可选，空格分隔的额外备份路径（如上传目录）
-#
-# 用法：xcmax_backup.sh [--dry-run]
+# Nightly FHD/Modstore/payment and configuration snapshots; daily UTC directories rotate locally and may copy offsite.
+# Each MANIFEST covers only the artifacts produced by that run; stale files remain untouched and unlisted.
+# PostgreSQL, SQLite, gzip and tar artifacts are validated before publishing the manifest.
+# Runtime options and defaults are in ops/env.example; use xcmax_backup.sh [--dry-run].
 
 set -uo pipefail
 
@@ -295,7 +266,21 @@ backup_configs() {
 # ---------------------------------------------------------- 轮转 + 异地
 write_manifest() {
   [[ "$DRY_RUN" == "1" ]] && return
-  (cd "$DEST" && sha256sum ./* 2>/dev/null | grep -v MANIFEST > MANIFEST.txt) || true
+  local -a files=(modstore_pg.dump payment_pg.dump modstore_sqlite.db.gz configs.tar.gz)
+  if [[ -s "$DEST/fhd_pg.dump" ]]; then
+    files+=(fhd_pg.dump)
+  elif [[ -s "$DEST/fhd_sqlite.db.gz" ]]; then
+    files+=(fhd_sqlite.db.gz)
+  else
+    fail "FHD backup output missing"
+    return 1
+  fi
+  local pending="$DEST/MANIFEST.txt.tmp"
+  if ! (cd "$DEST" && sha256sum "${files[@]}" > "$pending") ||
+    ! mv -f "$pending" "$DEST/MANIFEST.txt"; then
+    fail "MANIFEST generation failed"
+    return 1
+  fi
 }
 
 rotate() {
@@ -378,10 +363,11 @@ backup_modstore_sqlite
 backup_configs
 
 if [[ ${#FAILURES[@]} -eq 0 ]]; then
-  write_manifest
-  rotate
-  offsite_ssh
-  offsite_cos
+  if write_manifest; then
+    rotate
+    offsite_ssh
+    offsite_cos
+  fi
 else
   log "备份产物存在失败，跳过 MANIFEST、轮转和异地推送"
 fi

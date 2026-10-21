@@ -49,19 +49,6 @@ jobs:
                     errors.append(label)
                     emit(label, {"error": type(exc).__name__})
 
-            def metadata(path):
-                try:
-                    item = path.lstat()
-                    if not stat.S_ISREG(item.st_mode):
-                        return {"status": "not_regular_file"}
-                    return {"bytes": item.st_size, "mtime_utc": datetime.datetime.fromtimestamp(
-                        item.st_mtime, datetime.timezone.utc).isoformat()}
-                except FileNotFoundError:
-                    return {"status": "missing"}
-                except OSError:
-                    errors.append(str(path))
-                    return {"status": "unreadable"}
-
             def fixed_value(path, pattern):
                 try:
                     if path.is_symlink() or not stat.S_ISREG(path.stat().st_mode) or path.stat().st_size > 16384:
@@ -166,12 +153,30 @@ jobs:
                         age = datetime.datetime.now(datetime.timezone.utc).timestamp() - manifest.stat().st_mtime
                         if not -300 <= age <= 26 * 3600 or manifest.stat().st_size > 16384:
                             raise ValueError("stale_or_invalid_manifest")
-                        expected = {}
+                        expected, seen = {}, set()
+                        summary = dict.fromkeys(("line_count", "format_valid_count", "allowlisted_count",
+                                                 "duplicate_count", "unknown_name_count", "invalid_format_count"), 0)
                         for line in manifest.read_text().splitlines():
-                            match = re.fullmatch(r"([0-9a-f]{64}) [ *](?:\./)?([a-z_]+\.(?:dump|db\.gz|tar\.gz))", line)
-                            if not match or match[2] not in names or match[2] in expected:
-                                raise ValueError("invalid_manifest_entries")
-                            expected[match[2]] = match[1]
+                            summary["line_count"] += 1
+                            match = re.fullmatch(r"([0-9a-f]{64}) [ *](?:\./)?(.+)", line)
+                            if not match:
+                                summary["invalid_format_count"] += 1
+                                continue
+                            summary["format_valid_count"] += 1
+                            name = match[2]
+                            if name in seen:
+                                summary["duplicate_count"] += 1
+                            else:
+                                seen.add(name)
+                            if name not in names:
+                                summary["unknown_name_count"] += 1
+                                continue
+                            summary["allowlisted_count"] += 1
+                            expected.setdefault(name, match[1])
+                        summary["missing_expected_count"] = len(set(names) - set(expected))
+                        emit("manifest_summary", summary)
+                        if any(summary[key] for key in ("invalid_format_count", "duplicate_count", "unknown_name_count")):
+                            raise ValueError("invalid_manifest_entries")
                         if set(expected) != set(names):
                             raise ValueError("incomplete_manifest")
                         for name in names:
@@ -182,7 +187,6 @@ jobs:
                             if digest.hexdigest() != expected[name]:
                                 raise ValueError("checksum_mismatch")
                         restore = validator_version("pg_restore", "/usr/pgsql-16/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-                        validator_version("pg_dump", "/usr/sbin:/usr/bin:/sbin:/bin")
                         emit("writer_version_limit", "Host candidates only; configured container writer and actual dump producer remain unverified.")
                         for name in names[:3]:
                             with open(directory / name, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW)) as stream:
@@ -226,23 +230,7 @@ jobs:
             command("default_kernel", ["grubby", "--default-kernel"])
             command("disk_bytes", ["df", "-B1", "--output=target,size,used,avail,pcent", "/", "/boot"])
             command("disk_inodes", ["df", "--output=target,itotal,iused,iavail,ipcent", "/", "/boot"])
-            for root in (Path("/var/backups/xcmax/daily"), Path("/var/backups/fhd")):
-                try:
-                    if root.is_symlink():
-                        raise ValueError("symlink_backup_root")
-                    dates = sorted((p for p in root.iterdir() if re.fullmatch(r"\d{8}(?:-\d{6})?", p.name)
-                                    and not p.is_symlink() and p.is_dir()), reverse=True)[:3]
-                    emit(str(root), {"recent_directories": [p.name for p in dates]})
-                    for directory in dates:
-                        for name in ("MANIFEST.txt", "manifest.json", "fhd_pg.dump", "modstore_pg.dump",
-                                     "payment_pg.dump", "modstore_sqlite.db.gz", "fhd_sqlite.db.gz",
-                                     "xcagi.dump", "configs.tar.gz", "config.tar.gz"):
-                            emit(str(directory / name), metadata(directory / name))
-                except FileNotFoundError:
-                    emit(str(root), "missing")
-                except (OSError, ValueError):
-                    errors.append(str(root))
-                    emit(str(root), "unreadable_or_unsafe")
+            verify_latest_backup()
             for name in ("backup_last_success", "offsite_ssh_last_success"):
                 fixed_value(Path("/var/lib/xcmax-ops/state") / name, r"\A([0-9]{1,12})\s*\Z")
             fixed_value(Path("/etc/xcmax-dr-runtime-role.env"),
@@ -250,8 +238,7 @@ jobs:
             fixed_value(Path("/etc/xcmax-dr-auto-failover.env"), r"^OPS_DR_AUTO_FAILOVER_ENABLED=([01])\s*$")
             for unit in ("fhd-full", "modstore", "postgresql", "nginx", "xcmax-dr-failover-guard.timer"):
                 command("unit_" + unit, ["systemctl", "show", unit, "--property=LoadState,ActiveState,SubState"])
-            verify_latest_backup()
-            emit("limits", "Metadata only; file presence is not integrity or restore proof. Remote DR state, cloud snapshots and rescue console remain unverified. This is not maintenance clearance.")
+            emit("limits", "Host and backup metadata checked; archive readability is not a restore proof. Remote DR state, cloud snapshots and rescue console remain unverified. This is not maintenance clearance.")
             emit("failed_checks", errors)
             raise SystemExit(bool(errors))
             PY
