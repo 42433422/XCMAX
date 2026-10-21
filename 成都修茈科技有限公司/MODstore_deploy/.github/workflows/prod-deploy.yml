@@ -12,7 +12,7 @@ on:
       preserve_release_history:
         description: Keep all local and DR release history for this invocation
         type: boolean
-        default: false
+        default: true
       require_platform_key:
         description: Fail when platform LLM key is missing
         required: false
@@ -117,6 +117,9 @@ jobs:
             git -C "$SOURCE_ROOT" cat-file -e "${TARGET_SHA}^{commit}"
             BOOTSTRAP="$(mktemp -d /tmp/xcmax-release-controller.XXXXXX)"
             trap 'rm -rf -- "$BOOTSTRAP"' EXIT
+            ( set -a; . /etc/xcmax-ops.env; set +a; \
+              git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:ops/backup/xcmax_backup.sh" | \
+              bash -s -- --modstore-release "$TARGET_SHA" )
             git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-immutable-release.sh" > "$BOOTSTRAP/immutable.sh"
             for file in xcmax_release_sync.sh xcmax_release_sync_prune.py; do
               git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:ops/dr/$file" > "$BOOTSTRAP/$file"
