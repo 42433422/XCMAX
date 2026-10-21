@@ -486,7 +486,7 @@ pyparsing==3.3.2
     # via
     #   matplotlib
     #   pip-requirements-parser
-pypdf==6.21.1
+pypdf==6.21.2
     # via -r ../requirements.txt
 pypdfium2==5.13.0
     # via pdfplumber
