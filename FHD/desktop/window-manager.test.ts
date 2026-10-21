@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { BrowserWindow } from 'electron'
+import fs from 'node:fs'
+import { waitForBackendPing, waitForBackendApplicationReady, waitForBackendStatus } from './backend-process'
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
   app: { getPath: vi.fn(() => '/tmp/xcagi-test'), isQuitting: false },
@@ -56,6 +58,7 @@ function makeWindow(overrides: Partial<{
   return win as unknown as NonNullable<typeof desktopRuntime.mainWindow>
 }
 beforeEach(() => {
+  desktopRuntime.splashUrl = ''
   desktopRuntime.mainWindow = null
   desktopRuntime.mainApplicationReady = null
   vi.mocked(BrowserWindow).mockReset()
@@ -110,4 +113,28 @@ it('keeps the activated startup window and its in-flight readiness task', async 
   expect(desktopRuntime.mainWindow).toBe(win)
   expect(desktopRuntime.mainApplicationReady).toBe(ready)
   expect(BrowserWindow).not.toHaveBeenCalled()
+})
+
+
+it.each([true, false])('records selected splash before loading (file exists: %s)', async (exists) => {
+  vi.spyOn(fs, 'existsSync').mockReturnValue(exists)
+  vi.mocked(waitForBackendPing).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendApplicationReady).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendStatus).mockResolvedValue(null)
+  const loaded: Array<[string, string]> = []
+  const win = {
+    ...makeWindow(),
+    on: vi.fn(), setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(),
+    loadURL: vi.fn(async (url: string) => { loaded.push([url, desktopRuntime.splashUrl]) }),
+    webContents: {
+      on: vi.fn(), setWindowOpenHandler: vi.fn(),
+      session: { on: vi.fn() },
+      executeJavaScript: vi.fn(async () => undefined),
+    },
+  }
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
+  await createWindow()
+  await desktopRuntime.mainApplicationReady
+  expect(loaded[0][0]).toBe(loaded[0][1])
+  expect(loaded[0][0].startsWith(exists ? 'file:' : 'data:')).toBe(true)
 })

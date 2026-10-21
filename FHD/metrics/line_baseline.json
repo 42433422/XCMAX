@@ -1,5 +1,5 @@
 {
-  "lines": 2328453,
-  "updated": "2026-10-22",
-  "note": "2026-10-22 用户要求接手无人完成工作：统一整合 #2507 与九个停滞业务/权限草稿，补齐真实会话/PAT/支付归属组合回归；修复两处测试数据库污染、共享修复关联后旧团队续跑/回写竞态、Para回执持久化及实际report字段兼容、watchdog误报恢复和SLO隧道清理。净增主要为原草稿工单功能和负向测试；本轮共享修复竞态补充生产27行、回归182行，测试隔离4行。保留生产预算、限流和客户验收约束，不删无关代码凑数；此例外仅对应已授权代码整合，不表示线上部署或客户确认完成。"
+  "lines": 2328928,
+  "updated": "2026-10-21",
+  "note": "Six remaining issue fixes (#1773/#1776/#1778/#1782/#1783/#1840): additive safe CSV, exact IPC boundaries, UTC defaults and executable/submodule/routing regression gates; preserve existing tests and generated Mod SSOT mirrors. Market workflow is now actually generated and follows the existing exclusion rule."
 }

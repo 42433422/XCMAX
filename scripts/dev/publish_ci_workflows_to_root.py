@@ -76,6 +76,7 @@ MOD_RENAMES = {
 # These source workflows live below the monorepo root, where GitHub would
 # otherwise ignore them. Publish component gates without a root counterpart.
 CORP_RENAMES = {
+    "ci-market.yml": "market-ci.yml",
     "ci-root-frontend.yml": "corp-root-frontend.yml",
     "ci-vibe-coding.yml": "corp-vibe-coding.yml",
     "ci-marketing-site.yml": "corp-marketing-site.yml",
@@ -309,7 +310,9 @@ def _prefix_trigger_paths(content: str, out_name: str) -> str:
                 raw = match.group(3)
                 if raw.startswith(".github/workflows/"):
                     raw = f".github/workflows/{out_name}"
-                elif not raw.startswith(("成都修茈科技有限公司/", "FHD/")):
+                elif raw != ".gitmodules" and not raw.startswith(
+                    ("成都修茈科技有限公司/", "FHD/")
+                ):
                     raw = f"成都修茈科技有限公司/{raw}"
                 line = f"{match.group(1)}- {match.group(2)}{raw}{match.group(2)}"
         result.append(line)
@@ -335,6 +338,17 @@ def _render_corp(src: Path) -> tuple[str, str] | None:
         "working-directory: MODstore_deploy/java_payment_service",
         "working-directory: 成都修茈科技有限公司/MODstore_deploy/java_payment_service",
     )
+    if src.name == "ci-market.yml":
+        for prefix in (
+            "working-directory: ",
+            "cache-dependency-path: ",
+            "path: ",
+            "hashFiles('",
+        ):
+            body = body.replace(
+                prefix + "MODstore_deploy/market",
+                prefix + "成都修茈科技有限公司/MODstore_deploy/market",
+            )
     if src.name == "ci-root-frontend.yml":
         body = body.replace(
             "cache-dependency-path: package-lock.json",

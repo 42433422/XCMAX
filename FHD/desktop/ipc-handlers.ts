@@ -49,7 +49,7 @@ function handleTrusted<T extends unknown[]>(
   handler: (event: IpcMainInvokeEvent, ...args: T) => unknown,
 ): void {
   ipcMain.handle(channel, (event: IpcMainInvokeEvent, ...args: unknown[]) => {
-    if (!isTrustedIpcSender(event, desktopRuntime.mainWindow)) {
+    if (!isTrustedIpcSender(event, desktopRuntime.mainWindow, { port: DEFAULT_PORT, splashUrl: desktopRuntime.splashUrl })) {
       writeBackendLog(`[ipc] rejected call from untrusted sender channel=${channel}\n`)
       return { ok: false, reason: 'untrusted_sender' }
     }
@@ -119,7 +119,7 @@ export function registerDesktopIpcHandlers(): void {
       mainWindow.flashFrame(n > 0)
     }
   })
-  ipcMain.handle(
+  handleTrusted(
     'xcagi:show-notification',
     (_event, payload: { title?: string; body?: string }) => {
       const title = String(payload?.title || APP_NAME).trim() || APP_NAME
@@ -154,7 +154,7 @@ export function registerDesktopIpcHandlers(): void {
       `http://127.0.0.1:${DEFAULT_PORT}/`,
       (process.env.SESSION_COOKIE_NAME || 'session_id').trim(),
     )
-    if (!isTrustedIpcSender(event, desktopRuntime.mainWindow)) {
+    if (!isTrustedIpcSender(event, desktopRuntime.mainWindow, { port: DEFAULT_PORT, splashUrl: desktopRuntime.splashUrl })) {
       return { ok: false, reason: 'untrusted_sender' }
     }
     return result
