@@ -50,7 +50,6 @@ xcrun notarytool submit "${DMG_PATH}" \
   --wait \
   --timeout 30m
 python3 "${ROOT}/scripts/package/staple-macos-dmg.py" "${DMG_PATH}"
-xcrun stapler validate "${DMG_PATH}"
 spctl -a -vv -t open --context context:primary-signature "${DMG_PATH}"
 
 # Stapling changes the DMG bytes. Rebuild the companion blockmap only.

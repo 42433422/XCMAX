@@ -257,9 +257,9 @@ def test_release_workflow_notarizes_outer_dmg_and_hard_fails_gatekeeper() -> Non
 
     assert "scripts/package/finalize-macos-dmg.sh" in workflow
     assert "scripts/package/verify-macos-release-dmg.sh" in workflow
-    assert 'xcrun stapler validate "${dmg}"' in verify_script
+    assert 'staple-macos-dmg.py" --validate-only "${dmg}"' in verify_script
     assert 'spctl -a -vv -t open --context context:primary-signature "${dmg}"' in verify_script
-    assert 'xcrun stapler validate "${app}"' in verify_script
+    assert 'staple-macos-dmg.py" --validate-only "${app}"' in verify_script
     assert 'spctl -a -vv -t exec "${app}"' in verify_script
     assert "spctl assess may require stapled notarization ticket" not in workflow
 
