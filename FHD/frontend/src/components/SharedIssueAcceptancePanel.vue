@@ -106,7 +106,8 @@ onBeforeUnmount(() => { generation++; pending?.abort() })
 </script>
 
 <template>
-  <section v-if="repairs.length || error || failed" class="repair-acceptance" aria-label="问题工单处理结果">
+  <details v-if="repairs.length || error || failed" class="repair-acceptance" aria-label="问题工单处理结果">
+    <summary>问题工单处理结果（{{ repairs.length }}）<span v-if="error || failed"> · 同步或保存失败，请展开重试</span></summary>
     <p v-if="error || failed" role="alert">{{ error || failed?.message }} <button type="button" :disabled="busy !== null" @click="retry">重试</button></p>
     <article v-for="repair in repairs" :key="repair.id">
       <strong>{{ repair.ticket_no }} · {{ repair.summary }}</strong>
@@ -127,11 +128,13 @@ onBeforeUnmount(() => { generation++; pending?.abort() })
         </button>
       </template>
     </article>
-  </section>
+  </details>
 </template>
 
 <style scoped>
-.repair-acceptance { padding: 16px 24px; border-bottom: 1px solid var(--border-color, #ddd); max-height: 40vh; overflow: auto; }
+.repair-acceptance { flex: 0 0 auto; padding: 10px 16px; border-bottom: 1px solid var(--border-color, #ddd); max-height: 30vh; overflow: auto; overflow-wrap: anywhere; }
+summary { cursor: pointer; }
+summary span { color: var(--xc-color-danger, #b42318); }
 article + article { margin-top: 16px; }
 p { margin: 8px 0; }
 input { margin: 0 12px; padding: 8px; min-width: 240px; max-width: 100%; }

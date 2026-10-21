@@ -44,6 +44,10 @@ class ReleaseSyncPruneTest(unittest.TestCase):
             PRUNE.select_victims(listing, "fhd", "6" * 40, 2),
             [old_fhd],
         )
+        for component in ("modstore", "fhd"):
+            self.assertEqual(
+                PRUNE.select_victims(listing, component, "5" * 40, 2, True), []
+            )
 
     def test_does_not_prune_when_target_is_already_complete(self) -> None:
         target = "a" * 40

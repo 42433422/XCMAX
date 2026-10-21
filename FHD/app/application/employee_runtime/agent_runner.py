@@ -11,6 +11,7 @@ import asyncio
 import logging
 import os
 from collections.abc import Callable
+from contextvars import copy_context
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -26,7 +27,7 @@ def _run_async(coro):
     import concurrent.futures
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(asyncio.run, coro).result()
+        return pool.submit(copy_context().run, asyncio.run, coro).result()
 
 
 def _resolve_employee_llm_config() -> dict[str, str | None]:

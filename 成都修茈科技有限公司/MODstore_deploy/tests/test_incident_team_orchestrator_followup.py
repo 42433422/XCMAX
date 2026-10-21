@@ -175,12 +175,14 @@ def test_code_failure_retries_with_feedback_until_limit_then_escalates(monkeypat
     calls = []
     monkeypatch.setattr(
         "modstore_server.incident_team_orchestrator._retry_member",
-        lambda **kw: calls.append(kw)
-        or {
-            "status": "handler_failed",
-            "handler_failed": True,
-            "error": "CI 失败：pytest 2 failed",
-        },
+        lambda **kw: (
+            calls.append(kw)
+            or {
+                "status": "handler_failed",
+                "handler_failed": True,
+                "error": "CI 失败：pytest 2 failed",
+            }
+        ),
     )
     follow_ups = _follow_up_handler_failures(
         event_id=99,
@@ -338,11 +340,11 @@ def test_multiple_handler_failures_each_get_followup(monkeypatch):
         source="",
         uid=1,
     )
-    assert len(follow_ups) == 3
+    assert len(follow_ups) == 2  # new fix always replaces the old verify attempt
+    assert results[2]["ok"] is True
     # 各自按 failure_kind 分流
     assert follow_ups[0]["category"] == "code"  # 500 internal error 不匹配 quota/transient
     assert follow_ups[1]["failure_kind"] == "transient"
-    assert follow_ups[2]["failure_kind"] == "quota"
 
 
 def test_dispatch_incident_team_writes_followups_to_payload(fresh_db, admin_user, monkeypatch):
@@ -632,10 +634,13 @@ def test_model_fallback_hook_used_when_gateway_present(monkeypatch):
 
     gateway = types.ModuleType("modstore_server.model_fallback_gateway")
     seen = []
-    gateway.request_fallback = lambda **kw: seen.append(kw) or {
-        "ok": True,
-        "model": "gpt-5.6-terra",
-    }
+    gateway.request_fallback = lambda **kw: (
+        seen.append(kw)
+        or {
+            "ok": True,
+            "model": "gpt-5.6-terra",
+        }
+    )
     monkeypatch.setitem(sys.modules, "modstore_server.model_fallback_gateway", gateway)
     follow_ups = _follow_up_handler_failures(
         event_id=40,

@@ -392,7 +392,7 @@ def _planner_fallback_patches():
     )
 
 
-def test_create_get_and_list_agent_run() -> None:
+def test_create_get_and_list_agent_run(local_tools) -> None:
     get_agent_run_repository().clear()
     clear_consumed_approval_grants_for_tests()
     client = _client()
@@ -406,7 +406,7 @@ def test_create_get_and_list_agent_run() -> None:
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "data": [{"model_number": "XG-5003"}]},
-        ),
+        ) as mock_execute,
     ):
         response = client.post(
             "/api/agent/runs",
@@ -429,6 +429,10 @@ def test_create_get_and_list_agent_run() -> None:
     assert run["intent"] == "business_db_read"
     assert run["metadata"]["runtime_context"]["source"] == "route-test"
     assert "run.completed" in [event["event_type"] for event in run["events"]]
+    mock_execute.assert_called_once()
+    assert mock_execute.call_args.args[:2] == ("business_db", "read")
+    assert mock_execute.call_args.args[2]["_runtime_context"]["run_id"] == run["run_id"]
+    assert run["tool_calls"][0]["output"]["data"] == [{"model_number": "XG-5003"}]
 
     get_response = client.get(f"/api/agent/runs/{run['run_id']}")
     assert get_response.status_code == 200
@@ -529,7 +533,7 @@ def test_failed_observation_cannot_be_retried_as_an_execution_plan() -> None:
     assert "观察记录" in retry.json()["message"]
 
 
-def test_continue_waiting_agent_run() -> None:
+def test_continue_waiting_agent_run(local_tools) -> None:
     get_agent_run_repository().clear()
     clear_consumed_approval_grants_for_tests()
     client = _client()
@@ -606,7 +610,9 @@ def test_agent_routes_require_authentication_and_enforce_ownership() -> None:
     assert stranger.get("/api/agent/runs").json()["count"] == 0
 
 
-def test_continue_rejects_missing_mismatched_and_replayed_grants() -> None:
+def test_continue_rejects_missing_mismatched_and_replayed_grants(
+    local_tools,
+) -> None:
     get_agent_run_repository().clear()
     clear_consumed_approval_grants_for_tests()
     owner = _client("owner")
@@ -666,7 +672,9 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants() -> None:
         execute.assert_called_once()
 
 
-def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(tmp_path, monkeypatch):
+def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(
+    tmp_path, monkeypatch, local_tools
+):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -1008,7 +1016,7 @@ def test_agent_route_internal_failure_returns_stable_public_message() -> None:
     }
 
 
-def test_pause_resume_and_cancel_agent_run() -> None:
+def test_pause_resume_and_cancel_agent_run(local_tools) -> None:
     get_agent_run_repository().clear()
     clear_run_controls_for_tests()
     client = _client("owner")
@@ -1138,7 +1146,9 @@ def test_get_agent_run_returns_404_for_missing_run() -> None:
     assert events_response.json()["success"] is False
 
 
-def test_unified_task_requires_approval_and_deduplicates_execution() -> None:
+def test_unified_task_requires_approval_and_deduplicates_execution(
+    local_tools,
+) -> None:
     repository = get_agent_run_repository()
     repository.clear()
     clear_consumed_approval_grants_for_tests()

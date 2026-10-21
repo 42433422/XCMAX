@@ -11,6 +11,13 @@ import pytest
 from app.desktop_runtime.db import configure_sqlite_defaults, database_file
 
 
+@pytest.fixture(autouse=True)
+def _restore_database_environment():
+    # The runtime writes these settings directly; each test owns its changes.
+    with patch.dict(os.environ):
+        yield
+
+
 class TestConfigureSqliteDefaults:
     @patch("app.desktop_runtime.db.ensure_desktop_dirs")
     def test_returns_database_url(self, mock_dirs, monkeypatch):

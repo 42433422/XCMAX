@@ -278,7 +278,7 @@ class TestProductsResolveNameHints:
 
 
 class TestProductsUpdate:
-    def test_erp_service(self, client: TestClient):
+    def test_erp_service(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -311,7 +311,7 @@ class TestProductsUpdate:
         finally:
             _remove_lost_parse_price(_ei)
 
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, local_tools):
         _ei = _install_lost_parse_price()
         try:
             with (
@@ -357,7 +357,7 @@ class TestProductsUpdate:
 
 
 class TestProductsAdd:
-    def test_erp_service(self, client: TestClient):
+    def test_erp_service(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -371,7 +371,7 @@ class TestProductsAdd:
             r = client.post("/products/add", json={"product_name": "new"})
             assert r.json()["success"] is True
 
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, local_tools):
         _ei = _install_lost_parse_price()
         try:
             with (
@@ -402,7 +402,7 @@ class TestProductsAdd:
 
 
 class TestProductsDelete:
-    def test_erp_service(self, client: TestClient):
+    def test_erp_service(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -431,7 +431,7 @@ class TestProductsDelete:
             r = client.post("/products/delete", json={"id": "bad"})
             assert r.status_code == 400
 
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -458,7 +458,7 @@ class TestProductsDelete:
 
 
 class TestProductsBatchDelete:
-    def test_erp_service(self, client: TestClient):
+    def test_erp_service(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -502,7 +502,7 @@ class TestProductsBatchDelete:
             r = client.post("/products/batch-delete", json={"ids": "bad"})
             assert r.status_code == 400
 
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",

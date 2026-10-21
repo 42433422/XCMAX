@@ -37,8 +37,7 @@ def _assert_material_run(repo: InMemoryAgentRunRepository, run_id: str, action: 
 
 
 def test_material_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
@@ -104,8 +103,7 @@ def test_material_mutation_routes_execute_through_agent_orchestrator(
 
 
 def test_material_create_failure_is_recorded_on_agent_run(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()

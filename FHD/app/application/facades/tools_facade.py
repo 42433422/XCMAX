@@ -17,12 +17,7 @@ __all__ = [
 
 
 def run_archive_tools_execute(body: dict | None) -> tuple[dict, int]:
-    """
-    Execute a workflow-tool payload and unpack the legacy JSON response shape.
-
-    The public HTTP route still has to preserve the old response contract, but
-    callers should import this facade instead of the removed historical route shim.
-    """
+    """Execute a workflow tool and unpack its legacy JSON response."""
     raw = execute_tool_from_payload(body or {})
 
     if isinstance(raw, tuple):

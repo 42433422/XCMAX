@@ -5,14 +5,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from modstore_server.customer_issue_delivery_contract import issue_resolution
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.eventing import db_outbox
+from modstore_server.models import IncidentClaim, IncidentEvent, IncidentInbox
 from modstore_server.models_cs import CustomerServiceTicket
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 
@@ -29,7 +32,7 @@ def record_dispatch_failure(payload: dict[str, Any], error: str) -> None:
         return
     with get_session_factory()() as db:
         ticket = db.query(CustomerServiceTicket).filter_by(id=ticket_id, user_id=owner_id).first()
-        if ticket is None or ticket.status in {"resolved", "closed"}:
+        if ticket is None or ticket.status in {"resolved", "closed", "expired"}:
             return
         evidence = json_loads(ticket.evidence_json, {})
         resolution = issue_resolution(ticket, evidence)
@@ -133,6 +136,10 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
     event_id = str(event.get("id") or "")
     if not event_id or not payload.get("ticket_id") or not payload.get("user_id"):
         return {"ok": False, "message": "customer issue event missing lineage"}
+    with db_outbox.get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, int(payload["ticket_id"]))
+        if ticket is not None and ticket.status == "expired":
+            return {"ok": True, "skipped": True, "reason": "ticket_expired"}
     if payload.get("intake_source") == "private_mod_rework":
         from modstore_server.customer_issue_private_factory import (
             dispatch_private_rework,
@@ -147,6 +154,7 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
             source="customer-issue-intake",
             fingerprint=fingerprint,
             dedupe_minutes=52_560_000,
+            inbox_key=event_id,
         )
     except BOUNDARY_ERRORS as exc:
         record_dispatch_failure(payload, str(exc))
@@ -158,7 +166,7 @@ def dispatch_pending_issue_events(ticket_id: int) -> None:
     """Retry original intake while retaining dispatched outbox evidence."""
     with db_outbox.get_session_factory()() as db:
         ticket = db.get(CustomerServiceTicket, ticket_id)
-        if ticket is None or ticket.status in {"resolved", "closed"}:
+        if ticket is None or ticket.status in {"resolved", "closed", "expired"}:
             return
         prefix, owner_id = f"{ticket.ticket_no}:", int(ticket.user_id)
     for record in db_outbox.fetch_pending(
@@ -174,25 +182,138 @@ def dispatch_pending_issue_events(ticket_id: int) -> None:
             )
         ):
             continue
+        token = db_outbox.claim_record(record.id) if record.status != "dispatched" else ""
+        if record.status != "dispatched" and not token:
+            continue
         try:
             result = dispatch_issue_event(record.to_envelope())
         except BOUNDARY_ERRORS as exc:
             if record.status == "dispatched":
                 raise
-            db_outbox.mark_failed(record.id, str(exc)[:500], terminal=False)
+            db_outbox.mark_failed(record.id, str(exc)[:500], terminal=False, claim_token=token)
         else:
             if record.status == "dispatched":
                 continue
             if result.get("ok"):
-                db_outbox.mark_dispatched(record.id)
+                db_outbox.mark_dispatched(record.id, claim_token=token)
             else:
                 db_outbox.mark_failed(
                     record.id,
                     str(result.get("message") or "dispatch failed"),
                     terminal=False,
+                    claim_token=token,
                 )
 
 
 def request_identity(owner_id: int, source: str, source_ref: str) -> str:
     raw = json.dumps([int(owner_id), source, source_ref], ensure_ascii=False)
     return "CI" + hashlib.sha256(raw.encode()).hexdigest()[:48]
+
+
+def _persist_incident(event_type, payload, source, fp, dedupe_minutes, inbox_key):
+    from modstore_server import incident_bus as bus
+
+    get_session_factory = bus.get_session_factory
+    _incident_payload = bus._incident_payload
+    key = (
+        hashlib.sha256(f"{event_type}:{source}:{inbox_key}".encode()).hexdigest()
+        if inbox_key
+        else ""
+    )
+    with get_session_factory()() as session:
+        existing = session.get(IncidentInbox, key) if key else None
+        if existing is not None:
+            return int(existing.incident_event_id), False
+        cutoff = datetime.now(UTC) - timedelta(minutes=max(0, int(dedupe_minutes)))
+        old = (
+            session.query(IncidentEvent)
+            .filter(
+                IncidentEvent.event_type == event_type,
+                IncidentEvent.fingerprint == fp,
+                IncidentEvent.created_at >= cutoff,
+            )
+            .order_by(IncidentEvent.id.desc())
+            .first()
+        )
+        create = True
+        if old:
+            try:
+                previous = _incident_payload(old)
+            except ValueError:
+                previous = {}
+            create = (
+                event_type == "ops.intake.customer_ticket"
+                and source == "customer-issue-intake"
+                and old.source == source
+                and not previous.get("ticket_id")
+                and payload.get("ticket_id")
+            )
+            if create:
+                payload = {
+                    **payload,
+                    "_incident_replay": {
+                        "original_event_id": int(old.id),
+                        "original_payload_sha256": hashlib.sha256(
+                            (old.payload_json or "").encode()
+                        ).hexdigest(),
+                    },
+                }
+        try:
+            with session.begin_nested():
+                ev = (
+                    IncidentEvent(
+                        event_type=event_type,
+                        source=source,
+                        payload_json=json.dumps(payload, ensure_ascii=False),
+                        fingerprint=fp,
+                        dispatched_count=0,
+                    )
+                    if create
+                    else old
+                )
+                if create:
+                    session.add(ev)
+                    session.flush()
+                if key:
+                    session.add(IncidentInbox(inbox_key=key, incident_event_id=int(ev.id)))
+                    session.flush()
+            eid = int(ev.id)
+            session.commit()
+            return eid, bool(create)
+        except IntegrityError:
+            # The incident and inbox insert share the savepoint: the loser cannot
+            # leave behind a second incident or poison the caller's transaction.
+            existing = session.get(IncidentInbox, key) if key else None
+            if existing is None:
+                raise
+            return int(existing.incident_event_id), False
+
+
+def recover_pending_incidents(*, limit: int = 20) -> int:
+    """Recover committed-but-unscheduled intake and reconcile interrupted dispatches."""
+    from modstore_server import incident_bus as bus
+    from modstore_server.node_coordinator import _database_time
+
+    get_session_factory = bus.get_session_factory
+
+    with get_session_factory()() as session:
+        now = _database_time(session)
+        rows = (
+            session.query(IncidentEvent.id)
+            .join(IncidentInbox, IncidentInbox.incident_event_id == IncidentEvent.id)
+            .outerjoin(IncidentClaim, IncidentClaim.event_id == IncidentEvent.id)
+            .filter(
+                or_(
+                    IncidentClaim.event_id.is_(None),
+                    IncidentClaim.dispatch_state == "pending",
+                    (IncidentClaim.dispatch_state.in_(["dispatching", "unknown"]))
+                    & (IncidentClaim.lease_until <= now),
+                ),
+            )
+            .order_by(IncidentEvent.id)
+            .limit(max(1, int(limit)))
+            .all()
+        )
+    for (event_id,) in rows:
+        bus._dispatch_incident(int(event_id))
+    return len(rows)

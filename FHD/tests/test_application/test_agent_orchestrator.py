@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -7,6 +8,14 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _isolated_agent_usage_ledger(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    # These planner/event tests mock dispatch in this interpreter; the real spawned
+    # executor and tenant persistence are exercised by test_tool_process/tenant.
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
+        lambda: SimpleNamespace(execute=AgentToolExecutor().execute),
+    )
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "model_usage_ledger.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
@@ -110,7 +119,7 @@ def test_agent_orchestrator_executes_low_risk_tool_and_records_events():
     assert completed_event.data["cost_units"] == 1
 
 
-def test_agent_tool_executor_restores_durable_runtime_tenant_scope():
+def test_agent_tool_executor_restores_durable_purchase_tenant_scope():
     from app.application.agent_orchestrator.run_models import AgentStep
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
     from app.infrastructure.tenant_scope import current_tenant_id
@@ -119,13 +128,13 @@ def test_agent_tool_executor_restores_durable_runtime_tenant_scope():
 
     def _execute(_tool_id, _action, _params):
         observed_tenant_ids.append(current_tenant_id())
-        return {"success": True, "data": [{"unit_name": "XC 演示客户"}]}
+        return {"success": True, "data": {"id": 7}}
 
     step = AgentStep(
-        node_id="read_customer",
-        tool_id="business_db",
-        action="read",
-        params={"entity": "customers", "keyword": "XC 演示客户"},
+        node_id="create_supplier",
+        tool_id="purchase",
+        action="create_supplier",
+        params={"name": "XC 演示供应商"},
     )
     with patch(
         "app.application.facades.tools_facade.execute_registered_workflow_tool",

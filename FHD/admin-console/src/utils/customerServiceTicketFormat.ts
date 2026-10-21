@@ -37,6 +37,7 @@ const badgeFrom = (map: LabelMap, value: unknown, fallbackTone: Tone = 'neutral'
 }
 
 const TICKET_STATUS: LabelMap = {
+  expired: ['已过期不再处理', 'neutral'],
   open: ['待处理', 'info'], new: ['待处理', 'info'], pending: ['待处理', 'info'],
   processing: ['处理中', 'info'], in_progress: ['处理中', 'info'],
   awaiting_customer: ['待客户确认', 'warning'], waiting_customer: ['待客户确认', 'warning'],
@@ -62,6 +63,7 @@ const RUN_STATUS: LabelMap = {
 export const runStatusBadge = (value: unknown) => badgeFrom(RUN_STATUS, value, 'warning')
 
 const RESOLUTION_STATE: LabelMap = {
+  expired: ['已过期不再处理（未修复）', 'neutral'],
   received: ['已收到', 'info'], processing: ['处理中', 'info'], repairing: ['修复中', 'info'],
   repair_failed: ['修复未完成', 'danger'], repaired: ['已修复待验证', 'warning'],
   awaiting_verification: ['待客户验证', 'warning'], verified: ['已验证', 'success'],
@@ -104,7 +106,8 @@ export const actorLabel = plain({ ai: 'AI 客服', system: '系统', user: '客�
 export const routeLabel = plain({ shared_core: '平台公共修复', custom: '客户定制修复', software: '软件修复' })
 export const actionTypeLabel = plain({ 'employee.dispatch': '派单给处理小组', 'ticket.reply': '回复客户', 'ticket.close': '关闭工单' })
 export const eventLabel = plain({
-  ticket_title_corrected: '更正工单标题',
+  admin_ticket_expired: '管理员记录过期（未修复）',
+  ticket_title_corrected: '更正工单标题', ticket_classification_corrected: '纠正工单分类',
   ticket_created: '创建工单', decision_made: 'AI 受理决策', employee_progress: '员工处理进展',
   action_executed: '执行动作', action_forbidden: '动作被拒绝', session_created: '创建会话',
   chat_only_reply: '仅对话回复', issue_intake: '问题受理', issue_support_report: '上传支持包',
@@ -170,7 +173,7 @@ export function auditItems(rows: Row[]): AuditItem[] {
   return rows.map((row, i) => {
     const detail = (row.detail && typeof row.detail === 'object' ? row.detail : row.detail_json && typeof row.detail_json === 'object' ? row.detail_json : {}) as Row
     const actorId = row.actor_user_id ?? row.user_id
-    const summary = detail.progress || detail.note || detail.reason || (detail.new_title ? `标题：${detail.old_title ?? '（空）'} → ${detail.new_title}` : '') || (detail.decision ? `决策：${decisionBadge(detail.decision).label}` : '') || (detail.intent ? `意图：${intentLabel(detail.intent)}` : '')
+    const summary = detail.new_intent ? `分类：${intentLabel(detail.old_intent)} → ${intentLabel(detail.new_intent)}；${detail.reason || ''}` : detail.progress || detail.note || detail.reason || (detail.new_title ? `标题：${detail.old_title ?? '（空）'} → ${detail.new_title}` : '') || (detail.decision ? `决策：${decisionBadge(detail.decision).label}` : '') || (detail.intent ? `意图：${intentLabel(detail.intent)}` : '')
     return {
       key: `audit-${row.id ?? i}`, id: String(row.id ?? '—'), at: formatBeijingTime(row.created_at),
       actor: `${actorLabel(row.actor_type)}${actorId !== null && actorId !== undefined && actorId !== '' ? ` · 用户 ID ${actorId}` : ''}`,

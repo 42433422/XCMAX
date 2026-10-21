@@ -91,7 +91,7 @@ class TestWorkflowEngineRunBatch:
         plan = _simple_plan(nodes=nodes)
         result = engine.run(plan)
         assert result.success is False
-        assert "依赖无法继续解析" in result.message
+        assert "环" in result.message
 
     def test_runtime_context_propagation(self):
         engine = _make_engine({"success": True, "data": []})
@@ -103,7 +103,8 @@ class TestWorkflowEngineRunBatch:
         engine = _make_engine()
         plan = _simple_plan(nodes=[])
         result = engine.run(plan)
-        assert result.success is True
+        assert result.success is False
+        assert result.final_context["workflow_status"]["state"] == "blocked"
         assert result.node_results == []
 
     def test_parallelizes_only_independent_low_risk_idempotent_nodes(self):

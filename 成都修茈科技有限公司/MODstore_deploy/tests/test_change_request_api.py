@@ -135,3 +135,29 @@ def test_high_risk_change_request_waits_for_human_through_autonomy_ssot(
     audit = audit_rows[0]
     assert audit["decision"] == "require_human"
     assert audit["approver"] is None
+
+
+def test_queued_change_cannot_escape_after_parent_replacement(admin_client):
+    _, tmp_path = admin_client
+    from modstore_server.employee_change_request_service import (
+        apply_employee_change_request,
+        defer_write_as_change_request,
+    )
+    from modstore_server.models import EmployeeChangeRequest, get_session_factory
+
+    workspace = tmp_path / "workspace"
+    (workspace / "child").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "note.txt"
+    sentinel.write_text("private")
+    request_id = defer_write_as_change_request(
+        "test-employee", str(workspace), "child/note.txt", "overwrite"
+    )
+    (workspace / "child").rename(workspace / "original")
+    (workspace / "child").symlink_to(outside, target_is_directory=True)
+    result = apply_employee_change_request(request_id, approved_by_user_id=1)
+    assert result["ok"] is False
+    assert sentinel.read_text() == "private"
+    with get_session_factory()() as session:
+        assert session.get(EmployeeChangeRequest, request_id).status == "failed"

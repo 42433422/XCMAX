@@ -17,6 +17,9 @@ def execution_succeeded(result: Any) -> bool:
         or result.get("error")
         or result.get("handler_failed")
         or result.get("blocked_by_risk_gate")
+        or result.get("partial")
+        or result.get("outcome") == "unknown"
+        or result.get("requires_reconciliation")
         or status
         in {
             "failed",
@@ -27,6 +30,10 @@ def execution_succeeded(result: Any) -> bool:
             "pending",
             "running",
             "queued",
+            "unknown",
+            "partial",
+            "reconciling",
+            "dispatching",
             "blocked_by_risk_gate",
         }
     ):
@@ -89,39 +96,98 @@ def _para_task_id(row: dict[str, Any]) -> Any:
     )
 
 
-def execution_pending(result: dict[str, Any]) -> bool:
-    """Accepted Para work remains pending; a failed companion handler cannot be hidden."""
-    if (
-        result.get("ok") is False
-        or result.get("success") is False
-        or result.get("status") in {"failed", "error", "handler_failed", "blocked_by_risk_gate"}
-        or any(result.get(k) for k in ("error", "handler_failed", "blocked_by_risk_gate"))
-    ):
+def execution_requires_reconciliation(result: Any) -> bool:
+    """An error or lost response does not prove that accepted work stopped."""
+    if not isinstance(result, dict):
         return False
+    if result.get("outcome") == "unknown" or result.get("requires_reconciliation"):
+        return True
+    status = str(result.get("status") or result.get("execution_status") or "").lower()
+    terminal = status in {
+        "para_task_completed",
+        "para_task_merged",
+        "para_task_failed",
+        "para_task_merge_conflict",
+    }
+    if result.get("completed") is True and not result.get("partial"):
+        terminal = True
+    if not terminal and (
+        result.get("outcome") == "unknown"
+        or result.get("requires_reconciliation")
+        or result.get("ticket_route_requires_reconciliation")
+        or result.get("accepted")
+        or result.get("queued")
+        or result.get("outbox_path")
+        or status
+        in {
+            "unknown",
+            "reconciling",
+            "para_task_timeout",
+            "para_task_poll_failed",
+            "para_api_missing_task_id",
+            "dispatching",
+        }
+    ):
+        return True
+    nested = result.get("result")
+    if isinstance(nested, dict) and execution_requires_reconciliation(nested):
+        return True
+    return any(
+        execution_requires_reconciliation(row)
+        for key in ("outputs", "results")
+        for row in (result[key] if isinstance(result.get(key), list) else [])
+        if isinstance(row, dict)
+    )
+
+
+def para_task_succeeded(
+    task: Any,
+    expected_id: str,
+    required_ids: list[str] | None = None,
+    planned_devices: list[str] | None = None,
+) -> bool:
+    """Bind completion to the same task and all required/returned child receipts."""
+    if not isinstance(task, dict) or str(task.get("id") or "") != str(expected_id):
+        return False
+    if task.get("status") not in {"completed", "merged"} or task.get("error"):
+        return False
+    children = task.get("subTasks", task.get("subtasks", []))
+    if not isinstance(children, list) or any(not isinstance(child, dict) for child in children):
+        return False
+    returned = {str(child.get("id") or "") for child in children}
+    if planned_devices:
+        if len(children) < len(planned_devices):
+            return False
+        if len(required_ids or []) < len(planned_devices):
+            devices = {
+                str(child.get("device_id") or child.get("deviceId") or "") for child in children
+            }
+            if not set(planned_devices).issubset(devices):
+                return False  # Missing POST receipts need an explicit device/child readback.
+    return set(required_ids or []).issubset(returned) and all(
+        child.get("status") in {"completed", "merged", "done", "success"}
+        and not (child.get("last_error") or child.get("error"))
+        for child in children
+    )
+
+
+def execution_pending(result: dict[str, Any]) -> bool:
+    """Unknown work remains pending despite transport errors, never eligible for replay."""
     nested = result.get("result")
     outputs = nested.get("outputs") if isinstance(nested, dict) else None
     decisive = [row for row in outputs or [result] if not _is_informational_row(row)]
-
-    def pending(row):
-        return (
-            isinstance(row, dict)
-            and row.get("handler") == "para_delegate"
-            and row.get("ok") is True
-            and row.get("accepted") is True
-            and row.get("completed") is False
-            and not row.get("error")
-            and row.get("status") in {"para_task_accepted", "pending", "running", "queued"}
-            and bool(_para_task_id(row))
-        )
-
-    return any(pending(row) for row in decisive) and all(
-        pending(row) or execution_succeeded(row) for row in decisive
+    return any(execution_requires_reconciliation(row) for row in decisive) and all(
+        execution_requires_reconciliation(row) or execution_succeeded(row) for row in decisive
     )
 
 
 def team_succeeded(rows: list[dict[str, Any]]) -> bool:
     by_role = {str(row.get("role") or ""): row for row in rows if isinstance(row, dict)}
-    return all(by_role.get(role, {}).get("ok") is True for role in ("scout", "fix", "verify"))
+    successful = all(by_role.get(role, {}).get("ok") is True for role in ("scout", "fix", "verify"))
+    fix_attempt = by_role.get("fix", {}).get("attempt_id")
+    return successful and (
+        not fix_attempt or by_role.get("verify", {}).get("verified_fix_attempt_id") == fix_attempt
+    )
 
 
 def issue_resolution(ticket: Any, evidence: dict[str, Any]) -> dict[str, Any]:
@@ -158,7 +224,11 @@ def issue_resolution(ticket: Any, evidence: dict[str, Any]) -> dict[str, Any]:
 def repair_verification(source: str | None) -> dict[str, Any]:
     """repair_verified 只随实际核验来源置真：incident_team / customer_decision / *_runtime_receipt。"""
     at = datetime.now(UTC).isoformat() if source else None
-    return {"repair_verified": bool(source), "repair_verified_by": source, "repair_verified_at": at}
+    return {
+        "repair_verified": bool(source),
+        "repair_verified_by": source,
+        "repair_verified_at": at,
+    }
 
 
 def record_team_progress(
@@ -176,7 +246,17 @@ def record_team_progress(
                 if successful
                 else (
                     "processing"
-                    if rows and all(row.get("ok") or row.get("status") == "pending" for row in rows)
+                    if rows
+                    and all(
+                        row.get("ok")
+                        or row.get("status")
+                        in {
+                            "pending",
+                            "skipped_fix_unfinished",
+                            "verification_invalidated",
+                        }
+                        for row in rows
+                    )
                     else "repair_failed"
                 )
             )

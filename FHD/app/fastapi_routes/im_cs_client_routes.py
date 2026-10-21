@@ -9,6 +9,7 @@ production user by ``market_user_id``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -45,6 +46,13 @@ router = APIRouter(tags=["im-v0"])
 _schema_ready = False
 _REMOTE_PATH = "/api/im/enterprise-cs/remote/messages"
 _IM_UNAVAILABLE = "企业专属客服暂时不可用，请稍后重试"
+_SEND_UNCONFIRMED = {
+    "success": False,
+    "message": "发送结果暂无法确认，请先查看会话记录，勿重复发送",
+    "outcome": "unknown",
+    "retryable": False,
+    "reconciliation_required": True,
+}
 _identity_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
@@ -292,30 +300,44 @@ async def _proxy_to_production(
     token: str,
     *,
     body: dict[str, Any] | None = None,
+    session_id: str = "",
 ) -> JSONResponse:
     url = f"{_public_fhd_base_url()}{_REMOTE_PATH}"
     headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
+    post_started = False
     try:
-        async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
-            if method.upper() == "POST":
-                prime = await client.get(url, headers=headers)
-                if prime.status_code >= 400:
-                    response = prime
-                else:
-                    csrf = str(client.cookies.get("csrf_token") or "").strip()
-                    post_headers = {**headers, "Content-Type": "application/json"}
-                    if csrf:
-                        post_headers["X-CSRF-Token"] = csrf
-                    response = await client.post(url, headers=post_headers, json=body or {})
-            else:
-                response = await client.get(url, headers=headers)
-    except httpx.HTTPError:
+        async with (
+            asyncio.timeout(20.0),
+            httpx.AsyncClient(timeout=20.0, trust_env=False) as client,
+        ):
+            response = await client.get(url, headers=headers)
+            if response.status_code == 401 and session_id:
+                from app.fastapi_routes import market_account
+
+                refreshed = await market_account.refresh_session_market_token(session_id)
+                refreshed = refreshed or market_account.session_market_token(session_id)
+                if refreshed and refreshed != token:
+                    headers["Authorization"] = f"Bearer {refreshed}"
+                    response = await client.get(url, headers=headers)
+            if method.upper() == "POST" and response.status_code < 400:
+                csrf = str(client.cookies.get("csrf_token") or "").strip()
+                post_headers = {**headers, "Content-Type": "application/json"}
+                if csrf:
+                    post_headers["X-CSRF-Token"] = csrf
+                post_started = True
+                response = await client.post(url, headers=post_headers, json=body or {})
+    except (httpx.HTTPError, TimeoutError):
         logger.exception("enterprise CS production bridge unavailable")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=502)
+        return JSONResponse(
+            _SEND_UNCONFIRMED if post_started else {"success": False, "message": _IM_UNAVAILABLE},
+            status_code=502,
+        )
     try:
         payload = response.json()
     except ValueError:
-        payload = {"success": False, "message": _IM_UNAVAILABLE}
+        payload = None
+    if post_started and (response.status_code >= 500 or not isinstance(payload, dict)):
+        return JSONResponse(_SEND_UNCONFIRMED, status_code=502)
     if not isinstance(payload, dict):
         payload = {"success": False, "message": _IM_UNAVAILABLE}
     return JSONResponse(payload, status_code=response.status_code)
@@ -330,7 +352,7 @@ async def local_enterprise_cs_messages(
     token = await _local_market_token(request)
     if not token:
         return JSONResponse({"success": False, "message": "请重新登录企业账号"}, status_code=401)
-    return await _proxy_to_production("GET", token)
+    return await _proxy_to_production("GET", token, session_id=session_id_from_request(request))
 
 
 @router.post("/api/im/enterprise-cs/messages")
@@ -343,4 +365,9 @@ async def local_enterprise_cs_send(
     token = await _local_market_token(request)
     if not token:
         return JSONResponse({"success": False, "message": "请重新登录企业账号"}, status_code=401)
-    return await _proxy_to_production("POST", token, body={"body": body.get("body")})
+    return await _proxy_to_production(
+        "POST",
+        token,
+        body={"body": body.get("body")},
+        session_id=session_id_from_request(request),
+    )

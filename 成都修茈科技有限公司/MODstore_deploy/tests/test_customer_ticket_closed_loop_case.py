@@ -107,7 +107,10 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
 
     published: list[dict] = []
 
-    def _capture_publish(event_type, payload, source="unit", fingerprint=None, dedupe_minutes=0):
+    def _capture_publish(
+        event_type, payload, source="unit", fingerprint=None, dedupe_minutes=0, inbox_key=None
+    ):
+        assert inbox_key, "Durable dispatch must forward its inbox identity"
         published.append({"event_type": event_type, "payload": dict(payload), "source": source})
         return True
 

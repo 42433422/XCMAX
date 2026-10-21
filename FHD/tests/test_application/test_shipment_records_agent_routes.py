@@ -27,6 +27,7 @@ from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
 
 def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(tmp_path, monkeypatch):
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'shipments.db'}")
     engine = create_engine(f"sqlite:///{tmp_path / 'shipments.db'}")
     Base.metadata.create_all(engine)
     monkeypatch.setattr("app.db.session.SessionLocal", sessionmaker(bind=engine))

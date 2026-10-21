@@ -100,8 +100,13 @@ class TestWorkflowStateUpdate:
                 Branch(condition={"key": "kind", "equals": "b"}, target="tb"),
             ],
         )
-        engine.run(_plan([node]), state_event_callback=events.append)
+        targets = [
+            WorkflowNode(node_id=target, tool_id="router", action="route")
+            for target in ("ta", "tb")
+        ]
+        engine.run(_plan([node, *targets]), state_event_callback=events.append)
         assert any(e["node_id"] == "router" for e in events)
+        assert not any(e["node_id"] in {"ta", "tb"} for e in events)
 
     def test_callback_from_constructor_used_when_run_has_none(self):
         collected = []

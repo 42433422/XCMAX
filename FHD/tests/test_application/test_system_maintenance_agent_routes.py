@@ -30,8 +30,7 @@ def _configure_billing(monkeypatch, tmp_path) -> None:
 
 
 def test_system_printer_post_executes_system_maintenance_tool_through_agent(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     _configure_billing(monkeypatch, tmp_path)
@@ -70,8 +69,7 @@ def test_system_printer_post_executes_system_maintenance_tool_through_agent(
 
 
 def test_database_restore_executes_system_maintenance_tool_through_agent(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     _configure_billing(monkeypatch, tmp_path)
@@ -104,8 +102,7 @@ def test_database_restore_executes_system_maintenance_tool_through_agent(
 
 
 def test_performance_cache_invalidate_executes_system_maintenance_tool_through_agent(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     _configure_billing(monkeypatch, tmp_path)
@@ -140,8 +137,7 @@ def test_performance_cache_invalidate_executes_system_maintenance_tool_through_a
 
 
 def test_performance_reinitialize_executes_system_maintenance_tool_through_agent(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     _configure_billing(monkeypatch, tmp_path)

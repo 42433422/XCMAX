@@ -39,8 +39,7 @@ def _assert_shipment_order_run(repo: InMemoryAgentRunRepository, run_id: str, ac
 
 
 def test_shipment_order_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))

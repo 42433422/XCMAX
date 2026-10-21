@@ -424,7 +424,7 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     )
     notarize = (REPO_ROOT / "desktop" / "build" / "notarize.cjs").read_text(encoding="utf-8")
 
-    assert "xattr -cr desktop/node_modules/electron/dist" in installer
+    assert all(s in installer for s in ("electron/install.js", "xattr -cr"))
     assert '"--config.electronDist=node_modules/electron/dist"' in installer
     assert '"--config.directories.output=${package_stage}"' in installer
     assert 'for staged_file in "${package_stage}"/*' in installer

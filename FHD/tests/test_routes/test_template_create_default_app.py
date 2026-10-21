@@ -20,11 +20,9 @@ def template_app(tmp_path, monkeypatch):
     import app.db.session as db_session
     import app.fastapi_app.factory as factory
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.application.template_app_service import TemplateApplicationService
     from app.config import TestingConfig
     from app.db.base import Base
     from app.db.models.user import Session, User
-    from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
     from app.infrastructure.tenant_scope import tenant_scope
 
     for key, value in {
@@ -40,14 +38,14 @@ def template_app(tmp_path, monkeypatch):
     }.items():
         monkeypatch.setenv(key, value)
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-    db_path = tmp_path / "templates.sqlite3"
+    db_path = tmp_path / "products.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
     engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
     sessions = sessionmaker(bind=engine)
     Base.metadata.create_all(engine)
     monkeypatch.setattr(database, "HostSessionLocal", sessions)
     monkeypatch.setattr(database, "_get_engine", lambda: engine)
     monkeypatch.setattr(db_session, "SessionLocal", sessions)
-    monkeypatch.setattr(init_db, "get_db_path", lambda *_args: str(db_path))
     init_db.init_template_tables(str(db_path))
     with sessions.begin() as db:
         for uid, tid in ((7, 11), (8, 22), (9, None)):
@@ -64,12 +62,7 @@ def template_app(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
     )
-    service = TemplateApplicationService(FileSystemTemplateStore(str(tmp_path)))
-    monkeypatch.setattr(
-        "app.application.template_app_service.get_template_app_service", lambda: service
-    )
-    # Core route registration is real. Optional Mod loading and lifespan workers
-    # are excluded so this test cannot launch unrelated runtime/background jobs.
+    # Keep real core routes; exclude unrelated Mod/lifespan workers.
     monkeypatch.setattr(
         "app.fastapi_app.mod_startup.bootstrap_mod_extensions_sync", lambda *_args, **_kw: None
     )

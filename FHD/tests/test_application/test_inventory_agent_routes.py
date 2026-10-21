@@ -14,15 +14,17 @@ def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestCli
     monkeypatch.setattr(inventory_routes, "_svc", lambda: fake_service)
     app = FastAPI()
     app.include_router(inventory_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, raise_server_exceptions=False)
+    client.app_state["tenant_id"] = 7
+    return client
 
 
 def _assert_inventory_run(repo: InMemoryAgentRunRepository, run_id: str, action: str) -> None:
     run = repo.get(run_id)
-    assert run is not None
-    assert run.user_id == "tenant-a"
+    assert run is not None and run.user_id == "tenant-a"
     assert run.status == "completed"
     assert run.intent == f"inventory_{action}"
+    assert run.metadata["runtime_context"]["tenant_id"] == 7
     assert run.tool_calls[0].tool_id == "inventory"
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.inventory.{action}"
@@ -79,6 +81,7 @@ def test_inventory_structure_mutation_routes_execute_through_agent_orchestrator(
     payload,
     expected,
     result,
+    local_tools,
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
@@ -100,8 +103,7 @@ def test_inventory_structure_mutation_routes_execute_through_agent_orchestrator(
 
 
 def test_inventory_stock_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
@@ -139,9 +141,7 @@ def test_inventory_stock_mutation_routes_execute_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert stock_in.status_code == 200
-    assert stock_out.status_code == 200
-    assert transfer.status_code == 200
+    assert all(response.status_code == 200 for response in (stock_in, stock_out, transfer))
 
     assert svc.inventory_in.call_args.kwargs["unit_price"] is None
     assert svc.inventory_in.call_args.kwargs["quantity"] == 3.0

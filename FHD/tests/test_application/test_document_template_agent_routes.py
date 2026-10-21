@@ -17,8 +17,7 @@ def _client() -> TestClient:
 
 
 def test_templates_create_route_executes_document_template_tool_through_agent(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
@@ -72,8 +71,7 @@ def test_templates_create_route_executes_document_template_tool_through_agent(
 
 
 def test_templates_update_route_executes_document_template_tool_through_agent(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
@@ -123,8 +121,7 @@ def test_templates_update_route_executes_document_template_tool_through_agent(
 
 
 def test_templates_delete_route_executes_document_template_tool_through_agent(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))

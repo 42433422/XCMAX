@@ -18,6 +18,8 @@ class _AgentOrchestratorPart02Mixin:
         *,
         runtime_context: dict[str, _facade().Any],
     ) -> bool:
+        if run.metadata.get("non_retryable") or (step.output or {}).get("retryable") is False:
+            return False
         if str((step.output or {}).get("error_code") or "") == "tool_billing_blocked":
             return False
         if not self._can_auto_execute(step):

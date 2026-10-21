@@ -2,16 +2,41 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
+import importlib.metadata
 import json
 import math
 import os
+import re
 import sys
-import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
-import pytest
+
+def configured_total() -> int:
+    value = os.environ.get("BACKEND_SHARD_TOTAL", "")
+    if not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 24:
+        raise ValueError("Explicit BACKEND_SHARD_TOTAL in 1..24 is required")
+    return int(value)
+
+
+def plan(total: int) -> dict:
+    if total not in (4, 8, 16, 24):
+        raise ValueError("Supported shard plans are 4, 8, 16, and 24")
+    return {"total": total, "matrix": {"shard": list(range(1, total + 1))}}
+
+
+def validate_toolchain(data: dict) -> dict[str, str]:
+    if (
+        not isinstance(data, dict)
+        or set(data) != {"coverage", "python"}
+        or not isinstance(data["coverage"], str)
+        or re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", data["coverage"]) is None
+        or data["python"] != f"{sys.version_info.major}.{sys.version_info.minor}"
+    ):
+        raise ValueError("Invalid or incompatible report toolchain")
+    return data
 
 
 def profile() -> tuple[dict, str]:
@@ -64,98 +89,74 @@ def identity() -> dict[str, str]:
     }
 
 
-class ShardEvidence:
-    def __init__(self, config):
-        self.index = int(os.environ["BACKEND_SHARD_INDEX"])
-        self.total = int(os.environ["BACKEND_SHARD_TOTAL"])
-        if not 1 <= self.index <= self.total:
-            raise pytest.UsageError("Shard index outside configured range")
-        self.path = Path(os.environ["BACKEND_SHARD_MANIFEST"])
-        self.data = dict(identity(), index=self.index, total=self.total, full=[], selected=[])
-        self.timings, self.data["partition_profile"] = profile()
-        self.data["mode"] = os.environ.get("BACKEND_SHARD_MODE", "full")
-        self.reports: dict[str, list[dict]] = defaultdict(list)
-        self.collection_errors = []
-        self.collection_skips = []
-        self.subtests = []
-        self.started = time.monotonic()
-
-    @pytest.hookimpl(trylast=True)
-    def pytest_collection_modifyitems(self, config, items):
-        nodes = [item.nodeid for item in items]
-        try:
-            selected = set(partition(nodes, self.total, self.timings)[self.index - 1])
-        except ValueError as exc:
-            raise pytest.UsageError(str(exc)) from exc
-        self.data.update(full=sorted(nodes), selected=sorted(selected))
-        excluded = [item for item in items if item.nodeid not in selected]
-        items[:] = [item for item in items if item.nodeid in selected]
-        config.hook.pytest_deselected(items=excluded)
-
-    def pytest_collectreport(self, report):
-        if report.failed:
-            self.collection_errors.append(report.nodeid)
-        elif report.skipped:
-            self.collection_skips.append(report.nodeid)
-
-    def pytest_runtest_logreport(self, report):
-        if hasattr(report, "context"):
-            self.subtests.append({"nodeid": report.nodeid, "outcome": report.outcome})
-            return
-        self.reports[report.nodeid].append(
-            {"when": report.when, "outcome": report.outcome, "duration": report.duration}
-        )
-
-    def pytest_sessionfinish(self, session, exitstatus):
-        self.data.update(
-            exitstatus=int(exitstatus),
-            reports=dict(self.reports),
-            collection_errors=self.collection_errors,
-            collection_skips=sorted(self.collection_skips),
-            subtests=self.subtests,
-            elapsed=time.monotonic() - self.started,
-        )
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self.data, sort_keys=True), encoding="utf-8")
-
-
 def pytest_configure(config):
+    # The bootstrap verifier must run before report dependencies are installed.
+    import pytest
+
+    from scripts.ci.backend_shard_plugin import ShardEvidence
+
     if "BACKEND_SHARD_INDEX" not in os.environ:
         raise pytest.UsageError("Explicit backend shard configuration required")
     config.pluginmanager.register(ShardEvidence(config), "backend-shard-evidence")
 
 
 def digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def seal(directory: Path) -> None:
+    toolchain = validate_toolchain(
+        {
+            "coverage": importlib.metadata.version("coverage"),
+            "python": f"{sys.version_info.major}.{sys.version_info.minor}",
+        }
+    )
+    toolchain_path = directory / "report-toolchain.json"
+    toolchain_path.write_text(json.dumps(toolchain, sort_keys=True), encoding="utf-8")
     for mode in ("full", "behavior"):
         path = directory / f"{mode}.json"
         data = json.loads(path.read_text())
         data["coverage_sha256"] = digest(directory / f".coverage.{mode}")
         data["junit_sha256"] = digest(directory / f"{mode}.xml")
+        data["report_toolchain_sha256"] = digest(toolchain_path)
         path.write_text(json.dumps(data, sort_keys=True), encoding="utf-8")
 
 
-def verify(root: Path, total: int, mode: str, expected: dict[str, str]) -> dict:
+def verify(
+    root: Path, total: int, mode: str, expected: dict[str, str], artifact_prefix: str = "shard-"
+) -> dict:
+    if not 1 <= total <= 24 or mode not in ("full", "behavior"):
+        raise ValueError("Invalid shard total or evidence mode")
+    if re.fullmatch(r"[A-Za-z0-9_-]+", artifact_prefix) is None:
+        raise ValueError("Invalid artifact directory prefix")
     timings, expected_profile = profile()
     directories = sorted(root.iterdir())
     if len(directories) != total or {p.name for p in directories} != {
-        f"shard-{i}" for i in range(1, total + 1)
+        f"{artifact_prefix}{i}" for i in range(1, total + 1)
     }:
         raise ValueError("Missing or extra shard artifact")
     full = None
     skipped = None
+    toolchain = None
     indices, selected, outcomes, node_outcomes = set(), [], Counter(), {}
     for directory in directories:
-        data = json.loads((directory / f"{mode}.json").read_text())
+        manifest = directory / f"{mode}.json"
+        if directory.is_symlink() or manifest.is_symlink() or not manifest.is_file():
+            raise ValueError("Missing or indirect shard manifest")
+        data = json.loads(manifest.read_text())
         if any(data.get(key) != value for key, value in expected.items()):
             raise ValueError("Foreign SHA/run/attempt in shard evidence")
         if data.get("partition_profile") != expected_profile:
             raise ValueError("Foreign partition profile")
         index = data["index"]
-        if index in indices or not 1 <= index <= total or data["total"] != total:
+        if (
+            type(index) is not int
+            or index in indices
+            or not 1 <= index <= total
+            or data["total"] != total
+            or directory.name != f"{artifact_prefix}{index}"
+        ):
             raise ValueError("Invalid/duplicate shard identity")
         indices.add(index)
         if data["mode"] != mode or data["exitstatus"] != 0 or data["collection_errors"]:
@@ -187,10 +188,17 @@ def verify(root: Path, total: int, mode: str, expected: dict[str, str]) -> dict:
         for name, key in (
             (f".coverage.{mode}", "coverage_sha256"),
             (f"{mode}.xml", "junit_sha256"),
+            ("report-toolchain.json", "report_toolchain_sha256"),
         ):
             path = directory / name
             if path.is_symlink() or not path.is_file() or data[key] != digest(path):
                 raise ValueError("Missing or changed shard output")
+        current_toolchain = validate_toolchain(
+            json.loads((directory / "report-toolchain.json").read_text())
+        )
+        if toolchain is not None and current_toolchain != toolchain:
+            raise ValueError("Different report toolchains across shards")
+        toolchain = current_toolchain
         selected.extend(chosen)
     if len(selected) != len(set(selected)) or set(selected) != set(full or []):
         raise ValueError("Shard union differs from full suite")
@@ -199,6 +207,7 @@ def verify(root: Path, total: int, mode: str, expected: dict[str, str]) -> dict:
         "collected": len(selected),
         "outcomes": dict(outcomes),
         "collection_skips": skipped,
+        "report_toolchain": toolchain,
         "collection_sha256": hashlib.sha256(json.dumps(full, sort_keys=True).encode()).hexdigest(),
         "outcomes_sha256": hashlib.sha256(
             json.dumps(node_outcomes, sort_keys=True).encode()
@@ -207,15 +216,32 @@ def verify(root: Path, total: int, mode: str, expected: dict[str, str]) -> dict:
 
 
 def main() -> None:
-    command, directory = sys.argv[1:3]
-    if command == "seal":
-        seal(Path(directory))
-    elif command == "verify":
-        total = int(os.environ.get("BACKEND_SHARD_TOTAL", "2"))
-        result = [verify(Path(directory), total, mode, identity()) for mode in ("full", "behavior")]
-        print(json.dumps(result, indent=2))
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    planner = commands.add_parser("plan")
+    planner.add_argument("--total", type=int, choices=(4, 8, 16, 24), default=4)
+    commands.add_parser("seal").add_argument("directory", type=Path)
+    verifier = commands.add_parser("verify")
+    verifier.add_argument("directory", type=Path)
+    verifier.add_argument("--artifact-prefix", default="shard-")
+    args = parser.parse_args()
+    if args.command == "seal":
+        seal(args.directory)
+        return
+    if args.command == "plan":
+        result = plan(args.total)
+        outputs = {"total": str(args.total), "matrix": json.dumps(result["matrix"])}
     else:
-        raise ValueError("Unknown command")
+        result = [
+            verify(args.directory, configured_total(), mode, identity(), args.artifact_prefix)
+            for mode in ("full", "behavior")
+        ]
+        outputs = {"coverage_version": result[0]["report_toolchain"]["coverage"]}
+    if output := os.environ.get("GITHUB_OUTPUT"):
+        with Path(output).open("a", encoding="utf-8") as stream:
+            for name, value in outputs.items():
+                stream.write(f"{name}={value}\n")
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

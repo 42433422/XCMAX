@@ -5,7 +5,7 @@
 - 收款过账 借现金(1001) / 贷应收(1122)
 - 写入租户安全 receivable 分配（unpaid/partial/paid/refunded）
 - 累计收款超应收被拒
-- 同单同金额重复收款幂等
+- 同单同金额的两笔独立收款均应入账
 - 全额 → paid
 - refund/reversal 生成反向凭证并更新分配为 refunded
 - Decimal 安全金额比较与失败回滚
@@ -145,18 +145,21 @@ class TestPayment:
             # 超收被拒后不新增分配
             assert len(_allocations(db_session, order.id)) == 1
 
-    def test_same_order_same_amount_idempotent(self, db_session):
-        """同单同金额重复收款幂等：不重复生成分配。"""
+    def test_distinct_equal_amount_installments_both_post(self, db_session):
+        """同单等额的两笔真实收款应分别入账，不按金额去重。"""
         with tenant_scope(1):
             order = _make_order(db_session, Decimal("1000.00"))
             first = psvc.payment(sales_order_id=order.id, amount=Decimal("400.00"))
             second = psvc.payment(sales_order_id=order.id, amount=Decimal("400.00"))
             assert first["success"] is True
             assert second["success"] is True
-            assert second.get("idempotent") is True
+            assert second.get("idempotent") is not True
+            assert first["data"]["id"] != second["data"]["id"]
 
             allocations = _allocations(db_session, order.id)
-            assert len(allocations) == 1
+            assert len(allocations) == 2
+            db_session.refresh(order)
+            assert order.paid_amount == Decimal("800.00")
 
     def test_zero_amount_rejected(self, db_session):
         """金额必须大于 0。"""

@@ -177,6 +177,7 @@ class __SalesAppServicePart01MixinPart02Mixin:
         fulfillment = payload["fulfillment"]
         invoice = payload["invoice"]
         pa = payload["payment_allocation"]
+        payment_key = _facade().hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
         customer = self._closed_loop_resolve_customer(db, order, tenant_id)
         products = self._closed_loop_resolve_products(db, order, tenant_id)
         warehouse = self._closed_loop_resolve_warehouse(db, fulfillment, tenant_id)
@@ -210,6 +211,26 @@ class __SalesAppServicePart01MixinPart02Mixin:
         order_no = quote_res["data"]["order_no"]
         if replayed:
             self._closed_loop_verify_idempotent_fingerprint(db, order_id, fingerprint)
+            if pa.get("requested"):
+                from app.db.models import ReceivableAllocation
+                from app.infrastructure.tenant_scope import apply_tenant_filter
+
+                keys = {
+                    row[0]
+                    for row in apply_tenant_filter(
+                        db.query(ReceivableAllocation.request_key),
+                        ReceivableAllocation,
+                        tenant_id=tenant_id,
+                    ).filter(
+                        ReceivableAllocation.sales_order_id == order_id,
+                        ReceivableAllocation.reference_type == "payment",
+                    )
+                }
+                if None in keys and payment_key not in keys:
+                    raise _facade().ClosedLoopExecutionError(
+                        "payment_reconciliation",
+                        "旧收款缺少请求身份（含已退款记录），须人工核对，禁止自动再次收款",
+                    )
             inventory_sources = [{"batch_no": None, "location_id": None} for _product in products]
         else:
             self._closed_loop_persist_fingerprint(db, order_id, fingerprint)
@@ -269,7 +290,10 @@ class __SalesAppServicePart01MixinPart02Mixin:
         payment_allocation_id = None
         if pa.get("requested"):
             payment_res = self.payment(
-                order_id, amount=self._closed_loop_dec(order.get("total_amount")), db=db
+                order_id,
+                amount=self._closed_loop_dec(order.get("total_amount")),
+                db=db,
+                idempotency_key=payment_key,
             )
             if not payment_res.get("success"):
                 raise _facade().ClosedLoopExecutionError(

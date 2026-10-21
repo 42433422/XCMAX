@@ -770,7 +770,11 @@ if (-not $SkipRestart) {
         health_after_restart = $healthAfter
         window_title_after_restart = $w3Title
         me_after_restart = $me2.body
-        validate_after_restart = $sv2.body
+        # Keep only validation booleans; never persist the session response (2026-10-21).
+        validate_after_restart = [ordered]@{
+            success = ((Get-BodyField $sv2.body 'success') -eq $true)
+            valid = ($sv2Valid -eq $true)
+        }
         # Never record the raw cookie value: this record is committed to a public repo.
         session_cookie_reused = [bool]$cookie
         session_cookie_fingerprint = (Get-CookieFingerprint $cookie)

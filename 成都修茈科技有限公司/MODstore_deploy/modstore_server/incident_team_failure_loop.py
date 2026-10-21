@@ -16,7 +16,10 @@ import os
 import time
 from typing import Any, Dict, List
 
-from modstore_server.customer_issue_delivery_contract import execution_succeeded
+from modstore_server.customer_issue_delivery_contract import (
+    execution_requires_reconciliation,
+    execution_succeeded,
+)
 from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.llm_failure_classifier import (
     FAILURE_KIND_MODEL_UNSUPPORTED,
@@ -33,7 +36,14 @@ logger = logging.getLogger(__name__)
 MAX_ROUNDS_ENV = "MODSTORE_INCIDENT_TEAM_REPAIR_MAX_ROUNDS"
 BACKOFF_ENV = "MODSTORE_INCIDENT_TEAM_RETRY_BACKOFF_SEC"
 ESCALATE_TO = "ultimate_employee"
-_AUTH_NEEDLES = ("401", "unauthorized", "not logged in", "login required", "未登录", "鉴权失败")
+_AUTH_NEEDLES = (
+    "401",
+    "unauthorized",
+    "not logged in",
+    "login required",
+    "未登录",
+    "鉴权失败",
+)
 
 
 def _env_int(name: str, default: int, low: int = 0) -> int:
@@ -110,6 +120,9 @@ def _is_handler_failed(result: Dict[str, Any]) -> bool:
 def _mark_recovered(row: Dict[str, Any], result: Dict[str, Any]) -> None:
     row.update(ok=True, status="completed", result=result)
     row["handler_outputs"] = handler_output_digest(result)
+    for key in ("attempt_id", "verified_fix_attempt_id"):
+        if result.get(key):
+            row[key] = result[key]
 
 
 def _retry_ok(result: Dict[str, Any]) -> bool:
@@ -140,6 +153,23 @@ def run_failure_loop(
     follow_ups: List[Dict[str, Any]] = []
     for row in list(results):
         result = _dict(row.get("result"))
+        if execution_requires_reconciliation(result):
+            row.update(ok=False, status="pending")
+            follow_ups.append(
+                {
+                    "role": row.get("role"),
+                    "employee_id": row.get("employee_id"),
+                    "action": "reconcile_original_attempt",
+                    "category": "unknown",
+                    "attempts": 0,
+                    "ok": False,
+                    "retryable": False,
+                    "requires_reconciliation": True,
+                    "attempt_id": row.get("attempt_id") or result.get("attempt_id"),
+                    "handler_outputs": handler_output_digest(result),
+                }
+            )
+            continue
         if not _is_handler_failed(result):
             continue
         role = str(row.get("role") or "")
@@ -160,6 +190,9 @@ def run_failure_loop(
             "escalated_to": "",
         }
         while True:
+            if result.get("retryable") is False:
+                fu["action"] = "nonretryable_need_human"
+                break
             if category == "role_timeout":
                 fu["action"] = "role_timeout_no_retry_need_human"
                 break
@@ -172,7 +205,10 @@ def run_failure_loop(
             if category == "model_unavailable":
                 fu["action"] = "model_unsupported_need_fallback"
                 hook = request_model_fallback(
-                    event_id=event_id, role=role, employee_id=employee_id, error=error[:500]
+                    event_id=event_id,
+                    role=role,
+                    employee_id=employee_id,
+                    error=error[:500],
                 )
                 fu["model_fallback"] = {k: hook.get(k) for k in ("ok", "reason", "model")}
                 if hook.get("ok"):
@@ -184,6 +220,14 @@ def run_failure_loop(
                 cap = min(cap, transient_limit)
             if fu["attempts"] >= cap:
                 break
+            if role == "fix":
+                verify = next((item for item in results if item.get("role") == "verify"), None)
+                if verify is not None:
+                    verify.update(
+                        ok=False,
+                        status="verification_invalidated",
+                        verified_fix_attempt_id="",
+                    )
             fu["attempts"] += 1
             fu["action"] = (
                 "transient_retry" if category == "environment" else "code_retry_with_feedback"
@@ -204,12 +248,35 @@ def run_failure_loop(
                     **({"feedback": error} if category == "code" else {}),
                 )
             except RECOVERABLE_ERRORS as exc:
-                retry = {"status": "failed", "handler_failed": True, "error": str(exc)[:500]}
+                retry = {
+                    "status": "unknown",
+                    "handler_failed": True,
+                    "outcome": "unknown",
+                    "requires_reconciliation": True,
+                    "retryable": False,
+                    "error": str(exc)[:500],
+                }
                 logger.exception("incident_team: retry failed event_id=%s role=%s", event_id, role)
             retry = retry if isinstance(retry, dict) else {"status": "failed", "error": "invalid"}
             fu["retry_result"] = {
                 k: v for k, v in retry.items() if k in {"status", "ok", "error", "handler_failed"}
             }
+            if execution_requires_reconciliation(retry):
+                row.update(
+                    ok=False,
+                    status="pending",
+                    result=retry,
+                    handler_outputs=handler_output_digest(retry),
+                )
+                fu.update(
+                    action="reconcile_original_attempt",
+                    requires_reconciliation=True,
+                    retryable=False,
+                )
+                break
+            if retry.get("retryable") is False:
+                fu["action"] = "nonretryable_need_human"
+                break
             if _retry_ok(retry):
                 fu["ok"] = True
                 _mark_recovered(row, retry)
@@ -217,7 +284,7 @@ def run_failure_loop(
             error = failure_text(retry) or error
             kind, category = categorize(error)
             fu.update(last_category=category, error=error[:500])
-        if not fu["ok"]:
+        if not fu["ok"] and not fu.get("requires_reconciliation"):
             fu["action"] = fu["action"] or "retry_disabled_escalated"
             fu["escalated_to"] = ESCALATE_TO
             fu["need_human"] = True
@@ -248,23 +315,45 @@ def run_failure_loop(
 def _rerun_verify(retry_member, results, members, ctx: Dict[str, Any]) -> None:
     """fix 重派成功后，原 verify 是对失败修复的结论，必须重验一次。"""
     verify = next((r for r in results if r.get("role") == "verify"), None)
-    if verify is None or verify.get("ok") is True:
+    if verify is None:
         return
-    if _is_handler_failed(_dict(verify.get("result"))):
-        return  # verify 自己的失败由本循环单独处置，避免重复派
-    member = members.get("verify") or {"employee_id": verify.get("employee_id"), "role": "verify"}
+    verify.update(ok=False, status="verification_invalidated", verified_fix_attempt_id="")
+    member = members.get("verify") or {
+        "employee_id": verify.get("employee_id"),
+        "role": "verify",
+    }
     prev = {str(r.get("role") or ""): r for r in results if isinstance(r, dict)}
     try:
         out = retry_member(member=member, prev_results=prev, **ctx)
-    except RECOVERABLE_ERRORS:
+    except RECOVERABLE_ERRORS as exc:
+        out = {
+            "ok": False,
+            "status": "unknown",
+            "outcome": "unknown",
+            "requires_reconciliation": True,
+            "error": f"verify rerun unavailable: {type(exc).__name__}",
+        }
         logger.exception("incident_team: verify rerun failed")
-        return
-    if isinstance(out, dict) and _retry_ok(out):
-        _mark_recovered(verify, out)
+    if isinstance(out, dict):
+        verify.update(
+            result=out,
+            handler_outputs=handler_output_digest(out),
+            status="pending" if execution_requires_reconciliation(out) else "failed",
+        )
+        if _retry_ok(out):
+            _mark_recovered(verify, out)
 
 
 def loop_summary(follow_ups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    keys = ("role", "category", "failure_kind", "attempts", "max_rounds", "action", "ok")
+    keys = (
+        "role",
+        "category",
+        "failure_kind",
+        "attempts",
+        "max_rounds",
+        "action",
+        "ok",
+    )
     return [
         {**{k: fu.get(k) for k in keys}, "escalated_to": fu.get("escalated_to") or "",
          "reason": str(fu.get("reason") or "")[:300]}

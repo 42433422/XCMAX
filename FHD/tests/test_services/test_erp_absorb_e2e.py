@@ -992,6 +992,44 @@ class TestRealSqliteAtomicClosedLoop:
             assert after == before
             assert _ledger_available(factory, 1, seed["product_id"]) == before_avail == 90.0
 
+    @pytest.mark.parametrize("refunded", [False, True])
+    @pytest.mark.parametrize("legacy_null_tenant", [False, True])
+    def test_legacy_receipt_replay_requires_reconciliation(
+        self, _e2e_db, monkeypatch, refunded, legacy_null_tenant
+    ):
+        from app.application.payment_service import refund
+
+        if legacy_null_tenant:
+            monkeypatch.setenv("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE", "1")
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_tenant(factory, 1, "WH-T1")
+        with tenant_scope(1):
+            payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+            service = SalesAppService()
+            assert service.execute_closed_loop(payload)["success"]
+            with factory() as db:
+                receipt = db.query(ReceivableAllocation).filter_by(reference_type="payment").one()
+                receipt_id = receipt.id
+                receipt.request_key = receipt.request_fingerprint = None
+                if legacy_null_tenant:
+                    receipt.tenant_id = None
+                db.commit()
+            if refunded:
+                assert refund(allocation_id=receipt_id)["success"]
+            before = _count_business_rows(factory, 1)
+            with factory() as db:
+                paid = db.query(SalesOrder).one().paid_amount
+            result = service.execute_closed_loop(payload)
+            assert result["success"] is False
+            assert result["failed_step"] == "payment_reconciliation"
+            assert "人工核对" in result["message"]
+            assert _count_business_rows(factory, 1) == before
+            assert _ledger_available(factory, 1, seed["product_id"]) == 90.0
+            with factory() as db:
+                assert db.query(SalesOrder).one().paid_amount == paid
+                assert db.get(ReceivableAllocation, receipt_id).request_key is None
+
     def test_same_key_different_tenant_independent_rows(self, _e2e_db, monkeypatch):
         """后置条件 6：同载荷同 key 在租户 2 建独立行，不暴露/不改动租户一行。"""
         factory = _e2e_db
@@ -1783,7 +1821,8 @@ class TestIdempotencyPrefixBoundary:
         assert rows["orders"] == 3
         assert rows["items"] == 3
 
-    def test_exact_key_replay_after_fingerprint_appended(self, _e2e_db, monkeypatch):
+    @pytest.mark.parametrize("key", ["abc", "长" * 129])
+    def test_exact_key_replay_after_fingerprint_appended(self, _e2e_db, monkeypatch, key):
         """指纹追加后，同一精确键 + 完整载荷仍幂等重放，不增行、不动库存。"""
         factory = _e2e_db
         _patch_sessionlocal(monkeypatch, factory)

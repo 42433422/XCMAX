@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -123,7 +126,124 @@ def test_local_bridge_forwards_session_bound_token_only() -> None:
         patch.object(routes, "_local_market_token", AsyncMock(return_value="bound-token")),
         patch.object(routes, "_proxy_to_production", forwarded),
     ):
-        response = TestClient(app).get("/api/im/enterprise-cs/messages")
+        response = TestClient(app).get(
+            "/api/im/enterprise-cs/messages", headers={"X-Session-ID": "bound-session"}
+        )
 
     assert response.status_code == 200
-    forwarded.assert_awaited_once_with("GET", "bound-token")
+    forwarded.assert_awaited_once_with("GET", "bound-token", session_id="bound-session")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["GET", "POST"])
+@pytest.mark.parametrize(
+    "initial,refresh_token,post_status",
+    [
+        (401, "fresh", 200),
+        (401, "", 200),
+        (403, "fresh", 200),
+        (503, "fresh", 200),
+        (401, "fresh", 401),
+    ],
+)
+async def test_bridge_recovers_only_before_sending(method, initial, refresh_token, post_status):
+    from app.fastapi_routes import im_cs_client_routes as routes
+
+    requests = []
+
+    def remote(request):
+        requests.append((request.method, request.headers.get("Authorization")))
+        if request.method == "POST":
+            assert request.headers["X-CSRF-Token"] == "csrf"
+            return httpx.Response(post_status, json={"success": post_status == 200})
+        status = 200 if request.headers["Authorization"] == "Bearer fresh" else initial
+        return httpx.Response(
+            status,
+            json={"success": status == 200},
+            headers={"Set-Cookie": "csrf_token=csrf; Path=/"},
+        )
+
+    client_type = httpx.AsyncClient
+    refresh = AsyncMock(return_value=refresh_token)
+    with (
+        patch.object(
+            routes.httpx,
+            "AsyncClient",
+            lambda **kw: client_type(transport=httpx.MockTransport(remote), **kw),
+        ),
+        patch("app.fastapi_routes.market_account.refresh_session_market_token", refresh),
+        patch("app.fastapi_routes.market_account.session_market_token", return_value="expired"),
+    ):
+        response = await routes._proxy_to_production(
+            method, "expired", body={"body": "original"}, session_id="bound-session"
+        )
+    if initial == 401:
+        refresh.assert_awaited_once_with("bound-session")
+    else:
+        refresh.assert_not_awaited()
+    recovered = initial == 401 and bool(refresh_token)
+    assert len([r for r in requests if r[0] == "GET"]) == (2 if recovered else 1)
+    assert len([r for r in requests if r[0] == "POST"]) == int(recovered and method == "POST")
+    assert response.status_code == (
+        post_status if recovered and method == "POST" else 200 if recovered else initial
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure", ["GET", "POST", "refresh_deadline", "response_invalid", "server_error"]
+)
+async def test_bridge_never_replays_timeout_or_outlives_auth_deadline(failure):
+    from app.fastapi_routes import im_cs_client_routes as routes
+
+    sent = []
+
+    def remote(request):
+        sent.append(request.method)
+        if request.method == failure:
+            raise httpx.ReadTimeout("fixture timeout", request=request)
+        if request.method == "POST" and failure == "response_invalid":
+            return httpx.Response(200, content=b"unparseable")
+        if request.method == "POST" and failure == "server_error":
+            return httpx.Response(503, json={"success": False})
+        status = 401 if failure == "refresh_deadline" else 200
+        return httpx.Response(
+            status,
+            json={"success": status == 200},
+            headers={"Set-Cookie": "csrf_token=csrf; Path=/"},
+        )
+
+    async def stalled_refresh(_sid):
+        await asyncio.Event().wait()
+
+    refresh = AsyncMock(side_effect=stalled_refresh)
+    original_timeout, client_type = asyncio.timeout, httpx.AsyncClient
+    with (
+        patch.object(
+            routes.asyncio,
+            "timeout",
+            lambda budget: original_timeout(0.02 if failure == "refresh_deadline" else budget),
+        ),
+        patch.object(
+            routes.httpx,
+            "AsyncClient",
+            lambda **kw: client_type(transport=httpx.MockTransport(remote), **kw),
+        ),
+        patch("app.fastapi_routes.market_account.refresh_session_market_token", refresh),
+    ):
+        response = await routes._proxy_to_production(
+            "POST", "bound", body={"body": "original"}, session_id="bound-session"
+        )
+    assert response.status_code == 502
+    sent_post = failure in {"POST", "response_invalid", "server_error"}
+    assert sent == (["GET", "POST"] if sent_post else ["GET"])
+    payload = json.loads(response.body)
+    if sent_post:
+        assert payload["outcome"] == "unknown" and payload["retryable"] is False
+        assert payload["reconciliation_required"] is True
+    else:
+        assert "outcome" not in payload
+    if failure == "refresh_deadline":
+        refresh.assert_awaited_once_with("bound-session")
+    else:
+        refresh.assert_not_awaited()

@@ -10,6 +10,8 @@ import asyncio
 import json
 from typing import Any, Dict, List
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -244,8 +246,8 @@ def test_tool_run_sandboxed_python_basic(tmp_path):
     from modstore_server.mod_employee_agent_runner import tool_run_sandboxed_python
 
     result = asyncio.run(tool_run_sandboxed_python("print(1 + 1)"))
-    assert result["ok"] is True
-    assert "2" in result["stdout"]
+    assert result["ok"] is False
+    assert result["blocked"] is True
 
 
 def test_tool_run_sandboxed_python_blocks_dangerous(tmp_path):
@@ -253,7 +255,7 @@ def test_tool_run_sandboxed_python_blocks_dangerous(tmp_path):
 
     result = asyncio.run(tool_run_sandboxed_python("import subprocess; subprocess.run(['ls'])"))
     assert result["ok"] is False
-    assert "不允许" in result["error"]
+    assert result["blocked"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -297,3 +299,91 @@ def test_employee_template_renders_agent_handler():
     assert "agent_runner" in src
     assert "SYSTEM_PROMPT =" in src
     assert "cfg['system_prompt'] or SYSTEM_PROMPT" in src
+
+
+@pytest.mark.parametrize("directory", [False, True])
+def test_workspace_rejects_symlink_escape(tmp_path, directory):
+    from modstore_server import mod_employee_agent_runner as runner
+
+    root = tmp_path / "workspace"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret").write_text("private")
+    (root / "link").symlink_to(
+        outside if directory else outside / "secret", target_is_directory=directory
+    )
+    path = "link/secret" if directory else "link"
+    for tool, args in [
+        (runner.tool_read_workspace_file, (path,)),
+        (runner.tool_write_workspace_file, (path, "overwrite")),
+        (runner.tool_list_workspace_dir, ("link",)),
+        (runner.tool_scan_project_tree, ("link",)),
+        (runner.tool_analyze_project_summary, ("link",)),
+    ]:
+        assert asyncio.run(tool(str(root), *args))["ok"] is False
+    assert (outside / "secret").read_text() == "private"
+
+
+def test_workspace_directory_replacement_does_not_follow_link(tmp_path, monkeypatch):
+    from modstore_server import mod_employee_agent_runner_part02 as tools
+
+    root = tmp_path / "workspace"
+    (root / "child").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret").write_text("private")
+    original_open = tools.os.open
+
+    def replace_directory(path, flags, *args, **kwargs):
+        if path == "child":
+            (root / "child").rename(root / "old")
+            (root / "child").symlink_to(outside, target_is_directory=True)
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(tools.os, "supports_dir_fd", tools.os.supports_dir_fd | {replace_directory})
+    monkeypatch.setattr(tools.os, "open", replace_directory)
+    result = asyncio.run(tools.tool_write_workspace_file(str(root), "child/secret", "overwrite"))
+    assert result["ok"] is False
+    assert (outside / "secret").read_text() == "private"
+
+
+def test_python_execution_cannot_write_even_with_obfuscated_payload(tmp_path):
+    from modstore_server.mod_employee_agent_runner import tool_run_sandboxed_python
+
+    target = tmp_path / "escaped"
+    code = f"from pathlib import Path; Path({str(target)!r}).write_text('escaped')"
+    result = asyncio.run(tool_run_sandboxed_python(code))
+    assert result["ok"] is False and result["blocked"] is True
+    assert not target.exists()
+
+
+def test_workspace_readonly_refuses_write(tmp_path):
+    from modstore_server.mod_employee_agent_runner import tool_write_workspace_file
+
+    result = asyncio.run(
+        tool_write_workspace_file(str(tmp_path), "blocked", "data", {"read_only": True})
+    )
+    assert result["ok"] is False and result["blocked"] is True
+    assert not (tmp_path / "blocked").exists()
+
+
+def test_trusted_symlink_ancestor_keeps_workspace_usable(tmp_path):
+    from modstore_server.mod_employee_agent_runner import (
+        tool_read_workspace_file,
+        tool_write_workspace_file,
+    )
+
+    real = tmp_path / "real"
+    (real / "workspace").mkdir(parents=True)
+    alias = tmp_path / "tmp-alias"
+    alias.symlink_to(real, target_is_directory=True)
+    workspace = str(alias / "workspace")
+    assert asyncio.run(tool_write_workspace_file(workspace, "safe.txt", "safe"))["ok"] is True
+    assert asyncio.run(tool_read_workspace_file(workspace, "safe.txt"))["content"] == "safe"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (real / "workspace" / "escape").symlink_to(outside, target_is_directory=True)
+    assert (
+        asyncio.run(tool_write_workspace_file(workspace, "escape/no.txt", "blocked"))["ok"] is False
+    )

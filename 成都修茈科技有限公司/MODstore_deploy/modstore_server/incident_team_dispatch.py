@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
@@ -14,11 +15,32 @@ from modstore_server.customer_issue_delivery_contract import (
     execution_succeeded,
     team_succeeded,
 )
+from modstore_server.incident_team_completion import persist_role_attempt
 from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
 def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
+    from modstore_server.node_coordinator import incident_claim_scope
+
+    try:
+        with incident_claim_scope(event_id):
+            return _dispatch_incident_team_once(event_id)
+    except RECOVERABLE_ERRORS as exc:
+        # A partial dispatch may already exist. Never send it to a fallback executor.
+        return {
+            "claimed": True,
+            "ok": False,
+            "event_id": event_id,
+            "status": "unknown",
+            "outcome": "unknown",
+            "requires_reconciliation": True,
+            "retryable": False,
+            "error": f"incident dispatch requires readback: {type(exc).__name__}",
+        }
+
+
+def _dispatch_incident_team_once(event_id: int) -> Dict[str, Any]:
     _env_bool = facade._env_bool
     build_incident_team = facade.build_incident_team
     get_session_factory = facade.get_session_factory
@@ -104,7 +126,11 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         employee_id = str(member.get("employee_id") or "")
         if not role or not employee_id:
             continue
-        if role == "verify" and fix_result is not None and _is_role_timeout(fix_result):
+        if (
+            role == "verify"
+            and fix_result is not None
+            and (not fix_result.get("ok") or _is_role_timeout(fix_result))
+        ):
             # 修复岗未结束就验收必然假 FAIL（“无代码改动”）；记跳过，整单仍按失败闭环。
             results.append(
                 {
@@ -113,6 +139,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                     "ok": False,
                     "role": role,
                     "status": "skipped_fix_unfinished",
+                    "verified_fix_attempt_id": "",
                     "result": {},
                 }
             )
@@ -141,48 +168,34 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             role=role,
             scout_result=scout_result,
         )
-        from modstore_server.duty_workforce_contracts import duty_event_execution_input
-
-        duty_input = duty_event_execution_input(
-            employee_id,
+        attempt_id = uuid.uuid4().hex
+        runtime_input = member_runtime_input(
+            employee_id=employee_id,
+            role=role,
+            event_id=event_id,
+            team_plan=team_plan,
+            payload=payload,
             event_type=event_type,
             source=source,
-            incident=payload,
+            route=route,
+            attempt_id=attempt_id,
+            fix_result=fix_result,
         )
-        runtime_input = duty_input or {
-            "allow_high_risk_real_run": role in {"fix", "verify"},
-            "allow_medium_risk": True,
-            "incident": payload,
-            "source": source,
-            "suppress_lifecycle_events": True,
-            "unified_incident_bus": True,
+        runtime_input["release_recovery"] = recovery
+        intent = {
+            "role": role,
+            "employee_id": employee_id,
+            "attempt_id": attempt_id,
+            "event_id": int(event_id),
+            "tenant_id": runtime_input.get("tenant_id"),
+            "ok": False,
+            "status": "dispatching",
+            "outcome": "unknown",
+            "verified_fix_attempt_id": (
+                str((fix_result or {}).get("attempt_id") or "") if role == "verify" else ""
+            ),
         }
-        # agent/直接分析岗需要仓库根；复用现有 env，避免「缺 project_root」空转失败
-        if not str(runtime_input.get("project_root") or "").strip():
-            candidates = [
-                str(os.environ.get("MODSTORE_DUTY_PROJECT_ROOT") or "").strip(),
-                str(os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip(),
-                str(os.environ.get("MODSTORE_REPO_ROOT") or "").strip(),
-                str(os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT") or "").strip(),
-                "/opt/xcmax/current",
-                "/root/XCMAX",
-            ]
-            for root in candidates:
-                if root and os.path.isdir(root):
-                    runtime_input["project_root"] = root
-                    break
-        runtime_input.update(
-            {
-                "incident_team": team_plan,
-                "model_route": route,
-                "release_recovery": recovery,
-                "role": role,
-                # 系统事故小组：允许 monorepo project_root（含写），勿落入租户 workspace 校验
-                "_trusted_incident_team_execution": True,
-                "unified_incident_bus": True,
-                "event_type": str(event_type or ""),
-            }
-        )
+        persist_role_attempt(event_id, intent)
         # 事故小组一律系统身份；用 admin uid 会把 monorepo 根误判为越权路径
         result = _execute_employee_task_with_timeout(
             employee_id,
@@ -192,6 +205,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             bench_llm_override=bench_override,
             timeout_seconds=_role_timeout_seconds(role),
         )
+        result = {**result, "attempt_id": attempt_id, "event_id": int(event_id)}
         status = str(result.get("status") or result.get("execution_status") or "").strip().lower()
         risk_blocked = (
             status == "blocked_by_risk_gate"
@@ -202,6 +216,10 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         pending = not risk_blocked and execution_pending(result)
         row = {
             "employee_id": employee_id,
+            "attempt_id": attempt_id,
+            "event_id": int(event_id),
+            "tenant_id": runtime_input.get("tenant_id"),
+            "verified_fix_attempt_id": intent["verified_fix_attempt_id"],
             "handler_outputs": handler_output_digest(result),
             "ok": succeeded,
             "role": role,
@@ -209,6 +227,11 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             "result": result,
             "status": "pending" if pending else status or ("completed" if succeeded else "failed"),
         }
+        persist_role_attempt(
+            event_id,
+            {key: value for key, value in row.items() if key != "result"},
+            expected_attempt=attempt_id,
+        )
         results.append(row)
         if role == "scout":
             scout_result = row
@@ -220,7 +243,11 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
     failed_roles = [
         str(row.get("role") or "")
         for row in results
-        if (not bool(row.get("ok")) and row.get("status") != "pending")
+        if (
+            not bool(row.get("ok"))
+            and row.get("status")
+            not in {"pending", "skipped_fix_unfinished", "verification_invalidated"}
+        )
         or bool((row.get("result") or {}).get("handler_failed"))
         or str(row.get("status") or "").strip().lower() == "handler_failed"
     ]
@@ -240,7 +267,12 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
     if _env_bool(_HANDLER_FAILED_FOLLOWUP_ENV, True):
         follow_ups = _follow_up_handler_failures(
             event_id=event_id,
-            results=[row for row in results if row.get("status") != "pending"],
+            results=[
+                row
+                for row in results
+                if row.get("status")
+                not in {"pending", "skipped_fix_unfinished", "verification_invalidated"}
+            ],
             team_plan=team_plan,
             payload=payload,
             event_type=event_type,
@@ -254,11 +286,33 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
     with sf() as session:
         ev2 = session.get(IncidentEvent, int(event_id))
         if ev2 is not None:
+            from modstore_server.node_coordinator import assert_incident_claim
+
+            assert_incident_claim(event_id, session=session)
             updated = _payload(ev2)
+            latest_rows = (updated.get("_team_claim") or {}).get("team") or []
+            for index, row in enumerate(slim_rows):
+                latest = next(
+                    (
+                        item
+                        for item in latest_rows
+                        if item.get("role") == row.get("role")
+                        and item.get("attempt_id") == row.get("attempt_id")
+                    ),
+                    None,
+                )
+                if (
+                    latest
+                    and latest.get("status") in {"completed", "failed"}
+                    and row.get("status") == "pending"
+                ):
+                    slim_rows[index] = latest
+            ok = team_succeeded(slim_rows)
             updated["_team_claim"] = {
                 "claimed_at": datetime.now(UTC).isoformat(),
                 "ok": ok,
                 "recovery": recovery,
+                "plan": team_plan,
                 "team": slim_rows,
                 "follow_ups": follow_ups,
                 "handler_failed_count": handler_failed_count,
@@ -352,3 +406,63 @@ def _write_repair_loop(session, ticket, event_id: int, follow_ups: List[Dict[str
         ticket_id=int(ticket.id),
         actor_type="system",
     )
+
+
+def member_runtime_input(
+    *,
+    employee_id,
+    role,
+    event_id,
+    team_plan,
+    payload,
+    event_type,
+    source,
+    route,
+    attempt_id,
+    fix_result=None,
+):
+    """The first call and recovery use the same trusted scope and execution lineage."""
+    from modstore_server.duty_workforce_contracts import duty_event_execution_input
+
+    runtime = (
+        duty_event_execution_input(
+            employee_id, event_type=event_type, source=source, incident=payload
+        )
+        or {}
+    )
+    runtime.update(
+        {
+            "allow_high_risk_real_run": role in {"fix", "verify"},
+            "allow_medium_risk": True,
+            "incident": payload,
+            "incident_team": team_plan,
+            "model_route": route,
+            "role": role,
+            "source": source,
+            "suppress_lifecycle_events": True,
+            "unified_incident_bus": True,
+            "_trusted_incident_team_execution": True,
+            "event_type": event_type,
+            "event_id": int(event_id),
+            "tenant_id": payload.get("tenant_id") or payload.get("user_id"),
+            "user_id": payload.get("user_id"),
+            "attempt_id": attempt_id,
+            "request_id": attempt_id,
+            "revision": str((fix_result or {}).get("attempt_id") or ""),
+        }
+    )
+    if not str(runtime.get("project_root") or "").strip():
+        roots = [
+            str(os.environ.get(name) or "").strip()
+            for name in (
+                "MODSTORE_DUTY_PROJECT_ROOT",
+                "XCMAX_MONOREPO_ROOT",
+                "MODSTORE_REPO_ROOT",
+                "MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT",
+            )
+        ]
+        for root in [*roots, "/opt/xcmax/current", "/root/XCMAX"]:
+            if root and os.path.isdir(root):
+                runtime["project_root"] = root
+                break
+    return runtime

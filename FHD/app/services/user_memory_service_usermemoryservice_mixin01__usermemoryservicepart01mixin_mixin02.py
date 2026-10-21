@@ -11,6 +11,7 @@ def _facade():
 
 
 class __UserMemoryServicePart01MixinPart02Mixin:
+    @_facade().memory_store_transaction
     def correct_memory(
         self,
         user_id: str,
@@ -81,6 +82,7 @@ class __UserMemoryServicePart01MixinPart02Mixin:
             records.append(dict(record))
         return records
 
+    @_facade().memory_store_transaction
     def record_memory_recall(self, user_id: str, memory_id: str) -> dict[str, _facade().Any]:
         """Reinforce a confirmed memory after it contributed to retrieval."""
         memory = self._store.get_memory(user_id)
@@ -148,6 +150,7 @@ class __UserMemoryServicePart01MixinPart02Mixin:
             )
         return "\n".join(lines)
 
+    @_facade().memory_store_transaction
     def record_action(
         self, user_id: str, intent: str, slots: dict[str, _facade().Any], message: str = ""
     ) -> None:

@@ -721,7 +721,7 @@ class TestHandlersExecutionOkDeep:
         assert exec_mod._handlers_execution_ok({"outputs": None}) is True
 
     def test_output_not_dict_returns_true(self) -> None:
-        assert exec_mod._handlers_execution_ok({"outputs": ["string"]}) is True
+        assert exec_mod._handlers_execution_ok({"outputs": ["string"]}) is False
 
     def test_output_ok_true_returns_true(self) -> None:
         assert exec_mod._handlers_execution_ok({"outputs": [{"ok": True}]}) is True

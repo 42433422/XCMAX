@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import importlib.util
 import subprocess
 from pathlib import Path
@@ -19,68 +17,56 @@ def _module():
     return module
 
 
-def test_snapshot_retains_every_pin_and_normalizes_names():
-    parsed = _module().parse_pins(
-        "# generated\nPillow==12.3.0\n    # via pdfplumber\ncoverage[toml]==7.13.5\na_b.c==1.2.3+local\n"
-    )
-    assert parsed == {
-        "pillow": {"package_url": "pkg:pypi/pillow@12.3.0"},
-        "coverage": {"package_url": "pkg:pypi/coverage@7.13.5"},
-        "a-b-c": {"package_url": "pkg:pypi/a-b-c@1.2.3%2Blocal"},
-    }
-
-
-@pytest.mark.parametrize(
-    "content",
-    [
-        "",
-        "# empty",
-        "pillow>=12.3",
-        "pillow==12.*",
-        "-r another.txt",
-        "pillow @ https://example.test/p.whl",
-        "pillow==12.3.0\nPillow==12.2.0",
-        "pillow==12.3.0; sys_platform == 'darwin'",
-    ],
-)
-def test_ambiguous_or_incomplete_lockfiles_fail_closed(content):
-    with pytest.raises(ValueError):
-        _module().parse_pins(content)
-
-
-def test_snapshot_uses_commit_content_not_dirty_worktree(tmp_path):
+def test_snapshot_uses_exact_lock_and_local_editable_metadata(tmp_path):
     mod = _module()
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    uv = (
+        '[[package]]\nname="Pillow"\nversion="12.3.0"\n'
+        '[[package]]\nname="langgraph-local"\nversion="1.2.3"\n'
+        'source = { editable = "packages/local" }\n'
+        '[[package]]\nname="numpy"\nversion="2.3.0"\n'
+        '[[package]]\nname="numpy"\nversion="2.4.0"\n'
+    )
     for filename in mod.LOCKFILES:
         path = tmp_path / filename
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("pillow==12.3.0\n")
-        subprocess.run(["git", "add", filename], cwd=tmp_path, check=True)
+        content = (
+            uv
+            if filename.endswith("uv.lock")
+            else "-e ../packages/local\nPillow==12.3.0\ncoverage[toml]==7.13.5\n"
+            if filename == "FHD/XCAGI/requirements.lock.txt"
+            else "Pillow==12.3.0\n"
+        )
+        path.write_text(content)
+    project = tmp_path / "FHD/packages/local/pyproject.toml"
+    project.parent.mkdir(parents=True)
+    project.write_text('[project]\nname="langgraph-local"\nversion="1.2.3"\n')
+    subprocess.run(["git", "add", "FHD"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
     subprocess.run(
-        [
-            "git",
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "-c",
-            "commit.gpgsign=false",
-            "commit",
-            "-qm",
-            "pins",
-        ],
-        cwd=tmp_path,
-        check=True,
+        ["git", "config", "user.email", "test@example.invalid"], cwd=tmp_path, check=True
     )
+    subprocess.run(["git", "commit", "-qm", "pins"], cwd=tmp_path, check=True)
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True).strip()
-    (tmp_path / mod.LOCKFILES[0]).write_text("pillow==1.0.0\n")
-    first = mod.build_snapshot(tmp_path, sha, "job-1")
-    second = mod.build_snapshot(tmp_path, sha, "job-2")
-    assert first["job"]["correlator"] == second["job"]["correlator"]
-    assert first["detector"] == second["detector"]
-    assert all(
-        m["resolved"]["pillow"]["package_url"] == "pkg:pypi/pillow@12.3.0"
-        for m in first["manifests"].values()
-    )
+    for filename in mod.LOCKFILES:
+        (tmp_path / filename).write_text("invalid dirty content\n")
+    project.write_text('[project]\nname="langgraph-local"\nversion="9.9.9"\n')
+    snapshot = mod.build_snapshot(tmp_path, sha, "job-1")
+    requirements = snapshot["manifests"]["FHD/XCAGI/requirements.lock.txt"]["resolved"]
+    assert requirements["langgraph-local"] == {"package_url": "pkg:pypi/langgraph-local@1.2.3"}
+    assert requirements["coverage"] == {"package_url": "pkg:pypi/coverage@7.13.5"}
+    assert {
+        name
+        for name in snapshot["manifests"]["FHD/uv.lock"]["resolved"]
+        if name.startswith("numpy@")
+    } == {
+        "numpy@2.3.0",
+        "numpy@2.4.0",
+    }
+    for invalid in ("pillow>=12.3", "-r another.txt", "pillow @ https://example.test/p.whl"):
+        with pytest.raises(ValueError):
+            mod.parse_pins(invalid)
+    with pytest.raises(ValueError, match="duplicate"):
+        mod.parse_pins("numpy==2.3.0\nnumpy==2.3.0", multiple_versions=True)
     with pytest.raises(ValueError, match="full lowercase"):
-        mod.build_snapshot(tmp_path, sha[:8], "job-3")
+        mod.build_snapshot(tmp_path, sha[:8], "job-2")

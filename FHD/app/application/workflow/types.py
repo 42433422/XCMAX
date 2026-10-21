@@ -342,10 +342,51 @@ def validate_plan_graph(plan: PlanGraph) -> str | None:
     return _find_conditional_cycle(plan.nodes, node_ids)
 
 
+def step_plan_nodes(plan: PlanGraph) -> tuple[list[WorkflowNode], str | None]:
+    """Validate and topologically order data dependencies and conditional routing."""
+    error = validate_plan_graph(plan) if plan.nodes else None
+    if error:
+        return [], error
+    predecessors = {node.node_id: set(node.depends_on) for node in plan.nodes}
+    for node in plan.nodes:
+        for target in [node.next, *(branch.target for branch in node.branches)]:
+            if target is not None:
+                predecessors[target].add(node.node_id)
+    ordered: list[WorkflowNode] = []
+    remaining = list(plan.nodes)
+    completed: set[str] = set()
+    while remaining:
+        ready = [node for node in remaining if predecessors[node.node_id] <= completed]
+        ordered.extend(ready)
+        completed.update(node.node_id for node in ready)
+        remaining = [node for node in remaining if node.node_id not in completed]
+    return ordered, None
+
+
+def skip_unselected_step(run: Any, step: Any) -> bool:
+    """Reconstruct routing from persisted plan and outputs, including after approval."""
+    from app.application.workflow.engine import WorkflowEngine
+
+    graph = plan_from_dict(run.metadata.get("plan"))
+    if graph is None or not graph.nodes:
+        return False  # Older persisted runs contain dependency-only AgentSteps.
+    executed = {item.node_id for item in run.steps if item.status == "completed"}
+    blocked = {item.node_id for item in run.steps if item.status == "skipped"}
+    outputs = {item.node_id: item.output for item in run.steps if item.node_id in executed}
+    if WorkflowEngine._routing_state(step, graph, executed, blocked, outputs) != "skipped":
+        return False
+    step.status = "skipped"
+    step.error = "conditional route not selected"
+    run.add_event("step.skipped", step.error, {"step_id": step.step_id})
+    return True
+
+
 def _find_conditional_cycle(nodes: list[WorkflowNode], node_ids: set[str]) -> str | None:
-    """沿 next / branches[].target 下游边做 DFS 环检测；有环返回错误信息，否则 None。"""
+    """Detect cycles across dependency and conditional successor edges."""
     adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
     for node in nodes:
+        for dependency in node.depends_on:
+            adj[dependency].append(node.node_id)
         if node.next is not None:
             adj[node.node_id].append(node.next)
         for branch in node.branches:
@@ -359,7 +400,7 @@ def _find_conditional_cycle(nodes: list[WorkflowNode], node_ids: set[str]) -> st
         for v in adj[u]:
             if color[v] == GRAY:
                 start = stack.index(v) if v in stack else 0
-                return f"条件边形成环: {' -> '.join(stack[start:] + [v])}"
+                return f"计划依赖或条件边形成环: {' -> '.join(stack[start:] + [v])}"
             if color[v] == WHITE:
                 stack.append(v)
                 err = dfs(v, stack)

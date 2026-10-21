@@ -5,6 +5,11 @@ from __future__ import annotations
 
 import importlib
 
+from modstore_server.customer_issue_delivery_contract import (
+    execution_requires_reconciliation,
+)
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 def _facade():
     return importlib.import_module("modstore_server.para_delegate_handler")
@@ -72,7 +77,10 @@ def _customer_ticket_cloud_route(input_data: dict) -> dict:
         return {}
     if input_data.get("event_type") != _TICKET_EVENT:
         return {}
-    return {"device_id": device_id, "tool_name": env.get("MODSTORE_PARA_TICKET_TOOL") or "grok_bot"}
+    return {
+        "device_id": device_id,
+        "tool_name": env.get("MODSTORE_PARA_TICKET_TOOL") or "grok_bot",
+    }
 
 
 def _ticket_hop_should_handoff(result: dict) -> bool:
@@ -110,3 +118,155 @@ def _post_ticket_route(req: dict, hops: list[dict]) -> dict:
     if attempts:
         result["ticket_route_handoffs"] = attempts
     return result
+
+
+def _wait_for_para_task(
+    client: _facade().httpx.Client,
+    base: str,
+    token: str,
+    task_id: str,
+    req: _facade().Dict[str, _facade().Any],
+) -> _facade().Dict[str, _facade().Any]:
+    deadline = _facade().time.monotonic() + _facade()._wait_timeout_sec(req)
+    last_body: _facade().Any = {}
+    terminal = {"completed", "merged", "failed", "merge_conflict"}
+    from modstore_server.customer_issue_delivery_contract import para_task_succeeded
+
+    while True:
+        resp = client.get(
+            f"{base}/api/tasks/{task_id}", headers={"Authorization": f"Bearer {token}"}
+        )
+        try:
+            body = resp.json() if resp.content else {}
+        except RECOVERABLE_ERRORS:
+            body = {"raw": resp.text[:4000]}
+        last_body = body
+        if resp.status_code >= 400:
+            return {
+                "ok": False,
+                "status": "para_task_poll_failed",
+                "status_code": resp.status_code,
+                "error": str(
+                    body.get("error") or body.get("detail") or resp.text[:500]
+                    if isinstance(body, dict)
+                    else resp.text[:500]
+                ),
+                "snapshot": _facade()._task_result_snapshot(body),
+            }
+        task = body.get("task") if isinstance(body, dict) else None
+        if not isinstance(task, dict):
+            task = {}
+        status = str(task.get("status") or "").strip()
+        if str(task.get("id") or "") != task_id:
+            return {
+                "ok": False,
+                "outcome": "unknown",
+                "requires_reconciliation": True,
+                "status": "para_task_identity_mismatch",
+                "error": "Para returned a different task identity",
+                "snapshot": _facade()._task_result_snapshot(body),
+            }
+        if status in terminal:
+            snapshot = _facade()._task_result_snapshot(body)
+            ok = para_task_succeeded(
+                task, task_id, req.get("required_subtask_ids"), req.get("planned_devices")
+            )
+            incomplete = status in {"completed", "merged"} and not ok
+            return {
+                "ok": ok,
+                "status": "para_task_incomplete" if incomplete else "para_task_" + status,
+                "error": "" if ok else _facade()._first_para_error(snapshot),
+                "snapshot": snapshot,
+            }
+        if _facade().time.monotonic() >= deadline:
+            snapshot = _facade()._task_result_snapshot(last_body)
+            return {
+                "ok": False,
+                "status": "para_task_timeout",
+                "error": f"Para task {task_id} 未在 {_facade()._wait_timeout_sec(req):.0f}s 内完成",
+                "snapshot": snapshot,
+            }
+        _facade().time.sleep(_facade()._wait_poll_sec())
+
+
+def _req_with_excluded_tools(
+    req: _facade().Dict[str, _facade().Any], excluded: set[str]
+) -> _facade().Dict[str, _facade().Any]:
+    work = dict(req or {})
+    raw = dict(work.get("raw_input") or {}) if isinstance(work.get("raw_input"), dict) else {}
+    merged = sorted(set(excluded) | _facade()._excluded_tools(work))
+    raw["_para_exclude_tools"] = merged
+    work["raw_input"] = raw
+    work["_para_exclude_tools"] = merged
+    work.pop("para_task_id", None)
+    return work
+
+
+def _attach_tool_fallback_meta(
+    result: _facade().Dict[str, _facade().Any], *, attempts: list
+) -> _facade().Dict[str, _facade().Any]:
+    if not isinstance(result, dict):
+        return result
+    if attempts:
+        result["tool_fallback_attempts"] = list(attempts)
+        result["tool_fallback_used"] = True
+    return result
+
+
+def _post_para_api(
+    req: _facade().Dict[str, _facade().Any],
+) -> _facade().Dict[str, _facade().Any]:
+    attempts: list = []
+    excluded: set[str] = set(_facade()._excluded_tools(req))
+    result = _facade()._post_para_api_once(req)
+    fallback_budget = max(0, len(_facade()._tool_candidates(req)) - 1)
+    for _ in range(fallback_budget):
+        if bool(result.get("ok")) or execution_requires_reconciliation(result):
+            return _facade()._attach_tool_fallback_meta(result, attempts=attempts)
+        if not _facade()._tool_fallback_allowed(req):
+            return _facade()._attach_tool_fallback_meta(result, attempts=attempts)
+        used_tool = ""
+        for item in result.get("devices") or []:
+            if isinstance(item, dict) and str(item.get("tool_name") or "").strip():
+                used_tool = str(item.get("tool_name") or "").strip()
+                break
+        if not used_tool:
+            used_tool = str(
+                (result.get("request") or {}).get("tool_name")
+                if isinstance(result.get("request"), dict)
+                else ""
+            ).strip()
+        if used_tool not in _facade()._VALID_DEV_TOOLS:
+            candidates = _facade()._tool_candidates(
+                _facade()._req_with_excluded_tools(req, excluded)
+            )
+            used_tool = candidates[0] if candidates else ""
+        if not used_tool or used_tool in excluded:
+            return _facade()._attach_tool_fallback_meta(result, attempts=attempts)
+        if not _facade()._is_cli_runtime_failure(
+            error=str(result.get("error") or ""),
+            status=str(result.get("status") or ""),
+            snapshot=result.get("para_result"),
+            api_error=str(result.get("error") or ""),
+        ):
+            return _facade()._attach_tool_fallback_meta(result, attempts=attempts)
+        attempts.append(
+            {
+                "tool_name": used_tool,
+                "status": result.get("status"),
+                "error": str(result.get("error") or "")[:500],
+            }
+        )
+        excluded.add(used_tool)
+        next_req = _facade()._req_with_excluded_tools(req, excluded)
+        if not _facade()._tool_candidates(next_req):
+            return _facade()._attach_tool_fallback_meta(result, attempts=attempts)
+        logger_msg = f"para tool runtime failure tool={used_tool}; retry with {','.join(_facade()._tool_candidates(next_req))}"
+        try:
+            import logging
+
+            logging.getLogger(__name__).warning(logger_msg)
+        except RECOVERABLE_ERRORS:
+            pass
+        result = _facade()._post_para_api_once(next_req)
+    return _facade()._attach_tool_fallback_meta(result, attempts=attempts)

@@ -9,6 +9,10 @@ on:
         description: Exact 40-character main commit frozen by the release gate
         required: true
         type: string
+      preserve_release_history:
+        description: Keep all local and DR release history for this invocation
+        type: boolean
+        default: false
       require_platform_key:
         description: Fail when platform LLM key is missing
         required: false
@@ -107,26 +111,24 @@ jobs:
           envs: TARGET_SHA,STRICT_KEY,REPOSITORY_SLUG,PRODUCT_VERSION,CONTROLLER_SHA
           script: |
             set -euo pipefail
+            export XCMAX_PRESERVE_RELEASE_HISTORY="${{ inputs.preserve_release_history && '1' || '0' }}"
             SOURCE_ROOT="${XCMAX_REMOTE_ROOT:-/root/XCMAX}"
             git -C "$SOURCE_ROOT" fetch --quiet origin main
             git -C "$SOURCE_ROOT" cat-file -e "${TARGET_SHA}^{commit}"
-            BOOTSTRAP="$(mktemp /tmp/xcmax-immutable-release.XXXXXX)"
-            trap 'rm -f "$BOOTSTRAP"' EXIT
-            git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-immutable-release.sh" > "$BOOTSTRAP"
-            chmod 700 "$BOOTSTRAP"
+            BOOTSTRAP="$(mktemp -d /tmp/xcmax-release-controller.XXXXXX)"
+            trap 'rm -rf -- "$BOOTSTRAP"' EXIT
+            git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-immutable-release.sh" > "$BOOTSTRAP/immutable.sh"
+            for file in xcmax_release_sync.sh xcmax_release_sync_prune.py; do
+              git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:ops/dr/$file" > "$BOOTSTRAP/$file"
+            done
             XCMAX_SOURCE_ROOT="$SOURCE_ROOT" XCMAX_TARGET_SHA="$TARGET_SHA" \
               XCMAX_RELEASE_CONTROLLER_SHA="$CONTROLLER_SHA" \
               XCMAX_PRODUCT_VERSION="$PRODUCT_VERSION" \
-              XCMAX_GITHUB_REPOSITORY="$REPOSITORY_SLUG" bash "$BOOTSTRAP"
+              XCMAX_GITHUB_REPOSITORY="$REPOSITORY_SLUG" bash "$BOOTSTRAP/immutable.sh"
             CURRENT_DEPLOY="/opt/xcmax/current/成都修茈科技有限公司/MODstore_deploy"
             STRICT_PLATFORM_KEY="$STRICT_KEY" MODSTORE_DEPLOY_DIR="$CURRENT_DEPLOY" \
               XCMAX_MONOREPO_ROOT=/opt/xcmax/current bash "$CURRENT_DEPLOY/scripts/diagnose_production_landing.sh"
-            DR_SYNC="/usr/local/xcmax-ops/dr/xcmax_release_sync.sh"
-            [ -x "$DR_SYNC" ] || {
-              echo "DR release sync script missing: $DR_SYNC" >&2
-              exit 1
-            }
-            "$DR_SYNC" --component modstore --sha "$TARGET_SHA"
+            bash "$BOOTSTRAP/xcmax_release_sync.sh" --component modstore --sha "$TARGET_SHA"
 
       - name: Summary
         run: echo "MODstore exact-SHA production deploy succeeded at ${{ steps.target.outputs.sha }}"

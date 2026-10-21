@@ -17,6 +17,12 @@ on:
     - cron: "0 16 * * *"
   workflow_dispatch:
     inputs:
+      backend_shards:
+        description: "Backend partitions (concurrency is capped at 8)"
+        required: false
+        default: '8'
+        type: choice
+        options: ['4', '8', '16', '24']
       release_channel:
         description: "Release channel (stable=prod, staging)"
         required: false
@@ -51,7 +57,7 @@ on:
         default: ""
         type: string
       previous_security_scan_run_id:
-        description: "Prior-day zero-finding scan; required for stable CVM upload"
+        description: "Compatibility input; pass the current scan run ID for single-scan stable upload"
         required: false
         default: ""
         type: string
@@ -157,37 +163,56 @@ jobs:
 
   classify:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
     outputs:
-      macos: ${{ steps.c.outputs.run }}
-      windows: ${{ steps.w.outputs.run }}
+      valid: ${{ steps.paths.outputs.valid }}
+      source_sha: ${{ steps.paths.outputs.source_sha }}
+      backend: ${{ steps.paths.outputs.backend }}
+      backend_skip: ${{ steps.paths.outputs.backend_skip }}
+      frontend: ${{ steps.paths.outputs.frontend }}
+      frontend_skip: ${{ steps.paths.outputs.frontend_skip }}
+      macos: ${{ steps.paths.outputs.macos }}
+      windows: ${{ steps.paths.outputs.windows }}
+      backend_matrix: ${{ steps.plan.outputs.matrix }}
+      backend_total: ${{ steps.plan.outputs.total }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-          # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
           fetch-depth: 1
-      - name: Classify changed paths (macOS)
-        id: c
+      - name: Classify all changed paths and bind the tested source
+        id: paths
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
         run: |
-          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
-          python ../scripts/dev/change_classifier.py --category macos \
-            --base "${{ github.event.pull_request.base.sha }}" \
-            --head "${{ github.event.pull_request.head.sha }}"
-      - name: Classify changed paths (Windows)
-        id: w
-        run: |
-          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
-          python ../scripts/dev/change_classifier.py --category windows \
-            --base "${{ github.event.pull_request.base.sha }}" \
-            --head "${{ github.event.pull_request.head.sha }}"
+          if [ -n "$PR_BASE_SHA" ] && [ -n "$PR_HEAD_SHA" ]; then
+            git fetch --no-tags --depth=1 origin "$PR_BASE_SHA" "$PR_HEAD_SHA" || true
+          fi
+          python scripts/dev/change_classifier.py --all \
+            --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA" \
+            --source-sha "$EXPECTED_SOURCE_SHA" --report FHD/classification.json
+      - name: Plan backend partitions
+        id: plan
+        env:
+          SHARD_TOTAL: ${{ inputs.backend_shards || '8' }}
+        run: python FHD/scripts/ci/backend_shards.py plan --total "$SHARD_TOTAL"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-classification-${{ github.run_attempt }}
+          path: FHD/classification.json
+          if-no-files-found: error
+          retention-days: 7
 
   backend-quality:
-    # P0 快速失败（2026-10-12）：SSOT 门禁 ~53s 出结论，未过不启动 27 分钟重测试。
-    # SSOT 失败时本 job 为 skipped；SSOT 本身是 required check，PR 依旧被阻断，结论不丢失。
-    needs: [guard-temp-scripts, ssot-drift-gate]
+    # Cheap guards precede expensive work; quality and shards then run in parallel.
+    needs: [guard-temp-scripts, ssot-drift-gate, classify]
     runs-on: ubuntu-latest
     outputs:
-      skip: ${{ steps.paths.outputs.skip }}
+      skip: ${{ needs.classify.outputs.backend_skip }}
     services:
       redis:
         image: redis:7-alpine
@@ -206,35 +231,31 @@ jobs:
           # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
           fetch-depth: 1
 
-      - name: Classify changed paths (unified classifier)
-        id: paths
-        if: github.event_name == 'pull_request'
-        run: |
-          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
-          python ../scripts/dev/change_classifier.py --category backend \
-            --base "${{ github.event.pull_request.base.sha }}" \
-            --head "${{ github.event.pull_request.head.sha }}"
-
       - name: Skip notice (no backend-relevant changes)
-        if: steps.paths.outputs.skip == 'true'
+        if: needs.classify.outputs.backend_skip == 'true'
         run: echo "No backend-relevant path changes; backend-test satisfied without running the suite."
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+          cache-dependency-path: |
+            FHD/requirements-server-api.txt
+            FHD/deploy/requirements-dev.txt
+            FHD/pyproject.toml
+            FHD/packages/**/pyproject.toml
 
       - name: Install dependencies
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
           pip install -r deploy/requirements-dev.txt
 
       - name: Set up the real private Mod frontend compiler
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -242,82 +263,82 @@ jobs:
           cache-dependency-path: FHD/frontend/package-lock.json
 
       - name: Install runtime Mod compiler dependencies
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         working-directory: FHD/frontend
         run: npm ci --no-audit --no-fund
 
       - name: Verify requirements lock is in sync
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         run: |
           python scripts/dev/check_requirements_lock.py
 
       - name: Validate coverage SSOT metadata
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         run: python scripts/ci/check_coverage_ssot.py
 
       - name: Run Ruff lint
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         run: ruff check app/ tests/
 
       - name: Run Ruff format check
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         run: ruff format --check app/ tests/
 
       - name: Run mypy type checking
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         run: mypy app/ --no-error-summary
 
       - name: Type/SQL debt ratchet
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         run: |
           python scripts/dev/count_type_debt.py --max-type-ignore 69 --max-ts-nocheck 0 --max-any 99999
           python scripts/dev/count_raw_sql.py
 
       - name: "[观察期] Schema drift check（模型 vs 迁移链）"
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         continue-on-error: true
         run: python scripts/dev/check_schema_drift.py
 
       - name: Big files ratchet (巨文件只减不增)
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         run: python scripts/dev/count_big_files.py
 
       - name: Route integrity tests
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python -m pytest tests/test_routes/test_route_registry.py tests/test_routes/test_registry_unit.py tests/test_routes/test_route_golden.py -x -q
 
       - name: Intent benchmark ratchet (golden set 只升不降)
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/intent_benchmark.py --check
 
       - name: Coverage floor guard (下调必须有 ADR)
-        if: github.event_name == 'pull_request' && steps.paths.outputs.skip != 'true'
+        if: github.event_name == 'pull_request' && needs.classify.outputs.backend_skip != 'true'
         run: |
           # PR checkout 是 merge commit，工作区==HEAD，必须对比目标分支才能识别下调。
           git fetch --depth=1 origin "${{ github.base_ref }}"
           python scripts/dev/guard_coverage_floor.py --base FETCH_HEAD
 
       - name: coverage_ramp stub quota (只减不增)
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         run: python scripts/dev/count_coverage_ramp_stubs.py --check
 
       - name: test-bloat gate (P1-2 测试膨胀门禁)
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.backend_skip != 'true'
         run: python scripts/dev/test_bloat_report.py --check
 
 
   backend-test-shard:
-    needs: backend-quality
-    if: needs.backend-quality.outputs.skip != 'true'
+    needs: [guard-temp-scripts, ssot-drift-gate, classify]
+    if: needs.classify.outputs.backend == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.classify.outputs.backend_matrix) }}
     services:
       redis:
         image: redis:7-alpine
@@ -325,7 +346,7 @@ jobs:
         options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       BACKEND_SHARD_INDEX: ${{ matrix.shard }}
-      BACKEND_SHARD_TOTAL: "4"
+      BACKEND_SHARD_TOTAL: ${{ needs.classify.outputs.backend_total }}
       BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
       BACKEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
       XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
@@ -340,12 +361,18 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+          cache-dependency-path: |
+            FHD/requirements-server-api.txt
+            FHD/deploy/requirements-dev.txt
+            FHD/pyproject.toml
+            FHD/packages/**/pyproject.toml
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
           pip install -r deploy/requirements-dev.txt
+          python -m pip list --format=json > dependency-versions.json
 
       - name: Set up the real private Mod frontend compiler
         uses: actions/setup-node@v7
@@ -362,6 +389,7 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$BACKEND_SOURCE_SHA"
           mkdir -p shard-evidence
+          cp dependency-versions.json shard-evidence/
           export BACKEND_SHARD_MANIFEST=shard-evidence/full.json
           rc=0
           python -m pytest tests/ -v -p scripts.ci.backend_shards \
@@ -392,144 +420,119 @@ jobs:
           retention-days: 7
 
   backend-test:
-    # Preserve the required check and downstream skip contract. Missing shards fail closed.
-    needs: [backend-quality, backend-test-shard]
+    needs: [classify, backend-quality, backend-test-shard]
     if: always()
     runs-on: ubuntu-latest
     outputs:
-      skip: ${{ needs.backend-quality.outputs.skip }}
+      skip: ${{ needs.classify.outputs.backend_skip }}
     env:
-      BACKEND_SHARD_TOTAL: "4"
+      BACKEND_SHARD_TOTAL: ${{ needs.classify.outputs.backend_total }}
       BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
       BACKEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
     steps:
       - name: Validate prerequisites and skip semantics
         working-directory: .
         env:
+          CLASSIFY: ${{ needs.classify.result }}
+          VALID: ${{ needs.classify.outputs.valid }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          EXPECTED_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
           QUALITY: ${{ needs.backend-quality.result }}
           SHARDS: ${{ needs.backend-test-shard.result }}
-          SKIP: ${{ needs.backend-quality.outputs.skip }}
+          SHOULD_RUN: ${{ needs.classify.outputs.backend }}
+          SKIP: ${{ needs.classify.outputs.backend_skip }}
         run: |
+          set -euo pipefail
+          test "$CLASSIFY" = success
+          test "$VALID" = true
+          test -n "$SOURCE_SHA"
+          test "$SOURCE_SHA" = "$EXPECTED_SOURCE_SHA"
           test "$QUALITY" = success
-          if [ "$SKIP" = true ]; then test "$SHARDS" = skipped; else test "$SHARDS" = success; fi
+          case "$SHOULD_RUN:$SKIP" in
+            false:true) test "$SHARDS" = skipped ;;
+            true:false) test "$SHARDS" = success ;;
+            *) echo "::error::Invalid classifier decision"; exit 1 ;;
+          esac
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 1
       - uses: actions/setup-python@v7
-        if: needs.backend-quality.outputs.skip != 'true'
+        if: needs.classify.outputs.backend == 'true'
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-      - name: Install report dependencies
-        if: needs.backend-quality.outputs.skip != 'true'
-        run: pip install -r deploy/requirements-dev.txt
       - uses: actions/download-artifact@v8
-        if: needs.backend-quality.outputs.skip != 'true'
+        if: needs.classify.outputs.backend == 'true'
         with:
           pattern: backend-shard-${{ github.run_attempt }}-*
           path: FHD/shards
-      - name: Verify complete same-SHA evidence and combine coverage
-        if: needs.backend-quality.outputs.skip != 'true'
+      - name: Verify complete same-source evidence before installing report tools
+        id: verify
+        if: needs.classify.outputs.backend == 'true'
         run: |
           test "$(git rev-parse HEAD)" = "$BACKEND_SOURCE_SHA"
-          for n in 1 2 3 4; do mv "shards/backend-shard-${{ github.run_attempt }}-$n" "shards/shard-$n"; done
-          python scripts/ci/backend_shards.py verify shards > shard-summary.json
-          python -m coverage combine --keep shards/shard-*/.coverage.full
-          python -m coverage json -o coverage.json --fail-under=0
-          python -m coverage xml --fail-under=0
-          python -m coverage html --fail-under=0
-          cp .coverage .coverage.full-combined
-          python -m coverage combine --keep shards/shard-*/.coverage.behavior
-          python -m coverage json -o coverage-behavior.json --fail-under=0
-      - name: Coverage ratchet check (行/分支只升不降)
-        if: needs.backend-quality.outputs.skip != 'true'
+          python scripts/ci/backend_shards.py verify shards \
+            --artifact-prefix "backend-shard-${GITHUB_RUN_ATTEMPT}-" > shard-summary.json
+      - name: Install the verified coverage version
+        if: needs.classify.outputs.backend == 'true'
+        env:
+          COVERAGE_VERSION: ${{ steps.verify.outputs.coverage_version }}
+        run: python -m pip install "coverage==$COVERAGE_VERSION"
+      - name: Combine coverage and enforce full and behavior ratchets
+        if: needs.classify.outputs.backend == 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
-        run: python scripts/dev/coverage_ratchet.py --check --require-backend --record
-      - name: Behavior coverage gate (排除 coverage_ramp stub，硬门禁)
-        if: needs.backend-quality.outputs.skip != 'true'
-        env:
-          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
-        run: python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
+        run: |
+          python scripts/ci/backend_shard_aggregate.py shards \
+            --artifact-prefix "backend-shard-${GITHUB_RUN_ATTEMPT}-"
       - uses: actions/upload-artifact@v4
-        if: always() && needs.backend-quality.outputs.skip != 'true'
+        if: always() && needs.classify.outputs.backend == 'true'
         with:
           name: backend-combined-${{ github.run_attempt }}
           path: |
             FHD/shard-summary.json
+            FHD/backend-aggregate-timings.json
             FHD/coverage.json
             FHD/coverage-behavior.json
             FHD/coverage.xml
           if-no-files-found: error
           retention-days: 7
 
-  frontend-test:
-    # P0 快速失败（2026-10-12）：SSOT 门禁 ~53s 出结论，未过不启动 27 分钟重测试。
-    # SSOT 失败时本 job 为 skipped；SSOT 本身是 required check，PR 依旧被阻断，结论不丢失。
-    needs: [guard-temp-scripts, ssot-drift-gate]
+  frontend-quality:
+    needs: [guard-temp-scripts, ssot-drift-gate, classify]
     runs-on: ubuntu-latest
-    outputs:
-      skip: ${{ steps.paths.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
-          # CI 加速：默认浅克隆；分类器/覆盖率地板自取 base（见下），失败即 fail-open 跑全量。
           fetch-depth: 1
-
-      - name: Classify changed paths (unified classifier)
-        id: paths
-        if: github.event_name == 'pull_request'
-        run: |
-          git fetch --depth=1 origin "${{ github.event.pull_request.base.sha }}" || true
-          python ../scripts/dev/change_classifier.py --category frontend \
-            --base "${{ github.event.pull_request.base.sha }}" \
-            --head "${{ github.event.pull_request.head.sha }}"
-
       - name: Skip notice (no frontend-relevant changes)
-        if: steps.paths.outputs.skip == 'true'
-        run: echo "No frontend-relevant path changes; frontend-test satisfied without running the suite."
-
+        if: needs.classify.outputs.frontend_skip == 'true'
+        run: echo "No frontend-relevant path changes; classification is retained by the aggregate gate."
       - name: Set up Node.js
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.frontend == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: FHD/frontend/package-lock.json
-
       - name: Install dependencies
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.frontend == 'true'
         working-directory: FHD/frontend
-        run: npm ci
-
+        run: npm ci --no-audit --no-fund
       - name: Run ESLint
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.frontend == 'true'
         working-directory: FHD/frontend
         run: npm run lint
-
-      # 2026-10-12 CI 加速：与 test:coverage 同一测试集合（run 38164763655 实测两次均
-      # 641 test files），只跑带覆盖率的一次，省 ~240s；覆盖率只升不降语义不变。
-      - name: Run unit tests with coverage
-        if: steps.paths.outputs.skip != 'true'
+      - name: Verify native shard and coverage contracts
+        if: needs.classify.outputs.frontend == 'true'
         working-directory: FHD/frontend
-        run: npm run test:coverage
-
-      # 前端覆盖率诚实化（Delta B）：以 coverage_ratchet.py 为硬门禁，回退即阻断。
-      - name: Frontend coverage ratchet gate
-        if: steps.paths.outputs.skip != 'true'
-        working-directory: FHD/frontend
-        run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
-
-      # 前端显式 any 棘轮门禁（D2-4）：超过基线即阻断，只降方向收口。
-      # count_ts_any.py 在根仓 scripts/dev/（FHD/scripts/dev 无此脚本），需 ../ 前缀。
+        run: node --test ../tests/test_ci/frontend_shards.test.mjs
       - name: Frontend ts-any ratchet gate
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.frontend == 'true'
         run: python ../scripts/dev/count_ts_any.py --check
-
       - name: Run vue-tsc
-        if: steps.paths.outputs.skip != 'true'
+        if: needs.classify.outputs.frontend == 'true'
         working-directory: FHD/frontend
         run: |
           set +e
@@ -538,20 +541,123 @@ jobs:
             echo "::warning::vue-tsc reported errors (advisory; strict build uses tsconfig.build.json)"
           fi
 
-      - name: Upload frontend coverage
-        if: steps.paths.outputs.skip != 'true'
+  frontend-test-shard:
+    needs: [guard-temp-scripts, ssot-drift-gate, classify]
+    if: needs.classify.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      FRONTEND_SHARD_INDEX: ${{ matrix.shard }}
+      FRONTEND_SHARD_TOTAL: "4"
+      FRONTEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: FHD/frontend
+        run: npm ci --no-audit --no-fund
+      - name: Run frontend shard with raw coverage evidence
+        working-directory: FHD/frontend
+        run: node ../scripts/ci/frontend_shards.mjs run shard-evidence
+      - name: Preserve frontend shard evidence even on failure
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-coverage
-          path: frontend/coverage/
+          name: frontend-shard-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: FHD/frontend/shard-evidence/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  frontend-test:
+    needs: [classify, frontend-quality, frontend-test-shard]
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ needs.classify.outputs.frontend_skip }}
+    env:
+      FRONTEND_SHARD_TOTAL: "4"
+      FRONTEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
+    steps:
+      - name: Validate prerequisites and skip semantics
+        working-directory: .
+        env:
+          CLASSIFY: ${{ needs.classify.result }}
+          VALID: ${{ needs.classify.outputs.valid }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          EXPECTED_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
+          QUALITY: ${{ needs.frontend-quality.result }}
+          SHARDS: ${{ needs.frontend-test-shard.result }}
+          SHOULD_RUN: ${{ needs.classify.outputs.frontend }}
+          SKIP: ${{ needs.classify.outputs.frontend_skip }}
+        run: |
+          set -euo pipefail
+          test "$CLASSIFY" = success
+          test "$VALID" = true
+          test -n "$SOURCE_SHA"
+          test "$SOURCE_SHA" = "$EXPECTED_SOURCE_SHA"
+          test "$QUALITY" = success
+          case "$SHOULD_RUN:$SKIP" in
+            false:true) test "$SHARDS" = skipped ;;
+            true:false) test "$SHARDS" = success ;;
+            *) echo "::error::Invalid classifier decision"; exit 1 ;;
+          esac
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v7
+        if: needs.classify.outputs.frontend == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+      - name: Install dependencies for native Vitest report merging
+        if: needs.classify.outputs.frontend == 'true'
+        working-directory: FHD/frontend
+        run: npm ci --no-audit --no-fund
+      - uses: actions/download-artifact@v8
+        if: needs.classify.outputs.frontend == 'true'
+        with:
+          pattern: frontend-shard-${{ github.run_attempt }}-*
+          path: FHD/frontend/shards
+      - name: Verify all shards and merge native Vitest coverage
+        if: needs.classify.outputs.frontend == 'true'
+        working-directory: FHD/frontend
+        run: node ../scripts/ci/frontend_shards.mjs merge shards
+      - name: Frontend coverage ratchet gate
+        if: needs.classify.outputs.frontend == 'true'
+        working-directory: FHD/frontend
+        run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
+      - name: Upload frontend coverage and partition summary
+        if: always() && needs.classify.outputs.frontend == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage-${{ github.run_attempt }}
+          path: |
+            FHD/frontend/coverage/
+            FHD/frontend/.frontend-merge/summary.json
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 7
 
   # PR/push E2E: mock API (E2E_VITE_MOCK_API=1) — npm run test:e2e:p0 → 8 pass / 6 skip
   # (smoke 3 pass + 1 skip, critical-paths 5 pass, plan2026-skeleton 5 skip w/o E2E_FULL_STACK).
   # Full-stack 14/14: root e2e.yml on schedule or workflow_dispatch (see e2e-playwright-reusable.yml).
   frontend-e2e:
-    needs: [backend-test, frontend-test]
-    if: needs.backend-test.outputs.skip != 'true' || needs.frontend-test.outputs.skip != 'true'
+    needs: [guard-temp-scripts, ssot-drift-gate, classify]
+    if: needs.classify.outputs.backend == 'true' || needs.classify.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -569,7 +675,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('FHD/frontend/package-lock.json') }}
 
       - name: Install Playwright Chromium binary (CDN)
         working-directory: FHD/frontend
@@ -694,8 +800,8 @@ jobs:
 
   # Container image vulnerability scan (built image from CI Dockerfile)
   container-scan:
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, pack-verify]
-    if: needs.backend-test.outputs.skip != 'true'
+    needs: [classify, pack-verify]
+    if: needs.classify.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -758,8 +864,8 @@ jobs:
 
   # FHD 服务器 API 发布包（tarball + manifest；不含生产 SSH 部署）
   pack-verify:
-    needs: [backend-test, frontend-test]
-    if: needs.backend-test.outputs.skip != 'true' || needs.frontend-test.outputs.skip != 'true'
+    needs: [guard-temp-scripts, ssot-drift-gate, classify]
+    if: needs.classify.outputs.backend == 'true' || needs.classify.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -989,7 +1095,7 @@ jobs:
           run-id: ${{ inputs.security_scan_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download prior-day security evidence for stable upload
+      - name: Download compatibility security evidence for stable upload
         if: ${{ inputs.release_channel == 'stable' }}
         uses: actions/download-artifact@v8
         with:
@@ -998,7 +1104,7 @@ jobs:
           run-id: ${{ inputs.previous_security_scan_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enforce exact-SHA two-day security clearance for stable upload
+      - name: Enforce exact-SHA security clearance for stable upload
         if: ${{ inputs.release_channel == 'stable' }}
         working-directory: .
         run: >-

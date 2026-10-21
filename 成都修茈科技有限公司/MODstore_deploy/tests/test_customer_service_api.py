@@ -329,7 +329,10 @@ def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     published: list = []
 
-    def _fake_publish(event_type, payload, *, source, fingerprint=None, dedupe_minutes=0):
+    def _fake_publish(
+        event_type, payload, *, source, fingerprint=None, dedupe_minutes=0, inbox_key=None
+    ):
+        assert inbox_key, "Durable dispatch must forward its inbox identity"
         published.append(
             {"event_type": event_type, "payload": dict(payload or {}), "source": source}
         )

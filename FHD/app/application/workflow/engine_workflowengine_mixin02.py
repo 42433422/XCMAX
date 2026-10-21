@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+from copy import deepcopy
 
 
 def _facade():
@@ -25,6 +26,7 @@ class _WorkflowEnginePart02Mixin:
                 "tool_id": result.tool_id,
                 "action": result.action,
                 "success": result.success,
+                "output": deepcopy(result.output),
                 "retries": result.retries,
                 "retryable": result.retryable,
                 "duration_ms": result.duration_ms,

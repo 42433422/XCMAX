@@ -7,11 +7,10 @@ import { ADMIN_HOST_ROUTE_RECORDS } from '../../../admin-console/src/adminHostRo
 import { ADMIN_OPERATOR_MENU_ITEMS, ADMIN_OPERATOR_ROUTE_NAMES } from '../../../admin-console/src/constants/adminOperatorNav'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 
-const { list, detail, updateEta, push, route, put, post } = vi.hoisted(() => ({
-  post: vi.fn(), put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), route: { params: {} as Record<string, string> },
-}))
+const { list, detail, updateEta, push, route, put, post, prompt, confirm } = vi.hoisted(() => ({ post: vi.fn(), put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), prompt: vi.fn(), confirm: vi.fn(), route: { params: {} as Record<string, string> }, }))
 vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail, updateCustomerTicketExpectedCompletion: updateEta } }))
 vi.mock('@/api/core', () => ({ default: { put, post } }))
+vi.mock('@/utils/appDialog', () => ({ appConfirm: confirm, appPrompt: prompt }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => route }))
 
 const ticket = {
@@ -96,34 +95,38 @@ describe('customer service ticket list', () => {
 })
 
 describe('customer service ticket detail', () => {
-  it('keeps ETA and close forms distinct, cancels safely and reuses close retry identity', async () => {
-    const processing = { ...payload, ticket: { ...ticket, status: 'processing' } }
+  it.each([{ issue_domain: 'custom' }, { source: 'private_mod_rework' }])('requires customer acceptance for private Mod evidence %o', async evidence => {
+    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, status: 'processing', intent: 'general', evidence } }); const wrapper = mountDetail(); await flushPromises()
+    expect(wrapper.find('.cs-close-form select').exists()).toBe(false); expect(wrapper.text()).toContain('过期与后续活跃需求核对记录'); wrapper.unmount()
+  })
+  it.each(['resolved', 'expired'])('keeps %s disposition and retry identity distinct from ETA', async (disposition) => {
+    const processing = { ...payload, ticket: { ...ticket, status: 'processing', intent: 'account_support' } }
     detail.mockResolvedValue(processing)
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    let decide!: (accepted: boolean) => void; confirm.mockReturnValueOnce(new Promise(resolve => { decide = resolve })).mockResolvedValue(true)
     const wrapper = mountDetail(); await flushPromises()
-    expect(wrapper.find('form.cs-eta-editor').exists()).toBe(true)
+    await wrapper.find('.cs-close-form select').setValue(disposition); expect(wrapper.find('form.cs-eta-editor').exists()).toBe(true)
     await wrapper.findAll('.cs-close-form textarea')[0].setValue('修复已部署并完成原场景验收')
     await wrapper.findAll('.cs-close-form textarea')[1].setValue('主线 SHA abc123，目标版本已按原步骤运行并核实结果。')
-    await wrapper.find('.cs-close-form').trigger('submit'); expect(post).not.toHaveBeenCalled()
-    confirm.mockReturnValue(true)
-    let reject!: (error: Error) => void
-    post.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail }))
-    await wrapper.find('.cs-close-form').trigger('submit')
-    await wrapper.find('.cs-close-form').trigger('submit')
+    const closeForm = wrapper.find('.cs-close-form'), cancelled = closeForm.trigger('submit'); await flushPromises(); await closeForm.trigger('submit')
+    expect(confirm).toHaveBeenCalledOnce(); expect(post).not.toHaveBeenCalled(); decide(false); await cancelled
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining(disposition === 'expired' ? '确认已核对过期时间及后续需求' : '确认已在目标版本完成实际验收'), { title: '确认管理员处置', confirmText: '记录并关闭', cancelText: '返回检查', danger: true })
+    let reject!: (error: Error) => void; post.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail }))
+    const submitting = closeForm.trigger('submit'); await flushPromises(); await closeForm.trigger('submit'); await closeForm.trigger('submit')
     await wrapper.find('form.cs-eta-editor').trigger('submit')
-    expect(post).toHaveBeenCalledTimes(1); expect(updateEta).not.toHaveBeenCalled()
-    const original = post.mock.calls[0]
+    expect(confirm).toHaveBeenCalledTimes(2); expect(post).toHaveBeenCalledTimes(1); expect(updateEta).not.toHaveBeenCalled()
+    await submitting; const original = post.mock.calls[0]
     reject(new Error('network response unknown')); await flushPromises()
     await wrapper.findAll('button').find(button => button.text() === '重试详情')!.trigger('click'); await flushPromises()
     expect((wrapper.findAll('.cs-close-form textarea')[0].element as HTMLTextAreaElement).value).toBe('修复已部署并完成原场景验收')
-    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, evidence: { resolution: { state: 'resolved', verification_mode: 'admin_runtime' } } } })
+    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, status: disposition, evidence: { resolution: { state: disposition, verification_mode: disposition === 'expired' ? 'admin_expiry' : 'admin_runtime' } } } })
     post.mockResolvedValueOnce({ success: true })
     await wrapper.find('.cs-close-form').trigger('submit'); await flushPromises()
     expect(post.mock.calls[1]).toEqual(original)
     expect(original[0]).toBe('/api/xcmax/admin/customer-service/tickets/42/close')
-    expect(wrapper.text()).toContain('管理员验收已关闭'); expect(wrapper.text()).not.toContain('客户确认已解决')
+    expect(original[1].disposition).toBe(disposition)
+    expect(wrapper.text()).toContain(disposition === 'expired' ? '已过期不再处理（未修复）' : '管理员验收已关闭'); expect(wrapper.text()).not.toContain('客户确认已解决')
     expect(wrapper.find('.cs-close-form').exists()).toBe(false)
-    wrapper.unmount(); confirm.mockRestore()
+    wrapper.unmount()
   })
   it('does not apply an old ETA save result after navigating to another ticket', async () => {
     let complete!: (value: unknown) => void
@@ -139,15 +142,19 @@ describe('customer service ticket detail', () => {
     expect(wrapper.text()).toContain('另一张工单'); expect(wrapper.text()).not.toContain('已保存，客户工单页面会显示此时间。')
     wrapper.unmount()
   })
-  it('corrects the same ticket title with a stale-title guard and refreshes audit evidence', async () => {
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('  员工图谱无法正常显示  ')
-    detail.mockResolvedValueOnce(payload).mockResolvedValueOnce({ ...payload, ticket: { ...ticket, title: '员工图谱无法正常显示' }, audit_logs: [{ event_type: 'ticket_title_corrected', detail: { old_title: ticket.title, new_title: '员工图谱无法正常显示' } }] })
+  it.each([false, true])('corrects original-ticket metadata with CAS and refreshed audit (classification=%s)', async classification => {
+    const before = { ...ticket, ...(classification ? { status: 'processing', intent: 'account_support' } : {}) }
+    const title = classification ? before.title : '员工图谱无法正常显示', reason = '原描述明确是软件功能故障，纠正误分类'
+    prompt.mockResolvedValueOnce(classification ? reason : `  ${title}  `)
+    detail.mockResolvedValueOnce({ ...payload, ticket: before }).mockResolvedValueOnce({ ...payload, ticket: { ...before, title, intent: 'product_issue' }, audit_logs: [{ event_type: classification ? 'ticket_classification_corrected' : 'ticket_title_corrected', detail: { old_title: before.title, new_title: title, ...(classification ? { old_intent: before.intent, new_intent: 'product_issue', reason } : {}) } }] })
     const wrapper = mountDetail(); await flushPromises()
-    await wrapper.findAll('button').find(row => row.text() === '更正标题')!.trigger('click'); await flushPromises()
-    expect(put).toHaveBeenCalledWith('/api/xcmax/market-proxy/customer-service/tickets/42/title', { title: '员工图谱无法正常显示', expected_title: ticket.title })
-    expect(wrapper.find('h2').text()).toBe('员工图谱无法正常显示')
-    for (const part of ['更正工单标题', '标题：平台功能问题 → 员工图谱无法正常显示']) expect(wrapper.text()).toContain(part)
-    wrapper.unmount(); prompt.mockRestore()
+    await wrapper.findAll('button').find(row => row.text() === (classification ? '纠正为平台功能问题' : '更正标题'))!.trigger('click'); await flushPromises()
+    expect(put).toHaveBeenCalledWith('/api/xcmax/market-proxy/customer-service/tickets/42/title', { title, expected_title: before.title, ...(classification ? { intent: 'product_issue', expected_intent: before.intent, reason } : {}) })
+    expect(wrapper.find('h2').text()).toBe(title)
+    for (const part of classification ? ['纠正工单分类', '分类：账号支持 → 产品问题', reason] : ['更正工单标题', '标题：平台功能问题 → 员工图谱无法正常显示']) expect(wrapper.text()).toContain(part)
+    expect(wrapper.findAll('button').some(row => row.text() === '纠正为平台功能问题')).toBe(false)
+    expect(prompt).toHaveBeenCalledOnce()
+    wrapper.unmount()
   })
   it('lets an admin set the customer-visible expected completion time', async () => {
     const wrapper = mountDetail(); await flushPromises()

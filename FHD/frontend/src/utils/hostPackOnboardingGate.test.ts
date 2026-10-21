@@ -236,8 +236,8 @@ describe('isOnboardingEntryReady（账号定制待供应商交付不阻塞进入
   it('宿主基础线装齐、仅账号定制待交付 → 就绪', () => {
     expect(
       isOnboardingEntryReady({
-        baseline_ready: false,
-        missing_required_mod_ids: ['taiyangniao-pro'],
+        baseline_ready: true,
+        missing_required_mod_ids: [],
         missing_account_custom_mod_ids: ['taiyangniao-pro'],
       }),
     ).toBe(true)
@@ -283,10 +283,19 @@ describe('isOnboardingEntryReady（账号定制待供应商交付不阻塞进入
     clearHostPackSkippedSession()
     vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue(industryCatalog('涂料'))
     vi.mocked(fetchIndustryBaseline).mockResolvedValue({
-      baseline_ready: false,
-      missing_required_mod_ids: ['taiyangniao-pro'],
+      baseline_ready: true,
+      missing_required_mod_ids: [],
       missing_account_custom_mod_ids: ['taiyangniao-pro'],
     } as IndustryBaselinePlan)
     await expect(needsHostPackCompletion(true)).resolves.toBe(false)
+  })
+})
+
+
+describe('required custom delivery remains enforced', () => {
+  it.each([false, true])('does not exempt required packages merely because custom (ready=%s)', (ready) => {
+    expect(isOnboardingEntryReady({ baseline_ready: ready,
+      missing_required_mod_ids: ['private'], missing_account_custom_mod_ids: ['private'],
+    })).toBe(false)
   })
 })
