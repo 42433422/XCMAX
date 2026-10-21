@@ -27,6 +27,11 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+      - name: Verify source identity and dependency paths
+        run: |
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test -f FHD/frontend/package-lock.json
+          test -f FHD/requirements-server-api.txt
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
@@ -46,9 +51,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: FHD/frontend/package-lock.json
       - name: Install real runtime Mod compiler
-        working-directory: frontend
+        working-directory: FHD/frontend
         run: npm ci --no-audit --no-fund
       - name: Reproduce causal pair before repairing test isolation
         working-directory: FHD
