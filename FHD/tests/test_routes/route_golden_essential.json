@@ -339,6 +339,7 @@
   "/api/xcmax/admin/customer-service/tickets/{ticket_id}",
   "/api/xcmax/admin/customer-service/tickets/{ticket_id}/close",
   "/api/xcmax/admin/customer-service/tickets/{ticket_id}/expected-completion",
+  "/api/xcmax/admin/customer-service/tickets/{ticket_id}/reply",
   "/api/xcmax/admin/daily-digests",
   "/api/xcmax/admin/daily-digests/{record_id}",
   "/api/xcmax/admin/daily-digests/{record_id}/artifacts",
