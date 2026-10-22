@@ -1,0 +1,123 @@
+name: CI exact closure candidate verification
+'on':
+  push:
+    branches: ['ci/ssot-close-83319-20261022']
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == '42433422/XCMAX' && github.ref == 'refs/heads/ci/ssot-close-83319-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TARGET_SHA: bb13eb313230284febfc60556a9504a7b9e9d153
+      MAIN_SHA: 83319ef62276f8a01b89510051a6cf5a6c2c0426
+      EXPECTED_TREE: 100e545110df01146655b8bcc46e6bde70f65b70
+      XCAGI_SKIP_LEGACY_COMPAT_ROUTES: '1'
+      INTENT_BENCHMARK_RUN: '1'
+      XCAGI_SKIP_INTENT_LLM: '1'
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Verify committed candidate and upstream preservation
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/closure-evidence"
+          git config core.quotepath false
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+          test "$(git rev-parse HEAD^1)" = "$MAIN_SHA"
+          test "$(git rev-parse HEAD^2)" = f43d8d1cca7ea414e9d49aa035a57c0a5bc8b31a
+          test "$(git rev-parse --is-shallow-repository)" = false
+          git status --short
+          git worktree list --porcelain
+          python - <<'PY'
+          import os,subprocess
+          from pathlib import Path
+          main=os.environ['MAIN_SHA']
+          expected={'.github/workflows/fhd-ci-cd.yml','FHD/.github/workflows/ci-cd.yml','FHD/CHANGELOG.md','docs/CI_SSOT.md','FHD/metrics/line_baseline.json','FHD/tests/test_ci/test_workflow_gate_contracts.py','FHD/tests/release_gate/test_admin_console_release_policy.py','FHD/tests/test_ci/test_backend_shards.py'}
+          changed=set(subprocess.check_output(['git','diff','--name-only','-z',main,'HEAD']).decode().strip('\0').split('\0'))
+          assert changed==expected,changed
+          assert not subprocess.check_output(['git','status','--porcelain'])
+          for name in ('FHD/XCAGI/mods/xcagi-erp-domain-bridge/manifest.json','FHD/mods/xcagi-erp-domain-bridge/manifest.json','FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py','FHD/tests/test_routes/test_auth_subscription_register.py'):
+              assert Path(name).read_bytes()==subprocess.check_output(['git','show',main+':'+name]),name
+          PY
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            FHD/requirements-server-api.txt
+            FHD/deploy/requirements-dev.txt
+            FHD/pyproject.toml
+            FHD/packages/**/pyproject.toml
+      - name: Install backend test dependencies
+        working-directory: FHD
+        run: python -m pip install -r requirements-server-api.txt -r deploy/requirements-dev.txt
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+      - name: Install real Mod compiler dependencies
+        working-directory: FHD/frontend
+        run: npm ci --no-audit --no-fund
+      - name: Verify route isolation and CI release contracts
+        working-directory: FHD
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_infrastructure/test_mod_manager_branch_cov3.py tests/test_routes/test_auth_subscription_register.py -q --tb=short --junitxml="$RUNNER_TEMP/closure-evidence/routes.xml"
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. python -m pytest --noconftest -c /dev/null -p no:cacheprovider tests/test_ci/test_backend_shards.py tests/test_ci/test_workflow_gate_contracts.py tests/release_gate/test_admin_console_release_policy.py::test_fhd_release_chain_carries_and_verifies_admin_identity -q --junitxml="$RUNNER_TEMP/closure-evidence/contracts.xml"
+          python -m ruff check tests/test_ci/test_backend_shards.py tests/test_ci/test_workflow_gate_contracts.py tests/release_gate/test_admin_console_release_policy.py
+          python -m ruff format --check tests/test_ci/test_backend_shards.py tests/test_ci/test_workflow_gate_contracts.py tests/release_gate/test_admin_console_release_policy.py
+          cd ..
+          python -m scripts.dev.test_change_classifier
+          python scripts/dev/publish_ci_workflows_to_root.py --check
+      - name: Run committed preflight and full-history SSOT without changing the candidate
+        working-directory: FHD
+        run: |
+          set -euo pipefail
+          python scripts/dev/push_preflight.py --fix --base "$MAIN_SHA"
+          python scripts/dev/ssot_cli.py gate
+          git diff --exit-code
+          git diff --check "$MAIN_SHA" HEAD
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+      - name: Retain exact tree and regression receipt
+        run: |
+          python - <<'PY'
+          import json,os,subprocess,xml.etree.ElementTree as ET
+          from pathlib import Path
+          out=Path(os.environ['RUNNER_TEMP'])/'closure-evidence'
+          results={}
+          for name,count in (('routes.xml',163),('contracts.xml',275)):
+              suites=list(ET.parse(out/name).iter('testsuite'))
+              results[name]={key:sum(int(s.get(key,0)) for s in suites) for key in ('tests','failures','errors','skipped')}
+              assert results[name]==dict(tests=count,failures=0,errors=0,skipped=0),results
+          assert not subprocess.check_output(['git','status','--porcelain'])
+          receipt={'target':os.environ['TARGET_SHA'],'main':os.environ['MAIN_SHA'],'tree':os.environ['EXPECTED_TREE'],'tests':results,'preflight':'PASS','ssot':'PASS','product_refs_modified':False,'upstream_preserved':True,'baseline':json.loads(Path('FHD/metrics/line_baseline.json').read_text())}
+          (out/'receipt.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2))
+          print(json.dumps(receipt,ensure_ascii=False),flush=True)
+          PY
+      - name: Retain evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: closure-83319-${{ github.run_id }}
+          path: ${{ runner.temp }}/closure-evidence/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Clean only the disposable checkout
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/closure-clean-home" "$RUNNER_TEMP/closure-clean-tmp"
+          HOME="$RUNNER_TEMP/closure-clean-home" XCMAX_CLEAN_TMP_ROOT="$RUNNER_TEMP/closure-clean-tmp" python3 scripts/dev/clean_agent_workspace.py
+          df -h .
