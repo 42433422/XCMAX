@@ -234,45 +234,77 @@ def test_valid_replace_replaces_only_target(tmp_path):
     assert (library / "untouched.txt").read_text() == "neighbor"
 
 
-def _import_in_process(source, library, start, results):
-    start.wait(timeout=15)
-    try:
-        store.import_zip(Path(source), Path(library), replace=False)
-    except FileExistsError:
-        results.put("exists")
-    except (OSError, ValueError, RuntimeError) as exc:
-        results.put(type(exc).__name__ + ": " + str(exc))
-    else:
-        results.put("ok")
-
-
 def test_two_processes_cannot_both_claim_the_same_new_id(tmp_path):
-    import multiprocessing
+    import subprocess
+    import sys
+    import time
 
+    # A fresh interpreter must not unpickle a pytest-generated module name.
+    # Other test roots may also be named "tests" during a full-suite run.
+    worker = """
+import sys
+import time
+from pathlib import Path
+from modman import store
+source, library, ready, start = map(Path, sys.argv[1:])
+ready.touch()
+deadline = time.monotonic() + 15
+while not start.exists():
+    if time.monotonic() >= deadline:
+        raise TimeoutError("parent did not release import barrier")
+    time.sleep(0.01)
+try:
+    store.import_zip(source, library, replace=False)
+except FileExistsError:
+    print("exists")
+else:
+    print("ok")
+"""
     source = archive(tmp_path / "good.zip", [("safe/manifest.json", json.dumps(manifest()))])
     library = tmp_path / "library"
-    context = multiprocessing.get_context("spawn")
-    start, results = context.Barrier(2), context.Queue()
-    processes = [
-        context.Process(target=_import_in_process, args=(str(source), str(library), start, results))
-        for _ in range(2)
-    ]
+    start = tmp_path / "start"
+    ready = [tmp_path / f"ready-{i}" for i in range(2)]
+    processes = []
     try:
+        for marker in ready:
+            processes.append(
+                subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-c",
+                        worker,
+                        str(source),
+                        str(library),
+                        str(marker),
+                        str(start),
+                    ],
+                    cwd=Path(store.__file__).resolve().parents[1],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+            )
+        deadline = time.monotonic() + 15
+        while not all(marker.exists() for marker in ready):
+            for process in processes:
+                if process.poll() is not None:
+                    stdout, stderr = process.communicate(timeout=1)
+                    pytest.fail(f"import worker exited before barrier: {stdout} {stderr}")
+            assert time.monotonic() < deadline, "import workers did not reach barrier"
+            time.sleep(0.01)
+        start.touch()
+        outcomes = []
         for process in processes:
-            process.start()
-        outcomes = [results.get(timeout=20) for _ in processes]
-        for process in processes:
-            process.join(timeout=10)
-            assert process.exitcode == 0
+            stdout, stderr = process.communicate(timeout=20)
+            assert process.returncode == 0, stderr
+            outcomes.append(stdout.strip())
         assert sorted(outcomes) == ["exists", "ok"]
         assert json.loads((library / "safe/manifest.json").read_text())["id"] == "safe"
     finally:
         for process in processes:
-            if process.is_alive():
-                process.terminate()
-                process.join(timeout=5)
-        results.close()
-        results.join_thread()
+            if process.poll() is None:
+                process.kill()
+            process.communicate(timeout=5)
 
 
 @pytest.mark.parametrize("phase", ["restore", "after_backup_move", "publish"])
