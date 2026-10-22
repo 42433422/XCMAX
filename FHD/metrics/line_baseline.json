@@ -1,5 +1,5 @@
 {
-  "lines": 2328534,
+  "lines": 2328611,
   "updated": "2026-10-22",
-  "note": "棘轮下调"
+  "note": "Fix admin SPA mount-prefix login redirects and add real router/state security regressions without changing authentication"
 }
