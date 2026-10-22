@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import runpy
 from pathlib import Path
@@ -137,3 +138,107 @@ def test_handler_outputs_evidence_file_is_loaded(tmp_path: Path) -> None:
     ledger["tickets"]["resolved"]["processing"]["handler_outputs_evidence"] = "outputs.json"
     errs = CHECK["check_ledger"](ledger, base=tmp_path)
     assert _codes(errs) == {"para_fallback_detected"}
+
+
+@pytest.mark.parametrize(
+    "defect, expected",
+    [
+        ("accepted_missing", "para_not_completed"),
+        ("source_ref", "frozen_candidate_invalid"),
+        ("installer_digest", "frozen_candidate_invalid"),
+        ("weaken_forbidden", "para_fallback_detected"),
+        ("weaken_scope", "para_evidence_missing"),
+        ("duplicate_item", "item_number_duplicate"),
+        ("null_evidence", "pass_without_evidence"),
+        ("string_evidence", "pass_without_evidence"),
+        ("invalid_time", "pass_with_invalid_observed_at"),
+        ("naive_time", "pass_with_invalid_observed_at"),
+    ],
+)
+def test_incomplete_or_weakened_proof_cannot_pass(defect: str, expected: str) -> None:
+    ledger = _filled([copy.deepcopy(PARA_OK)])
+    processing = ledger["tickets"]["resolved"]["processing"]
+    item = next(row for row in ledger["items"] if row["no"] == 24)
+    if defect == "accepted_missing":
+        processing["handlers_attempted"][0].pop("accepted")
+    elif defect == "source_ref":
+        ledger["candidate"]["source_sha"] = "main"
+    elif defect == "installer_digest":
+        ledger["candidate"]["installer_sha256"] = "pending"
+    elif defect == "weaken_forbidden":
+        ledger["processor_policy"]["forbidden_local_handlers"] = ["other"]
+        processing["handlers_attempted"].append({"handler": "direct_python", "ok": True})
+    elif defect == "weaken_scope":
+        ledger["processor_policy"]["applies_to_items"] = [999]
+        ledger["tickets"]["resolved"].pop("processing")
+    elif defect == "duplicate_item":
+        ledger["items"].insert(0, dict(item, result="FAIL"))
+    elif defect in {"null_evidence", "string_evidence"}:
+        item["evidence"] = [None] if defect == "null_evidence" else "receipt.json"
+    else:
+        item["observed_at"] = "pending" if defect == "invalid_time" else "2026-10-10T15:00:00"
+    assert expected in _codes(CHECK["check_ledger"](ledger))
+
+
+@pytest.mark.parametrize("numbers", [None, [], "24", [True], ["24"]])
+def test_green_gate_requires_explicit_nonempty_integer_items(numbers) -> None:
+    gates = {
+        "gates": [
+            {
+                "no": 19,
+                "status": "GREEN",
+                "sources": [
+                    {"run": "ticket-loop.run.json", "items": numbers},
+                ],
+            }
+        ]
+    }
+    assert "gate_source_items_invalid" in _codes(CHECK["check_ledger"](_filled([PARA_OK]), gates))
+
+
+@pytest.mark.parametrize("attempt", [None, "para_delegate", {}, {"handler": " "}])
+def test_malformed_handler_records_are_not_silently_dropped(attempt) -> None:
+    assert "para_evidence_missing" in _codes(CHECK["check_ledger"](_filled([PARA_OK, attempt])))
+
+
+@pytest.mark.parametrize("number", [None, True, 0, -1, "pending"])
+def test_invalid_item_numbers_fail_closed(number) -> None:
+    ledger = _filled([PARA_OK])
+    ledger["items"].append({"no": number, "result": "UNKNOWN"})
+    assert "item_number_invalid" in _codes(CHECK["check_ledger"](ledger))
+
+
+@pytest.mark.parametrize(
+    "policy", ["invalid", {"applies_to_items": "24"}, {"forbidden_local_handlers": [{}]}]
+)
+def test_malformed_processor_policy_fails_closed(policy) -> None:
+    ledger = _filled([PARA_OK])
+    ledger["processor_policy"] = policy
+    assert "processor_policy_invalid" in _codes(CHECK["check_ledger"](ledger))
+
+
+def test_custom_policy_can_strengthen_but_not_replace_defaults() -> None:
+    ledger = _filled([PARA_OK, {"handler": "custom_local", "ok": True}], pass_items=(1,))
+    ledger["processor_policy"] = {
+        "applies_to_items": [1],
+        "forbidden_local_handlers": ["custom_local"],
+    }
+    assert "para_fallback_detected" in _codes(CHECK["check_ledger"](ledger))
+
+
+def test_valid_proof_and_green_gate_are_unchanged() -> None:
+    ledger = _filled([PARA_OK])
+    gates = {
+        "gates": [
+            {
+                "no": 19,
+                "status": "GREEN",
+                "sources": [
+                    {"run": "ticket-loop.run.json", "items": [24]},
+                ],
+            }
+        ]
+    }
+    before = copy.deepcopy((ledger, gates))
+    assert CHECK["check_ledger"](ledger, gates) == []
+    assert (ledger, gates) == before
