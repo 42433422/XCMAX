@@ -902,8 +902,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Verify stable version anchors
-        run: python scripts/dev/verify_version_anchors.py
+      - name: Verify version anchors and offline startup measurements
+        run: |
+          python scripts/dev/verify_version_anchors.py
+          node --test scripts/package/macos-startup-metrics.test.cjs
 
       - name: Pack FHD server release tarball
         env:

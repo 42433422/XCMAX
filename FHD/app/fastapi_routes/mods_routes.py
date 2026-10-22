@@ -339,10 +339,10 @@ def _register_mods_endpoints(router) -> None:
             return JSONResponse({"success": False, "error": _MODS_UNAVAILABLE}, status_code=500)
 
     @router.delete("/{mod_id}")
-    async def uninstall_mod_disk(mod_id: str):
+    async def uninstall_mod_disk(mod_id: str, request: Request):
         """从本机删除扩展包目录并解除加载（与 ``POST /api/mod-store/uninstall`` 同源逻辑）。"""
         try:
-            from app.infrastructure.mods.mod_manager import get_mod_manager, is_mods_disabled
+            from app.infrastructure.mods.mod_manager import is_mods_disabled
 
             if is_mods_disabled():
                 return JSONResponse(
@@ -355,8 +355,9 @@ def _register_mods_endpoints(router) -> None:
             mid = (mod_id or "").strip()
             if not mid:
                 return JSONResponse({"success": False, "message": "缺少 mod_id"}, status_code=400)
-            mm = get_mod_manager()
-            ok, msg = mm.uninstall_mod(mid, remove_files=True)
+            from app.application.mod_uninstall import uninstall_mod_for_request
+
+            ok, msg = uninstall_mod_for_request(request, mid)
             if not ok:
                 return JSONResponse({"success": False, "message": msg}, status_code=400)
             return {"success": True, "message": msg, "data": {"id": mid}}

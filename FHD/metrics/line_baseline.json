@@ -1,5 +1,5 @@
 {
-  "lines": 2329757,
+  "lines": 2330802,
   "updated": "2026-10-23",
-  "note": "#2529 authorized ticket/admin fixes, #44 authenticated formal acceptance, and legacy chat/planner ReDoS fixes with bounded-process and semantic regressions; total maintenance increase 360 lines versus current main, including 71 for this security slice; no unrelated code deleted."
+  "note": "#2529接手统筹授权内补齐本机Mod卸载登录/归属/签名与锁序回归，修正Mac启动测量并接入现有打包门禁，保留受理未知回执和镜像安装失败的有限重试；本切片维护净增1045行，相对main累计净增1405行。按仓库显式例外抬升并提交评审，不宣称达成净删除；未删除无关代码，未把离线测量当作客户卡顿修复。"
 }
