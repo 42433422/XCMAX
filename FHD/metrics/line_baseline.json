@@ -1,5 +1,5 @@
 {
-  "lines": 2328632,
+  "lines": 2328790,
   "updated": "2026-10-22",
-  "note": "User-authorized CI report reuse: verified equal-input reporting and phase timing (+140 versus main); isolate the synthetic test fixture from the real CI parent timing profile (+1), keeping production foreign-profile rejection intact."
+  "note": "User-authorized CI report reuse: verified equal-input reporting and phase timing, plus isolating the synthetic test fixture from the real CI parent timing profile. Merged onto main 2328649; measured after merge."
 }
