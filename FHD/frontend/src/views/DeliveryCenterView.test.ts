@@ -254,3 +254,16 @@ describe('DeliveryCenterView', () => {
   })
 
 })
+
+it('explicitly selects the repaired main source on the original Sunbird delivery', async () => {
+  listCustomDeliveries.mockResolvedValue({ items: [{ ...delivery, id: 34, user_id: 29,
+    custom_delivery: { ...delivery.custom_delivery, kind: 'module', suggested_id: 'sunbird-attendance-custom', stage: 'rework' },
+  }] })
+  const wrapper = mount(DeliveryCenterView)
+  await flushPromises()
+  await wrapper.get('.delivery-actions__controls input[type="checkbox"]').setValue(true)
+  await wrapper.get('.delivery-actions__controls input[type="text"]').setValue('原单使用主线已修复的SDK前端与业务探针返工')
+  await wrapper.findAll('button').find(button => button.text().includes('发起返工'))!.trigger('click')
+  await flushPromises()
+  expect(decideCustomDelivery).toHaveBeenCalledWith(34, 'rework', '原单使用主线已修复的SDK前端与业务探针返工', 'versioned_main')
+})
