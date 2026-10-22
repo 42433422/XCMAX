@@ -10,10 +10,18 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 
 
-@pytest.fixture(scope="module", params=["backend-test", "frontend-test"])
+@pytest.fixture(
+    scope="module",
+    params=[
+        (path, name)
+        for path in ("FHD/.github/workflows/ci-cd.yml", ".github/workflows/fhd-ci-cd.yml")
+        for name in ("backend-test", "frontend-test")
+    ],
+)
 def gate(request):
-    jobs = yaml.safe_load((ROOT / "FHD/.github/workflows/ci-cd.yml").read_text())["jobs"]
-    job = jobs[request.param]
+    path, name = request.param
+    jobs = yaml.safe_load((ROOT / path).read_text())["jobs"]
+    job = jobs[name]
     assert job["if"] == "always()"
     return job["steps"][0]["run"]
 
@@ -21,6 +29,8 @@ def gate(request):
 def run_gate(gate, **changes):
     env = {
         **os.environ,
+        "GUARD": "success",
+        "SSOT": "success",
         "CLASSIFY": "success",
         "VALID": "true",
         "SOURCE_SHA": "a" * 40,
@@ -71,7 +81,7 @@ def test_gate_rejects_incomplete_or_inconsistent_evidence(gate, changes):
 
 def test_parallel_work_keeps_cheap_guards_and_publish_dependencies():
     jobs = yaml.safe_load((ROOT / ".github/workflows/fhd-ci-cd.yml").read_text())["jobs"]
-    prerequisites = {"classify", "guard-temp-scripts", "ssot-drift-gate"}
+    prerequisites = {"classify", "guard-temp-scripts"}
     for name in (
         "backend-quality",
         "backend-test-shard",
@@ -90,8 +100,22 @@ def test_parallel_work_keeps_cheap_guards_and_publish_dependencies():
         "container-scan",
     } <= set(jobs["docker-build-fhd-api"]["needs"])
     for name in ("backend-test", "frontend-test"):
+        assert {"guard-temp-scripts", "ssot-drift-gate"} <= set(jobs[name]["needs"])
+        assert not jobs[name].get("continue-on-error", False)
         prerequisite = jobs[name]["steps"][0]
+        assert prerequisite["env"]["GUARD"] == "${{ needs.guard-temp-scripts.result }}"
+        assert prerequisite["env"]["SSOT"] == "${{ needs.ssot-drift-gate.result }}"
         assert prerequisite["working-directory"] == "."
         assert (
             prerequisite["env"]["EXPECTED_SOURCE_SHA"] == "${{ inputs.release_sha || github.sha }}"
         )
+
+
+@pytest.mark.parametrize("guard", ["GUARD", "SSOT"])
+@pytest.mark.parametrize("state", ["failure", "cancelled", "skipped", "", "unknown"])
+@pytest.mark.parametrize("irrelevant", [False, True])
+def test_parallel_guard_must_pass_even_when_suite_is_irrelevant(gate, guard, state, irrelevant):
+    changes = {guard: state}
+    if irrelevant:
+        changes.update(SHOULD_RUN="false", SKIP="true", SHARDS="skipped")
+    assert run_gate(gate, **changes) != 0

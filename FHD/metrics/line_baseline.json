@@ -1,5 +1,5 @@
 {
-  "lines": 2329034,
-  "updated": "2026-10-21",
-  "note": "PR #2519 follow-up for #1783: fail-closed Paddle model tar extraction plus 12 real adversarial/archive CLI tests, on top of the six previously documented issue fixes. No test deletion or filter fallback."
+  "lines": 2329061,
+  "updated": "2026-10-22",
+  "note": "用户已授权本批 PR 修复与收口。保留 #2519 六项功能修复及 OCR 安全过滤回归；本轮导出路由拆分与 CSV 实际字节校验净增 28 行，合入 #2520 净减 1 行，原基线 2329034 净增 27 行。保留租户隔离、50000 行上限和全部测试，未删除无关代码凑数。"
 }

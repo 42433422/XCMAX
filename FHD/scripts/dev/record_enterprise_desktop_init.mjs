@@ -110,7 +110,7 @@ async function main() {
     const body = await r.json().catch(() => ({})), rows = body.data || body.customers || body.products || []
     if (Array.isArray(rows)) for (const row of rows) observedRows.set(row.customer_name || row.name || row.product_name, row)
   })
-  page.on('pageerror', error => evidence.observations.push({ browser_error: String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'), observed_at: new Date().toISOString() })); page.setDefaultTimeout(20000)
+  page.on('pageerror', error => evidence.observations.push({ browser_error: String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'), observed_at: new Date().toISOString() })); page.on('console', msg => { const text = msg.text(); if (msg.type() === 'error' && text.startsWith('[Login] workspace hydration failed:')) evidence.observations.push({ login_bootstrap_error: text.replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'), observed_at: new Date().toISOString() }) }); page.setDefaultTimeout(20000)
   await page.waitForURL(/127\.0\.0\.1:17500/, { timeout: 240000 })
   const login = await step('normal_login', async () => {
     await expect.poll(async () => await page.locator('#lv-username').isVisible() || await page.locator('[data-tour="sidebar-settings"]:visible,[data-tour="sidebar-mod-erp-settings"]:visible').first().isVisible(), { timeout: 60000 }).toBe(true)
