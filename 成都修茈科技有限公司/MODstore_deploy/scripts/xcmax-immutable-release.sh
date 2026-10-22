@@ -387,7 +387,11 @@ else
   log "creating release-specific Python environment"
   python3 -m venv "$DEPLOY_DIR/.venv"
   "$DEPLOY_DIR/.venv/bin/python" -m pip install -q --upgrade pip
-  (cd "$DEPLOY_DIR" && .venv/bin/pip install -q -e '.[web,knowledge,evolution-metrics]')
+  (cd "$DEPLOY_DIR" && .venv/bin/pip install -q \
+    "$BUILD_ROOT/packages/retort_engine" "$BUILD_ROOT/packages/xcagi_common" \
+    -e '.[web,knowledge,evolution-metrics,governance]')
+  "$DEPLOY_DIR/.venv/bin/python" -c \
+    'from modstore_server.integrations.repository_packages import load_repository_module; load_repository_module("retort_engine.intent_alignment"); load_repository_module("retort_engine.clarification"); load_repository_module("xcagi_common.employee_pack")'
   mkdir -p "$BUILD_ROOT/.runtime-build"
   MODSTORE_ENV=production \
     MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET" \

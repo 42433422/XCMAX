@@ -22,6 +22,7 @@ on:
       - 'FHD/VERSION.md'
       - 'FHD/config/saas_plans.json'
       - 'FHD/config/public_cases.json'
+      - 'FHD/docs/evidence/**'
       - '.github/workflows/corp-site-ssot-gate.yml'
   push:
     branches: [main]
@@ -37,6 +38,7 @@ on:
       - 'FHD/VERSION.md'
       - 'FHD/config/saas_plans.json'
       - 'FHD/config/public_cases.json'
+      - 'FHD/docs/evidence/**'
       - '.github/workflows/corp-site-ssot-gate.yml'
 
 concurrency:
@@ -53,6 +55,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+
+      - name: Rebuild checksum-pinned public evidence
+        run: python3 成都修茈科技有限公司/scripts/evidence_assets.py materialize
 
       - name: SSOT drift check（fail-closed）
         working-directory: 成都修茈科技有限公司

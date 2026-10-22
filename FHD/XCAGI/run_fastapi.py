@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import socket
 import sys
 import time
 from pathlib import Path
@@ -24,26 +23,6 @@ RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
 
 _XCAGI_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _XCAGI_DIR.parent
-
-_PORT_PROBE_RANGE = range(5000, 5021)
-
-
-def _is_port_free(host: str, port: int) -> bool:
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind((host, port))
-        return True
-    except OSError:
-        return False
-
-
-def _find_free_port(host: str, preferred: int) -> int:
-    candidates = [preferred] + [p for p in _PORT_PROBE_RANGE if p != preferred]
-    for p in candidates:
-        if _is_port_free(host, p):
-            return p
-    return preferred
 
 
 def _runtime_port_file() -> Path:
@@ -395,17 +374,27 @@ def main(argv: list[str] | None = None) -> None:
         os.environ["FASTAPI_PORT"] = str(args.port)
         os.environ["XCAGI_API_PORT"] = str(args.port)
 
-    host = os.environ.get("FASTAPI_HOST") or os.environ.get("XCAGI_API_HOST") or "127.0.0.1"
-    port = int(os.environ.get("XCAGI_API_PORT") or os.environ.get("FASTAPI_PORT") or "5000")
-    if not args.desktop:
-        probe_host = "127.0.0.1" if host in ("0.0.0.0", "") else host
-        free_port = _find_free_port(probe_host, port)
+    from app.utils.device_system.listen_port import (
+        DESKTOP_API_PORT,
+        find_available_port,
+        publish_listen_address,
+        resolve_listen_host,
+        resolve_listen_port,
+    )
+
+    host = resolve_listen_host()
+    port = resolve_listen_port()
+    if args.port is not None and not 1 <= args.port <= 65535:
+        raise ValueError("HTTP port must be between 1 and 65535")
+    if not desktop:
+        free_port = find_available_port(host, port, range(DESKTOP_API_PORT, DESKTOP_API_PORT + 21))
         if free_port != port:
             print(
                 f"[run_fastapi] 端口 {port} 被占用，自动切换到 {free_port}",
                 file=sys.stderr,
             )
             port = free_port
+    publish_listen_address(host, port)
     _persist_runtime_port(port)
     reload = _resolve_reload(desktop)
 

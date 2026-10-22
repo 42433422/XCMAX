@@ -21,7 +21,7 @@
 1. **营销官网静态页（canonical，线上部署）**
    - 入口：根 [`index.html`](index.html)（多页站，另含 `about.html`/`contact.html`/`cases.html` 等）
    - 样式/脚本：根 [`styles.css`](styles.css) + [`main.js`](main.js)
-   - 构建：无需构建，静态文件直接部署；CI 见 `ci-marketing-site.yml`
+   - 构建：静态页面配合下述证据资源重建；CI 见 `ci-marketing-site.yml`
    - 维护：修改静态页请直接改根 `*.html`/`styles.css`/`main.js`
 
 2. **根 Vue 3 应用（modstore-market，独立产品）**
@@ -41,6 +41,44 @@
 4. 运行期产物（outbox、webhook 投递 JSON、payment_orders、chroma）不进入源码仓库；
    由 `MODSTORE_RUNTIME_DIR` / `MODSTORE_WEBHOOK_EVENTS_DIR` 指向数据盘。
    提交门禁见 [`ci-runtime-artifacts-guard.yml`](.github/workflows/ci-runtime-artifacts-guard.yml)。
+
+## 证据资源与发布副本
+
+验收原件继续保存在 `FHD/docs/evidence/`；仅在官网留存的原件列于
+`data/capabilities/evidence-materialization.json` 的 `retained_sources`。该清单逐件记录
+原件路径、SHA-256、字节数以及兼容的公开文件名。`source_aliases` 将历史验收目录中
+字节完全相同的媒体映射到一份现有原件；验收 JSON、路径声明和原始 SHA 保持不变。
+`capabilities/assets/evidence/`
+其余文件都是可重建副本，不再提交；文件存在不代表验收通过。
+
+从本目录执行：
+
+```bash
+python3 scripts/evidence_assets.py check
+python3 scripts/evidence_assets.py materialize
+python3 scripts/build_capability_center.py --check
+python3 scripts/build_public_site.py --check
+```
+
+重建先校验全部原件，再生成普通文件，保留原来的公开 URL、历史目录路径和字节内容。原件缺失或
+哈希不符会在静态发布前终止。部署脚本、官网 CI 和本地构建均使用同一清单；新增
+验收证据须先复核原件，运行 `build_capability_center.py` 更新清单和页面，提交原件、
+清单及页面，不提交发布副本。CI 拒绝重新跟踪副本及新增字节完全相同的媒体。
+
+需要迁移原件时，可在受控本地存储创建按内容去重的恢复包：
+
+```bash
+python3 scripts/evidence_assets.py archive --archive /approved/private/evidence.tar
+python3 scripts/evidence_assets.py restore --archive /approved/private/evidence.tar
+```
+
+`archive` 不删除原件、不上传；恢复只接受当前仓库清单声明的路径和校验和，拒绝
+覆盖不同内容。命令中的目录须由操作者指定已获授权的私有存储；目前没有配置或
+宣称远端归档成功。历史报告引用、原始验收录像及其追溯信息在持久归档与取回验证
+完成前继续保留。仅查看历史验收时可运行 `materialize-sources`，只恢复原目录媒体，
+不生成官网副本。历史验收脚本的登记、哈希校验与交付总账读取入口亦支持此清单。
+法律递交材料保留原目录布局，未纳入媒体合并。媒体发布策略不合格的历史记录仍按
+原门禁阻断，不改写为通过。
 
 ## 关键文档
 

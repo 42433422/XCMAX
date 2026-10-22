@@ -333,6 +333,11 @@ publish_site_static_to_live() {
     log "WARN: git site tree missing: $git_site"
     return 0
   fi
+  # Restore exact legacy URLs before exposing either the Git tree or a live copy.
+  if ! python3 "$git_site/scripts/evidence_assets.py" materialize; then
+    log "ERROR: evidence reconstruction failed; stop before publishing static pages"
+    return 1
+  fi
   if [[ -z "$live_site" || ! -d "$live_site" ]]; then
     log "WARN: live site root missing: $SITE_ROOT"
     return 0
@@ -390,6 +395,12 @@ publish_site_static_to_live() {
   if [[ -d "$git_site/corp-butler" ]]; then
     cp -af "$git_site/corp-butler/." "$live_site/corp-butler/"
   fi
+  for base in capabilities data/capabilities site/data; do
+    if [[ -d "$git_site/$base" ]]; then
+      mkdir -p "$live_site/$base"
+      cp -af "$git_site/$base/." "$live_site/$base/"
+    fi
+  done
   # Keep release root traversable for unprivileged nginx after chmod u+w above.
   chmod a+rx "$live_site" 2>/dev/null || true
   log "live root 静态发布完成"

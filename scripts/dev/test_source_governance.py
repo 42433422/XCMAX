@@ -57,6 +57,31 @@ def baseline_state() -> dict:
 
 
 class SourceGovernanceEvaluateTests(unittest.TestCase):
+    def test_new_fragments_and_renamed_dynamic_facades_are_rejected(self) -> None:
+        for name, item in (
+            ("FHD/app/service_part01.py", 0),
+            ("FHD/app/renamed_service.py", 4),
+        ):
+            current = current_state()
+            current["mechanical_modules"] = {name: item}
+            errors, _ = source_governance.evaluate(current, baseline_state())
+            self.assertTrue(any("new mechanical" in error for error in errors))
+
+    def test_dynamic_coupling_may_only_shrink(self) -> None:
+        path = "FHD/app/service_part01.py"
+        baseline = baseline_state()
+        baseline["mechanical_modules"] = {path: 3}
+        current = current_state()
+        current["mechanical_modules"] = {path: 4}
+        errors, _ = source_governance.evaluate(current, baseline)
+        self.assertTrue(any("coupling grew" in error for error in errors))
+        current["mechanical_modules"] = {}
+        errors, progress = source_governance.evaluate(current, baseline)
+        self.assertEqual(errors, [])
+        self.assertTrue(
+            any("mechanical module debt reduced" in value for value in progress)
+        )
+
     def test_rejects_positive_growth_in_grandfathered_file(self) -> None:
         current = current_state(
             files=[
@@ -143,7 +168,7 @@ class SourceGovernanceEvaluateTests(unittest.TestCase):
                     ["generated/live.py"],
                 )
 
-    def test_duplicate_candidates_exclude_materialized_langgraph_trees(self) -> None:
+    def test_duplicate_candidates_exclude_only_active_langgraph_packages(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
             content = "VALUE = 'vendored'\n" * 40
@@ -161,7 +186,10 @@ class SourceGovernanceEvaluateTests(unittest.TestCase):
 
             self.assertEqual(
                 [item["file"] for item in candidates],
-                ["FHD/app/runtime.py"],
+                [
+                    "FHD/app/runtime.py",
+                    "FHD/third_party/langgraph/libs/langgraph/langgraph/runtime.py",
+                ],
             )
 
 

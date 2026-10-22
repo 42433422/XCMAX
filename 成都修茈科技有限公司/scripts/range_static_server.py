@@ -5,6 +5,7 @@
 from __future__ import annotations
 import os
 import re
+import runpy
 import sys
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -75,6 +76,7 @@ class RangeHandler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    runpy.run_path(str(Path(__file__).with_name("evidence_assets.py")))["materialize"](ROOT.parent)
     ThreadingHTTPServer.allow_reuse_address = True
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), RangeHandler)
     print(f"[range-server] serving {ROOT} at http://127.0.0.1:{PORT} (Range OK)", flush=True)

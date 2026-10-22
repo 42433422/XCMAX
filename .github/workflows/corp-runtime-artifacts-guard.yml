@@ -30,6 +30,20 @@ jobs:
           # 仓库历史较大时 fetch-depth: 0 会耗尽本任务的 5 分钟限额。
           fetch-depth: 1
 
+      - name: Evidence source and generated media guard
+        env:
+          EVIDENCE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          evidence_script="成都修茈科技有限公司/scripts/evidence_assets.py"
+          args=()
+          if [ -n "${EVIDENCE_BASE_SHA}" ] && [[ ! "${EVIDENCE_BASE_SHA}" =~ ^0+$ ]]; then
+            git fetch origin "${EVIDENCE_BASE_SHA}" --depth=1
+            args=(--base "${EVIDENCE_BASE_SHA}")
+          fi
+          python3 "${evidence_script}" check
+          python3 "${evidence_script}" guard "${args[@]}"
+
       - name: Forbidden path check (tracked files)
         # 已经在 git 索引里的禁止路径：这些文件不应存在于仓库中。
         # 失败说明历史里已经提交了运行期产物，需要跑 scripts/cleanup-committed-runtime-artifacts.sh 清理。
@@ -42,10 +56,11 @@ jobs:
             '成都修茈科技有限公司/MODstore_deploy/modstore_server/data/payment_orders/'
             '成都修茈科技有限公司/MODstore_deploy/modstore_server/payment_orders/.*\.json$'
             '成都修茈科技有限公司/MODstore_deploy/modstore_server/data/chroma/'
+            '成都修茈科技有限公司/MODstore_deploy/var/employee_draft_assets/'
           )
           failures=0
           for pat in "${FORBIDDEN_PATTERNS[@]}"; do
-            matches=$(git ls-files | grep -E "$pat" || true)
+            matches=$(git -c core.quotepath=false ls-files | grep -E "$pat" || true)
             if [ -n "$matches" ]; then
               echo "::error ::Found forbidden runtime artifacts tracked in git (pattern: $pat):"
               echo "$matches" | sed 's/^/  - /'
@@ -57,7 +72,7 @@ jobs:
             echo "运行期产物（outbox / webhook 投递 JSON / payment_orders / chroma）不应进入 git。"
             echo "请在生产 / compose 里用 MODSTORE_RUNTIME_DIR 指向数据盘，并运行"
             echo "  bash scripts/cleanup-committed-runtime-artifacts.sh"
-            echo "从历史中清掉这些文件。"
+            echo "从当前索引移除这些文件；已公开的历史对象需单独安排清理。"
             exit 1
           fi
           echo "[ok] no tracked runtime artifacts"
@@ -77,12 +92,13 @@ jobs:
             '成都修茈科技有限公司/MODstore_deploy/modstore_server/data/payment_orders/'
             '成都修茈科技有限公司/MODstore_deploy/modstore_server/payment_orders/.*\.json$'
             '成都修茈科技有限公司/MODstore_deploy/modstore_server/data/chroma/'
+            '成都修茈科技有限公司/MODstore_deploy/var/employee_draft_assets/'
           )
           git fetch origin "$BASE_SHA" --depth=1 || true
           # Deletions are the remediation path for artifacts that were already
           # committed. Only block paths that remain added, copied, modified,
           # renamed, or type-changed in the proposed tree.
-          changed=$(git diff --name-only --diff-filter=ACMRT "$BASE_SHA" "$HEAD_SHA" || true)
+          changed=$(git -c core.quotepath=false diff --name-only --diff-filter=ACMRT "$BASE_SHA" "$HEAD_SHA" || true)
           failures=0
           for pat in "${FORBIDDEN_PATTERNS[@]}"; do
             hits=$(echo "$changed" | grep -E "$pat" || true)

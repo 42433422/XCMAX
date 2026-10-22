@@ -5,6 +5,11 @@ from __future__ import annotations
 
 import importlib
 
+from modstore_server.infrastructure.private_asset_storage import (
+    draft_asset_directory,
+    reset_draft_directory,
+)
+
 
 def _facade():
     return importlib.import_module("modstore_server.employee_asset_pipeline")
@@ -29,12 +34,15 @@ def _infer_accepted_extensions(
             suffixes - _facade().EXCEL_SUFFIXES
         )
     if suffixes & _facade().DOC_SUFFIXES:
-        return sorted(suffixes & _facade().DOC_SUFFIXES) + sorted(suffixes - _facade().DOC_SUFFIXES)
+        return sorted(suffixes & _facade().DOC_SUFFIXES) + sorted(
+            suffixes - _facade().DOC_SUFFIXES
+        )
     return sorted(suffixes)
 
 
 def _infer_asset_runtime_kind(
-    brief: str, asset_manifest: _facade().Optional[_facade().Dict[str, _facade().Any]] = None
+    brief: str,
+    asset_manifest: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> str:
     """Classify by asset shape, not by a customer-specific package name."""
     if _facade().is_csv_generate(brief):
@@ -80,15 +88,35 @@ def _infer_asset_runtime_kind(
             has_rules = has_rules or kind == "rules"
             has_reference_code = has_reference_code or kind == "reference_code"
     text = brief or ""
-    _contract_keywords = ("合同", "法务", "合规", "审核", "条款", "contract", "legal", "compliance")
-    _doc_keywords = ("文档", "报告", "方案", "标书", "简历", "document", "report", "proposal")
+    _contract_keywords = (
+        "合同",
+        "法务",
+        "合规",
+        "审核",
+        "条款",
+        "contract",
+        "legal",
+        "compliance",
+    )
+    _doc_keywords = (
+        "文档",
+        "报告",
+        "方案",
+        "标书",
+        "简历",
+        "document",
+        "report",
+        "proposal",
+    )
     if has_reference_code:
         return "reference_python_transform"
     if has_doc or any((k in text for k in _contract_keywords)):
         if any((k in text for k in _contract_keywords)):
             return "contract_doc_review"
         return "doc_template_transform"
-    if has_excel and (has_rules or any((k in text for k in ("规则", "模板", "转换", "考勤")))):
+    if has_excel and (
+        has_rules or any((k in text for k in ("规则", "模板", "转换", "考勤")))
+    ):
         return "excel_rules_transform"
     if has_excel:
         return "generic_excel_transform"
@@ -105,7 +133,11 @@ def _read_text_preview(content: bytes, limit: int = 4000) -> str:
 
 
 def _excel_summary(path: _facade().Path) -> _facade().Dict[str, _facade().Any]:
-    summary: _facade().Dict[str, _facade().Any] = {"ok": False, "sheets": [], "error": ""}
+    summary: _facade().Dict[str, _facade().Any] = {
+        "ok": False,
+        "sheets": [],
+        "error": "",
+    }
     try:
         from openpyxl import load_workbook
     except _facade().RECOVERABLE_ERRORS as exc:
@@ -147,6 +179,7 @@ def _excel_summary(path: _facade().Path) -> _facade().Dict[str, _facade().Any]:
                 "header_candidates": header_candidates,
             }
         )
+    wb.close()
     summary["ok"] = True
     summary["sheets"] = sheets
     return summary
@@ -159,19 +192,15 @@ def prepare_employee_assets(
     raw_files: _facade().List[_facade().Dict[str, _facade().Any]],
     repo_root: _facade().Optional[_facade().Path] = None,
 ) -> _facade().Dict[str, _facade().Any]:
-    root = (
-        (repo_root or _facade().Path(__file__).resolve().parents[1])
-        / "var"
-        / "employee_draft_assets"
-        / str(user_id)
-        / session_id
+    root = draft_asset_directory(
+        user_id=user_id, session_id=session_id, repo_root=repo_root
     )
-    if root.exists():
-        _facade().shutil.rmtree(root, ignore_errors=True)
-    root.mkdir(parents=True, exist_ok=True)
+    reset_draft_directory(root)
     assets: _facade().List[_facade().Dict[str, _facade().Any]] = []
     for idx, item in enumerate(raw_files or []):
-        filename = _facade()._safe_basename(str(item.get("filename") or f"asset-{idx}.bin"))
+        filename = _facade()._safe_basename(
+            str(item.get("filename") or f"asset-{idx}.bin")
+        )
         content = item.get("content") or b""
         if not isinstance(content, (bytes, bytearray)):
             continue
@@ -208,7 +237,10 @@ def prepare_employee_assets(
 
 
 def _preflight_scaffold_write_access(
-    *, session_id: str, user_id: int, repo_root: _facade().Optional[_facade().Path] = None
+    *,
+    session_id: str,
+    user_id: int,
+    repo_root: _facade().Optional[_facade().Path] = None,
 ) -> _facade().Tuple[bool, _facade().List[str], _facade().Dict[str, str]]:
     """资产脚手架写路径权限预检（MODstore 库 + 会话草稿目录）。"""
     paths_checked: _facade().Dict[str, str] = {}
@@ -221,13 +253,13 @@ def _preflight_scaffold_write_access(
             errors.append(f"modstore 库目录不可写：{lib}")
     except OSError as exc:
         errors.append(f"modstore 库目录不可创建：{lib} ({exc})")
-    draft_root = (
-        (repo_root or _facade().Path(__file__).resolve().parents[1])
-        / "var"
-        / "employee_draft_assets"
-        / str(user_id)
-        / session_id
-    )
+    try:
+        draft_root = draft_asset_directory(
+            user_id=user_id, session_id=session_id, repo_root=repo_root
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+        return (False, errors, paths_checked)
     paths_checked["draft_assets_root"] = str(draft_root)
     try:
         draft_root.parent.mkdir(parents=True, exist_ok=True)

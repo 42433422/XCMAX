@@ -434,4 +434,7 @@ def render_runtime_modules(
 
 
 def render_build_xcemp_py(pack_id: str) -> str:
-    return f'"""Build {pack_id}.xcemp from this employee_pack directory."""\nfrom __future__ import annotations\n\nimport io\nimport json\nimport zipfile\nfrom pathlib import Path\n\n\nROOT = Path(__file__).resolve().parent\nPACK_ID = {_facade().json.dumps(pack_id, ensure_ascii=False)}\n\n\ndef main() -> None:\n    manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))\n    out = ROOT / f"{{PACK_ID}}.xcemp"\n    buf = io.BytesIO()\n    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:\n        zf.writestr(f"{{PACK_ID}}/manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2) + "\\n")\n        for path in sorted((ROOT / "backend").rglob("*")):\n            if not path.is_file():\n                continue\n            if path.suffix.lower() not in {{".py", ".xlsx", ".xlsm", ".xls"}}:\n                continue\n            rel = path.relative_to(ROOT).as_posix()\n            zf.write(path, f"{{PACK_ID}}/{{rel}}")\n        readme = ROOT / "README.md"\n        if readme.is_file():\n            zf.write(readme, f"{{PACK_ID}}/README.md")\n    out.write_bytes(buf.getvalue())\n    print(out)\n\n\nif __name__ == "__main__":\n    main()\n'
+    from modstore_server.integrations.repository_packages import load_repository_module
+
+    builder = load_repository_module("xcagi_common.employee_pack")
+    return builder.render_builder_script(pack_id)

@@ -7,6 +7,13 @@ misaligned, `retort_clarification_gate` opens blocking questions, accepts human
 answers, re-assesses intent, and sweeps TTL / max-open sessions so queues never
 pile up. APIs live under `/api/xcmax/strategic/council/clarifications*`.
 
+MODstore declares this integration in its `governance` dependency extra and
+loads it through `integrations.repository_packages`. Immutable releases install
+the pinned checkout's package into their own venv before promotion. Source
+checkouts can resolve the same local package; a missing or broken engine keeps
+the existing governance gate closed. The CLI/UI remain separate author tools;
+this dependency does not add them to the FHD host startup.
+
 - Main project: local folder.
 - Absorption source: GitHub URL or local folder.
 - Workflow: collect evidence, ask PaiBi LLM to score with the Retort prompt, clone/read the external project, generate absorption tasks, run the real `retort apply-absorption` CLI to change project code, then require another completed PaiBi LLM deep review before any score is shown.
