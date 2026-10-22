@@ -400,6 +400,35 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     expect(imMocks.fetchImMessages).toHaveBeenLastCalledWith(1, { limit: 50, beforeId: 100 })
   })
 
+  it('加载更早消息后保持当前对话内容的视口位置', async () => {
+    imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
+    const initialMessages = Array.from({ length: 50 }, (_, i) => ({
+      ...sampleMessage,
+      id: 100 + i,
+    }))
+    const olderMessages = Array.from({ length: 10 }, (_, i) => ({
+      ...sampleMessage,
+      id: 50 + i,
+    }))
+    imMocks.fetchImMessages.mockResolvedValueOnce(initialMessages).mockResolvedValueOnce(olderMessages)
+    const wrapper = await mountView()
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
+    await flushPromises()
+
+    const scrollContainer = wrapper.find('.im-messages').element as HTMLElement
+    Object.defineProperty(scrollContainer, 'scrollHeight', {
+      configurable: true,
+      get: () => wrapper.findAll('.im-bubble-row').length * 40,
+    })
+    scrollContainer.scrollTop = 120
+    await wrapper.find('.im-load-more').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.im-bubble-row')).toHaveLength(60)
+    expect(scrollContainer.scrollTop).toBe(520)
+  })
+
   // ===== 4. 发送消息 =====
 
   it('输入消息并提交发送', async () => {
