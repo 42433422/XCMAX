@@ -24,7 +24,7 @@ export function useLoginViewSession(state: LoginViewState, options: { router: Ro
     const currentAttempt = () => attempt === latestLoginAttempt && epoch === productReadAccountEpoch.value
     try {
       await hydration
-    } catch {
+    } catch (error) {
       if (!currentAttempt()) return
       // Only discard this attempt's client bootstrap. A remote logout could
       // arrive after a retry and clear its new cookie. Router readiness gates
@@ -34,6 +34,7 @@ export function useLoginViewSession(state: LoginViewState, options: { router: Ro
       try {
         for (const key of [LS_MARKET_ACCESS_TOKEN, LS_MARKET_REFRESH_TOKEN, LS_MARKET_USER_JSON]) localStorage.removeItem(key)
       } catch { /* private mode */ }
+      console.error('[Login] workspace hydration failed:', error instanceof Error ? error.message : String(error))
       errorMessage.value = '工作空间资料加载失败，请检查网络后重新登录。'
       return
     }
