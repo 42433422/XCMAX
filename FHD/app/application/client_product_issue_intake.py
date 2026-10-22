@@ -41,7 +41,8 @@ def _attached_screenshots(attachments: Any) -> list[bytes]:
     return images[:6]
 
 
-def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str, Any] | None:
+def classify_explicit_report(message: str) -> dict[str, Any] | None:
+    """Recognize an explicit defect report without requiring a model or credentials."""
     fields = {
         "expected": re.search(r"期望(?:结果|行为)?[：:]\s*(.+?)(?:[。；;\n]|$)", message),
         "actual": re.search(r"实际(?:结果|表现|行为)?[：:]\s*(.+?)(?:[。；;\n]|$)", message),
@@ -54,6 +55,13 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
             **{key: match[1][:1000] if match else "" for key, match in fields.items()},
             "missing_evidence": [f"{key}_behavior" for key, match in fields.items() if not match],
         }
+    return None
+
+
+def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str, Any] | None:
+    explicit = classify_explicit_report(message)
+    if explicit is not None:
+        return explicit
     try:
         response = client.chat.completions.create(
             model=client.default_model,

@@ -60,19 +60,21 @@ async def _classify_and_submit_client_issue_async(
     def _unavailable():
         return {"state": "NEEDS_MORE_EVIDENCE"} if guide_unavailable else None
 
-    if client is None:
+    triage = intake.classify_explicit_report(message)
+    if triage is None:
+        if client is None:
+            try:
+                client = _facade().create_modstore_openai_client_from_request(request)
+            except _facade().BOUNDARY_ERRORS:
+                _facade().logger.warning("client issue classifier unavailable", exc_info=True)
+                return _unavailable()
         try:
-            client = _facade().create_modstore_openai_client_from_request(request)
+            triage = await asyncio.to_thread(intake.classify_report, client, message, reply)
         except _facade().BOUNDARY_ERRORS:
-            _facade().logger.warning("client issue classifier unavailable", exc_info=True)
+            # 分类器是外部 LLM 边界：任何意外异常都必须退化成「引导补齐证据」，
+            # 既不能让缺陷被静默吃掉，也不能把对话打成 500。
+            _facade().logger.warning("client issue classification raised", exc_info=True)
             return _unavailable()
-    try:
-        triage = await asyncio.to_thread(intake.classify_report, client, message, reply)
-    except _facade().BOUNDARY_ERRORS:
-        # 分类器是外部 LLM 边界：任何意外异常都必须退化成「引导补齐证据」，
-        # 既不能让缺陷被静默吃掉，也不能把对话打成 500。
-        _facade().logger.warning("client issue classification raised", exc_info=True)
-        return _unavailable()
     if triage is None:
         return _unavailable()
     if str(triage.get("type") or "") == "usage_question":

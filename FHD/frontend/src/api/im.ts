@@ -128,16 +128,35 @@ export async function sendImMessage(conversationId: number, body: string): Promi
 }
 
 type EnterpriseCsReply = { success?: boolean; conversation?: ImConversationSummary; messages?: ImMessage[];
-  conversation_id?: number; message?: ImMessage | string; state?: Partial<ImConversationSummary>; detail?: string }
+  conversation_id?: number; message?: ImMessage | string; state?: Partial<ImConversationSummary>; detail?: string;
+  outcome?: string; retryable?: boolean; reconciliation_required?: boolean }
+export class EnterpriseCsRequestError extends Error {
+  constructor(message: string, public readonly reconciliationRequired = false) { super(message) }
+}
 async function enterpriseCsRequest(fallback: string, body?: string): Promise<EnterpriseCsReply> {
-  const res = await apiFetch('/api/im/enterprise-cs/messages', {
+  let res: Response
+  let responseStatus = 0
+  let data: EnterpriseCsReply
+  try {
+    res = await apiFetch('/api/im/enterprise-cs/messages', {
     headers: jsonHeaders, timeoutMs: 25_000,
     ...(body === undefined ? {} : { method: 'POST', body: JSON.stringify({ body }) }),
   })
-  const data = await readJson<EnterpriseCsReply>(res)
-  if (!res.ok || !data.success) {
+    responseStatus = res.status
+    data = await readJson<EnterpriseCsReply>(res)
+  } catch (error) {
+    if (responseStatus === 401) throw new EnterpriseCsRequestError('企业专属客服登录已失效，请到系统设置重新登录企业账号；草稿已保留。')
+    if (responseStatus === 403) throw new EnterpriseCsRequestError('当前账号无权访问企业专属客服。')
+    if (body !== undefined) throw new EnterpriseCsRequestError('发送结果未确认，请先核对会话，勿重复发送；草稿已保留。', true)
+    throw error
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new EnterpriseCsRequestError('发送失败：服务端回执格式无效，请核对会话后再操作。', body !== undefined)
+  }
+  if (!res.ok || data.success !== true) {
     const reason = typeof data.message === 'string' ? data.message : data.detail || fallback
-    throw new Error(res.status === 401 ? '企业专属客服登录已失效，请到系统设置重新登录企业账号；消息未确认送达，草稿已保留。' : reason)
+    const uncertain = body !== undefined && (res.status >= 500 || res.ok || data.outcome === 'unknown' || data.reconciliation_required === true)
+    throw new EnterpriseCsRequestError(res.status === 401 ? '企业专属客服登录已失效，请到系统设置重新登录企业账号；草稿已保留。' : reason, uncertain)
   }
   return data
 }
@@ -152,8 +171,8 @@ export async function sendEnterpriseCsMessage(body: string): Promise<{
   conversation_id: number; message: ImMessage; state: Partial<ImConversationSummary>
 }> {
   const data = await enterpriseCsRequest('发送失败', body)
-  if (!data.conversation_id || !data.message || typeof data.message !== 'object') {
-    throw new Error(data.detail || '发送失败')
+  if (!Number.isInteger(data.conversation_id) || !data.conversation_id || data.conversation_id < 1 || !data.message || typeof data.message !== 'object' || !Number.isInteger(data.message.id) || data.message.id < 1 || data.message.conversation_id !== data.conversation_id || typeof data.message.body !== 'string') {
+    throw new EnterpriseCsRequestError(data.detail || '发送失败：服务端回执不完整，请核对会话后再操作。', true)
   }
   return { conversation_id: data.conversation_id, message: data.message, state: data.state ?? {} }
 }

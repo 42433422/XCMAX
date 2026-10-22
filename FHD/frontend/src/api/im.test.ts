@@ -115,3 +115,19 @@ describe('IM request and response contracts', () => {
     expect(im.imWebSocketUrl()).toBe('ws://127.0.0.1:5000/ws/im')
   })
 })
+
+describe('uncertain enterprise CS receipts', () => {
+  it.each([500, 502, 503])('marks POST %s as requiring reconciliation', async (status) => {
+    apiFetch.mockResolvedValue(jsonRes({ success: false, message: 'gateway failure' }, { ok: false, status }))
+    await expect(im.sendEnterpriseCsMessage('synthetic report')).rejects.toMatchObject({ reconciliationRequired: true })
+  })
+  it.each([{}, { id: 0, conversation_id: 3, body: 'x' }, { id: 1, conversation_id: 4, body: 'x' }, { id: 1, conversation_id: 3 }])('rejects incomplete success receipt %j', async (badMessage) => {
+    apiFetch.mockResolvedValue(jsonRes({ success: true, conversation_id: 3, message: badMessage }))
+    await expect(im.sendEnterpriseCsMessage('synthetic report')).rejects.toMatchObject({ reconciliationRequired: true })
+  })
+})
+
+it.each([null, [], {}, { success: 'true' }])('retains unknown state for malformed POST payload %j', async (payload) => {
+  apiFetch.mockResolvedValue(jsonRes(payload))
+  await expect(im.sendEnterpriseCsMessage('synthetic report')).rejects.toMatchObject({ reconciliationRequired: true })
+})
