@@ -136,6 +136,11 @@ try {
     throw "Installed build-info version mismatch: actual=$actualVersion expected=$ExpectedProductVersion"
   }
 
+  $exeProductVersion = ([string]((Get-Item -LiteralPath $installedExe).VersionInfo.ProductVersion)).Trim()
+  if ($exeProductVersion -ne $ExpectedProductVersion) {
+    throw "Installed XCAGI.exe ProductVersion mismatch: actual=$exeProductVersion expected=$ExpectedProductVersion"
+  }
+
   $skuInfo = Get-Content -LiteralPath $skuPath -Raw | ConvertFrom-Json
   if ([string]$skuInfo.sku -ne 'enterprise') {
     throw "Installed product SKU mismatch: actual=$($skuInfo.sku) expected=enterprise"

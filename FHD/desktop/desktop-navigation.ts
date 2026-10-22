@@ -5,7 +5,7 @@ export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort:
     const host = url.hostname.toLowerCase()
     const trustedHost = host === '127.0.0.1' || host === 'localhost'
     if (!trustedHost || url.protocol !== 'http:') return false
-    return url.port === String(expectedPort)
+    return (url.port || '80') === String(expectedPort)
   } catch {
     return false
   }

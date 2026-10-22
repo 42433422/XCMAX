@@ -18,7 +18,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.models import InventoryLedger, Product, Warehouse
-from app.fastapi_routes import inventory
+from app.fastapi_routes import inventory, inventory_exports
 from app.infrastructure.tenant_scope import tenant_scope
 
 
@@ -248,9 +248,161 @@ def test_export_failure_returns_no_workbook(inventory_http, monkeypatch):
     client, _factory, _engine = inventory_http
     service = MagicMock()
     service.export_inventory.side_effect = RuntimeError("internal database unavailable")
-    monkeypatch.setattr(inventory, "_svc", lambda: service)
+    monkeypatch.setattr(inventory_exports, "_svc", lambda: service)
     response = client.get("/api/inventory/export.xlsx")
     assert response.status_code == 500
     assert response.json()["error_code"] == "INVENTORY_EXPORT_FAILED"
     assert "internal database" not in response.text
     assert "content-disposition" not in response.headers
+
+
+def csv_rows(response):
+    import csv
+    from io import StringIO
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"\xef\xbb\xbf")
+    assert response.headers["content-type"] == "text/csv; charset=utf-8"
+    return list(csv.reader(StringIO(response.content.decode("utf-8-sig"), newline="")))
+
+
+@pytest.mark.parametrize(
+    "params", [{}, {"keyword": "涂料3"}, {"keyword": "SKU-003"}, {"batch_no": "B-57"}]
+)
+def test_csv_shares_complete_ordered_filtered_snapshot_with_workbook(inventory_http, params):
+    client, _factory, engine = inventory_http
+    statements = []
+
+    def record(_conn, _cursor, statement, parameters, _context, _many):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    response = client.get("/api/inventory/export.csv", params=params)
+    event.remove(engine, "before_cursor_execute", record)
+    rows = csv_rows(response)
+    assert len(statements) == 1
+    _book, xlsx_rows = workbook_rows(client.get("/api/inventory/export.xlsx", params=params))
+    assert rows[0] == list(xlsx_rows[0])
+    assert len(rows) == len(xlsx_rows)
+    assert response.headers["x-inventory-row-count"] == str(len(rows) - 1)
+    assert "inventory.csv" in response.headers["content-disposition"]
+    assert response.headers["cache-control"] == "no-store"
+    for csv_row, excel_row in zip(rows[1:], xlsx_rows[1:], strict=True):
+        assert csv_row[:4] == list(excel_row[:4])
+        assert Decimal(csv_row[4]) == Decimal(str(excel_row[4]))
+        assert Decimal(csv_row[5]) == Decimal(str(excel_row[5]))
+        assert csv_row[6] == excel_row[6]
+        assert csv_row[7] == "2026-09-05"
+
+
+def test_csv_combines_all_filters_and_preserves_tenant_boundary(inventory_http):
+    client, factory, _engine = inventory_http
+    with factory() as db:
+        product = db.query(Product).filter(Product.model_number == "SKU-057").one()
+        warehouse = db.query(Warehouse).filter(Warehouse.code == "WH-1-SECOND").one()
+        params = {
+            "product_id": product.id,
+            "warehouse_id": warehouse.id,
+            "batch_no": "B-57",
+            "keyword": "SKU-0",
+        }
+    rows = csv_rows(client.get("/api/inventory/export.csv", params=params))
+    assert len(rows) == 2 and rows[1][1] == "SKU-057"
+    with tenant_scope(2):
+        other = csv_rows(client.get("/api/inventory/export.csv"))
+        assert len(other) == 2 and other[1][0] == "其他租户保密产品"
+        assert client.get("/api/inventory/export.csv", params=params).status_code == 404
+    with tenant_scope(None):
+        assert client.get("/api/inventory/export.csv").status_code == 404
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        " ",
+        "\t",
+        "\r\n",
+        "\ufeff",
+        "\u200b",
+        "\u200c",
+        "\u200d",
+        "\u2060",
+        " \u200b\t",
+        "\x00",
+        "\x1b",
+        "\x85",
+        "\u00ad",
+        "\u061c",
+        "\u202e",
+    ],
+)
+@pytest.mark.parametrize("formula", ["=1+1", "+1+1", "-1+1", "@SUM(1)"])
+def test_csv_protects_all_text_columns_without_corrupting_numbers(prefix, formula):
+    import csv
+    from io import StringIO
+
+    from app.application.inventory_export import render_inventory_csv
+
+    text_fields = ("product_name", "product_code", "warehouse_name", "batch_no", "unit")
+    row = dict.fromkeys(text_fields, prefix + formula)
+    row.update(
+        quantity=Decimal("-1.2500"), available_quantity=Decimal("0.7500"), in_date=date(2026, 9, 5)
+    )
+    result = list(csv.reader(StringIO(render_inventory_csv([row]).decode("utf-8-sig"))))[1]
+    for index in (0, 1, 2, 3, 6):
+        assert result[index] == "'" + prefix + formula
+    assert result[4:6] == ["-1.2500", "0.7500"]
+
+
+def test_csv_quotes_chinese_commas_newlines_and_empty_values():
+    import csv
+    from io import StringIO
+
+    from app.application.inventory_export import render_inventory_csv
+
+    value = '中文,"引号"\r\n第二行'
+    rows = list(
+        csv.reader(
+            StringIO(
+                render_inventory_csv([{"product_name": value}]).decode("utf-8-sig"), newline=""
+            )
+        )
+    )
+    assert rows[1] == [value, "", "", "", "", "", "", ""]
+
+
+@pytest.mark.parametrize("kind,status", [("empty", 404), ("limit", 413), ("failure", 500)])
+def test_csv_errors_never_download_partial_file(inventory_http, monkeypatch, kind, status):
+    client, _factory, _engine = inventory_http
+    params = {"keyword": "不存在"} if kind == "empty" else {}
+    if kind == "limit":
+        monkeypatch.setattr("app.services.inventory_lookup.INVENTORY_EXPORT_ROW_LIMIT", 2)
+    if kind == "failure":
+        service = MagicMock()
+        service.export_inventory.side_effect = RuntimeError("private detail")
+        monkeypatch.setattr(inventory_exports, "_svc", lambda: service)
+    response = client.get("/api/inventory/export.csv", params=params)
+    assert response.status_code == status
+    assert "content-disposition" not in response.headers
+    assert "private detail" not in response.text
+
+
+def test_csv_mod_declares_new_host_requirement_and_export_copy_matches(monkeypatch):
+    import json
+    from pathlib import Path
+
+    from app.infrastructure.mods import manifest
+
+    root = Path(__file__).resolve().parents[2]
+    source = root / "mods/xcagi-erp-domain-bridge/manifest.json"
+    exported = root / "XCAGI/mods/xcagi-erp-domain-bridge/manifest.json"
+    assert source.read_bytes() == exported.read_bytes()
+    data = json.loads(source.read_text())
+    assert data["version"] == "1.0.0.7"
+    required = data["dependencies"]["xcagi"]
+    monkeypatch.setattr(manifest, "host_xcagi_version", lambda: "1.0.0.5")
+    assert not manifest._check_xcagi_version(required)
+    monkeypatch.setattr(manifest, "host_xcagi_version", lambda: "1.0.0.6")
+    assert manifest._check_xcagi_version(required)
