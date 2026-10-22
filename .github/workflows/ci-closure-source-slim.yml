@@ -1,0 +1,60 @@
+name: CI closure bounded source
+on:
+  push:
+    branches: ['ci/closure-lab-20261022']
+    paths: ['.github/workflows/ci-closure-source-slim.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 501849c02a8e77dc887a0047f4cff6bdfec8f090
+          persist-credentials: false
+      - name: Materialize bounded CI sources, not product binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/ci-source"
+          mkdir -p "$out"
+          export OUT="$out"
+          python3 - <<'PY'
+          import os, pathlib, subprocess, tarfile, json
+          root = pathlib.Path.cwd()
+          prefixes = ('scripts/', '.github/', 'FHD/scripts/', 'FHD/tests/test_ci/', 'FHD/tests/release_gate/', 'FHD/config/', 'FHD/metrics/', 'FHD/.github/', 'FHD/deploy/', 'FHD/packages/', 'FHD/docker/')
+          exact = {'AGENTS.md', 'FHD/AGENTS.md', 'docs/CI_SSOT.md', 'FHD/pyproject.toml', 'FHD/.coveragerc', 'FHD/CHANGELOG.md', 'FHD/requirements-server-api.txt', 'FHD/requirements.txt', 'FHD/frontend/package.json', 'FHD/frontend/package-lock.json'}
+          names = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          included, excluded = [], []
+          with tarfile.open(pathlib.Path(os.environ['OUT']) / 'source.tar.gz', 'w:gz') as out:
+              for name in names:
+                  if not name or not (name in exact or name.startswith(prefixes)):
+                      continue
+                  path = root / name
+                  if not path.is_file() or path.is_symlink() or path.stat().st_size > 2_000_000:
+                      excluded.append(name)
+                      continue
+                  out.add(path, arcname=name, recursive=False)
+                  included.append(name)
+          pathlib.Path(os.environ['OUT'], 'scope.json').write_text(json.dumps({'included': included, 'excluded': excluded, 'scope': 'partial source for CI editing; not a full checkout'}, indent=2))
+          PY
+          git rev-parse HEAD HEAD^{tree} > "$out/identity.txt"
+          git ls-tree -r HEAD > "$out/tree.txt"
+          gh api --paginate 'repos/42433422/XCMAX/actions/runs?head_sha=501849c02a8e77dc887a0047f4cff6bdfec8f090&event=push&per_page=100' --jq '.workflow_runs[] | {id,name,event,head_sha,status,conclusion,created_at,updated_at}' > "$out/main-runs.jsonl"
+          gh api 'repos/42433422/XCMAX/actions/runs/39716406440' --jq '{id,name,event,head_sha,status,conclusion,created_at,updated_at}' > "$out/pr-run.json"
+          gh api --paginate 'repos/42433422/XCMAX/actions/runs/39722134020/jobs?per_page=100' --jq '.jobs[] | {id,name,status,conclusion,created_at,started_at,completed_at,steps}' > "$out/main-jobs.jsonl"
+          sha256sum "$out/source.tar.gz" > "$out/source.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-closure-bounded-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/ci-source/
+          if-no-files-found: error
+          retention-days: 3
+      - name: Clean task workspace
+        if: ${{ always() && hashFiles('scripts/dev/clean_agent_workspace.py') != '' }}
+        run: python3 scripts/dev/clean_agent_workspace.py
