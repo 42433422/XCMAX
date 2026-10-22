@@ -1,0 +1,45 @@
+name: CI closure source snapshot
+on:
+  push:
+    branches: ['ci/closure-lab-20261022']
+    paths: ['.github/workflows/ci-closure-source-snapshot.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 501849c02a8e77dc887a0047f4cff6bdfec8f090
+          persist-credentials: false
+      - name: Archive tracked source only and exact run receipts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/ci-closure-source"
+          mkdir -p "$out"
+          test "$(git rev-parse HEAD)" = 501849c02a8e77dc887a0047f4cff6bdfec8f090
+          git archive --format=tar.gz --output="$out/source.tar.gz" HEAD
+          git ls-tree -r HEAD > "$out/tree.txt"
+          git rev-parse HEAD HEAD^{tree} > "$out/identity.txt"
+          gh api --paginate 'repos/42433422/XCMAX/actions/runs?head_sha=501849c02a8e77dc887a0047f4cff6bdfec8f090&event=push&per_page=100' --jq '.workflow_runs[] | {id,name,event,head_sha,status,conclusion,created_at,updated_at}' > "$out/main-runs.jsonl"
+          gh api 'repos/42433422/XCMAX/actions/runs/39716406440' --jq '{id,name,event,head_sha,status,conclusion,created_at,updated_at}' > "$out/pr-run.json"
+          main_run=$(gh api 'repos/42433422/XCMAX/actions/runs?head_sha=501849c02a8e77dc887a0047f4cff6bdfec8f090&event=push&per_page=100' --jq '.workflow_runs[] | select(.workflow_id == 291181631) | .id' | head -1)
+          if [ -n "$main_run" ]; then
+            gh api --paginate "repos/42433422/XCMAX/actions/runs/$main_run/jobs?per_page=100" --jq '.jobs[] | {id,name,head_sha,status,conclusion,created_at,started_at,completed_at,steps}' > "$out/main-jobs.jsonl"
+          fi
+          sha256sum "$out/source.tar.gz" > "$out/source.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-closure-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/ci-closure-source/
+          if-no-files-found: error
+          retention-days: 3
+      - name: Clean task workspace
+        if: ${{ always() && hashFiles('scripts/dev/clean_agent_workspace.py') != '' }}
+        run: python3 scripts/dev/clean_agent_workspace.py
