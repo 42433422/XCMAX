@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -81,7 +82,7 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
     if not mod_id:
         raise HTTPException(status_code=400, detail="缺少 mod_id")
 
-    from app.infrastructure.mods.mod_manager import get_mod_manager
+    from app.infrastructure.mods.mod_manager import get_mod_manager, get_mod_registry
 
     manager = get_mod_manager()
     root = install_receipts._root(str(manager.mods_root))
@@ -92,6 +93,7 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
 
     receipt_path = state / "receipt.json"
     pending_to_remove: tuple[Path, str] | None = None
+    verified_regular_install = False
     try:
         # Keep the same lock order as install_receipts.install_extracted and
         # pending activation: process-wide install lock, then per-Mod file lock.
@@ -118,6 +120,7 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
                         raise HTTPException(
                             status_code=403, detail="扩展归属或卸载权限未通过校验，拒绝删除"
                         )
+                verified_regular_install = not install.get("requires_restart")
                 if install.get("requires_restart"):
                     pending_to_remove = (
                         Path(str(install.get("installed_root") or "")),
@@ -134,7 +137,15 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
                         status_code=403, detail="旧包归属或卸载权限未通过校验，拒绝删除"
                     )
 
-            result: tuple[bool, str] = manager.uninstall_mod(mod_id, remove_files=True)
+            result: tuple[bool, str]
+            if verified_regular_install and get_mod_registry().get_mod_metadata(mod_id) is None:
+                # A verified disk install need not have loaded successfully. Never
+                # apply this fallback to unsigned legacy or unverified pending trees.
+                manager.unload_mod(mod_id)
+                shutil.rmtree(root / mod_id)
+                result = (True, f"MOD {mod_id} 卸载成功")
+            else:
+                result = manager.uninstall_mod(mod_id, remove_files=True)
             if not result[0]:
                 return result
 
@@ -148,8 +159,6 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
                     and pending.parent.resolve() == expected_parent
                     and pending.name == "pending-" + digest
                 ):
-                    import shutil
-
                     shutil.rmtree(pending)
             return result
     except HTTPException:

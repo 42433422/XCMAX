@@ -383,3 +383,140 @@ def test_csrf_double_submit_still_protects_both_mutation_routes(
     assert response.status_code == 403
     assert target.is_dir()
     isolated_manager.unload_mod.assert_not_called()
+
+
+@pytest.fixture
+def verified_unregistered_install(monkeypatch, signed_runtime_mod, tmp_path):
+    from app.infrastructure.mods import mod_manager
+    from app.infrastructure.mods.registry import ModRegistry
+
+    registry = ModRegistry()
+    manager = mod_manager.ModManager(mods_root=str(signed_runtime_mod.root))
+    monkeypatch.setattr(mod_manager, "get_mod_registry", lambda: registry)
+    monkeypatch.setattr(mod_manager, "get_mod_manager", lambda: manager)
+    monkeypatch.setattr(mod_manager, "is_mods_disabled", lambda: False)
+    manager.unload_mod = Mock(wraps=manager.unload_mod)
+
+    def prepare(mode):
+        source = tmp_path / "disk-only-source"
+        source.mkdir()
+        manifest = {
+            "id": "unknown-ui-fixture",
+            "name": "Disk-only fixture",
+            "version": "1.0.0",
+            "scope": "account",
+            "entitlement_mod_id": "taiyangniao-pro",
+            "dependencies": {"not-installed-fixture-dependency": "*"}
+            if mode == "dependency_failure"
+            else {},
+            "frontend": {
+                "runtime": {
+                    "sdk_version": 1,
+                    "entry": "frontend/runtime/index.js",
+                    "routes": [{"path": "/mod/unknown-ui-fixture/home", "title": "Fixture"}],
+                }
+            },
+        }
+        (source / "manifest.json").write_text(json.dumps(manifest))
+        entry = source / "frontend/runtime/index.js"
+        entry.parent.mkdir(parents=True)
+        entry.write_text("export function mount() { return () => {} }")
+        target = signed_runtime_mod.install(source=source)
+        archive = next(
+            (signed_runtime_mod.root / ".install-receipts/unknown-ui-fixture").glob("*.zip")
+        )
+        ok, message, _ = manager.install_mod_package(
+            str(archive), verify_signature=True, activate=mode != "inactive", owner_scope="tenant:1"
+        )
+        if mode == "inactive":
+            assert ok and "未激活" in message
+        else:
+            assert not ok and "加载失败" in message
+        assert target.is_dir()
+        assert registry.get_mod_metadata("unknown-ui-fixture") is None
+        return target
+
+    return SimpleNamespace(prepare=prepare, manager=manager, registry=registry)
+
+
+@pytest.mark.parametrize("mode", ["inactive", "dependency_failure"])
+@pytest.mark.parametrize(
+    "method,route",
+    [("DELETE", "/api/mods/unknown-ui-fixture"), ("POST", "/api/mod-store/uninstall")],
+)
+def test_verified_owner_can_uninstall_disk_only_install_through_real_routes(
+    uninstall_client, verified_unregistered_install, mode, method, route
+):
+    target = verified_unregistered_install.prepare(mode)
+    response = _mod_call(
+        uninstall_client,
+        route,
+        method,
+        _authenticated(uninstall_client, "mod-session-1"),
+        "unknown-ui-fixture",
+    )
+    assert response.status_code == 200 and response.json()["success"] is True
+    assert not target.exists()
+    verified_unregistered_install.manager.unload_mod.assert_called_once_with("unknown-ui-fixture")
+
+
+@pytest.mark.parametrize("mode", ["inactive", "dependency_failure"])
+@pytest.mark.parametrize("failure", ["other_owner", "broken_receipt"])
+@pytest.mark.parametrize(
+    "method,route",
+    [("DELETE", "/api/mods/unknown-ui-fixture"), ("POST", "/api/mod-store/uninstall")],
+)
+def test_disk_only_fallback_keeps_owner_and_receipt_rejections(
+    uninstall_client,
+    verified_unregistered_install,
+    signed_runtime_mod,
+    mode,
+    failure,
+    method,
+    route,
+):
+    target = verified_unregistered_install.prepare(mode)
+    if failure == "broken_receipt":
+        (signed_runtime_mod.root / ".install-receipts/unknown-ui-fixture/receipt.json").write_text(
+            "{broken"
+        )
+    session = "mod-session-2" if failure == "other_owner" else "mod-session-1"
+    response = _mod_call(
+        uninstall_client,
+        route,
+        method,
+        _authenticated(uninstall_client, session),
+        "unknown-ui-fixture",
+    )
+    assert response.status_code == (403 if failure == "other_owner" else 409)
+    assert target.exists()
+    verified_unregistered_install.manager.unload_mod.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "method,route",
+    [("DELETE", "/api/mods/unknown-ui-fixture"), ("POST", "/api/mod-store/uninstall")],
+)
+def test_disk_only_fallback_does_not_delete_unverified_legacy_directory(
+    uninstall_client,
+    verified_unregistered_install,
+    signed_runtime_mod,
+    admin_session,
+    method,
+    route,
+):
+    target = signed_runtime_mod.root / "unknown-ui-fixture"
+    target.mkdir()
+    (target / "manifest.json").write_text(
+        json.dumps({"id": "unknown-ui-fixture", "scope": "global"})
+    )
+    response = _mod_call(
+        uninstall_client,
+        route,
+        method,
+        _authenticated(uninstall_client, admin_session),
+        "unknown-ui-fixture",
+    )
+    assert response.json()["success"] is False
+    assert target.exists()
+    verified_unregistered_install.manager.unload_mod.assert_not_called()
