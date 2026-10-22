@@ -1,0 +1,102 @@
+name: Isolated backend collection profile
+on:
+  push:
+    branches: ['ci/verify-aggregate-profile-fix-20261022']
+    paths: ['.github/workflows/ci2525-collection-profile.yml']
+permissions:
+  contents: read
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd 'redis-cli ping' --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f54e9da02a0911a9962da09706c674a1ebfcd47f
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            FHD/requirements-server-api.txt
+            FHD/deploy/requirements-dev.txt
+            FHD/pyproject.toml
+            FHD/packages/**/pyproject.toml
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+      - name: Prepare the existing production test dependencies
+        working-directory: FHD
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-server-api.txt
+          pip install -r deploy/requirements-dev.txt
+          python -m pip check
+          cd frontend
+          npm ci --no-audit --no-fund
+      - name: Profile collection only, never claim test execution
+        working-directory: FHD
+        env:
+          BACKEND_SHARD_INDEX: '7'
+          BACKEND_SHARD_TOTAL: '8'
+          BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
+          BACKEND_SOURCE_SHA: f54e9da02a0911a9962da09706c674a1ebfcd47f
+          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: '1'
+          INTENT_BENCHMARK_RUN: '1'
+        run: |
+          python - <<'PY'
+          import hashlib, io, json, os, pathlib, pstats, subprocess, sys, time
+          from datetime import datetime, timezone
+          root=pathlib.Path.cwd(); out=pathlib.Path(os.environ['RUNNER_TEMP'])/'collection-profile';out.mkdir()
+          actual=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          assert actual==os.environ['BACKEND_SOURCE_SHA']
+          env=dict(os.environ, GITHUB_SHA=actual, BACKEND_SHARD_MANIFEST=str(out/'collection-only-manifest.json'))
+          receipt={'source_sha':actual,'source_tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'run_id':os.environ['GITHUB_RUN_ID'],'scope':'instrumented collection-only diagnosis; no tests executed; not gate evidence','status':'running','started_at':datetime.now(timezone.utc).isoformat()}
+          try:
+              (out/'dependencies.json').write_text(subprocess.check_output([sys.executable,'-m','pip','list','--format=json'],text=True))
+              started=time.monotonic()
+              with (out/'collection.log').open('w') as log:
+                  result=subprocess.run([sys.executable,'-m','cProfile','-o',str(out/'collection.prof'),'-m','pytest','tests/','--collect-only','-q','-p','scripts.ci.backend_shards','--cov','--cov-branch','--cov-fail-under=0','--cov-report='],env=env,stdout=log,stderr=subprocess.STDOUT,timeout=900)
+              receipt['instrumented_wall_seconds']=time.monotonic()-started
+              receipt['returncode']=result.returncode
+              data=json.loads((out/'collection-only-manifest.json').read_text())
+              receipt['collected_total']=len(data['full']);receipt['selected_for_shard']=len(data['selected']);receipt['collection_errors']=data['collection_errors'];receipt['collection_skips']=data['collection_skips'];receipt['phase_seconds']=data['phase_seconds'];receipt['executed_test_reports']=len(data['reports'])
+              assert result.returncode==0 and not data['collection_errors'] and not data['reports'], 'Collection failed or unexpectedly executed tests'
+              stream=io.StringIO();stats=pstats.Stats(str(out/'collection.prof'),stream=stream)
+              stats.sort_stats('cumulative').print_stats(80);(out/'top-cumulative.txt').write_text(stream.getvalue())
+              entries=[]
+              for (filename,line,function),(primitive,total,self_time,cumulative,callers) in stats.stats.items():
+                  entries.append({'file':filename,'line':line,'function':function,'primitive_calls':primitive,'total_calls':total,'self_seconds':self_time,'cumulative_seconds':cumulative})
+              rows=sorted(entries,key=lambda e:e['cumulative_seconds'],reverse=True)
+              (out/'functions.json').write_text(json.dumps(rows,indent=2))
+              project=[e for e in rows if str(root) in e['file']]
+              (out/'top-project.json').write_text(json.dumps(project[:100],indent=2))
+              subprocess.run(['git','diff','--exit-code'],check=True)
+              receipt['status']='success'
+          finally:
+              if receipt['status']!='success': receipt['status']='failure'
+              receipt['finished_at']=datetime.now(timezone.utc).isoformat()
+              (out/'receipt.json').write_text(json.dumps(receipt,indent=2));print(json.dumps(receipt,indent=2))
+          PY
+      - name: Clean task-created caches
+        if: always()
+        run: |
+          python3 scripts/dev/clean_agent_workspace.py
+          df -h .
+      - name: Retain diagnostic evidence separately from test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-collection-profile-${{ github.run_id }}
+          path: ${{ runner.temp }}/collection-profile/
+          if-no-files-found: error
+          retention-days: 7
