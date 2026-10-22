@@ -180,7 +180,7 @@
           </div>
           <div v-if="stageOf(ticket) !== 'delivered'" class="delivery-actions__controls">
             <label v-if="ticket.custom_delivery?.kind === 'module' && ticket.custom_delivery.suggested_id === 'sunbird-attendance-custom'">
-              <input v-model="mainRework[ticket.id]" type="checkbox" />使用主线已修复的私有模块（保留原客户归属与权益）
+              <input v-model="mainRework[ticket.id]" type="checkbox" />使用主线私有模块源码（保留原客户归属与权益）
             </label>
             <input
               v-model.trim="reworkNotes[ticket.id]"
