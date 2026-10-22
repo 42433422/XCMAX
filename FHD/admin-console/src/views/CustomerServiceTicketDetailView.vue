@@ -103,6 +103,13 @@
         </template>
       </section>
 
+      <form v-if="ticket.status === 'processing'" class="cs-card cs-reply-form" @submit.prevent="replyTicket">
+        <h3 class="cs-card-title">答复原客户</h3>
+        <p class="cs-hint">发送到原客服会话，保持原工单未解决；答复不代表修复或验收通过。</p>
+        <label>客户可见答复<textarea v-model="replyNote" required minlength="4" maxlength="2000" /></label>
+        <button class="cs-btn" type="submit" :disabled="saving || savingEta">发送答复并保留原单</button>
+      </form>
+
       <form v-if="ticket.status === 'processing'" class="cs-card cs-close-form" @submit.prevent="closeTicket">
         <h3 class="cs-card-title">处理原工单</h3>
         <p v-if="requiresCustomerAcceptance" class="cs-hint">产品问题与定制交付须由原客户通过运行回执或原工单决策验收；管理员只能按旧单规则记录过期。</p><label v-else>处置方式<select v-model="closeDisposition"><option value="resolved">实际验收已解决</option><option value="expired">已过期不再处理（未修复，不影响资金权益）</option></select></label>
@@ -176,6 +183,8 @@ const router = useRouter()
 const detail = ref<Detail | null>(null), loading = ref(false), error = ref(''), saving = ref(false), expectedCompletionInput = ref('')
 const savingEta = ref(false), etaMessage = ref(''), etaError = ref('')
 const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref(''), closeDisposition = ref('resolved')
+const replyNote = ref(''), replyRequestId = ref('')
+watch(replyNote, () => { replyRequestId.value = '' })
 let generation = 0
 
 const ticketId = computed(() => Number(String(route.params.ticketId ?? '')))
@@ -206,6 +215,18 @@ function backToList() { void router.push({ name: 'customer-service-tickets' }) }
 
 watch([closeNote, closeVerification, closeDisposition], () => { closeRequestId.value = '' })
 watch([ticketId, requiresCustomerAcceptance], () => { closeDisposition.value = requiresCustomerAcceptance.value ? 'expired' : 'resolved' })
+
+async function replyTicket() {
+  const id = ticketId.value
+  if (saving.value || savingEta.value || replyNote.value.trim().length < 4 || ticket.value.status !== 'processing') return
+  saving.value = true
+  try {
+    replyRequestId.value ||= crypto.randomUUID()
+    await api.post(`/api/xcmax/admin/customer-service/tickets/${id}/reply`, { request_id: replyRequestId.value, note: replyNote.value })
+    if (ticketId.value === id) { replyNote.value = ''; replyRequestId.value = ''; await load() }
+  } catch (cause) { if (ticketId.value === id) error.value = message(cause) }
+  finally { saving.value = false }
+}
 
 async function closeTicket() {
   const id = ticketId.value
@@ -287,7 +308,7 @@ async function load() {
   } catch (cause) { if (request === generation) error.value = message(cause) }
   finally { if (request === generation) loading.value = false }
 }
-watch(ticketId, () => { closeDisposition.value = 'resolved'; closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''; etaMessage.value = ''; etaError.value = ''; void load() }, { immediate: true })
+watch(ticketId, () => { replyNote.value = ''; replyRequestId.value = ''; closeDisposition.value = 'resolved'; closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''; etaMessage.value = ''; etaError.value = ''; void load() }, { immediate: true })
 onBeforeUnmount(() => { generation++ })
 </script>
 

@@ -108,9 +108,11 @@ onBeforeUnmount(() => { generation++; pending?.abort() })
 <template>
   <details v-if="repairs.length || error || failed" class="repair-acceptance" aria-label="问题工单处理结果">
     <summary>问题工单处理结果（{{ repairs.length }}）<span v-if="error || failed"> · 同步或保存失败，请展开重试</span></summary>
+    <div class="repair-list">
     <p v-if="error || failed" role="alert">{{ error || failed?.message }} <button type="button" :disabled="busy !== null" @click="retry">重试</button></p>
     <article v-for="repair in repairs" :key="repair.id">
-      <strong>{{ repair.ticket_no }} · {{ repair.summary }}</strong>
+      <strong>{{ repair.ticket_no }}</strong>
+      <details class="repair-description"><summary>{{ repair.summary.slice(0, 64) }}{{ repair.summary.length > 64 ? '…' : '' }}</summary><p>{{ repair.summary }}</p></details>
       <p>{{ stateText(repair) }}</p>
       <p v-if="repair.latest_result?.progress">AI 处理结果：{{ repair.latest_result.progress }}</p>
       <p v-if="repair.last_error">失败原因：{{ repair.last_error }}</p>
@@ -128,16 +130,21 @@ onBeforeUnmount(() => { generation++; pending?.abort() })
         </button>
       </template>
     </article>
+    </div>
   </details>
 </template>
 
 <style scoped>
-.repair-acceptance { flex: 0 0 auto; padding: 10px 16px; border-bottom: 1px solid var(--border-color, #ddd); max-height: 30vh; overflow: auto; overflow-wrap: anywhere; }
+.repair-acceptance { flex: 0 0 auto; min-width: 0; margin-bottom: 8px; border: 1px solid var(--border-color, #ddd); border-radius: 8px; overflow: hidden; background: var(--xc-color-surface, #fff); }
+.repair-acceptance > summary { padding: 8px 12px; }
+.repair-list { max-height: min(24vh, 200px); overflow: auto; padding: 0 12px 12px; overflow-wrap: anywhere; }
+.repair-description summary { font-weight: normal; line-height: 1.5; }
+article { padding: 8px 0; border-top: 1px solid var(--border-color, #ddd); }
 summary { cursor: pointer; }
 summary span { color: var(--xc-color-danger, #b42318); }
 article + article { margin-top: 16px; }
 p { margin: 8px 0; }
-input { margin: 0 12px; padding: 8px; min-width: 240px; max-width: 100%; }
+input { box-sizing: border-box; margin: 4px 8px; padding: 8px; width: min(240px, 100%); max-width: 100%; }
 button { padding: 8px 12px; cursor: pointer; }
 button + button { margin-left: 8px; }
 button:disabled { cursor: default; opacity: .6; }
