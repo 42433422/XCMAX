@@ -1,5 +1,5 @@
 {
-  "lines": 2328491,
+  "lines": 2328631,
   "updated": "2026-10-22",
-  "note": "用户2026-10-22要求完整闭环CI并行改造；与最新main桌面修复合并，保留最终SSOT硬门禁及完整覆盖率，修复三项旧分片契约及守卫输入；仅生成器同步能力页面日期，不改产品权限，不删无关测试。"
+  "note": "User-authorized CI acceleration: exact-input report reuse, distinct-scope and tamper regressions, collection-phase timing; no threshold or test-scope reduction."
 }
