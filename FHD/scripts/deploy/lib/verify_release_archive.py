@@ -10,6 +10,9 @@ import tarfile
 from pathlib import Path, PurePosixPath
 
 FORBIDDEN_PARTS = {
+    ".backups",
+    ".test_db_state.json",
+    "商标导出",
     ".DS_Store",
     ".git",
     ".install-receipts",
@@ -63,6 +66,10 @@ def _normalise(raw_name: str) -> str:
 
 
 def _forbidden_reason(name: str) -> str | None:
+    if name.startswith(
+        ("XCAGI/监控/window_", "tools/bartender-monitor/window_")
+    ) and name.lower().endswith((".png", ".jpg", ".jpeg")):
+        return "monitor screenshots are runtime data"
     for part in PurePosixPath(name).parts:
         if part in FORBIDDEN_PARTS:
             return f"forbidden path component: {part}"

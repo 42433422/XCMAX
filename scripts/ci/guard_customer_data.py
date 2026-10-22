@@ -22,8 +22,14 @@ PREFIXES = (
     MODSTORE + "modstore_server/data/chroma/",
     "FHD/delivery/sunbird-seed/424/",
     "FHD/delivery/sunbird-seed/data/",
+    "FHD/XCAGI/.backups/",
+    "FHD/app/resources/ai_assistant/商标导出/",
+    "FHD/resources/ai_assistant/商标导出/",
 )
-EXACT = {"FHD/delivery/sunbird-seed/config/sunbird-roster.json"}
+EXACT = {
+    "FHD/delivery/sunbird-seed/config/sunbird-roster.json",
+    "FHD/XCAGI/.test_db_state.json",
+}
 BLOCKED_BLOBS = frozenset(
     {
         "bcc11bbe86cc06f0118c7cccc6a79df51b9aed7b",
@@ -39,6 +45,10 @@ BLOCKED_BLOBS = frozenset(
         "569db365a840d7916f66fdaa30ba4f20b5664746",
         "da1839d345f22ceb9024e64af7bcaf931bcd4c9b",
         "cfd5dcb0aaa9e1eb718867712384a23d6d7524ac",
+        "bfc8897b71dff4ed972ee84b5292061cec7e6171",
+        "d975ca3b41f10bfc4ba36fa1e85f2cd62fbdfecf",
+        "f3dd629bbcf4fc3ce321e268dc76f8f913375eb4",
+        "16c6c4923c72492d44a472e2b50539d8cbf89984",
     }
 )
 
@@ -48,6 +58,9 @@ def _path_pattern(pattern: str) -> re.Pattern[str]:
 
 
 PATTERNS = (
+    _path_pattern(
+        r"FHD/(?:XCAGI/监控|tools/bartender-monitor)/window_.*\.(?i:png|jpe?g)$"
+    ),
     _path_pattern(r"FHD/\.cursor/.*\.docx$"),
     _path_pattern(re.escape(MODSTORE) + r"modstore_server/webhook_events/.*\.json$"),
     _path_pattern(

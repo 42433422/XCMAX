@@ -111,6 +111,12 @@ deploy_emit pack started "artifact=$ARTIFACT"
 
 # 仅打包运行时代码；不含 .env / data / uploads / 前端构建缓存。
 RSYNC_EXCLUDES=(
+  --exclude '.backups'
+  --exclude '.test_db_state.json'
+  --exclude '商标导出'
+  --exclude '监控/window_*.png'
+  --exclude '监控/window_*.jpg'
+  --exclude '监控/window_*.jpeg'
   --exclude '.git'
   --exclude '.venv'
   --exclude '__pycache__'
