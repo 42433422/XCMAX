@@ -12,6 +12,7 @@ from app.db.session import get_host_db
 TENANT_PERMISSION_CODES = frozenset(
     {
         "tenant.manage_roles",
+        "model_payment.refund",
         "etl.read",
         "etl.template.manage",
         "etl.execute",

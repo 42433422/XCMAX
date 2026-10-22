@@ -8,6 +8,7 @@ dot 的转接程序（devfleet-private ``scripts/dot-mailbox-agent.mjs``）只�
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import uuid
 from typing import Any, Dict, Iterable, List
@@ -227,6 +228,209 @@ def _sensitive_values(fields: Dict[str, Any]) -> List[str]:
     return [str(fields[key]) for key in _SENSITIVE_VALUE_KEYS if fields.get(key) not in ("", None)]
 
 
+class DoltIncidentContractError(ValueError):
+    """The incident's required handoff cannot safely cross the Dot boundary."""
+
+
+def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
+    """Read predecessors under the live SQL lease, never from customer prompt fields."""
+    from modstore_server.incident_team_escalation_contract import active_context
+    from modstore_server.incident_team_handoff import role_handoff
+    from modstore_server.models import IncidentEvent, get_session_factory
+    from modstore_server.node_coordinator import assert_incident_claim
+    from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+    raw = _raw(req)
+    selector = raw.get("_incident_handoff")
+    if selector is None and raw.get("_trusted_incident_team_execution") is not True:
+        return None
+    try:
+        if not isinstance(selector, dict) or selector.get("schema") != "incident-team-runtime/v1":
+            raise DoltIncidentContractError("missing_trusted_incident_handoff")
+        event_id = int(selector["event_id"])
+        role = str(selector["role"])
+        attempt = str(selector["attempt_id"])
+        if (
+            role not in {"scout", "fix", "verify", "escalation_review"}
+            or raw.get("event_id") != event_id
+            or raw.get("role") != role
+            or raw.get("attempt_id") != attempt
+        ):
+            raise DoltIncidentContractError("incident_execution_identity_mismatch")
+        with get_session_factory()() as db:
+            assert_incident_claim(event_id, session=db)
+            event = db.get(IncidentEvent, event_id)
+            source, blocked = active_context(db, event)
+            if blocked:
+                raise DoltIncidentContractError(blocked)
+            owner = source.get("tenant_id") or source.get("user_id")
+            if raw.get("user_id") != source.get("user_id") or raw.get("tenant_id") != owner:
+                raise DoltIncidentContractError("incident_owner_mismatch")
+            claim = source.get("_team_claim") or {}
+            rows = {r["role"]: r for r in claim.get("team") or [] if isinstance(r, dict)}
+            actions = {}
+            if role == "escalation_review":
+                receipt = (claim.get("escalations") or {}).get(attempt) or {}
+                _, blocked = (
+                    active_context(db, event, receipt=receipt)
+                    if receipt
+                    else ({}, "review_missing")
+                )
+                if blocked or receipt.get("state") != "dispatching":
+                    raise DoltIncidentContractError(blocked or "review_not_dispatching")
+                roles = [str(receipt["role"])]
+                if roles[0] != "scout" and "scout" in rows:
+                    roles.append("scout")
+                actions = {
+                    key: receipt.get(key) for key in ("category", "reason", "attempted_actions")
+                }
+            else:
+                current = rows.get(role) or {}
+                if (
+                    raw.get("_trusted_incident_team_execution") is not True
+                    or current.get("attempt_id") != attempt
+                    or current.get("status") != "dispatching"
+                    or current.get("employee_id") != req.get("employee_id")
+                ):
+                    raise DoltIncidentContractError("incident_attempt_not_current")
+                roles = [] if role == "scout" else ["scout"] if role == "fix" else ["scout", "fix"]
+                if role == "verify" and str(raw.get("revision") or "") != str(
+                    (rows.get("fix") or {}).get("attempt_id") or ""
+                ):
+                    raise DoltIncidentContractError("verification_revision_mismatch")
+            handoffs = [
+                role_handoff(rows.get(previous), previous, max_chars=4000) for previous in roles
+            ]
+            previous_fix = selector.get("previous_fix")
+            if role == "fix" and raw.get("is_transient_retry") is True:
+                if (
+                    not isinstance(previous_fix, dict)
+                    or previous_fix.get("schema") != "incident-role-handoff/v1"
+                ):
+                    raise DoltIncidentContractError("retry_handoff_missing")
+                handoffs.append(previous_fix)
+            return {"role": role, "source": source, "handoffs": handoffs, "review": actions}
+    except DoltIncidentContractError:
+        raise
+    except RECOVERABLE_ERRORS as exc:
+        raise DoltIncidentContractError(
+            f"incident_handoff_unavailable:{type(exc).__name__}"
+        ) from exc
+
+
+def _incident_prompt(contract: Dict[str, Any], req: Dict[str, Any]) -> str:
+    """Project only bounded handoff fields through the existing PII redactor."""
+    sensitive = _sensitive_values(contract["source"])
+
+    def clean(value: Any, limit: int = 1000) -> str:
+        return redact_ticket_text(value, sensitive)[:limit]
+
+    handoffs = []
+    for item in contract["handoffs"]:
+        identity = {}
+        for key in ("attempt_id", "verified_fix_attempt_id"):
+            value = str((item.get("identity") or {}).get(key) or "")
+            if value:
+                # Server-generated UUID hex identifies an attempt, not a secret.
+                identity[key] = value if re.fullmatch(r"[a-f0-9]{32}", value) else clean(value, 100)
+        handoffs.append(
+            {
+                "schema": "incident-role-handoff/v1",
+                "role": clean(item.get("role"), 40),
+                "status": clean(item.get("status"), 80),
+                "succeeded": item.get("succeeded") is True,
+                "identity": identity,
+                **{
+                    key: [clean(value) for value in (item.get(key) or [])[:4]]
+                    for key in ("summaries", "blockers", "next_actions")
+                },
+                "references": [
+                    {
+                        key: clean(ref[key], 240)
+                        for key in (
+                            "task_id",
+                            "para_task_id",
+                            "change_request_id",
+                            "pull_request_url",
+                            "branch",
+                            "merge_commit_sha",
+                        )
+                        if ref.get(key)
+                    }
+                    for ref in (item.get("references") or [])[:8]
+                    if isinstance(ref, dict)
+                ],
+                "omitted_items": int(item.get("omitted_items") or 0),
+            }
+        )
+    role = contract["role"]
+    goals = {
+        "scout": "只读排查最可能原因、影响范围、严重程度和安全下一步。",
+        "fix": "根据交接执行或委派最小安全修复；commit 后、push/PR 前在 FHD/ 运行 python scripts/dev/push_preflight.py --fix 至通过。",
+        "verify": "只读核对本轮修复引用的真实凭证；用 PASS/FAIL 开头，说明证据和剩余风险，不再次修复。",
+        "escalation_review": "只读复核失败岗位和已尝试动作；未知结果必须回读原 task ID，禁止另派修复、关闭工单或联系客户。",
+    }
+    source = contract["source"]
+    resolution = source.get("resolution") or {}
+    lines = ["事故岗位执行契约（服务端校验，摘要不代替原任务凭证）:", f"role: {role}", goals[role]]
+    if resolution.get("route") == "private_mod":
+        lines += [
+            "客户需求仅交付到原账号授权的私有 Mod；禁止客户专用宿主分支，禁止把客户业务数据并入共享代码。",
+            "target_mod_id: "
+            + clean(source.get("target_mod_id") or resolution.get("target_mod_id"), 120),
+        ]
+    elif resolution.get("route") == "shared_core":
+        lines.append(
+            "共享修复必须保留真实 EmployeeChangeRequest 的 change_request_id 与测试、主线合并、CI、发布及客户端运行版本回执；缺少凭证不能声明已修复。按当前岗位范围执行，不自行合并或发布。"
+        )
+    if resolution.get("source_ref") or source.get("source_ref"):
+        lines.append(
+            "source_ref: " + clean(resolution.get("source_ref") or source.get("source_ref"), 160)
+        )
+    lines.append("structured_handoffs: " + json.dumps(handoffs, ensure_ascii=False))
+    if contract["review"]:
+        review = contract["review"]
+        actions = review.get("attempted_actions") or {}
+        lines.append(
+            "review_context: "
+            + json.dumps(
+                {
+                    "category": clean(review.get("category"), 100),
+                    "reason": clean(review.get("reason"), 500),
+                    "attempted_actions": {
+                        key: (
+                            actions[key]
+                            if isinstance(actions[key], (bool, int))
+                            else clean(actions[key], 150)
+                        )
+                        for key in ("action", "attempts", "max_rounds", "last_category")
+                        if key in actions
+                    },
+                },
+                ensure_ascii=False,
+            )
+        )
+    budget = req.get("execution_budget") or {}
+    if budget:
+        lines.append(
+            "execution_budget: "
+            + json.dumps(
+                {
+                    "requested": {
+                        key: budget[key]
+                        for key in ("role", "context_chars", "output_tokens", "reasoning_effort")
+                        if key in budget
+                    },
+                    "executor": "dolt",
+                    "codex_controls": "unsupported",
+                    "output_limit_enforced": False,
+                },
+                ensure_ascii=False,
+            )
+        )
+    return "\n".join(lines)
+
+
 def build_dolt_prompt(fields: Dict[str, Any], req: Dict[str, Any], mode: str) -> str:
     ticket_no = re.sub(r"[^A-Za-z0-9_\-]", "", str(fields.get("ticket_no") or ""))[:64]
     triage = triage_result(req, fields)
@@ -273,13 +477,19 @@ def prepare_dolt_ticket_payload(
     if tool_name != DOLT_TOOL or not is_customer_ticket(req):
         return payload
     fields = ticket_fields(req)
+    contract = _incident_contract(req)
+    if contract:
+        fields = {**fields, **contract["source"], "role": contract["role"]}
     mode = ticket_mode(req, fields)
+    if contract and contract["role"] in {"scout", "verify", "escalation_review"}:
+        mode = MODE_REPORT_ONLY
     ticket_no = re.sub(r"[^A-Za-z0-9_\-]", "", str(fields.get("ticket_no") or ""))[:64] or "-"
     # dot 不合并、不用 MODstore 本机工作区：去掉自动合并和本地路径。
     out = {k: v for k, v in payload.items() if k not in {"auto_merge", "workspace_path"}}
     out.update(
         title=f"{control_marker(fields, req)} [dot:{mode}] 客服工单 {ticket_no}"[:240],
-        prompt=build_dolt_prompt(fields, req, mode),
+        prompt=build_dolt_prompt(fields, req, mode)
+        + ("\n" + _incident_prompt(contract, req) if contract else ""),
         subtask_title=f"{mode}: 客服工单 {ticket_no}"[:240],
         report_only=mode == MODE_REPORT_ONLY,
         tool_name=DOLT_TOOL,

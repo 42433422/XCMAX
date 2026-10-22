@@ -9,6 +9,7 @@ dependencies = []
 web = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.27",
+    "websockets>=15,<17",
     "python-multipart>=0.0.6",
     "httpx[socks]>=0.27",
     # Starlette 1.7 removes deprecated portal imports required by AnyIO 4.15.

@@ -1111,7 +1111,7 @@ class TestDigestLocalOrProxyDeep:
     """Deep coverage for _digest_local_or_proxy."""
 
     @pytest.mark.asyncio
-    async def test_prefer_local_false_uses_proxy(self):
+    async def test_prefer_local_false_uses_proxy(self, digest_admin_branch):
         """When prefer_local_modstore is False, should use proxy with admin session."""
         req = MagicMock(spec=Request)
         with (
@@ -1138,7 +1138,7 @@ class TestDigestLocalOrProxyDeep:
         assert kwargs.get("require_admin_session") is True
 
     @pytest.mark.asyncio
-    async def test_prefer_local_true_get_uses_local(self):
+    async def test_prefer_local_true_get_uses_local(self, digest_admin_branch):
         """When prefer_local_modstore is True and GET, should use local."""
         req = MagicMock(spec=Request)
         with (
@@ -1159,7 +1159,7 @@ class TestDigestLocalOrProxyDeep:
         assert result["data"][0]["id"] == 9
 
     @pytest.mark.asyncio
-    async def test_local_path_with_query_params(self):
+    async def test_local_path_with_query_params(self, digest_admin_branch):
         """Local path with query params should parse them."""
         req = MagicMock(spec=Request)
         with (
@@ -1182,7 +1182,7 @@ class TestDigestLocalOrProxyDeep:
         assert kwargs.get("offset") == 0
 
     @pytest.mark.asyncio
-    async def test_local_action_items_with_query_params(self):
+    async def test_local_action_items_with_query_params(self, digest_admin_branch):
         """Local action-items path with query params should parse them."""
         req = MagicMock(spec=Request)
         with (
@@ -1204,7 +1204,7 @@ class TestDigestLocalOrProxyDeep:
         assert kwargs.get("day") == "2026-06-17"
 
     @pytest.mark.asyncio
-    async def test_local_action_items_with_only_kind(self):
+    async def test_local_action_items_with_only_kind(self, digest_admin_branch):
         """Local action-items path with only kind param."""
         req = MagicMock(spec=Request)
         with (
@@ -1226,7 +1226,7 @@ class TestDigestLocalOrProxyDeep:
         assert kwargs.get("day") == ""
 
     @pytest.mark.asyncio
-    async def test_local_action_items_with_only_day(self):
+    async def test_local_action_items_with_only_day(self, digest_admin_branch):
         """Local action-items path with only day param."""
         req = MagicMock(spec=Request)
         with (

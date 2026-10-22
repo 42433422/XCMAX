@@ -329,7 +329,7 @@ def _drain_background_run(run_id: str) -> AgentRun:
 
 
 def _client(
-    user_id: str | None = "u1", *, tenant_id: str = "", mod_authorization=None
+    user_id: str | None = "u1", *, tenant_id: str = "", mod_authorization=None, is_admin=False
 ) -> TestClient:
     app = FastAPI()
     app.include_router(router)
@@ -344,6 +344,7 @@ def _client(
             user_id=user_id,
             tenant_id=tenant_id,
             mod_authorization=mod_authorization,
+            is_admin=is_admin,
         )
     return TestClient(app, raise_server_exceptions=False)
 
@@ -884,6 +885,9 @@ def test_resume_rejects_tenant_change_without_control_command():
     [
         ("get", ""),
         ("get", "/events"),
+        ("get", "/events/stream"),
+        ("get", "/artifacts/private-artifact"),
+        ("post", "/clarification"),
         ("post", "/pause"),
         ("post", "/cancel"),
         ("post", "/resume"),
@@ -891,19 +895,34 @@ def test_resume_rejects_tenant_change_without_control_command():
         ("post", "/continue"),
     ],
 )
-def test_same_user_cannot_access_run_from_another_tenant(method, path):
-    run = AgentRun(user_id="owner", message="private task", status="paused")
+@pytest.mark.parametrize("is_admin", [False, True])
+@pytest.mark.parametrize(
+    "actor,tenant", [("owner", "tenant-b"), ("other", "tenant-a"), ("other", "tenant-b")]
+)
+def test_run_scope_rejects_other_owner_or_tenant_even_for_admin(
+    method, path, is_admin, actor, tenant
+):
+    run = AgentRun(
+        user_id="owner",
+        message="private task",
+        status="failed" if path == "/events/stream" else "paused",
+    )
     run.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
     repository = get_agent_run_repository()
     repository.save(run)
     before = repository.get(run.run_id).to_dict()
-    response = getattr(_client("owner", tenant_id="tenant-b"), method)(
-        f"/api/agent/runs/{run.run_id}{path}"
+    response = _client(actor, tenant_id=tenant, is_admin=is_admin).request(
+        method.upper(),
+        f"/api/agent/runs/{run.run_id}{path}",
+        json={"step_id": "private-step", "parameters": {}} if method == "post" else None,
     )
     assert response.status_code == 403
+    assert response.json()["message"] == "无权访问该 agent run"
     assert "private task" not in response.text
     assert repository.get(run.run_id).to_dict() == before
     assert repository.latest_task_control(run.run_id) is None
+
+    assert get_task_execution_repository().get(run.run_id) is None
 
 
 def test_run_list_filters_tenant_before_limit():

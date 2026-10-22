@@ -385,6 +385,21 @@ def _registered_router_business_event(
             "contact_person": str(params.get("contact_person") or "").strip(),
             "contact_phone": str(params.get("contact_phone") or "").strip(),
         }
+        from app.domain.shipment.shipment_quantities import (
+            ShipmentQuantityValidationError,
+            validate_shipment_products,
+        )
+
+        if not payload["items"]:
+            return {
+                "success": False,
+                "error_code": "PRODUCTS_REQUIRED",
+                "message": "产品列表不能为空",
+            }
+        try:
+            validate_shipment_products(payload["items"])
+        except ShipmentQuantityValidationError as exc:
+            return exc.result()
         ok = publish_neuro_event("shipment.created", payload, "shipment")
         if not ok:
             logger.info("business shipment.create: neuro publish skipped or failed (stack off?)")

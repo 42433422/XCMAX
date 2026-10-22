@@ -60,7 +60,7 @@ class TestCreateShipment:
             with patch("app.infrastructure.mods.hooks.trigger"):
                 out = svc.create_shipment(
                     unit_name="X",
-                    items_data=[{"good": 1}, {"bad": 1}],
+                    items_data=[{"good": 1, "quantity_kg": 2}, {"bad": 1, "quantity_kg": 2}],
                 )
         # 1 item was added (the other was skipped with logger.warning)
         assert out["success"] is True
@@ -76,7 +76,7 @@ class TestCreateShipment:
             shipment_inst.is_valid.return_value = False
             ShipmentMock.create.return_value = shipment_inst
             ItemMock.from_dict.return_value = MagicMock()
-            out = svc.create_shipment(unit_name="X", items_data=[{"success": 1}])
+            out = svc.create_shipment(unit_name="X", items_data=[{"success": 1, "quantity_kg": 2}])
         assert out["success"] is False
         assert "无效" in out["message"]
 

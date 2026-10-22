@@ -184,7 +184,7 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
     quality, shard, gate = (
         jobs[name] for name in ("backend-quality", "backend-test-shard", "backend-test")
     )
-    prerequisites = {"guard-temp-scripts", "ssot-drift-gate", "classify"}
+    prerequisites = {"guard-temp-scripts", "classify"}
     assert set(quality["needs"]) == set(shard["needs"]) == prerequisites
     assert shard["if"] == "needs.classify.outputs.backend == 'true'"
     assert shard["runs-on"] == "ubuntu-latest"
@@ -193,7 +193,11 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
         "max-parallel": 8,
         "matrix": "${{ fromJSON(needs.classify.outputs.backend_matrix) }}",
     }
-    assert set(gate["needs"]) == {"classify", "backend-quality", "backend-test-shard"}
+    assert set(gate["needs"]) == prerequisites | {
+        "ssot-drift-gate",
+        "backend-quality",
+        "backend-test-shard",
+    }
     assert gate["if"] == "always()"
     assert gate["outputs"]["skip"] == "${{ needs.classify.outputs.backend_skip }}"
     preflight = gate["steps"][0]
@@ -333,6 +337,8 @@ def test_aggregate_shell_result_semantics(quality, shards, skip, passed):
         ["bash", "-e", "-c", jobs["backend-test"]["steps"][0]["run"]],
         env=dict(
             os.environ,
+            GUARD="success",
+            SSOT="success",
             CLASSIFY="success",
             VALID="true",
             SOURCE_SHA="a" * 40,
@@ -364,6 +370,8 @@ def test_aggregate_shell_rejects_unbound_classification(field, value):
     jobs = yaml.safe_load((ROOT / ".github/workflows/ci-cd.yml").read_text())["jobs"]
     env = dict(
         os.environ,
+        GUARD="success",
+        SSOT="success",
         CLASSIFY="success",
         VALID="true",
         SOURCE_SHA="a" * 40,

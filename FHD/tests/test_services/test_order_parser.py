@@ -164,9 +164,10 @@ class TestParseOrderTextQuantityPrice2067:
         assert result["unit_name"] == "客户闭环验收客户"
         product = result["products"][0]
         assert product["name"] == "客户闭环测试商品A"
-        assert product["quantity_tins"] == 24
-        assert product["quantity_kg"] == 24
-        assert product["tin_spec"] == 1.0
+        assert product["quantity"] == 24
+        assert "quantity_kg" not in product
+        assert "tin_spec" not in product
+        assert product["unit"] == ""
         assert product["unit_price"] == 3.5
         assert product["amount"] == 84.0
 
@@ -175,7 +176,8 @@ class TestParseOrderTextQuantityPrice2067:
         assert result["success"] is True
         assert result["unit_name"] == "张三"
         assert result["products"][0]["name"] == "白色乳胶漆"
-        assert result["products"][0]["quantity_tins"] == 3
+        assert result["products"][0]["quantity"] == 3
+        assert result["products"][0]["unit"] == "个"
         assert result["products"][0]["amount"] == 37.5
 
     def test_filler_customer_is_rejected(self):

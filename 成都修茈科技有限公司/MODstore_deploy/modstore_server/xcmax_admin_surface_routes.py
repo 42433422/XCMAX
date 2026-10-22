@@ -8,8 +8,12 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from modstore_server.api.service_auth import (
+    require_admin_or_internal,
+    require_admin_user,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("modstore_server.xcmax_admin_api")
@@ -42,7 +46,11 @@ def _daily_digest_record_to_dict(row: Any, *, include_body: bool = False) -> dic
     return data
 
 
-@router.get("/admin/daily-digests", response_model=None)
+@router.get(
+    "/admin/daily-digests",
+    response_model=None,
+    dependencies=[Depends(require_admin_or_internal)],
+)
 async def xcmax_daily_digest_records(
     limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0)
 ) -> dict[str, Any]:
@@ -76,7 +84,11 @@ async def xcmax_daily_digest_records(
         }
 
 
-@router.get("/admin/daily-digests/{record_id}", response_model=None)
+@router.get(
+    "/admin/daily-digests/{record_id}",
+    response_model=None,
+    dependencies=[Depends(require_admin_or_internal)],
+)
 async def xcmax_daily_digest_record_detail(record_id: int) -> dict[str, Any]:
     try:
         from modstore_server.models import DailyDigestRecord, get_session_factory
@@ -118,7 +130,11 @@ async def xcmax_release_train() -> dict[str, Any]:
         }
 
 
-@router.get("/admin/digest-identity", response_model=None)
+@router.get(
+    "/admin/digest-identity",
+    response_model=None,
+    dependencies=[Depends(require_admin_user)],
+)
 async def xcmax_digest_identity() -> dict[str, Any]:
     """返回当前宜向 XCmax 展示的 6 位身份校验码及是否仍可通过市场管理端解锁校验。
 
@@ -159,7 +175,11 @@ async def xcmax_digest_identity() -> dict[str, Any]:
         }
 
 
-@router.get("/admin/surface-audit/lane", response_model=None)
+@router.get(
+    "/admin/surface-audit/lane",
+    response_model=None,
+    dependencies=[Depends(require_admin_user)],
+)
 async def xcmax_surface_audit_lane(
     lane: str = Query("P-W"), refresh: bool = Query(False)
 ) -> dict[str, Any]:

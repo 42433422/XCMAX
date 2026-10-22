@@ -137,6 +137,38 @@ def test_skip_can_be_disabled_and_ignores_non_para_roles(monkeypatch):
     assert _para_first_skip_cognition("vibe-coding-maintainer", ["agent"], {}) is False
 
 
+@pytest.mark.parametrize("role", ["scout", "fix", "verify"])
+def test_dynamic_team_member_uses_the_existing_plan(para_ready, role):
+    employee = "dynamic-code-owner"
+    result = ee.execute_employee_task(
+        employee,
+        "沿用事故处理计划",
+        {
+            "role": role,
+            "incident_team": {"team": [{"employee_id": employee, "role": role}]},
+            "_trusted_incident_team_execution": True,
+            "suppress_lifecycle_events": True,
+            "allow_high_risk_real_run": True,
+        },
+        0,
+    )
+    assert result["llm_tokens"] == 0
+    assert para_ready == {"para": 1, "agent": 0}
+
+
+@pytest.mark.parametrize(
+    "plan", [None, {"team": None}, {"team": [{"employee_id": "other", "role": "fix"}]}]
+)
+def test_unselected_dynamic_employee_does_not_skip_cognition(plan):
+    from modstore_server.employee_executor_part03_part01_part02 import _para_first_skip_cognition
+
+    assert not _para_first_skip_cognition(
+        "dynamic-code-owner",
+        ["agent"],
+        {"role": "fix", "_trusted_incident_team_execution": True, "incident_team": plan},
+    )
+
+
 @pytest.mark.parametrize("preflight", ["ready_failure", "not_ready", "exception", "disabled_flag"])
 def test_trusted_incident_para_outage_never_plans_locally(para_ready, monkeypatch, preflight):
     def readiness():

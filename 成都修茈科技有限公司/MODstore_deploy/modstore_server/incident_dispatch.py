@@ -60,6 +60,10 @@ def _dispatch_intake_routing_plan(
 
     from modstore_server.duty_workforce_contracts import duty_event_execution_input
 
+    # A persisted team already owns repair planning. A subscriber's routing
+    # suggestion must not create a second set of side effects for that event.
+    if _claimed_team_members(incident_payload):
+        return 0
     extra = 0
     for row in _extract_routing_plan(exec_result):
         owner = str(row.get("proposed_owner") or "").strip()
@@ -94,6 +98,18 @@ def _dispatch_intake_routing_plan(
     return extra
 
 
+def _claimed_team_members(payload: Dict[str, Any]) -> set[str]:
+    claim = payload.get("_team_claim")
+    rows = claim.get("team") if isinstance(claim, dict) else None
+    return {
+        str(row["employee_id"])
+        for row in (rows if isinstance(rows, list) else [])
+        if isinstance(row, dict)
+        and row.get("employee_id")
+        and row.get("role") in {"scout", "fix", "verify"}
+    }
+
+
 def _dispatch_incident_body(event_id: int) -> None:
     _incident_event_type = facade._incident_event_type
     _NON_DISPATCH_EVENT_TYPES = facade._NON_DISPATCH_EVENT_TYPES
@@ -122,6 +138,7 @@ def _dispatch_incident_body(event_id: int) -> None:
     binding_only = event_type_pre in _BINDING_ONLY_EVENT_TYPES
     reviewed_duty_binding = _has_reviewed_duty_binding(event_id)
     reviewed_bindings_only = False
+    team_claimed = False
 
     if not binding_only and (
         os.environ.get("MODSTORE_UNIFIED_ORCHESTRATOR_ENABLED", "1") or ""
@@ -167,13 +184,19 @@ def _dispatch_incident_body(event_id: int) -> None:
                 )
                 return
             if team.get("claimed"):
+                team_claimed = True
                 logger.info(
                     "incident_bus: team claimed event_id=%s ok=%s",
                     event_id,
                     team.get("ok"),
                 )
-                # 客服工单：团队抢单后仍走 binding，让 intake-dispatcher /
-                # user-customer-service-officer 按既有订阅接单（跳过 market 防双派）。
+                if team.get("reason") in {
+                    "incident_scope_mismatch",
+                    "shared_repair_reused",
+                    "incident_not_active",
+                }:
+                    return
+                # 客服订阅只能跟进原团队；终止或缺少持久计划的事件不再分派。
                 if event_type_pre == "ops.intake.customer_ticket" or reviewed_duty_binding:
                     binding_only = True
                     reviewed_bindings_only = reviewed_duty_binding
@@ -283,9 +306,19 @@ def _dispatch_incident_body(event_id: int) -> None:
         brief = f"[{event_type}] {summary}"[:500]
 
     dispatched = 0
-    already_ran: set[str] = set()
+    team_members = (
+        _claimed_team_members(payload) if event_type == "ops.intake.customer_ticket" else set()
+    )
+    if event_type == "ops.intake.customer_ticket" and team_claimed and not team_members:
+        logger.warning(
+            "incident claimed without persisted team event_id=%s; stop fallback", event_id
+        )
+        return
+    already_ran: set[str] = set(team_members)
     for eid_emp in binding_ids:
         if not eid_emp or eid_emp not in catalog_ids:
+            continue
+        if team_members and (eid_emp == "intake-dispatcher" or eid_emp in team_members):
             continue
         try:
             from modstore_server.duty_workforce_contracts import (
@@ -308,15 +341,18 @@ def _dispatch_incident_body(event_id: int) -> None:
                 logger.info("incident_bus: reviewed duty input unavailable")
                 continue
             duty_input.pop("_duty_input_ready", None)
+            employee_input = duty_input or _incident_employee_input(
+                incident_payload=payload,
+                event_type=event_type,
+                source=source,
+            )
+            if team_members:
+                employee_input["reuse_incident_team_plan"] = True
             exec_result = execute_employee_task(
                 eid_emp,
-                brief,
-                duty_input
-                or _incident_employee_input(
-                    incident_payload=payload,
-                    event_type=event_type,
-                    source=source,
-                ),
+                brief
+                + ("；沿用原团队，只跟进客户进度与阻塞，不另建修复计划。" if team_members else ""),
+                employee_input,
                 user_id=0 if duty_input else admin_id,
             )
             dispatched += 1

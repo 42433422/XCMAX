@@ -13,9 +13,19 @@ side-steps that crash. It is a best-effort no-op when torch is not installed
 
 from __future__ import annotations
 
+import pytest
+
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 try:  # pragma: no cover - environment dependent
     import torch  # noqa: F401
 except BOUNDARY_ERRORS:  # noqa: BLE001 - torch absent or broken → tests degrade gracefully
     pass
+
+
+@pytest.fixture
+def digest_admin_branch(monkeypatch):
+    """Opt in only for digest business-branch units; HTTP auth tests use the real gate."""
+    monkeypatch.setattr(
+        "app.fastapi_routes.xcmax_admin._require_market_admin_session", lambda request: None
+    )

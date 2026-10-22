@@ -157,3 +157,6 @@
 .runtime-health-button .status-dot.warning { background: #b76e00; }
 .runtime-health-button .status-dot.offline { background: #c63333; }
 .runtime-health-button .status-dot.pending { background: #64748b; }
+
+.runtime-health-labels { display: inline-flex; flex-direction: column; gap: 2px; }
+.runtime-health-labels time, .runtime-health-unchecked { font-size: 10px; opacity: 0.75; }

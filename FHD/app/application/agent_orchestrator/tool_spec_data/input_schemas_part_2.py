@@ -9,10 +9,45 @@ _SHIPMENT_PRODUCTS_SCHEMA = {
     "minItems": 1,
     "items": {
         "type": "object",
-        "required": ["quantity_tins", "unit_price"],
+        "required": ["unit_price"],
         "allOf": [
             {"anyOf": [{"required": ["product_name"]}, {"required": ["name"]}]},
-            {"anyOf": [{"required": ["tin_spec"]}, {"required": ["spec_per_tin"]}]},
+            {
+                "anyOf": [
+                    {"required": ["quantity_kg"]},
+                    *[
+                        {
+                            "required": ["quantity", key],
+                            "properties": {
+                                key: {"pattern": "^(?:[kK][gG]|公斤|千克)$", "type": "string"}
+                            },
+                        }
+                        for key in ("unit", "quantity_unit")
+                    ],
+                    {
+                        "allOf": [
+                            {
+                                "anyOf": [
+                                    {"required": ["quantity_tins"]},
+                                    {"required": ["quantity", "unit"]},
+                                    {"required": ["quantity", "quantity_unit"]},
+                                ]
+                            },
+                            {
+                                "anyOf": [
+                                    {"required": [key]}
+                                    for key in (
+                                        "tin_spec",
+                                        "spec_per_tin",
+                                        "spec",
+                                        "weight_per_unit",
+                                    )
+                                ]
+                            },
+                        ]
+                    },
+                ]
+            },
         ],
     },
 }

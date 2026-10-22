@@ -27,9 +27,21 @@ def _para_first_skip_cognition(
     The compatibility switch only affects other employee invocations; trusted
     incidents cannot use it to bypass Para through server-side cognition.
     """
-    if str(employee_id or "") not in _PARA_FIRST_PLANNING_EMPLOYEES:
-        return False
     data = payload if isinstance(payload, dict) else {}
+    plan = data.get("incident_team")
+    members = plan.get("team") if isinstance(plan, dict) else None
+    members = members if isinstance(members, list) else []
+    selected_role = data.get("role")
+    selected_member = selected_role in {"scout", "fix", "verify"} and any(
+        isinstance(row, dict)
+        and row.get("employee_id") == employee_id
+        and row.get("role") == selected_role
+        for row in members
+    )
+    if str(employee_id or "") not in _PARA_FIRST_PLANNING_EMPLOYEES and not (
+        data.get("_trusted_incident_team_execution") is True and selected_member
+    ):
+        return False
     if data.get("_trusted_incident_team_execution") is True:
         return True
     flag = _facade().os.environ.get("MODSTORE_PARA_FIRST_SKIP_COGNITION", "1")
@@ -214,6 +226,17 @@ async def _cognition_real(
                     }
                 provider, model_name = (rp, rm)
     max_tokens = int(model_cfg.get("max_tokens") or 4000)
+    if normalized_inp.get("_trusted_incident_team_execution") is True:
+        from modstore_server.incident_model_router import route_for_incident
+
+        role_route = route_for_incident(
+            event_type=str(normalized_inp.get("event_type") or ""),
+            payload=normalized_inp.get("incident") or {},
+            role=str(normalized_inp.get("role") or ""),
+        )
+        max_tokens = min(
+            max_tokens, int(role_route.get("budget", {}).get("output_tokens") or max_tokens)
+        )
     messages = [{"role": "system", "content": system_prompt}]
     p_cfg = _facade()._get_section(config, "perception")
     vis_cfg = p_cfg.get("vision") if isinstance(p_cfg.get("vision"), dict) else {}

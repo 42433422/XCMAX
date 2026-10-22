@@ -67,6 +67,8 @@ const RESOLUTION_STATE: LabelMap = {
   received: ['已收到', 'info'], processing: ['处理中', 'info'], repairing: ['修复中', 'info'],
   repair_failed: ['修复未完成', 'danger'], repaired: ['已修复待验证', 'warning'],
   awaiting_verification: ['待客户验证', 'warning'], verified: ['已验证', 'success'],
+  awaiting_delivery: ['待正式发布交付', 'warning'], awaiting_customer_verification: ['待原客户验收', 'warning'],
+  awaiting_manual_review: ['待复核接手', 'danger'], dispatch_failed: ['派单未完成', 'danger'],
   resolved: ['客户确认已解决', 'success'], reopened: ['已重新打开', 'warning'], closed: ['已关闭', 'neutral'],
 }
 export const resolutionStateBadge = (value: unknown, mode?: unknown): Badge =>
@@ -114,7 +116,45 @@ export const eventLabel = plain({
   customer_issue_resolved: '客户确认已解决', customer_issue_reopen: '客户重新打开',
   forbidden_request_refused: '拒绝越权请求', event_enqueue_failed: '事件入队失败',
   content_blocked: '内容被拦截', rate_limited: '请求过于频繁',
+  shared_repair_linked: '确认关联公共修复',
 })
+
+export const verificationSourceLabel = plain({
+  incident_team: '处理小组核验', shared_core_repair: '已确认复用的公共修复',
+  customer_decision: '原客户直接确认', customer_runtime_receipt: '原客户正式版本运行回执',
+  delivery_runtime_receipt: '客户私有交付运行回执', admin_runtime: '管理员运行验收',
+})
+const workOrderLabel = plain({ candidate: '待分流', routed: '已分流', in_dev: '开发中', merged: '已合入',
+  released: '已发布', verifying: '验收中', closed: '已关闭', reopened: '已重开', dropped: '已停止' })
+const blockerLabel = plain({ none: '无待办', task_receipt: '任务结果待对账', review_in_progress: '复核任务处理中',
+  customer_confirmation: '等待原客户验收', release_binding: '等待正式版本绑定', execution_failed: '执行失败待恢复',
+  execution_pending: '当前环节执行中或待执行', assignment_unconfirmed: '尚未确认实际接单' })
+
+export function executionOverview(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const overview = value as Row, workOrder = (overview.work_order || {}) as Row
+  const responsible = (overview.responsible || {}) as Row, progress = (overview.last_progress || {}) as Row
+  const verification = (overview.verification || {}) as Row, next = (overview.next_step || {}) as Row
+  return {
+    blocker: blockerLabel(overview.blocker), responsible: String(responsible.label || '暂无当前责任人记录'),
+    next: String(next.label || '尚无下一步记录'), progress: String(progress.label || '尚无执行进展记录'),
+    progressAt: formatBeijingTime(progress.at, '时间未记录'),
+    workOrder: workOrder.binding === 'verified' ? `${workOrder.id} · ${workOrderLabel(workOrder.status)}`
+      : workOrder.binding === 'unavailable' ? '关联未核验' : '未关联产品工作单',
+    verificationSource: verificationSourceLabel(verification.source),
+    release: verification.release_bound === true ? '已绑定正式版本' : '未记录正式版本绑定',
+    customer: verification.customer_confirmed === true ? '原客户已确认' : '原客户尚未确认',
+    receipts: asRows(overview.receipts).map((row, index) => ({
+      key: `${row.kind}-${row.task_id || index}`, role: roleLabel(row.role), taskId: String(row.task_id || '任务编号未记录'),
+      kind: row.kind === 'escalation' ? '失败复核' : '环节执行',
+      badge: row.requires_reconciliation === true || ['unknown', 'dispatching'].includes(String(row.state))
+        ? { label: '接单结果待对账', tone: 'warning' as Tone, raw: String(row.state) }
+        : row.accepted === true && !!row.task_id
+          ? { label: row.completed === true ? '已接单并完成' : '已真实接单', tone: 'success' as Tone, raw: String(row.state) }
+          : { label: '尚无真实接单凭证', tone: 'neutral' as Tone, raw: String(row.state) },
+    })),
+  }
+}
 
 const asRows = (value: unknown): Row[] => Array.isArray(value) ? value.filter((v): v is Row => !!v && typeof v === 'object') : []
 const clip = (value: unknown, max = 240) => {

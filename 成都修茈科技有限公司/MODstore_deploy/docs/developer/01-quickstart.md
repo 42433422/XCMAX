@@ -1,29 +1,26 @@
 # Quickstart — 5 分钟跑通第一次调用
 
+> 本页派生自[账号体系 SSOT](https://github.com/42433422/XCMAX/blob/main/FHD/docs/account_system_ssot.md#04-modstore-pat-能力边界)，不能将 scope 名称当作所有接口已开放。
+
 ## 1. 创建 Personal Access Token
 
 打开 MODstore 前端 → 顶部用户菜单 → **开发者门户** (`/dev`) → **API Token** → **创建新 Token**。
 
 - 起一个有意义的名字，例如 `crm-pipeline`。
-- 选填权限范围（scopes）—— 当前 PR 不强制路由级 scope 校验，留空 = 全部权限。
+- 本例选择 `mod:sync`。空 scope 不授予任何已声明能力；其他 scope 不自动开放通用接口。
 - 推荐设置过期时间（90 天比较合理）。
 
 > 明文 Token 形如 `pat_AbCdEfGh...`，**仅在创建时显示一次**。
 > 如果窗口关掉了，只能吊销重建。
 
-## 2. 触发一次员工执行
+## 2. 读取获授权的 Mod 列表
 
 ```bash
-PAT="pat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-
-curl -X POST https://<your-host>/api/employees/<employee_id>/execute \
-  -H "Authorization: Bearer $PAT" \
-  -H "Content-Type: application/json" \
-  -G --data-urlencode "task=请总结今天的客诉数据" \
-  --data '{"input_data":{"date":"2026-04-27"}}'
+curl https://<your-host>/v1/mod-sync/mods \
+  -H "Authorization: Bearer $MODSTORE_PAT"
 ```
 
-成功后服务端返回员工执行结果，并向所有匹配 `employee.execution_completed` 事件的 webhook 订阅推送回调。
+凭证须含 `mod:sync`，列表受账号授权范围限制。员工执行、工作流及凭证管理的通用入口当前不接受 PAT；不要改用管理员 PAT 绕过。
 
 ## 3. 接收 Webhook 回调
 

@@ -24,18 +24,38 @@ def missing_shipment_fields(params: dict[str, Any]) -> list[str]:
             continue
         if not _provided_name(item.get("product_name") or item.get("name")):
             missing.append(f"products.{index}.product_name")
-        for key in ("quantity_tins", "tin_spec", "unit_price", "amount"):
+        from app.domain.shipment.shipment_quantities import (
+            ShipmentQuantityValidationError,
+            resolve_shipment_quantity,
+        )
+
+        try:
+            _, kg, _ = resolve_shipment_quantity(item)
+            if kg <= 0:
+                missing.append(
+                    f"products.{index}.quantity_kg"
+                    if item.get("quantity_kg") is not None
+                    else f"products.{index}.quantity_tins"
+                )
+        except ShipmentQuantityValidationError as exc:
+            missing.append(f"products.{index}.{exc.field}")
+            if (
+                not item.get("quantity_tins")
+                and not item.get("quantity_kg")
+                and not item.get("quantity")
+            ):
+                missing.append(f"products.{index}.quantity_tins")
+        keys = ("unit_price", "amount")
+        for key in keys:
             if key == "amount" and key not in item:
                 continue
-            value = item.get(key, item.get("spec_per_tin") if key == "tin_spec" else None)
+            value = item.get(key)
             try:
                 valid = (
                     isinstance(value, (int, float))
                     and not isinstance(value, bool)
                     and math.isfinite(value)
                     and value >= 0
-                    and (key not in {"quantity_tins", "tin_spec"} or value > 0)
-                    and (key != "quantity_tins" or value == int(value))
                 )
             except OverflowError:
                 valid = False
