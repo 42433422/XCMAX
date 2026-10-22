@@ -1,5 +1,5 @@
 {
-  "lines": 2329159,
-  "updated": "2026-10-22",
-  "note": "PR #2529 adds 242 maintained lines for authorized customer-ticket reply/delivery, SUNBIRD rework, employee-graph repair, and isolation/replay coverage; two additional blank lines are required by Black between top-level API tests. The user authorized completion of the full backlog. No unrelated code was removed."
+  "lines": 2329621,
+  "updated": "2026-10-23",
+  "note": "PR #2529 retains 224 maintained lines above current main for the authorized original-ticket reply API, SUNBIRD owner-scoped rework, graph/layout fixes and security regression tests; reconcile latest main without removing unrelated work."
 }

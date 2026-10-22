@@ -10,6 +10,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from modstore_server.api.xss_sanitizer import _sanitize_value
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import (
     WorkflowTrigger,
@@ -40,19 +41,20 @@ async def public_webhook_run_workflow(
 
     cfg = json.loads(trig.config_json or "{}")
     secret = str(cfg.get("secret") or os.getenv("WORKFLOW_WEBHOOK_DEFAULT_SECRET") or "").strip()
-    if secret:
-        body_bytes = await request.body()
-        sig = request.headers.get("X-Webhook-Signature") or request.headers.get(
-            "X-Hub-Signature-256", ""
-        )
-        if not sig:
-            raise HTTPException(401, "缺少签名头 X-Webhook-Signature")
-        expected = "sha256=" + hmac.new(secret.encode(), body_bytes, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, expected):
-            raise HTTPException(403, "签名校验失败")
+    if not secret:
+        raise HTTPException(503, "Webhook 签名密钥未配置，入口已禁用")
+    body_bytes = await request.body()
+    sig = request.headers.get("X-Webhook-Signature") or request.headers.get(
+        "X-Hub-Signature-256", ""
+    )
+    if not sig:
+        raise HTTPException(401, "缺少签名头 X-Webhook-Signature")
+    expected = "sha256=" + hmac.new(secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+    if not sig.isascii() or not hmac.compare_digest(sig, expected):
+        raise HTTPException(403, "签名校验失败")
 
     try:
-        payload: Dict[str, Any] = await request.json()
+        payload: Dict[str, Any] = _sanitize_value(await request.json())
     except RECOVERABLE_ERRORS:
         payload = {}
 

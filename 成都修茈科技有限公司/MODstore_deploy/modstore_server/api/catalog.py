@@ -31,6 +31,7 @@ from modstore_server.api.auth_deps import (
     require_user,
 )
 from modstore_server.api.dto import CreateModDTO, ManifestPutDTO, ModFilePutDTO
+from modstore_server.api.service_auth import require_admin_user
 from modstore_server.application.catalog import CatalogShellService
 from modstore_server.file_safe import read_text_under_mod, write_text_under_mod
 from modstore_server.infrastructure import library_paths
@@ -115,7 +116,7 @@ def api_get_mod(mod_id: str, user: User = Depends(require_user)):
 
 
 @router.put("/api/mods/{mod_id}/manifest")
-def api_put_manifest(mod_id: str, body: ManifestPutDTO, user: User = Depends(require_user)):
+def api_put_manifest(mod_id: str, body: ManifestPutDTO, user: User = Depends(require_admin_user)):
     assert_user_owns_mod(user, mod_id)
     try:
         d = library_paths.mod_dir(mod_id)
@@ -149,7 +150,7 @@ def api_get_mod_file(mod_id: str, path: str, user: User = Depends(require_user))
 
 
 @router.put("/api/mods/{mod_id}/file")
-def api_put_mod_file(mod_id: str, body: ModFilePutDTO, user: User = Depends(require_user)):
+def api_put_mod_file(mod_id: str, body: ModFilePutDTO, user: User = Depends(require_admin_user)):
     assert_user_owns_mod(user, mod_id)
     try:
         d = library_paths.mod_dir(mod_id)
@@ -192,7 +193,7 @@ def api_create_mod(body: CreateModDTO, user: User = Depends(require_user)):
 
 
 @router.delete("/api/mods/{mod_id}")
-def api_delete_mod(mod_id: str, user: User = Depends(require_user)):
+def api_delete_mod(mod_id: str, user: User = Depends(require_admin_user)):
     mid = mod_id.strip()
     assert_user_owns_mod(user, mid)
     try:
@@ -209,7 +210,7 @@ def api_delete_mod(mod_id: str, user: User = Depends(require_user)):
 async def api_import_mod(
     file: UploadFile = File(...),
     replace: bool = True,
-    user: User = Depends(require_user),
+    user: User = Depends(require_admin_user),
 ):
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(400, "请上传 .zip")

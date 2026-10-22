@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import importlib
 
+from fastapi import HTTPException
+
 
 def _facade():
     return importlib.import_module("app.fastapi_routes.market_account")
@@ -215,7 +217,7 @@ def _refresh_token_from_auth_response(payload: _facade().Any) -> str:
     return ""
 
 
-async def refresh_session_market_token(session_id: str) -> str:
+async def refresh_session_market_token(session_id: str, *, distinguish_errors: bool = False) -> str:
     """Use persisted modstore refresh_token to obtain a new access_token."""
     sid = (session_id or "").strip()
     if not sid:
@@ -226,11 +228,25 @@ async def refresh_session_market_token(session_id: str) -> str:
     payload = await _facade()._proxy_json(
         "POST", "/api/auth/refresh", json_body={"refresh_token": refresh}, return_error_payload=True
     )
-    if isinstance(payload, _facade().JSONResponse):
-        return ""
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
+    if isinstance(payload, _facade().JSONResponse) or (
+        isinstance(payload, dict) and payload.get("__proxy_error__")
+    ):
+        status = (
+            payload.status_code
+            if isinstance(payload, _facade().JSONResponse)
+            else int(payload.get("status_code") or 503)
+        )
+        if distinguish_errors and status != 401:
+            raise HTTPException(
+                status_code=403 if status == 403 else 503,
+                detail="市场账号无权刷新登录"
+                if status == 403
+                else "市场登录服务暂时不可用，请稍后恢复；草稿未发送",
+            )
         return ""
     access = _facade()._token_from_auth_response(payload)
+    if distinguish_errors and not access:
+        raise HTTPException(status_code=503, detail="市场登录服务返回无效响应；草稿未发送")
     new_refresh = _facade()._refresh_token_from_auth_response(payload) or refresh
     if access and sid:
         _facade().save_session_market_token(sid, access, new_refresh)

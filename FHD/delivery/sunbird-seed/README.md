@@ -4,14 +4,13 @@
 >
 > 本目录与 `build-sunbird-installer.ps1` / `Sunbird Installer` workflow 仅保留为历史种子与排障参考，**禁止作为新签约交付面**。
 
-由 `scripts/package/build-sunbird-seed.py` 生成/刷新的业务数据快照（考勤模板、花名册、Mod 侧库）。历史定制安装包曾用 `build-sunbird-installer.ps1` 嵌入 WPF 安装程序。
+历史目录中的客户考勤模板、花名册与人员数据库已从当前源码树移除。
+这不代表历史提交或已有副本被清除。真实交付数据只能保存在客户授权的私有运行目录，
+不得重新提交本目录。业务解析与转换回归使用 tests/fixtures/synthetic_attendance 的全合成数据。
 
-| 路径 | 内容 |
-|------|------|
-| `424/考勤-2026-3月份考勤统计表.xlsx` | 固定考勤模板 |
-| `data/mod_dbs/taiyangniao_pro.db` | Mod 侧库（含人员镜像） |
-| `config/sunbird-roster.json` | 主库花名册种子 |
-| `mods/` | 历史打包脚本从 `mods/taiyangniao-pro`、`mods/attendance-industry` 拷贝 |
+历史 build-sunbird-seed.py 与 publish-sunbird-delivery-seed.py 入口现已禁用，
+不会重用旧本地种子、打包或登记传入 ZIP；已授权的现行私有交付 API 不受影响。
+默认示例模板已替换为明确标记的虚构数据，不可作为真实客户花名册导入生产。
 
 现行交付：
 

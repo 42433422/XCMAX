@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import urllib.error
 import urllib.request
 from types import SimpleNamespace
@@ -333,34 +332,7 @@ def test_pull_from_remote_error() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _seed_inbox(db_path, rows) -> None:
-    conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        "CREATE TABLE sync_inbox (id INTEGER PRIMARY KEY, entity_type TEXT, entity_id TEXT, "
-        "operation TEXT, payload_json TEXT, status TEXT)"
-    )
-    conn.executemany(
-        "INSERT INTO sync_inbox (id, entity_type, entity_id, operation, payload_json, status) "
-        "VALUES (?,?,?,?,?,?)",
-        rows,
-    )
-    conn.commit()
-    conn.close()
-
-
-def test_apply_inbox_applies_and_skips(tmp_path, monkeypatch) -> None:
-    db_path = tmp_path / "inbox.db"
-    _seed_inbox(
-        db_path,
-        [
-            (1, "__rt_entity__", "a", "insert", json.dumps({"v": 1}), "pending"),
-            (2, "__unknown_entity__", "b", "insert", "{}", "pending"),
-        ],
-    )
-    import app.db.xcmax_sync as xs
-
-    monkeypatch.setattr(xs, "_resolve_db_path", lambda: db_path)
-
+def test_apply_inbox_applies_and_skips() -> None:
     seen = []
 
     @svc.register_entity_applier("__rt_entity__")
@@ -368,53 +340,69 @@ def test_apply_inbox_applies_and_skips(tmp_path, monkeypatch) -> None:
         seen.append(item)
 
     fake_db = MagicMock()
+    fake_db.get_pending_inbox.return_value = [
+        {
+            "id": 1,
+            "entity_type": "__rt_entity__",
+            "entity_id": "a",
+            "operation": "insert",
+            "payload_json": json.dumps({"v": 1}),
+        },
+        {
+            "id": 2,
+            "entity_type": "__unknown_entity__",
+            "entity_id": "b",
+            "operation": "insert",
+            "payload_json": "{}",
+        },
+    ]
     try:
         with patch("app.db.xcmax_sync.SyncDb", return_value=fake_db):
             out = svc.apply_inbox(limit=10)
     finally:
         del svc._ENTITY_APPLIERS["__rt_entity__"]
 
+    fake_db.get_pending_inbox.assert_called_once_with(limit=10)
     assert out["applied"] == 2
     assert len(seen) == 1
     assert fake_db.mark_inbox_applied.call_count == 2
 
 
-def test_apply_inbox_conflict_on_applier_error(tmp_path, monkeypatch) -> None:
-    db_path = tmp_path / "inbox2.db"
-    _seed_inbox(
-        db_path,
-        [(1, "__boom_entity__", "a", "insert", "{}", "pending")],
-    )
-    import app.db.xcmax_sync as xs
-
-    monkeypatch.setattr(xs, "_resolve_db_path", lambda: db_path)
-
+def test_apply_inbox_conflict_on_applier_error() -> None:
     @svc.register_entity_applier("__boom_entity__")
     def _applier(item):  # noqa: ANN001
         raise ValueError("bad")
 
     fake_db = MagicMock()
+    fake_db.get_pending_inbox.return_value = [
+        {
+            "id": 1,
+            "entity_type": "__boom_entity__",
+            "entity_id": "a",
+            "operation": "insert",
+            "payload_json": "{}",
+        },
+    ]
     try:
         with patch("app.db.xcmax_sync.SyncDb", return_value=fake_db):
             out = svc.apply_inbox(limit=10)
     finally:
         del svc._ENTITY_APPLIERS["__boom_entity__"]
 
+    fake_db.get_pending_inbox.assert_called_once_with(limit=10)
     assert out["conflicts"] == 1
     assert out["errors"] == 1
     fake_db.mark_inbox_conflict.assert_called_once()
 
 
-def test_apply_inbox_read_failure(monkeypatch) -> None:
-    import app.db.xcmax_sync as xs
-
-    monkeypatch.setattr(xs, "_resolve_db_path", lambda: "/nonexistent/dir/x.db")
+def test_apply_inbox_read_failure() -> None:
     fake_db = MagicMock()
-    with (
-        patch("app.db.xcmax_sync.SyncDb", return_value=fake_db),
-        patch("sqlite3.connect", side_effect=OSError("cannot open")),
-    ):
+    fake_db.get_pending_inbox.side_effect = OSError("cannot open")
+    with patch("app.db.xcmax_sync.SyncDb", return_value=fake_db):
         out = svc.apply_inbox()
+    fake_db.get_pending_inbox.assert_called_once_with(limit=200)
+    fake_db.mark_inbox_applied.assert_not_called()
+    fake_db.mark_inbox_conflict.assert_not_called()
     assert out == {"applied": 0, "errors": 1}
 
 

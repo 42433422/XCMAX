@@ -294,7 +294,9 @@ def test_invalid_scope_json_cannot_grant_generic_permissions(pat_case):
 
 
 @pytest.mark.parametrize("owned", [True, False])
-def test_mod_sync_pat_still_requires_resource_ownership(pat_case, monkeypatch, tmp_path, owned):
+def test_mod_sync_member_pat_cannot_write_shared_host_even_when_owned(
+    pat_case, monkeypatch, tmp_path, owned
+):
     from modstore_server import app as app_module
     from modstore_server import mod_sync_catalog_api as sync
 
@@ -317,8 +319,8 @@ def test_mod_sync_pat_still_requires_resource_ownership(pat_case, monkeypatch, t
             json={"mod_ids": ["synthetic"]},
             headers={"Authorization": "Bearer " + _pat(sessions, ["mod:sync"], uid=8)},
         )
-    assert response.status_code == (200 if owned else 403), response.text
-    assert deploy.call_count == int(owned)
+    assert response.status_code == 403, response.text
+    deploy.assert_not_called()
 
 
 def test_jwt_can_still_manage_credentials_and_request_handoff(pat_case):

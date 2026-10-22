@@ -69,7 +69,7 @@ export function useStartupAuth(options: {
             hash: window.location.hash,
           }
         : {}
-    void router.replace(buildLoginLocation(loc))
+    void router.replace(buildLoginLocation(loc, import.meta.env.BASE_URL))
     return { ok: false, entitledModIds: [] }
   }
 

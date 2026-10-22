@@ -80,7 +80,7 @@ def test_two_accounts_cannot_see_each_other(client):
     assert (
         client.post(
             "/api/mods/attendance-industry/employees",
-            json={"employee_name": "胡超", "department": "计划生产部"},
+            json={"employee_name": "SYNTHETIC-001", "department": "计划生产部"},
         ).status_code
         == 200
     )
@@ -94,7 +94,7 @@ def test_two_accounts_cannot_see_each_other(client):
     )
 
     _login(client, "SUNBIRD")
-    assert _employees(client) == {"胡超"}
+    assert _employees(client) == {"SYNTHETIC-001"}
     _login(client, "wuxinghua1")
     assert _employees(client) == {"王涂料"}
 

@@ -223,3 +223,15 @@ FHD/admin-console/.vite-bak/
 /reports/
 /FHD/tools/XcagiInstaller/Assets/WindowsRollback.generated.ps1
 /FHD/tools/XcagiInstaller/Assets/WindowsRollbackLoader.generated.ps1
+
+# Customer runtime data belongs outside the public source tree.
+/outputs/
+/成都修茈科技有限公司/MODstore_deploy/var/employee_draft_assets/
+/成都修茈科技有限公司/MODstore_deploy/var/employee_uploads/
+/成都修茈科技有限公司/taiyangniao-pro/backend/_conv_*.xlsx
+/FHD/delivery/sunbird-seed/424/
+/FHD/delivery/sunbird-seed/data/
+/FHD/delivery/sunbird-seed/config/sunbird-roster.json
+
+# Filled office documents do not belong in editor scratch state.
+/FHD/.cursor/*.docx

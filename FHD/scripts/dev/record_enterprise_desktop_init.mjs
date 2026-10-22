@@ -99,6 +99,17 @@ async function openAiApproval(name) {
   await expect(detail).toContainText(requestNos[0]); await expect(detail).toContainText(name)
   return { requestNo: requestNos[0], detail }
 }
+async function hasRetainedSession() {
+  // Share the page's cookies; a visible shell is not proof of authentication.
+  const response = await page.request.get(new URL('/api/auth/me', page.url()).href, { timeout: 10000, maxRedirects: 0 })
+  const status = response.status()
+  if (status === 401) return false
+  if (status !== 200) throw new Error(`Session probe rejected: HTTP ${status}`)
+  const body = await response.json()
+  if (body.success === false && body.valid === false && body.error?.code === 'UNAUTHORIZED') return false
+  if (body.success !== true || !body.data?.user?.id) throw new Error('Session probe returned no authenticated identity')
+  return true
+}
 async function main() {
   if (phase === 'readback' && !seed) throw new Error('GUI recovery readback requires original business evidence')
   browser = await chromium.connectOverCDP(process.env.XCAGI_CDP || 'http://127.0.0.1:9222', { timeout: 60000 })
@@ -113,13 +124,17 @@ async function main() {
   page.on('pageerror', error => evidence.observations.push({ browser_error: String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'), observed_at: new Date().toISOString() })); page.on('console', msg => { const text = msg.text(); if (msg.type() === 'error' && text.startsWith('[Login] workspace hydration failed:')) evidence.observations.push({ login_bootstrap_error: text.replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'), observed_at: new Date().toISOString() }) }); page.setDefaultTimeout(20000)
   await page.waitForURL(/127\.0\.0\.1:17500/, { timeout: 240000 })
   const login = await step('normal_login', async () => {
-    await expect.poll(async () => await page.locator('#lv-username').isVisible() || await page.locator('[data-tour="sidebar-settings"]:visible,[data-tour="sidebar-mod-erp-settings"]:visible').first().isVisible(), { timeout: 60000 }).toBe(true)
-    if (!await page.locator('#lv-username').isVisible()) {
+    const retainedSession = await hasRetainedSession()
+    if (retainedSession && ['Gui', 'Recovery'].includes(process.env.XCAGI_GUI_MODE)) throw new Error('Fresh acceptance requires a logged-out session')
+    if (retainedSession) {
+      await expect(page.locator('[data-tour="sidebar-settings"]:visible,[data-tour="sidebar-mod-erp-settings"]:visible').first()).toBeVisible({ timeout: 60000 })
       await nav('settings', '#view-settings'); await click('退出登录')
       const confirmation = page.locator('.app-dialog-host-panel')
       await expect(confirmation).toContainText(/退出登录|退出本机账号/)
       const [logout] = await Promise.all([page.waitForResponse(r => new URL(r.url()).pathname === '/api/auth/logout'), confirmation.getByRole('button', { name: '确定', exact: true }).click()])
       if (!logout.ok()) throw new Error('Retained session normal sign-out failed')
+    } else {
+      await page.goto(new URL('/login', page.url()).href, { waitUntil: 'domcontentloaded' })
     }
     await expect(page.locator('#lv-username')).toBeVisible({ timeout: 60000 })
     await page.locator('#lv-username').fill(process.env.XCAGI_TEST_USER || '')

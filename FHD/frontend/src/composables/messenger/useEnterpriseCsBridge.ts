@@ -1,4 +1,5 @@
-import { computed, nextTick, ref, type Ref } from 'vue'
+import { computed, nextTick, ref, watch, type Ref } from 'vue'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import {
   fetchEnterpriseCsThread,
   type ImConversationSummary,
@@ -16,9 +17,19 @@ type Options = {
 
 /** Poll the canonical production CS thread while the local fixed contact is open. */
 export function useEnterpriseCsBridge(options: Options) {
-  const enterpriseCsError = ref('')
+  const enterpriseCsReadError = ref('')
+  const enterpriseCsSendError = ref('')
+  const enterpriseCsUnconfirmed = ref(false)
+  const enterpriseCsError = computed(() => enterpriseCsSendError.value || enterpriseCsReadError.value)
   let pollTimer: ReturnType<typeof setInterval> | null = null
   let pollBusy = false
+  let selectionEpoch = 0
+  watch(options.activeConversationId, () => { selectionEpoch++ }, { flush: 'sync' })
+  watch(productReadAccountEpoch, () => {
+    selectionEpoch++
+    options.messages.value = []
+    enterpriseCsReadError.value = ''
+  }, { flush: 'sync' })
 
   function customerConversation(id = options.activeConversationId.value) {
     const conv = options.conversations.value.find((item) => item.id === id)
@@ -36,11 +47,14 @@ export function useEnterpriseCsBridge(options: Options) {
     const localId = options.activeConversationId.value
     if (!localId || !isCustomerEnterpriseCs(localId) || pollBusy) return
     pollBusy = true
+    const accountEpoch = productReadAccountEpoch.value
+    const selection = selectionEpoch
+    const current = () => options.activeConversationId.value === localId && selection === selectionEpoch && accountEpoch === productReadAccountEpoch.value
     try {
       const oldIds = new Set(options.messages.value.map((item) => item.id))
       const thread = await fetchEnterpriseCsThread()
-      if (options.activeConversationId.value !== localId) return
-      enterpriseCsError.value = ''
+      if (!current()) return
+      enterpriseCsReadError.value = ''
       options.messages.value = thread.messages
       const local = options.conversations.value.find((item) => item.id === localId)
       const last = thread.messages[thread.messages.length - 1]
@@ -57,7 +71,7 @@ export function useEnterpriseCsBridge(options: Options) {
       await nextTick()
       options.scrollToBottom()
     } catch (error) {
-      if (options.activeConversationId.value === localId) enterpriseCsError.value = error instanceof Error ? error.message : '企业专属客服读取失败'
+      if (current()) enterpriseCsReadError.value = error instanceof Error ? error.message : '企业专属客服读取失败'
       if (!notifyIncoming) throw error
     } finally {
       pollBusy = false
@@ -71,6 +85,8 @@ export function useEnterpriseCsBridge(options: Options) {
 
   return {
     enterpriseCsError,
+    enterpriseCsSendError,
+    enterpriseCsUnconfirmed,
     activeCustomerCsConversation,
     isCustomerEnterpriseCs,
     refreshEnterpriseCsThread: refreshThread,

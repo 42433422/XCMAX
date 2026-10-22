@@ -101,7 +101,7 @@
         <thead><tr><th>动作</th><th>说明</th><th>时间</th><th>详情</th></tr></thead>
         <tbody><tr v-for="(row, idx) in crossAudit" :key="idx">
           <td>{{ auditAction(row).type || auditAction(row).action || row.event || row.type || '未标注动作' }}</td>
-          <td>{{ auditAction(row).params?.reason || row.reason || row.decision || '查看原始记录' }}</td>
+          <td>{{ auditSummary(row) }}</td>
           <td>{{ row.timestamp || row.ts || '未知' }}</td>
           <td><details><summary>原始记录</summary><pre>{{ JSON.stringify(row, null, 2) }}</pre></details></td>
         </tr></tbody>
@@ -146,6 +146,13 @@ const auditMessages: Record<string, string> = {
   unknown_freshness: '已加载记录，但无法核实数据时效，请检查记录时间。',
 }
 const auditMessage = computed(() => auditMessages[auditStatus.value] || '尚未读取审计数据。')
+function auditSummary(row: Record<string, any>): string {
+  const action = auditAction(row)
+  const reasons = Array.isArray(action.reasons) ? action.reasons.filter((item: unknown) => typeof item === 'string').join('；') : ''
+  const detail = action.params?.reason || reasons || row.reason || row.diagnosis?.detail || row.result?.detail || row.decision || '查看原始记录'
+  const result = row.result?.ok === true ? '成功' : row.result?.ok === false ? '失败' : ''
+  return [result, typeof detail === 'string' ? detail : '查看原始记录'].filter(Boolean).join('：')
+}
 function auditAction(row: Record<string, any>): Record<string, any> {
   return row.action && typeof row.action === 'object' ? row.action : { type: row.action }
 }
@@ -214,7 +221,7 @@ async function switchTier(tier: string) {
   try {
     const res = await xcmaxAdminApi.fetchAutonomyAuditCrossTier({ tier, limit: 30 })
     if (request !== auditRequest) return
-    if (res?.ok === false) throw new Error('audit_load_failed')
+    if (!res || typeof res !== 'object' || res.ok === false || !Array.isArray(res.items) || res.items.some((item: unknown) => !item || typeof item !== 'object' || Array.isArray(item)) || (res.status && !Object.hasOwn(auditMessages, res.status))) throw new Error('audit_load_failed')
     crossAudit.value = Array.isArray(res?.items) ? res.items : []
     auditPath.value = res?.path || ''
     auditLatest.value = res?.last_event_at || ''

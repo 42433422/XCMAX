@@ -265,7 +265,8 @@ export async function createWindow(): Promise<void> {
     }
   })
 
-  void mainWindow.loadURL(resolveDesktopSplashUrl())
+  desktopRuntime.splashUrl = resolveDesktopSplashUrl()
+  void mainWindow.loadURL(desktopRuntime.splashUrl)
   mainWindow.show()
   mainWindow.focus()
   updateSplashProgress(8, '正在启动本地服务…')

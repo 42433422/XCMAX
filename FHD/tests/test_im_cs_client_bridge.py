@@ -178,7 +178,7 @@ async def test_bridge_recovers_only_before_sending(method, initial, refresh_toke
             method, "expired", body={"body": "original"}, session_id="bound-session"
         )
     if initial == 401:
-        refresh.assert_awaited_once_with("bound-session")
+        refresh.assert_awaited_once_with("bound-session", distinguish_errors=True)
     else:
         refresh.assert_not_awaited()
     recovered = initial == 401 and bool(refresh_token)
@@ -213,7 +213,7 @@ async def test_bridge_never_replays_timeout_or_outlives_auth_deadline(failure):
             headers={"Set-Cookie": "csrf_token=csrf; Path=/"},
         )
 
-    async def stalled_refresh(_sid):
+    async def stalled_refresh(_sid, **kwargs):
         await asyncio.Event().wait()
 
     refresh = AsyncMock(side_effect=stalled_refresh)
@@ -244,6 +244,49 @@ async def test_bridge_never_replays_timeout_or_outlives_auth_deadline(failure):
     else:
         assert "outcome" not in payload
     if failure == "refresh_deadline":
-        refresh.assert_awaited_once_with("bound-session")
+        refresh.assert_awaited_once_with("bound-session", distinguish_errors=True)
     else:
         refresh.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403, 503])
+async def test_market_identity_preserves_forbidden_status(status):
+    from app.fastapi_routes import im_cs_client_routes as routes
+
+    request = type(
+        "SyntheticRequest", (), {"headers": {"Authorization": f"Bearer synthetic-{status}"}}
+    )()
+    with patch(
+        "app.fastapi_routes.market_account._proxy_json",
+        AsyncMock(return_value={"__proxy_error__": True, "status_code": status}),
+    ):
+        with pytest.raises(HTTPException) as error:
+            await routes._validate_market_identity(request)
+    assert error.value.status_code == status
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403, 502, 503])
+async def test_refresh_can_distinguish_transport_failure_without_breaking_legacy(status):
+    from app.fastapi_routes import market_account as market
+
+    payload = {"__proxy_error__": True, "status_code": status}
+    with (
+        patch.object(market, "session_market_refresh_token", return_value="synthetic-refresh"),
+        patch.object(market, "_proxy_json", AsyncMock(return_value=payload)),
+    ):
+        assert await market.refresh_session_market_token("synthetic-session") == ""
+        if status == 401:
+            assert (
+                await market.refresh_session_market_token(
+                    "synthetic-session", distinguish_errors=True
+                )
+                == ""
+            )
+        else:
+            with pytest.raises(HTTPException) as error:
+                await market.refresh_session_market_token(
+                    "synthetic-session", distinguish_errors=True
+                )
+            assert error.value.status_code == (403 if status == 403 else 503)

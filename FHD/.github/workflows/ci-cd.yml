@@ -739,6 +739,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install architecture contract checker from dependency SSOT
+        run: |
+          python - <<'PYTHON'
+          import pathlib, subprocess, sys, tomllib
+          config = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          requirements = config["project"]["optional-dependencies"]["dev"]
+          requirement = next(value for value in requirements if value.startswith("import-linter"))
+          subprocess.check_call([sys.executable, "-m", "pip", "install", requirement])
+          PYTHON
+
+      - name: Check sync data-access import contracts
+        run: lint-imports --config pyproject.toml --no-cache
+
       - name: Run architecture fitness checks
         run: python scripts/arch_fitness.py
 
@@ -1086,6 +1099,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
+
+      - name: Validate security scan run ids
+        if: ${{ inputs.release_channel == 'stable' }}
+        env:
+          CURRENT_SECURITY_SCAN_RUN_ID: ${{ inputs.security_scan_run_id }}
+          PREVIOUS_SECURITY_SCAN_RUN_ID: ${{ inputs.previous_security_scan_run_id }}
+        run: |
+          set -euo pipefail
+          for name in CURRENT_SECURITY_SCAN_RUN_ID PREVIOUS_SECURITY_SCAN_RUN_ID; do
+            value="${!name}"
+            if ! printf '%s' "${value}" | grep -Eq '^[0-9]+$'; then
+              echo "::error::${name} must be a numeric GitHub Actions run id; got '${value}'."
+              exit 1
+            fi
+          done
 
       - name: Download normalized security evidence for stable upload
         if: ${{ inputs.release_channel == 'stable' }}

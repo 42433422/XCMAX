@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import types
 
 import pytest
 
@@ -14,13 +13,21 @@ pytest.importorskip("fastapi")
 
 
 @pytest.fixture
-def admin_client(client):
-    from modstore_server.app import _require_user, app
+def admin_client(client, auth_headers):
+    from modstore_server.application.auth import AuthApplicationService
+    from modstore_server.models import User, get_session_factory
 
-    u = types.SimpleNamespace(id=1, username="pytest", is_admin=True, email="t@t.local")
-    app.dependency_overrides[_require_user] = lambda: u
-    yield client
-    app.dependency_overrides.pop(_require_user, None)
+    user = AuthApplicationService().current_user_from_authorization(auth_headers["Authorization"])
+    with get_session_factory()() as db:
+        db.get(User, user.id).is_admin = True
+        db.commit()
+    previous = dict(client.headers)
+    client.headers.update(auth_headers)
+    try:
+        yield client
+    finally:
+        client.headers.clear()
+        client.headers.update(previous)
 
 
 def test_snapshot_list_capture_restore(admin_client, library):
