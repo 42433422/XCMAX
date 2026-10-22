@@ -1,5 +1,5 @@
 {
-  "lines": 2329099,
+  "lines": 2329253,
   "updated": "2026-10-22",
-  "note": "用户已授权本批 PR 修复与收口。#2519 在已合并 #2516、#2520、#2522 的主线基础上保留六项功能修复与 OCR 安全回归；相对主线基线 2328649 净增 450 行。导出路由按职责拆分以满足源代码治理上限，CSV 回归验证 BOM 与实际字节；Mod 升至 1.0.0.7，最低宿主仍为 1.0.0.6。完整保留租户隔离、50000 行上限及测试，未删除无关代码凑数。"
+  "note": "PR #2519 retains six authorized fixes; from main 1ab42432, the candidate was +607 lines before the macOS Bash/window-test robustness follow-up deleted 3 maintained lines. Final baseline is 2,328,649 to 2,329,253 (+604); no unrelated tests removed or weakened."
 }

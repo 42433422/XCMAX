@@ -5,8 +5,8 @@ import { waitForBackendPing, waitForBackendApplicationReady, waitForBackendStatu
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
   app: { getPath: vi.fn(() => '/tmp/xcagi-test'), isQuitting: false },
-  dialog: {},
-  screen: { getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })) },
+  dialog: { showErrorBox: vi.fn() },
+  screen: { getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })), getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })) },
   shell: {},
 }))
 vi.mock('./backend-process', () => ({
@@ -53,7 +53,7 @@ function makeWindow(overrides: Partial<{
     show: vi.fn(),
     hide: vi.fn(),
     focus: vi.fn(),
-    restore: vi.fn(),
+    restore: vi.fn(), getBounds: vi.fn(() => ({ x: 0, y: 0, width: 1280, height: 800 })), setBounds: vi.fn(),
   }
   return win as unknown as NonNullable<typeof desktopRuntime.mainWindow>
 }
@@ -115,7 +115,6 @@ it('keeps the activated startup window and its in-flight readiness task', async 
   expect(BrowserWindow).not.toHaveBeenCalled()
 })
 
-
 it.each([true, false])('records selected splash before loading (file exists: %s)', async (exists) => {
   vi.spyOn(fs, 'existsSync').mockReturnValue(exists)
   vi.mocked(waitForBackendPing).mockResolvedValue(undefined)
@@ -127,7 +126,7 @@ it.each([true, false])('records selected splash before loading (file exists: %s)
     on: vi.fn(), setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(),
     loadURL: vi.fn(async (url: string) => { loaded.push([url, desktopRuntime.splashUrl]) }),
     webContents: {
-      on: vi.fn(), setWindowOpenHandler: vi.fn(),
+      on: vi.fn(), getURL: vi.fn(() => 'http://127.0.0.1:17500/'), setWindowOpenHandler: vi.fn(),
       session: { on: vi.fn() },
       executeJavaScript: vi.fn(async () => undefined),
     },
