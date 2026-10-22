@@ -1,5 +1,5 @@
 {
-  "lines": 2329686,
+  "lines": 2329757,
   "updated": "2026-10-23",
-  "note": "#44: accept authenticated explicit reports before expected/actual are available; reuse existing customer intake, stable account/tenant-scoped references and receipt readback; add denial regressions without fabricating Work Order evidence."
+  "note": "#2529 authorized ticket/admin fixes, #44 authenticated formal acceptance, and legacy chat/planner ReDoS fixes with bounded-process and semantic regressions; total maintenance increase 360 lines versus current main, including 71 for this security slice; no unrelated code deleted."
 }
