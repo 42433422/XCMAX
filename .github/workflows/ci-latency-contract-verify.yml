@@ -1,187 +1,96 @@
-name: CI closure current-main verification
+name: CI closure read-only evidence
 'on':
   push:
     branches: ['ci/latency-contract-verify-20261022']
 permissions:
-  contents: write
+  contents: read
   actions: read
+  checks: read
+  pull-requests: read
 jobs:
-  verify:
+  observe:
     if: github.repository == '42433422/XCMAX' && github.ref == 'refs/heads/ci/latency-contract-verify-20261022'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      TARGET_SHA: 981e43005a1344ce6d0197fd308d6c789d0d3d71
-      MAIN_SHA: 2cb0c77dca3913955aa5cdcb8505fc0c8d496fe3
-      XCAGI_SKIP_LEGACY_COMPAT_ROUTES: '1'
-      INTENT_BENCHMARK_RUN: '1'
-      XCAGI_SKIP_INTENT_LLM: '1'
-    services:
-      redis:
-        image: redis:7-alpine
-        ports: ['6379:6379']
-        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+      OBSERVED_SHA: f43d8d1cca7ea414e9d49aa035a57c0a5bc8b31a
+      OBSERVED_EVENT: pull_request
+      OBSERVED_BASE: 2cb0c77dca3913955aa5cdcb8505fc0c8d496fe3
+      EXPECTED_TREE: 296d89847b2b23d1b435744534716b5a695f2f8c
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TARGET_SHA }}
-          fetch-depth: 0
-          filter: blob:none
+          ref: ${{ env.OBSERVED_SHA }}
+          fetch-depth: 1
+          sparse-checkout: FHD/scripts/ci
           persist-credentials: false
-      - name: Merge pinned main with narrow conflict resolution
-        run: |
-          set -euo pipefail
-          git config user.name 'CI verification'
-          git config user.email 'ci-verification@users.noreply.github.com'
-          git config core.quotepath false
-          git status --short
-          git worktree list --porcelain
-          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
-          test "$(git rev-parse --is-shallow-repository)" = false
-          git fetch --no-tags origin "$MAIN_SHA"
-          python - <<'PY'
-          import os,re,subprocess
-          from pathlib import Path
-          main,target=os.environ['MAIN_SHA'],os.environ['TARGET_SHA']
-          out=Path(os.environ['RUNNER_TEMP'])/'ci-current-main';out.mkdir()
-          assert not subprocess.check_output(['git','status','--porcelain'])
-          ancestor=subprocess.check_output(['git','merge-base',target,main],text=True).strip()
-          result=subprocess.run(['git','merge','--no-commit','--no-ff',main],capture_output=True,text=True)
-          print(result.stdout,result.stderr,flush=True)
-          assert result.returncode in (0,1)
-          conflicts=set(subprocess.check_output(['git','diff','--name-only','--diff-filter=U','-z']).decode().strip('\0').split('\0'))-{''}
-          known={'FHD/CHANGELOG.md','FHD/metrics/line_baseline.json'}
-          for name in conflicts-known:
-              assert name.startswith('成都修茈科技有限公司/capabilities/feature/') and name.endswith('.html'),name
-              old=subprocess.check_output(['git','show',ancestor+':'+name]).decode()
-              ours=subprocess.check_output(['git','show',target+':'+name]).decode()
-              assert re.sub(r'\d{4}-\d{2}-\d{2}','DATE',old)==re.sub(r'\d{4}-\d{2}-\d{2}','DATE',ours),name
-              Path(name).write_bytes(subprocess.check_output(['git','show',main+':'+name]))
-          heading='## Unreleased（1.0.0.6 候选，尚未发布）\n\n'
-          entry='- 自动检查可与配置一致性校验并行启动，减少等待；配置校验失败时仍禁止通过和发布。同步后端分片门禁的守卫输入与依赖断言，保留主线的员工包测试隔离修复。\n\n'
-          original=subprocess.check_output(['git','show',main+':FHD/CHANGELOG.md']).decode()
-          assert original.count(heading)==1 and entry not in original
-          Path('FHD/CHANGELOG.md').write_text(original.replace(heading,heading+entry,1))
-          Path('FHD/metrics/line_baseline.json').write_bytes(subprocess.check_output(['git','show',main+':FHD/metrics/line_baseline.json']))
-          preserve=('FHD/tests/test_infrastructure/test_mod_manager_branch_cov3.py','FHD/tests/test_routes/test_auth_subscription_register.py','FHD/XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/ShipmentRecordsView.vue','FHD/mods/xcagi-erp-domain-bridge/frontend/views/ShipmentRecordsView.vue','FHD/frontend/src/views/login-view/useLoginViewSession.ts','FHD/scripts/dev/record_enterprise_desktop_init.mjs')
-          for name in preserve:
-              assert Path(name).read_bytes()==subprocess.check_output(['git','show',main+':'+name]),name
-          subprocess.run(['git','add','--',*sorted(conflicts|known)],check=True)
-          assert not subprocess.check_output(['git','diff','--name-only','--diff-filter=U'])
-          assert subprocess.check_output(['git','hash-object','FHD/tests/test_ci/test_backend_shards.py'],text=True).strip()=='f11c51cfadc5753b4ca3e006f05fb2bc376571c2'
-          (out/'merge-conflicts.txt').write_text('\n'.join(sorted(conflicts)))
-          PY
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.11'
-          cache: pip
-          cache-dependency-path: |
-            FHD/requirements-server-api.txt
-            FHD/deploy/requirements-dev.txt
-            FHD/pyproject.toml
-            FHD/packages/**/pyproject.toml
-      - name: Install matching backend dependencies
-        working-directory: FHD
-        run: |
-          python -m pip install -r requirements-server-api.txt
-          python -m pip install -r deploy/requirements-dev.txt
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: FHD/frontend/package-lock.json
-      - name: Install real runtime Mod compiler
-        working-directory: FHD/frontend
-        run: npm ci --no-audit --no-fund
-      - name: Verify route isolation and all affected CI contracts
-        working-directory: FHD
-        run: |
-          set -euo pipefail
-          python -m pytest tests/test_infrastructure/test_mod_manager_branch_cov3.py tests/test_routes/test_auth_subscription_register.py -q --tb=short --junitxml="$RUNNER_TEMP/ci-current-main/routes.xml"
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. python -m pytest --noconftest -c /dev/null -p no:cacheprovider tests/test_ci/test_backend_shards.py tests/test_ci/test_workflow_gate_contracts.py tests/release_gate/test_admin_console_release_policy.py::test_fhd_release_chain_carries_and_verifies_admin_identity -q --junitxml="$RUNNER_TEMP/ci-current-main/contracts.xml"
-          python -m ruff check tests/test_ci/test_backend_shards.py
-          python -m ruff format --check tests/test_ci/test_backend_shards.py
-          cd ..
-          python -m scripts.dev.test_change_classifier
-          python scripts/dev/publish_ci_workflows_to_root.py --check
-      - name: Commit local merge and reconcile generated dates and accounting
-        run: |
-          set -euo pipefail
-          git diff --check
-          git commit -m 'Merge latest desktop fixes without changing CI gate or coverage semantics'
-          test "$(git rev-parse HEAD^1)" = "$TARGET_SHA"
-          test "$(git rev-parse HEAD^2)" = "$MAIN_SHA"
-          python '成都修茈科技有限公司/scripts/build_capability_center.py'
-          python - <<'PY'
-          import os,re,subprocess
-          from pathlib import Path
-          out=Path(os.environ['RUNNER_TEMP'])/'ci-current-main'
-          changed=set(subprocess.check_output(['git','diff','--name-only','-z']).decode().strip('\0').split('\0'))-{''}
-          for name in sorted(changed):
-              assert name.startswith('成都修茈科技有限公司/capabilities/feature/') and name.endswith('.html'),name
-              before=subprocess.check_output(['git','show','HEAD:'+name]).decode();after=Path(name).read_text()
-              assert re.sub(r'\d{4}-\d{2}-\d{2}','DATE',before)==re.sub(r'\d{4}-\d{2}-\d{2}','DATE',after),name
-              assert len(before.splitlines())==len(after.splitlines()),name
-          (out/'generated-date-reconciliation.patch').write_bytes(subprocess.check_output(['git','diff']))
-          if changed:
-              subprocess.run(['git','add','--',*sorted(changed)],check=True)
-              subprocess.run(['git','commit','-m','docs: synchronize generated capability dates only'],check=True)
-          PY
-          (cd FHD && python scripts/dev/check_net_deletion.py --update --force --reason '用户2026-10-22要求完整闭环CI并行改造；与最新main桌面修复合并，保留最终SSOT硬门禁及完整覆盖率，修复三项旧分片契约及守卫输入；仅生成器同步能力页面日期，不改产品权限，不删无关测试。')
-          git add FHD/metrics/line_baseline.json
-          git commit -m 'chore(ci): reconcile measured maintained-line baseline after main merge'
-          (cd FHD && python scripts/dev/push_preflight.py --fix --base "$MAIN_SHA")
-          (cd FHD && python scripts/dev/ssot_cli.py gate)
-          git diff --exit-code
-          git diff --check "$MAIN_SHA" HEAD
-      - name: Store verified Git objects without modifying any branch
+      - name: Capture all checks, attempts and job timestamps without modifying refs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
-          import base64,hashlib,json,os,re,shutil,subprocess,urllib.request,xml.etree.ElementTree as ET
+          import datetime,json,os,subprocess,time,urllib.parse,urllib.request
           from pathlib import Path
-          out=Path(os.environ['RUNNER_TEMP'])/'ci-current-main'
-          target,main=os.environ['TARGET_SHA'],os.environ['MAIN_SHA']
-          core={'.github/workflows/fhd-ci-cd.yml','FHD/.github/workflows/ci-cd.yml','FHD/CHANGELOG.md','docs/CI_SSOT.md','FHD/metrics/line_baseline.json','FHD/tests/test_ci/test_workflow_gate_contracts.py','FHD/tests/release_gate/test_admin_console_release_policy.py','FHD/tests/test_ci/test_backend_shards.py'}
-          changed=set(subprocess.check_output(['git','diff','--name-only','-z',main,'HEAD']).decode().strip('\0').split('\0'))-{''}
-          assert core<=changed,changed
-          for name in changed-core:
-              assert name.startswith('成都修茈科技有限公司/capabilities/feature/') and name.endswith('.html'),name
-              before=subprocess.check_output(['git','show',main+':'+name]).decode();after=Path(name).read_text()
-              assert re.sub(r'\d{4}-\d{2}-\d{2}','DATE',before)==re.sub(r'\d{4}-\d{2}-\d{2}','DATE',after),name
-          results={}
-          for filename in ('routes.xml','contracts.xml'):
-              suites=list(ET.parse(out/filename).iter('testsuite'))
-              results[filename]={key:sum(int(s.get(key,0)) for s in suites) for key in ('tests','failures','errors','skipped')}
-              assert results[filename]['tests']>0 and results[filename]['failures']==results[filename]['errors']==results[filename]['skipped']==0,results
-          elements=[]
-          for name in sorted(changed):
-              raw=Path(name).read_bytes();blob=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
-              payload=json.dumps({'content':base64.b64encode(raw).decode(),'encoding':'base64'}).encode()
-              request=urllib.request.Request('https://api.github.com/repos/42433422/XCMAX/git/blobs',data=payload,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'},method='POST')
-              with urllib.request.urlopen(request,timeout=45) as response:stored=json.load(response)
-              assert stored['sha']==blob
-              elements.append({'path':name,'mode':'100644','type':'blob','sha':blob})
-              destination=out/'candidate'/name;destination.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(name,destination)
-          baseline=json.loads(Path('FHD/metrics/line_baseline.json').read_text())
-          old_baseline=json.loads(subprocess.check_output(['git','show',main+':FHD/metrics/line_baseline.json']))
-          receipt={'target':target,'main':main,'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'base_tree':subprocess.check_output(['git','rev-parse',main+'^{tree}'],text=True).strip(),'elements':elements,'tests':results,'baseline':baseline,'baseline_delta':baseline['lines']-old_baseline['lines'],'refs_modified':False,'upstream_desktop_and_isolation_fixes_retained':True}
-          (out/'receipt.json').write_text(json.dumps(receipt,indent=2,ensure_ascii=False))
-          print('VERIFIED_OBJECT_HANDOFF',json.dumps(receipt,ensure_ascii=False),flush=True)
+          repo='42433422/XCMAX';head=os.environ['OBSERVED_SHA'];event=os.environ['OBSERVED_EVENT']
+          out=Path(os.environ['RUNNER_TEMP'])/'ci-observation';out.mkdir(exist_ok=True)
+          def get(path):
+              request=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+path,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'})
+              with urllib.request.urlopen(request,timeout=45) as response:return json.load(response)
+          def pages(path,key):
+              result=[];count=0
+              for page in range(1,21):
+                  value=get(path+('&' if '?' in path else '?')+f'per_page=100&page={page}')
+                  result.append(value);count+=len(value[key])
+                  if count>=value['total_count']:
+                      assert count==value['total_count'],(key,count,value['total_count'])
+                      return result
+                  assert value[key],(path,'unexpected empty page')
+              raise AssertionError('Pagination safety limit exceeded: '+path)
+          path='actions/runs?'+urllib.parse.urlencode({'head_sha':head,'event':event})
+          for attempt in range(30):
+              runs=[r for p in pages(path,'workflow_runs') for r in p['workflow_runs']]
+              assert runs and all(r['head_sha']==head and r['event']==event for r in runs)
+              pending=[{'id':r['id'],'status':r['status']} for r in runs if r['status']!='completed']
+              failed=[r['id'] for r in runs if r['status']=='completed' and r['conclusion']!='success']
+              print('OBSERVATION',attempt,'pending',pending,'unsuccessful',failed,flush=True)
+              if failed or not pending:break
+              time.sleep(30)
+          branch=get('branches/main');required=branch['protection']['required_status_checks']
+          assert required['checks'],'App-bound required checks unavailable'
+          assert len({r['workflow_id'] for r in runs})==len(runs),'Repeated workflows require reconciliation'
+          checks=pages(f'commits/{head}/check-runs?filter=all','check_runs')
+          jobs=[pages(f"actions/runs/{r['id']}/jobs?filter=all",'jobs') for r in runs]
+          snapshot={'repository':repo,'head_sha':head,'event':event,'required':required,'runs':runs,'checks':checks,'jobs':jobs,'observed_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'cache_state':'unknown'}
+          identity={'head':head,'event':event,'main_at_observation':branch['commit']['sha']}
+          if event=='pull_request':
+              pr=get('pulls/2516')
+              assert pr['head']['sha']==head,'PR advanced; old-head evidence is not current'
+              assert pr['state']=='open' and not pr['merged'],'Capture PR identity before merge'
+              snapshot.update(pull_request_number=2516,base_sha=os.environ['OBSERVED_BASE'])
+              source=pr['merge_commit_sha'];commit=get('git/commits/'+source)
+              assert commit['tree']['sha']==os.environ['EXPECTED_TREE'],'PR merge tree differs from verified tree'
+              identity.update(merge_source=source,merge_tree=commit['tree']['sha'],pr_mergeable=pr['mergeable'],pr_draft=pr['draft'],pr_base_at_observation=pr['base']['sha'])
+              (out/'pull-request.json').write_text(json.dumps(pr,indent=2))
+          else:
+              commit=get('git/commits/'+head)
+              assert commit['tree']['sha']==os.environ['EXPECTED_TREE'],'Main tree differs from reviewed tree'
+              identity.update(main_tree=commit['tree']['sha'])
+          (out/'snapshot.json').write_text(json.dumps(snapshot,indent=2))
+          (out/'identity.json').write_text(json.dumps(identity,indent=2))
+          (out/'branch-protection-public.json').write_text(json.dumps(branch,indent=2))
+          status=subprocess.run(['python','FHD/scripts/ci/measure_required_checks.py',str(out/'snapshot.json'),'--output',str(out/'required-report.json')])
+          report=json.loads((out/'required-report.json').read_text())
+          summary={'identity':identity,'required':report,'workflows':[{'id':r['id'],'name':r['name'],'status':r['status'],'conclusion':r['conclusion'],'created_at':r['created_at'],'run_attempt':r['run_attempt']} for r in runs]}
+          (out/'summary.json').write_text(json.dumps(summary,indent=2))
+          print(json.dumps(summary,ensure_ascii=False),flush=True)
+          assert status.returncode==0,'Required checks are not a complete successful sample'
+          assert all(r['status']=='completed' and r['conclusion']=='success' for r in runs),'Some workflows are incomplete or unsuccessful'
           PY
-      - name: Retain verification evidence including workflow files
+      - name: Retain identity and timing evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-current-main-${{ github.run_id }}
-          path: ${{ runner.temp }}/ci-current-main/
-          include-hidden-files: true
-          if-no-files-found: error
+          name: ci-observation-${{ github.run_id }}
+          path: ${{ runner.temp }}/ci-observation/
+          if-no-files-found: warn
           retention-days: 7
-      - name: Clean only this disposable checkout
-        if: always()
-        run: |
-          mkdir -p "$RUNNER_TEMP/latency-clean-home" "$RUNNER_TEMP/latency-clean-tmp"
-          HOME="$RUNNER_TEMP/latency-clean-home" XCMAX_CLEAN_TMP_ROOT="$RUNNER_TEMP/latency-clean-tmp" python3 scripts/dev/clean_agent_workspace.py
-          df -h .
