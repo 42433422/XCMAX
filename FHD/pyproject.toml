@@ -92,6 +92,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "jsonschema>=4.23",
     "ruff>=0.8,<0.16",
+    "import-linter>=2.15,<3",
     "mypy>=1.8",
     "types-redis",
     "types-requests",
@@ -392,3 +393,23 @@ exclude = [
     "MODstore*",
 ]
 namespaces = false
+
+# Incremental contracts: scope only the migrated sync slice, not all legacy modules.
+[tool.importlinter]
+root_package = "app"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+id = "sync-service-uses-dal"
+name = "Sync service uses the existing DAO instead of the SQLite driver"
+type = "forbidden"
+source_modules = ["app.services.xcmax_sync_service"]
+forbidden_modules = ["sqlite3"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "sync-dal-stays-low-level"
+name = "Sync DAO cannot depend on services or application entrypoints"
+type = "forbidden"
+source_modules = ["app.db.xcmax_sync"]
+forbidden_modules = ["app.services", "app.application", "app.fastapi_routes", "app.fastapi_app"]

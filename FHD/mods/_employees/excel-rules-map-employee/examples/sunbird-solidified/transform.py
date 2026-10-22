@@ -1,15 +1,9 @@
-"""太阳鸟考勤转换的固化脚本（solidify 循环产物示例）。
+"""合成考勤固化示例，不包含客户人员配置。
 
-由 LLM 在固化循环中亲笔编写（零 taiyangniao 依赖），3 轮迭代通过金样门禁：
-v1 68.7%（原始记录误取「考勤时间」列）→ v2 97.8%（修打卡列优先级）→
-v3 100%（金样归纳每人参数：MORNING9 上午 1+2 块、OT_1830 加班起算 18:30，
-等价太阳鸟模板 B 列 DSL；请假子列口径复现参考实现——事假首列不计入）。
-
-端到端验收：produce_records → compile → 模板写入员，与金样（太阳鸟单体输出）
-数据区 30240 格逐格 0 差异。见 tests/test_mods/test_excel_rules_solidify.py 回归。
-
-固化语义：MORNING9 / OT_1830 是当前人员配置的快照；人员变动时质检员
-structure/expected 节会报警，触发重新 solidify。
+回归使用 80 名明确标记的虚构员工和 31 天合成记录，与仓库内
+attendance-industry 参考实现逐槽对账，不依赖外部客户文件或跳过测试。
+上午特殊班次由 SYNTHETIC-001 演练；现行参考实现的夜班统一从
+18:00 起算，零头满 25 分钟计 0.5 小时，不额外重复累计周六时长。
 """
 
 import re
@@ -21,8 +15,7 @@ DATE_RE = re.compile(r"(\d{2,4})-(\d{1,2})-(\d{1,2})")
 HHMM_RE = re.compile(r"(\d{1,2}):(\d{2})")
 
 # 金样归纳：上午块 (1,2) 的人（模板 B 列写 09:00 上班），其余 (2,2)
-MORNING9 = {"李伟毅"}
-OT_1830 = {"丁章帅", "杨宁", "杨进彬", "桂秀花", "桂艳芳", "桂辉定", "陈玉容"}
+MORNING9 = {"SYNTHETIC-001"}
 FACTORY_KEYS = ("惠州工厂", "工厂")
 COMPANY_KEYS = ("公司-考勤", "公司正班", "惠州工厂-正班", "工厂正班")
 
@@ -248,7 +241,9 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
         punches = rec["punches"]
         shift, group, dept = rec["shift"], rec["group"], rec["dept"]
         symbol = _regular_symbol(dept, group, shift, d)
-        dingtalk_hours = rec["work_raw"] if rec["work_raw"] <= 24 else rec["work_raw"] / 60.0
+        dingtalk_hours = (
+            rec["work_raw"] if rec["work_raw"] <= 24 else rec["work_raw"] / 60.0
+        )
         morning, afternoon, night = [], [], []
 
         if not punches:
@@ -269,7 +264,9 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
             else:
                 n = len(punches)
                 if n % 2 == 1:
-                    intervals = [(punches[0], punches[-1])] if punches[-1] > punches[0] else []
+                    intervals = (
+                        [(punches[0], punches[-1])] if punches[-1] > punches[0] else []
+                    )
                 else:
                     intervals = [
                         (punches[i], punches[i + 1])
@@ -281,8 +278,12 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
                     clipped = []
                     for a, b in intervals:
                         for s, e in sched:
-                            cs = max(a, datetime(d.year, d.month, d.day, s.hour, s.minute))
-                            ce = min(b, datetime(d.year, d.month, d.day, e.hour, e.minute))
+                            cs = max(
+                                a, datetime(d.year, d.month, d.day, s.hour, s.minute)
+                            )
+                            ce = min(
+                                b, datetime(d.year, d.month, d.day, e.hour, e.minute)
+                            )
                             if ce > cs:
                                 clipped.append((cs, ce))
                     eff = clipped
@@ -290,8 +291,12 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
                     for band, bs, be, credit in _blocks(name):
                         total = 0.0
                         for a, b in eff:
-                            cs = max(a, datetime(d.year, d.month, d.day, bs.hour, bs.minute))
-                            ce = min(b, datetime(d.year, d.month, d.day, be.hour, be.minute))
+                            cs = max(
+                                a, datetime(d.year, d.month, d.day, bs.hour, bs.minute)
+                            )
+                            ce = min(
+                                b, datetime(d.year, d.month, d.day, be.hour, be.minute)
+                            )
                             if ce > cs:
                                 total += _hours(cs, ce)
                         val = min(_round_whole(total), credit)
@@ -304,35 +309,26 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
 
             # 夜班加班
             night_symbol = "★" if symbol == "★" else "☆"
-            ot_start = (
-                datetime(d.year, d.month, d.day, 18, 30)
-                if name in OT_1830
-                else datetime(d.year, d.month, d.day, 18, 0)
+            ot_start = datetime(d.year, d.month, d.day, 18, 0)
+            minutes = max((punches[-1] - ot_start).total_seconds() / 60.0, 0.0)
+            whole_hours, remainder = divmod(minutes, 60)
+            total_night = whole_hours + (
+                1.0 if remainder >= 55 else 0.5 if remainder >= 25 else 0.0
             )
-            base = 0.0
-            if punches and punches[-1] > ot_start:
-                base = _round_half(_hours(ot_start, punches[-1]))
-            extra_sat = 0.0
-            if d.weekday() == 5 and _is_factory_group(group, shift) and sched and len(punches) >= 2:
-                total = sum(_hours(a, b) for a, b in intervals)
-                inside = 0.0
-                for a, b in intervals:
-                    for s, e in sched:
-                        cs = max(a, datetime(d.year, d.month, d.day, s.hour, s.minute))
-                        ce = min(b, datetime(d.year, d.month, d.day, e.hour, e.minute))
-                        if ce > cs:
-                            inside += _hours(cs, ce)
-                extra_sat = _round_half(max(0.0, total - inside))
-            total_night = _round_half(base + extra_sat)
             if total_night > 0:
-                if total_night < 1.0 and base > 0 and extra_sat == 0.0:
-                    total_night = 1.0
                 night.append({"symbol": night_symbol, "value": total_night})
 
-        for band, entries in (("morning", morning), ("afternoon", afternoon), ("night", night)):
+        for band, entries in (
+            ("morning", morning),
+            ("afternoon", afternoon),
+            ("night", night),
+        ):
             trimmed = [
-                {"symbol": e["symbol"], "value": round(float(e["value"]), 1)} for e in entries[:2]
+                {"symbol": e["symbol"], "value": round(float(e["value"]), 1)}
+                for e in entries[:2]
             ]
             if trimmed:
-                records.append({"key": name, "day": d.day, "band": band, "entries": trimmed})
+                records.append(
+                    {"key": name, "day": d.day, "band": band, "entries": trimmed}
+                )
     return records

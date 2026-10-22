@@ -23,8 +23,8 @@ MAPPER_VENDOR = FHD_ROOT / "mods/_employees/excel-rules-map-employee/backend/ven
 QC_VENDOR = FHD_ROOT / "mods/_employees/excel-qc-employee/backend/vendor"
 QC_EMPLOYEE = FHD_ROOT / "mods/_employees/excel-qc-employee/backend/employees/excel_qc_employee.py"
 
-SUNBIRD_TEMPLATE = Path(
-    "/workspace/成都修茈科技有限公司/MODstore_deploy/var/employee_draft_assets/9/real-files-smoke/00_考勤-2026-3月份考勤统计表.xlsx"
+SUNBIRD_TEMPLATE = (
+    FHD_ROOT / "tests/fixtures/synthetic_attendance/synthetic-attendance-template.xlsx"
 )
 
 
@@ -84,7 +84,11 @@ def _build_chain(tmp_path: Path):
     _synthetic_template(template)
     wb_json = tmp_path / "wb.json"
     reader.convert_file(
-        template, wb_json, payload={}, ctx={}, rule_spec={"default_output_relpath": "workbook.json"}
+        template,
+        wb_json,
+        payload={},
+        ctx={},
+        rule_spec={"default_output_relpath": "workbook.json"},
     )
     rules = infer_mod.infer_rules(
         json.loads(wb_json.read_text(encoding="utf-8")), source_name="synthetic"
@@ -94,9 +98,24 @@ def _build_chain(tmp_path: Path):
         "pm": {"row_offset": 1, "max_entries": 1},
     }
     records = [
-        {"key": "甲", "day": 1, "band": "am", "entries": [{"symbol": "√", "value": 2.0}]},
-        {"key": "乙", "day": 3, "band": "pm", "entries": [{"symbol": "☆", "value": 1.5}]},
-        {"key": "路人", "day": 2, "band": "am", "entries": [{"symbol": "√", "value": 1}]},
+        {
+            "key": "甲",
+            "day": 1,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 2.0}],
+        },
+        {
+            "key": "乙",
+            "day": 3,
+            "band": "pm",
+            "entries": [{"symbol": "☆", "value": 1.5}],
+        },
+        {
+            "key": "路人",
+            "day": 2,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 1}],
+        },
     ]
     plan = compile_mod.compile_plan(rules, records, month_label="2026-07")
     plan_path = tmp_path / "plan.json"
@@ -337,12 +356,11 @@ def test_qc_employee_missing_plan_fails(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 真实太阳鸟模板全链 QC
+# 合成考勤模板全链 QC
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not SUNBIRD_TEMPLATE.is_file(), reason="真实太阳鸟模板不在本机")
-def test_qc_on_real_sunbird_chain(tmp_path: Path) -> None:
+def test_qc_on_synthetic_attendance_chain(tmp_path: Path) -> None:
     infer_mod, compile_mod, qc = _load_vendor_pkgs()
     reader = _load_module("reader_qc_sunbird", READER_CONVERT)
     writer = _load_module("writer_qc_sunbird", WRITER_CONVERT)
@@ -364,8 +382,18 @@ def test_qc_on_real_sunbird_chain(tmp_path: Path) -> None:
         "night": {"row_offset": 4, "max_entries": 2},
     }
     records = [
-        {"key": "胡超", "day": 2, "band": "morning", "entries": [{"symbol": "√", "value": 4.0}]},
-        {"key": "樊琪麒", "day": 8, "band": "night", "entries": [{"symbol": "☆", "value": 1.5}]},
+        {
+            "key": "SYNTHETIC-001",
+            "day": 2,
+            "band": "morning",
+            "entries": [{"symbol": "√", "value": 4.0}],
+        },
+        {
+            "key": "SYNTHETIC-002",
+            "day": 8,
+            "band": "night",
+            "entries": [{"symbol": "☆", "value": 1.5}],
+        },
     ]
     plan = compile_mod.compile_plan(rules, records, month_label="2026-03")
     plan_path = tmp_path / "plan.json"
@@ -382,7 +410,11 @@ def test_qc_on_real_sunbird_chain(tmp_path: Path) -> None:
     write_report = json.loads((filled.parent / "write_report.json").read_text(encoding="utf-8"))
 
     report = qc.run_qc(
-        filled, plan, template_path=SUNBIRD_TEMPLATE, rules=rules, write_report=write_report
+        filled,
+        plan,
+        template_path=SUNBIRD_TEMPLATE,
+        rules=rules,
+        write_report=write_report,
     )
     sections = report["sections"]
     assert sections["conformance"]["status"] == "pass", sections["conformance"]["issues"][:3]
@@ -393,4 +425,4 @@ def test_qc_on_real_sunbird_chain(tmp_path: Path) -> None:
     assert report["verdict"] in ("PASS", "WARN")
     assert write_result["violations"] == []
     # 数值对账命中
-    assert sections["expected"]["stats"]["file_sum"]["胡超"] == 4.0
+    assert sections["expected"]["stats"]["file_sum"]["SYNTHETIC-001"] == 4.0

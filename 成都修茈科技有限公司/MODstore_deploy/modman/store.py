@@ -311,38 +311,9 @@ def build_mod_zip_bytes(mod_dir: Path) -> io.BytesIO:
 
 
 def import_zip(zip_path: Path, library: Path, *, replace: bool = True) -> Path:
-    zip_path = zip_path.resolve()
-    library.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        names = zf.namelist()
-        if not names:
-            raise ValueError("空 zip")
-        top_levels = {n.split("/")[0].strip() for n in names if n.strip()}
-        if len(top_levels) != 1:
-            raise ValueError(
-                "zip 顶层应只有一个文件夹（例如 my-mod/manifest.json），实际: "
-                + ", ".join(sorted(top_levels)[:10])
-            )
-        root_name = next(iter(top_levels))
-        extract_to = library / root_name
-        if extract_to.exists():
-            if not replace:
-                raise FileExistsError(str(extract_to))
-            shutil.rmtree(extract_to)
-        zf.extractall(library)
-    mod_dir = library / root_name
-    data, err = read_manifest(mod_dir)
-    if err or not data:
-        shutil.rmtree(mod_dir, ignore_errors=True)
-        raise ValueError(err or "解压后 manifest 无效")
-    mid = (data.get("id") or "").strip()
-    if mid != mod_dir.name:
-        shutil.rmtree(mod_dir, ignore_errors=True)
-        raise ValueError(f"zip 内文件夹名 {mod_dir.name!r} 须与 manifest.id {mid!r} 一致")
-    ve = validate_manifest_dict(data)
-    if ve:
-        raise ValueError("manifest: " + "; ".join(ve))
-    return mod_dir
+    from modman.archive_import import import_zip as validated_import
+
+    return validated_import(zip_path, library, replace=replace)
 
 
 def write_registry_note(library: Path, note: dict) -> None:

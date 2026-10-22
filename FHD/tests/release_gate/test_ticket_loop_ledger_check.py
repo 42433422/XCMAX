@@ -55,7 +55,9 @@ def _filled(attempts: list[dict], *, pass_items=(24,)) -> dict:
     for item in ledger["items"]:
         if item["no"] in pass_items:
             item.update(
-                result="PASS", observed_at="2026-10-10T15:00:00Z", evidence=["runs/ticket.json"]
+                result="PASS",
+                observed_at="2026-10-10T15:00:00Z",
+                evidence=["runs/ticket.json"],
             )
     return ledger
 
@@ -132,7 +134,8 @@ def test_gate_19_green_requires_all_items_pass() -> None:
 
 def test_handler_outputs_evidence_file_is_loaded(tmp_path: Path) -> None:
     (tmp_path / "outputs.json").write_text(
-        json.dumps({"outputs": [PARA_OK, {"handler": "vibe_edit", "ok": True}]}), encoding="utf-8"
+        json.dumps({"outputs": [PARA_OK, {"handler": "vibe_edit", "ok": True}]}),
+        encoding="utf-8",
     )
     ledger = _filled([])
     ledger["tickets"]["resolved"]["processing"]["handler_outputs_evidence"] = "outputs.json"
@@ -209,7 +212,8 @@ def test_invalid_item_numbers_fail_closed(number) -> None:
 
 
 @pytest.mark.parametrize(
-    "policy", ["invalid", {"applies_to_items": "24"}, {"forbidden_local_handlers": [{}]}]
+    "policy",
+    ["invalid", {"applies_to_items": "24"}, {"forbidden_local_handlers": [{}]}],
 )
 def test_malformed_processor_policy_fails_closed(policy) -> None:
     ledger = _filled([PARA_OK])
@@ -227,14 +231,15 @@ def test_custom_policy_can_strengthen_but_not_replace_defaults() -> None:
 
 
 def test_valid_proof_and_green_gate_are_unchanged() -> None:
-    ledger = _filled([PARA_OK])
+    nos = [*range(17, 28), 41]
+    ledger = _filled([PARA_OK], pass_items=nos)
     gates = {
         "gates": [
             {
                 "no": 19,
                 "status": "GREEN",
                 "sources": [
-                    {"run": "ticket-loop.run.json", "items": [24]},
+                    {"run": "ticket-loop.run.json", "items": nos},
                 ],
             }
         ]
@@ -242,3 +247,177 @@ def test_valid_proof_and_green_gate_are_unchanged() -> None:
     before = copy.deepcopy((ledger, gates))
     assert CHECK["check_ledger"](ledger, gates) == []
     assert (ledger, gates) == before
+
+
+@pytest.mark.parametrize("section", [None, "", "A", "invalid", "omitted"])
+def test_section_cannot_disable_identity_requirements(section) -> None:
+    ledger = _filled([PARA_OK])
+    item = next(i for i in ledger["items"] if i["no"] == 24)
+    if section == "omitted":
+        item.pop("section")
+    else:
+        item["section"] = section
+    ledger.pop("candidate")
+    ledger.pop("accounts")
+    ledger["tickets"]["resolved"].pop("ticket_id")
+    assert {
+        "item_section_invalid",
+        "frozen_candidate_missing",
+        "account_missing",
+        "resolved_ticket_missing",
+    } <= _codes(CHECK["check_ledger"](ledger))
+
+
+@pytest.mark.parametrize("gate_no", [1, 2, *range(17, 24)])
+@pytest.mark.parametrize(
+    "sources", [None, [], [{"run": "wrong.run.json", "items": [24]}], "omitted"]
+)
+def test_green_ticket_gates_require_their_canonical_sources(gate_no, sources) -> None:
+    gate = {"no": gate_no, "status": "GREEN"}
+    if sources != "omitted":
+        gate["sources"] = sources
+    assert "gate_required_sources_missing" in _codes(CHECK["check_ledger"]({}, {"gates": [gate]}))
+
+
+def test_green_gate_cannot_reduce_required_items() -> None:
+    ledger = _filled([PARA_OK])
+    gate = {
+        "no": 19,
+        "status": "GREEN",
+        "sources": [{"run": "ticket-loop.run.json", "items": [24]}],
+    }
+    errors = CHECK["check_ledger"](ledger, {"gates": [gate]})
+    assert {"gate_required_sources_missing", "gate_green_without_pass"} <= _codes(errors)
+
+
+@pytest.mark.parametrize("result", ["UNKNOWN", "FAIL", "missing"])
+def test_green_gate_requires_every_canonical_item_to_pass(result) -> None:
+    nos = [*range(17, 28), 41]
+    ledger = _filled([PARA_OK], pass_items=nos)
+    if result == "missing":
+        ledger["items"] = [i for i in ledger["items"] if i["no"] != 41]
+    else:
+        next(i for i in ledger["items"] if i["no"] == 41)["result"] = result
+    gate = {
+        "no": 19,
+        "status": "GREEN",
+        "sources": [{"run": "ticket-loop.run.json", "items": nos}],
+    }
+    errors = CHECK["check_ledger"](ledger, {"gates": [gate]})
+    assert any(e["code"] == "gate_green_without_pass" and 41 in e["items"] for e in errors)
+
+
+def test_unknown_item_and_green_gate_numbers_are_rejected() -> None:
+    ledger = _filled([PARA_OK])
+    ledger["items"].append({"no": 999, "section": "A", "result": "UNKNOWN"})
+    assert "item_number_unknown" in _codes(CHECK["check_ledger"](ledger))
+    assert "gate_number_invalid" in _codes(
+        CHECK["check_ledger"]({}, {"gates": [{"no": 999, "status": "GREEN"}]})
+    )
+
+
+def test_non_ticket_green_gate_remains_outside_ticket_validation() -> None:
+    assert CHECK["check_ledger"]({}, {"gates": [{"no": 3, "status": "GREEN"}]}) == []
+
+
+@pytest.mark.parametrize("catalog", ["ticket-loop.run.json", "gates.json"])
+def test_default_catalog_structural_tampering_is_rejected(monkeypatch, catalog) -> None:
+    ledger = _template()
+    changed = _read(catalog)
+    if catalog == "ticket-loop.run.json":
+        next(i for i in changed["items"] if i["no"] == 24)["section"] = "A"
+    else:
+        next(g for g in changed["gates"] if g["no"] == 19)["sources"] = []
+    original = Path.read_text
+
+    def read(path, *args, **kwargs):
+        return (
+            json.dumps(changed) if path == LEDGER_DIR / catalog else original(path, *args, **kwargs)
+        )
+
+    monkeypatch.setattr(Path, "read_text", read)
+    assert "acceptance_contract_invalid" in _codes(CHECK["check_ledger"](ledger))
+
+
+def test_evidence_updates_do_not_change_structural_contract(monkeypatch) -> None:
+    ledger = _template()
+    changed = copy.deepcopy(ledger)
+    changed["items"][0].update(
+        result="PASS",
+        evidence=["new-synthetic-evidence"],
+        observed_at="2026-10-22T00:00:00Z",
+    )
+    original = Path.read_text
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda p, *a, **kw: (
+            json.dumps(changed)
+            if p == LEDGER_DIR / "ticket-loop.run.json"
+            else original(p, *a, **kw)
+        ),
+    )
+    assert CHECK["check_ledger"](ledger) == []
+
+
+def test_caller_base_does_not_override_structural_contract(tmp_path) -> None:
+    (tmp_path / "ticket-loop.run.json").write_text('{"items": []}')
+    (tmp_path / "gates.json").write_text('{"gates": []}')
+    ledger = _filled([PARA_OK])
+    next(i for i in ledger["items"] if i["no"] == 24)["section"] = "A"
+    assert "item_section_invalid" in _codes(CHECK["check_ledger"](ledger, base=tmp_path))
+
+
+def test_cli_missing_requested_gate_file_fails_closed(tmp_path, capsys) -> None:
+    assert (
+        CHECK["main"](
+            [
+                "--ledger",
+                str(LEDGER_DIR / "ticket-loop.run.json"),
+                "--gates",
+                str(tmp_path / "missing.json"),
+            ]
+        )
+        == 1
+    )
+    assert "input_file_invalid" in _codes(json.loads(capsys.readouterr().out)["violations"])
+
+
+def test_unreadable_contract_fails_closed(monkeypatch) -> None:
+    ledger = _template()
+    original = Path.read_text
+
+    def read(path, *args, **kwargs):
+        if path == LEDGER_DIR / "gates.json":
+            raise FileNotFoundError("synthetic missing catalog")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read)
+    assert "acceptance_contract_invalid" in _codes(CHECK["check_ledger"](ledger))
+
+
+def test_cli_malformed_gate_json_fails_closed(tmp_path, capsys) -> None:
+    path = tmp_path / "invalid.json"
+    path.write_text("{invalid", encoding="utf-8")
+    assert (
+        CHECK["main"](["--ledger", str(LEDGER_DIR / "ticket-loop.run.json"), "--gates", str(path)])
+        == 1
+    )
+    assert json.loads(capsys.readouterr().out)["violations"] == [
+        {"code": "input_file_invalid", "kind": "JSONDecodeError"}
+    ]
+
+
+@pytest.mark.parametrize("payload", ["null", "[]", "42"])
+def test_cli_gate_file_must_be_an_object(tmp_path, capsys, payload) -> None:
+    path = tmp_path / "invalid-root.json"
+    path.write_text(payload, encoding="utf-8")
+    assert (
+        CHECK["main"](["--ledger", str(LEDGER_DIR / "ticket-loop.run.json"), "--gates", str(path)])
+        == 1
+    )
+    assert "gates_invalid" in _codes(json.loads(capsys.readouterr().out)["violations"])
+
+
+def test_ledger_only_python_api_remains_supported() -> None:
+    assert CHECK["check_ledger"]({}, None) == []
