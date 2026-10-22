@@ -1,9 +1,6 @@
-# CI SSOT: 此文件为编辑源，执行入口在根仓 .github/workflows/market-ci.yml
-#
 # 组件级 CI：MODstore market 前端（MODstore_deploy/market）
 #
 # 责任边界：仅负责 MODstore_deploy/market 子项目。
-# 下游：market-live-deploy.yml 通过 workflow_run 监听本工作流。
 
 name: CI - Market
 
@@ -12,11 +9,15 @@ on:
     paths:
       - 'MODstore_deploy/market/**'
       - '.github/workflows/ci-market.yml'
+      - '成都修茈科技有限公司/.github/workflows/ci-market.yml'
+      - '.gitmodules'
   push:
     branches: [main]
     paths:
       - 'MODstore_deploy/market/**'
       - '.github/workflows/ci-market.yml'
+      - '成都修茈科技有限公司/.github/workflows/ci-market.yml'
+      - '.gitmodules'
   workflow_dispatch:
 
 concurrency:

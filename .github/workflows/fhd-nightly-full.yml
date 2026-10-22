@@ -72,11 +72,9 @@ jobs:
             fhd-ci-mobile-flutter.yml \
           ; do
             echo "==> dispatch ${wf} @ ${REF}"
-            inputs=()
             if [ "${wf}" = "fhd-security-full-scan.yml" ]; then
-              inputs=(-f "release_sha=${RELEASE_SHA}")
-            fi
-            if ! gh workflow run "${wf}" --ref "${REF}" "${inputs[@]}"; then
+              gh workflow run "${wf}" --ref "${REF}" -f "release_sha=${RELEASE_SHA}" || failed="${failed} ${wf}"
+            elif ! gh workflow run "${wf}" --ref "${REF}"; then
               failed="${failed} ${wf}"
             fi
           done
