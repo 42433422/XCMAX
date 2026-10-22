@@ -63,9 +63,12 @@ jobs:
               assert Path(path).read_bytes()==expected,path
           PY
           cd FHD
-          python scripts/dev/check_net_deletion.py --update --force --reason '2026-10-22 用户授权 CI 提速闭环：保留 main 1ab42432 的 #2524 工单证据硬门禁及回归；本 PR 仅复用同次同源相同覆盖率报告并记录阶段计时，含合成夹具隔离。相对该 main 净增141行，不删无关代码、不降低门槛。'
+          # Resolve the index before the existing counter calls git ls-files;
+          # unmerged entries otherwise enumerate a conflicted path three times.
           git add CHANGELOG.md metrics/line_baseline.json
           test -z "$(git diff --name-only --diff-filter=U)"
+          python scripts/dev/check_net_deletion.py --update --force --reason '2026-10-22 用户授权 CI 提速闭环：保留 main 1ab42432 的 #2524 工单证据硬门禁及回归；本 PR 仅复用同次同源相同覆盖率报告并记录阶段计时，含合成夹具隔离。相对该 main 净增141行，不删无关代码、不降低门槛。'
+          git add CHANGELOG.md metrics/line_baseline.json
           git diff --cached --check
           git -c core.hooksPath=/dev/null commit -m 'Merge protected main 1ab42432 and retain both verified CI and ticket-ledger changes'
       - name: Test CI contracts under the real parent timing profile
@@ -107,7 +110,7 @@ jobs:
               suites=list(ET.parse(out/filename).getroot().iter('testsuite'))
               assert all(int(s.get(k,'0'))==0 for s in suites for k in ('failures','errors','skipped'))
               counts[filename]=sum(int(s.get('tests','0')) for s in suites)
-          assert counts['ci-contracts.xml']==287 and counts['upstream-ticket-ledger.xml']>0,counts
+          assert counts['ci-contracts.xml']==287 and counts['upstream-ticket-ledger.xml']==40,counts
           receipt={'old_head':os.environ['PR_HEAD'],'main':os.environ['TARGET_MAIN'],'head':git('rev-parse','HEAD'),'tree':git('rev-parse','HEAD^{tree}'),'run':os.environ['GITHUB_RUN_ID'],'branch':os.environ['CANDIDATE_BRANCH'],'tests':counts,'files':{p:git('hash-object',p) for p in paths},'scope':'targeted integration checks, not new formal full CI'}
           (out/'receipt.json').write_text(json.dumps(receipt,indent=2))
           print(json.dumps(receipt,indent=2))
