@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # mypy: disable-error-code="no-any-return"
-"""巨型文件棘轮（ratchet）：只减不增地收口 FHD/app 大文件债务。
+"""文件规模提示与路由棘轮：按职责维护 FHD/app，不机械拆分文件。
 
 守护两条大文件基线：
 
-1. ``app/**/*.py`` 行数 > ``file_lines_soft_cap``（默认 800）的文件 —— 巨型文件**不得新增或增长**。
+1. ``app/**/*.py`` 行数 > ``file_lines_soft_cap``（默认 800）的文件 —— 只给出规模警告，不阻断构建或基线更新。
    新代码应按职责拆分（router 拆 domain、app_service 拆 helper、巨型 schema 拆子模块）。
 2. 单文件 ``@router.`` 装饰器数 > ``routes_per_file_soft_cap``（默认 20）的文件 ——
    路由数**不得增长**，并应聚合到 domain 子模块（绞杀者式收口）。
@@ -17,7 +17,7 @@
     python scripts/dev/count_big_files.py                    # 校验（CI，exit 1 on violation）
     python scripts/dev/count_big_files.py --json             # JSON 输出
     python scripts/dev/count_big_files.py --top 10           # 列出 Top N 待拆分文件
-    python scripts/dev/count_big_files.py --update-baseline  # 收口后锁定新基线（只降）
+    python scripts/dev/count_big_files.py --update-baseline  # 更新规模观测和路由基线（路由只降）
     python scripts/dev/count_big_files.py --update-baseline --force   # 强制更新（不推荐）
 
 退出码：违规 ``1`` / 正常 ``0`` / 用法错 ``2``。
@@ -134,21 +134,9 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
 
     file_limits = baseline.get("file_line_limits", {})
     current_files = {item["file"]: item["lines"] for item in current["big_files_over_cap"]}
-    if file_limits:
-        for rel, lines in current_files.items():
-            limit = file_limits.get(rel)
-            if limit is None:
-                errors.append(
-                    f"新增巨型文件：{rel}（{lines} > "
-                    f"{baseline['thresholds']['file_lines_soft_cap']} 行）"
-                )
-            elif lines > limit:
-                errors.append(f"巨型文件继续增长：{rel}（{limit} → {lines} 行）")
-        removed = sorted(set(file_limits) - set(current_files))
-        if removed:
-            progress.append(f"app/ 巨型文件债务下降：移除 {len(removed)} 个基线项 ✓")
-    elif current["big_files_count"] > baseline["big_files_over_800_lines"]:
-        errors.append("app/ 巨型文件数增加；请生成逐文件 V2 基线。")
+    removed = sorted(set(file_limits) - set(current_files))
+    if removed:
+        progress.append(f"app/ 不再超过规模提示阈值的文件：{len(removed)} 个")
 
     route_limits = baseline.get("router_route_limits", {})
     current_routers = {
@@ -173,6 +161,12 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     return errors, progress
 
 
+
+def size_warnings(current: dict, cap: int) -> list[str]:
+    return [f"文件规模提示：{item['file']}（{item['lines']} > {cap} 行，仅告警）"
+            for item in current["big_files_over_cap"]]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -182,7 +176,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--update-baseline",
         action="store_true",
-        help="把当前实测写为新基线（默认只允许调低；升高需 --force）",
+        help="记录文件规模；路由基线仅允许调低，升高需 --force",
     )
     parser.add_argument("--force", action="store_true", help="允许 --update-baseline 调高基线")
     parser.add_argument(
@@ -212,16 +206,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.update_baseline:
         if not args.force:
             raising: list[str] = []
-            if current["big_files_count"] > baseline["big_files_over_800_lines"]:
-                raising.append("big_files_over_800_lines")
             if current["big_router_count"] > baseline["big_router_files_over_20_routes"]:
                 raising.append("big_router_files_over_20_routes")
-            for item in current["big_files_over_cap"]:
-                old = baseline.get("file_line_limits", {}).get(item["file"])
-                if baseline.get("file_line_limits") and old is None:
-                    raising.append(f"new oversized file {item['file']}")
-                elif old is not None and item["lines"] > old:
-                    raising.append(f"{item['file']} lines")
             for item in current["big_router_files_over_cap"]:
                 old = baseline.get("router_route_limits", {}).get(item["file"])
                 if baseline.get("router_route_limits") and old is None:
@@ -255,6 +241,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     errors, progress = evaluate(current, baseline)
+    warnings = size_warnings(current, file_lines_cap)
 
     if args.json:
         print(
@@ -272,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
                             "big_router_files_over_20_routes"
                         ],
                     },
+                    "warnings": warnings,
                     "errors": errors,
                     "progress": progress,
                     "ok": not errors,
@@ -295,6 +283,8 @@ def main(argv: list[str] | None = None) -> int:
         f"[big-files-ratchet] max file lines: {current['max_file_lines']} | "
         f"max routes per file: {current['max_routes_per_file']}"
     )
+    for warning in warnings:
+        print(f"[big-files-ratchet] WARNING: {warning}")
     for p in progress:
         print(f"[big-files-ratchet] PROGRESS: {p}")
     if errors:
@@ -302,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         for e in errors:
             print(f"  - {e}", file=sys.stderr)
         return 1
-    print("[big-files-ratchet] OK — 巨型文件未增长")
+    print("[big-files-ratchet] OK — 路由门禁通过；文件规模仅告警")
     return 0
 
 
