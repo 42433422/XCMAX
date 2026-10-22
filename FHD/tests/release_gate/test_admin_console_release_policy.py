@@ -87,11 +87,9 @@ def test_fhd_release_chain_carries_and_verifies_admin_identity() -> None:
 
     parsed = yaml.safe_load(workflow)
     jobs = parsed["jobs"]
-    assert set(jobs["pack-verify"]["needs"]) == {
-        "guard-temp-scripts",
-        "ssot-drift-gate",
-        "classify",
-    }
+    assert set(jobs["pack-verify"]["needs"]) == {"guard-temp-scripts", "classify"}
+    for gate in ("backend-test", "frontend-test"):
+        assert "ssot-drift-gate" in jobs[gate]["needs"]
     assert "pack-verify" in jobs["container-scan"]["needs"]
     assert set(jobs["docker-build-fhd-api"]["needs"]) == {
         "backend-test",

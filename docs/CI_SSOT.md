@@ -180,7 +180,7 @@ PR Fast CI
 
 ## 分片执行与耗时观测（2026-10-21）
 
-本轮保留现有 11 个 required checks、测试全集及覆盖率基线，调整工作流依赖与报告成本。`backend-test`、`frontend-test` 仍是最终聚合门禁；质量检查与分片同时开始，均先等待 `guard-temp-scripts`、`SSOT Drift Gate` 和分类完成。聚合使用 `always()`，分类失败、质量失败、分片缺失或取消不能变成成功。
+本轮保留现有 11 个 required checks、测试全集及覆盖率基线，调整工作流依赖与报告成本。`backend-test`、`frontend-test` 仍是最终聚合门禁；质量检查与分片只等待 `guard-temp-scripts` 和分类完成；`SSOT Drift Gate` 同时运行，两个最终聚合门禁仍显式要求守卫与 SSOT 均成功。聚合使用 `always()`，分类失败、质量失败、分片缺失或取消不能变成成功。
 
 | 环节 | 执行与验证口径 |
 | --- | --- |
@@ -190,7 +190,7 @@ PR Fast CI
 | 后端报告 | stdlib 先验证所有证据及工具链，再只安装分片实际使用的 coverage 版本。full/behavior 数据隔离生成 JSON，保留 XML 和两道 ratchet；HTML 仅手动 `--html`。逐阶段耗时保存在 `backend-aggregate-timings.json`。 |
 | 前端分片 | 4 片 Vitest；原生 blob/V8 合并后再执行原全局阈值及 `--require-frontend`。验证完整文件集合、片号唯一、身份及原始报告哈希。ESLint、any 棘轮及现有 advisory vue-tsc 在质量任务执行。 |
 | 下游验证 | mock E2E 与打包提前开始；容器扫描等待实际打包产物。镜像发布仍等待前后端聚合、E2E、安全、容器扫描、打包和架构检查。 |
-| 无关变更 | 只有有效分类、正确源码、质量任务成功且分片明确 skipped 时，聚合才接受 skip；空输出或未知状态均失败。 |
+| 无关变更 | 只有守卫和 SSOT 均成功、有效分类、正确源码、质量任务成功且分片明确 skipped 时，聚合才接受 skip；空输出或未知状态均失败。 |
 
 ### 比较时间的方法
 
@@ -648,4 +648,3 @@ python scripts/autonomy/audit_query.py --source server --since 1h \
 ```
 
 完整用法与运维剧本见 [autonomy.md](./autonomy.md)。
-
