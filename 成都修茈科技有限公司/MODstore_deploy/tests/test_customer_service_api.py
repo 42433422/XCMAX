@@ -1322,6 +1322,8 @@ def test_admin_reply_preserves_ticket_and_original_customer_session(client):
         assert (
             client.post(url, json={**payload, "request_id": str(uuid.uuid4())}).status_code == 409
         )
+
+
 def test_admin_customer_ticket_intent_and_status_filters_preserve_customer_scope(client):
     customer, other_customer, admin = (
         _make_user("filter_customer"),
