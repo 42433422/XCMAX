@@ -37,9 +37,8 @@
           <div><dt>预期完成时间（客户可见）</dt><dd>{{ formatBeijingTime(ticket.expected_completion_at, '暂未安排') }}</dd></div>
         </dl>
         <form class="cs-eta-editor" @submit.prevent="saveExpectedCompletion">
-          <label for="customer-ticket-eta">设置客户可见的预期完成时间（北京时间）</label>
-          <input id="customer-ticket-eta" v-model="expectedCompletionInput" type="datetime-local" />
-          <button type="submit" class="cs-btn" :disabled="saving || savingEta">{{ savingEta ? '保存中…' : '保存时间' }}</button>
+          <label for="customer-ticket-eta">设置客户可见的预期完成时间（北京时间）</label><input id="customer-ticket-eta" v-model="expectedCompletionInput" type="datetime-local" />
+          <button type="submit" class="cs-btn cs-btn-primary" :disabled="saving || savingEta">{{ savingEta ? '保存中…' : '保存时间' }}</button>
           <button v-if="ticket.expected_completion_at" type="button" class="cs-btn" :disabled="saving || savingEta" @click="clearExpectedCompletion">清除</button>
           <span v-if="etaMessage" role="status">{{ etaMessage }}</span>
           <span v-if="etaError" role="alert" class="cs-error-text">{{ etaError }}</span>
