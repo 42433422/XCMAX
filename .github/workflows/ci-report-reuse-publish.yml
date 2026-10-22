@@ -1,0 +1,140 @@
+name: Publish verified CI report reuse candidate
+on:
+  push:
+    branches: [ci/publish-report-reuse-20261022-r1]
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    env:
+      SOURCE_RUN: '39708080130'
+      PRODUCT_BASE: b9e6a5ee47b114b5e45d678123f0ca2d48a77e6f
+      PRODUCT_BRANCH: ci/coverage-report-reuse-20261022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b9e6a5ee47b114b5e45d678123f0ca2d48a77e6f
+          fetch-depth: 0
+          filter: blob:none
+      - name: Verify successful fixed-source validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/publication"
+          gh api "repos/42433422/XCMAX/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/publication/source-run.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          run=json.loads((Path(os.environ['RUNNER_TEMP'])/'publication/source-run.json').read_text())
+          assert run['id']==39708080130 and run['run_attempt']==1
+          assert run['head_sha']=='d4cbe29ea470e46847701421198db1cd63430187'
+          assert run['status']=='completed' and run['conclusion']=='success'
+          PY
+          test "$(git rev-parse HEAD)" = "$PRODUCT_BASE"
+          test "$(git rev-parse HEAD^{tree})" = 100e545110df01146655b8bcc46e6bde70f65b70
+          test -z "$(git status --porcelain)"
+          git worktree list
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: 42433422/XCMAX
+          run-id: 39708080130
+          name: ci-report-reuse-39708080130
+          path: ${{ runner.temp }}/verified-candidate
+      - name: Apply only hash-verified candidate files
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          artifact=Path(os.environ['RUNNER_TEMP'])/'verified-candidate'
+          receipt=json.loads((artifact/'receipt.json').read_text())
+          expected={'FHD/scripts/ci/backend_shard_aggregate.py','FHD/scripts/ci/backend_shard_plugin.py','FHD/tests/test_ci/test_backend_shard_aggregate.py','FHD/CHANGELOG.md','FHD/metrics/line_baseline.json'}
+          assert set(receipt['files'])==expected
+          assert receipt['base_tree']=='100e545110df01146655b8bcc46e6bde70f65b70'
+          assert receipt['tree']=='c18cc713d4ac8645995f1e3f92796a5a0bfe7f21'
+          for name,sha in receipt['files'].items():
+              source=artifact/'candidate'/name
+              target=Path(name)
+              assert source.is_file() and not source.is_symlink() and not target.is_symlink()
+              data=source.read_bytes()
+              assert hashlib.sha1(f'blob {len(data)}\0'.encode()+data).hexdigest()==sha,name
+              target.write_bytes(data)
+          # Put the release note under the existing Unreleased heading, in its
+          # existing language. Runtime/test candidate blobs stay byte-identical.
+          name='FHD/CHANGELOG.md'
+          original=subprocess.check_output(['git','show',os.environ['PRODUCT_BASE']+':'+name],text=True)
+          marker='## Unreleased（1.0.0.6 候选，尚未发布）\n\n'
+          assert original.count(marker)==1
+          note='- 自动检查仅在同一次运行的测试范围与原始覆盖率数据完全一致时复用报告计算，仍分别执行两道覆盖率门槛；新增测试收集和执行分段计时。提速幅度以正式运行记录为准。\n\n'
+          Path(name).write_text(original.replace(marker,marker+note),encoding='utf-8')
+          assert set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())==expected
+          PY
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install verification tools
+        run: python -m pip install pytest==9.1.1 pytest-cov==7.1.0 coverage==7.16.2 PyYAML==6.0.3 ruff==0.15.22
+      - name: Verify candidate on main ancestry
+        working-directory: FHD
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+        run: |
+          set -euo pipefail
+          printf '[pytest]\n' > "$RUNNER_TEMP/unit.ini"
+          PYTHONPATH="$PWD" python -m pytest -c "$RUNNER_TEMP/unit.ini" --confcutdir=tests/test_ci tests/test_ci/test_backend_shards.py tests/test_ci/test_backend_shard_aggregate.py tests/test_ci/test_workflow_gate_contracts.py -q --junitxml="$RUNNER_TEMP/publication/contracts.xml"
+          python -m ruff check scripts/ci/backend_shard_aggregate.py scripts/ci/backend_shard_plugin.py tests/test_ci/test_backend_shard_aggregate.py
+          python -m ruff format --check scripts/ci/backend_shard_aggregate.py scripts/ci/backend_shard_plugin.py tests/test_ci/test_backend_shard_aggregate.py
+      - name: Commit and enforce repository pre-push checks
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add FHD/scripts/ci/backend_shard_aggregate.py FHD/scripts/ci/backend_shard_plugin.py FHD/tests/test_ci/test_backend_shard_aggregate.py FHD/CHANGELOG.md FHD/metrics/line_baseline.json
+          git -c core.hooksPath=/dev/null commit -m 'ci: reuse verified identical coverage reports and measure test phases'
+          cd FHD
+          python scripts/dev/push_preflight.py --fix --base "$PRODUCT_BASE"
+          python scripts/dev/ssot_cli.py gate
+          test -z "$(git status --porcelain --untracked-files=no)"
+          git diff --check "$PRODUCT_BASE" HEAD
+      - name: Push a new review branch only
+        run: |
+          set -euo pipefail
+          test -z "$(git ls-remote --heads origin "refs/heads/$PRODUCT_BRANCH")"
+          python - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          receipt=json.loads((Path(os.environ['RUNNER_TEMP'])/'verified-candidate/receipt.json').read_text())
+          paths=subprocess.check_output(['git','diff','--name-only',os.environ['PRODUCT_BASE'],'HEAD'],text=True).splitlines()
+          assert set(paths)==set(receipt['files'])
+          for name in paths:
+              if name not in {'FHD/CHANGELOG.md','FHD/metrics/line_baseline.json'}:
+                  assert subprocess.check_output(['git','hash-object',name],text=True).strip()==receipt['files'][name]
+          PY
+          git push origin "HEAD:refs/heads/$PRODUCT_BRANCH"
+          test "$(git ls-remote --heads origin "refs/heads/$PRODUCT_BRANCH" | cut -f1)" = "$(git rev-parse HEAD)"
+          python - <<'PY'
+          import json,os,subprocess
+          from pathlib import Path
+          command=lambda *args: subprocess.check_output(['git',*args],text=True).strip()
+          receipt={'branch':os.environ['PRODUCT_BRANCH'],'head':command('rev-parse','HEAD'),'tree':command('rev-parse','HEAD^{tree}'),'base':os.environ['PRODUCT_BASE'],'source_run':39708080130,'publication_run':os.environ['GITHUB_RUN_ID'],'status':'branch_pushed_no_merge_no_deploy','files':{name:command('hash-object',name) for name in command('diff','--name-only',os.environ['PRODUCT_BASE'],'HEAD').splitlines()}}
+          (Path(os.environ['RUNNER_TEMP'])/'publication/receipt.json').write_text(json.dumps(receipt,indent=2))
+          print(json.dumps(receipt,indent=2))
+          PY
+      - name: Cleanup task-owned caches
+        if: always()
+        run: |
+          python3 scripts/dev/clean_agent_workspace.py
+          df -h .
+      - name: Retain publication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-reuse-publication-${{ github.run_id }}
+          path: ${{ runner.temp }}/publication/
+          if-no-files-found: error
+          retention-days: 7
