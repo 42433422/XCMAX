@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, Response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(tags=["inventory"])
 
 
 def _svc():

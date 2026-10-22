@@ -6,13 +6,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import Body, Query, Request
 
 from app.application.workflow.types import normalize_workflow_risk
 from app.fastapi_routes.inventory_exports import router as export_router
 
-router = APIRouter(tags=["inventory"])
-router.include_router(export_router)
+router = export_router
 
 
 def _svc():

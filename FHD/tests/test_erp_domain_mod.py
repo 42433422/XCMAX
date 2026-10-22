@@ -22,7 +22,6 @@ def test_customer_export_download_is_tenant_scoped(tmp_path, monkeypatch):
 
     from app.application.customer_app_service import CustomerApplicationService
     from app.db.models.purchase_unit import PurchaseUnit
-    from app.infrastructure.tenant_scope import tenant_scope
     from app.mod_sdk import erp_customers_facade
 
     engine = create_engine(f"sqlite:///{tmp_path / 'export.db'}")
@@ -38,7 +37,7 @@ def test_customer_export_download_is_tenant_scoped(tmp_path, monkeypatch):
         session.commit()
     service = CustomerApplicationService()
     monkeypatch.setattr(service, "_get_session", factory)
-    monkeypatch.setattr(erp_customers_facade, "_service", lambda: service)
+    monkeypatch.setattr("app.mod_sdk.erp_customers_facade._service", lambda: service)
     monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(
         "app.infrastructure.auth.db_token.verify_db_read_token_header", lambda request: None
@@ -52,8 +51,8 @@ def test_customer_export_download_is_tenant_scoped(tmp_path, monkeypatch):
 
     @app.middleware("http")
     async def customer_scope(request, call_next):
-        with tenant_scope(1):
-            return await call_next(request)
+        request.state.tenant_id = 1
+        return await call_next(request)
 
     bridge.register_fastapi_routes(app, "xcagi-erp-domain-bridge")
     response = TestClient(app).get("/api/mod/xcagi-erp-domain-bridge/customers/export")
@@ -73,7 +72,7 @@ def test_customer_export_rejects_unsafe_or_failed_download(tmp_path, monkeypatch
     from fastapi import HTTPException
     from starlette.requests import Request
 
-    from app.mod_sdk import erp_customers_facade
+    from app.mod_sdk.erp_customers_facade import customers_export
 
     service = Mock()
     service.export_to_excel.return_value = {
@@ -83,7 +82,7 @@ def test_customer_export_rejects_unsafe_or_failed_download(tmp_path, monkeypatch
         ),
         "message": "导出失败",
     }
-    monkeypatch.setattr(erp_customers_facade, "_service", lambda: service)
+    monkeypatch.setattr("app.mod_sdk.erp_customers_facade._service", lambda: service)
     monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: str(tmp_path))
 
     def authorize(request):
@@ -92,9 +91,7 @@ def test_customer_export_rejects_unsafe_or_failed_download(tmp_path, monkeypatch
 
     monkeypatch.setattr("app.infrastructure.auth.db_token.verify_db_read_token_header", authorize)
     with pytest.raises(HTTPException) as exc:
-        erp_customers_facade.customers_export(
-            Request({"type": "http", "method": "GET", "path": "/"})
-        )
+        customers_export(Request({"type": "http", "method": "GET", "path": "/"}))
     assert exc.value.status_code == status
     if failure == "auth":
         service.export_to_excel.assert_not_called()

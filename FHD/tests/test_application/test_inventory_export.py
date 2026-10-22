@@ -400,7 +400,7 @@ def test_csv_mod_declares_new_host_requirement_and_export_copy_matches(monkeypat
     exported = root / "XCAGI/mods/xcagi-erp-domain-bridge/manifest.json"
     assert source.read_bytes() == exported.read_bytes()
     data = json.loads(source.read_text())
-    assert data["version"] == "1.0.0.6"
+    assert data["version"] == "1.0.0.7"
     required = data["dependencies"]["xcagi"]
     monkeypatch.setattr(manifest, "host_xcagi_version", lambda: "1.0.0.5")
     assert not manifest._check_xcagi_version(required)
