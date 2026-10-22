@@ -43,6 +43,23 @@ jobs:
                 printf '%s=%s\n' "$ref" "$sha"
               else rc=$?; printf 'revision lookup failed: %s exit=%s\n' "$ref" "$rc"; exit "$rc"; fi
             done
+            echo 'Ticket-reader prerequisites: metadata only; no credentials or customer data'
+            printf 'architecture='; uname -m
+            for tool in node npm systemctl tunnel-client; do
+              if command -v "$tool" >/dev/null; then printf '%s=available\n' "$tool";
+              else printf '%s=missing\n' "$tool"; fi
+            done
+            if command -v node >/dev/null; then timeout --kill-after=2s 5s env -u NODE_OPTIONS -u NODE_PATH node --version; fi
+            if command -v find >/dev/null; then
+              if candidates=$(timeout --kill-after=2s 15s find /root /etc /opt -xdev -maxdepth 6 -type f -name ticket-reader.json -printf x 2>/dev/null); then
+                printf 'ticket_reader_config_candidates=%s\n' "${#candidates}"
+              else echo 'ticket_reader_config_candidates=unknown'; fi
+            fi
+            if command -v systemctl >/dev/null; then
+              if timeout --kill-after=2s 5s systemctl is-active --quiet company-tickets.service; then
+                echo 'company_tickets_service=active'
+              else echo 'company_tickets_service=not_active_or_unavailable'; fi
+            fi
             date -u '+snapshot_finished=%Y-%m-%dT%H:%M:%SZ'
             echo 'Read-only snapshot complete; review process/lock evidence before any separate deployment.'
             exit 0
