@@ -2,6 +2,11 @@
 
 ## Unreleased（1.0.0.6 候选，尚未发布）
 
+- 产品问题的完整明确报障先按确定规则建单，不再被模型客户端初始化失败阻断；不绕过身份、证据和正式工单回执校验。
+- 企业客服发送区分登录、权限与服务失败；未知回执停止重复发送，草稿仅在当前身份内存恢复，切换会话或账号拒绝旧请求回写。
+- 跨端审计明确区分文件缺失、权限、目录配置和损坏数据；展示动作原因及执行结果，不把部分坏记录显示为正常。
+
+- 独立管理端登录回跳统一按应用挂载前缀归一化，避免 /admin/admin/ 重复路径；兼容既有回跳链接并保留外站、登录循环及 onboarding 查询保护，不放宽管理员身份校验。
 - Security: shared-library authoring routes now require administrator identity, including snapshots, frontend and AI scaffolds; preserve private customer generation and add real JWT denial/snapshot acceptance tests.
 
 - 共享 Mod 的文件/manifest 修改、删除及宿主双向同步要求管理员（含 v1 兼容写入口，PAT 仍校验 scope）；普通账号持有 Mod 使用授权也不能改写共享目录，空同步列表不能扩大范围。保留读取与新建合同，并增加真实账号拒绝回归；其他写入口仍待审计，未部署。

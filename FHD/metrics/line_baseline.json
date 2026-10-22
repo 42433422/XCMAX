@@ -1,5 +1,5 @@
 {
-  "lines": 2328838,
+  "lines": 2329389,
   "updated": "2026-10-22",
-  "note": "Add fourteen shared-write admin boundaries and credential/CSRF regression tests; measured net +304 lines versus main 8ff44ab4 after resolving the merge index"
+  "note": "用户要求修复工单与共享写权限：保留main管理端修复，增加客服失败保护、确定规则报障、审计状态和回归测试；无删除无关代码，按合并后真实索引计数"
 }
