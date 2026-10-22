@@ -141,3 +141,100 @@ def test_gate_failure_keeps_exit_code_and_timing(measured_shards):
     assert timing["status"] == "failure"
     assert timing["stages"][-1]["name"] == "ratchet-full"
     assert timing["stages"][-1]["status"] == "failure"
+
+
+@pytest.fixture
+def identical_shards(measured_shards, tmp_path, monkeypatch):
+    monkeypatch.delenv("BACKEND_TIMINGS_FILE", raising=False)
+    source, env = measured_shards
+    root = tmp_path / "identical"
+    shutil.copytree(source, root)
+    configuration = root / ".coveragerc"
+    configuration.write_text(
+        configuration.read_text() + f"\n[paths]\nsource =\n    {root}\n    {source}\n"
+    )
+    shutil.copyfile(root / "serial-full.json", root / "serial-behavior.json")
+    for directory in (root / "shards").iterdir():
+        data = json.loads((directory / "full.json").read_text())
+        data["mode"] = "behavior"
+        (directory / "behavior.json").write_text(json.dumps(data))
+        for name in (".coverage", "xml"):
+            src, dst = (
+                (".coverage.full", ".coverage.behavior")
+                if name == ".coverage"
+                else ("full.xml", "behavior.xml")
+            )
+            shutil.copyfile(directory / src, directory / dst)
+        seal(directory)
+    return root, env
+
+
+@pytest.mark.parametrize("failed_gate", ["", "full", "behavior"])
+def test_identical_reports_reuse_computation_but_never_skip_gates(identical_shards, failed_gate):
+    root, _ = identical_shards
+    result = aggregate_run(identical_shards, FAIL_GATE=failed_gate)
+    assert result.returncode == (23 if failed_gate else 0), result.stdout + result.stderr
+    assert (root / "coverage.json").read_bytes() == (root / "coverage-behavior.json").read_bytes()
+    timing = json.loads((root / "backend-aggregate-timings.json").read_text())
+    names = [stage["name"] for stage in timing["stages"]]
+    assert timing["behavior_report_reused"] is True
+    assert names[:2] == ["verify-full", "verify-behavior"]
+    assert "reuse-json-behavior" in names
+    assert not {"combine-behavior", "json-behavior"}.intersection(names)
+    assert names[-1] == ("ratchet-full" if failed_gate == "full" else "ratchet-behavior")
+    assert timing["status"] == ("failure" if failed_gate else "success")
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "collected",
+        "outcomes",
+        "collection_skips",
+        "report_toolchain",
+        "collection_sha256",
+        "outcomes_sha256",
+    ],
+)
+def test_equal_coverage_bytes_do_not_override_different_scopes(identical_shards, field):
+    from scripts.ci.backend_shard_aggregate import identical_measurements
+    from scripts.ci.backend_shards import verify
+
+    root, _ = identical_shards
+    shards = root / "shards"
+    summaries = [
+        verify(shards, 2, mode, IDENTITY, "backend-shard-1-") for mode in ("full", "behavior")
+    ]
+    assert identical_measurements(shards, 2, "backend-shard-1-", summaries)
+    summaries[1][field] = "different"
+    assert not identical_measurements(shards, 2, "backend-shard-1-", summaries)
+
+
+def test_equal_scopes_require_equal_raw_coverage_on_every_shard(identical_shards):
+    from scripts.ci.backend_shard_aggregate import identical_measurements
+    from scripts.ci.backend_shards import verify
+
+    root, _ = identical_shards
+    shards = root / "shards"
+    summaries = [
+        verify(shards, 2, mode, IDENTITY, "backend-shard-1-") for mode in ("full", "behavior")
+    ]
+    target = shards / "backend-shard-1-2/.coverage.behavior"
+    original = target.read_bytes()
+    target.write_bytes(original[:-1] + bytes([original[-1] ^ 1]))
+    assert not identical_measurements(shards, 2, "backend-shard-1-", summaries)
+    result = aggregate_run(identical_shards)
+    assert result.returncode != 0
+    timing = json.loads((root / "backend-aggregate-timings.json").read_text())
+    assert timing["status"] == "failure"
+    assert "behavior_report_reused" not in timing
+
+
+def test_phase_timings_cover_real_collection_and_execution(measured_shards):
+    root, _ = measured_shards
+    for path in (root / "shards").glob("*/full.json"):
+        data = json.loads(path.read_text())
+        phases = data["phase_seconds"]
+        assert set(phases) == {"collection", "execution"}
+        assert all(value >= 0 for value in phases.values())
+        assert sum(phases.values()) <= data["elapsed"]
