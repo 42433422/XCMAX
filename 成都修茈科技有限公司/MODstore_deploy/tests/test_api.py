@@ -13,11 +13,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-def test_health(client):
+@pytest.mark.parametrize("scheduler_state", [True, False, None])
+def test_health(client, monkeypatch, scheduler_state):
+    # Schema smoke must not contact a live scheduler; its probe has dedicated tests.
+    monkeypatch.setattr("modstore_server.api.health._scheduler_status", lambda: scheduler_state)
     r = client.get("/api/health")
     assert r.status_code == 200
     j = r.json()
     assert j.get("ok") is True
+    assert j["scheduler_running"] is scheduler_state
     assert "deploy_tier" in j and j["deploy_tier"]
     assert "git_sha" in j
     assert "hostname" in j
@@ -97,7 +101,19 @@ def test_create_list_get_mod(client, library: Path, auth_headers: dict):
     assert r.json()["id"] == "api-test-mod"
 
 
-def test_mod_file_get_put(client, library: Path, auth_headers: dict):
+def _set_test_admin(headers: dict, administrator: bool) -> None:
+    from modstore_server.application.auth import AuthApplicationService
+    from modstore_server.models import User, get_session_factory
+
+    actor = AuthApplicationService().current_user_from_authorization(headers["Authorization"])
+    with get_session_factory()() as db:
+        db.get(User, actor.id).is_admin = administrator
+        db.commit()
+
+
+@pytest.mark.parametrize("administrator", [False, True])
+def test_mod_file_get_put(client, library: Path, auth_headers: dict, administrator):
+    _set_test_admin(auth_headers, administrator)
     client.post(
         "/api/mods/create",
         json={"mod_id": "file-mod", "display_name": "F"},
@@ -108,6 +124,10 @@ def test_mod_file_get_put(client, library: Path, auth_headers: dict):
         json={"path": "notes.md", "content": "# hi\n"},
         headers=auth_headers,
     )
+    if not administrator:
+        assert r.status_code == 403, r.text
+        assert not (library / "file-mod" / "notes.md").exists()
+        return
     assert r.status_code == 200, r.text
     assert (library / "file-mod" / "notes.md").read_text(encoding="utf-8") == "# hi\n"
 
@@ -215,7 +235,8 @@ def test_import_zip(client, library: Path, auth_headers: dict, administrator):
     assert (library / "zip-mod" / "manifest.json").is_file()
 
 
-def test_sync_push_pull(tmp_path, monkeypatch):
+@pytest.mark.parametrize("administrator", [False, True])
+def test_sync_push_pull(tmp_path, monkeypatch, administrator):
     """使用真实目录结构验证 deploy / pull。"""
     import uuid
 
@@ -266,11 +287,19 @@ def test_sync_push_pull(tmp_path, monkeypatch):
     tok = reg.get("access_token") or reg.get("token")
     assert tok, reg
     h = {"Authorization": f"Bearer {tok}"}
+    _set_test_admin(h, administrator)
 
     r = c.post("/api/mods/create", json={"mod_id": "sync-m", "display_name": "S"}, headers=h)
     assert r.status_code == 200
 
     r = c.post("/api/sync/push", json={"mod_ids": ["sync-m"]}, headers=h)
+    if not administrator:
+        assert r.status_code == 403, r.text
+        assert not (xcagi / "mods" / "sync-m").exists()
+        denied_pull = c.post("/api/sync/pull", json={"mod_ids": ["sync-m"]}, headers=h)
+        assert denied_pull.status_code == 403, denied_pull.text
+        assert (library / "sync-m" / "manifest.json").is_file()
+        return
     assert r.status_code == 200
     assert (xcagi / "mods" / "sync-m" / "manifest.json").is_file()
 
@@ -296,17 +325,23 @@ def test_xcagi_loading_status_mocked(mock_client_cls, client):
     assert body["data"]["success"] is True
 
 
-def test_delete_mod(client, auth_headers: dict):
+@pytest.mark.parametrize("administrator", [False, True])
+def test_delete_mod(client, auth_headers: dict, administrator):
+    _set_test_admin(auth_headers, administrator)
     client.post(
         "/api/mods/create",
         json={"mod_id": "del-me", "display_name": "D"},
         headers=auth_headers,
     )
     r = client.delete("/api/mods/del-me", headers=auth_headers)
+    if not administrator:
+        assert r.status_code == 403, r.text
+        assert client.get("/api/mods/del-me", headers=auth_headers).status_code == 200
+        return
     assert r.status_code == 200
     r = client.get("/api/mods/del-me", headers=auth_headers)
-    # 删除后用户不再拥有该 mod，所有权校验先于「目录是否存在」
-    assert r.status_code == 403
+    # 管理员仍有目录管理权限，但被删除的目录应当不存在。
+    assert r.status_code == 404
 
 
 def test_admin_reset_user_password_requires_token(client, monkeypatch):
@@ -373,3 +408,25 @@ def test_admin_reset_user_password_then_login(client, monkeypatch):
         "/api/auth/login", json={"username": username, "password": "old-pass-12"}
     )
     assert login_old.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "path,payload",
+    [
+        ("/api/mods/shared/snapshots/synthetic/restore", None),
+        ("/api/mods/shared/manifest/bump-patch-version", None),
+        ("/api/mods/shared/frontend/regenerate", {}),
+        ("/api/mods/shared/workflow-employees/scaffold", {"id": "synthetic", "label": "Synthetic"}),
+        ("/api/mods/shared/snapshots", {}),
+        ("/api/mods/shared/attach-catalog-employee", {"pkg_id": "synthetic"}),
+        ("/api/mods/ai-scaffold", {"brief": "synthetic", "_manifest_override": {"id": "shared"}}),
+    ],
+)
+def test_real_member_jwt_cannot_enter_shared_authoring(
+    client, auth_headers, library, path, payload
+):
+    _set_test_admin(auth_headers, False)
+    before = sorted(str(p.relative_to(library)) for p in library.rglob("*"))
+    response = client.post(path + "?is_admin=true", json=payload, headers=auth_headers)
+    assert response.status_code == 403, response.text
+    assert sorted(str(p.relative_to(library)) for p in library.rglob("*")) == before

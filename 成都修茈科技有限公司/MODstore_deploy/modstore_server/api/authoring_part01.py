@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import importlib
 
+from modstore_server.api.service_auth import require_admin_user
+
 
 def _facade():
     return importlib.import_module("modstore_server.api.authoring")
@@ -52,7 +54,7 @@ def api_mod_authoring_summary(
 def api_mod_workflow_employee_scaffold(
     mod_id: str,
     body: _facade().WorkflowEmployeeScaffoldDTO,
-    user: _facade().User = _facade().Depends(_facade().require_user),
+    user: _facade().User = _facade().Depends(require_admin_user),
 ):
     _facade().assert_user_owns_mod(user, mod_id)
     try:
@@ -217,7 +219,7 @@ def _slug_workflow_employee_id(raw: str, fallback: str = "emp") -> str:
 def api_attach_catalog_employee(
     mod_id: str,
     body: _facade().AttachCatalogEmployeeDTO,
-    user: _facade().User = _facade().Depends(_facade().require_user),
+    user: _facade().User = _facade().Depends(require_admin_user),
 ):
     """将 AI 市场 employee_pack 写入 manifest.workflow_employees（含 catalog_pkg_id）。"""
     from modstore_server.models import CatalogItem
@@ -334,7 +336,7 @@ def api_list_mod_snapshots(
 def api_capture_mod_snapshot(
     mod_id: str,
     body: _facade().ModSnapshotCaptureDTO,
-    user: _facade().User = _facade().Depends(_facade().require_user),
+    user: _facade().User = _facade().Depends(require_admin_user),
 ):
     _facade().assert_user_owns_mod(user, mod_id)
     try:

@@ -1,5 +1,5 @@
 {
-  "lines": 2328534,
+  "lines": 2328838,
   "updated": "2026-10-22",
-  "note": "棘轮下调"
+  "note": "Add fourteen shared-write admin boundaries and credential/CSRF regression tests; measured net +304 lines versus main 8ff44ab4 after resolving the merge index"
 }

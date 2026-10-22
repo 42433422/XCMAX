@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import importlib
 
+from modstore_server.api.service_auth import require_admin_user
+
 
 def _facade():
     return importlib.import_module("modstore_server.api.authoring")
@@ -12,7 +14,9 @@ def _facade():
 
 @_facade().router.post("/api/mods/{mod_id}/snapshots/{snap_id}/restore")
 def api_restore_mod_snapshot(
-    mod_id: str, snap_id: str, user: _facade().User = _facade().Depends(_facade().require_user)
+    mod_id: str,
+    snap_id: str,
+    user: _facade().User = _facade().Depends(require_admin_user),
 ):
     _facade().assert_user_owns_mod(user, mod_id)
     try:
@@ -30,7 +34,7 @@ def api_restore_mod_snapshot(
 
 @_facade().router.post("/api/mods/{mod_id}/manifest/bump-patch-version")
 def api_bump_mod_manifest_patch_version(
-    mod_id: str, user: _facade().User = _facade().Depends(_facade().require_user)
+    mod_id: str, user: _facade().User = _facade().Depends(require_admin_user)
 ):
     _facade().assert_user_owns_mod(user, mod_id)
     try:
@@ -73,7 +77,7 @@ def api_patch_workflow_employee_nodes(
 def api_mod_frontend_regenerate(
     mod_id: str,
     body: _facade().FrontendRegenerateDTO,
-    user: _facade().User = _facade().Depends(_facade().require_user),
+    user: _facade().User = _facade().Depends(require_admin_user),
 ):
     _facade().assert_user_owns_mod(user, mod_id)
     try:
@@ -91,7 +95,7 @@ def api_mod_frontend_regenerate(
 @_facade().router.post("/api/mods/ai-scaffold")
 async def api_mod_ai_scaffold(
     body: _facade().ModAiScaffoldDTO,
-    user: _facade().User = _facade().Depends(_facade().require_user),
+    user: _facade().User = _facade().Depends(require_admin_user),
 ):
     import logging
 

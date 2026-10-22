@@ -116,7 +116,7 @@ def api_get_mod(mod_id: str, user: User = Depends(require_user)):
 
 
 @router.put("/api/mods/{mod_id}/manifest")
-def api_put_manifest(mod_id: str, body: ManifestPutDTO, user: User = Depends(require_user)):
+def api_put_manifest(mod_id: str, body: ManifestPutDTO, user: User = Depends(require_admin_user)):
     assert_user_owns_mod(user, mod_id)
     try:
         d = library_paths.mod_dir(mod_id)
@@ -150,7 +150,7 @@ def api_get_mod_file(mod_id: str, path: str, user: User = Depends(require_user))
 
 
 @router.put("/api/mods/{mod_id}/file")
-def api_put_mod_file(mod_id: str, body: ModFilePutDTO, user: User = Depends(require_user)):
+def api_put_mod_file(mod_id: str, body: ModFilePutDTO, user: User = Depends(require_admin_user)):
     assert_user_owns_mod(user, mod_id)
     try:
         d = library_paths.mod_dir(mod_id)
@@ -193,7 +193,7 @@ def api_create_mod(body: CreateModDTO, user: User = Depends(require_user)):
 
 
 @router.delete("/api/mods/{mod_id}")
-def api_delete_mod(mod_id: str, user: User = Depends(require_user)):
+def api_delete_mod(mod_id: str, user: User = Depends(require_admin_user)):
     mid = mod_id.strip()
     assert_user_owns_mod(user, mid)
     try:

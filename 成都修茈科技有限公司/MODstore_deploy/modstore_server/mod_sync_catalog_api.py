@@ -7,7 +7,8 @@
 - Web 登录态：``Authorization: Bearer <JWT>``；
 - 机器/本地同步：``Authorization: Bearer pat_xxx``，且必须包含 ``mod:sync`` scope。
 
-普通用户只能同步自己拥有的 Mod；管理员可同步全部。
+服务端共享目录的 push/pull 写入要求管理员；PAT 仍必须具备 mod:sync。
+普通用户保留授权范围内的列表与正式发布包读取，用于本机 remote-deploy。
 
 另提供 ``GET /v1/mod-sync/mods`` 与 ``GET /v1/mod-sync/export-zip/{mod_id}``：
 供本机运行 ``modman remote-deploy`` 从线上库拉 zip 写入本机 ``XCAGI/mods/``（跨机场景）。
@@ -114,6 +115,13 @@ def _require_mod_sync_auth(authorization: Optional[str]) -> SyncAuthContext:
     return SyncAuthContext(user=user, auth_type="jwt")
 
 
+def _require_mod_sync_writer(authorization: Optional[str]) -> SyncAuthContext:
+    auth = _require_mod_sync_auth(authorization)
+    if not auth.user.is_admin:
+        raise HTTPException(403, "共享宿主同步写入需要管理员权限")
+    return auth
+
+
 def _authorized_mod_ids(
     ctx: SyncAuthContext, requested: Optional[List[str]]
 ) -> Optional[List[str]]:
@@ -136,7 +144,7 @@ def api_v1_mod_sync_push(
     authorization: Optional[str] = Header(None, alias="Authorization"),
     body: ModSyncDTO = Body(default_factory=ModSyncDTO),
 ):
-    auth = _require_mod_sync_auth(authorization)
+    auth = _require_mod_sync_writer(authorization)
     from modstore_server import app as app_module
 
     cfg = app_module._cfg()
@@ -162,7 +170,7 @@ def api_v1_mod_sync_pull(
     authorization: Optional[str] = Header(None, alias="Authorization"),
     body: ModSyncDTO = Body(default_factory=ModSyncDTO),
 ):
-    auth = _require_mod_sync_auth(authorization)
+    auth = _require_mod_sync_writer(authorization)
     from modstore_server import app as app_module
 
     cfg = app_module._cfg()

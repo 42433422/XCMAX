@@ -2,6 +2,10 @@
 
 ## Unreleased（1.0.0.6 候选，尚未发布）
 
+- Security: shared-library authoring routes now require administrator identity, including snapshots, frontend and AI scaffolds; preserve private customer generation and add real JWT denial/snapshot acceptance tests.
+
+- 共享 Mod 的文件/manifest 修改、删除及宿主双向同步要求管理员（含 v1 兼容写入口，PAT 仍校验 scope）；普通账号持有 Mod 使用授权也不能改写共享目录，空同步列表不能扩大范围。保留读取与新建合同，并增加真实账号拒绝回归；其他写入口仍待审计，未部署。
+
 - 自动合并与安全遥测扫描器补齐信号列表类型，移除该模块的文件级类型错误禁用；未改变扫描行为，不代表全仓类型债已清零。
 - 修复全量 CI 中并发导入测试的测试模块导入冲突：改用独立解释器和双进程屏障，保留唯一写入、退出码与清理断言，不跳过并发验证。
 
