@@ -1,0 +1,114 @@
+name: Isolated aggregate fixture repair
+on:
+  push:
+    branches: ['ci/verify-aggregate-profile-fix-20261022']
+    paths: ['.github/workflows/ci-aggregate-profile-fix.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 699102f771b7d03661f0bbd9e67a1eec7edde2b4
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v6
+      - name: Install isolated validation dependencies
+        working-directory: FHD
+        run: uv sync --frozen --extra server-api --extra dev
+      - name: Reproduce seven failures and verify minimal fixture repair
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+          PYTHONPATH: ${{ github.workspace }}/FHD
+        run: |
+          FHD/.venv/bin/python - <<'PY'
+          import hashlib, json, os, pathlib, shutil, subprocess, sys, xml.etree.ElementTree as ET
+          repo = pathlib.Path.cwd(); fhd = repo / 'FHD'
+          base = '699102f771b7d03661f0bbd9e67a1eec7edde2b4'
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'ci2525-fix-evidence'; out.mkdir(exist_ok=True)
+          def git(*args):
+              return subprocess.check_output(['git', *args], cwd=repo, text=True).strip()
+          def run(name, args, cwd=fhd, env=None, expected=0):
+              with (out/(name+'.log')).open('w') as log:
+                  proc=subprocess.run(args, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=600)
+              print(name, proc.returncode, flush=True)
+              if proc.returncode != expected:
+                  print((out/(name+'.log')).read_text()[-8000:]); raise RuntimeError(name)
+              return proc
+          assert git('rev-parse','HEAD') == base
+          assert not git('status','--porcelain')
+          args=[sys.executable,'-m','pytest','-c','/dev/null','--rootdir=.', '--confcutdir=tests/test_ci','-q','-o','addopts=']
+          profile_env=dict(os.environ, BACKEND_TIMINGS_FILE=str(fhd/'metrics/backend_test_timings.json'))
+          test='tests/test_ci/test_backend_shard_aggregate.py'
+          run('original-reproduction',args+[test,f'--junitxml={out}/original.xml'],env=profile_env,expected=1)
+          original=ET.parse(out/'original.xml'); failures=list(original.iter('failure')); assert len(failures)==7
+          assert all('Foreign partition profile' in (x.text or '') for x in failures)
+          path=fhd/test; source=path.read_text()
+          old='def identical_shards(measured_shards, tmp_path):\n'
+          new='def identical_shards(measured_shards, tmp_path, monkeypatch):\n    monkeypatch.delenv("BACKEND_TIMINGS_FILE", raising=False)\n'
+          assert source.count(old)==1;source=source.replace(old,new)
+          old='def test_equal_scopes_require_equal_raw_coverage_on_every_shard(identical_shards):'
+          new='def test_equal_scopes_require_equal_raw_coverage_on_every_shard(identical_shards, monkeypatch):'
+          assert source.count(old)==1;source=source.replace(old,new)
+          old='    target = shards / "backend-shard-1-2/.coverage.behavior"\n'
+          new='''    foreign = root / "foreign-profile.json"
+              foreign.write_text(json.dumps({"schema": 1, "fallback_seconds_per_test": 1, "modules": {}}))
+              monkeypatch.setenv("BACKEND_TIMINGS_FILE", str(foreign))
+              with pytest.raises(ValueError, match="Foreign partition profile"):
+                  verify(shards, 2, "full", IDENTITY, "backend-shard-1-")
+              monkeypatch.delenv("BACKEND_TIMINGS_FILE")
+              target = shards / "backend-shard-1-2/.coverage.behavior"
+          '''
+          assert source.count(old)==1;source=source.replace(old,new);path.write_text(source)
+          run('fixed-with-production-profile',args+[test,f'--junitxml={out}/fixed-profile.xml'],env=profile_env)
+          run('fixed-with-clean-profile',args+[test,f'--junitxml={out}/fixed-clean.xml'])
+          files=['tests/test_ci/test_backend_shards.py','tests/test_ci/test_backend_shard_bootstrap.py',test,'tests/test_ci/test_workflow_gate_contracts.py']
+          run('contracts',args+files+[f'--junitxml={out}/contracts.xml'],env=profile_env)
+          for name in ('fixed-profile','fixed-clean','contracts'):
+              doc=ET.parse(out/f'{name}.xml')
+              assert all(int(x.get(k,'0')) == 0 for x in doc.iter('testsuite') for k in ('failures','errors','skipped'))
+          run('ruff-check',[sys.executable,'-m','ruff','check',test])
+          run('ruff-format',[sys.executable,'-m','ruff','format','--check',test])
+          changelog=fhd/'CHANGELOG.md'; text=changelog.read_text()
+          old='新增测试收集和执行分段计时。提速幅度以正式运行记录为准。'
+          assert text.count(old)==1
+          changelog.write_text(text.replace(old,'新增测试收集和执行分段计时，并隔离测试夹具与正式分片配置，避免误报校验失败。提速幅度以正式运行记录为准。'))
+          reason='用户2026-10-22授权继续CI完整闭环；覆盖率报告复用及计时原有+140行，新增7行隔离聚合测试分片环境并保留外来配置拒绝回归；不改生产校验、门槛和测试数量。'
+          run('baseline',[sys.executable,'scripts/dev/check_net_deletion.py','--update','--force','--reason',reason])
+          allowed=['FHD/tests/test_ci/test_backend_shard_aggregate.py','FHD/CHANGELOG.md','FHD/metrics/line_baseline.json']
+          assert sorted(git('diff','--name-only').splitlines()) == sorted(allowed)
+          git('config','user.name','CI verification');git('config','user.email','ci-verification@users.noreply.github.com')
+          git('add','--',*allowed); git('commit','-m','test(ci): isolate fixture partition profile without relaxing evidence checks')
+          run('preflight',[sys.executable,'scripts/dev/push_preflight.py','--fix','--base',base])
+          run('ssot',[sys.executable,'scripts/dev/ssot_cli.py','gate'])
+          run('workflow-sync',[sys.executable,'scripts/dev/publish_ci_workflows_to_root.py','--check'],cwd=repo)
+          run('diff-check',['git','diff','--check',base,'HEAD'],cwd=repo)
+          assert not git('status','--porcelain','--untracked-files=no')
+          receipt={'parent':base,'tree':git('rev-parse','HEAD^{tree}'),'local_commit':git('rev-parse','HEAD'),'files':{},'tests':{},'scope':'targeted fixture repair; full formal CI still required'}
+          for name in allowed:
+              dest=out/'candidate'/name;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(repo/name,dest)
+              receipt['files'][name]=git('hash-object',name)
+          for name in ('original','fixed-profile','fixed-clean','contracts'):
+              doc=ET.parse(out/f'{name}.xml');receipt['tests'][name]={'cases':len(list(doc.iter('testcase'))),'failures':len(list(doc.iter('failure'))),'errors':len(list(doc.iter('error'))),'skipped':len(list(doc.iter('skipped')))}
+          receipt['baseline']=json.loads((fhd/'metrics/line_baseline.json').read_text())
+          (out/'receipt.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2));print(json.dumps(receipt,ensure_ascii=False,indent=2))
+          PY
+      - name: Clean task-created caches
+        if: always()
+        run: |
+          python3 scripts/dev/clean_agent_workspace.py
+          df -h .
+      - name: Preserve exact candidate and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-aggregate-profile-fix-${{ github.run_id }}
+          path: ${{ runner.temp }}/ci2525-fix-evidence/
+          if-no-files-found: error
+          retention-days: 7
