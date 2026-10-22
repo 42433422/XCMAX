@@ -28,9 +28,7 @@ def test_template_contains_only_explicit_synthetic_employee_keys():
 
 
 def test_daily_and_raw_records_are_complete_and_use_no_customer_identifiers():
-    workbook = load_workbook(
-        FIXTURES / "synthetic-dingtalk-source.xlsx", read_only=True
-    )
+    workbook = load_workbook(FIXTURES / "synthetic-dingtalk-source.xlsx", read_only=True)
     expected_names = {f"SYNTHETIC-{i:03d}" for i in range(1, 81)}
     try:
         daily = list(workbook["每日统计"].iter_rows(min_row=3, values_only=True))

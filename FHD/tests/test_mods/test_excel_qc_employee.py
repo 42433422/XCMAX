@@ -13,8 +13,7 @@ from openpyxl import load_workbook
 FHD_ROOT = Path(__file__).resolve().parents[2]
 
 READER_CONVERT = (
-    FHD_ROOT
-    / "mods/_employees/excel-full-read-employee/backend/vendor/excel_full_read/convert.py"
+    FHD_ROOT / "mods/_employees/excel-full-read-employee/backend/vendor/excel_full_read/convert.py"
 )
 WRITER_CONVERT = (
     FHD_ROOT
@@ -22,10 +21,7 @@ WRITER_CONVERT = (
 )
 MAPPER_VENDOR = FHD_ROOT / "mods/_employees/excel-rules-map-employee/backend/vendor"
 QC_VENDOR = FHD_ROOT / "mods/_employees/excel-qc-employee/backend/vendor"
-QC_EMPLOYEE = (
-    FHD_ROOT
-    / "mods/_employees/excel-qc-employee/backend/employees/excel_qc_employee.py"
-)
+QC_EMPLOYEE = FHD_ROOT / "mods/_employees/excel-qc-employee/backend/employees/excel_qc_employee.py"
 
 SUNBIRD_TEMPLATE = (
     FHD_ROOT / "tests/fixtures/synthetic_attendance/synthetic-attendance-template.xlsx"
@@ -167,9 +163,7 @@ def test_qc_pass_without_optional_inputs(tmp_path: Path) -> None:
     _, _, qc = _load_vendor_pkgs()
     rules, plan, filled, _ = _build_chain(tmp_path)
     plan2 = json.loads(json.dumps(plan))
-    plan2["expected"] = {
-        k: v for k, v in plan["expected"].items() if k != "records_dropped"
-    }
+    plan2["expected"] = {k: v for k, v in plan["expected"].items() if k != "records_dropped"}
 
     report = qc.run_qc(filled, plan2)
     sections = report["sections"]
@@ -219,9 +213,7 @@ def test_qc_detects_clear_residue(tmp_path: Path) -> None:
 
     report = qc.run_qc(filled, plan, template_path=template, rules=rules)
     assert report["verdict"] == "FAIL"
-    assert any(
-        "残值" in i["detail"] for i in report["sections"]["conformance"]["issues"]
-    )
+    assert any("残值" in i["detail"] for i in report["sections"]["conformance"]["issues"])
 
 
 def test_qc_detects_mapper_false_claim(tmp_path: Path) -> None:
@@ -259,8 +251,7 @@ def test_qc_detects_protection_breach(tmp_path: Path) -> None:
     assert report["verdict"] == "FAIL"
     assert "writer" in report["blame"]
     assert any(
-        "保护区格与原模板不一致" in i["detail"]
-        for i in report["sections"]["protection"]["issues"]
+        "保护区格与原模板不一致" in i["detail"] for i in report["sections"]["protection"]["issues"]
     )
 
 
@@ -290,8 +281,7 @@ def test_qc_detects_rules_ref_mismatch(tmp_path: Path) -> None:
     assert report["verdict"] == "FAIL"
     assert "pipeline" in report["blame"]
     assert any(
-        "规则版本不一致" in i["detail"]
-        for i in report["sections"]["traceability"]["issues"]
+        "规则版本不一致" in i["detail"] for i in report["sections"]["traceability"]["issues"]
     )
 
 
@@ -307,10 +297,7 @@ def test_qc_detects_structure_drift(tmp_path: Path) -> None:
     report = qc.run_qc(filled, plan, rules=rules)
     assert report["verdict"] == "FAIL"
     assert "rules_stale" in report["blame"]
-    assert any(
-        "块键与规则不符" in i["detail"]
-        for i in report["sections"]["structure"]["issues"]
-    )
+    assert any("块键与规则不符" in i["detail"] for i in report["sections"]["structure"]["issues"])
 
 
 # ---------------------------------------------------------------------------
@@ -420,9 +407,7 @@ def test_qc_on_synthetic_attendance_chain(tmp_path: Path) -> None:
         ctx={},
         rule_spec={"default_output_relpath": "outputs/filled.xlsx"},
     )
-    write_report = json.loads(
-        (filled.parent / "write_report.json").read_text(encoding="utf-8")
-    )
+    write_report = json.loads((filled.parent / "write_report.json").read_text(encoding="utf-8"))
 
     report = qc.run_qc(
         filled,
@@ -432,9 +417,7 @@ def test_qc_on_synthetic_attendance_chain(tmp_path: Path) -> None:
         write_report=write_report,
     )
     sections = report["sections"]
-    assert sections["conformance"]["status"] == "pass", sections["conformance"][
-        "issues"
-    ][:3]
+    assert sections["conformance"]["status"] == "pass", sections["conformance"]["issues"][:3]
     assert sections["expected"]["status"] == "pass", sections["expected"]["issues"][:3]
     assert sections["traceability"]["status"] == "pass"
     assert sections["structure"]["status"] == "pass"

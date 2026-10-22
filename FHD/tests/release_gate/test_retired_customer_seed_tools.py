@@ -11,9 +11,7 @@ SCRIPTS = Path(__file__).resolve().parents[2] / "scripts/package"
 
 
 def load_script(filename):
-    spec = importlib.util.spec_from_file_location(
-        filename.replace("-", "_"), SCRIPTS / filename
-    )
+    spec = importlib.util.spec_from_file_location(filename.replace("-", "_"), SCRIPTS / filename)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -44,9 +42,7 @@ def test_retired_publisher_cannot_package_or_register_supplied_zip(tmp_path):
     assert source.read_bytes() == b"synthetic existing package sentinel"
 
 
-@pytest.mark.parametrize(
-    "filename", ["build-sunbird-seed.py", "publish-sunbird-delivery-seed.py"]
-)
+@pytest.mark.parametrize("filename", ["build-sunbird-seed.py", "publish-sunbird-delivery-seed.py"])
 def test_retired_cli_fails_before_handling_legacy_arguments(tmp_path, filename):
     result = subprocess.run(
         [

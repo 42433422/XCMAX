@@ -13,8 +13,7 @@ from openpyxl import Workbook, load_workbook
 FHD_ROOT = Path(__file__).resolve().parents[2]
 
 READER_CONVERT = (
-    FHD_ROOT
-    / "mods/_employees/excel-full-read-employee/backend/vendor/excel_full_read/convert.py"
+    FHD_ROOT / "mods/_employees/excel-full-read-employee/backend/vendor/excel_full_read/convert.py"
 )
 WRITER_CONVERT = (
     FHD_ROOT
@@ -445,9 +444,7 @@ def test_infer_on_synthetic_attendance_template(tmp_path: Path) -> None:
         ("CC", 3, 22),
     ):
         got = infer_mod.instantiate_formula(by_col[col_letter], block_index)
-        assert (
-            got == ws[f"{col_letter}{row}"].value
-        ), f"{col_letter}{row} 公式实例化不一致"
+        assert got == ws[f"{col_letter}{row}"].value, f"{col_letter}{row} 公式实例化不一致"
     src_wb.close()
 
     # compile 冒烟：真实 151 块 × 拟合列全部实例化

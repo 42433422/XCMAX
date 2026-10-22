@@ -20,8 +20,7 @@ from openpyxl import Workbook
 FHD_ROOT = Path(__file__).resolve().parents[2]
 
 READER_CONVERT = (
-    FHD_ROOT
-    / "mods/_employees/excel-full-read-employee/backend/vendor/excel_full_read/convert.py"
+    FHD_ROOT / "mods/_employees/excel-full-read-employee/backend/vendor/excel_full_read/convert.py"
 )
 WRITER_CONVERT = (
     FHD_ROOT
@@ -300,9 +299,7 @@ def test_solidify_succeeds_first_round(tmp_path: Path) -> None:
     call_llm = _fake_llm_seq([_GOOD_SCRIPT])
 
     result = asyncio.run(
-        solidify_mod.solidify_transform(
-            _source_workbook(), rules, _expected_records(), call_llm
-        )
+        solidify_mod.solidify_transform(_source_workbook(), rules, _expected_records(), call_llm)
     )
     assert result["ok"], result["iterations"]
     assert len(result["iterations"]) == 1
@@ -319,9 +316,7 @@ def test_solidify_iterates_on_feedback(tmp_path: Path) -> None:
     call_llm = _fake_llm_seq([_BAD_BAND_SCRIPT, _GOOD_SCRIPT])
 
     result = asyncio.run(
-        solidify_mod.solidify_transform(
-            _source_workbook(), rules, _expected_records(), call_llm
-        )
+        solidify_mod.solidify_transform(_source_workbook(), rules, _expected_records(), call_llm)
     )
     assert result["ok"]
     assert len(result["iterations"]) == 2
@@ -404,8 +399,7 @@ def test_solidify_convert_action_end_to_end(tmp_path: Path) -> None:
 
 
 SOLIDIFIED_EXAMPLE = (
-    FHD_ROOT
-    / "mods/_employees/excel-rules-map-employee/examples/sunbird-solidified/transform.py"
+    FHD_ROOT / "mods/_employees/excel-rules-map-employee/examples/sunbird-solidified/transform.py"
 )
 
 
