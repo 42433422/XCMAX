@@ -138,3 +138,5 @@ const runAllowHighRisk = computed({
 
             <!-- ── 全员汇报抽屉 ───────────────────────────────────────────── -->
 </template>
+
+<style scoped src="../DutyRosterGraphPanel.css"></style>

@@ -18,6 +18,7 @@ defineProps<{
   nodeLoopActive: Deref<DutyLoopCore['nodeLoopActive']>
   handleNodeClick: Deref<DutyWorkshop['onNodeClick']>
 }>()
+
 </script>
 
 <template>
@@ -27,7 +28,6 @@ defineProps<{
                 :edges="flowEdges"
                 :nodes-connectable="false"
                 :elements-selectable="true"
-                :min-zoom="0.1"
                 fit-view-on-init
                 class="dg-flow"
                 style="width: 100%; height: 100%;"
@@ -36,6 +36,7 @@ defineProps<{
                 <Background :pattern-color="flowBgPatternColor" :gap="24" />
                 <Controls position="bottom-left" />
                 <MiniMap position="bottom-right" :mask-color="miniMapMaskColor" />
+
                 <!-- 六部门 / 物理分区：父级 group 容器 -->
                 <template #node-group="{ label }">
                   <div class="dg-group-node">
@@ -92,3 +93,5 @@ defineProps<{
 
               <!-- ── 客户端车间详情（仅管理端） ───────────────────────────── -->
 </template>
+
+<style scoped src="../DutyRosterGraphPanel.css"></style>

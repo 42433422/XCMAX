@@ -218,3 +218,5 @@ const autoRefresh = computed({
             </div>
           </div>
 </template>
+
+<style scoped src="../DutyRosterGraphPanel.css"></style>

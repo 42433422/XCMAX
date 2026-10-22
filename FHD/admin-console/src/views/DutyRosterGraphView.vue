@@ -9,7 +9,6 @@ export default { name: 'DutyRosterGraphView' }
 </script>
 
 <script setup lang="ts">
-import '../components/workflow/DutyRosterGraphPanel.css'
 import DutyRosterGraphPanel from '../components/workflow/DutyRosterGraphPanel.vue'
 </script>
 

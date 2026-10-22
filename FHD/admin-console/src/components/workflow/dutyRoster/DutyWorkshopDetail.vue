@@ -95,3 +95,5 @@ const selectedWorkshop = computed({
 
               <!-- ── Detail sidebar ──────────────────────────────────────── -->
 </template>
+
+<style scoped src="../DutyRosterGraphPanel.css"></style>
