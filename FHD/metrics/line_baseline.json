@@ -1,5 +1,5 @@
 {
-  "lines": 2328789,
+  "lines": 2328915,
   "updated": "2026-10-22",
-  "note": "User-authorized CI report reuse: verified equal-input reporting and phase timing, plus isolating the synthetic test fixture from the real CI parent timing profile. Merged onto main 2328649; measured after merge."
+  "note": "PR #2523 adds required customer-ticket category and status filters and isolation coverage, merged onto current main including #2525 (+126 maintained lines); no unrelated code removed; user authorized completing the full backlog."
 }
