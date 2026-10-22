@@ -84,7 +84,7 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 1
 fi
 
-IFS='|' read -r ARTIFACT SHA256 VERSION GIT_SHA DEPLOY_MODE IMAGE IMAGE_DIGEST ADMIN_CONSOLE_SHA256 <<<"$(
+IFS='|' read -r ARTIFACT SHA256 VERSION GIT_SHA DEPLOY_MODE IMAGE IMAGE_DIGEST ADMIN_CONSOLE_SHA256 ARCHIVE_VERIFY_SHA256 <<<"$(
   python3 - <<'PY' "$MANIFEST"
 import json, sys
 doc = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -97,6 +97,7 @@ values = [
     str(doc.get("image", "")),
     str(doc.get("image_digest", "")),
     str(doc.get("admin_console_sha256", "")),
+    str(doc.get("archive_verifier_sha256", "")),
 ]
 if any("|" in value or "\n" in value for value in values):
     raise SystemExit("manifest contains an invalid field delimiter")
@@ -151,6 +152,20 @@ fi
   deploy_emit push failed "admin_identity_missing"
   exit 1
 }
+[[ "$ARCHIVE_VERIFY_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "[err] manifest 缺少精确候选归档校验器身份" >&2
+  deploy_emit push failed "archive_verifier_identity_missing"
+  exit 1
+}
+ARCHIVE_VERIFY_SOURCE_B64="$(python3 - "$FHD_ROOT" "$GIT_SHA" "$ARCHIVE_VERIFY_SHA256" <<'PY'
+import base64, hashlib, subprocess, sys
+root, sha, expected = sys.argv[1:]
+source = subprocess.check_output(["git", "-C", root, "show", f"{sha}:FHD/scripts/deploy/lib/verify_release_archive.py"])
+if hashlib.sha256(source).hexdigest() != expected:
+    raise SystemExit("manifest verifier hash differs from exact Git candidate source")
+print(base64.b64encode(source).decode("ascii"))
+PY
+)"
 
 IMMUTABLE_REMOTE_DIR="${FHD_IMMUTABLE_REMOTE_DIR:-/var/www/update/releases/builds/${VERSION}/${GIT_SHA}/server}"
 [[ "$IMMUTABLE_REMOTE_DIR" == /* && "$IMMUTABLE_REMOTE_DIR" != *$'\n'* ]] || {
@@ -266,7 +281,8 @@ fi
 "${SSH[@]}" "$REMOTE" "bash -s" -- \
   "$IMMUTABLE_REMOTE_DIR" "$REMOTE_DIR" "$ARTIFACT" "$PUSH_IMAGE_TAR" \
   "$CHANNEL" "${FHD_PUSH_REMOTE_DEPLOY_ROOT:-/opt/fhd-full}" "$GIT_SHA" "$SHA256" \
-  "$CONTROLLER_HASHES_B64" "${FHD_PUSH_APPLY_LOCK_WAIT_SECONDS:-360}" <<'REMOTE_PROMOTE'
+  "$CONTROLLER_HASHES_B64" "${FHD_PUSH_APPLY_LOCK_WAIT_SECONDS:-360}" \
+  "$ARCHIVE_VERIFY_SOURCE_B64" <<'REMOTE_PROMOTE'
 set -euo pipefail
 python3 - "$@" <<'PY_BOOTSTRAP'
 import base64
@@ -330,7 +346,7 @@ def wait_legacy_exit(controller, deadline):
 
 
 def bootstrap_promote(args):
-    immutable, channel_dir, artifact, image, channel, root, sha, digest, encoded, wait = args
+    immutable, channel_dir, artifact, image, channel, root, sha, digest, encoded, wait, verifier_b64 = args
     immutable, channel_dir, root = Path(immutable), Path(channel_dir), Path(root)
     if not all(path.is_absolute() for path in (immutable, channel_dir, root)):
         raise RuntimeError("release paths must be absolute")
@@ -353,6 +369,10 @@ def bootstrap_promote(args):
     manifest = json.loads(manifest_bytes)
     if (manifest.get("artifact"), manifest.get("git_sha"), manifest.get("sha256")) != (artifact, sha, digest):
         raise RuntimeError("immutable manifest differs from the frozen upload identity")
+    verifier_source = base64.b64decode(verifier_b64, validate=True)
+    verifier_sha = hashlib.sha256(verifier_source).hexdigest()
+    if manifest.get("archive_verifier_sha256") != verifier_sha:
+        raise RuntimeError("archive verifier is not bound to the exact release Git source")
     lock = None
     try:
         if channel == "stable":
@@ -373,6 +393,23 @@ def bootstrap_promote(args):
                 h.update(chunk)
             if h.hexdigest() != digest:
                 raise RuntimeError("uploaded artifact SHA256 differs from immutable manifest")
+            with tempfile.TemporaryDirectory(prefix="fhd-trusted-verifier-") as verifier_dir:
+                verifier_path = Path(verifier_dir) / "verify_release_archive.py"
+                verifier_path.write_bytes(verifier_source)
+                try:
+                    subprocess.run([sys.executable, str(verifier_path), "--archive", str(immutable / artifact)],
+                                   check=True, capture_output=True, text=True)
+                except subprocess.CalledProcessError as error:
+                    raise RuntimeError("release archive validation failed: " + error.stderr.strip()) from error
+            stream.seek(0)
+            with tarfile.open(fileobj=stream, mode="r:*") as archive:
+                bundled = [member for member in archive.getmembers()
+                           if member.name.removeprefix("./") == "scripts/deploy/lib/verify_release_archive.py"]
+                if len(bundled) != 1 or not bundled[0].isfile() or bundled[0].size > 1024 * 1024:
+                    raise RuntimeError("archive verifier member is missing, unsafe, or ambiguous")
+                verifier_member = archive.extractfile(bundled[0])
+                if verifier_member is None or verifier_member.read() != verifier_source:
+                    raise RuntimeError("bundled archive verifier differs from exact release Git source")
             if channel == "stable":
                 stream.seek(0)
                 with tarfile.open(fileobj=stream, mode="r:*") as archive:
@@ -391,6 +428,8 @@ def bootstrap_promote(args):
                             identity = json.loads(data)
                     if not identity or identity.get("git_sha") != sha:
                         raise RuntimeError("archive build identity differs from frozen main SHA")
+                    if expected.get("lib/verify_release_archive.py") != verifier_sha:
+                        raise RuntimeError("controller verifier differs from exact release Git source")
                     payload = {}
                     for name, checksum in expected.items():
                         if name.startswith("/") or ".." in Path(name).parts:
@@ -494,7 +533,8 @@ if [[ "$APPLY_NOW" == "1" ]]; then
   REMOTE_MANIFEST="${REMOTE_DIR}/fhd-manifest.json"
   REMOTE_TARBALL="${REMOTE_DIR}/${ARTIFACT}"
   printf -v APPLY_COMMAND \
-    'set -euo pipefail; BOOTSTRAP=$(mktemp -d /tmp/fhd-release-bootstrap.XXXXXX); trap '\''rm -rf -- "$BOOTSTRAP"'\'' EXIT; tar -xzf %q -C "$BOOTSTRAP" ./scripts/deploy; test -x "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"; XCMAX_PRESERVE_RELEASE_HISTORY=%q FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS=%q FHD_MANIFEST_PATH=%q FHD_ARTIFACT_DIR=%q FHD_DEPLOY_ROOT=%q bash "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"' \
+    'set -euo pipefail; VERIFY=%q; EXPECTED_VERIFY=%q; ACTUAL_VERIFY=$(sha256sum -- "$VERIFY" | awk '\''{print $1}'\''); test "$ACTUAL_VERIFY" = "$EXPECTED_VERIFY"; python3 "$VERIFY" --archive %q; BOOTSTRAP=$(mktemp -d /tmp/fhd-release-bootstrap.XXXXXX); trap '\''rm -rf -- "$BOOTSTRAP"'\'' EXIT; tar -xzf %q -C "$BOOTSTRAP" ./scripts/deploy; test -x "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"; XCMAX_PRESERVE_RELEASE_HISTORY=%q FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS=%q FHD_MANIFEST_PATH=%q FHD_ARTIFACT_DIR=%q FHD_DEPLOY_ROOT=%q bash "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"' \
+    "$REMOTE_DEPLOY_ROOT/scripts/deploy/lib/verify_release_archive.py" "$ARCHIVE_VERIFY_SHA256" "$REMOTE_TARBALL" \
     "$REMOTE_TARBALL" "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" "$APPLY_LOCK_WAIT_SECONDS" "$REMOTE_MANIFEST" "$REMOTE_DIR" "$REMOTE_DEPLOY_ROOT"
 
   deploy_emit apply started "host=$HOST git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"

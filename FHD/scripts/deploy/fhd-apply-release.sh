@@ -83,6 +83,27 @@ fi
 
 deploy_emit apply started "tarball=$TARBALL"
 log "开始应用发布包: $TARBALL sha256=${TARBALL_SHA256:0:16}..."
+if [[ -e "$DEPLOY_ROOT/.deploy-identity-pending" ]]; then
+  log "ERROR: 上次发布身份事务未完成，拒绝覆盖并保留恢复材料: $DEPLOY_ROOT/.deploy-identity-pending"
+  exit 78
+fi
+ARCHIVE_VERIFY="$SCRIPT_DIR/lib/verify_release_archive.py"
+EXPECTED_ARCHIVE_VERIFY_SHA256="${FHD_ARCHIVE_VERIFY_SHA256:-}"
+[[ "$EXPECTED_ARCHIVE_VERIFY_SHA256" =~ ^[0-9a-f]{64}$ && -f "$ARCHIVE_VERIFY" && ! -L "$ARCHIVE_VERIFY" ]] || {
+  log "ERROR: trusted release archive verifier identity is missing or unsafe"
+  exit 78
+}
+ACTUAL_ARCHIVE_VERIFY_SHA256="$(python3 - "$ARCHIVE_VERIFY" <<'PY'
+import hashlib, sys
+with open(sys.argv[1], "rb") as stream:
+    print(hashlib.sha256(stream.read()).hexdigest())
+PY
+)"
+[[ "$ACTUAL_ARCHIVE_VERIFY_SHA256" == "$EXPECTED_ARCHIVE_VERIFY_SHA256" ]] || {
+  log "ERROR: installed archive verifier differs from exact candidate source"
+  exit 78
+}
+python3 "$ARCHIVE_VERIFY" --archive "$TARBALL"
 
 TS="$(date +%Y%m%d-%H%M%S)"
 BACKUP_ROOT="${FHD_BACKUP_ROOT:-/opt/fhd-full-backups}"
@@ -122,7 +143,8 @@ if [[ "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" != 1 ]]; then
 fi
 
 rollback_from_backup() {
-  autonomy_evaluate_action "rollback_release" "rollback:${TARBALL_SHA256:0:16}"
+  autonomy_evaluate_action "rollback_release" "rollback:${TARBALL_SHA256:0:16}" || return $?
+  fhd_stop_service_for_release "$SERVICE" "restart:rollback:${TARBALL_SHA256:0:16}" || return $?
   log "执行回滚: $BACKUP"
   for item in .build-identity.json app XCAGI alembic alembic.ini config xcagi_common packages requirements-langgraph-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
     if [[ -e "$BACKUP/$item" ]]; then
@@ -162,14 +184,7 @@ rollback_from_backup() {
   else
     rm -rf -- "$DEPLOY_ROOT/scripts/ci" || return $?
   fi
-  for stamp in .deploy-last.tar.gz .deploy-git-sha .deploy-sha256 .deploy-admin-console-sha256; do
-    if [[ -f "$BACKUP/$stamp" ]]; then
-      cp "$BACKUP/$stamp" "$DEPLOY_ROOT/$stamp" || return $?
-    else
-      rm -f "$DEPLOY_ROOT/$stamp" || return $?
-    fi
-  done
-  autonomy_evaluate_action "restart_service" "restart:rollback:${TARBALL_SHA256:0:16}" || return $?
+  fhd_restore_release_identity "$DEPLOY_ROOT" "$BACKUP" || return $?
   systemctl restart "$SERVICE" || return $?
   systemctl is-active --quiet "$SERVICE" || return 1
   FHD_SERVICE_QUIESCED=0
@@ -223,6 +238,16 @@ cleanup_apply() {
 }
 trap cleanup_apply EXIT
 tar -xzf "$TARBALL" -C "$TMP"
+BUNDLED_ARCHIVE_VERIFY_SHA256="$(python3 - "$TMP/scripts/deploy/lib/verify_release_archive.py" <<'PY'
+import hashlib, sys
+with open(sys.argv[1], "rb") as stream:
+    print(hashlib.sha256(stream.read()).hexdigest())
+PY
+)"
+[[ "$BUNDLED_ARCHIVE_VERIFY_SHA256" == "$EXPECTED_ARCHIVE_VERIFY_SHA256" ]] || {
+  log "ERROR: release bundle archive verifier differs from exact candidate source"
+  exit 1
+}
 
 ADMIN_VERIFY="$TMP/scripts/deploy/lib/verify_admin_console.py"
 EXPECTED_ADMIN_CONSOLE_SHA256="$(
@@ -386,9 +411,9 @@ if [[ -d "$DROPIN_SRC_DIR" ]]; then
 fi
 
 deploy_emit restart started "service=$SERVICE"
-echo "$TARBALL_SHA256" > "$DEPLOY_ROOT/.deploy-sha256"
-echo "$EXPECTED_GIT_SHA" > "$DEPLOY_ROOT/.deploy-git-sha"
-echo "$EXPECTED_ADMIN_CONSOLE_SHA256" > "$DEPLOY_ROOT/.deploy-admin-console-sha256"
+fhd_commit_release_identity \
+  "$TARBALL" "$DEPLOY_ROOT" "$BACKUP" "$TARBALL_SHA256" \
+  "$EXPECTED_GIT_SHA" "$EXPECTED_ADMIN_CONSOLE_SHA256"
 systemctl restart "$SERVICE"
 FHD_SERVICE_QUIESCED=1
 sleep "${FHD_HEALTH_INITIAL_SLEEP:-15}"
@@ -430,7 +455,9 @@ if [[ "$API_CODE" != "200" ]]; then
   exit 1
 fi
 
-cp "$TARBALL" "${DEPLOY_ROOT}/.deploy-last.tar.gz" 2>/dev/null || true
+fhd_complete_release_identity \
+  "$DEPLOY_ROOT" "$BACKUP" "$TARBALL_SHA256" \
+  "$EXPECTED_GIT_SHA" "$EXPECTED_ADMIN_CONSOLE_SHA256"
 
 MUTATION_STARTED=0
 FHD_SERVICE_QUIESCED=0

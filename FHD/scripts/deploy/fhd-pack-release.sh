@@ -72,6 +72,19 @@ fi
   echo "[err] release archive verifier is missing: $ARCHIVE_VERIFY" >&2
   exit 1
 }
+ARCHIVE_VERIFY_SHA256="$(python3 - "$REPO_ROOT" "$GIT_SHA" "$ARCHIVE_VERIFY" <<'PY'
+import hashlib, subprocess, sys
+root, sha, local_path = sys.argv[1:]
+source = subprocess.check_output(["git", "-C", root, "show", f"{sha}:FHD/scripts/deploy/lib/verify_release_archive.py"])
+expected = hashlib.sha256(source).hexdigest()
+with open(local_path, "rb") as stream:
+    actual = hashlib.sha256(stream.read()).hexdigest()
+if actual != expected:
+    raise SystemExit("release archive verifier differs from exact release Git source")
+print(expected)
+PY
+)"
+[[ "$ARCHIVE_VERIFY_SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 1
 [[ -x "$DR_RELEASE_SYNC" ]] || {
   echo "[err] DR release sync helper is missing or not executable: $DR_RELEASE_SYNC" >&2
   exit 1
@@ -243,11 +256,12 @@ PY
 
 MANIFEST="$OUT_DIR/fhd-manifest.json"
 
-python3 - <<'PY' "$MANIFEST" "$VERSION" "$GIT_SHA" "$ARTIFACT" "$SHA256" "$BUILT_AT" "$COMMIT_AT" "$CHANNEL" "$ADMIN_CONSOLE_SHA256"
+python3 - <<'PY' "$MANIFEST" "$VERSION" "$GIT_SHA" "$ARTIFACT" "$SHA256" "$BUILT_AT" "$COMMIT_AT" "$CHANNEL" "$ADMIN_CONSOLE_SHA256" "$ARCHIVE_VERIFY_SHA256"
 import json, sys
-path, version, git_sha, artifact, sha256, built_at, commit_at, channel, admin_console_sha256 = sys.argv[1:10]
+path, version, git_sha, artifact, sha256, built_at, commit_at, channel, admin_console_sha256, archive_verify_sha256 = sys.argv[1:11]
 doc = {
     "admin_console_sha256": admin_console_sha256,
+    "archive_verifier_sha256": archive_verify_sha256,
     "product": "fhd-full",
     "channel": channel,
     "version": version,

@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import runpy
 import subprocess
 import tarfile
 from pathlib import Path
@@ -62,6 +63,9 @@ def setup(tmp_path):
     channel.mkdir(parents=True)
     old = {}
     new = {}
+    verifier_path = FHD / "scripts/deploy/lib/verify_release_archive.py"
+    verifier_source = verifier_path.read_bytes()
+    required = runpy.run_path(str(verifier_path))["REQUIRED_RUNTIME_MEMBERS"]
     for name in NAMES:
         p = deploy / name
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -70,6 +74,7 @@ def setup(tmp_path):
         p.chmod(0o700)
         old[name] = data
         new[name] = b"# reviewed helper\n" if name.endswith(".py") else b"#!/bin/bash\nexit 77\n"
+    new["lib/verify_release_archive.py"] = verifier_source
     for name in [".build-identity.json", ".env", "XCAGI/mods/customer/data.db"]:
         p = root / name
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -88,11 +93,13 @@ def setup(tmp_path):
         "",
         base64.b64encode(json.dumps(expected).encode()).decode(),
         "0",
+        base64.b64encode(verifier_source).decode(),
     ]
 
     def pack(identity=SHA, changed=None, link=None):
         with tarfile.open(immutable / args[2], "w:gz") as tar:
             payload = {
+                **dict.fromkeys(required, b"fixture runtime file\n"),
                 ".build-identity.json": json.dumps({"git_sha": identity}).encode(),
                 **{"scripts/deploy/" + k: v for k, v in new.items()},
                 "app/main.py": b"user runtime",
@@ -110,7 +117,12 @@ def setup(tmp_path):
                 else:
                     tar.addfile(info, io.BytesIO(data))
         args[7] = hashlib.sha256((immutable / args[2]).read_bytes()).hexdigest()
-        manifest = {"artifact": args[2], "git_sha": SHA, "sha256": args[7]}
+        manifest = {
+            "artifact": args[2],
+            "git_sha": SHA,
+            "sha256": args[7],
+            "archive_verifier_sha256": hashlib.sha256(verifier_source).hexdigest(),
+        }
         (immutable / "fhd-manifest.json").write_text(json.dumps(manifest))
 
     pack()

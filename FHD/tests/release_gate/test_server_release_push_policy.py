@@ -35,6 +35,7 @@ def _tarball_release(tmp_path: Path, git_sha: str, **metadata: str):
         "git_sha": git_sha,
         "deploy_mode": "tarball",
         "admin_console_sha256": "a" * 64,
+        "archive_verifier_sha256": hashlib.sha256(b"# reviewed fixture\n").hexdigest(),
         **metadata,
     }
     (out_dir / "fhd-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")

@@ -292,6 +292,10 @@ jobs:
           echo "✅ Neuro Bus 7 switches verified (all =1) in \$ENV_FILE"
           NEURO_EOF
 
+          TRUSTED_VERIFIER_B64=""
+          if [ "${TARGET_ENV}" = "production" ]; then
+            TRUSTED_VERIFIER_B64="$(base64 < "$GITHUB_WORKSPACE/FHD/scripts/deploy/lib/verify_release_archive.py" | tr -d '\n')"
+          fi
           ssh -i "$KEY_FILE" \
             -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=30 \
@@ -331,18 +335,21 @@ jobs:
           git_sha = str(doc.get("git_sha") or "")
           artifact = str(doc.get("artifact") or "")
           digest = str(doc.get("sha256") or "")
+          verifier_sha = str(doc.get("archive_verifier_sha256") or "")
           if not re.fullmatch(r"[0-9a-f]{40}", git_sha):
               raise SystemExit("manifest git_sha is not an exact lowercase SHA")
           if not re.fullmatch(r"[0-9a-f]{64}", digest):
               raise SystemExit("manifest sha256 is invalid")
+          if not re.fullmatch(r"[0-9a-f]{64}", verifier_sha):
+              raise SystemExit("manifest archive verifier SHA256 is invalid")
           if not re.fullmatch(r"fhd-full-[A-Za-z0-9._-]+\.tar\.gz", artifact):
               raise SystemExit("manifest artifact is not a safe FHD tarball basename")
           if environment == "production" and action == "apply-latest" and git_sha != authorized_sha:
               raise SystemExit("manifest git_sha differs from authorized release_sha")
-          print("|".join((git_sha, artifact, digest)))
+          print("|".join((git_sha, artifact, digest, verifier_sha)))
           PY
           )"
-            IFS='|' read -r MANIFEST_GIT_SHA ARTIFACT EXPECTED_ARCHIVE_SHA <<<"\$RELEASE_FIELDS"
+            IFS='|' read -r MANIFEST_GIT_SHA ARTIFACT EXPECTED_ARCHIVE_SHA EXPECTED_VERIFIER_SHA <<<"\$RELEASE_FIELDS"
             EXPECTED_SHA="\$MANIFEST_GIT_SHA"
             TARBALL="\$(dirname "${MANIFEST}")/\$ARTIFACT"
             test -f "\$TARBALL"
@@ -350,6 +357,23 @@ jobs:
             if [ "\$ACTUAL_ARCHIVE_SHA" != "\$EXPECTED_ARCHIVE_SHA" ]; then
               echo "Artifact SHA256 does not match manifest" >&2
               exit 1
+            fi
+            TRUSTED_VERIFIER=""
+            if [ "${TARGET_ENV}" = "production" ]; then
+              TRUSTED_VERIFIER="\$(mktemp /tmp/fhd-trusted-archive-verifier.XXXXXX.py)"
+              printf '%s' "${TRUSTED_VERIFIER_B64}" | base64 --decode >"\$TRUSTED_VERIFIER"
+              chmod 600 "\$TRUSTED_VERIFIER"
+            else
+              TRUSTED_VERIFIER="${DEPLOY_ROOT}/scripts/deploy/lib/verify_release_archive.py"
+            fi
+            ACTUAL_VERIFIER_SHA="\$(sha256sum -- "\$TRUSTED_VERIFIER" | awk '{print \$1}')"
+            if [ "\$ACTUAL_VERIFIER_SHA" != "\$EXPECTED_VERIFIER_SHA" ]; then
+              echo "Checked-out verifier differs from exact release source" >&2
+              exit 1
+            fi
+            python3 "\$TRUSTED_VERIFIER" --archive "\$TARBALL"
+            if [ "${TARGET_ENV}" = "production" ]; then
+              rm -f -- "\$TRUSTED_VERIFIER"
             fi
             BOOTSTRAP="\$(mktemp -d /tmp/fhd-deploy-bootstrap.XXXXXX)"
             trap 'rm -rf -- "\$BOOTSTRAP"' EXIT

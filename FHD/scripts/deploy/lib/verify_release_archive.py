@@ -34,6 +34,7 @@ REQUIRED_RUNTIME_MEMBERS = {
     "scripts/deploy/xcmax-release-sync.sh",
     "scripts/deploy/xcmax_release_sync_prune.py",
     "scripts/deploy/lib/mod_tree_guard.py",
+    "scripts/deploy/lib/verify_release_archive.py",
     "scripts/deploy/lib/service_quiescence.sh",
     "scripts/deploy/lib/apply_recovery.sh",
     "scripts/deploy/lib/version.sh",
@@ -46,26 +47,19 @@ REQUIRED_RUNTIME_MEMBERS = {
 
 
 def _normalise(raw_name: str) -> str:
-    while raw_name.startswith("./"):
-        raw_name = raw_name[2:]
-    return raw_name.rstrip("/")
-
-
-def _safe_relative(raw_path: str, base: PurePosixPath | None = None) -> bool:
-    path = PurePosixPath(raw_path)
-    if path.is_absolute():
-        return False
-    stack = list((base or PurePosixPath()).parts)
-    for part in path.parts:
-        if part in ("", "."):
-            continue
-        if part == "..":
-            if not stack:
-                return False
-            stack.pop()
-        else:
-            stack.append(part)
-    return True
+    # Tar archives produced by fhd-pack-release use a single leading ./.
+    # Strip only that prefix; reject internal dot, empty, and parent components
+    # rather than accepting multiple spellings for the same extracted path.
+    raw_name = raw_name.removeprefix("./")
+    raw_name = raw_name.rstrip("/")
+    if raw_name in ("", "."):
+        return ""
+    if raw_name.startswith("/"):
+        return raw_name
+    parts = raw_name.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        return raw_name
+    return "/".join(parts)
 
 
 def _forbidden_reason(name: str) -> str | None:
@@ -83,6 +77,7 @@ def _forbidden_reason(name: str) -> str | None:
 
 def verify_archive(path: Path) -> dict[str, int | str]:
     seen: set[str] = set()
+    entries: dict[str, tarfile.TarInfo] = {}
     violations: list[str] = []
     file_count = 0
     try:
@@ -92,28 +87,48 @@ def verify_archive(path: Path) -> dict[str, int | str]:
 
     with archive:
         for member in archive.getmembers():
+            if not member.name:
+                violations.append("unnamed archive member is forbidden")
+            if member.name.startswith("/"):
+                violations.append(f"unsafe member path: {member.name}")
             name = _normalise(member.name)
             if not name:
+                if not member.isdir():
+                    violations.append("archive root member must be a directory")
                 continue
             if name in seen:
-                violations.append(f"duplicate member: {name}")
+                violations.append(f"duplicate member target: {name}")
             seen.add(name)
-            if not _safe_relative(name):
+            entries[name] = member
+            if name.startswith("/") or any(part in ("", ".", "..") for part in name.split("/")):
                 violations.append(f"unsafe member path: {member.name}")
+            if name != member.name.removeprefix("./").rstrip("/"):
+                violations.append(f"non-canonical member path: {member.name}")
             if reason := _forbidden_reason(name):
                 violations.append(f"{name}: {reason}")
             if member.isdev():
                 violations.append(f"device member is forbidden: {name}")
             if member.isfile():
                 file_count += 1
-            if member.issym() and not _safe_relative(member.linkname, PurePosixPath(name).parent):
-                violations.append(f"unsafe symlink target: {name} -> {member.linkname}")
-            if member.islnk() and not _safe_relative(member.linkname):
-                violations.append(f"unsafe hardlink target: {name} -> {member.linkname}")
+            # Release payloads contain regular files/directories. Refuse all
+            # links so chained aliases cannot write or expose another path.
+            if member.issym() or member.islnk():
+                violations.append(f"release archive links are forbidden: {name}")
 
+    symlinks = {name for name, member in entries.items() if member.issym()}
+    for name, member in entries.items():
+        parts = name.split("/")
+        for end in range(1, len(parts)):
+            parent = "/".join(parts[:end])
+            if parent in symlinks:
+                violations.append(f"member traverses symlink parent: {name} via {parent}")
+                break
     missing = sorted(REQUIRED_RUNTIME_MEMBERS.difference(seen))
     if missing:
         violations.append("missing required runtime members: " + ", ".join(missing))
+    for name in REQUIRED_RUNTIME_MEMBERS.intersection(entries):
+        if not entries[name].isfile():
+            violations.append("required runtime member is not a regular file: " + name)
 
     if violations:
         preview = "; ".join(violations[:12])

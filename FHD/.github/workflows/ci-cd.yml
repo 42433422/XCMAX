@@ -833,6 +833,15 @@ jobs:
           set -euo pipefail
           artifact="$(find dist/deploy -maxdepth 1 -name 'fhd-full-*.tar.gz' -print -quit)"
           test -n "$artifact"
+          manifest="$(dirname "$artifact")/fhd-manifest.json"
+          expected_verifier="$(python3 - "$manifest" <<'PY'
+          import json, sys
+          print(json.load(open(sys.argv[1], encoding="utf-8")).get("archive_verifier_sha256", ""))
+          PY
+          )"
+          actual_verifier="$(sha256sum -- scripts/deploy/lib/verify_release_archive.py | awk '{print $1}')"
+          test "$expected_verifier" = "$actual_verifier"
+          python3 scripts/deploy/lib/verify_release_archive.py --archive "$artifact"
           tar -xzf "$artifact" ./templates/admin-vue-dist
           python3 scripts/deploy/lib/verify_admin_console.py \
             --root templates/admin-vue-dist \
