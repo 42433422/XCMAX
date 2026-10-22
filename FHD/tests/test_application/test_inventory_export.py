@@ -18,7 +18,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.models import InventoryLedger, Product, Warehouse
-from app.fastapi_routes import inventory
+from app.fastapi_routes import inventory, inventory_exports
 from app.infrastructure.tenant_scope import tenant_scope
 
 
@@ -248,7 +248,7 @@ def test_export_failure_returns_no_workbook(inventory_http, monkeypatch):
     client, _factory, _engine = inventory_http
     service = MagicMock()
     service.export_inventory.side_effect = RuntimeError("internal database unavailable")
-    monkeypatch.setattr(inventory, "_svc", lambda: service)
+    monkeypatch.setattr(inventory_exports, "_svc", lambda: service)
     response = client.get("/api/inventory/export.xlsx")
     assert response.status_code == 500
     assert response.json()["error_code"] == "INVENTORY_EXPORT_FAILED"
@@ -382,7 +382,7 @@ def test_csv_errors_never_download_partial_file(inventory_http, monkeypatch, kin
     if kind == "failure":
         service = MagicMock()
         service.export_inventory.side_effect = RuntimeError("private detail")
-        monkeypatch.setattr(inventory, "_svc", lambda: service)
+        monkeypatch.setattr(inventory_exports, "_svc", lambda: service)
     response = client.get("/api/inventory/export.csv", params=params)
     assert response.status_code == status
     assert "content-disposition" not in response.headers

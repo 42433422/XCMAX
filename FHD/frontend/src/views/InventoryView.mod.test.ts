@@ -110,11 +110,23 @@ describe('ERP domain bridge InventoryView', () => {
       await wrapper.get(`[data-testid="${id}"]`).trigger('click')
     }
     expect(downloadMock).toHaveBeenCalledTimes(1)
-    finish(new Response('\ufeff产品名称,数量\r\n涂料,1.25', { headers: {
+    const csv = '\ufeff产品名称,数量\r\n涂料,1.25'
+    finish(new Response(csv, { headers: {
       'Content-Type': 'text/csv; charset=utf-8', 'X-Inventory-Row-Count': '1',
     } }))
     await flushPromises()
-    expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), '库存明细.csv')
+    // Response.blob() and jsdom may use different Blob constructors; verify the download bytes.
+    expect(downloadBlobMock).toHaveBeenCalledTimes(1)
+    const [blob, filename] = downloadBlobMock.mock.calls[0] as [Blob, string]
+    expect(filename).toBe('库存明细.csv')
+    expect(blob.type).toBe('text/csv;charset=utf-8')
+    const bytes = await (blob.arrayBuffer?.() ?? new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as ArrayBuffer)
+      reader.onerror = () => reject(reader.error)
+      reader.readAsArrayBuffer(blob)
+    }))
+    expect(Array.from(new Uint8Array(bytes))).toEqual(Array.from(new TextEncoder().encode(csv)))
     expect(wrapper.text()).toContain('1 条库存明细')
     for (const id of ['inventory-export', 'inventory-export-csv'])
       expect(wrapper.get(`[data-testid="${id}"]`).attributes('disabled')).toBeUndefined()
