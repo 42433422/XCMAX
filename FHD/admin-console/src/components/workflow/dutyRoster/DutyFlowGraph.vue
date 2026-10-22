@@ -93,5 +93,3 @@ defineProps<{
 
               <!-- ── 客户端车间详情（仅管理端） ───────────────────────────── -->
 </template>
-
-<style scoped src="../DutyRosterGraphPanel.css"></style>

@@ -48,5 +48,3 @@ defineProps<{
             </transition>
 
 </template>
-
-<style scoped src="../DutyRosterGraphPanel.css"></style>
