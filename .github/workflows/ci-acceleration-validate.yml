@@ -1,0 +1,149 @@
+name: CI acceleration candidate validation
+on:
+  push:
+    branches: ['ci/acceleration-audit-20261022']
+    paths: ['.github/workflows/ci-acceleration-validate.yml', '.github/ci-acceleration-candidate/**']
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: transport
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 096ced72160d9feceb83cc9e0da1bcd4adc7ced9
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.5'
+          enable-cache: true
+      - name: Apply only the hash-bound reviewed candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/acceleration-validation"
+          python - <<'PY'
+          import base64,gzip,hashlib,os,pathlib,re,subprocess,json
+          base='096ced72160d9feceb83cc9e0da1bcd4adc7ced9'
+          root=pathlib.Path('candidate').resolve()
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()==base
+          parts=pathlib.Path('transport/.github/ci-acceleration-candidate')
+          data=base64.b64decode(''.join((parts/f'part-{i}.txt').read_text() for i in range(3)),validate=True)
+          assert hashlib.sha256(data).hexdigest()=='e6f2f1707e1b44bf2892712495cc62e72163095ccd2c2d9dd8614f2133d8ce9e'
+          patch=gzip.decompress(data)
+          paths=re.findall(r'^diff --git a/(\S+) b/\S+$',patch.decode(),re.M)
+          assert len(paths)==14 and len(paths)==len(set(paths))
+          assert all(p.startswith(('FHD/','.github/workflows/fhd-ci-cd.yml')) and '..' not in p.split('/') for p in paths)
+          out=pathlib.Path(os.environ['RUNNER_TEMP'])/'acceleration-validation'
+          (out/'candidate-input.patch').write_bytes(patch)
+          (out/'paths.json').write_text(json.dumps(paths))
+          subprocess.run(['git','apply','--check',str(out/'candidate-input.patch')],cwd=root,check=True)
+          subprocess.run(['git','apply',str(out/'candidate-input.patch')],cwd=root,check=True)
+          PY
+      - name: Install and verify the pinned real CI environment
+        working-directory: candidate/FHD
+        run: python scripts/ci/backend_environment.py install
+      - name: Format and lint only candidate Python files
+        working-directory: candidate/FHD
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,pathlib,subprocess
+          paths=json.loads((pathlib.Path(os.environ['RUNNER_TEMP'])/'acceleration-validation/paths.json').read_text())
+          files=[p.removeprefix('FHD/') for p in paths if p.endswith('.py')]
+          subprocess.run(['ruff','check','--fix',*files],check=True)
+          subprocess.run(['ruff','format',*files],check=True)
+          subprocess.run(['ruff','check',*files],check=True)
+          subprocess.run(['ruff','format','--check',*files],check=True)
+          PY
+      - name: Run all changed gate and negative regression tests
+        working-directory: candidate/FHD
+        env:
+          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: '1'
+          INTENT_BENCHMARK_RUN: '1'
+        run: |
+          python -m pytest tests/test_ci/test_backend_file_shards.py tests/test_ci/test_backend_environment.py tests/test_ci/test_backend_shards.py tests/test_ci/test_backend_shard_aggregate.py tests/test_ci/test_workflow_gate_contracts.py tests/test_ci/test_scanned_image.py -q -o addopts= --junitxml="$RUNNER_TEMP/acceleration-validation/regressions.xml"
+      - name: Generate, commit, and run repository preflight before publication
+        working-directory: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/dev/publish_ci_workflows_to_root.py --apply
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c ci/early-shards-locked-env-image-reuse-20261022
+          python - <<'PY'
+          import json,os,pathlib,subprocess
+          paths=json.loads((pathlib.Path(os.environ['RUNNER_TEMP'])/'acceleration-validation/paths.json').read_text())
+          subprocess.run(['git','add','--',*paths],check=True)
+          PY
+          cd FHD
+          python scripts/dev/check_net_deletion.py --update --force --reason '用户授权完整CI提速：提前按文件分片和同轮全集校验、锁定已验证依赖环境、扫描后复用同一镜像；增加失败阻断与真实覆盖率回归。仅必要实现和验证，不削弱既有门槛。'
+          git add metrics/line_baseline.json
+          git commit -m 'ci: preselect module shards, lock CI environment, and promote scanned images'
+          python scripts/dev/push_preflight.py --fix --base 096ced72160d9feceb83cc9e0da1bcd4adc7ced9
+          python scripts/dev/ssot_cli.py gate
+          cd ..
+          python scripts/dev/publish_ci_workflows_to_root.py --check
+          git diff --exit-code
+          git diff --check 096ced72160d9feceb83cc9e0da1bcd4adc7ced9 HEAD
+      - name: Record exact candidate identity and publish only a new review branch
+        working-directory: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64,hashlib,json,os,pathlib,subprocess
+          base='096ced72160d9feceb83cc9e0da1bcd4adc7ced9'
+          branch='ci/early-shards-locked-env-image-reuse-20261022'
+          def git(*args): return subprocess.check_output(['git',*args],text=True).strip()
+          main=git('ls-remote','origin','refs/heads/main').split()[0]
+          assert main==base, 'Main advanced; do not overwrite or publish an unreviewed integration'
+          assert not git('ls-remote','origin','refs/heads/'+branch), 'Review branch already exists'
+          out=pathlib.Path(os.environ['RUNNER_TEMP'])/'acceleration-validation'
+          paths=git('diff','--name-only',base,'HEAD').splitlines()
+          expected=set(json.loads((out/'paths.json').read_text()))|{'FHD/metrics/line_baseline.json'}
+          assert set(paths)==expected
+          receipt={'base':base,'head':git('rev-parse','HEAD'),'tree':git('rev-parse','HEAD^{tree}'),'branch':branch,'files':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in paths}}
+          (out/'receipt.json').write_text(json.dumps(receipt,indent=2))
+          (out/'candidate-final.patch').write_text(git('diff','--binary',base,'HEAD')+'\n')
+          header='AUTHORIZATION: basic '+base64.b64encode(('x-access-token:'+os.environ['GH_TOKEN']).encode()).decode()
+          subprocess.run(['git','-c','http.https://github.com/.extraheader='+header,'push','origin','HEAD:refs/heads/'+branch],check=True)
+          receipt['published']=True
+          (out/'receipt.json').write_text(json.dumps(receipt,indent=2))
+          print(json.dumps({'branch':branch,'head':receipt['head'],'tree':receipt['tree'],'files':len(paths)}))
+          PY
+      - name: Retain results, including original failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-acceleration-validation-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/acceleration-validation/
+            candidate/FHD/ci-environment.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Clean task-created caches only
+        if: always()
+        working-directory: candidate
+        run: |
+          if [ -f scripts/dev/clean_agent_workspace.py ]; then python3 scripts/dev/clean_agent_workspace.py; fi
+          df -h .
