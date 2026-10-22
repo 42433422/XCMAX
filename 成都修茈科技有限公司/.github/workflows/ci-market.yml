@@ -37,6 +37,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -53,6 +55,14 @@ jobs:
 
       - name: Type check
         run: npm run typecheck:ci
+
+      - name: Install independent child dependencies
+        working-directory: MODstore_deploy/market/src/domain/客来来/desktop
+        run: npm ci --ignore-scripts
+
+      - name: Type check independent child
+        working-directory: MODstore_deploy/market/src/domain/客来来/desktop
+        run: ./node_modules/.bin/tsc -b --force
 
       - name: Unit tests + coverage
         run: npm run test:coverage
