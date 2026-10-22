@@ -1087,6 +1087,21 @@ jobs:
         with:
           ref: ${{ inputs.release_sha || github.sha }}
 
+      - name: Validate security scan run ids
+        if: ${{ inputs.release_channel == 'stable' }}
+        env:
+          CURRENT_SECURITY_SCAN_RUN_ID: ${{ inputs.security_scan_run_id }}
+          PREVIOUS_SECURITY_SCAN_RUN_ID: ${{ inputs.previous_security_scan_run_id }}
+        run: |
+          set -euo pipefail
+          for name in CURRENT_SECURITY_SCAN_RUN_ID PREVIOUS_SECURITY_SCAN_RUN_ID; do
+            value="${!name}"
+            if ! printf '%s' "${value}" | grep -Eq '^[0-9]+$'; then
+              echo "::error::${name} must be a numeric GitHub Actions run id; got '${value}'."
+              exit 1
+            fi
+          done
+
       - name: Download normalized security evidence for stable upload
         if: ${{ inputs.release_channel == 'stable' }}
         uses: actions/download-artifact@v8

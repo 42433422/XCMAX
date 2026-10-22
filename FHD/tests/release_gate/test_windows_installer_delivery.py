@@ -116,6 +116,12 @@ def test_installer_mode_keeps_identity_and_runtime_checks():
     assert script.count("-AllowUnsigned:$AllowUnsigned") == 3
     assert "Installed build-info Git SHA mismatch" in script
     assert "Installed build-info version mismatch" in script
+    assert "(Get-Item -LiteralPath $installedExe).VersionInfo.ProductVersion" in script
+    assert "if ($exeProductVersion -ne $ExpectedProductVersion)" in script
+    assert 'throw "Installed XCAGI.exe ProductVersion mismatch:' in script
+    assert script.index("Installed XCAGI.exe ProductVersion mismatch") < script.index(
+        "Launching installed desktop runtime"
+    )
     assert "& $runtimeSmoke" in script
     assert "Uninstall unexpectedly deleted XCAGI user data" in script
 

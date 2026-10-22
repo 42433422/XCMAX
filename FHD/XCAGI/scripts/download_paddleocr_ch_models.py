@@ -55,8 +55,12 @@ def download_file(url: str, dest: Path, chunk: int = 1024 * 256) -> None:
 
 
 def extract_tar(tar_path: Path, dest_dir: Path) -> None:
+    # Feature-detect security backports; never fall back to trusted extraction.
+    safe_filter = getattr(tarfile, "data_filter", None)
+    if not callable(safe_filter):
+        raise RuntimeError("安全解包过滤器不可用，请升级 Python 后重试")
     with tarfile.open(tar_path, "r:*") as tf:
-        tf.extractall(path=dest_dir)
+        tf.extractall(path=dest_dir, filter=safe_filter)
 
 
 def main() -> int:

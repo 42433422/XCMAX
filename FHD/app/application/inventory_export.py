@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from io import BytesIO
+import csv
+import unicodedata
+from datetime import date
+from io import BytesIO, StringIO
 from typing import Any
 
 from openpyxl import Workbook
@@ -52,3 +55,30 @@ def render_inventory_workbook(rows: list[dict[str, Any]]) -> bytes:
     output = BytesIO()
     workbook.save(output)
     return output.getvalue()
+
+
+def render_inventory_csv(rows: list[dict[str, Any]]) -> bytes:
+    """BOM CSV sharing the workbook snapshot, with text-only formula protection."""
+    output = StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\r\n")
+    writer.writerow([title for _key, title, _width in INVENTORY_COLUMNS])
+    for row in rows:
+        values = []
+        for key, _title, _width in INVENTORY_COLUMNS:
+            value = row.get(key)
+            if isinstance(value, str):
+                meaningful = next(
+                    (
+                        char
+                        for char in value
+                        if not char.isspace() and unicodedata.category(char) not in ("Cc", "Cf")
+                    ),
+                    "",
+                )
+                if meaningful.startswith(("=", "+", "-", "@")):
+                    value = "'" + value
+            elif isinstance(value, date):
+                value = value.isoformat()
+            values.append(value)
+        writer.writerow(values)
+    return output.getvalue().encode("utf-8-sig")

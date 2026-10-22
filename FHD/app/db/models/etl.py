@@ -23,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.db.mixins import TenantScopedMixin, TimestampMixin
+from app.utils.time import utc_now_naive
 
 
 class EtlUpload(TimestampMixin, TenantScopedMixin, Base):
@@ -82,7 +83,7 @@ class EtlTemplateVersion(TenantScopedMixin, Base):
     allowed_update_fields_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     action_rules_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now_naive
     )
 
 
@@ -162,10 +163,10 @@ class EtlRunRow(TenantScopedMixin, Base):
     execution_error_code: Mapped[Optional[str]] = mapped_column(String(64))
     execution_error_message: Mapped[Optional[str]] = mapped_column(String(500))
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now_naive
     )
     updated_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now_naive, onupdate=utc_now_naive
     )
 
 

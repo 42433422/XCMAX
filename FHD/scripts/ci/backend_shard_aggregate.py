@@ -15,7 +15,23 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.ci.backend_shards import configured_total, identity, verify
+from scripts.ci.backend_shards import configured_total, digest, identity, verify
+
+
+def identical_measurements(root: Path, total: int, prefix: str, summaries: list[dict]) -> bool:
+    """Reuse only after both same-run manifests have passed full verification."""
+    scopes = [
+        {key: value for key, value in summary.items() if key != "mode"} for summary in summaries
+    ]
+    return (
+        len(scopes) == 2
+        and scopes[0] == scopes[1]
+        and all(
+            digest(root / f"{prefix}{index}" / ".coverage.full")
+            == digest(root / f"{prefix}{index}" / ".coverage.behavior")
+            for index in range(1, total + 1)
+        )
+    )
 
 
 def aggregate(
@@ -55,8 +71,16 @@ def aggregate(
         if importlib.metadata.version("coverage") != required_coverage:
             raise ValueError("Installed coverage differs from verified shard toolchain")
         Path("shard-summary.json").write_text(json.dumps(summaries, indent=2), encoding="utf-8")
+        reuse_behavior = identical_measurements(root, total, artifact_prefix, summaries)
+        report["behavior_report_reused"] = reuse_behavior
         with tempfile.TemporaryDirectory(prefix="backend-coverage-") as workspace:
             for mode in ("full", "behavior"):
+                if mode == "behavior" and reuse_behavior:
+                    stage(
+                        "reuse-json-behavior",
+                        lambda: shutil.copyfile("coverage.json", "coverage-behavior.json"),
+                    )
+                    continue
                 # Report commands can auto-combine sibling data files. Keep each
                 # mode separate from retained outputs and any stale local data.
                 data_file = Path(workspace) / mode / ".coverage"
