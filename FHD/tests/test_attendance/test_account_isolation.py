@@ -58,10 +58,10 @@ def db(tmp_path):
         "id INTEGER PRIMARY KEY AUTOINCREMENT, month_label TEXT, employee_name TEXT, "
         "department TEXT, work_date TEXT)"
     )
-    # 存量太阳鸟数据（无 owner 列的旧 schema）
+    # 合成的存量数据（无 owner 列的旧 schema）
     conn.execute(
         "INSERT INTO attendance_employees (source_file, employee_name, department) VALUES "
-        "('seed', '胡超', '计划生产部'), ('seed', '樊琪麒', '计划生产部')"
+        "('seed', 'SYNTHETIC-001', '计划生产部'), ('seed', 'SYNTHETIC-002', '计划生产部')"
     )
     conn.commit()
     conn.close()
@@ -113,6 +113,6 @@ def test_roster_query_is_owner_scoped(owner_scope, db):
         "SELECT employee_name FROM attendance_employees WHERE owner_user_id = ?",
         ("wuxinghua1",),
     ).fetchall()
-    assert {r[0] for r in sunbird} == {"胡超", "樊琪麒"}
+    assert {r[0] for r in sunbird} == {"SYNTHETIC-001", "SYNTHETIC-002"}
     assert {r[0] for r in coating} == {"王涂料"}
     conn.close()

@@ -20,7 +20,8 @@ from openpyxl import Workbook
 FHD_ROOT = Path(__file__).resolve().parents[2]
 
 READER_CONVERT = (
-    FHD_ROOT / "mods/_employees/excel-full-read-employee/backend/vendor/excel_full_read/convert.py"
+    FHD_ROOT
+    / "mods/_employees/excel-full-read-employee/backend/vendor/excel_full_read/convert.py"
 )
 WRITER_CONVERT = (
     FHD_ROOT
@@ -28,12 +29,10 @@ WRITER_CONVERT = (
 )
 MAPPER_VENDOR = FHD_ROOT / "mods/_employees/excel-rules-map-employee/backend/vendor"
 
-SUNBIRD_DIR = Path(
-    "/workspace/成都修茈科技有限公司/MODstore_deploy/var/employee_draft_assets/9/real-files-smoke"
-)
-SUNBIRD_TEMPLATE = SUNBIRD_DIR / "00_考勤-2026-3月份考勤统计表.xlsx"
-SUNBIRD_SOURCE = SUNBIRD_DIR / "01_钉钉导出来的考勤数据.xlsx"
-SUNBIRD_VENDOR = Path("/workspace/成都修茈科技有限公司/taiyangniao-pro/backend")
+SUNBIRD_DIR = FHD_ROOT / "tests/fixtures/synthetic_attendance"
+SUNBIRD_TEMPLATE = SUNBIRD_DIR / "synthetic-attendance-template.xlsx"
+SUNBIRD_SOURCE = SUNBIRD_DIR / "synthetic-dingtalk-source.xlsx"
+SUNBIRD_VENDOR = FHD_ROOT / "XCAGI/mods/attendance-industry/backend"
 
 
 def _load_module(name: str, path: Path) -> ModuleType:
@@ -79,7 +78,11 @@ def _synthetic_template(path: Path) -> None:
 
 def _read_json(reader, xlsx: Path, out: Path) -> dict:
     reader.convert_file(
-        xlsx, out, payload={}, ctx={}, rule_spec={"default_output_relpath": "workbook.json"}
+        xlsx,
+        out,
+        payload={},
+        ctx={},
+        rule_spec={"default_output_relpath": "workbook.json"},
     )
     return json.loads(out.read_text(encoding="utf-8"))
 
@@ -124,9 +127,24 @@ def test_golden_reverse_read_roundtrip(tmp_path: Path) -> None:
     rules = _rules_with_bands(infer_mod, reader, tmp_path)
 
     records = [
-        {"key": "甲", "day": 1, "band": "am", "entries": [{"symbol": "√", "value": 2.0}]},
-        {"key": "甲", "day": 3, "band": "pm", "entries": [{"symbol": "☆", "value": 1.5}]},
-        {"key": "丁", "day": 15, "band": "am", "entries": [{"symbol": "★", "value": 4.0}]},
+        {
+            "key": "甲",
+            "day": 1,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 2.0}],
+        },
+        {
+            "key": "甲",
+            "day": 3,
+            "band": "pm",
+            "entries": [{"symbol": "☆", "value": 1.5}],
+        },
+        {
+            "key": "丁",
+            "day": 15,
+            "band": "am",
+            "entries": [{"symbol": "★", "value": 4.0}],
+        },
     ]
     plan = compile_mod.compile_plan(rules, records, month_label="2026-07")
     plan_path = tmp_path / "plan.json"
@@ -151,8 +169,18 @@ def test_golden_reverse_read_roundtrip(tmp_path: Path) -> None:
 def test_diff_records_reports_mismatch_missing_extra() -> None:
     _, _, golden_mod, _, _ = _load_pkg()
     expected = [
-        {"key": "甲", "day": 1, "band": "am", "entries": [{"symbol": "√", "value": 2.0}]},
-        {"key": "乙", "day": 2, "band": "am", "entries": [{"symbol": "√", "value": 1.0}]},
+        {
+            "key": "甲",
+            "day": 1,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 2.0}],
+        },
+        {
+            "key": "乙",
+            "day": 2,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 1.0}],
+        },
     ]
     produced = [
         {
@@ -161,7 +189,12 @@ def test_diff_records_reports_mismatch_missing_extra() -> None:
             "band": "am",
             "entries": [{"symbol": "√", "value": 9.9}],
         },  # mismatch
-        {"key": "丙", "day": 3, "band": "am", "entries": [{"symbol": "√", "value": 1.0}]},  # extra
+        {
+            "key": "丙",
+            "day": 3,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 1.0}],
+        },  # extra
     ]
     diff = golden_mod.diff_records(produced, expected)
     assert not diff["ok"]
@@ -239,9 +272,24 @@ def _source_workbook() -> dict:
 
 def _expected_records() -> list:
     return [
-        {"key": "甲", "day": 1, "band": "am", "entries": [{"symbol": "√", "value": 4.0}]},
-        {"key": "甲", "day": 1, "band": "pm", "entries": [{"symbol": "☆", "value": 2.0}]},
-        {"key": "乙", "day": 2, "band": "am", "entries": [{"symbol": "√", "value": 4.0}]},
+        {
+            "key": "甲",
+            "day": 1,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 4.0}],
+        },
+        {
+            "key": "甲",
+            "day": 1,
+            "band": "pm",
+            "entries": [{"symbol": "☆", "value": 2.0}],
+        },
+        {
+            "key": "乙",
+            "day": 2,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 4.0}],
+        },
     ]
 
 
@@ -252,7 +300,9 @@ def test_solidify_succeeds_first_round(tmp_path: Path) -> None:
     call_llm = _fake_llm_seq([_GOOD_SCRIPT])
 
     result = asyncio.run(
-        solidify_mod.solidify_transform(_source_workbook(), rules, _expected_records(), call_llm)
+        solidify_mod.solidify_transform(
+            _source_workbook(), rules, _expected_records(), call_llm
+        )
     )
     assert result["ok"], result["iterations"]
     assert len(result["iterations"]) == 1
@@ -269,7 +319,9 @@ def test_solidify_iterates_on_feedback(tmp_path: Path) -> None:
     call_llm = _fake_llm_seq([_BAD_BAND_SCRIPT, _GOOD_SCRIPT])
 
     result = asyncio.run(
-        solidify_mod.solidify_transform(_source_workbook(), rules, _expected_records(), call_llm)
+        solidify_mod.solidify_transform(
+            _source_workbook(), rules, _expected_records(), call_llm
+        )
     )
     assert result["ok"]
     assert len(result["iterations"]) == 2
@@ -352,14 +404,11 @@ def test_solidify_convert_action_end_to_end(tmp_path: Path) -> None:
 
 
 SOLIDIFIED_EXAMPLE = (
-    FHD_ROOT / "mods/_employees/excel-rules-map-employee/examples/sunbird-solidified/transform.py"
+    FHD_ROOT
+    / "mods/_employees/excel-rules-map-employee/examples/sunbird-solidified/transform.py"
 )
 
 
-@pytest.mark.skipif(
-    not (SUNBIRD_TEMPLATE.is_file() and SUNBIRD_SOURCE.is_file() and SUNBIRD_VENDOR.is_dir()),
-    reason="真实太阳鸟文件/vendor 不在本机",
-)
 def test_solidified_example_passes_golden_gate(tmp_path: Path) -> None:
     """LLM 亲笔固化脚本（examples/sunbird-solidified）常驻回归：金样对账必须全绿。
 
@@ -381,7 +430,8 @@ def test_solidified_example_passes_golden_gate(tmp_path: Path) -> None:
     )["success"]
 
     rules = infer_mod.infer_rules(
-        _read_json(reader, SUNBIRD_TEMPLATE, tmp_path / "tpl_wb.json"), source_name="sunbird"
+        _read_json(reader, SUNBIRD_TEMPLATE, tmp_path / "tpl_wb.json"),
+        source_name="sunbird",
     )
     rules["bands"] = {
         "morning": {"row_offset": 0, "max_entries": 2},
@@ -401,14 +451,10 @@ def test_solidified_example_passes_golden_gate(tmp_path: Path) -> None:
     records = namespace["produce_records"](source_wb, rules)
 
     diff = golden_mod.diff_records(records, expected)
-    assert diff["ok"], diff["stats"]
+    assert diff["ok"], (diff["stats"], diff.get("samples"))
     assert diff["stats"]["matched"] == len(expected) > 3000
 
 
-@pytest.mark.skipif(
-    not (SUNBIRD_TEMPLATE.is_file() and SUNBIRD_SOURCE.is_file() and SUNBIRD_VENDOR.is_dir()),
-    reason="真实太阳鸟文件/vendor 不在本机",
-)
 def test_solidify_reproduces_sunbird_conversion(tmp_path: Path) -> None:
     import sys
 
@@ -416,7 +462,7 @@ def test_solidify_reproduces_sunbird_conversion(tmp_path: Path) -> None:
     reader = _load_module("reader_sunbird_solidify", READER_CONVERT)
     writer = _load_module("writer_sunbird_solidify", WRITER_CONVERT)
 
-    # 1) 金样：太阳鸟单体（参考实现）跑真实钉钉表 + 模板
+    # 1) 金样：太阳鸟单体（参考实现）跑合成钉钉表 + 模板
     if str(SUNBIRD_VENDOR) not in sys.path:
         sys.path.insert(0, str(SUNBIRD_VENDOR))
     from attendance_engine.convert import convert_attendance_file
@@ -428,7 +474,7 @@ def test_solidify_reproduces_sunbird_conversion(tmp_path: Path) -> None:
     assert golden_result["success"], golden_result
     golden_wb = _read_json(reader, golden_xlsx, tmp_path / "golden_wb.json")
 
-    # 2) 结构规则：真实模板 infer + 人确认环节——补三带、并按 open_question 提示
+    # 2) 结构规则：合成模板 infer + 人确认环节——补三带、并按 open_question 提示
     #    把 clear_zone 右界修到 67（68/69 是太阳鸟侧栏序号/姓名列，非日历数据区）
     tpl_wb = _read_json(reader, SUNBIRD_TEMPLATE, tmp_path / "tpl_wb.json")
     rules = infer_mod.infer_rules(tpl_wb, source_name="sunbird")
@@ -462,7 +508,7 @@ def produce_records(source_workbook: dict, rules: dict) -> list[dict]:
     profiles = build_template_profiles(ws)
     wb.close()
     filtered = _filter_records_to_template_roster(parsed.records, profiles)
-    employees, _, _ = _aggregate_employee_records(filtered, template_profiles=profiles)
+    employees, _ = _aggregate_employee_records(filtered, template_profiles=profiles)
 
     records = []
     for name, month in employees.items():
@@ -486,14 +532,19 @@ def produce_records(source_workbook: dict, rules: dict) -> list[dict]:
             max_iterations=2,
         )
     )
-    assert result["ok"], (result["iterations"], (result.get("diff") or {}).get("samples"))
+    assert result["ok"], (
+        result["iterations"],
+        (result.get("diff") or {}).get("samples"),
+    )
     assert result["diff"]["stats"]["mismatched"] == 0
     assert result["diff"]["stats"]["missing"] == 0
     assert result["diff"]["stats"]["extra"] == 0
 
     # 5) 固化脚本产 records → 白盒管道 → 与金样数据区逐格一致（端到端验收）
     plan = compile_mod.compile_plan(
-        rules, result["records"], month_label=str(golden_result.get("month") or "2026-03")
+        rules,
+        result["records"],
+        month_label=str(golden_result.get("month") or "2026-03"),
     )
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
