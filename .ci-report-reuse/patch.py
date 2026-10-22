@@ -75,6 +75,10 @@ def identical_shards(measured_shards, tmp_path):
     source, env = measured_shards
     root = tmp_path / "identical"
     shutil.copytree(source, root)
+    configuration = root / ".coveragerc"
+    configuration.write_text(
+        configuration.read_text() + f"\\n[paths]\\nsource =\\n    {root}\\n    {source}\\n"
+    )
     shutil.copyfile(root / "serial-full.json", root / "serial-behavior.json")
     for directory in (root / "shards").iterdir():
         data = json.loads((directory / "full.json").read_text())
