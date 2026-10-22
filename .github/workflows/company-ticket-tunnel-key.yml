@@ -1,0 +1,68 @@
+name: Provision approved company-ticket tunnel credential
+on:
+  push:
+    branches: [dot/company-ticket-tunnel-setup-20261022]
+    paths: [.github/workflows/company-ticket-tunnel-key.yml]
+permissions:
+  contents: read
+concurrency:
+  group: company-ticket-tunnel-credential
+  cancel-in-progress: false
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Store approved runtime credential over verified SSH stdin
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          TUNNEL_RUNTIME_API_KEY: ${{ secrets.COMPANY_TICKETS_TUNNEL_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          test -n "${DEPLOY_SSH_KEY:-}" && test -n "${TUNNEL_RUNTIME_API_KEY:-}" || { echo 'Required secret unavailable'; exit 1; }
+          umask 077
+          workspace=$(mktemp -d)
+          trap 'rm -rf -- "$workspace"' EXIT
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$workspace/identity"
+          unset DEPLOY_SSH_KEY
+          # Candidate key is accepted only if it matches the independently verified Mac known_hosts fingerprint.
+          ssh-keyscan -T 10 -t ed25519 119.27.178.147 > "$workspace/known_hosts" 2>/dev/null
+          fingerprint=$(ssh-keygen -lf "$workspace/known_hosts" -E sha256 | awk '{print $2}')
+          test "$fingerprint" = 'SHA256:mt3MJrweyP0bCmiVWc4lbE2NLmuU7FdDl1QRYGiV4ng' || { echo 'Host identity mismatch'; exit 1; }
+          remote_script=$(cat <<'REMOTE'
+          set -euo pipefail
+          set +x
+          test "$(id -u)" = 0 || exit 1
+          directory=/etc/company-tickets
+          target="$directory/tunnel-runtime.key"
+          test ! -L "$directory" && test -d "$directory" || { echo "Protected reader directory not prepared"; exit 1; }
+          test "$(stat -c %u "$directory")" = 0 && test "$(stat -c %a "$directory")" = 700 || { echo "Unsafe directory ownership or mode"; exit 1; }
+          umask 077
+          temporary=$(mktemp "$directory/.tunnel-runtime.XXXXXXXX")
+          trap "rm -f -- $temporary" EXIT
+          head -c 8193 > "$temporary"
+          length=$(wc -c < "$temporary")
+          test "$length" -ge 16 && test "$length" -le 8192 || { echo "Invalid credential length"; exit 1; }
+          test "$(wc -l < "$temporary")" = 0 || { echo "Invalid credential line break"; exit 1; }
+          if LC_ALL=C grep -q "[[:space:][:cntrl:]]" "$temporary"; then echo "Invalid credential format"; exit 1; fi
+          if test -e "$target" || test -L "$target"; then
+            test ! -L "$target" && test -f "$target" || { echo "Unsafe credential target"; exit 1; }
+            test "$(stat -c %u "$target")" = 0 && test "$(stat -c %a "$target")" = 600 || { echo "Unsafe credential protection"; exit 1; }
+            cmp -s "$temporary" "$target" || { echo "Existing credential differs; not overwritten"; exit 1; }
+            echo "Existing protected credential matches; unchanged"
+          else
+            ln -T -- "$temporary" "$target"
+            echo "Approved runtime credential stored with mode 0600"
+          fi
+          echo "No service started or restarted; no customer grant modified"
+          REMOTE
+          )
+          # The remote command is static; credential bytes travel only via stdin, never command arguments.
+          printf '%s' "$TUNNEL_RUNTIME_API_KEY" | ssh -F /dev/null -T -p 22 \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$workspace/known_hosts" -o GlobalKnownHostsFile=/dev/null \
+            -o HostKeyAlgorithms=ssh-ed25519 -o UpdateHostKeys=no -o ConnectTimeout=20 \
+            -i "$workspace/identity" root@119.27.178.147 "bash -c '$remote_script'"
+          unset TUNNEL_RUNTIME_API_KEY
