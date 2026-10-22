@@ -201,8 +201,8 @@ jobs:
           retention-days: 7
 
   backend-quality:
-    # Cheap guards precede expensive work; quality and shards then run in parallel.
-    needs: [guard-temp-scripts, ssot-drift-gate, classify]
+    # SSOT runs alongside tests; aggregate gates still require every guard to succeed.
+    needs: [guard-temp-scripts, classify]
     runs-on: ubuntu-latest
     outputs:
       skip: ${{ needs.classify.outputs.backend_skip }}
@@ -325,7 +325,7 @@ jobs:
 
 
   backend-test-shard:
-    needs: [guard-temp-scripts, ssot-drift-gate, classify]
+    needs: [guard-temp-scripts, classify]
     if: needs.classify.outputs.backend == 'true'
     runs-on: ubuntu-latest
     strategy:
@@ -413,7 +413,7 @@ jobs:
           retention-days: 7
 
   backend-test:
-    needs: [classify, backend-quality, backend-test-shard]
+    needs: [guard-temp-scripts, ssot-drift-gate, classify, backend-quality, backend-test-shard]
     if: always()
     runs-on: ubuntu-latest
     outputs:
@@ -426,6 +426,8 @@ jobs:
       - name: Validate prerequisites and skip semantics
         working-directory: .
         env:
+          GUARD: ${{ needs.guard-temp-scripts.result }}
+          SSOT: ${{ needs.ssot-drift-gate.result }}
           CLASSIFY: ${{ needs.classify.result }}
           VALID: ${{ needs.classify.outputs.valid }}
           SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
@@ -436,6 +438,8 @@ jobs:
           SKIP: ${{ needs.classify.outputs.backend_skip }}
         run: |
           set -euo pipefail
+          test "$GUARD" = success
+          test "$SSOT" = success
           test "$CLASSIFY" = success
           test "$VALID" = true
           test -n "$SOURCE_SHA"
@@ -492,7 +496,7 @@ jobs:
           retention-days: 7
 
   frontend-quality:
-    needs: [guard-temp-scripts, ssot-drift-gate, classify]
+    needs: [guard-temp-scripts, classify]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -535,7 +539,7 @@ jobs:
           fi
 
   frontend-test-shard:
-    needs: [guard-temp-scripts, ssot-drift-gate, classify]
+    needs: [guard-temp-scripts, classify]
     if: needs.classify.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     strategy:
@@ -574,7 +578,7 @@ jobs:
           retention-days: 7
 
   frontend-test:
-    needs: [classify, frontend-quality, frontend-test-shard]
+    needs: [guard-temp-scripts, ssot-drift-gate, classify, frontend-quality, frontend-test-shard]
     if: always()
     runs-on: ubuntu-latest
     outputs:
@@ -586,6 +590,8 @@ jobs:
       - name: Validate prerequisites and skip semantics
         working-directory: .
         env:
+          GUARD: ${{ needs.guard-temp-scripts.result }}
+          SSOT: ${{ needs.ssot-drift-gate.result }}
           CLASSIFY: ${{ needs.classify.result }}
           VALID: ${{ needs.classify.outputs.valid }}
           SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
@@ -596,6 +602,8 @@ jobs:
           SKIP: ${{ needs.classify.outputs.frontend_skip }}
         run: |
           set -euo pipefail
+          test "$GUARD" = success
+          test "$SSOT" = success
           test "$CLASSIFY" = success
           test "$VALID" = true
           test -n "$SOURCE_SHA"
@@ -649,7 +657,7 @@ jobs:
   # (smoke 3 pass + 1 skip, critical-paths 5 pass, plan2026-skeleton 5 skip w/o E2E_FULL_STACK).
   # Full-stack 14/14: root e2e.yml on schedule or workflow_dispatch (see e2e-playwright-reusable.yml).
   frontend-e2e:
-    needs: [guard-temp-scripts, ssot-drift-gate, classify]
+    needs: [guard-temp-scripts, classify]
     if: needs.classify.outputs.backend == 'true' || needs.classify.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -857,7 +865,7 @@ jobs:
 
   # FHD 服务器 API 发布包（tarball + manifest；不含生产 SSH 部署）
   pack-verify:
-    needs: [guard-temp-scripts, ssot-drift-gate, classify]
+    needs: [guard-temp-scripts, classify]
     if: needs.classify.outputs.backend == 'true' || needs.classify.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
