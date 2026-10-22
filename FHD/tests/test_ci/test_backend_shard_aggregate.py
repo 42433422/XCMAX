@@ -144,7 +144,8 @@ def test_gate_failure_keeps_exit_code_and_timing(measured_shards):
 
 
 @pytest.fixture
-def identical_shards(measured_shards, tmp_path):
+def identical_shards(measured_shards, tmp_path, monkeypatch):
+    monkeypatch.delenv("BACKEND_TIMINGS_FILE", raising=False)
     source, env = measured_shards
     root = tmp_path / "identical"
     shutil.copytree(source, root)

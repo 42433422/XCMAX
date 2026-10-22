@@ -1,5 +1,5 @@
 {
-  "lines": 2328631,
+  "lines": 2328632,
   "updated": "2026-10-22",
-  "note": "User-authorized CI acceleration: exact-input report reuse, distinct-scope and tamper regressions, collection-phase timing; no threshold or test-scope reduction."
+  "note": "User-authorized CI report reuse: verified equal-input reporting and phase timing (+140 versus main); isolate the synthetic test fixture from the real CI parent timing profile (+1), keeping production foreign-profile rejection intact."
 }
