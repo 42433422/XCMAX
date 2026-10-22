@@ -248,11 +248,6 @@ CHANNEL="${CHANNEL:-stable}"
   log "ERROR: manifest 缺少管理端不可变资产身份"
   exit 1
 }
-if [[ "$DEPLOY_MODE" != "image" && ! "$ARCHIVE_VERIFY_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
-  log "ERROR: tarball manifest 缺少精确候选归档校验器身份"
-  exit 1
-fi
-
 if [[ "$DEPLOY_MODE" == "image" ]]; then
   if [[ -z "$IMAGE" || -z "$IMAGE_DIGEST" ]]; then
     log "ERROR: deploy_mode=image 但 manifest 缺少 image / image_digest"
@@ -316,6 +311,11 @@ if [[ "$REMOTE_SHA" == "$LOCAL_SHA" && "${FHD_FORCE_APPLY:-0}" != "1" ]]; then
   log "已是最新 version=$VERSION sha=$GIT_SHA"
   sync_dr_release
   exit 0
+fi
+
+if [[ ! "$ARCHIVE_VERIFY_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+  log "ERROR: tarball manifest 缺少精确候选归档校验器身份"
+  exit 1
 fi
 
 if ! authorize_production_release "$CHANNEL" "${GIT_SHA:-$REMOTE_SHA}"; then
