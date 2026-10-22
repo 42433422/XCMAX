@@ -1,5 +1,5 @@
 {
-  "lines": 2329253,
+  "lines": 2329255,
   "updated": "2026-10-22",
-  "note": "PR #2519 retains six authorized fixes; from main 1ab42432, the candidate was +607 lines before the macOS Bash/window-test robustness follow-up deleted 3 maintained lines. Final baseline is 2,328,649 to 2,329,253 (+604); no unrelated tests removed or weakened."
+  "note": "用户已授权本批 PR 修复与收口。#2519 完整保留主线 1ab42432（含 #2516、#2520、#2522、#2524）及并发库存、macOS 修复；实测 2329255 行，相对主线基线 2328649 净增 606 行。六项功能与安全回归原增 608 行，库存 router 复用减 1 行，macOS Bash/窗口测试修复减 3 行，Planner 按键恢复模块替身增 2 行。恢复既有客户租户优先级与完整 XLSX 断言，保留租户隔离、50000 行上限及全部门禁；Mod 1.0.0.7，最低宿主仍为 1.0.0.6。未删除无关代码凑数。"
 }

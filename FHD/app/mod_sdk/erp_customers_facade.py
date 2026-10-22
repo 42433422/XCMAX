@@ -116,10 +116,7 @@ def customers_export(request: Request, keyword: str | None = None, template_id: 
     )
 
     verify_db_read_token_header(request)
-    from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
-
-    with tenant_scope(getattr(request.state, "tenant_id", current_tenant_id())):
-        result = _service().export_to_excel(keyword=keyword, template_id=template_id)
+    result = _service().export_to_excel(keyword=keyword, template_id=template_id)
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("message") or "客户导出失败")
     try:

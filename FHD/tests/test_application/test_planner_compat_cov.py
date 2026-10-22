@@ -14,6 +14,7 @@ the module is loaded.
 
 import importlib.util
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -179,6 +180,15 @@ MOD = "app.application.planner_compat_service"
 # ---------------------------------------------------------------------------
 
 
+@contextmanager
+def _patch_modules(replacements):
+    """Restore explicit stubs without evicting unrelated modules imported inside."""
+    with pytest.MonkeyPatch.context() as patches:
+        for name, module in replacements.items():
+            patches.setitem(sys.modules, name, module)
+        yield
+
+
 def _req(**headers) -> MagicMock:
     req = MagicMock()
     req.headers = headers
@@ -232,8 +242,7 @@ def test_derive_industry_sid_none():
     meta_mod = MagicMock()
     meta_mod.load_session_account_meta = MagicMock(return_value={})
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -250,8 +259,7 @@ def test_derive_industry_sid_empty_string():
     meta_mod = MagicMock()
     meta_mod.load_session_account_meta = MagicMock(return_value={})
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -273,8 +281,7 @@ def test_derive_industry_admin_kind():
     meta_mod = MagicMock()
     meta_mod.load_session_account_meta = MagicMock(return_value={"account_kind": "admin"})
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -295,8 +302,7 @@ def test_derive_industry_prefers_authenticated_request_state():
     request = _req()
     request.state.industry_id = "考勤"
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -317,8 +323,7 @@ def test_derive_industry_uses_workspace_preference_before_user_row():
     prefs_mod = MagicMock()
     prefs_mod.get_workspace_prefs = MagicMock(return_value={"selected_industry_id": "考勤"})
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -358,8 +363,7 @@ def test_derive_industry_user_has_industry():
     user_mod = MagicMock()
     user_mod.User = MagicMock()
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -398,8 +402,7 @@ def test_derive_industry_user_no_row():
     user_mod = MagicMock()
     user_mod.User = MagicMock()
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -481,7 +484,7 @@ async def test_execute_compat_chat_db_read_authorized():
         kitten_mod = MagicMock()
         kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={"x": 1})
         kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
             result = await execute_compat_chat(req, body)
 
     assert result is not None
@@ -527,7 +530,7 @@ async def test_execute_compat_chat_requires_token_with_prerun():
         kitten_mod = MagicMock()
         kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
         kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
             result = await execute_compat_chat(req, body)
 
     assert finalize_mock.called
@@ -572,7 +575,7 @@ async def test_execute_compat_chat_timeout_with_prerun():
         kitten_mod = MagicMock()
         kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
         kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
             result = await execute_compat_chat(req, body)
 
     assert finalize_mock.called
@@ -613,7 +616,7 @@ async def test_execute_compat_chat_timeout_without_prerun():
         kitten_mod = MagicMock()
         kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
         kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
             result = await execute_compat_chat(req, body)
 
     assert attach_mock.called
@@ -655,7 +658,7 @@ async def test_execute_compat_chat_recoverable_error_with_prerun():
         kitten_mod = MagicMock()
         kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
         kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
             with pytest.raises(fastapi.HTTPException):
                 await execute_compat_chat(req, body)
 
@@ -698,7 +701,7 @@ async def test_execute_compat_chat_final_with_prerun():
         kitten_mod = MagicMock()
         kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
         kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
             result = await execute_compat_chat(req, body)
 
     assert finalize_mock.called
@@ -739,7 +742,7 @@ async def test_execute_compat_chat_mode_online():
         kitten_mod = MagicMock()
         kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
         kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
             await execute_compat_chat(req, body)
 
     set_mode_mock.assert_called_once_with("online")
@@ -1086,7 +1089,7 @@ async def test_stream_user_id_from_header():
         svc_mock = MagicMock()
         svc_mock.persona_service = None
         conv_mod.get_ai_conversation_service = MagicMock(return_value=svc_mock)
-        with patch.dict(sys.modules, {"app.services.conversation.manager": conv_mod}):
+        with _patch_modules({"app.services.conversation.manager": conv_mod}):
             chunks = []
             async for chunk in compat_chat_stream_async(req, body):
                 chunks.append(chunk)
@@ -1125,7 +1128,7 @@ async def test_stream_persona_industry_from_ctx():
     conv_mod.get_ai_conversation_service = MagicMock(return_value=svc_mock)
 
     with (
-        patch.dict(sys.modules, {"app.services.conversation.manager": conv_mod}),
+        _patch_modules({"app.services.conversation.manager": conv_mod}),
         patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
         patch.object(_pcs, "_xcagi_planner_stream_bytes_async", side_effect=_fake_stream),
     ):
@@ -1174,8 +1177,7 @@ async def test_stream_persona_industry_from_derive():
     meta_mod.load_session_account_meta = MagicMock(return_value={})
 
     with (
-        patch.dict(
-            sys.modules,
+        _patch_modules(
             {
                 "app.services.conversation.manager": conv_mod,
                 "app.fastapi_routes.domains.misc.helpers": helpers_mod,
