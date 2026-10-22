@@ -1,0 +1,132 @@
+name: Verify CI report fixture isolation fix
+on:
+  push:
+    branches: [ci/publish-report-reuse-20261022-r1]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      SOURCE_HEAD: 699102f771b7d03661f0bbd9e67a1eec7edde2b4
+      CANDIDATE_BRANCH: ci/coverage-report-reuse-fix-candidate-20261022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 699102f771b7d03661f0bbd9e67a1eec7edde2b4
+          fetch-depth: 0
+          filter: blob:none
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install fixed validation tools
+        run: python -m pip install pytest==9.1.1 pytest-cov==7.1.0 coverage==7.16.2 PyYAML==6.0.3 ruff==0.15.22
+      - name: Reproduce all seven failures with the real CI parent profile
+        working-directory: FHD
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+          BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_HEAD"
+          test -z "$(git status --porcelain)"
+          git worktree list
+          mkdir -p "$RUNNER_TEMP/isolation-evidence"
+          printf '[pytest]\n' > "$RUNNER_TEMP/unit.ini"
+          set +e
+          PYTHONPATH="$PWD" python -m pytest -c "$RUNNER_TEMP/unit.ini" --confcutdir=tests/test_ci tests/test_ci/test_backend_shard_aggregate.py -q -k 'equal_coverage_bytes_do_not_override or equal_scopes_require_equal' --junitxml="$RUNNER_TEMP/isolation-evidence/before.xml"
+          result=$?
+          set -e
+          test "$result" -eq 1
+          python - <<'PY'
+          import os,xml.etree.ElementTree as ET
+          from pathlib import Path
+          root=ET.parse(Path(os.environ['RUNNER_TEMP'])/'isolation-evidence/before.xml').getroot()
+          suites=list(root.iter('testsuite'))
+          assert sum(int(s.get('tests','0')) for s in suites)==7
+          assert sum(int(s.get('failures','0')) for s in suites)==7
+          assert sum(int(s.get('errors','0')) for s in suites)==0
+          failures=list(root.iter('failure'))
+          assert len(failures)==7 and all('Foreign partition profile' in (f.text or '') for f in failures)
+          PY
+      - name: Isolate only the synthetic fixture from its parent timing profile
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path=Path('FHD/tests/test_ci/test_backend_shard_aggregate.py')
+          old='def identical_shards(measured_shards, tmp_path):\n    source, env = measured_shards\n'
+          new='def identical_shards(measured_shards, tmp_path, monkeypatch):\n    monkeypatch.delenv("BACKEND_TIMINGS_FILE", raising=False)\n    source, env = measured_shards\n'
+          text=path.read_text()
+          assert text.count(old)==1
+          path.write_text(text.replace(old,new),encoding='utf-8')
+          PY
+      - name: Run all targeted contracts under the same real parent profile
+        working-directory: FHD
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+          BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
+        run: |
+          set -euo pipefail
+          PYTHONPATH="$PWD" python -m pytest -c "$RUNNER_TEMP/unit.ini" --confcutdir=tests/test_ci tests/test_ci/test_backend_shards.py tests/test_ci/test_backend_shard_aggregate.py tests/test_ci/test_workflow_gate_contracts.py -q --junitxml="$RUNNER_TEMP/isolation-evidence/after.xml"
+          python -m ruff check scripts/ci/backend_shard_aggregate.py scripts/ci/backend_shard_plugin.py tests/test_ci/test_backend_shard_aggregate.py
+          python -m ruff format --check scripts/ci/backend_shard_aggregate.py scripts/ci/backend_shard_plugin.py tests/test_ci/test_backend_shard_aggregate.py
+          python - <<'PY'
+          import os,xml.etree.ElementTree as ET
+          from pathlib import Path
+          suites=list(ET.parse(Path(os.environ['RUNNER_TEMP'])/'isolation-evidence/after.xml').getroot().iter('testsuite'))
+          assert sum(int(s.get('tests','0')) for s in suites)==287
+          assert all(int(s.get(key,'0'))==0 for s in suites for key in ('failures','errors','skipped'))
+          PY
+      - name: Commit, account for the one added fixture line, and run preflight
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          cd FHD
+          python scripts/dev/check_net_deletion.py --update --force --reason 'User-authorized CI report reuse: verified equal-input reporting and phase timing (+140 versus main); isolate the synthetic test fixture from the real CI parent timing profile (+1), keeping production foreign-profile rejection intact.'
+          git add tests/test_ci/test_backend_shard_aggregate.py metrics/line_baseline.json
+          git -c core.hooksPath=/dev/null commit -m 'test(ci): isolate synthetic report fixtures from parent shard profile'
+          python scripts/dev/push_preflight.py --fix --base "$SOURCE_HEAD"
+          python scripts/dev/ssot_cli.py gate
+          test -z "$(git status --porcelain --untracked-files=no)"
+          git diff --check "$SOURCE_HEAD" HEAD
+      - name: Publish a clean candidate branch, never the PR or main branch
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,subprocess,json
+          from pathlib import Path
+          base=os.environ['SOURCE_HEAD']
+          names=subprocess.check_output(['git','diff','--name-only',base,'HEAD'],text=True).splitlines()
+          assert set(names)=={'FHD/tests/test_ci/test_backend_shard_aggregate.py','FHD/metrics/line_baseline.json'}
+          for path,sha in {'FHD/scripts/ci/backend_shard_aggregate.py':'ed72575c658d00167c96e8dc46f430f69d498ecc','FHD/scripts/ci/backend_shard_plugin.py':'08e84f00d714d539371757081ebce51364f11393'}.items():
+              assert subprocess.check_output(['git','hash-object',path],text=True).strip()==sha
+          assert json.loads(Path('FHD/metrics/line_baseline.json').read_text())['lines']==2328632
+          PY
+          test -z "$(git ls-remote --heads origin "refs/heads/$CANDIDATE_BRANCH")"
+          git push origin "HEAD:refs/heads/$CANDIDATE_BRANCH"
+          test "$(git ls-remote --heads origin "refs/heads/$CANDIDATE_BRANCH" | cut -f1)" = "$(git rev-parse HEAD)"
+          python - <<'PY'
+          import json,os,subprocess
+          from pathlib import Path
+          git=lambda *args:subprocess.check_output(['git',*args],text=True).strip()
+          receipt={'base':os.environ['SOURCE_HEAD'],'candidate_branch':os.environ['CANDIDATE_BRANCH'],'head':git('rev-parse','HEAD'),'tree':git('rev-parse','HEAD^{tree}'),'run':os.environ['GITHUB_RUN_ID'],'reproduced_failures':7,'after_passed':287,'production_code_unchanged':True,'scope':'targeted validation only; full PR validation still required'}
+          (Path(os.environ['RUNNER_TEMP'])/'isolation-evidence/receipt.json').write_text(json.dumps(receipt,indent=2))
+          print(json.dumps(receipt,indent=2))
+          PY
+      - name: Clean task-owned caches
+        if: always()
+        run: |
+          python3 scripts/dev/clean_agent_workspace.py
+          df -h .
+      - name: Retain reproduction and fix evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-fixture-fix-${{ github.run_id }}
+          path: ${{ runner.temp }}/isolation-evidence/
+          if-no-files-found: error
+          retention-days: 7
