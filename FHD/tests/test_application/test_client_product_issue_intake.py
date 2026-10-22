@@ -322,7 +322,7 @@ def test_explicit_report_does_not_initialize_llm(intake_env, monkeypatch, comple
         return {"success": True, "ticket_id": 424242, "ticket_no": "CI-synthetic"}
 
     monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
-    message = "我要提交产品问题，管理端基础设施展示不直观。"
+    message = "【原单010069验收测试，仅提交一次】请为‘管理端基础设施展示不直观’提交产品问题，并返回正式客服受理编号。"
     if complete:
         message += "期望：清晰展示状态。实际：状态文字难以阅读。"
     result = asyncio.run(
@@ -337,14 +337,19 @@ def test_explicit_report_does_not_initialize_llm(intake_env, monkeypatch, comple
             "/api/customer-service/issues/intake",
         ]
     else:
-        assert result["state"] == "NEEDS_MORE_EVIDENCE"
+        assert result["state"] == "RECEIVED"
+        assert result["owner_ticket_no"] == "CI-synthetic"
         assert set(result["missing_evidence"]) == {"expected_behavior", "actual_behavior"}
-        assert calls == []
+        assert [entry[0] for entry in calls] == ["/api/customer-service/issues/intake"]
+        assert not calls[0][2].get("work_order_id")
+        assert message in calls[0][2]["description"]
+        assert "CI-synthetic" in stream._client_issue_reply(result)
 
 
+@pytest.mark.parametrize("complete", [False, True])
 @pytest.mark.parametrize("failure", ["no_session_token", "missing_formal_number"])
 def test_model_free_report_still_requires_authenticated_formal_receipt(
-    intake_env, monkeypatch, failure
+    intake_env, monkeypatch, failure, complete
 ):
     from unittest.mock import Mock
 
@@ -377,7 +382,7 @@ def test_model_free_report_still_requires_authenticated_formal_receipt(
         stream._classify_and_submit_client_issue_async(
             object(),
             {"tenant_id": 424242},
-            "提交产品问题。期望：页面正常显示。实际：页面报错。",
+            "提交产品问题。" + ("期望：页面正常显示。实际：页面报错。" if complete else ""),
             "",
         )
     )
@@ -387,5 +392,5 @@ def test_model_free_report_still_requires_authenticated_formal_receipt(
     if failure == "no_session_token":
         assert calls == []
     else:
-        assert sum(method == "POST" for _, method in calls) == 2
+        assert sum(method == "POST" for _, method in calls) == (2 if complete else 1)
         assert calls[-1][1] == "GET"

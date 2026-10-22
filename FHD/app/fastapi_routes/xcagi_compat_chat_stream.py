@@ -26,6 +26,7 @@ def _client_issue_reply(receipt: dict | None) -> str:
         if shots:
             attachment += f"支持包已附截图 {shots.get('included')}/{shots.get('selected')} 张。"
     replies: dict[str, str] = {
+        "RECEIVED": f"产品问题已受理，市场工单：{receipt.get('owner_ticket_no')}。请在原工单补充期望、实际及诊断证据，供后续复现核验。",
         "ROUTED": f"产品问题已登记，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。{attachment}",
         "NEEDS_MORE_EVIDENCE": (
             "这看起来是产品缺陷上报，但还缺少必要信息，暂未自动建单。"

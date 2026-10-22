@@ -1,5 +1,5 @@
 {
-  "lines": 2329636,
+  "lines": 2329686,
   "updated": "2026-10-23",
-  "note": "PR #2529 integrates original-ticket replies, owner-scoped rework, graph/layout repairs, and conversation viewport anchoring on the newer main baseline; the integration retains 239 maintained lines after removing the duplicate employee profile panel."
+  "note": "#44: accept authenticated explicit reports before expected/actual are available; reuse existing customer intake, stable account/tenant-scoped references and receipt readback; add denial regressions without fabricating Work Order evidence."
 }
