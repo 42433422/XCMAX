@@ -54,7 +54,9 @@ def _verify(path: Path) -> subprocess.CompletedProcess[str]:
 
 def test_release_archive_accepts_clean_members(tmp_path: Path) -> None:
     archive = tmp_path / "clean.tar.gz"
-    _write_archive(archive, ["./app/main.py", *REQUIRED_RUNTIME_MEMBERS])
+    _write_archive(
+        archive, ["./app/main.py", "./XCAGI/监控/bartender_mapper.py", *REQUIRED_RUNTIME_MEMBERS]
+    )
 
     result = _verify(archive)
 
@@ -181,6 +183,12 @@ def test_release_archive_rejects_missing_vendored_runtime(tmp_path: Path) -> Non
         (["./.env.production"], "environment files"),
         (["./mods/.install-receipts/customer/receipt.json"], "forbidden path component"),
         (["./app/__pycache__/main.pyc"], "forbidden path component"),
+        (["./XCAGI/.backups/index.json"], "forbidden path component"),
+        (["./XCAGI/.test_db_state.json"], "forbidden path component"),
+        (["./app/resources/ai_assistant/商标导出/export.png"], "forbidden path component"),
+        (["./XCAGI/监控/window_2.png"], "monitor screenshots are runtime data"),
+        (["./XCAGI/监控/window_2.PNG"], "monitor screenshots are runtime data"),
+        (["./tools/bartender-monitor/window_2.png"], "monitor screenshots are runtime data"),
         (["../outside.txt"], "unsafe member path"),
     ],
 )
@@ -205,6 +213,43 @@ def test_pack_release_invokes_archive_verifier() -> None:
     assert 'python3 "$ARCHIVE_VERIFY" --archive "$TARBALL"' in script
     assert '"$SCRIPT_DIR/lib/verify_release_archive.py"' in script
     assert '"archive_verifier_sha256": archive_verify_sha256' in script
+
+
+def test_pack_excludes_runtime_outputs_and_keeps_monitor_code_and_tutorial(tmp_path: Path) -> None:
+    pack = (FHD_ROOT / "scripts/deploy/fhd-pack-release.sh").read_text(encoding="utf-8")
+    excludes = pack.split("RSYNC_EXCLUDES=(", 1)[1].split("\n)", 1)[0]
+    source, target = tmp_path / "source", tmp_path / "target"
+    blocked = [
+        "XCAGI/.backups/index.json",
+        "XCAGI/.test_db_state.json",
+        "XCAGI/监控/window_2.png",
+        "app/resources/ai_assistant/商标导出/export.png",
+    ]
+    allowed = ["XCAGI/监控/bartender_mapper.py", "templates/admin-vue-dist/tutorial/sample.xlsx"]
+    for name in blocked + allowed:
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"synthetic test only")
+    target.mkdir()
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "set -eu\nRSYNC_EXCLUDES=("
+            + excludes
+            + '\n)\nrsync -a "${RSYNC_EXCLUDES[@]}" "$1/" "$2/"',
+            "_",
+            str(source),
+            str(target),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert {p.relative_to(target).as_posix() for p in target.rglob("*") if p.is_file()} == set(
+        allowed
+    )
 
 
 def test_pack_release_bundles_immutable_dr_sync_helper() -> None:
