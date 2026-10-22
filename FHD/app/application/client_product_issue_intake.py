@@ -43,17 +43,19 @@ def _attached_screenshots(attachments: Any) -> list[bytes]:
 
 def classify_explicit_report(message: str) -> dict[str, Any] | None:
     """Recognize an explicit defect report without requiring a model or credentials."""
-    fields = {
-        "expected": re.search(r"期望(?:结果|行为)?[：:]\s*(.+?)(?:[。；;\n]|$)", message),
-        "actual": re.search(r"实际(?:结果|表现|行为)?[：:]\s*(.+?)(?:[。；;\n]|$)", message),
-    }
+    fields = dict.fromkeys(("expected", "actual"), "")
+    for key in fields:
+        label = "期望(?:结果|行为)?" if key == "expected" else "实际(?:结果|表现|行为)?"
+        if match := re.search(label + "[：:]", message):
+            value = message[match.end() :].lstrip()
+            fields[key] = re.split(r"[。；;\n]", value, maxsplit=1)[0][:1000]
     explicit = bool(_EXPLICIT_INTAKE_RE.search(message or ""))
     if _REPORT_RE.search(message) and (explicit or all(fields.values())):
         return {
             "type": "product_defect",
             "confidence": 0.95 if explicit else 0.9,
-            **{key: match[1][:1000] if match else "" for key, match in fields.items()},
-            "missing_evidence": [f"{key}_behavior" for key, match in fields.items() if not match],
+            **fields,
+            "missing_evidence": [f"{key}_behavior" for key, value in fields.items() if not value],
         }
     return None
 
@@ -116,10 +118,7 @@ async def submit_product_issue(
     if triage.get("type") != "product_defect" or triage.get("confidence", 0) < 0.8:
         return {"state": "not_confirmed"}
     missing = list(triage.get("missing_evidence") or [])
-    if not triage.get("expected"):
-        missing.append("expected_behavior")
-    if not triage.get("actual"):
-        missing.append("actual_behavior")
+    missing.extend(f"{key}_behavior" for key in ("expected", "actual") if not triage.get(key))
     if missing:
         return {"state": "NEEDS_MORE_EVIDENCE", "missing_evidence": missing}
     from app.application.desktop_delivery_receipt import desktop_installation_id

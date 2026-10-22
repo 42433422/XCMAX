@@ -88,9 +88,9 @@ def test_report_classifier_requires_structured_product_defect():
     triage = classify_report(client, "保存时报错", "这是软件缺陷。")
     assert triage["type"] == "product_defect" and triage["actual"] == "failed"
     assert calls[0]["response_format"] == {"type": "json_object"}
-    assert classify_report(None, "提交产品问题，期望：缺口。", "")["missing_evidence"] == [
-        "actual_behavior"
-    ]
+    assert classify_report(None, "提交产品问题，期望：" + "\t" * 100_000, "")[
+        "missing_evidence"
+    ] == ["expected_behavior", "actual_behavior"]
     assert looks_like_issue_report("登录后软件不能用")
     assert not looks_like_issue_report("请写入验收文本。不能用排队或待审批代替完成。")
 
