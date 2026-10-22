@@ -1,5 +1,5 @@
 {
-  "lines": 2328618,
+  "lines": 2328776,
   "updated": "2026-10-22",
-  "note": "2026-10-22 用户授权完整问题清单闭环：承接最新主线 CI 并行改造，保留最终 SSOT 硬门禁与完整覆盖率；本 PR 新增客服工单分类与状态服务端筛选、分页条件保留及客户租户隔离回归，必要净增约 127 行，不删无关测试或弱化断言。"
+  "note": "PR #2523 adds required customer-ticket category and status filters and isolation coverage (127 maintained lines), rebased onto main 1ab42432 including PR #2524; no unrelated code removed; user authorized completing the full backlog."
 }
