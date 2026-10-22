@@ -1,5 +1,5 @@
 {
-  "lines": 2328649,
+  "lines": 2328789,
   "updated": "2026-10-22",
-  "note": "2026-10-22 用户授权完整问题清单闭环：主线合入 CI 并行改造；本 PR 加强工单闭环账本校验，缺失/无效执行、证据或候选指纹及削弱策略均不能判通过，新增必要负向回归。相对最新 main 净增 158 行；不删无关代码或降低门禁。"
+  "note": "User-authorized CI report reuse: verified equal-input reporting and phase timing, plus isolating the synthetic test fixture from the real CI parent timing profile. Merged onto main 2328649; measured after merge."
 }
