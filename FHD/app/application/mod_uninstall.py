@@ -93,7 +93,7 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
 
     receipt_path = state / "receipt.json"
     pending_to_remove: tuple[Path, str] | None = None
-    verified_regular_install = False
+    verified_regular_root: Path | None = None
     try:
         # Keep the same lock order as install_receipts.install_extracted and
         # pending activation: process-wide install lock, then per-Mod file lock.
@@ -120,7 +120,8 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
                         raise HTTPException(
                             status_code=403, detail="扩展归属或卸载权限未通过校验，拒绝删除"
                         )
-                verified_regular_install = not install.get("requires_restart")
+                if not install.get("requires_restart"):
+                    verified_regular_root = Path(str(install["installed_root"]))
                 if install.get("requires_restart"):
                     pending_to_remove = (
                         Path(str(install.get("installed_root") or "")),
@@ -138,11 +139,14 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
                     )
 
             result: tuple[bool, str]
-            if verified_regular_install and get_mod_registry().get_mod_metadata(mod_id) is None:
+            if (
+                verified_regular_root is not None
+                and get_mod_registry().get_mod_metadata(mod_id) is None
+            ):
                 # A verified disk install need not have loaded successfully. Never
                 # apply this fallback to unsigned legacy or unverified pending trees.
                 manager.unload_mod(mod_id)
-                shutil.rmtree(root / mod_id)
+                shutil.rmtree(verified_regular_root)
                 result = (True, f"MOD {mod_id} 卸载成功")
             else:
                 result = manager.uninstall_mod(mod_id, remove_files=True)
