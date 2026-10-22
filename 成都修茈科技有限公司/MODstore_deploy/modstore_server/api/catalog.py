@@ -31,6 +31,7 @@ from modstore_server.api.auth_deps import (
     require_user,
 )
 from modstore_server.api.dto import CreateModDTO, ManifestPutDTO, ModFilePutDTO
+from modstore_server.api.service_auth import require_admin_user
 from modstore_server.application.catalog import CatalogShellService
 from modstore_server.file_safe import read_text_under_mod, write_text_under_mod
 from modstore_server.infrastructure import library_paths
@@ -209,7 +210,7 @@ def api_delete_mod(mod_id: str, user: User = Depends(require_user)):
 async def api_import_mod(
     file: UploadFile = File(...),
     replace: bool = True,
-    user: User = Depends(require_user),
+    user: User = Depends(require_admin_user),
 ):
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(400, "请上传 .zip")

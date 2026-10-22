@@ -206,6 +206,8 @@ def test_customer_ticket_proxy_preserves_search_and_market_identity(
             params={
                 "search": "290063 & 原文",
                 "submitter_type": "admin",
+                "intent": "product_issue",
+                "status": "processing",
                 "offset": 50,
                 "limit": 50,
             },
@@ -221,6 +223,8 @@ def test_customer_ticket_proxy_preserves_search_and_market_identity(
         assert parse_qs(urlsplit(args[1]).query) == {
             "search": ["290063 & 原文"],
             "submitter_type": ["admin"],
+            "intent": ["product_issue"],
+            "status": ["processing"],
             "offset": ["50"],
             "limit": ["50"],
         }
