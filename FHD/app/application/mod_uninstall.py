@@ -134,7 +134,7 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
                         status_code=403, detail="旧包归属或卸载权限未通过校验，拒绝删除"
                     )
 
-            result = manager.uninstall_mod(mod_id, remove_files=True)
+            result: tuple[bool, str] = manager.uninstall_mod(mod_id, remove_files=True)
             if not result[0]:
                 return result
 

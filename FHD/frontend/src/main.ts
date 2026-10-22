@@ -25,6 +25,7 @@ import { applySidebarThemeFromStorage } from './utils/sidebarTheme'
 import { installClientConsoleBridge } from './utils/clientDebugLog'
 import { initServiceWorker, unregisterStaleServiceWorkers } from './utils/serviceWorker'
 import { bootstrapHostConfig } from '@/stores/hostConfig'
+import { waitForInitialBootstrapDependencies } from './bootstrapDependencies'
 
 import './styles/tokens.css'
 import './styles/css/base.css'
@@ -152,8 +153,6 @@ async function bootstrap() {
   })
 
   app.use(pinia)
-  const { default: i18n } = await import('./i18n')
-  app.use(i18n)
   try {
     const shell = useAppShellStore()
     shell.setAppActive(true)
@@ -176,8 +175,16 @@ async function bootstrap() {
   // 等待首个路由守卫（含会话校验与登录重定向）完成后再挂载全局组件。
   // 否则未登录直达受保护页时，任务中心、教程和 SSE 会抢先请求受保护接口，
   // 在登录页留下成组 401，并可能短暂渲染不该出现的管理端壳。
-  await router.isReady()
+  // Router guards still finish before mount so session checks and deep-link redirects
+  // remain authoritative. Load the i18n chunk while that first navigation is pending.
+  const i18n = await waitForInitialBootstrapDependencies(
+    () => import('./i18n').then(module => module.default),
+    () => router.isReady(),
+  )
+  app.use(i18n)
   app.mount('#app')
+  const startupRoot = document.getElementById('app')
+  if (startupRoot) startupRoot.dataset.startupMounted = 'true'
 
   if (typeof performance !== 'undefined' && performance.mark) {
     performance.mark('bootstrap_mount')

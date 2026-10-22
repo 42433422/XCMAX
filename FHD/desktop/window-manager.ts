@@ -161,7 +161,8 @@ export async function createWindow(): Promise<void> {
     minHeight: 760,
     title: APP_NAME,
     autoHideMenuBar: process.platform !== 'darwin',
-    show: true,
+    // Avoid exposing an empty native surface before the local splash has painted.
+    show: false,
     backgroundColor: '#f4f7fb'
   }
   if (fs.existsSync(icon)) {
@@ -189,6 +190,14 @@ export async function createWindow(): Promise<void> {
   } })
   desktopRuntime.mainWindow = mainWindow
   desktopRuntime.rendererFailedDuringStartup = false
+  let startupWindowShown = false
+  const showStartupWindow = () => {
+    if (startupWindowShown || mainWindow.isDestroyed()) return
+    startupWindowShown = true
+    mainWindow.show()
+    mainWindow.focus()
+  }
+  mainWindow.once('ready-to-show', showStartupWindow)
   let stateWriteTimer: NodeJS.Timeout | null = null
   const persistWindowState = () => {
     if (mainWindow.isDestroyed() || mainWindow.isMinimized() || mainWindow.isFullScreen()) return
@@ -266,9 +275,13 @@ export async function createWindow(): Promise<void> {
   })
 
   desktopRuntime.splashUrl = resolveDesktopSplashUrl()
-  void mainWindow.loadURL(desktopRuntime.splashUrl)
-  mainWindow.show()
-  mainWindow.focus()
+  void mainWindow.loadURL(desktopRuntime.splashUrl).catch(error => {
+    // The backend may become ready while the splash is still loading. Its
+    // replacement navigation must still wait for a painted renderer to show.
+    if (error instanceof Error && /ERR_ABORTED/i.test(error.message)) return
+    console.error('[xcagi-desktop] load startup splash failed', error)
+    showStartupWindow()
+  })
   updateSplashProgress(8, '正在启动本地服务…')
 
   if (shouldClearFrontendCache()) {
@@ -291,7 +304,7 @@ export async function createWindow(): Promise<void> {
       if (process.platform === 'darwin') {
         ensureMacWindowInWorkArea(desktopRuntime.mainWindow)
       }
-      desktopRuntime.mainWindow.focus()
+      if (startupWindowShown) desktopRuntime.mainWindow.focus()
     } catch (error) {
       const currentUrl = desktopRuntime.mainWindow?.webContents.getURL()
       if (isBenignDesktopLoadAbort(error, currentUrl, DEFAULT_PORT)) {
