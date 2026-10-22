@@ -12,135 +12,53 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 699102f771b7d03661f0bbd9e67a1eec7edde2b4
+          ref: 5b052a95fd9deab27e37addf3374c4ff4ea248bf
           persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - uses: astral-sh/setup-uv@v6
         with:
+          version: '0.13.5'
           enable-cache: false
-      - name: Compare exact frozen dependencies without changing product code
-        working-directory: FHD
-        shell: bash
+      - name: Prepare fixed-source experiment without changing product files
         env:
-          PYTHONHASHSEED: '0'
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
           PYTHONPATH: ${{ github.workspace }}/FHD
+          PYTHONHASHSEED: '0'
         run: |
           python - <<'PY'
-          import hashlib, json, os, pathlib, re, subprocess, sys, tempfile, time
-          from urllib.parse import unquote, urlsplit
-          from datetime import datetime, timezone
+          import ast, hashlib, os, pathlib, subprocess, textwrap
           root = pathlib.Path.cwd()
-          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'installer-probe-evidence'
-          out.mkdir()
-          report = {'source_sha': '699102f771b7d03661f0bbd9e67a1eec7edde2b4', 'scope': 'isolated pinned installer experiment; not full CI or deployment', 'status': 'running', 'commands': [], 'rounds': []}
-          def save():
-              (out / 'receipt.json').write_text(json.dumps(report, indent=2))
-          def run(label, args, env=None):
-              start = time.monotonic()
-              with (out / (label + '.log')).open('w') as log:
-                  result = subprocess.run(args, cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=600)
-              seconds = time.monotonic() - start
-              report['commands'].append({'label': label, 'seconds': seconds, 'returncode': result.returncode})
-              save()
-              print(label, result.returncode, round(seconds, 3), flush=True)
-              if result.returncode:
-                  print((out / (label + '.log')).read_text()[-4000:])
-                  raise RuntimeError(label + ' failed; no product changes made')
-              return seconds
-          snapshot_code = '''import importlib.metadata as m,json,re
-          result={}
-          for d in m.distributions():
-              raw=d.read_text('direct_url.json')
-              direct=json.loads(raw) if raw else {}
-              origin={k:direct[k] for k in ('url','dir_info','vcs_info') if k in direct}
-              result[re.sub(r'[-_.]+','-',d.metadata['Name']).lower()]={'version':d.version,'origin':origin}
-          print(json.dumps(result,sort_keys=True))'''
-          def snapshot(python):
-              return json.loads(subprocess.check_output([str(python), '-c', snapshot_code], cwd=root, text=True))
-          try:
-              actual = subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-              assert actual == report['source_sha'], actual
-              report['source_tree'] = subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip()
-              report['started_at'] = datetime.now(timezone.utc).isoformat()
-              report['uv_version'] = subprocess.check_output(['uv','--version'],text=True).strip()
-              with tempfile.TemporaryDirectory(prefix='ci-pinned-installer-') as tmp:
-                  work = pathlib.Path(tmp)
-                  env = dict(os.environ, PIP_CACHE_DIR=str(work/'pip-cache'), UV_CACHE_DIR=str(work/'uv-cache'), PIP_DISABLE_PIP_VERSION_CHECK='1')
-                  def fresh(name):
-                      path = work/name
-                      subprocess.run([sys.executable,'-m','venv',str(path)],check=True)
-                      return path/'bin'/'python'
-                  seed = fresh('original')
-                  run('original-upgrade-pip',[str(seed),'-m','pip','install','--upgrade','pip'],env)
-                  run('original-server',[str(seed),'-m','pip','install','-r','requirements-server-api.txt'],env)
-                  run('original-dev',[str(seed),'-m','pip','install','-r','deploy/requirements-dev.txt'],env)
-                  expected = snapshot(seed)
-                  (out/'original-dependencies.json').write_text(json.dumps(expected,indent=2))
-                  frozen = out/'resolved-requirements.txt'
-                  (out/'original-pip-freeze.txt').write_text(subprocess.check_output([str(seed),'-m','pip','freeze','--all'],cwd=root,env=env,text=True))
-                  requirements=[]
-                  for name, data in sorted(expected.items()):
-                      origin=data['origin']
-                      if not origin:
-                          requirements.append(f"{name}=={data['version']}")
-                          continue
-                      url=origin['url']
-                      assert url.startswith('file://') and 'vcs_info' not in origin, 'Unreviewed non-local direct dependency'
-                      local=pathlib.Path(unquote(urlsplit(url).path)).resolve()
-                      assert local.is_relative_to(root.parent) and local.is_dir(), 'Direct dependency outside tested source tree'
-                      requirements.append(f'-e {local}' if origin.get('dir_info',{}).get('editable') else f'{name} @ {local.as_uri()}')
-                  frozen.write_text('\n'.join(requirements)+'\n')
-                  report['lock_sha256'] = hashlib.sha256(frozen.read_bytes()).hexdigest()
-                  report['package_count'] = len(expected)
-                  run('original-pip-check',[str(seed),'-m','pip','check'],env)
-                  warm = fresh('uv-warmup')
-                  run('uv-warmup',['uv','pip','sync','--python',str(warm),str(frozen)],env)
-                  actual = snapshot(warm)
-                  (out/'uv-warmup-dependencies.json').write_text(json.dumps(actual,indent=2))
-                  assert actual == expected, 'UV warmup package versions or local origins differ'
-                  smoke = []
-                  for index, variant in enumerate(('pip','uv','uv','pip')):
-                      python = fresh(f'{index}-{variant}')
-                      args = ([str(python),'-m','pip','install','--no-deps','-r',str(frozen)] if variant == 'pip' else ['uv','pip','sync','--python',str(python),str(frozen)])
-                      elapsed = run(f'install-{index}-{variant}',args,env)
-                      actual = snapshot(python)
-                      (out/f'dependencies-{index}-{variant}.json').write_text(json.dumps(actual,indent=2))
-                      assert actual == expected, f'Package or origin mismatch in {index}-{variant}'
-                      run(f'check-{index}-{variant}',[str(python),'-m','pip','check'],env)
-                      report['rounds'].append({'variant':variant,'seconds':elapsed,'packages_and_origins_equal':True})
-                      if index < 2:
-                          smoke.append((variant,python))
-                      save()
-                  for variant, python in smoke:
-                      args=[str(python),'-m','pytest','-q','-o','addopts=','--confcutdir=tests/test_ci','tests/test_ci/test_backend_shards.py','tests/test_ci/test_backend_shard_aggregate.py','tests/test_ci/test_workflow_gate_contracts.py',f'--junitxml={out}/smoke-{variant}.xml']
-                      run(f'smoke-{variant}',args,env)
-                  import xml.etree.ElementTree as ET
-                  suites = []
-                  for variant in ('pip', 'uv'):
-                      doc = ET.parse(out/f'smoke-{variant}.xml')
-                      assert all(int(node.get(key, '0')) == 0 for node in doc.iter('testsuite') for key in ('errors', 'failures', 'skipped'))
-                      suites.append(sorted((c.get('classname'), c.get('name')) for c in doc.iter('testcase')))
-                  assert suites[0] and suites[0] == suites[1], 'Installer smoke test collections differ'
-                  report['smoke_tests_per_installer'] = len(suites[0])
-                  run('tracked-source-unchanged',['git','diff','--exit-code'],env)
-              report['status']='success'
-          finally:
-              if report['status'] != 'success':
-                  report['status']='failure'
-              report['finished_at']=datetime.now(timezone.utc).isoformat()
-              save()
+          p = root / '.github/workflows/ci-locked-installer-probe.yml'
+          raw = p.read_bytes()
+          assert hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest() == 'd9a2d275f5d669d86940a9a8c66de53f6baa476b'
+          script = textwrap.dedent(raw.decode().split("          python - <<'PY'\n",1)[1].split('\n          PY\n',1)[0])
+          old = "'-m','pytest','-q','-o','addopts=',"
+          new = "'-m','pytest','-c','/dev/null','--rootdir=.','-q','-o','addopts=',"
+          assert script.count(old) == 1
+          script = script.replace(old,new).replace('699102f771b7d03661f0bbd9e67a1eec7edde2b4','a74823076ebea3afac3859ee256d20360b3aa73f')
+          ast.parse(script)
+          target = pathlib.Path(os.environ['RUNNER_TEMP'])/'run_pinned_installer_probe.py'
+          target.write_text(script)
+          print('Probe script SHA256:', hashlib.sha256(target.read_bytes()).hexdigest())
+          subprocess.run(['git','fetch','--no-tags','--depth=1','origin','a74823076ebea3afac3859ee256d20360b3aa73f'],check=True)
+          subprocess.run(['git','checkout','--detach','a74823076ebea3afac3859ee256d20360b3aa73f'],check=True)
           PY
+          cd FHD
+          python "$RUNNER_TEMP/run_pinned_installer_probe.py"
       - name: Clean task-created runner caches
         if: always()
-        run: python3 scripts/dev/clean_agent_workspace.py
+        run: |
+          python3 scripts/dev/clean_agent_workspace.py
+          df -h .
       - name: Preserve experiment evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ci-locked-installer-probe-${{ github.run_id }}
-          path: ${{ runner.temp }}/installer-probe-evidence/
+          path: |
+            ${{ runner.temp }}/installer-probe-evidence/
+            ${{ runner.temp }}/run_pinned_installer_probe.py
           if-no-files-found: error
           retention-days: 7
