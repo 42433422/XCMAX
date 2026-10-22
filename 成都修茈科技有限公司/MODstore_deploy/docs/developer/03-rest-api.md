@@ -106,3 +106,9 @@ curl -X POST https://xiu-ci.com/v1/mod-sync/push \
   -H "Content-Type: application/json" \
   -d '{"mod_ids":["example-mod"]}'
 ```
+
+## 沙箱连接与推送边界
+
+`POST /api/sandbox/connect` 与 `POST /api/sandbox/push-and-test` 仅接受管理员配置的 `xcagi_backend_url`（含现有默认值）或服务端公共来源下的 `/sandbox`。比较包含协议、端口和基路径；不接受凭据、查询参数、片段或跳转。前端发现的其他宿主必须先由管理员配置，不能把服务端推送凭据发送给任意输入地址。
+
+推送要求登录者拥有对应 Mod，管理员保留既有跨 Mod 管理权限；鉴权和目标校验在读取与打包前完成。Cookie 请求沿用现有 CSRF 策略，合法 Bearer 仍按既有策略认证。未改变沙箱接收端认证协议，亦不代表已完成租户级执行隔离或生产验收。
