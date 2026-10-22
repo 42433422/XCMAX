@@ -42,8 +42,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/opt/site-packages \
     XCAGI_GIT_SHA=${XCAGI_GIT_SHA}
 
-RUN apk upgrade --no-cache \
-    && apk add --no-cache python-3.11 curl 'ca-certificates-bundle>=20260909-r3' \
+RUN for attempt in 1 2 3; do \
+      apk upgrade --no-cache \
+        && apk add --no-cache python-3.11 curl 'ca-certificates-bundle>=20260909-r3' \
+        && break; \
+      if [ "$attempt" -eq 3 ]; then exit 1; fi; sleep "$((attempt * 5))"; \
+    done \
     && addgroup -S appuser \
     && adduser -S -G appuser -h /home/appuser -s /bin/sh appuser
 

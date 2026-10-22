@@ -1,9 +1,9 @@
 """FASTGATE — installer/major 快路径推 COS/OTA 前的强制门禁。
 
 对齐时间轨 docs/xcagi-dashboard/emp-wf-radial-graph.js 的 FASTGATE 节点：
-快路径全量推送（record_installer_push 写 download_release.json.last_push + 刷新官网公开清单）
+快路径上传只由 record_installer_push 记录 last_upload，公开发布另需验收同步。
 前置 staging 验收 + /api/health + 市场下载页可达性检查，通过才放行；不过则阻断并标记回滚待审，
-避免「即时路径绕过灰度/审批直推全量」与「未上传却虚假写 last_push」。
+避免「即时路径绕过灰度/审批直推全量」与「未上传却虚假记录上传成功」。
 
 复用现有 post_deploy_smoke（探测 health + 市场下载页）。
 开关 MODSTORE_INSTALLER_FASTGATE_ENABLED（默认 1）；smoke 自身被显式关闭时默认放行并记录。

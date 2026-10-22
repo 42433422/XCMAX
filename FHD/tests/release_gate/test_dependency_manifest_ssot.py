@@ -20,9 +20,7 @@ def _pin(path: Path, package: str) -> Version:
 
 def test_canonical_dependency_manifest_paths_are_stable() -> None:
     """Keep alert identity stable while updating the versions in place."""
-    assert DESKTOP_LOCK.is_file()
-    assert SERVER_LOCK.is_file()
-    assert SERVER_REQUIREMENTS.is_file()
+    assert all(path.is_file() for path in (DESKTOP_LOCK, SERVER_LOCK, SERVER_REQUIREMENTS))
     assert not (FHD_ROOT / "XCAGI" / "requirements-desktop.lock.txt").exists()
     assert not (FHD_ROOT / "deploy" / "requirements-server.lock.txt").exists()
     assert not (FHD_ROOT / "deploy" / "requirements-server-api.txt").exists()
@@ -35,3 +33,5 @@ def test_high_severity_dependency_floors_are_pinned_in_canonical_ssot() -> None:
     assert _pin(DESKTOP_LOCK, "multidict") >= Version("6.9.1")
     assert _pin(DESKTOP_LOCK, "transformers") >= Version("5.10.0")
     assert _pin(SERVER_LOCK, "pillow") >= Version("12.3.0")
+    for package in ("opentelemetry-api", "opentelemetry-sdk", "opentelemetry-exporter-otlp"):
+        assert min(_pin(DESKTOP_LOCK, package), _pin(SERVER_LOCK, package)) >= Version("1.45.1")

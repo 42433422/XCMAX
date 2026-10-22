@@ -242,7 +242,7 @@ async def decide_custom_delivery(
         )
 
         try:
-            select_main_rework_source(evidence, int(user.id), body.action)
+            select_main_rework_source(evidence, int(ticket.user_id), body.action)
         except PermissionError as exc:
             raise HTTPException(403, str(exc)) from exc
         except ValueError as exc:

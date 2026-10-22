@@ -121,19 +121,60 @@ it.each([true, false])('records selected splash before loading (file exists: %s)
   vi.mocked(waitForBackendApplicationReady).mockResolvedValue(undefined)
   vi.mocked(waitForBackendStatus).mockResolvedValue(null)
   const loaded: Array<[string, string]> = []
-  const win = {
-    ...makeWindow(),
-    on: vi.fn(), setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(),
+  const win = Object.assign(makeWindow(), {
+    on: vi.fn(),
+    once: vi.fn(),
+    setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(),
     loadURL: vi.fn(async (url: string) => { loaded.push([url, desktopRuntime.splashUrl]) }),
     webContents: {
       on: vi.fn(), getURL: vi.fn(() => 'http://127.0.0.1:17500/'), setWindowOpenHandler: vi.fn(),
       session: { on: vi.fn() },
       executeJavaScript: vi.fn(async () => undefined),
     },
-  }
+  })
   vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
   await createWindow()
   await desktopRuntime.mainApplicationReady
   expect(loaded[0][0]).toBe(loaded[0][1])
   expect(loaded[0][0].startsWith(exists ? 'file:' : 'data:')).toBe(true)
+})
+
+it.each(['paint', 'aborted', 'failed'])('keeps splash paint readiness across %s startup', async (outcome) => {
+  vi.spyOn(fs, 'existsSync').mockReturnValue(true)
+  vi.mocked(waitForBackendPing).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendApplicationReady).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendStatus).mockResolvedValue(null)
+  let onReadyToShow: (() => void) | undefined
+  const win = Object.assign(makeWindow(), {
+    on: vi.fn(),
+    once: vi.fn((event: string, listener: () => void) => {
+      if (event === 'ready-to-show') onReadyToShow = listener
+    }),
+    setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(),
+    loadURL: vi.fn(async () => undefined),
+    webContents: {
+      on: vi.fn(), getURL: vi.fn(() => 'file:///trusted/splash.html'), setWindowOpenHandler: vi.fn(),
+      session: { on: vi.fn() },
+      executeJavaScript: vi.fn(async () => undefined),
+    },
+  })
+  if (outcome !== 'paint') {
+    win.loadURL.mockRejectedValueOnce(new Error(outcome === 'aborted' ? 'ERR_ABORTED (-3)' : 'ERR_FAILED'))
+  }
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
+
+  await createWindow()
+  await desktopRuntime.mainApplicationReady
+
+  expect(BrowserWindow).toHaveBeenCalledWith(expect.objectContaining({ show: false }))
+  expect(win.once).toHaveBeenCalledWith('ready-to-show', expect.any(Function))
+  expect(win.show).toHaveBeenCalledTimes(outcome === 'failed' ? 1 : 0)
+  const focusBeforePaint = vi.mocked(win.focus).mock.calls.length
+  if (outcome !== 'failed') expect(focusBeforePaint).toBe(0)
+  expect(onReadyToShow).toBeTypeOf('function')
+  onReadyToShow?.()
+  expect(win.show).toHaveBeenCalledTimes(1)
+  expect(win.focus).toHaveBeenCalledTimes(focusBeforePaint + (outcome === 'failed' ? 0 : 1))
+  onReadyToShow?.()
+  expect(win.show).toHaveBeenCalledTimes(1)
 })

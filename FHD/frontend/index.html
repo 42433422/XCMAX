@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>XCAGI · 登录</title>
+    <style>
+      .startup-placeholder { min-height: 100vh; display: grid; place-content: center; gap: 14px; padding: 24px; color: #253858; background: #f4f7fb; font: 14px system-ui, sans-serif; text-align: center; }
+      .startup-placeholder__mark { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: .02em; }
+      .startup-placeholder__status, .startup-placeholder__hint { margin: 0; color: #62718a; }
+      .startup-placeholder__hint { max-width: 360px; color: #8a5a12; }
+      .startup-placeholder__bar { width: min(280px, 70vw); height: 5px; overflow: hidden; border-radius: 999px; background: #dce5f4; }
+      .startup-placeholder__bar::after { display: block; width: 38%; height: 100%; border-radius: inherit; background: #3b6fd9; content: ''; animation: startup-progress 1.3s ease-in-out infinite alternate; }
+      @keyframes startup-progress { from { transform: translateX(0); } to { transform: translateX(165%); } }
+      @media (prefers-reduced-motion: reduce) { .startup-placeholder__bar::after { animation: none; } }
+    </style>
     <!-- 与服务器 PostgreSQL 账号库一致：登录等 /api 请求走 Nginx 前缀（如 /fhd-api）。构建时设 VITE_XCMAX_PUBLIC_API_PREFIX=/fhd-api 可自动注入下一行；或手动取消注释： -->
     <!-- <script>window.__XCMAX_API_BASE__='/fhd-api'</script> -->
     <script>
@@ -22,8 +32,24 @@
     </script>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app" data-startup-mounted="false">
+      <main class="startup-placeholder" role="status" aria-live="polite">
+        <p class="startup-placeholder__mark">XCAGI</p>
+        <p class="startup-placeholder__status">正在准备工作台…</p>
+        <div class="startup-placeholder__bar" aria-hidden="true"></div>
+        <p class="startup-placeholder__hint" id="startup-timeout-hint" hidden>
+          启动时间较长。若始终没有变化，请重新加载或重启应用后再试。
+        </p>
+      </main>
+    </div>
     <script type="module" src="/src/main.ts"></script>
+    <script>
+      window.setTimeout(() => {
+        const root = document.getElementById('app')
+        const hint = document.getElementById('startup-timeout-hint')
+        if (root?.dataset.startupMounted !== 'true' && hint) hint.hidden = false
+      }, 20000)
+    </script>
     <script>
       // Legacy static JS — opt-in only (Vue SPA is default). Set __ENABLE_LEGACY__ = true for old Flask shells.
       window.__ENABLE_LEGACY__ = window.__ENABLE_LEGACY__ === true

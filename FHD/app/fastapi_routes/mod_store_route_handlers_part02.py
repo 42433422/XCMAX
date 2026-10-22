@@ -43,9 +43,9 @@ async def mod_store_uninstall(
     mod_id = await _facade()._body_value(request, "mod_id")
     if not mod_id:
         raise _facade().HTTPException(status_code=400, detail="缺少 mod_id")
-    from app.infrastructure.mods.mod_manager import get_mod_manager
+    from app.application.mod_uninstall import uninstall_mod_for_request
 
-    ok, message = get_mod_manager().uninstall_mod(mod_id, remove_files=True)
+    ok, message = uninstall_mod_for_request(request, mod_id)
     return _facade().ModStoreSimpleResponse(success=bool(ok), message=message, data={"id": mod_id})
 
 

@@ -34,6 +34,71 @@ class TicketTitleBody(BaseModel, extra="forbid"):
     reason: str = Field(default="", max_length=2000)
 
 
+class TicketReplyBody(BaseModel, extra="forbid"):
+    request_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
+    note: str = Field(min_length=4, max_length=2000)
+
+
+def reply_to_ticket(db: Session, user: User, ticket_id: int, body: TicketReplyBody):
+    if not user.is_admin:
+        raise HTTPException(403, "需要管理员权限")
+    ticket = visible_ticket_or_404(db, user, ticket_id)
+    db.refresh(ticket, with_for_update=True)
+    note = body.note.strip()
+    if len(note) < 4:
+        raise HTTPException(422, "答复至少4字")
+    key = f"admin-ticket-reply:{ticket_id}:{body.request_id.lower()}"
+    existing = db.query(CustomerServiceAction).filter_by(idempotency_key=key).first()
+    if existing:
+        if json_loads(existing.request_json, {}) != {"note": note}:
+            raise HTTPException(409, "同一答复标识不能用于不同内容")
+        return {"ticket": ticket_payload(ticket), "replayed": True}
+    if ticket.status != "processing" or ticket.closed_at:
+        raise HTTPException(409, "仅可答复未关闭的原工单")
+    session = db.get(CustomerServiceSession, ticket.session_id)
+    if session is None or session.user_id != ticket.user_id:
+        raise HTTPException(409, "原客服会话归属不可核验")
+    now = datetime.now(UTC)
+    db.add(
+        CustomerServiceMessage(
+            session_id=session.id,
+            ticket_id=ticket.id,
+            user_id=ticket.user_id,
+            role="assistant",
+            content=note,
+            created_at=now,
+            payload_json=json_dumps({"origin": "admin_reply", "operator_user_id": user.id}),
+        )
+    )
+    db.add(
+        CustomerServiceAction(
+            ticket_id=ticket.id,
+            user_id=user.id,
+            action_type="ticket.reply",
+            target_type="session",
+            target_id=str(session.id),
+            status="completed",
+            request_json=json_dumps({"note": note}),
+            result_json=json_dumps({"session_id": session.id}),
+            idempotency_key=key,
+        )
+    )
+    setattr(session, "last_message", note)
+    setattr(session, "updated_at", now)
+    setattr(ticket, "updated_at", now)
+    audit(
+        db,
+        actor=user,
+        actor_type="admin",
+        ticket_id=ticket.id,
+        session_id=session.id,
+        event_type="admin_ticket_replied",
+        detail={"note": note, "request_id": body.request_id},
+    )
+    db.commit()
+    return {"ticket": ticket_payload(ticket), "replayed": False}
+
+
 class StandardBody(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     scenario: str = Field(default="general", max_length=64)
@@ -122,7 +187,8 @@ def standard_payload(
 def integration_payload(row: CustomerServiceIntegration) -> dict[str, Any]:
     return {
         **_row_payload(
-            row, "id name integration_type connector_id workflow_id scenario enabled created_by"
+            row,
+            "id name integration_type connector_id workflow_id scenario enabled created_by",
         ),
         "config": json_loads(row.config_json, {}),
     }
@@ -169,7 +235,11 @@ def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request:
             year, month + 1, min(today.day, monthrange(year, month + 1)[1])
         ) - timedelta(hours=8)
         recent = max(ticket.created_at, ticket.updated_at or ticket.created_at) >= cutoff
-        for model in (CustomerServiceAuditLog, CustomerServiceMessage, CustomerServiceAction):
+        for model in (
+            CustomerServiceAuditLog,
+            CustomerServiceMessage,
+            CustomerServiceAction,
+        ):
             recent |= (
                 db.query(model.id)
                 .filter(

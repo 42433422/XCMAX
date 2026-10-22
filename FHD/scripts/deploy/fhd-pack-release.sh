@@ -72,6 +72,19 @@ fi
   echo "[err] release archive verifier is missing: $ARCHIVE_VERIFY" >&2
   exit 1
 }
+ARCHIVE_VERIFY_SHA256="$(python3 - "$REPO_ROOT" "$GIT_SHA" "$ARCHIVE_VERIFY" <<'PY'
+import hashlib, subprocess, sys
+root, sha, local_path = sys.argv[1:]
+source = subprocess.check_output(["git", "-C", root, "show", f"{sha}:FHD/scripts/deploy/lib/verify_release_archive.py"])
+expected = hashlib.sha256(source).hexdigest()
+with open(local_path, "rb") as stream:
+    actual = hashlib.sha256(stream.read()).hexdigest()
+if actual != expected:
+    raise SystemExit("release archive verifier differs from exact release Git source")
+print(expected)
+PY
+)"
+[[ "$ARCHIVE_VERIFY_SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 1
 [[ -x "$DR_RELEASE_SYNC" ]] || {
   echo "[err] DR release sync helper is missing or not executable: $DR_RELEASE_SYNC" >&2
   exit 1
@@ -118,6 +131,9 @@ RSYNC_EXCLUDES=(
   --exclude '.secrets'
   --exclude '.env'
   --exclude '.env.*'
+  --exclude '.install-receipts'
+  --exclude '.install-receipts/***'
+  --exclude '.fhd-release-managed.json'
   --exclude 'routing_policies/routing_decisions.jsonl'
   --exclude 'routing_policies/.online_update_state.json'
 )
@@ -162,6 +178,7 @@ mkdir -p "$STAGING/scripts/deploy/lib" "$STAGING/docker"
 cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$SCRIPT_DIR/fhd-apply-release.sh" \
   "$SCRIPT_DIR/fhd-apply-release-compose.sh" \
+  "$SCRIPT_DIR/fhd-load-release-image.sh" \
   "$SCRIPT_DIR/fhd-install-online-update-cron.sh" \
   "$SCRIPT_DIR/fhd-install-temp-cleanup-cron.sh" \
   "$SCRIPT_DIR/fhd-clean-temp-files.sh" \
@@ -172,7 +189,11 @@ cp "$DR_RELEASE_SYNC" "$STAGING/scripts/deploy/xcmax-release-sync.sh"
 cp "$DR_RELEASE_SYNC_PRUNE" "$STAGING/scripts/deploy/xcmax_release_sync_prune.py"
 cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
   "$SCRIPT_DIR/lib/dora_event.sh" \
+  "$SCRIPT_DIR/lib/version.sh" \
   "$SCRIPT_DIR/lib/autonomy_gate.sh" \
+  "$SCRIPT_DIR/lib/service_quiescence.sh" \
+  "$SCRIPT_DIR/lib/apply_recovery.sh" \
+  "$FHD_ROOT/scripts/deploy/lib/mod_tree_guard.py" \
   "$SCRIPT_DIR/lib/verify_admin_console.py" \
   "$SCRIPT_DIR/lib/verify_release_archive.py" \
   "$SCRIPT_DIR/lib/verify_release_identity.sh" \
@@ -235,11 +256,12 @@ PY
 
 MANIFEST="$OUT_DIR/fhd-manifest.json"
 
-python3 - <<'PY' "$MANIFEST" "$VERSION" "$GIT_SHA" "$ARTIFACT" "$SHA256" "$BUILT_AT" "$COMMIT_AT" "$CHANNEL" "$ADMIN_CONSOLE_SHA256"
+python3 - <<'PY' "$MANIFEST" "$VERSION" "$GIT_SHA" "$ARTIFACT" "$SHA256" "$BUILT_AT" "$COMMIT_AT" "$CHANNEL" "$ADMIN_CONSOLE_SHA256" "$ARCHIVE_VERIFY_SHA256"
 import json, sys
-path, version, git_sha, artifact, sha256, built_at, commit_at, channel, admin_console_sha256 = sys.argv[1:10]
+path, version, git_sha, artifact, sha256, built_at, commit_at, channel, admin_console_sha256, archive_verify_sha256 = sys.argv[1:11]
 doc = {
     "admin_console_sha256": admin_console_sha256,
+    "archive_verifier_sha256": archive_verify_sha256,
     "product": "fhd-full",
     "channel": channel,
     "version": version,

@@ -26,13 +26,14 @@ def _client_issue_reply(receipt: dict | None) -> str:
         if shots:
             attachment += f"支持包已附截图 {shots.get('included')}/{shots.get('selected')} 张。"
     replies: dict[str, str] = {
+        "RECEIVED": f"产品问题已受理，市场工单：{receipt.get('owner_ticket_no')}。请在原工单补充期望、实际及诊断证据，供后续复现核验。",
         "ROUTED": f"产品问题已登记，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。{attachment}",
         "NEEDS_MORE_EVIDENCE": (
             "这看起来是产品缺陷上报，但还缺少必要信息，暂未自动建单。"
             "请按「期望：… 实际：…」补充后重发，我会立即建单并把工单号回给你。"
             "（若只是使用咨询，请再发一次，我会直接回答。）"
         ),
-        "OWNER_ROUTE_UNAVAILABLE": f"Owner 候选 Work Order {receipt.get('work_order_id') or '受理服务'}尚未送达。",
+        "OWNER_ROUTE_UNAVAILABLE": "暂时无法确认受理结果。请先查看客服工单列表，避免重复提交；登录失效时请重新登录。",
         "not_confirmed": "目前无法以足够把握确认是产品缺陷，因此没有自动建单。",
     }
     return replies.get(str(receipt.get("state") or ""), "")

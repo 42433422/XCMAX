@@ -84,7 +84,7 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 1
 fi
 
-IFS='|' read -r ARTIFACT SHA256 VERSION GIT_SHA DEPLOY_MODE IMAGE IMAGE_DIGEST ADMIN_CONSOLE_SHA256 <<<"$(
+IFS='|' read -r ARTIFACT SHA256 VERSION GIT_SHA DEPLOY_MODE IMAGE IMAGE_DIGEST ADMIN_CONSOLE_SHA256 ARCHIVE_VERIFY_SHA256 <<<"$(
   python3 - <<'PY' "$MANIFEST"
 import json, sys
 doc = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -97,6 +97,7 @@ values = [
     str(doc.get("image", "")),
     str(doc.get("image_digest", "")),
     str(doc.get("admin_console_sha256", "")),
+    str(doc.get("archive_verifier_sha256", "")),
 ]
 if any("|" in value or "\n" in value for value in values):
     raise SystemExit("manifest contains an invalid field delimiter")
@@ -151,6 +152,20 @@ fi
   deploy_emit push failed "admin_identity_missing"
   exit 1
 }
+[[ "$ARCHIVE_VERIFY_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "[err] manifest 缺少精确候选归档校验器身份" >&2
+  deploy_emit push failed "archive_verifier_identity_missing"
+  exit 1
+}
+ARCHIVE_VERIFY_SOURCE_B64="$(python3 - "$FHD_ROOT" "$GIT_SHA" "$ARCHIVE_VERIFY_SHA256" <<'PY'
+import base64, hashlib, subprocess, sys
+root, sha, expected = sys.argv[1:]
+source = subprocess.check_output(["git", "-C", root, "show", f"{sha}:FHD/scripts/deploy/lib/verify_release_archive.py"])
+if hashlib.sha256(source).hexdigest() != expected:
+    raise SystemExit("manifest verifier hash differs from exact Git candidate source")
+print(base64.b64encode(source).decode("ascii"))
+PY
+)"
 
 IMMUTABLE_REMOTE_DIR="${FHD_IMMUTABLE_REMOTE_DIR:-/var/www/update/releases/builds/${VERSION}/${GIT_SHA}/server}"
 [[ "$IMMUTABLE_REMOTE_DIR" == /* && "$IMMUTABLE_REMOTE_DIR" != *$'\n'* ]] || {
@@ -245,28 +260,259 @@ fi
 # present do we atomically promote the channel manifest; the previous SHA stays
 # available for an exact rollback without rebuilding.
 atomic_upload "$MANIFEST" "${IMMUTABLE_REMOTE_DIR}/fhd-manifest.json"
-"${SSH[@]}" "$REMOTE" "bash -s" -- \
-  "$IMMUTABLE_REMOTE_DIR" "$REMOTE_DIR" "$ARTIFACT" "$PUSH_IMAGE_TAR" <<'REMOTE_PROMOTE'
-set -euo pipefail
-immutable_dir="$1"
-channel_dir="$2"
-artifact="$3"
-include_image="$4"
-mkdir -p "$channel_dir"
-promote() {
-  source="$1"
-  target="$2"
-  test -f "$source"
-  tmp="${target}.tmp.$$"
-  cp -p "$source" "$tmp"
-  mv -f "$tmp" "$target"
-}
-promote "$immutable_dir/$artifact" "$channel_dir/$artifact"
-if [ "$include_image" = "1" ]; then
-  promote "$immutable_dir/fhd-api-image.tar.gz" "$channel_dir/fhd-api-image.tar.gz"
+# Bind controller bytes to the same already-integrated source SHA, never the dirty checkout.
+CONTROLLER_HASHES_B64="e30="
+if [[ "$CHANNEL" == "stable" ]]; then
+CONTROLLER_HASHES_B64="$(python3 - "$FHD_ROOT" "$GIT_SHA" <<'PY_CONTROLLERS'
+import base64, hashlib, json, subprocess, sys
+root, sha = sys.argv[1:]
+subprocess.run(["git", "-C", root, "merge-base", "--is-ancestor", sha, "origin/main"], check=True)
+names = ["fhd-auto-update.sh", "fhd-apply-release.sh", "fhd-apply-release-compose.sh",
+         "fhd-load-release-image.sh", "lib/deploy_emit.sh", "lib/autonomy_gate.sh",
+         "lib/verify_release_identity.sh", "lib/dora_event.sh", "lib/version.sh",
+         "lib/verify_admin_console.py", "lib/mod_tree_guard.py", "lib/verify_release_archive.py",
+         "lib/service_quiescence.sh", "lib/apply_recovery.sh", "prune_release_cache.py"]
+hashes = {name: hashlib.sha256(subprocess.check_output(
+    ["git", "-C", root, "show", f"{sha}:FHD/scripts/deploy/{name}"])).hexdigest() for name in names}
+print(base64.b64encode(json.dumps(hashes, sort_keys=True).encode()).decode())
+PY_CONTROLLERS
+)"
 fi
-# Manifest is the channel pointer and therefore moves last.
-promote "$immutable_dir/fhd-manifest.json" "$channel_dir/fhd-manifest.json"
+"${SSH[@]}" "$REMOTE" "bash -s" -- \
+  "$IMMUTABLE_REMOTE_DIR" "$REMOTE_DIR" "$ARTIFACT" "$PUSH_IMAGE_TAR" \
+  "$CHANNEL" "${FHD_PUSH_REMOTE_DEPLOY_ROOT:-/opt/fhd-full}" "$GIT_SHA" "$SHA256" \
+  "$CONTROLLER_HASHES_B64" "${FHD_PUSH_APPLY_LOCK_WAIT_SECONDS:-360}" \
+  "$ARCHIVE_VERIFY_SOURCE_B64" <<'REMOTE_PROMOTE'
+set -euo pipefail
+python3 - "$@" <<'PY_BOOTSTRAP'
+import base64
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+
+PROC_ROOT = Path("/proc")
+LOCK_PATH = Path("/tmp/fhd-auto-update.lock")
+LEGACY_DEPLOY_ROOT = Path("/opt/fhd-full")
+
+
+def atomic_bytes(path, data, mode):
+    fd, tmp = tempfile.mkstemp(prefix=".controller-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+            os.fchmod(stream.fileno(), mode)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+def require_real_parents(path):
+    for part in [path, *path.parents]:
+        if part.is_symlink():
+            raise RuntimeError("controller path must not traverse symlinks")
+
+
+def wait_legacy_exit(controller, deadline):
+    if not PROC_ROOT.is_dir():
+        raise RuntimeError("cannot establish legacy-controller quiescence")
+    while True:
+        running = False
+        for proc in PROC_ROOT.iterdir():
+            if not proc.name.isdigit() or int(proc.name) == os.getpid():
+                continue
+            try:
+                args = (proc / "cmdline").read_bytes().split(b"\0")
+            except FileNotFoundError:
+                continue
+            if os.fsencode(controller) in args:
+                running = True
+        if not running:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError("legacy controller has not exited; manifest stays unchanged")
+        time.sleep(0.1)
+
+
+def bootstrap_promote(args):
+    immutable, channel_dir, artifact, image, channel, root, sha, digest, encoded, wait, verifier_b64 = args
+    immutable, channel_dir, root = Path(immutable), Path(channel_dir), Path(root)
+    if not all(path.is_absolute() for path in (immutable, channel_dir, root)):
+        raise RuntimeError("release paths must be absolute")
+    if channel == "stable" and root != LEGACY_DEPLOY_ROOT:
+        raise RuntimeError("stable controller root differs from the verified legacy cron target")
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", artifact) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise RuntimeError("invalid release identity")
+    if not re.fullmatch(r"[0-9a-f]{64}", digest) or not wait.isdigit():
+        raise RuntimeError("invalid archive identity or lock wait")
+    expected = json.loads(base64.b64decode(encoded, validate=True))
+    required = {"fhd-auto-update.sh", "fhd-apply-release.sh", "fhd-apply-release-compose.sh",
+                "fhd-load-release-image.sh", "lib/deploy_emit.sh", "lib/autonomy_gate.sh",
+                "lib/verify_release_identity.sh", "lib/dora_event.sh", "lib/version.sh",
+                "lib/verify_admin_console.py", "lib/mod_tree_guard.py", "lib/verify_release_archive.py",
+                "lib/service_quiescence.sh", "lib/apply_recovery.sh", "prune_release_cache.py"}
+    if channel == "stable" and (not isinstance(expected, dict) or set(expected) != required):
+        raise RuntimeError("stable controller inventory is incomplete or unexpected")
+    manifest_path = immutable / "fhd-manifest.json"
+    manifest_bytes = manifest_path.read_bytes()
+    manifest = json.loads(manifest_bytes)
+    if (manifest.get("artifact"), manifest.get("git_sha"), manifest.get("sha256")) != (artifact, sha, digest):
+        raise RuntimeError("immutable manifest differs from the frozen upload identity")
+    verifier_source = base64.b64decode(verifier_b64, validate=True)
+    verifier_sha = hashlib.sha256(verifier_source).hexdigest()
+    if manifest.get("archive_verifier_sha256") != verifier_sha:
+        raise RuntimeError("archive verifier is not bound to the exact release Git source")
+    lock = None
+    try:
+        if channel == "stable":
+            fd = os.open(LOCK_PATH, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+            lock = os.fdopen(fd, "a+")
+            deadline = time.monotonic() + int(wait)
+            while True:
+                try:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("legacy updater lock timeout; manifest stays unchanged")
+                    time.sleep(0.1)
+        with (immutable / artifact).open("rb") as stream:
+            h = hashlib.sha256()
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                h.update(chunk)
+            if h.hexdigest() != digest:
+                raise RuntimeError("uploaded artifact SHA256 differs from immutable manifest")
+            with tempfile.TemporaryDirectory(prefix="fhd-trusted-verifier-") as verifier_dir:
+                verifier_path = Path(verifier_dir) / "verify_release_archive.py"
+                verifier_path.write_bytes(verifier_source)
+                try:
+                    subprocess.run([sys.executable, str(verifier_path), "--archive", str(immutable / artifact)],
+                                   check=True, capture_output=True, text=True)
+                except subprocess.CalledProcessError as error:
+                    raise RuntimeError("release archive validation failed: " + error.stderr.strip()) from error
+            stream.seek(0)
+            with tarfile.open(fileobj=stream, mode="r:*") as archive:
+                bundled = [member for member in archive.getmembers()
+                           if member.name.removeprefix("./") == "scripts/deploy/lib/verify_release_archive.py"]
+                if len(bundled) != 1 or not bundled[0].isfile() or bundled[0].size > 1024 * 1024:
+                    raise RuntimeError("archive verifier member is missing, unsafe, or ambiguous")
+                verifier_member = archive.extractfile(bundled[0])
+                if verifier_member is None or verifier_member.read() != verifier_source:
+                    raise RuntimeError("bundled archive verifier differs from exact release Git source")
+            if channel == "stable":
+                stream.seek(0)
+                with tarfile.open(fileobj=stream, mode="r:*") as archive:
+                    selected = {}
+                    identity = None
+                    for member in archive:
+                        name = member.name.removeprefix("./")
+                        key = name.removeprefix("scripts/deploy/") if name.startswith("scripts/deploy/") else None
+                        if name != ".build-identity.json" and key not in expected:
+                            continue
+                        if not member.isfile() or member.size > 1024 * 1024 or name in selected:
+                            raise RuntimeError("invalid or duplicate controller archive member")
+                        data = archive.extractfile(member).read()
+                        selected[name] = data
+                        if name == ".build-identity.json":
+                            identity = json.loads(data)
+                    if not identity or identity.get("git_sha") != sha:
+                        raise RuntimeError("archive build identity differs from frozen main SHA")
+                    if expected.get("lib/verify_release_archive.py") != verifier_sha:
+                        raise RuntimeError("controller verifier differs from exact release Git source")
+                    payload = {}
+                    for name, checksum in expected.items():
+                        if name.startswith("/") or ".." in Path(name).parts:
+                            raise RuntimeError("invalid controller inventory path")
+                        data = selected.get("scripts/deploy/" + name)
+                        if data is None or hashlib.sha256(data).hexdigest() != checksum:
+                            raise RuntimeError("controller differs from reviewed main source")
+                        if name.endswith(".py"):
+                            compile(data, name, "exec")
+                        else:
+                            subprocess.run(["bash", "-n"], input=data, check=True,
+                                           env={k:v for k,v in os.environ.items() if k != "BASH_ENV"})
+                        payload[name] = data
+                deploy = root / "scripts/deploy"
+                require_real_parents(deploy)
+                backup = root.parent / ("." + root.name + "-controller-backups") / sha
+                require_real_parents(backup)
+                backup.mkdir(parents=True, exist_ok=True)
+                backup = Path(tempfile.mkdtemp(prefix="controller-", dir=backup))
+                old = {}
+                for name in payload:
+                    target = deploy / name
+                    require_real_parents(target)
+                    old[name] = (target.read_bytes(), stat.S_IMODE(target.stat().st_mode)) if target.exists() else None
+                    if old[name] is not None:
+                        saved = backup / name
+                        saved.parent.mkdir(parents=True, exist_ok=True)
+                        atomic_bytes(saved, old[name][0], old[name][1])
+                        if saved.read_bytes() != old[name][0]:
+                            raise RuntimeError("controller backup verification failed")
+                atomic_bytes(backup / "backup.json", json.dumps({
+                    name: {"sha256": hashlib.sha256(value[0]).hexdigest(), "mode": value[1]}
+                    if value is not None else None for name, value in old.items()
+                }, sort_keys=True).encode(), 0o600)
+                installed = []
+                try:
+                    for name in sorted(payload, key=lambda value: value == "fhd-auto-update.sh"):
+                        target = deploy / name
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        atomic_bytes(target, payload[name], 0o755 if name.endswith(".sh") else 0o644)
+                        installed.append(name)
+                        if target.read_bytes() != payload[name]:
+                            raise RuntimeError("installed controller verification failed")
+                    wait_legacy_exit(deploy / "fhd-auto-update.sh", time.monotonic() + int(wait))
+                except BaseException:
+                    for name in reversed(installed):
+                        target = deploy / name
+                        if old[name] is None:
+                            target.unlink()
+                        else:
+                            atomic_bytes(target, *old[name])
+                    raise
+        # No controller is executed here. Existing freeze and autonomy approval remain authoritative.
+        channel_dir.mkdir(parents=True, exist_ok=True)
+        names = [artifact] + (["fhd-api-image.tar.gz"] if image == "1" else []) + ["fhd-manifest.json"]
+        for name in names:
+            target = channel_dir / name
+            if name == "fhd-manifest.json":
+                atomic_bytes(target, manifest_bytes, 0o644)
+                continue
+            fd, tmp = tempfile.mkstemp(prefix=".promote-", dir=channel_dir)
+            try:
+                with os.fdopen(fd, "wb") as output, (immutable / name).open("rb") as source:
+                    copied = hashlib.sha256()
+                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        output.write(chunk)
+                        copied.update(chunk)
+                    if name == artifact and copied.hexdigest() != digest:
+                        raise RuntimeError("archive changed before channel promotion")
+                    output.flush()
+                    os.fsync(output.fileno())
+                os.replace(tmp, target)
+            finally:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+    finally:
+        if lock is not None:
+            lock.close()
+
+
+if __name__ == "__main__":
+    bootstrap_promote(sys.argv[1:])
+PY_BOOTSTRAP
 REMOTE_PROMOTE
 
 if [[ "$APPLY_NOW" == "1" ]]; then
@@ -287,7 +533,8 @@ if [[ "$APPLY_NOW" == "1" ]]; then
   REMOTE_MANIFEST="${REMOTE_DIR}/fhd-manifest.json"
   REMOTE_TARBALL="${REMOTE_DIR}/${ARTIFACT}"
   printf -v APPLY_COMMAND \
-    'set -euo pipefail; BOOTSTRAP=$(mktemp -d /tmp/fhd-release-bootstrap.XXXXXX); trap '\''rm -rf -- "$BOOTSTRAP"'\'' EXIT; tar -xzf %q -C "$BOOTSTRAP" ./scripts/deploy; test -x "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"; XCMAX_PRESERVE_RELEASE_HISTORY=%q FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS=%q FHD_MANIFEST_PATH=%q FHD_ARTIFACT_DIR=%q FHD_DEPLOY_ROOT=%q bash "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"' \
+    'set -euo pipefail; VERIFY=%q; EXPECTED_VERIFY=%q; ACTUAL_VERIFY=$(sha256sum -- "$VERIFY" | awk '\''{print $1}'\''); test "$ACTUAL_VERIFY" = "$EXPECTED_VERIFY"; python3 "$VERIFY" --archive %q; BOOTSTRAP=$(mktemp -d /tmp/fhd-release-bootstrap.XXXXXX); trap '\''rm -rf -- "$BOOTSTRAP"'\'' EXIT; tar -xzf %q -C "$BOOTSTRAP" ./scripts/deploy; test -x "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"; XCMAX_PRESERVE_RELEASE_HISTORY=%q FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS=%q FHD_MANIFEST_PATH=%q FHD_ARTIFACT_DIR=%q FHD_DEPLOY_ROOT=%q bash "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"' \
+    "$REMOTE_DEPLOY_ROOT/scripts/deploy/lib/verify_release_archive.py" "$ARCHIVE_VERIFY_SHA256" "$REMOTE_TARBALL" \
     "$REMOTE_TARBALL" "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" "$APPLY_LOCK_WAIT_SECONDS" "$REMOTE_MANIFEST" "$REMOTE_DIR" "$REMOTE_DEPLOY_ROOT"
 
   deploy_emit apply started "host=$HOST git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"

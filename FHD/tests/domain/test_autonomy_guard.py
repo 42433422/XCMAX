@@ -66,7 +66,7 @@ REQUIRED_ACTIVATION_EVIDENCE = {
         '"freeze_manifest": "freeze-manifest"',
     ),
     "restart_service": (
-        FHD_ROOT / "scripts/deploy/fhd-apply-release.sh",
+        FHD_ROOT / "scripts/deploy/lib/service_quiescence.sh",
         'autonomy_evaluate_action "restart_service"',
     ),
     "self_heal_pr_merge": (
@@ -402,6 +402,9 @@ def test_required_autonomous_actions_have_executable_activation_evidence() -> No
         )
 
     bridge = (FHD_ROOT / "scripts/deploy/lib/autonomy_gate.sh").read_text(encoding="utf-8")
+    apply = (FHD_ROOT / "scripts/deploy/fhd-apply-release.sh").read_text(encoding="utf-8")
+    assert '. "$SCRIPT_DIR/lib/service_quiescence.sh"' in apply
+    assert 'fhd_stop_service_for_release "$SERVICE"' in apply
     assert "from app.domain.autonomy.autonomy_guard import evaluate_risk" in bridge
     delegate = (
         REPO_ROOT

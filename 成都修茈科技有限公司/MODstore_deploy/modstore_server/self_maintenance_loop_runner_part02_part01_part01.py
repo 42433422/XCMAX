@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+from collections import deque
+from typing import Any
 
 
 def _facade():
@@ -186,7 +188,7 @@ def _read_ledger(
     path = _facade().ledger_path()
     if not path.exists():
         return []
-    rows: _facade().List[_facade().Dict[str, _facade().Any]] = []
+    rows: deque[dict[str, Any]] = deque(maxlen=limit if limit > 0 else None)
     try:
         with path.open("r", encoding="utf-8") as fh:
             for line in fh:
@@ -194,13 +196,16 @@ def _read_ledger(
                 if not line:
                     continue
                 try:
-                    rows.append(_facade().json.loads(line))
+                    row = _facade().json.loads(line)
+                    if isinstance(row, dict) and row.get("phase") == "remediation_attempt":
+                        continue
+                    rows.append(row)
                 except _facade().json.JSONDecodeError:
                     continue
     except OSError:
         _facade().logger.exception("failed to read self-maintenance ledger")
         return []
-    return rows[-limit:]
+    return list(rows)[-limit:]
 
 
 def _ledger_row_timestamp(

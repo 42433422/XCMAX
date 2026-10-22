@@ -179,6 +179,18 @@ async def close_admin_customer_service_ticket(
     )
 
 
+@_facade().router.post("/admin/customer-service/tickets/{ticket_id}/reply", response_model=None)
+async def reply_admin_customer_service_ticket(
+    request: _facade().Request, ticket_id: int, body: dict[str, _facade().Any]
+):
+    return await _customer_ticket_proxy(
+        request,
+        f"/api/customer-service/tickets/{ticket_id}/reply",
+        method="POST",
+        json_body=body,
+    )
+
+
 async def _xcmax_market_proxy_impl(request: _facade().Request, subpath: str):
     """编制图 LLM / 员工执行等：经会话市场 token 转发至 MODstore ``/api/...``。"""
     method = request.method.upper()

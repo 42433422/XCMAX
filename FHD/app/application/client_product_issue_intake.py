@@ -43,17 +43,19 @@ def _attached_screenshots(attachments: Any) -> list[bytes]:
 
 def classify_explicit_report(message: str) -> dict[str, Any] | None:
     """Recognize an explicit defect report without requiring a model or credentials."""
-    fields = {
-        "expected": re.search(r"期望(?:结果|行为)?[：:]\s*(.+?)(?:[。；;\n]|$)", message),
-        "actual": re.search(r"实际(?:结果|表现|行为)?[：:]\s*(.+?)(?:[。；;\n]|$)", message),
-    }
+    fields = dict.fromkeys(("expected", "actual"), "")
+    for key in fields:
+        label = "期望(?:结果|行为)?" if key == "expected" else "实际(?:结果|表现|行为)?"
+        if match := re.search(label + "[：:]", message):
+            value = message[match.end() :].lstrip()
+            fields[key] = re.split(r"[。；;\n]", value, maxsplit=1)[0][:1000]
     explicit = bool(_EXPLICIT_INTAKE_RE.search(message or ""))
     if _REPORT_RE.search(message) and (explicit or all(fields.values())):
         return {
             "type": "product_defect",
             "confidence": 0.95 if explicit else 0.9,
-            **{key: match[1][:1000] if match else "" for key, match in fields.items()},
-            "missing_evidence": [f"{key}_behavior" for key, match in fields.items() if not match],
+            **fields,
+            "missing_evidence": [f"{key}_behavior" for key, value in fields.items() if not value],
         }
     return None
 
@@ -116,12 +118,9 @@ async def submit_product_issue(
     if triage.get("type") != "product_defect" or triage.get("confidence", 0) < 0.8:
         return {"state": "not_confirmed"}
     missing = list(triage.get("missing_evidence") or [])
-    if not triage.get("expected"):
-        missing.append("expected_behavior")
-    if not triage.get("actual"):
-        missing.append("actual_behavior")
+    missing.extend(f"{key}_behavior" for key in ("expected", "actual") if not triage.get(key))
     if missing:
-        return {"state": "NEEDS_MORE_EVIDENCE", "missing_evidence": missing}
+        return await _receive_pending_report(request, tenant_id, customer_message, missing)
     from app.application.desktop_delivery_receipt import desktop_installation_id
     from app.build_identity import build_identity
     from app.desktop_runtime.support_bundle import build_evidence_ref
@@ -208,7 +207,7 @@ async def submit_product_issue(
         or not result.get("ticket_id")
         or not result.get("ticket_no")
     ):
-        existing = await _existing_ticket_for_work_order(token, wo_id)
+        existing = await _existing_ticket_for_source_ref(token, wo_id)
         if not existing:
             return {"state": "OWNER_ROUTE_UNAVAILABLE", "work_order_id": wo_id}
         result = {**existing, "success": True}
@@ -231,8 +230,54 @@ async def submit_product_issue(
     }
 
 
-async def _existing_ticket_for_work_order(token: str, wo_id: str) -> dict[str, Any] | None:
-    """回查当前账号在该 Work Order 下已有的受理工单编号。"""
+async def _receive_pending_report(
+    request: Any, tenant_id: int | None, message: str, missing: list[str]
+) -> dict[str, Any]:
+    """Use normal authenticated intake without inventing Work Order evidence."""
+    from app.fastapi_routes.private_mod_delivery_context import _private_delivery_market_token
+
+    token = await _private_delivery_market_token(request)
+    if not token:
+        return {"state": "OWNER_ROUTE_UNAVAILABLE"}
+    reason = message.strip()[:1000]
+    digest = hashlib.sha256(
+        json.dumps([f"tenant:{int(tenant_id or 0)}", message.strip()], ensure_ascii=False).encode()
+    ).hexdigest()
+    source_ref = f"client-pending:{digest}"
+    try:
+        result = await custom_delivery_remote_json(
+            token,
+            "/api/customer-service/issues/intake",
+            method="POST",
+            payload={
+                "source": "customer_feedback",
+                "source_ref": source_ref,
+                "title": f"客户端产品问题 · {reason[:100]}",
+                "description": f"客户原话：{reason}",
+                "issue_domain": "platform",
+                "acceptance_criteria": "在原工单补充期望、实际与诊断证据后复现验证。",
+            },
+        )
+    except (RuntimeError, ConnectionError):
+        result = {}
+    if (
+        result.get("success") is not True
+        or not result.get("ticket_id")
+        or not result.get("ticket_no")
+    ):
+        result = await _existing_ticket_for_source_ref(token, source_ref) or {}
+    if not result.get("ticket_id") or not result.get("ticket_no"):
+        return {"state": "OWNER_ROUTE_UNAVAILABLE"}
+    return {
+        "state": "RECEIVED",
+        "owner_ticket_id": result["ticket_id"],
+        "owner_ticket_no": result["ticket_no"],
+        "missing_evidence": sorted(set(missing)),
+    }
+
+
+async def _existing_ticket_for_source_ref(token: str, source_ref: str) -> dict[str, Any] | None:
+    """Read back an existing formal ticket within the authenticated account."""
     try:
         listing = await custom_delivery_remote_json(token, "/api/customer-service/tickets?limit=50")
     except (RuntimeError, ConnectionError):
@@ -244,7 +289,7 @@ async def _existing_ticket_for_work_order(token: str, wo_id: str) -> dict[str, A
         evidence = item.get("evidence")
         if not isinstance(evidence, dict):
             continue
-        if str(evidence.get("source_ref") or "") != wo_id:
+        if str(evidence.get("source_ref") or "") != source_ref:
             continue
         ticket_id, ticket_no = item.get("id"), str(item.get("ticket_no") or "")
         if ticket_id is None or not ticket_no:

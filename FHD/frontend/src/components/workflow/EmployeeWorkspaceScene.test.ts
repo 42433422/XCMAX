@@ -168,14 +168,13 @@ describe('EmployeeWorkspaceScene.vue', () => {
     expect(wrapper.find('.ews-empty-title').text()).toContain('企业 Mod 工位待同步')
   })
 
-  it('管理端空工位时从编制构建占位工位（不显示空态）', async () => {
+  it('管理端没有真实工位时显示同步空态，不生成占位卡片', async () => {
     isAdminConsoleVal = true
     const wrapper = await mountManagementComponent()
     await flushPromises()
-    // 管理端 + 空工作流注册表 → 从 ALL_PLANNED_YUANGON_PKG_IDS 构建占位工位
-    const desks = wrapper.findAll('.ews-desk')
-    expect(desks.length).toBe(3) // emp-001, emp-002, emp-003
-    expect(wrapper.find('.ews-empty').exists()).toBe(false)
+    expect(wrapper.findAll('.ews-desk')).toHaveLength(0)
+    expect(wrapper.find('.ews-empty-title').text()).toContain('平台编制工位待同步')
+    expect(wrapper.findAll('.ews-stat-v')[0].text()).toBe('3')
   })
 
   it('有工位时渲染工位卡片列表', async () => {
@@ -611,15 +610,6 @@ describe('EmployeeWorkspaceScene.vue', () => {
     await flushPromises()
     expect(wrapper.find('.ews').exists()).toBe(true)
     expect(wrapper.find('.ews-loop-console-status').text()).toBe('待连接')
-  })
-
-  it('管理端模式无工位时从编制构建占位工位', async () => {
-    isAdminConsoleVal = true
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    // 管理端 + 空工作流注册表 → 从 ALL_PLANNED_YUANGON_PKG_IDS 构建占位
-    const desks = wrapper.findAll('.ews-desk')
-    expect(desks.length).toBe(3) // emp-001, emp-002, emp-003
   })
 
   it('组件卸载时清理定时器（不报错）', async () => {

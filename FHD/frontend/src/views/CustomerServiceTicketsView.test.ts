@@ -298,3 +298,19 @@ describe('customer service ticket detail', () => {
     wrapper.unmount()
   })
 })
+
+it('sends a customer-visible reply without closing the original ticket', async () => {
+  detail.mockResolvedValue({ ...payload, ticket: { ...ticket, status: 'processing' } })
+  post.mockResolvedValue({})
+  const wrapper = mountDetail()
+  await flushPromises()
+  await wrapper.get('.cs-reply-form textarea').setValue('请在信息页展开问题工单处理结果查看进度。')
+  const send = wrapper.findAll('button').find(button => button.text() === '发送答复并保留原单')!
+  await send.trigger('submit')
+  await flushPromises()
+  expect(post).toHaveBeenCalledWith('/api/xcmax/admin/customer-service/tickets/42/reply', {
+    request_id: expect.any(String), note: '请在信息页展开问题工单处理结果查看进度。',
+  })
+  expect(post.mock.calls.every(([url]) => !url.endsWith('/close'))).toBe(true)
+  expect(confirm).not.toHaveBeenCalled()
+})

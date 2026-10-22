@@ -415,8 +415,9 @@ def test_original_ticket_main_rework_rejects_before_start_or_commit(monkeypatch,
     "selected,previous",
     [(None, "generated"), (None, "versioned_main"), ("versioned_main", "generated")],
 )
+@pytest.mark.parametrize("actor_id,is_admin", [(29, False), (1, True)])
 def test_original_ticket_rework_preserves_identity_and_source_choice(
-    monkeypatch, selected, previous
+    monkeypatch, selected, previous, actor_id, is_admin
 ):
     import modstore_server.customer_service_api  # noqa: F401
     from modstore_server import customer_delivery_versioned as versioned
@@ -445,7 +446,11 @@ def test_original_ticket_rework_preserves_identity_and_source_choice(
     monkeypatch.setattr(
         versioned,
         "assert_owner_source",
-        lambda owner, mod: owner == 29 and mod == versioned.MOD_ID,
+        lambda owner, mod: (
+            pytest.fail("wrong private source owner")
+            if owner != 29 or mod != versioned.MOD_ID
+            else None
+        ),
     )
     monkeypatch.setattr(versioned, "release_source", lambda: (None, {"git_sha": "a" * 40}))
     calls = []
@@ -470,7 +475,7 @@ def test_original_ticket_rework_preserves_identity_and_source_choice(
                 action="rework", note="补齐正式运行产物", source_mode=selected
             ),
             db=db,
-            user=types.SimpleNamespace(id=29),
+            user=types.SimpleNamespace(id=actor_id, is_admin=is_admin),
         )
     )
     saved = json.loads(ticket.evidence_json)

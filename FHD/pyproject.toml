@@ -66,9 +66,9 @@ server-api = [
     "PyJWT>=2.15.0",
     "PyYAML>=6.0.2",
     # OpenTelemetry (NeuroBus tracer 底层)
-    "opentelemetry-api>=1.24.0",
-    "opentelemetry-sdk>=1.24.0",
-    "opentelemetry-exporter-otlp>=1.24.0",
+    "opentelemetry-api>=1.45.1",
+    "opentelemetry-sdk>=1.45.1",
+    "opentelemetry-exporter-otlp>=1.45.1",
 ]
 ml = [
     "torch>=2.13.0",

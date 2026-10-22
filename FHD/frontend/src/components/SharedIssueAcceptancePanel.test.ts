@@ -22,7 +22,7 @@ beforeEach(() => { vi.mocked(apiFetch).mockReset().mockImplementation(async () =
 it('keeps ticket descriptions collapsed so the messenger remains visible', async () => {
   const { wrapper } = await setup()
   expect(wrapper.get('details').attributes('open')).toBeUndefined()
-  expect(wrapper.get('summary').text()).toBe('问题工单处理结果（1）')
+  expect(wrapper.get('.repair-acceptance > summary').text()).toBe('问题工单处理结果（1）')
   expect(apiFetch).toHaveBeenCalledTimes(1)
   ;(wrapper.get('details').element as HTMLDetailsElement).open = true
   expect(wrapper.get('article').text()).toContain('保存订单失败')
@@ -135,5 +135,16 @@ it('offers only reopen on a closed ticket', async () => {
   const { wrapper } = await setup()
   expect(wrapper.text()).toContain('工单已关闭')
   expect(wrapper.findAll('button').map((button) => button.text())).toEqual(['仍未解决，重新打开'])
+  wrapper.unmount()
+})
+
+it('keeps long original reports inside per-ticket expandable descriptions', async () => {
+  const original = '很长的问题原文'.repeat(80)
+  vi.mocked(apiFetch).mockResolvedValueOnce(response([{ ...repair, summary: original }]))
+  const { wrapper } = await setup()
+  expect(wrapper.get('.repair-description').attributes('open')).toBeUndefined()
+  expect(wrapper.get('.repair-description summary').text().length).toBeLessThanOrEqual(65)
+  expect(wrapper.get('.repair-description p').text()).toBe(original)
+  expect(wrapper.get('.repair-list').find('input').exists()).toBe(true)
   wrapper.unmount()
 })

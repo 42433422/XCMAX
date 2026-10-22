@@ -2,9 +2,9 @@
 """官网下载版本 SSOT 读写 + installer 日推送回写。
 
 单一真相源：``FHD/config/download_release.json``（可用 ``MODSTORE_DOWNLOAD_RELEASE_JSON`` 覆盖）。
-- 稳定产品版本、下载版本和 Android versionName 统一为 ``1.0.0.0``（见 ``FHD/VERSION.md``）。
-- installer/major 日：P5 构建 → P6 推 COS → 调用 :func:`record_installer_push` 回写 ``last_push``，
-  并刷新 market SPA 运行时读取的公开清单 ``market/public/download-release.json``（下载页 fetch 后无需重建即生效）。
+- 稳定版本及下载版本以 ``FHD/VERSION.md`` 和下载 SSOT 为准。
+- installer/major 日：P5 构建 → P6 推 COS → 调用 :func:`record_installer_push` 记录 ``last_upload``。
+  公开发布指针由带版本验收记录与制品哈希核验的发布同步流程单独维护。
 
 本模块只动下载版本元数据，不擅自改变 ``FHD/VERSION.md`` 的稳定版本。
 """
@@ -167,12 +167,13 @@ def record_installer_push(
     actor: str = "installer-chain",
     path: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """installer/major 日推送后回写 SSOT ``last_push`` 并刷新公开清单。
+    """记录安装包上传事实，不将它当作发布验收或改写公开清单。
 
-    不改 download_version；只记录 installer 推送事实并刷新站点清单。
+    ``cos_uploaded`` 仅表示上传器报告上传成功；版本、制品身份和客户验收由正式发布同步
+    流程核实。这里不得改变 ``release_ready`` 或把候选 SHA 投影到当前公开下载指针。
     """
     rel = load_release(path=path)
-    rel["last_push"] = {
+    upload = {
         "at": datetime.now(UTC).isoformat(),
         "release_train": str(release_train or ""),
         "release_kind": str(release_kind or ""),
@@ -180,10 +181,13 @@ def record_installer_push(
         "cos_uploaded": bool(cos_uploaded),
         "by": str(actor or ""),
     }
-    if cos_uploaded:
-        rel["release_ready"] = True
+    # last_push is also the public release identity source; keep it unchanged.
+    rel["last_upload"] = upload
     saved = save_release(rel, path=path)
-    written = write_public_manifests(rel)
+    # Upload telemetry is not the accepted release identity. In particular, do not
+    # regenerate the public pointer from this candidate's git_sha and the prior
+    # version's release_ready/download URLs.
+    written: List[str] = []
     logger.info(
         "download_release: installer push recorded rt=%s kind=%s cos=%s ssot=%s public=%s",
         release_train,
@@ -196,5 +200,5 @@ def record_installer_push(
         "ok": True,
         "ssot": str(saved),
         "public_written": written,
-        "last_push": rel["last_push"],
+        "last_push": upload,  # Legacy caller receipt key; not the public SSOT identity.
     }

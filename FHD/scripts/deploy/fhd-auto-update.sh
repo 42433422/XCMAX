@@ -13,6 +13,7 @@
 #   FHD_AUTO_UPDATE_LOCK  默认 /tmp/fhd-auto-update.lock（staging 须用独立锁）
 set -euo pipefail
 case "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" in 0|1) ;; *) echo "XCMAX_PRESERVE_RELEASE_HISTORY must be 0 or 1" >&2; exit 64 ;; esac
+case "${FHD_FORCE_APPLY:-0}" in 0|1) ;; *) echo "FHD_FORCE_APPLY must be 0 or 1" >&2; exit 64 ;; esac
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 APPLY_TARBALL="$SCRIPT_DIR/fhd-apply-release.sh"
@@ -206,13 +207,17 @@ if [[ -f "$FREEZE_MARKER" ]]; then
   log "manifest 已冻结，跳过自动发布: $FREEZE_MARKER"
   exit 0
 fi
+if [[ -e "$DEPLOY_ROOT/.deploy-identity-pending" ]]; then
+  log "ERROR: 上次发布身份事务未完成，拒绝自动发布并保留恢复材料: $DEPLOY_ROOT/.deploy-identity-pending"
+  exit 78
+fi
 
 if [[ ! -f "$MANIFEST" ]]; then
   log "manifest 不存在: $MANIFEST"
   exit 0
 fi
 
-IFS='|' read -r DEPLOY_MODE REMOTE_SHA ARTIFACT VERSION GIT_SHA IMAGE IMAGE_DIGEST CHANNEL ADMIN_CONSOLE_SHA256 BUILT_AT COMMIT_AT <<<"$(
+IFS='|' read -r DEPLOY_MODE REMOTE_SHA ARTIFACT VERSION GIT_SHA IMAGE IMAGE_DIGEST CHANNEL ADMIN_CONSOLE_SHA256 ARCHIVE_VERIFY_SHA256 BUILT_AT COMMIT_AT <<<"$(
   python3 - <<'PY' "$MANIFEST"
 import json, sys
 doc = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -226,6 +231,7 @@ values = [
     str(doc.get("image_digest", "")),
     str(doc.get("channel", "")),
     str(doc.get("admin_console_sha256", "")),
+    str(doc.get("archive_verifier_sha256", "")),
     str(doc.get("built_at", "")),
     str(doc.get("commit_at", "")),
 ]
@@ -242,7 +248,6 @@ CHANNEL="${CHANNEL:-stable}"
   log "ERROR: manifest 缺少管理端不可变资产身份"
   exit 1
 }
-
 if [[ "$DEPLOY_MODE" == "image" ]]; then
   if [[ -z "$IMAGE" || -z "$IMAGE_DIGEST" ]]; then
     log "ERROR: deploy_mode=image 但 manifest 缺少 image / image_digest"
@@ -254,7 +259,7 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
     LOCAL_DIGEST="$(tr -d '[:space:]' < "$DEPLOY_ROOT/.deploy-image-digest")"
   fi
 
-  if [[ "$IMAGE_DIGEST" == "$LOCAL_DIGEST" ]]; then
+  if [[ "$IMAGE_DIGEST" == "$LOCAL_DIGEST" && "${FHD_FORCE_APPLY:-0}" != "1" ]]; then
     log "已是最新（compose） version=$VERSION digest=${IMAGE_DIGEST:0:19}..."
     sync_dr_release
     exit 0
@@ -302,10 +307,15 @@ if [[ -f "$DEPLOY_ROOT/.deploy-sha256" ]]; then
   LOCAL_SHA="$(tr -d '[:space:]' < "$DEPLOY_ROOT/.deploy-sha256")"
 fi
 
-if [[ "$REMOTE_SHA" == "$LOCAL_SHA" ]]; then
+if [[ "$REMOTE_SHA" == "$LOCAL_SHA" && "${FHD_FORCE_APPLY:-0}" != "1" ]]; then
   log "已是最新 version=$VERSION sha=$GIT_SHA"
   sync_dr_release
   exit 0
+fi
+
+if [[ ! "$ARCHIVE_VERIFY_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+  log "ERROR: tarball manifest 缺少精确候选归档校验器身份"
+  exit 1
 fi
 
 if ! authorize_production_release "$CHANNEL" "${GIT_SHA:-$REMOTE_SHA}"; then
@@ -340,6 +350,7 @@ APPLY_ENV=(
   "FHD_EXPECTED_SHA256=$REMOTE_SHA"
   "FHD_GIT_SHA=$GIT_SHA"
   "FHD_ADMIN_CONSOLE_SHA256=$ADMIN_CONSOLE_SHA256"
+  "FHD_ARCHIVE_VERIFY_SHA256=$ARCHIVE_VERIFY_SHA256"
   "FHD_SKIP_PIP=${FHD_SKIP_PIP:-1}"
   "XCMAX_PRESERVE_RELEASE_HISTORY=${XCMAX_PRESERVE_RELEASE_HISTORY:-0}"
 )

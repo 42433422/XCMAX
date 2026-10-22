@@ -554,11 +554,9 @@ class TestModStoreUninstall:
         assert resp.status_code == 400
 
     def test_uninstall_success(self, client: TestClient) -> None:
-        mock_mgr = MagicMock()
-        mock_mgr.uninstall_mod.return_value = (True, "removed")
         with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            return_value=mock_mgr,
+            "app.application.mod_uninstall.uninstall_mod_for_request",
+            return_value=(True, "removed"),
         ):
             resp = client.post("/uninstall", json={"mod_id": "mod1"})
         assert resp.status_code == 200
@@ -566,11 +564,9 @@ class TestModStoreUninstall:
         assert data["success"] is True
 
     def test_uninstall_failure(self, client: TestClient) -> None:
-        mock_mgr = MagicMock()
-        mock_mgr.uninstall_mod.return_value = (False, "not found")
         with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            return_value=mock_mgr,
+            "app.application.mod_uninstall.uninstall_mod_for_request",
+            return_value=(False, "not found"),
         ):
             resp = client.post("/uninstall", json={"mod_id": "mod1"})
         assert resp.status_code == 200
