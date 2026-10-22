@@ -1,0 +1,146 @@
+name: XCAGI isolated ledger verification
+on:
+  push:
+    branches: [validation/xcagi-ledger-proof-20261022]
+permissions:
+  contents: write
+jobs:
+  verify-and-publish-review-branch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE_SHA: 83319ef62276f8a01b89510051a6cf5a6c2c0426
+      REVIEW_BRANCH: fix/ticket-ledger-proof-20261022
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Prepare isolated complete baseline and locked test tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ledger-evidence"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git worktree add --detach "$RUNNER_TEMP/ledger-product" "$BASE_SHA"
+          cd "$RUNNER_TEMP/ledger-product"
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          python - <<'PY'
+          import pathlib, subprocess, sys, tomllib
+          data = tomllib.loads(pathlib.Path('FHD/uv.lock').read_text())
+          deps = [p['name'] + '==' + p['version'] for p in data['package'] if p['name'] in {'pytest', 'ruff'}]
+          assert len(deps) == 2, deps
+          subprocess.run([sys.executable, '-m', 'pip', 'install', *deps], check=True)
+          PY
+      - name: Reproduce baseline failures then apply and validate correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/ledger-product"
+          PATCH="$GITHUB_WORKSPACE/.github/xcagi-validation/ledger-proof.patch"
+          git apply --check "$PATCH"
+          git apply --include='FHD/tests/release_gate/test_ticket_loop_ledger_check.py' "$PATCH"
+          cd FHD
+          set +e
+          python -m pytest tests/release_gate/test_ticket_loop_ledger_check.py --confcutdir=tests/release_gate -c /dev/null -q --tb=short --junitxml="$RUNNER_TEMP/ledger-evidence/baseline.xml" > "$RUNNER_TEMP/ledger-evidence/baseline.log" 2>&1
+          rc=$?
+          set -e
+          test "$rc" = 1
+          python - <<'PY'
+          import os, pathlib, xml.etree.ElementTree as ET
+          root = ET.parse(pathlib.Path(os.environ['RUNNER_TEMP']) / 'ledger-evidence/baseline.xml').getroot()
+          suites = list(root.iter('testsuite'))
+          totals = {key: sum(int(s.get(key, '0')) for s in suites) for key in ('tests', 'failures', 'errors', 'skipped')}
+          print(totals)
+          assert totals == {'tests': 40, 'failures': 27, 'errors': 0, 'skipped': 0}, totals
+          PY
+          cd ..
+          git apply --include='FHD/scripts/release/ticket_loop_ledger_check.py' "$PATCH"
+          cd FHD
+          python -m ruff check --fix scripts/release/ticket_loop_ledger_check.py tests/release_gate/test_ticket_loop_ledger_check.py
+          python -m ruff format scripts/release/ticket_loop_ledger_check.py tests/release_gate/test_ticket_loop_ledger_check.py
+          python -m ruff check scripts/release/ticket_loop_ledger_check.py tests/release_gate/test_ticket_loop_ledger_check.py
+          python -m pytest tests/release_gate/test_ticket_loop_ledger_check.py --confcutdir=tests/release_gate -c /dev/null -q --tb=short --junitxml="$RUNNER_TEMP/ledger-evidence/candidate.xml" | tee "$RUNNER_TEMP/ledger-evidence/candidate.log"
+          python scripts/release/ticket_loop_ledger_check.py > "$RUNNER_TEMP/ledger-evidence/committed-ledger-readback.json"
+      - name: Commit candidate, run required preflight, and preserve exact evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/ledger-product"
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('FHD/CHANGELOG.md')
+          s = p.read_text()
+          marker = '## Unreleased'
+          start = s.index('\n', s.index(marker)) + 1
+          note = '\n- 工单闭环验收不再把缺失接单确认、无效版本指纹、重复条目或空证据判为通过；自定义处理策略只能加强默认要求，不能移除必检项。补充失败回归并保留历史验收记录，未表示已部署或完成客户工单实测。\n'
+          p.write_text(s[:start] + note + s[start:])
+          PY
+          git switch -c "$REVIEW_BRANCH"
+          git add FHD/scripts/release/ticket_loop_ledger_check.py FHD/tests/release_gate/test_ticket_loop_ledger_check.py FHD/CHANGELOG.md
+          git commit -m 'fix(release): reject incomplete or weakened ticket closure evidence'
+          cd FHD
+          python scripts/dev/check_net_deletion.py --update --force --reason '2026-10-22 用户授权工程整改：修复工单验收错误放行，增加必要的负向回归与变更说明；不删除无关代码，不降低质量门禁。实际行数由既有脚本统计。'
+          git add metrics/line_baseline.json
+          git commit -m 'chore(metrics): record authorized evidence validation regression growth'
+          set +e
+          python scripts/dev/push_preflight.py --fix --base "$BASE_SHA" > "$RUNNER_TEMP/ledger-evidence/preflight-first.log" 2>&1
+          first=$?
+          set -e
+          cat "$RUNNER_TEMP/ledger-evidence/preflight-first.log"
+          cd ..
+          if [ "$first" != 0 ]; then
+            python - <<'PY'
+          import subprocess
+          paths = subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines()
+          assert paths and all(p.startswith('成都修茈科技有限公司/capabilities/') or p == '成都修茈科技有限公司/data/capabilities.json' for p in paths), paths
+          subprocess.run(['git', 'add', '--', *paths], check=True)
+          subprocess.run(['git', 'commit', '-m', 'chore(capabilities): synchronize generated evidence reading view'], check=True)
+          PY
+          fi
+          cd FHD
+          python scripts/dev/push_preflight.py --fix --base "$BASE_SHA" | tee "$RUNNER_TEMP/ledger-evidence/preflight-final.log"
+          cd ..
+          git diff --check "$BASE_SHA" HEAD
+          test -z "$(git status --porcelain --untracked-files=no)"
+          python - <<'PY'
+          import json, os, pathlib, subprocess
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'ledger-evidence'
+          def git(*args): return subprocess.check_output(['git', *args], text=True).strip()
+          paths = git('diff', '--name-only', os.environ['BASE_SHA'], 'HEAD').splitlines()
+          allowed = {'FHD/scripts/release/ticket_loop_ledger_check.py', 'FHD/tests/release_gate/test_ticket_loop_ledger_check.py', 'FHD/CHANGELOG.md', 'FHD/metrics/line_baseline.json'}
+          assert all(p in allowed or p.startswith('成都修茈科技有限公司/capabilities/') or p == '成都修茈科技有限公司/data/capabilities.json' for p in paths), paths
+          info = {'base_sha': os.environ['BASE_SHA'], 'head_sha': git('rev-parse', 'HEAD'), 'tree_sha': git('rev-parse', 'HEAD^{tree}'), 'branch': os.environ['REVIEW_BRANCH'], 'files': [{'path': p, 'blob': git('rev-parse', 'HEAD:' + p)} for p in paths], 'production_deployed': False}
+          (root / 'identity.json').write_text(json.dumps(info, indent=2, ensure_ascii=False) + '\n')
+          (root / 'candidate.patch').write_text(git('diff', '--binary', os.environ['BASE_SHA'], 'HEAD') + '\n')
+          (root / 'diff-stat.txt').write_text(git('diff', '--stat', os.environ['BASE_SHA'], 'HEAD') + '\n')
+          print(json.dumps(info, ensure_ascii=False))
+          PY
+      - name: Push only the new validated review branch, never main or tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/ledger-product"
+          test "$REVIEW_BRANCH" = fix/ticket-ledger-proof-20261022
+          test "$(git branch --show-current)" = "$REVIEW_BRANCH"
+          test -z "$(git ls-remote --heads origin "refs/heads/$REVIEW_BRANCH")"
+          git push origin "HEAD:refs/heads/$REVIEW_BRANCH"
+      - name: Clean this runner workspace only
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/ledger-clean-home" "$RUNNER_TEMP/ledger-clean-tmp"
+          cd "$RUNNER_TEMP/ledger-product"
+          HOME="$RUNNER_TEMP/ledger-clean-home" XCMAX_CLEAN_TMP_ROOT="$RUNNER_TEMP/ledger-clean-tmp" python scripts/dev/clean_agent_workspace.py > "$RUNNER_TEMP/ledger-evidence/cleanup.json"
+          df -h . > "$RUNNER_TEMP/ledger-evidence/disk-space.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xcagi-ledger-verification-${{ github.run_id }}
+          path: ${{ runner.temp }}/ledger-evidence/
+          retention-days: 14
+          if-no-files-found: error
