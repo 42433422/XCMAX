@@ -71,6 +71,21 @@ def _csrf_exempt_path(path: str) -> bool:
     return False
 
 
+def _machine_webhook_path(path: str) -> bool:
+    """Only fixed protocol receivers; their routes must validate signatures/tokens."""
+    path = path.rstrip("/")
+    if path in {
+        "/api/inbound/webhooks/github",
+        "/api/inbound/webhooks/feishu",
+        "/api/inbound/webhooks/dingtalk",
+        "/api/inbound/webhooks/generic",
+    }:
+        return True
+    prefix = "/api/workflow-hooks/webhook/"
+    key = path.removeprefix(prefix)
+    return path.startswith(prefix) and bool(key) and "/" not in key
+
+
 def _csrf_disabled_for_tests() -> bool:
     """仅用于自动化测试（``conftest`` 设置 ``MODSTORE_DISABLE_CSRF=1``）；生产环境禁止开启。"""
     return (os.environ.get("MODSTORE_DISABLE_CSRF") or "").strip().lower() in (
@@ -135,6 +150,16 @@ class CSRFMiddleware:
         if auth_header.lower().startswith("bearer ") and (
             not request.headers.get("cookie")
             or await run_in_threadpool(_bearer_authenticates, auth_header)
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        # External protocols have no ambient browser credentials. Cookie-bearing
+        # requests still require CSRF; path matching alone never authenticates them.
+        if (
+            method == "POST"
+            and not request.headers.get("cookie")
+            and _machine_webhook_path(request.url.path)
         ):
             await self.app(scope, receive, send)
             return

@@ -10,6 +10,8 @@ import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 def test_health(client):
     r = client.get("/api/health")
@@ -175,7 +177,16 @@ def test_focus_primary(client, library: Path, auth_headers: dict):
     assert mb.get("primary") is True
 
 
-def test_import_zip(client, library: Path, auth_headers: dict):
+@pytest.mark.parametrize("administrator", [False, True])
+def test_import_zip(client, library: Path, auth_headers: dict, administrator):
+    # Shared executable-library publication is an administrator operation.
+    from modstore_server.application.auth import AuthApplicationService
+    from modstore_server.models import User, get_session_factory
+
+    actor = AuthApplicationService().current_user_from_authorization(auth_headers["Authorization"])
+    with get_session_factory()() as db:
+        db.get(User, actor.id).is_admin = administrator
+        db.commit()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         manifest = {
@@ -196,6 +207,10 @@ def test_import_zip(client, library: Path, auth_headers: dict):
         files={"file": ("z.zip", buf.getvalue(), "application/zip")},
         headers=auth_headers,
     )
+    if not administrator:
+        assert r.status_code == 403, r.text
+        assert not (library / "zip-mod").exists()
+        return
     assert r.status_code == 200, r.text
     assert (library / "zip-mod" / "manifest.json").is_file()
 
