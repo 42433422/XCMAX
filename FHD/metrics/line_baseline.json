@@ -1,5 +1,5 @@
 {
-  "lines": 2328776,
+  "lines": 2328789,
   "updated": "2026-10-22",
-  "note": "PR #2523 adds required customer-ticket category and status filters and isolation coverage (127 maintained lines), rebased onto main 1ab42432 including PR #2524; no unrelated code removed; user authorized completing the full backlog."
+  "note": "PR #2523 adds required customer-ticket category and status filters and isolation coverage, rebased onto current main including #2525; no unrelated code removed; user authorized completing the full backlog."
 }
