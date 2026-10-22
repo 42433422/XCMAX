@@ -1,5 +1,5 @@
 {
-  "lines": 2330097,
+  "lines": 2330101,
   "updated": "2026-10-21",
-  "note": "用户授权 P0 鉴权和 ZIP 导入修复；保留 44 项导入专项（含发布、恢复、搬移中断）及已审查的 Webhook/Sandbox 边界，采用精确文件系统异常，不放松 broad-except 门禁；本次实测包含 main 09eb6e0a 的工单筛选。"
+  "note": "用户授权P0修复的CI收口：使用sys.platform显式分支和锁迭代器类型；mypy2.4.0的linux/win32/darwin目标通过，44导入专项通过；不新增类型忽略、不放宽门禁。"
 }

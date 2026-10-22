@@ -7,10 +7,12 @@ import os
 import re
 import shutil
 import stat
+import sys
 import tempfile
 import threading
 import unicodedata
 import zipfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -107,21 +109,13 @@ def _validated_archive(zf: zipfile.ZipFile) -> tuple[str, list[tuple[zipfile.Zip
 
 
 @contextmanager
-def _library_write_lock(library: Path):
+def _library_write_lock(library: Path) -> Iterator[None]:
     """Importers share a process and OS lock; unsupported platforms fail closed."""
     with _THREAD_LOCK:
         flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
         descriptor = os.open(library / ".mod-import.lock", flags, 0o600)
         with os.fdopen(descriptor, "r+b") as handle:
-            if os.name == "posix":
-                import fcntl
-
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-
-                def unlock():
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-            elif os.name == "nt":
+            if sys.platform == "win32":
                 import msvcrt
 
                 if not os.fstat(handle.fileno()).st_size:
@@ -130,9 +124,17 @@ def _library_write_lock(library: Path):
                 handle.seek(0)
                 msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
 
-                def unlock():
+                def unlock() -> None:
                     handle.seek(0)
                     msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
+            elif os.name == "posix":
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+                def unlock() -> None:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
             else:
                 raise RuntimeError("当前平台不支持安全导入锁")
