@@ -415,7 +415,6 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-
     const scrollContainer = wrapper.find('.im-messages').element as HTMLElement
     Object.defineProperty(scrollContainer, 'scrollHeight', {
       configurable: true,

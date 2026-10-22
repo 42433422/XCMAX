@@ -1,5 +1,5 @@
 {
   "lines": 2329636,
   "updated": "2026-10-23",
-  "note": "PR #2529 integrates the previously authorized customer-ticket reply and audit path, employee-graph layout repair, private-source rework, and regression coverage on the newer 2026-10-22 main baseline; latest-main reconciliation adds 239 maintained lines after removing the duplicate employee profile panel."
+  "note": "PR #2529 integrates original-ticket replies, owner-scoped rework, graph/layout repairs, and conversation viewport anchoring on the newer main baseline; the integration retains 239 maintained lines after removing the duplicate employee profile panel."
 }
