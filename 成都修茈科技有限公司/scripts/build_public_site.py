@@ -25,6 +25,7 @@ import json
 import re
 import struct
 import sys
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -465,6 +466,7 @@ def data_updated_at(*candidates: str | None) -> str | None:
 
 def build() -> dict:
     prepare_evidence_assets()
+    subprocess.run(["node", str(REPO_ROOT / "scripts/dev/materialize_media_assets.mjs"), "marketing"], check=True)
     version_ssot = parse_version_md(FHD_ROOT / "VERSION.md")
     plans_cfg = read_json(FHD_ROOT / "config" / "saas_plans.json")
     cases_cfg = read_json(FHD_ROOT / "config" / "public_cases.json")

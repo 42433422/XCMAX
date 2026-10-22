@@ -176,6 +176,7 @@ def main() -> None:
     ap.add_argument("--runtime", help="Playwright 运行时结果 JSON（mobile_test/desktop_test/video_runtime_test/range_test）")
     args = ap.parse_args()
     runpy.run_path(str(Path(__file__).with_name("evidence_assets.py")))["materialize"](REPO_ROOT)
+    subprocess.run(["node", str(REPO_ROOT / "scripts/dev/materialize_media_assets.mjs"), "marketing"], check=True)
 
     public_site_path = DATA_DIR / "public-site.json"
     if not public_site_path.exists():

@@ -108,7 +108,7 @@ def _reconcile_completed_loop_memory_safely() -> None:
 
 def _remediation_lineage_by_run_id() -> dict[str, dict[str, str]]:
     """Recover the original autonomous trigger for resumable ledger runs."""
-    from modstore_server.self_maintenance_loop_runner import _read_ledger
+    from modstore_server.maintenance_loop.store import _read_ledger
 
     lineage: dict[str, dict[str, str]] = {}
     for row in _read_ledger(limit=5000):
@@ -163,7 +163,7 @@ def _remediation_priority(candidate: dict[str, Any], item_index: int) -> tuple[i
 
 def pending_automated_remediation() -> dict[str, Any] | None:
     """Settle verified receipts, then return one executable unattended repair."""
-    from modstore_server.self_maintenance_loop_runner import _load_loop_memory
+    from modstore_server.maintenance_loop.store import _load_loop_memory
     from modstore_server.self_maintenance_remediation_lineage import (
         automated_remediation_resume_plan,
         normalize_automated_remediation_reason,
@@ -243,7 +243,9 @@ def run_pending_automated_remediation() -> dict[str, Any]:
     if pending is None:
         return {"ok": True, "status": "skipped_no_pending_remediation"}
 
-    from modstore_server.self_maintenance_loop_runner import run_self_maintenance_loop
+    from modstore_server.maintenance_loop.coordinator import (
+        run_self_maintenance_loop,
+    )
 
     result = run_self_maintenance_loop(
         triggered_by="automated_remediation",

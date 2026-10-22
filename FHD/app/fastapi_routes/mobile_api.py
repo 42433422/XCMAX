@@ -441,6 +441,7 @@ async def mobile_health():
     )
 
 
-from app.fastapi_routes.mobile_api_extensions import extension_router  # noqa: E402
-
-router.include_router(extension_router)
+# Mounted by the completed extension composition root (supports either import order).
+from app.fastapi_routes.mobile_api_extensions import (
+    extension_router as extension_router,  # noqa: E402
+)

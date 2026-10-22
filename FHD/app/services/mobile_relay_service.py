@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
-import secrets
+import secrets as secrets
 from typing import Any
 
-from sqlalchemy import text
-
 from app.db.session import get_db
-from app.services.mobile_relay_pairing import MobileRelayPairingMixin
-from app.services.mobile_relay_tasks import MobileRelayTaskMixin
+from app.services import mobile_relay_repository as repository
+from app.services.mobile_relay_pairing import RelayPairing
+from app.services.mobile_relay_ports import PairingPorts, TaskPorts
+from app.services.mobile_relay_tasks import RelayTaskQueue
 from app.services.mobile_relay_utils import _epoch_from_iso as _epoch_from_iso
 from app.services.mobile_relay_utils import _json_dumps as _json_dumps
 from app.services.mobile_relay_utils import _json_loads as _json_loads
@@ -25,86 +25,51 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-class MobileRelayService(MobileRelayPairingMixin, MobileRelayTaskMixin):
-    """Small SQL-backed relay used by phones and desktop runtimes."""
+class MobileRelayService:
+    """Compose SQL storage, pairing and task execution through explicit capabilities."""
+
+    def __init__(self):
+        self._pairing = RelayPairing(
+            PairingPorts(
+                database=lambda: self._get_db(),
+                ensure_tables=lambda db: self.ensure_tables(db),
+                fresh_pairing_code=lambda db: self._fresh_pairing_code(db),
+                desktop_for_token=lambda db, relay_id, desktop_token: self._desktop_for_token(
+                    db, relay_id=relay_id, desktop_token=desktop_token
+                ),
+                public_desktop=lambda data: self._public_desktop(data),
+            )
+        )
+        self._tasks = RelayTaskQueue(
+            TaskPorts(
+                database=lambda: self._get_db(),
+                ensure_tables=lambda db: self.ensure_tables(db),
+                desktop_belongs_to_user=lambda user_id, relay_id: self._desktop_belongs_to_user(
+                    user_id=user_id, relay_id=relay_id
+                ),
+                desktop_for_token=lambda db, relay_id, desktop_token: self._desktop_for_token(
+                    db, relay_id=relay_id, desktop_token=desktop_token
+                ),
+                public_desktop=lambda data: self._public_desktop(data),
+                notify_task_creator=lambda task: self._notify_task_creator(task),
+                get_task=lambda user_id, task_id: self.get_task(user_id=user_id, task_id=task_id),
+            )
+        )
 
     @staticmethod
     def _get_db():
         return get_db()
 
     def ensure_tables(self, db) -> None:
-        db.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS mobile_relay_desktops (
-                    relay_id VARCHAR(64) PRIMARY KEY,
-                    pairing_code VARCHAR(16) UNIQUE NOT NULL,
-                    desktop_token_hash VARCHAR(128) NOT NULL,
-                    desktop_label VARCHAR(200) NOT NULL DEFAULT '',
-                    device_id VARCHAR(128) NOT NULL DEFAULT '',
-                    relay_base_url VARCHAR(512) NOT NULL DEFAULT '',
-                    status VARCHAR(32) NOT NULL DEFAULT 'pending',
-                    mobile_user_id INTEGER,
-                    mobile_username VARCHAR(200) NOT NULL DEFAULT '',
-                    capabilities_json TEXT NOT NULL DEFAULT '{}',
-                    last_seen_at VARCHAR(64),
-                    expires_at VARCHAR(64) NOT NULL,
-                    created_at VARCHAR(64) NOT NULL,
-                    updated_at VARCHAR(64) NOT NULL
-                )
-                """
-            )
-        )
-        db.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS mobile_relay_tasks (
-                    task_id VARCHAR(64) PRIMARY KEY,
-                    relay_id VARCHAR(64) NOT NULL,
-                    kind VARCHAR(64) NOT NULL DEFAULT 'codex.invoke',
-                    payload_json TEXT NOT NULL DEFAULT '{}',
-                    status VARCHAR(32) NOT NULL DEFAULT 'queued',
-                    result_json TEXT NOT NULL DEFAULT '{}',
-                    created_by_user_id INTEGER,
-                    created_at VARCHAR(64) NOT NULL,
-                    updated_at VARCHAR(64) NOT NULL,
-                    claimed_at VARCHAR(64),
-                    completed_at VARCHAR(64)
-                )
-                """
-            )
-        )
-        db.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS ix_mobile_relay_desktops_user "
-                "ON mobile_relay_desktops(mobile_user_id)"
-            )
-        )
-        db.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS ix_mobile_relay_tasks_relay_status "
-                "ON mobile_relay_tasks(relay_id, status, created_at)"
-            )
-        )
+        return repository.ensure_tables(db)
 
     def list_desktops(self, *, user_id: int) -> list[dict[str, Any]]:
-        with get_db() as db:
-            self.ensure_tables(db)
-            rows = (
-                db.execute(
-                    text(
-                        """
-                        SELECT * FROM mobile_relay_desktops
-                        WHERE mobile_user_id = :user_id AND status = 'paired'
-                        ORDER BY updated_at DESC
-                        """
-                    ),
-                    {"user_id": int(user_id)},
-                )
-                .mappings()
-                .all()
-            )
-            return [self._public_desktop(_row_dict(row)) for row in rows]
+        return repository.list_desktops(
+            user_id=user_id,
+            database=lambda: get_db(),
+            ensure_schema=lambda db: self.ensure_tables(db),
+            project=lambda data: self._public_desktop(data),
+        )
 
     @staticmethod
     def _notify_task_creator(task: dict[str, Any]) -> None:
@@ -169,78 +134,93 @@ class MobileRelayService(MobileRelayPairingMixin, MobileRelayTaskMixin):
             )
 
     def _fresh_pairing_code(self, db) -> str:
-        for _ in range(100):
-            code = str(secrets.randbelow(900000) + 100000)
-            if not db.execute(
-                text("SELECT 1 FROM mobile_relay_desktops WHERE pairing_code = :code"),
-                {"code": code},
-            ).first():
-                return code
-        raise RuntimeError("No unused relay pairing code is available")
+        return repository.fresh_pairing_code(db)
 
     def _desktop_belongs_to_user(self, *, user_id: int, relay_id: str) -> bool:
-        with get_db() as db:
-            self.ensure_tables(db)
-            return (
-                db.execute(
-                    text(
-                        """
-                        SELECT 1 FROM mobile_relay_desktops
-                        WHERE relay_id = :relay_id
-                          AND mobile_user_id = :user_id
-                          AND status = 'paired'
-                        """
-                    ),
-                    {"relay_id": relay_id.strip(), "user_id": int(user_id)},
-                ).first()
-                is not None
-            )
+        return repository.desktop_belongs_to_user(
+            user_id=user_id,
+            relay_id=relay_id,
+            database=lambda: get_db(),
+            ensure_schema=lambda db: self.ensure_tables(db),
+        )
 
     def _desktop_for_token(self, db, *, relay_id: str, desktop_token: str) -> dict[str, Any] | None:
-        token = (desktop_token or "").strip()
-        if not token:
-            return None
-        row = (
-            db.execute(
-                text(
-                    """
-                    SELECT * FROM mobile_relay_desktops
-                    WHERE relay_id = :relay_id
-                      AND desktop_token_hash = :token_hash
-                      AND status IN ('pending', 'paired')
-                    """
-                ),
-                {"relay_id": relay_id.strip(), "token_hash": _token_hash(token)},
-            )
-            .mappings()
-            .first()
-        )
-        return _row_dict(row) if row else None
+        return repository.desktop_for_token(db, relay_id=relay_id, desktop_token=desktop_token)
 
     def _public_desktop(self, data: dict[str, Any]) -> dict[str, Any]:
-        capabilities = (
-            data.get("capabilities") if isinstance(data.get("capabilities"), dict) else {}
+        return repository.public_desktop(data)
+
+    def register_desktop(
+        self,
+        *,
+        label: str,
+        device_id: str,
+        capabilities: dict[str, Any] | None = None,
+        relay_base_url: str = "",
+        ttl_seconds: int = 24 * 3600,
+    ) -> dict[str, Any]:
+        return self._pairing.register_desktop(
+            label=label,
+            device_id=device_id,
+            capabilities=capabilities,
+            relay_base_url=relay_base_url,
+            ttl_seconds=ttl_seconds,
         )
-        if not isinstance(capabilities, dict):
-            capabilities = {}
-        host = str(capabilities.get("host") or "").strip()
-        port = int(capabilities.get("port") or 0)
-        local_base_url = ""
-        if host and host not in {"0.0.0.0", "::"}:
-            local_base_url = f"http://{host}{f':{port}' if port > 0 else ''}"
-        status = data.get("status") or "pending"
-        return {
-            "relay_id": data.get("relay_id"),
-            "label": data.get("desktop_label") or "XCAGI 桌面执行端",
-            "device_id": data.get("device_id") or "",
-            "status": status,
-            "relay_base_url": data.get("relay_base_url") or "",
-            "local_base_url": local_base_url,
-            "paired_at": data.get("updated_at") if status == "paired" else "",
-            "capabilities": capabilities,
-            "last_seen_at": data.get("last_seen_at") or "",
-            "created_at": data.get("created_at") or "",
-            "updated_at": data.get("updated_at") or "",
-            # 已绑定手机的账号名；供桌面端设置页展示「已连接：xxx 的手机」，与手机端「服务」文案对齐。
-            "mobile_username": data.get("mobile_username") or "",
-        }
+
+    def renew_desktop_pairing(
+        self, *, relay_id: str, desktop_token: str, ttl_seconds: int = 24 * 3600
+    ) -> dict[str, Any] | None:
+        return self._pairing.renew_desktop_pairing(
+            relay_id=relay_id, desktop_token=desktop_token, ttl_seconds=ttl_seconds
+        )
+
+    def bind_mobile_by_account(
+        self, *, user_id: int, username: str, relay_id: str = "", pairing_code: str = ""
+    ) -> dict[str, Any] | None:
+        """Bind a desktop relay to the authenticated mobile account.
+
+        The signed-in phone obtains a relay ID from a QR or LAN exchange, or
+        resolves a six-digit device code through the cloud relay. An existing
+        binding remains owned by its original mobile account.
+        """
+        return self._pairing.bind_mobile_by_account(
+            user_id=user_id, username=username, relay_id=relay_id, pairing_code=pairing_code
+        )
+
+    def create_task(
+        self, *, user_id: int, relay_id: str, kind: str, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
+        return self._tasks.create_task(
+            user_id=user_id, relay_id=relay_id, kind=kind, payload=payload
+        )
+
+    def get_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
+        return self._tasks.get_task(user_id=user_id, task_id=task_id)
+
+    def cancel_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
+        """手机端取消任务：仅 queued/running 可取消，标记为 cancelled。"""
+        return self._tasks.cancel_task(user_id=user_id, task_id=task_id)
+
+    def poll_desktop(
+        self, *, relay_id: str, desktop_token: str, max_tasks: int = 5
+    ) -> dict[str, Any] | None:
+        return self._tasks.poll_desktop(
+            relay_id=relay_id, desktop_token=desktop_token, max_tasks=max_tasks
+        )
+
+    def complete_desktop_task(
+        self,
+        *,
+        relay_id: str,
+        desktop_token: str,
+        task_id: str,
+        status: str,
+        result: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        return self._tasks.complete_desktop_task(
+            relay_id=relay_id,
+            desktop_token=desktop_token,
+            task_id=task_id,
+            status=status,
+            result=result,
+        )

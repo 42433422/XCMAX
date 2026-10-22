@@ -8,7 +8,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-PART03 = "app.application.planner_compat_service_part03"
+SERVICE = "app.application.planner_compat_service"
 STREAM = "app.fastapi_routes.xcagi_compat_chat_stream"
 DISPATCH = "app.application.normal_chat_dispatch"
 
@@ -41,7 +41,7 @@ def _collect(agen) -> list[dict]:
 def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide, message):
     import importlib
 
-    part03 = importlib.import_module(PART03)
+    service = importlib.import_module(SERVICE)
     stream = importlib.import_module(STREAM)
     dispatch = importlib.import_module(DISPATCH)
 
@@ -68,7 +68,7 @@ def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide, message):
         url=NS(path="/api/ai/chat/stream"),
         method="POST",
     )
-    chunks = _collect(part03.compat_chat_stream_async(request, body, ai_tier="basic"))
+    chunks = _collect(service.compat_chat_stream_async(request, body, ai_tier="basic"))
     text = "".join(
         c.decode("utf-8", "ignore") if isinstance(c, (bytes, bytearray)) else str(c) for c in chunks
     )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.run_repository import AgentRunRepository
@@ -53,7 +53,7 @@ class RunPlanning:
             "Agent 计划生成完成",
             {"plan_id": plan.plan_id, "intent": plan.intent, "nodes": len(plan.nodes)},
         )
-        return cast(PlanGraph, plan)
+        return plan
 
     def recall_knowledge_for_run(self, run: AgentRun, *, context: dict[str, Any]) -> None:
         """统一 Agent Runtime 接缝：pre-plan 知识库 RAG 召回（best-effort，开关控制）。

@@ -80,6 +80,22 @@ python3 scripts/evidence_assets.py restore --archive /approved/private/evidence.
 法律递交材料保留原目录布局，未纳入媒体合并。媒体发布策略不合格的历史记录仍按
 原门禁阻断，不改写为通过。
 
+产品界面和宣传资源的可重建副本使用根仓 `config/media-aliases.json`：员工图片、
+共享品牌头像、徽标、官网优化图以及 App Store `live/` 副本均固定原图路径和哈希。
+前端、商店 Vite 构建与官网部署会按组件生成普通文件；根 README 直接引用保留的
+版本化 App Store 原图。手动恢复或只校验可在根仓运行：
+
+```bash
+node scripts/dev/materialize_media_assets.mjs --check
+node scripts/dev/materialize_media_assets.mjs frontend
+node scripts/dev/materialize_media_assets.mjs market
+node scripts/dev/materialize_media_assets.mjs marketing
+node scripts/dev/materialize_media_assets.mjs appstore
+```
+
+修改原图时同时复核清单中的 SHA-256 和字节数；不要提交生成别名。法律递交附件、
+iOS 规定命名的图标及跨平台独立应用资源仍按其现有打包边界保留。
+
 ## 关键文档
 
 - [仓库治理与多仓拆分计划](docs/migration/split-repos.md)

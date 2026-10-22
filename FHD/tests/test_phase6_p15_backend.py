@@ -967,8 +967,27 @@ class TestMarketRegisterRoute:
         assert resp.status_code == 400
 
     def test_missing_email_returns_400(self, market_client: TestClient) -> None:
-        resp = market_client.post("/api/market/register", json={"username": "u", "password": "p"})
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new_callable=AsyncMock,
+            return_value={
+                "__proxy_error__": True,
+                "status_code": 400,
+                "payload": {"detail": "email 必填"},
+            },
+        ) as market_proxy:
+            resp = market_client.post(
+                "/api/market/register", json={"username": "u", "password": "p"}
+            )
         assert resp.status_code == 400
+        assert resp.json()["message"] == "email 必填"
+        market_proxy.assert_awaited_once_with(
+            "POST",
+            "/api/auth/register",
+            json_body={"username": "u", "password": "p", "email": "", "verification_code": ""},
+            return_error_payload=True,
+        )
 
     def test_success_returns_token(self, market_client: TestClient) -> None:
         with patch.object(

@@ -242,12 +242,12 @@ def _write_ledger_xlsx(path):
     return path
 
 
-def _delivery_note(profile_target="shipment"):
+def _delivery_note(profile_target="shipment", *, order_number="O-1"):
     return {
         "unit_name": "客户A",
         "contact_person": "张三",
         "order_date": "2026-07-24",
-        "order_number": "O-1",
+        "order_number": order_number,
         "source_kind": "delivery_note",
         "profile_target": profile_target,
         "items": [
@@ -1380,7 +1380,7 @@ def test_execute_compensate_on_failure(monkeypatch, delivery_profile, tmp_path):
     ]
     svc.cancel_shipment.return_value = {"success": True}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    notes = [_delivery_note(), _delivery_note()]
+    notes = [_delivery_note(), _delivery_note(order_number="O-2")]
     res = execute_shipment_excel_etl(
         "d.xlsx",
         notes=notes,
@@ -1404,7 +1404,7 @@ def test_execute_compensate_delete_fallback(monkeypatch, delivery_profile, tmp_p
     svc.cancel_shipment.return_value = {"success": False}
     svc.delete_shipment.return_value = {"success": True}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    notes = [_delivery_note(), _delivery_note()]
+    notes = [_delivery_note(), _delivery_note(order_number="O-2")]
     res = execute_shipment_excel_etl(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
@@ -1421,7 +1421,7 @@ def test_execute_compensate_error(monkeypatch, delivery_profile, tmp_path):
     svc.cancel_shipment.return_value = {"success": False}
     svc.delete_shipment.return_value = {"success": False, "message": "del fail"}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    notes = [_delivery_note(), _delivery_note()]
+    notes = [_delivery_note(), _delivery_note(order_number="O-2")]
     res = execute_shipment_excel_etl(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
@@ -1442,7 +1442,7 @@ def test_execute_compensate_exception(monkeypatch, delivery_profile, tmp_path):
 
     svc.cancel_shipment.side_effect = cancel_boom
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    notes = [_delivery_note(), _delivery_note()]
+    notes = [_delivery_note(), _delivery_note(order_number="O-2")]
     res = execute_shipment_excel_etl(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
@@ -1458,7 +1458,7 @@ def test_execute_partial_no_compensate(monkeypatch, delivery_profile, tmp_path):
         {"success": False, "message": "boom"},
     ]
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    notes = [_delivery_note(), _delivery_note()]
+    notes = [_delivery_note(), _delivery_note(order_number="O-2")]
     res = execute_shipment_excel_etl(
         "d.xlsx",
         notes=notes,

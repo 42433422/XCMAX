@@ -301,7 +301,7 @@ def load_self_maintenance_records(
     path: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     if path is None:
-        from modstore_server.self_maintenance_loop_runner import ledger_path
+        from modstore_server.maintenance_loop.store import ledger_path
 
         resolved = ledger_path()
     else:
@@ -324,7 +324,9 @@ def default_para_task_fetcher(task_id: str) -> dict[str, Any]:
     api_base = str(os.environ.get("MODSTORE_PARA_API_BASE") or "").strip()
     if not api_base:
         raise RuntimeError("para_api_base_missing")
-    from modstore_server.self_maintenance_loop_runner import _fetch_para_task_state
+    from modstore_server.maintenance_loop.para_client import (
+        _fetch_para_task_state,
+    )
 
     return _fetch_para_task_state(api_base, task_id)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -259,6 +259,14 @@ def test_printer_utils_get_printer_status_codes() -> None:
 def mobile_ext_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     from app.fastapi_routes.mobile_api import get_mobile_user
 
+    monkeypatch.setattr(
+        mobile_ext,
+        "_load_market_ai_employee_profile_index",
+        AsyncMock(return_value=({}, False, "")),
+    )
+    monkeypatch.setattr(
+        "app.application.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
+    )
     app = FastAPI()
     app.include_router(mobile_ext.extension_router)
     app.dependency_overrides[get_mobile_user] = lambda: SimpleNamespace(id=1, username="mobile")

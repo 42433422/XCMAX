@@ -217,20 +217,52 @@ def test_guard_rejects_recommitting_generated_aliases(repository):
         ASSETS["guard"](root)
 
 
-@pytest.mark.parametrize("corrupt", [False, True])
+def test_guard_rejects_static_alias_even_when_it_differs_from_its_source(repository):
+    root, original, _, _ = repository
+    _git(root, "init", "-q")
+    alias = "FHD/frontend/public/brand-copy.png"
+    registry = root / "config/media-aliases.json"
+    registry.parent.mkdir()
+    registry.write_text(json.dumps({"aliases": {alias: {"source": original.relative_to(root).as_posix()}}}))
+    _git(root, "add", str(original))
+    ASSETS["guard"](root)
+    (root / alias).parent.mkdir(parents=True)
+    (root / alias).write_bytes(b"unreviewed generated copy")
+    _git(root, "add", alias)
+    with pytest.raises(ValueError, match="generated media alias is tracked"):
+        ASSETS["guard"](root)
+
+
+@pytest.mark.parametrize("corrupt", [None, "evidence", "branding"])
 def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repository, corrupt):
     root, original, _, _ = repository
     site = root / ASSETS["SITE"]
     helper = site / "scripts/evidence_assets.py"
     helper.parent.mkdir()
     helper.write_bytes((ROOT / ASSETS["SITE"] / "scripts/evidence_assets.py").read_bytes())
+    media_builder = root / "scripts/dev/materialize_media_assets.mjs"
+    media_builder.parent.mkdir(parents=True)
+    media_builder.write_bytes((ROOT / "scripts/dev/materialize_media_assets.mjs").read_bytes())
+    brand = root / "FHD/frontend/public/brand.jpg"
+    brand.parent.mkdir(parents=True)
+    brand.write_bytes(b"reviewed brand image")
+    registry = root / "config/media-aliases.json"
+    registry.parent.mkdir()
+    registry.write_text(json.dumps({"schema": "xcmax.media-aliases/v1", "aliases": {
+        f"{ASSETS['SITE']}/corp-butler/brand.jpg": {
+            "scope": "marketing", "source": "FHD/frontend/public/brand.jpg",
+            "sha256": hashlib.sha256(brand.read_bytes()).hexdigest(), "size": brand.stat().st_size,
+        }
+    }}))
     (site / "index.html").write_text("new page")
     live = root / "live"
     live.mkdir()
     (live / "index.html").write_text("previous page")
     (live / "download-release.json").write_text("{\"verified\":true}")
-    if corrupt:
+    if corrupt == "evidence":
         original.write_bytes(b"changed after acceptance")
+    elif corrupt == "branding":
+        brand.write_bytes(b"unreviewed replacement")
     script = (ROOT / ASSETS["SITE"] / "MODstore_deploy/scripts/xcmax-site-auto-update.sh").read_text()
     function = re.search(r"^publish_site_static_to_live\(\) \{.*?^\}", script, re.M | re.S)
     assert function is not None
@@ -247,4 +279,5 @@ def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repo
         assert run.returncode == 0, run.stderr
         assert (live / "index.html").read_text() == "new page"
         assert (live / "capabilities/assets/evidence/old-public-url.png").read_bytes() == original.read_bytes()
+        assert (live / "corp-butler/brand.jpg").read_bytes() == brand.read_bytes()
         assert json.loads((live / "download-release.json").read_text()) == {"verified": True}

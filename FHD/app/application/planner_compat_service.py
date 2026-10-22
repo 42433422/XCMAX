@@ -1,28 +1,61 @@
-# ruff: noqa: F401
-"""Planner 兼容对话服务（3d）：供宿主 /api/ai/* 与 Mod facade 共用。"""
+"""Planner chat API with request-scoped, explicitly bound components."""
 
 from __future__ import annotations
 
-import asyncio
-import json
+import asyncio as asyncio
+import json as json
 import logging
 import os
-from typing import Any, cast
+from collections.abc import AsyncGenerator
+from contextlib import aclosing
+from typing import Any
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException as HTTPException
+from fastapi import Request
 
 from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run,
     finalize_legacy_chat_run,
     start_legacy_chat_run,
 )
-from app.application.planner_compat_execute import (
-    execute_compat_chat as _execute_compat_chat_impl,
+from app.application.planner_compat.admission import ChatAdmission
+from app.application.planner_compat.application import CompatChatApplication, FastPaths
+from app.application.planner_compat.persona import (
+    BINARY_CONTEXT_KEYS,
+    ConversationService,
+    IndustryResolver,
+    PersonaEnricher,
+    request_session_candidates,
+    summarize_context_for_log,
 )
-from app.application.planner_compat_execute import (
-    execute_compat_chat_batch as _execute_compat_chat_batch_impl,
+from app.application.planner_compat.persona import recent_history as _recent_history
+from app.application.planner_compat.persona import resolve_chat_user_id as _resolve_chat_user_id
+from app.application.planner_compat.ports import (
+    ChatBackends,
+    ChatBody,
+    ChatResponses,
+    ChatTrace,
+    Context,
+    Payload,
 )
-from app.application.planner_compat_execute import reset_facade_globals, set_facade_globals
+from app.application.planner_compat.runtime import (
+    allow_legacy_fallback,
+    execute_mainline,
+    use_mainline,
+)
+from app.application.planner_compat.runtime import await_with_timeout as _await_with_timeout
+from app.application.planner_compat.runtime import env_truthy as _env_truthy
+from app.application.planner_compat.runtime import (
+    legacy_requires_token_payload as _legacy_requires_token_payload,
+)
+from app.application.planner_compat.runtime import (
+    merge_kitten_attachments as _merge_kitten_attachments,
+)
+from app.application.planner_compat.runtime import (
+    reply_has_legacy_tool_records as _reply_has_legacy_tool_records,
+)
+from app.application.planner_compat.streaming import CompatStream
+from app.application.planner_compat_execute import ChatTurnExecutor
 from app.domain.ai.tier import (
     assert_p2_elevated_claim_or_raise,
     resolve_ai_tier,
@@ -49,126 +82,249 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
 from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.legacy.chat.legacy_chat_adapter import chat as run_agent_chat
 from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
-from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
-
-_COMPAT_PATCH_EXPORTS: tuple[Any, ...] = (
-    json,
-    cast,
-    HTTPException,
-    finalize_legacy_chat_run,
-    start_legacy_chat_run,
-)
-_COMPAT_PATCH_EXPORTS += (assert_p2_elevated_claim_or_raise, runtime_context_with_tier)
-_COMPAT_PATCH_EXPORTS += (
-    planner_workflow_interrupt_reply,
-    runtime_context_after_workflow_interrupt,
-)
-_COMPAT_PATCH_EXPORTS += (_ensure_chat_db_read_authorized, _ensure_vector_index_if_needed)
-_COMPAT_PATCH_EXPORTS += (_message_requires_db_read_token, _xcagi_chat_http_exc)
-_COMPAT_PATCH_EXPORTS += (_xcagi_chat_timeout_error_payload, _xcagi_chat_timeout_seconds)
-_COMPAT_PATCH_EXPORTS += (set_llm_mode, run_agent_chat, create_modstore_openai_client_from_request)
+from app.utils.operational_errors import BOUNDARY_ERRORS as BOUNDARY_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_BINARY_CONTEXT_KEYS = BINARY_CONTEXT_KEYS
 
 
-from app.application.planner_compat_service_part01 import (
-    _request_session_candidates as _request_session_candidates,
-)
+def _compatibility_session(request: Request) -> str | None:
+    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
 
-_BINARY_CONTEXT_KEYS = frozenset(
-    {
-        "base64",
-        "data_url",
-        "dataurl",
-        "file_bytes",
-        "image_base64",
-        "image_data",
-        "pdf_base64",
-        "raw_bytes",
-    }
-)
+    return _session_id_from_request(request)
 
 
-from app.application.planner_compat_service_part02 import (
-    _attach_compat_chat_trace as _attach_compat_chat_trace,
-)
-from app.application.planner_compat_service_part02 import (
-    _await_with_timeout as _await_with_timeout,
-)
-from app.application.planner_compat_service_part02 import (
-    _clear_legacy_tool_result_if_reply_has_no_records as _clear_legacy_tool_result_if_reply_has_no_records,
-)
-from app.application.planner_compat_service_part02 import (
-    _derive_industry_from_session as _derive_industry_from_session,
-)
-from app.application.planner_compat_service_part02 import (
-    _env_truthy as _env_truthy,
-)
-from app.application.planner_compat_service_part02 import (
-    _execute_ai_chat_mainline as _execute_ai_chat_mainline,
-)
-from app.application.planner_compat_service_part02 import (
-    _legacy_chat_fallback_allowed as _legacy_chat_fallback_allowed,
-)
-from app.application.planner_compat_service_part02 import (
-    _legacy_requires_token_payload as _legacy_requires_token_payload,
-)
-from app.application.planner_compat_service_part02 import (
-    _merge_kitten_attachments as _merge_kitten_attachments,
-)
-from app.application.planner_compat_service_part02 import (
-    _recent_history as _recent_history,
-)
-from app.application.planner_compat_service_part02 import (
-    _reply_has_legacy_tool_records as _reply_has_legacy_tool_records,
-)
-from app.application.planner_compat_service_part02 import (
-    _resolve_chat_user_id as _resolve_chat_user_id,
-)
-from app.application.planner_compat_service_part02 import (
-    _summarize_context_for_log as _summarize_context_for_log,
-)
-from app.application.planner_compat_service_part02 import (
-    _use_ai_chat_mainline as _use_ai_chat_mainline,
-)
-from app.application.planner_compat_service_part02 import (
-    execute_compat_chat as _execute_compat_chat_part,
-)
-from app.application.planner_compat_service_part02 import (
-    execute_compat_chat_batch as _execute_compat_chat_batch_part,
-)
-from app.application.planner_compat_service_part03 import (
-    compat_chat_stream_async as _compat_chat_stream_async_impl,
-)
+def _request_session_candidates(request: Request) -> list[str]:
+    return request_session_candidates(request, _compatibility_session, logger)
 
 
-async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> dict[str, Any]:
-    """Run the extracted implementation against this facade's patchable globals."""
-    token = set_facade_globals(globals())
+def _account_meta(session: str) -> Context:
+    from app.application.session_account_meta import load_session_account_meta
+
+    return load_session_account_meta(session) or {}
+
+
+def _workspace_prefs(owner: str) -> Context:
+    from app.application.tenant_workspace_prefs import get_workspace_prefs
+
+    return get_workspace_prefs(owner)
+
+
+def _user_industry(user: Any) -> str | None:
+    from app.db.models.user import User
+    from app.db.session import get_db
+
+    with get_db() as db:
+        row = db.query(User.industry_id).filter(User.id == user).first()
+        return str(row[0]).strip() if row and row[0] else None
+
+
+def _derive_industry_from_session(request: Request) -> str:
+    return IndustryResolver(
+        _request_session_candidates, _account_meta, _workspace_prefs, _user_industry, logger
+    ).resolve(request)
+
+
+def _summarize_context_for_log(value: Any, *, key: str = "", depth: int = 0) -> Any:
+    return summarize_context_for_log(value, key=key, depth=depth, binary_keys=_BINARY_CONTEXT_KEYS)
+
+
+def _attach_compat_chat_trace(
+    payload: Payload,
+    body: ChatBody,
+    *,
+    message: str,
+    runtime_context: Context | None,
+    channel: str,
+) -> Payload:
+    return attach_chat_trace_run(
+        payload,
+        message=message,
+        runtime_context=runtime_context,
+        user_id=body.user_id,
+        source=body.source,
+        channel=channel,
+    )
+
+
+def _clear_legacy_tool_result_if_reply_has_no_records(reply: Any) -> None:
+    if _reply_has_legacy_tool_records(reply):
+        return
     try:
-        return await _execute_compat_chat_impl(request, body)
-    finally:
-        reset_facade_globals(token)
+        from app.legacy.chat.legacy_chat_adapter import clear_last_tool_result
+
+        clear_last_tool_result()
+    except RECOVERABLE_ERRORS:
+        logger.debug("legacy planner local tool trace clear skipped", exc_info=True)
 
 
-async def execute_compat_chat_batch(
-    request: Request, body: XcagiCompatChatBatchBody
-) -> dict[str, Any]:
-    """Run the extracted batch implementation against this facade instance."""
-    token = set_facade_globals(globals())
+def _use_ai_chat_mainline(runtime_context: Context | None) -> bool:
+    return use_mainline(runtime_context, _env_truthy)
+
+
+def _legacy_chat_fallback_allowed(runtime_context: Context | None) -> bool:
+    return allow_legacy_fallback(runtime_context, _env_truthy)
+
+
+async def _execute_ai_chat_mainline(
+    body: ChatBody,
+    runtime_context: Context,
+    *,
+    message: str | None = None,
+    kitten_extra: Payload | None = None,
+) -> Payload:
+    from app.application import get_ai_chat_app_service
+
+    return await execute_mainline(
+        get_ai_chat_app_service(),
+        body,
+        runtime_context,
+        message=message,
+        kitten_extra=kitten_extra,
+        reply=_xcagi_compat_reply_payload,
+        merge_attachments=_merge_kitten_attachments,
+    )
+
+
+async def _client_issue_payload(
+    request: Request, runtime_context: Context, message: str
+) -> tuple[str, Payload] | None:
+    from app.fastapi_routes.xcagi_compat_chat_stream import (
+        _apply_client_issue_outcome,
+        _classify_and_submit_client_issue_async,
+        _client_issue_reply,
+    )
+
+    receipt = await _classify_and_submit_client_issue_async(request, runtime_context, message, "")
+    reply = _client_issue_reply(receipt)
+    if not reply:
+        return None
+    return reply, _apply_client_issue_outcome(_xcagi_compat_reply_payload(reply), receipt)
+
+
+def _business_action(
+    message: str, *, runtime_context: Context, user_id: str | None, request: Request
+) -> Payload | None:
+    from app.application.chat_business_safety import try_handle_business_chat_action
+
+    return try_handle_business_chat_action(
+        message, runtime_context=runtime_context, user_id=user_id, request=request
+    )
+
+
+def _slot_read(message: str, *, request: Request, user_id: str) -> Payload | None:
+    from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+    return try_normal_slot_read_payload(message, request=request, user_id=user_id)
+
+
+async def _kitten_context(context: Context, message: str) -> tuple[Context, Payload]:
     try:
-        return await _execute_compat_chat_batch_impl(request, body)
-    finally:
-        reset_facade_globals(token)
+        from app.application.kitten_planner_context import (
+            enrich_kitten_analyzer_runtime,
+            kitten_reply_attachments,
+        )
+
+        context = await enrich_kitten_analyzer_runtime(context, message)
+        return context, kitten_reply_attachments(context)
+    except RECOVERABLE_ERRORS:
+        logger.debug("kitten planner context enrich skipped", exc_info=True)
+        return context, {}
+
+
+def _conversation_service() -> ConversationService:
+    from app.services.conversation.manager import get_ai_conversation_service
+
+    return get_ai_conversation_service()
+
+
+def _sse_event(payload: Payload) -> bytes:
+    from app.fastapi_routes.xcagi_compat_chat_helpers import _sse_event_line
+
+    return _sse_event_line(payload)
+
+
+def _admission() -> ChatAdmission:
+    return ChatAdmission(
+        merge_paths=_merge_runtime_context_with_message_paths,
+        authenticate=_runtime_context_with_authenticated_actor,
+        with_tier=runtime_context_with_tier,
+        authorize_read=_ensure_chat_db_read_authorized,
+        requires_read=_message_requires_db_read_token,
+        interrupt=planner_workflow_interrupt_reply,
+        after_interrupt=runtime_context_after_workflow_interrupt,
+        vector_guard=_ensure_vector_index_if_needed,
+        reply=_xcagi_compat_reply_payload,
+    )
+
+
+def _fast_paths() -> FastPaths:
+    return FastPaths(_client_issue_payload, _business_action, _slot_read, _kitten_context)
+
+
+def _application() -> CompatChatApplication:
+    # Resolve these seams from the calling module, including separately loaded
+    # facade instances. No ambient globals or shared request state is needed.
+    executor = ChatTurnExecutor(
+        backends=ChatBackends(
+            _execute_ai_chat_mainline,
+            run_agent_chat,
+            create_modstore_openai_client_from_request,
+            _use_ai_chat_mainline,
+            _legacy_chat_fallback_allowed,
+        ),
+        responses=ChatResponses(
+            _xcagi_compat_reply_payload,
+            _legacy_requires_token_payload,
+            _xcagi_chat_timeout_error_payload,
+            _xcagi_chat_http_exc,
+        ),
+        trace=ChatTrace(_attach_compat_chat_trace, start_legacy_chat_run, finalize_legacy_chat_run),
+        await_timeout=_await_with_timeout,
+        clear_legacy_tool_result=_clear_legacy_tool_result_if_reply_has_no_records,
+        workspace_root=lambda: os.environ.get("WORKSPACE_ROOT", os.getcwd()),
+        logger=logger,
+    )
+    return CompatChatApplication(
+        _admission(),
+        executor,
+        _fast_paths(),
+        set_llm_mode,
+        assert_p2_elevated_claim_or_raise,
+        resolve_ai_tier,
+        _xcagi_chat_timeout_seconds,
+    )
+
+
+async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:
+    return await _application().single(request, body)
+
+
+async def execute_compat_chat_batch(request: Request, body: XcagiCompatChatBatchBody) -> Payload:
+    return await _application().batch(request, body)
 
 
 async def compat_chat_stream_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
-):
-    """Keep stream helpers bound to this facade while iterating the async generator."""
-    token = set_facade_globals(globals())
-    try:
-        async for chunk in _compat_chat_stream_async_impl(request, body, ai_tier=ai_tier):
+) -> AsyncGenerator[bytes, None]:
+    stream = CompatStream(
+        _admission(),
+        _fast_paths(),
+        PersonaEnricher(
+            _conversation_service,
+            _resolve_chat_user_id,
+            _derive_industry_from_session,
+            _recent_history,
+            _summarize_context_for_log,
+            logger,
+        ),
+        attach_chat_trace_run,
+        _sse_event,
+        resolve_ai_tier,
+        _xcagi_planner_stream_bytes_async,
+        logger,
+    )
+    async with aclosing(stream.run(request, body, ai_tier=ai_tier)) as chunks:
+        async for chunk in chunks:
             yield chunk
-    finally:
-        reset_facade_globals(token)

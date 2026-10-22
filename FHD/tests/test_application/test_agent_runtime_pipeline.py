@@ -174,7 +174,7 @@ class TestRecallKnowledgeContext:
             "citations": [{"index": 1, "text": "7 天无理由退货"}],
         }
         monkeypatch.setattr(
-            "app.application.dataset_rag_app_service_part05.get_dataset_rag_app_service",
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
             lambda: svc,
         )
         result = recall_knowledge_context(query="退货政策", dataset_id="ds1", top_k=3)
@@ -191,7 +191,7 @@ class TestRecallKnowledgeContext:
             raise RuntimeError("dataset backend down")
 
         monkeypatch.setattr(
-            "app.application.dataset_rag_app_service_part05.get_dataset_rag_app_service",
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
             _boom,
         )
         result = recall_knowledge_context(query="q", dataset_id="ds1")

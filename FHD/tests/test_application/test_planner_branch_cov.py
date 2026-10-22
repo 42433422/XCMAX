@@ -2417,17 +2417,23 @@ class TestPlanIntegration:
                 return_value=_sample_registry(),
             ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
-                    # 让 get_user_memory_rag_app_service 导入失败
-                    import sys
+                    # Fail at the import boundary, including when the public
+                    # service is exported lazily instead of stored in __dict__.
+                    import builtins
 
-                    original = sys.modules.get("app.application")
-                    if original is not None:
-                        original_getattr = getattr(
-                            original, "get_user_memory_rag_app_service", None
-                        )
-                        if original_getattr:
-                            del original.get_user_memory_rag_app_service  # type: ignore[attr-defined]
-                    try:
+                    original_import = builtins.__import__
+                    blocked = []
+
+                    def unavailable_memory(name, globals=None, locals=None, fromlist=(), level=0):
+                        if (
+                            name == "app.application"
+                            and "get_user_memory_rag_app_service" in fromlist
+                        ):
+                            blocked.append(name)
+                            raise ImportError("user memory RAG unavailable")
+                        return original_import(name, globals, locals, fromlist, level)
+
+                    with patch("builtins.__import__", side_effect=unavailable_memory):
                         result = planner.plan(
                             user_id="u1",
                             message="test",
@@ -2435,9 +2441,7 @@ class TestPlanIntegration:
                             context={},
                         )
                         assert result is not None
-                    finally:
-                        if original is not None and original_getattr is not None:
-                            original.get_user_memory_rag_app_service = original_getattr  # type: ignore[attr-defined]
+                    assert blocked == ["app.application"]
 
     def test_plan_user_memory_rag_recoverable_error_handled(self) -> None:
         """用户记忆 RAG RECOVERABLE_ERRORS 不阻断主流程。"""

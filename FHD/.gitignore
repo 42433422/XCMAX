@@ -162,6 +162,9 @@ saved_analyses/
 user_memory/
 !app/domain/user_memory/
 !app/domain/user_memory/*.py
+!app/services/user_memory/
+app/services/user_memory/*
+!app/services/user_memory/*.py
 labels/
 test_labels/
 output/

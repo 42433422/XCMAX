@@ -85,3 +85,11 @@ eskill-prototype/
 !/capabilities/assets/evidence/dt-mac-control-dt-mac-control-macos-20260929-094829.log
 !/capabilities/assets/evidence/dt-mac-control-dt-mac-control-macos-20260929-094829.webm
 !/capabilities/assets/evidence/dt-mac-control-dt-mac-control-macos-identity.json
+
+# Exact generated media aliases; sources and checksums live in config/media-aliases.json.
+/assets/optimized/ai-intent-03-product-exists.webp
+/assets/optimized/ai-intent-05-query-failure-visible.webp
+/corp-butler/ai-butler-female-avatar-v1.png
+/corp-butler/ai-butler-male-avatar-v1.jpg
+/corp-butler/brand-xc-logo.jpg
+/marketing-assets/xc-brand-film/assets/logo-source.png

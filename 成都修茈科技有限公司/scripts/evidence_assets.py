@@ -240,6 +240,8 @@ def restore(root: Path, source: Path) -> None:
 
 def guard(root: Path, base: str | None = None) -> None:
     data = load(root)
+    media_registry = root / "config/media-aliases.json"
+    static_aliases = json.loads(media_registry.read_text()).get("aliases", {}) if media_registry.is_file() else {}
     tracked = subprocess.check_output(["git", "-C", str(root), "ls-files", "--stage", "-z"])
     blobs: dict[str, list[str]] = {}
     for row in tracked.split(b"\0"):
@@ -247,6 +249,8 @@ def guard(root: Path, base: str | None = None) -> None:
             continue
         meta, raw = row.split(b"\t", 1)
         path = raw.decode()
+        if path in static_aliases:
+            raise ValueError(f"generated media alias is tracked; use its canonical source: {path}")
         if path in data.get("source_aliases", {}):
             raise ValueError(f"duplicate evidence alias is tracked; use its canonical file: {path}")
         if path.startswith(PUBLIC + "/") and path[len(PUBLIC) + 1:] not in data["retained_sources"]:
