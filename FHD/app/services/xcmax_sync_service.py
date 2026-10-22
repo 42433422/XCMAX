@@ -31,7 +31,7 @@ import logging
 import os
 import urllib.error
 import urllib.request
-from typing import Any, cast
+from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -94,35 +94,15 @@ def _payload_updated_at_ms(payload: dict[str, Any]) -> int:
 
 
 def _read_sync_meta(key: str) -> dict[str, Any]:
-    import sqlite3 as _sqlite3
+    from app.db.xcmax_sync import SyncDb
 
-    from app.db.xcmax_sync import _ensure_schema, _resolve_db_path
-
-    conn = _sqlite3.connect(str(_resolve_db_path()))
-    _ensure_schema(conn)
-    row = conn.execute("SELECT value FROM sync_meta WHERE key=?", (key,)).fetchone()
-    conn.close()
-    if not row:
-        return {}
-    try:
-        return cast("dict[str, Any]", json.loads(row[0] or "{}"))
-    except (json.JSONDecodeError, TypeError):
-        return {}
+    return SyncDb.read_meta(key)
 
 
 def _write_sync_meta(key: str, value: dict[str, Any]) -> None:
-    import sqlite3 as _sqlite3
+    from app.db.xcmax_sync import SyncDb
 
-    from app.db.xcmax_sync import _ensure_schema, _resolve_db_path
-
-    conn = _sqlite3.connect(str(_resolve_db_path()))
-    _ensure_schema(conn)
-    conn.execute(
-        "INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
-        (key, json.dumps(value, ensure_ascii=False, default=str)),
-    )
-    conn.commit()
-    conn.close()
+    SyncDb.write_meta(key, value)
 
 
 # 公共变更记录入口（各业务路由均可调用）
@@ -304,23 +284,11 @@ register_entity_applier("private_mod_delivery")(apply_private_mod_delivery)
 
 def apply_inbox(limit: int = 200) -> dict[str, Any]:
     """幂等地把 inbox 中 pending 的变更应用到本地。"""
-    import sqlite3
-
     from app.db.xcmax_sync import SyncDb
 
     db = SyncDb()
     try:
-        db._resolve_db_path() if hasattr(db, "_resolve_db_path") else None
-        from app.db.xcmax_sync import _resolve_db_path
-
-        path = _resolve_db_path()
-        conn = sqlite3.connect(str(path))
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT id, entity_type, entity_id, operation, payload_json FROM sync_inbox WHERE status='pending' LIMIT ?",
-            (limit,),
-        ).fetchall()
-        conn.close()
+        rows = db.get_pending_inbox(limit=limit)
     except RECOVERABLE_ERRORS as exc:
         logger.warning("apply_inbox read failed: %s", exc)
         return {"applied": 0, "errors": 1}

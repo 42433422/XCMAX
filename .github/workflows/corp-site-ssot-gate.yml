@@ -23,6 +23,7 @@ on:
       - 'FHD/config/saas_plans.json'
       - 'FHD/config/public_cases.json'
       - 'FHD/docs/evidence/**'
+      - 'scripts/ci/test_range_static_server.py'
       - '.github/workflows/corp-site-ssot-gate.yml'
   push:
     branches: [main]
@@ -39,6 +40,7 @@ on:
       - 'FHD/config/saas_plans.json'
       - 'FHD/config/public_cases.json'
       - 'FHD/docs/evidence/**'
+      - 'scripts/ci/test_range_static_server.py'
       - '.github/workflows/corp-site-ssot-gate.yml'
 
 concurrency:
@@ -67,6 +69,9 @@ jobs:
         working-directory: 成都修茈科技有限公司
         run: python3 scripts/site_acceptance.py
 
+      - name: Static server byte-range contract
+        run: python3 scripts/ci/test_range_static_server.py
+
       - uses: actions/setup-node@v7
         with:
           node-version: '24.19.0'
@@ -81,8 +86,22 @@ jobs:
         working-directory: 成都修茈科技有限公司
         run: |
           python3 scripts/range_static_server.py 8139 > /tmp/range-server.log 2>&1 &
-          sleep 1
-          curl -s --noproxy '*' -o /dev/null -w "server: %{http_code}\n" http://127.0.0.1:8139/index.html
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl -fsS --max-time 1 --noproxy '*' -o /dev/null http://127.0.0.1:8139/index.html 2>/dev/null; then
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat /tmp/range-server.log
+              exit 1
+            fi
+            sleep 0.25
+          done
+          if ! curl -fsS --max-time 1 --noproxy '*' -o /dev/null -w "server: %{http_code}\n" http://127.0.0.1:8139/index.html; then
+            cat /tmp/range-server.log
+            exit 1
+          fi
           NO_PROXY="127.0.0.1,localhost" no_proxy="127.0.0.1,localhost" \
             node scripts/site_runtime_acceptance.mjs http://127.0.0.1:8139
 

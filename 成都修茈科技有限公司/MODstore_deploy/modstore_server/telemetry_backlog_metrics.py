@@ -1,4 +1,3 @@
-# mypy: disable-error-code="var-annotated"
 """Auto-merge and security telemetry scanners."""
 
 from __future__ import annotations
@@ -22,7 +21,7 @@ def _scan_auto_merge_metrics() -> List[Dict[str, Any]]:
     数据源：self_maintenance_loop_memory.json 的 recent_runs
     信号类型：auto_merge_degradation（成功率 < 80% 或回滚率 > 20% 时触发）
     """
-    signals = []
+    signals: List[Dict[str, Any]] = []
     try:
         from modstore_server.maintenance_loop.store import _load_loop_memory
 
@@ -109,7 +108,7 @@ def _scan_security_scan_metrics() -> List[Dict[str, Any]]:
     数据源：FHD/metrics/ 目录下的安全扫描结果文件
     信号类型：security_scan_alert（发现高危漏洞/泄漏时触发）
     """
-    signals = []
+    signals: List[Dict[str, Any]] = []
     try:
         import json
         from pathlib import Path

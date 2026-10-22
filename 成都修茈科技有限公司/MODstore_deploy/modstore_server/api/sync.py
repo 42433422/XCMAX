@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from modman.manifest_util import read_manifest
 from modman.repo_config import resolved_xcagi
 from modman.store import deploy_to_xcagi, iter_mod_dirs, pull_from_xcagi
-from modstore_server.api.auth_deps import assert_user_owns_mod, require_user
+from modstore_server.api.auth_deps import assert_user_owns_mod
 from modstore_server.api.dto import SyncDTO
+from modstore_server.api.service_auth import require_admin_user
 from modstore_server.infrastructure import library_paths
 from modstore_server.models import User, get_session_factory
 from modstore_server.quota_middleware import consume_quota, get_quota, require_quota
@@ -20,7 +21,7 @@ router = APIRouter(tags=["sync"])
 
 
 @router.post("/api/sync/push")
-def api_sync_push(body: SyncDTO, user: User = Depends(require_user)):
+def api_sync_push(body: SyncDTO, user: User = Depends(require_admin_user)):
     cfg = library_paths.cfg()
     xc = resolved_xcagi(cfg)
     if not xc:
@@ -58,7 +59,7 @@ def api_sync_push(body: SyncDTO, user: User = Depends(require_user)):
 
 
 @router.post("/api/sync/pull")
-def api_sync_pull(body: SyncDTO, user: User = Depends(require_user)):
+def api_sync_pull(body: SyncDTO, user: User = Depends(require_admin_user)):
     cfg = library_paths.cfg()
     xc = resolved_xcagi(cfg)
     if not xc:

@@ -42,71 +42,8 @@ jobs:
           python3 "${evidence_script}" check
           python3 "${evidence_script}" guard "${args[@]}"
 
-      - name: Forbidden path check (tracked files)
-        # 已经在 git 索引里的禁止路径：这些文件不应存在于仓库中。
-        # 失败说明历史里已经提交了运行期产物，需要跑 scripts/cleanup-committed-runtime-artifacts.sh 清理。
-        run: |
-          set -euo pipefail
-          FORBIDDEN_PATTERNS=(
-            'MODstore_deploy/modstore_server/webhook_events/.*\.json'
-            'MODstore_deploy/modstore_server/data/event_outbox\.jsonl'
-            'MODstore_deploy/modstore_server/data/event_outbox_.*\.jsonl'
-            'MODstore_deploy/modstore_server/data/payment_orders/'
-            'MODstore_deploy/modstore_server/payment_orders/.*\.json$'
-            'MODstore_deploy/modstore_server/data/chroma/'
-            'MODstore_deploy/var/employee_draft_assets/'
-          )
-          failures=0
-          for pat in "${FORBIDDEN_PATTERNS[@]}"; do
-            matches=$(git -c core.quotepath=false ls-files | grep -E "$pat" || true)
-            if [ -n "$matches" ]; then
-              echo "::error ::Found forbidden runtime artifacts tracked in git (pattern: $pat):"
-              echo "$matches" | sed 's/^/  - /'
-              failures=$((failures + 1))
-            fi
-          done
-          if [ "$failures" -gt 0 ]; then
-            echo ""
-            echo "运行期产物（outbox / webhook 投递 JSON / payment_orders / chroma）不应进入 git。"
-            echo "请在生产 / compose 里用 MODSTORE_RUNTIME_DIR 指向数据盘，并运行"
-            echo "  bash scripts/cleanup-committed-runtime-artifacts.sh"
-            echo "从当前索引移除这些文件；已公开的历史对象需单独安排清理。"
-            exit 1
-          fi
-          echo "[ok] no tracked runtime artifacts"
+      - name: Test runtime artifact guard
+        run: python3 -m unittest discover -s scripts/ci -p test_guard_customer_data.py
 
-      - name: Forbidden path check (PR diff)
-        # 针对本 PR 新增/修改的文件，显式阻止运行期产物被添加。
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          FORBIDDEN_PATTERNS=(
-            'MODstore_deploy/modstore_server/webhook_events/.*\.json'
-            'MODstore_deploy/modstore_server/data/event_outbox\.jsonl'
-            'MODstore_deploy/modstore_server/data/event_outbox_.*\.jsonl'
-            'MODstore_deploy/modstore_server/data/payment_orders/'
-            'MODstore_deploy/modstore_server/payment_orders/.*\.json$'
-            'MODstore_deploy/modstore_server/data/chroma/'
-            'MODstore_deploy/var/employee_draft_assets/'
-          )
-          git fetch origin "$BASE_SHA" --depth=1 || true
-          # Deletions are the remediation path for artifacts that were already
-          # committed. Only block paths that remain added, copied, modified,
-          # renamed, or type-changed in the proposed tree.
-          changed=$(git -c core.quotepath=false diff --name-only --diff-filter=ACMRT "$BASE_SHA" "$HEAD_SHA" || true)
-          failures=0
-          for pat in "${FORBIDDEN_PATTERNS[@]}"; do
-            hits=$(echo "$changed" | grep -E "$pat" || true)
-            if [ -n "$hits" ]; then
-              echo "::error ::PR adds/modifies forbidden runtime artifacts (pattern: $pat):"
-              echo "$hits" | sed 's/^/  - /'
-              failures=$((failures + 1))
-            fi
-          done
-          if [ "$failures" -gt 0 ]; then
-            exit 1
-          fi
-          echo "[ok] PR does not touch runtime-artifact paths"
+      - name: Reject customer and runtime data in the proposed Git index
+        run: python3 scripts/ci/guard_customer_data.py

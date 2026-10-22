@@ -52,10 +52,20 @@ jobs:
           config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform CodeQL Analysis
+        id: analyze
         if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+
+      - name: Retain source locations and data flows for review
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif-${{ matrix.language }}
+          path: ${{ steps.analyze.outputs.sarif-output }}/**/*.sarif
+          retention-days: 14
+          if-no-files-found: error
 
       - name: No ${{ matrix.language }} changes (targeted skip)
         if: github.event_name == 'pull_request' && steps.paths.outputs.run != 'true'
@@ -88,7 +98,14 @@ jobs:
               | jq '[.[][] | select(
                   ((.rule.security_severity_level // "") | ascii_downcase)
                   as $severity | $severity == "critical" or $severity == "high"
-                ) | {number, rule_id:.rule.id, path:.most_recent_instance.location.path}]' \
+                ) | {
+                  number,
+                  rule_id:.rule.id,
+                  path:.most_recent_instance.location.path,
+                  start_line:.most_recent_instance.location.start_line,
+                  end_line:.most_recent_instance.location.end_line,
+                  message:.most_recent_instance.message.text
+                }]' \
               > "$output"
           }
           export_alerts "$BASE_REF" base.json

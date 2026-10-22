@@ -746,6 +746,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install architecture contract checker from dependency SSOT
+        run: |
+          python - <<'PYTHON'
+          import pathlib, subprocess, sys, tomllib
+          config = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          requirements = config["project"]["optional-dependencies"]["dev"]
+          requirement = next(value for value in requirements if value.startswith("import-linter"))
+          subprocess.check_call([sys.executable, "-m", "pip", "install", requirement])
+          PYTHON
+
+      - name: Check sync data-access import contracts
+        run: lint-imports --config pyproject.toml --no-cache
+
       - name: Run architecture fitness checks
         run: python scripts/arch_fitness.py
 

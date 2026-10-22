@@ -1547,13 +1547,11 @@ class TestXcmaxSyncServiceUncoveredBranches:
             mock_conn.return_value.execute.assert_called_once()
 
     def test_apply_inbox_read_failed(self):
-        with (
-            patch("app.db.xcmax_sync.SyncDb") as mock_sync_db,
-            patch("sqlite3.connect", side_effect=OSError("db locked")),
-        ):
-            mock_sync_db.return_value.get_pending_outbox.return_value = []
+        with patch("app.db.xcmax_sync.SyncDb") as mock_sync_db:
+            mock_sync_db.return_value.get_pending_inbox.side_effect = OSError("db locked")
             result = sync_svc.apply_inbox()
-        assert result["errors"] == 1
+        mock_sync_db.return_value.get_pending_inbox.assert_called_once_with(limit=200)
+        assert result == {"applied": 0, "errors": 1}
 
     def test_apply_inbox_no_applier(self):
         row = {
@@ -1564,14 +1562,14 @@ class TestXcmaxSyncServiceUncoveredBranches:
             "payload_json": "{}",
         }
         db = MagicMock()
-        db.get_pending_outbox.return_value = []
+        db.get_pending_inbox.return_value = [row]
 
-        with patch("sqlite3.connect") as mock_conn:
-            mock_conn.return_value.execute.return_value.fetchall.return_value = [row]
-            mock_conn.return_value.row_factory = None
+        with patch("app.db.xcmax_sync.SyncDb", return_value=db):
             result = sync_svc.apply_inbox()
 
-        assert result["applied"] == 1
+        db.get_pending_inbox.assert_called_once_with(limit=200)
+        db.mark_inbox_applied.assert_called_once_with(1)
+        assert result == {"applied": 1, "conflicts": 0, "errors": 0}
 
 
 # -----------------------------------------------------------------------------

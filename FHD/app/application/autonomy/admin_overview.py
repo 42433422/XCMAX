@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import stat
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -50,9 +51,13 @@ def _read_jsonl(path: Path, *, limit: int = 100, strict: bool = False) -> list[d
         try:
             row = json.loads(text)
         except json.JSONDecodeError:
+            if strict:
+                raise ValueError("审计记录格式无效") from None
             continue
         if isinstance(row, dict):
             items.append(row)
+        elif strict:
+            raise ValueError("审计记录必须为对象")
         if len(items) >= max(1, limit):
             break
     if strict and any(line.strip() for line in lines) and not items:
@@ -393,12 +398,20 @@ def read_cross_tier_audit(
         "ci": _FHD_ROOT / ".trae" / "autonomy-ci" / "audit.jsonl",
     }
     server_fallback = _runtime_metrics_dir().parent / "autonomy" / "audit.jsonl"
-    if tier_key == "server" and not path_map["server"].is_file() and server_fallback.is_file():
-        path_map["server"] = server_fallback
     path = path_map.get(tier_key) or path_map["server"]
     status, items, last_event_at = "not_connected", [], None
+    exists, error_code = False, None
     try:
-        exists = path.is_file()
+        try:
+            metadata = path.stat()
+        except FileNotFoundError:
+            if tier_key != "server":
+                raise
+            path = server_fallback
+            metadata = path.stat()
+        exists = True
+        if not stat.S_ISREG(metadata.st_mode):
+            raise IsADirectoryError("invalid audit source")
         if exists:
             items = _read_jsonl(path, limit=bounded, strict=True)
             status = "unknown_freshness" if items else "empty"
@@ -419,9 +432,19 @@ def read_cross_tier_audit(
                 last_event_at = latest.isoformat()
                 age = (datetime.now(UTC) - latest).total_seconds()
                 status = "stale" if age > 86400 else "ready" if age >= -300 else "unknown_freshness"
-    except (OSError, UnicodeError, ValueError):
-        exists, status = path.exists(), "error"
+    except FileNotFoundError:
+        status = "not_connected"
+    except PermissionError:
+        status, error_code = "error", "permission_denied"
+    except IsADirectoryError:
+        status, error_code = "error", "invalid_path"
+    except (UnicodeError, ValueError):
+        status, error_code = "error", "invalid_format"
+    except OSError:
+        status, error_code = "error", "read_failed"
     return {
+        "error_code": error_code,
+        "collected_at": datetime.now(UTC).isoformat(),
         "tier": tier_key,
         "path": str(path),
         "exists": exists,

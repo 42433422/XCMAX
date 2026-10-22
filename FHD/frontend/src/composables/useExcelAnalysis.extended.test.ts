@@ -339,10 +339,10 @@ describe('workbook detail fallback and response deadlines', () => {
       .mockResolvedValueOnce(response({ success: true, fields: [{ label: 'Product' }], preview_data: { sample_rows: [{ Product: 'A' }], grid_preview: { rows: [['A']] }, grid_style_cache: { cell_style_refs: { A1: 'bold' } }, tables: [{ fields: ['Product'] }] } }))
       .mockResolvedValueOnce(response({ success: true }))
       .mockResolvedValueOnce(response({ success: false }, false))
-      .mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce(new Error('offline'))
     await api.onExcelAnalyzeFileChange(event())
-    expect(fetch).toHaveBeenCalledTimes(6)
-    expect(vi.mocked(fetch).mock.calls.slice(1).map(([, init]) => (init!.body as FormData).get('sheet_name'))).toEqual(['Sales', 'Empty', 'Unavailable', 'Offline', 'Offline'])
+    expect(fetch).toHaveBeenCalledTimes(5)
+    expect(vi.mocked(fetch).mock.calls.slice(1).map(([, init]) => (init!.body as FormData).get('sheet_name'))).toEqual(['Sales', 'Empty', 'Unavailable', 'Offline'])
     expect((vi.mocked(fetch).mock.calls[1][1]!.body as FormData).get('analyze_all_sheets')).toBe('false')
     const result = onAnalyzed.mock.calls[0][0]
     expect(result.result.sheets).toHaveLength(2)

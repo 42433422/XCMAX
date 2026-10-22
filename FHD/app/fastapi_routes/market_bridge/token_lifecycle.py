@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from logging import Logger
 from typing import Any
 
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -29,7 +30,7 @@ class TokenLifecycle:
     fast_timeout: Callable[[], float]
     logger: Logger
 
-    async def refresh(self, session_id: str) -> str:
+    async def refresh(self, session_id: str, *, distinguish_errors: bool = False) -> str:
         sid = (session_id or "").strip()
         if not sid:
             return ""
@@ -45,8 +46,22 @@ class TokenLifecycle:
         if isinstance(payload, JSONResponse) or (
             isinstance(payload, dict) and payload.get("__proxy_error__")
         ):
+            status = (
+                payload.status_code
+                if isinstance(payload, JSONResponse)
+                else int(payload.get("status_code") or 503)
+            )
+            if distinguish_errors and status != 401:
+                raise HTTPException(
+                    status_code=403 if status == 403 else 503,
+                    detail="市场账号无权刷新登录"
+                    if status == 403
+                    else "市场登录服务暂时不可用，请稍后恢复；草稿未发送",
+                )
             return ""
         access = self.access_from_payload(payload)
+        if distinguish_errors and not access:
+            raise HTTPException(status_code=503, detail="市场登录服务返回无效响应；草稿未发送")
         new_refresh = self.refresh_from_payload(payload) or refresh
         if access:
             self.save(sid, access, new_refresh)

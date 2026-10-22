@@ -301,3 +301,91 @@ def test_defect_report_is_not_swallowed_when_classification_unavailable():
         )
         is None
     )
+
+
+@pytest.mark.parametrize("complete", [False, True])
+def test_explicit_report_does_not_initialize_llm(intake_env, monkeypatch, complete):
+    from unittest.mock import Mock
+
+    from app.application import client_product_issue_intake as intake
+    from app.fastapi_routes import xcagi_compat_chat_stream as stream
+
+    intake_env.identity(instance="synthetic-instance", version="1.0.0.6", git_sha="a" * 40)
+    factory = Mock(side_effect=RuntimeError("synthetic model is unavailable"))
+    monkeypatch.setattr(stream._facade(), "create_modstore_openai_client_from_request", factory)
+    calls = []
+
+    async def remote(token, route, *, method="GET", payload=None):
+        calls.append((route, method, payload))
+        if route.endswith("customer-candidate"):
+            return {"wo_id": "WO-synthetic", "created": True}
+        return {"success": True, "ticket_id": 424242, "ticket_no": "CI-synthetic"}
+
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    message = "我要提交产品问题，管理端基础设施展示不直观。"
+    if complete:
+        message += "期望：清晰展示状态。实际：状态文字难以阅读。"
+    result = asyncio.run(
+        stream._classify_and_submit_client_issue_async(object(), {"tenant_id": 424242}, message, "")
+    )
+    factory.assert_not_called()
+    if complete:
+        assert result["state"] == "ROUTED"
+        assert result["owner_ticket_no"] == "CI-synthetic"
+        assert [entry[0] for entry in calls] == [
+            "/api/work-orders/customer-candidate",
+            "/api/customer-service/issues/intake",
+        ]
+    else:
+        assert result["state"] == "NEEDS_MORE_EVIDENCE"
+        assert set(result["missing_evidence"]) == {"expected_behavior", "actual_behavior"}
+        assert calls == []
+
+
+@pytest.mark.parametrize("failure", ["no_session_token", "missing_formal_number"])
+def test_model_free_report_still_requires_authenticated_formal_receipt(
+    intake_env, monkeypatch, failure
+):
+    from unittest.mock import Mock
+
+    from app.application import client_product_issue_intake as intake
+    from app.fastapi_routes import private_mod_delivery_context
+    from app.fastapi_routes import xcagi_compat_chat_stream as stream
+
+    factory = Mock(side_effect=AssertionError("explicit intake must not create an LLM client"))
+    monkeypatch.setattr(stream._facade(), "create_modstore_openai_client_from_request", factory)
+    calls = []
+
+    async def remote(token, route, *, method="GET", payload=None):
+        calls.append((route, method))
+        if route.endswith("customer-candidate"):
+            return {"wo_id": "WO-synthetic"}
+        if route.endswith("intake"):
+            return {"success": True, "ticket_id": 424242}
+        return {"items": []}
+
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    if failure == "no_session_token":
+
+        async def no_token(_request):
+            return ""
+
+        monkeypatch.setattr(
+            private_mod_delivery_context, "_private_delivery_market_token", no_token
+        )
+    result = asyncio.run(
+        stream._classify_and_submit_client_issue_async(
+            object(),
+            {"tenant_id": 424242},
+            "提交产品问题。期望：页面正常显示。实际：页面报错。",
+            "",
+        )
+    )
+    factory.assert_not_called()
+    assert result["state"] == "OWNER_ROUTE_UNAVAILABLE"
+    assert not result.get("owner_ticket_no")
+    if failure == "no_session_token":
+        assert calls == []
+    else:
+        assert sum(method == "POST" for _, method in calls) == 2
+        assert calls[-1][1] == "GET"

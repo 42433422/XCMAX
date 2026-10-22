@@ -366,8 +366,8 @@ async def market_membership_plans():
     return await _membership().plans()
 
 
-async def refresh_session_market_token(session_id: str) -> str:
-    return await _token_lifecycle().refresh(session_id)
+async def refresh_session_market_token(session_id: str, *, distinguish_errors: bool = False) -> str:
+    return await _token_lifecycle().refresh(session_id, distinguish_errors=distinguish_errors)
 
 
 async def resolve_valid_market_access_token(session_id: str) -> str:

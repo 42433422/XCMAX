@@ -1,165 +1,37 @@
 #!/usr/bin/env python3
-"""Build and register the SUNBIRD customer delivery seed package.
+"""Retired shared-catalog customer seed publisher; fail closed before any I/O.
 
-Requires explicit external seed, output and catalog directories. The catalog
-directory must match the server's MODSTORE_CATALOG_DIR; customer data is never
-published into the source checkout or the generic public package listing.
+This legacy tool registered personnel snapshots under a fixed production customer
+identity. Removing tracked fixtures does not make old local seeds or supplied ZIPs
+safe. Existing private delivery APIs are unchanged; this repository helper cannot
+package, copy or register customer data, including with --zip-path.
 """
 
 from __future__ import annotations
 
-import argparse
-import hashlib
-import json
-import shutil
 import sys
-import zipfile
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-_SCRIPT_PATH = Path(__file__).resolve()
-ROOT = _SCRIPT_PATH.parents[2] if len(_SCRIPT_PATH.parents) > 2 else Path.cwd()
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-from scripts.package.private_delivery_paths import private_path
-
-PACKAGE_ID = "sunbird-delivery-seed"
-DEFAULT_VERSION = "1.0.0"
-ARTIFACT = "customer_delivery_seed"
-
-PACKAGE_REQUIRED_FILES = (
-    "config/sunbird-roster.json",
-    "424/考勤-2026-3月份考勤统计表.xlsx",
+RETIRED = (
+    "Legacy customer seed catalog publication is disabled. "
+    "Use the authorized private delivery workflow. No package was built or registered."
 )
 
 
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def _build_zip(seed_root: Path, out_dir: Path, version: str) -> Path:
-    seed_root = private_path(seed_root, "seed_root")
-    out_dir = private_path(out_dir, "out_dir")
-    package_files = list(PACKAGE_REQUIRED_FILES)
-    missing = [rel for rel in PACKAGE_REQUIRED_FILES if not (seed_root / rel).is_file()]
-    if missing:
-        raise SystemExit("missing seed files: " + ", ".join(missing))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    zip_path = out_dir / f"{PACKAGE_ID}-{version}.zip"
-    manifest = {
-        "schema_version": 1,
-        "delivery_id": "customer-taiyangniao",
-        "customer_account": "SUNBIRD",
-        "customer_name": "太阳鸟",
-        "artifact": ARTIFACT,
-        "pkg_id": PACKAGE_ID,
-        "version": version,
-        "apply": "sunbird_roster",
-        "contents": package_files,
-        "built_at": datetime.now(UTC).isoformat(),
-    }
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(
-            "delivery-manifest.json",
-            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-        )
-        for rel in package_files:
-            zf.write(seed_root / rel, rel)
-    return zip_path
+    raise RuntimeError(RETIRED)
 
 
-def _upsert_package(catalog_dir: Path, zip_path: Path, version: str) -> dict[str, Any]:
-    catalog_dir = private_path(catalog_dir, "catalog_dir")
-    zip_path = private_path(zip_path, "zip_path")
-    files_dir = catalog_dir / "files"
-    files_dir.mkdir(parents=True, exist_ok=True)
-    packages_path = catalog_dir / "packages.json"
-    stored_filename = zip_path.name
-    dest = files_dir / stored_filename
-    if zip_path.resolve() != dest.resolve():
-        shutil.copy2(zip_path, dest)
-
-    if packages_path.is_file():
-        data = json.loads(packages_path.read_text(encoding="utf-8"))
-    else:
-        data = {"packages": []}
-    rows = [
-        r
-        for r in data.get("packages") or []
-        if not (
-            str((r or {}).get("id") or "") == PACKAGE_ID
-            and str((r or {}).get("version") or "") == version
-        )
-    ]
-    record = {
-        "id": PACKAGE_ID,
-        "version": version,
-        "artifact": ARTIFACT,
-        "name": "太阳鸟交付种子数据",
-        "description": "SUNBIRD 标准客户端定制功能数据：花名册与太阳鸟专属转换模板。",
-        "author": "成都修茈科技有限公司",
-        "industry": "饰品包装",
-        "customer_account": "SUNBIRD",
-        "visibility": "private",
-        "public_listing": False,
-        "delivery_id": "customer-taiyangniao",
-        "account_mod_id": "taiyangniao-pro",
-        "stored_filename": stored_filename,
-        "sha256": _sha256(dest),
-        "file_size": dest.stat().st_size,
-        "download_path": f"/v1/packages/{PACKAGE_ID}/{version}/download",
-        "commerce": {"mode": "free", "product_id": None, "sku": None},
-        "license": {"type": "account_entitlement", "verify_url": None},
-        "created_at": datetime.now(UTC).isoformat(),
-    }
-    rows.append(record)
-    data["packages"] = rows
-    packages_path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    return record
+def _upsert_package(
+    modstore_root: Path, zip_path: Path, version: str
+) -> dict[str, Any]:
+    raise RuntimeError(RETIRED)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", default=DEFAULT_VERSION)
-    parser.add_argument("--seed-root", type=Path)
-    parser.add_argument(
-        "--catalog-dir",
-        type=Path,
-        required=True,
-        help="external directory configured as MODSTORE_CATALOG_DIR",
-    )
-    parser.add_argument("--out-dir", type=Path)
-    parser.add_argument("--zip-path", default="", help="register an already built zip")
-    args = parser.parse_args()
-
-    version = str(args.version or DEFAULT_VERSION).strip()
-    catalog_dir = private_path(args.catalog_dir, "catalog_dir")
-
-    if args.zip_path:
-        zip_path = private_path(Path(args.zip_path), "zip_path")
-        if not zip_path.is_file():
-            raise SystemExit(f"zip not found: {zip_path}")
-    else:
-        seed_root = private_path(args.seed_root, "seed_root")
-        out_dir = private_path(args.out_dir, "out_dir")
-        zip_path = _build_zip(seed_root, out_dir, version)
-    record = _upsert_package(catalog_dir, zip_path, version)
-    print(
-        json.dumps(
-            {"ok": True, "zip": str(zip_path), "package": record},
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
-    return 0
+    print(RETIRED, file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":

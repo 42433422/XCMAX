@@ -1,3 +1,4 @@
+import { clearEnterpriseCsRecovery } from '@/utils/enterpriseCsRecovery'
 import { api, primeCsrfCookie } from './core'
 import { LS_MARKET_ACCESS_TOKEN, LS_MARKET_USER_JSON } from './marketAccount'
 import { invalidateEnterpriseSessionCache, markEnterpriseSessionValid } from '@/utils/authSessionCache'
@@ -195,6 +196,7 @@ export const authApi = {
   },
 
   async logout(): Promise<ApiResponse<void>> {
+    clearEnterpriseCsRecovery()
     clearAutoLoginPreference()
     await invalidateSessionScopedUiCaches()
     try {
