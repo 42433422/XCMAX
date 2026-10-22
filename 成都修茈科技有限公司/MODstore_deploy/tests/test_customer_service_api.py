@@ -1322,3 +1322,62 @@ def test_admin_reply_preserves_ticket_and_original_customer_session(client):
         assert (
             client.post(url, json={**payload, "request_id": str(uuid.uuid4())}).status_code == 409
         )
+def test_admin_customer_ticket_intent_and_status_filters_preserve_customer_scope(client):
+    customer, other_customer, admin = (
+        _make_user("filter_customer"),
+        _make_user("filter_other_customer"),
+        _make_user("filter_admin", admin=True),
+    )
+    marker = f"FILTER-{uuid.uuid4().hex}"
+    with get_session_factory()() as db:
+        own_ticket = _make_ticket(
+            db,
+            customer,
+            ticket_no=f"{marker}-own",
+            summary=marker,
+            intent="account_support",
+            status="open",
+        )
+        other_ticket = _make_ticket(
+            db,
+            other_customer,
+            ticket_no=f"{marker}-other",
+            summary=marker,
+            intent="product_issue",
+            status="open",
+        )
+        admin_ticket = _make_ticket(
+            db,
+            admin,
+            ticket_no=f"{marker}-admin",
+            summary=marker,
+            intent="product_issue",
+            status="processing",
+        )
+        own_id, other_id, admin_id = own_ticket.id, other_ticket.id, admin_ticket.id
+        db.commit()
+
+    with _as_user(admin):
+        filtered = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "intent": "product_issue", "status": "processing"},
+        ).json()
+        assert filtered["total"] == 1
+        assert filtered["items"][0]["id"] == admin_id
+        assert filtered["items"][0]["intent"] == "product_issue"
+        assert filtered["items"][0]["status"] == "processing"
+        by_category = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "intent": "product_issue", "status": "open"},
+        ).json()
+        assert [row["id"] for row in by_category["items"]] == [other_id]
+
+    with _as_user(customer):
+        own = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "intent": "product_issue", "status": "open"},
+        ).json()
+        assert own["total"] == 1
+        assert own["items"][0]["id"] == own_id
+        assert own["items"][0]["user_id"] == customer.id
+        assert own["items"][0]["status"] == "open"

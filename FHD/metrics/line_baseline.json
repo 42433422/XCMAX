@@ -1,5 +1,5 @@
 {
-  "lines": 2329032,
+  "lines": 2329157,
   "updated": "2026-10-22",
-  "note": "棘轮下调"
+  "note": "PR #2529 synchronizes protected main PR #2523 ticket filters and adds the authorized customer-ticket reply/delivery, SUNBIRD rework, employee-graph repair, and isolation/replay coverage. Measured final tree is +242 maintained lines over main 2328915; no unrelated code was removed. This explicit baseline update records required backlog fixes for review."
 }
