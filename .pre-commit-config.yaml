@@ -13,6 +13,12 @@ repos:
   # ----- 自定义钩子：XCAGI archive 卫生检查 -----
   - repo: local
     hooks:
+      - id: customer-runtime-data
+        name: Block customer runtime files and known private blobs
+        entry: python3 scripts/ci/guard_customer_data.py
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: guard-no-new-coverage-ramp
         name: Block new test_coverage_ramp_phase* files
         entry: python3 scripts/guard_no_new_coverage_ramp.py

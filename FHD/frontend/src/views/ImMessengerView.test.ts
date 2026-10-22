@@ -173,7 +173,7 @@ describe('ImMessengerView.vue', () => {
     expect(fetchImMessages).not.toHaveBeenCalled()
 
     await wrapper.find('.im-compose-input').setValue('测试消息')
-    vi.mocked(sendEnterpriseCsMessage).mockRejectedValueOnce(new Error('请重新登录企业账号'))
+    vi.mocked(sendEnterpriseCsMessage).mockRejectedValueOnce(Object.assign(new Error('请重新登录企业账号'), { reconciliationRequired: false }))
     await wrapper.find('.im-compose').trigger('submit')
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain('重新登录企业账号')
@@ -181,6 +181,26 @@ describe('ImMessengerView.vue', () => {
     await wrapper.find('.im-compose').trigger('submit')
     await flushPromises()
     expect(sendEnterpriseCsMessage).toHaveBeenCalledWith('测试消息')
+    wrapper.unmount()
+  })
+
+  it('shows reconciliation controls while a CS send receipt is pending', async () => {
+    const { sendEnterpriseCsMessage } = await import('@/api/im')
+    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = {}
+    let reject!: (error: Error) => void
+    vi.mocked(sendEnterpriseCsMessage).mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail }))
+    const wrapper = mount(ImMessengerView, { global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    await wrapper.findAll('.im-conv-item--pinned').find(item => item.text().includes('企业专属客服'))!.trigger('click')
+    await flushPromises()
+    await wrapper.find('.im-compose-input').setValue('synthetic pending report')
+    await wrapper.find('.im-compose').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('发送结果待核对')
+    expect(wrapper.get('[role="alert"] button').text()).toContain('解除重复发送保护')
+    reject(Object.assign(new Error('unknown receipt'), { reconciliationRequired: true }))
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('unknown receipt')
     wrapper.unmount()
   })
 

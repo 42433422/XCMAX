@@ -1,5 +1,5 @@
 {
-  "_note": "Cross-stack source debt ratchet. Existing oversized files and exact-copy debt may only shrink; generated/derived roots are excluded.",
+  "_note": "Source size above 800 lines is advisory. Router and exact-copy debt may only shrink; source-boundary gates remain blocking and derived roots are excluded.",
   "schema_version": 1,
   "updated_at": "2026-09-01",
   "oversized_files": {},

@@ -1,8 +1,9 @@
 <template>
   <div class="im-messenger">
     <SharedIssueAcceptancePanel />
-    <p v-if="isCustomerEnterpriseCs() && enterpriseCsError" role="alert">
-      {{ enterpriseCsError }} <router-link to="/settings">检查账号与连接</router-link>
+    <p v-if="isCustomerEnterpriseCs() && (enterpriseCsError || enterpriseCsUnconfirmed)" role="alert">
+      {{ enterpriseCsError || '发送结果待核对，请先检查会话，勿重复发送。' }} <router-link to="/settings">检查账号与连接</router-link>
+      <button v-if="enterpriseCsUnconfirmed" type="button" @click="confirmCsReconciliation">已核对会话，解除重复发送保护</button>
       <button type="button" :disabled="busy" @click="refreshEnterpriseCsThread()">重新连接</button>
     </p>
     <div class="im-body">
@@ -69,7 +70,7 @@
         v-else-if="activeConversationId"
         :active-title="activeTitle"
         :has-more-history="hasMoreHistory"
-        :busy="busy"
+        :busy="busy || (isCustomerEnterpriseCs() && enterpriseCsUnconfirmed)"
         :messages="messages"
         v-model:draft="draft"
         :is-my-message="isMyMessage"
@@ -142,6 +143,7 @@ import {
   type ExternalAppEntry,
   type SystemEmployeeEntry,
 } from '@/composables/messenger/useMessengerEntries'
+import { useEnterpriseCsRecovery } from '@/utils/enterpriseCsRecovery'
 import SharedIssueAcceptancePanel from '@/components/SharedIssueAcceptancePanel.vue'
 import KellaiCustomerInbox from '@/components/im/KellaiCustomerInbox.vue'
 import AiGroupChatView from '@/views/AiGroupChatView.vue'
@@ -176,6 +178,8 @@ const {
   isCustomerEnterpriseCs,
   refreshEnterpriseCsThread,
   enterpriseCsError,
+  enterpriseCsSendError,
+  enterpriseCsUnconfirmed,
   startEnterpriseCsPolling,
   stopEnterpriseCsPolling,
 } = useEnterpriseCsBridge({
@@ -186,6 +190,13 @@ const {
   playIncoming,
   scrollToBottom,
 })
+useEnterpriseCsRecovery({ draft, error: enterpriseCsSendError, uncertain: enterpriseCsUnconfirmed,
+  conversationId: activeConversationId, active: () => isCustomerEnterpriseCs() })
+function confirmCsReconciliation(): void {
+  if (!window.confirm('请先核对会话中是否已有原消息。解除保护后再次发送可能产生重复消息；是否已核对并继续？')) return
+  enterpriseCsUnconfirmed.value = false
+  enterpriseCsSendError.value = ''
+}
 const { refreshCsInbox, startCsInboxPolling, stopCsInboxPolling } = useCsInboxBridge({
   enabled: isAdminCustomerServiceConsole,
   conversations,
@@ -278,7 +289,8 @@ const {
 })
 
 const { selectConversation, onSend } = useImConversationActions({
-  enterpriseCsError,
+  enterpriseCsError: enterpriseCsSendError,
+  enterpriseCsUnconfirmed,
   localUserId,
   conversations,
   activeConversationId,

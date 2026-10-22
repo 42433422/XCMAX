@@ -142,6 +142,7 @@
   "/api/inventory",
   "/api/inventory/alert",
   "/api/inventory/combined-alert",
+  "/api/inventory/export.csv",
   "/api/inventory/export.xlsx",
   "/api/inventory/in",
   "/api/inventory/inventory/alert",

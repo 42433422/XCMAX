@@ -139,3 +139,11 @@ it('the will-navigate policy blocks external replacement without logging credent
   handleDesktopWillNavigate('http://127.0.0.1:17500/model-payment', 17500, prevent, warn)
   expect(prevent).toHaveBeenCalledOnce()
 })
+
+
+it.each(['http://127.0.0.1/', 'http://127.0.0.1:80/', 'http://localhost/'])(
+  'canonical HTTP default port respects configured port: %s', (url) => {
+    expect(isTrustedDesktopOrigin(url, 80)).toBe(true)
+    expect(isTrustedDesktopOrigin(url, 17500)).toBe(false)
+  },
+)

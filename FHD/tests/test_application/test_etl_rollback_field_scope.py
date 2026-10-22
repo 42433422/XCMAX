@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -17,7 +19,7 @@ from app.application.etl.targets.customer_product_support import customer_values
 from app.application.etl.targets.helpers import model_values
 from app.application.etl.targets.products import ProductAdapter
 from app.db.base import Base
-from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
+from app.db.models.etl import EtlRun, EtlRunRow, EtlTemplateVersion, EtlUpload
 from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit
 
@@ -274,3 +276,22 @@ def test_aggregate_rollback_removes_created_products_before_created_customer(db)
     assert db.query(Product).count() == 0
     assert db.query(PurchaseUnit).count() == 0
     assert [row.execution_status for row in rows] == ["rolled_back", "rolled_back"]
+
+
+@pytest.mark.parametrize(
+    ("model", "field", "hook"),
+    [
+        (EtlTemplateVersion, "created_at", "default"),
+        (EtlRunRow, "created_at", "default"),
+        (EtlRunRow, "updated_at", "default"),
+        (EtlRunRow, "updated_at", "onupdate"),
+    ],
+)
+def test_etl_timestamp_hooks_keep_utc_naive_without_deprecated_calls(model, field, hook):
+    before = datetime.now(UTC).replace(tzinfo=None)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        value = getattr(model.__table__.c[field], hook).arg(None)
+    after = datetime.now(UTC).replace(tzinfo=None)
+    assert value.tzinfo is None
+    assert before <= value <= after

@@ -10,7 +10,8 @@
      llm_md 等）。检测到回退即判失败，不算通过。
   3. B–I 段有 PASS 时，冻结版本、两个不同租户的客户账号、已解决工单号必须已填；
      重开条目 PASS 时重开工单号必须已填且不同于已解决工单号。
-  4. gates.json 中引用本总账的闸门判 GREEN 时，其来源条目必须全部 PASS 且本校验无错误。
+  4. GREEN 闸门不得省略固定契约中的工单来源；全部必需条目必须 PASS 且本校验无错误。
+  5. 条目分区和来源映射使用已审阅的结构摘要固定，不能通过删改待验数据放宽。
 
 用法：python ticket_loop_ledger_check.py [--ledger PATH] [--gates PATH]
 退出码 0 = 无违规；1 = 有违规（stdout 打印 JSON 违规列表）。
@@ -19,6 +20,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -45,6 +47,33 @@ DEFAULT_FORBIDDEN = (
 DEFAULT_PARA_ITEMS = tuple(range(17, 28)) + (41, 48, 49)
 IDENTITY_SECTIONS = set("BCDEFGHI")
 REOPEN_ITEMS = (36, 37, 52)
+# Pin only reviewed structure, not mutable evidence/status. Intentional contract
+# changes require reviewing this digest; caller --ledger/--gates/base never select it.
+ACCEPTANCE_CONTRACT_SHA256 = "fe39a9ec4724c317ba7a9ad5447930f0c1cc5de1784bc56fe5bfd59f471e65b5"
+
+
+def _acceptance_contract() -> tuple[dict[int, str], dict[int, set[int]]]:
+    ledger = json.loads((DEFAULT_DIR / "ticket-loop.run.json").read_text(encoding="utf-8"))
+    gates = json.loads((DEFAULT_DIR / "gates.json").read_text(encoding="utf-8"))
+    sections = sorted((item["no"], item["section"]) for item in ledger["items"])
+    sources = sorted(
+        (
+            gate["no"],
+            sorted(
+                {
+                    n
+                    for source in gate.get("sources", [])
+                    if source.get("run") == "ticket-loop.run.json"
+                    for n in source["items"]
+                }
+            ),
+        )
+        for gate in gates["gates"]
+    )
+    projection = json.dumps([sections, sources], separators=(",", ":")).encode()
+    if hashlib.sha256(projection).hexdigest() != ACCEPTANCE_CONTRACT_SHA256:
+        raise ValueError("acceptance structure changed without contract review")
+    return dict(sections), {no: set(nos) for no, nos in sources}
 
 
 def _items(ledger: dict[str, Any], errs: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
@@ -120,7 +149,13 @@ def check_para_processing(
     if load_err:
         return [{"code": "para_evidence_missing", "ticket": name, "detail": load_err}]
     if not attempts:
-        return [{"code": "para_evidence_missing", "ticket": name, "detail": "无 handler 执行记录"}]
+        return [
+            {
+                "code": "para_evidence_missing",
+                "ticket": name,
+                "detail": "无 handler 执行记录",
+            }
+        ]
     forbidden = set(DEFAULT_FORBIDDEN) | set(policy.get("forbidden_local_handlers") or ())
     fallback = sorted(
         {str(a.get("handler")) for a in attempts if str(a.get("handler")) in forbidden}
@@ -147,15 +182,25 @@ def check_para_processing(
 
 
 def check_ledger(
-    ledger: dict[str, Any], gates: dict[str, Any] | None = None, base: Path | None = None
+    ledger: dict[str, Any],
+    gates: dict[str, Any] | None = None,
+    base: Path | None = None,
 ) -> list[dict[str, Any]]:
     base = base or DEFAULT_DIR
     errs: list[dict[str, Any]] = []
     if not isinstance(ledger, dict):
         return [{"code": "ledger_invalid"}]
+    try:
+        sections, gate_sources = _acceptance_contract()
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return [{"code": "acceptance_contract_invalid"}]
     items = _items(ledger, errs)
 
     for no, item in sorted(items.items()):
+        if no not in sections:
+            errs.append({"code": "item_number_unknown", "item": no})
+        elif item.get("section") != sections[no]:
+            errs.append({"code": "item_section_invalid", "item": no})
         if item.get("result") == "PASS":
             if not item.get("observed_at"):
                 errs.append({"code": "pass_without_observed_at", "item": no})
@@ -189,7 +234,7 @@ def check_ledger(
     identity_pass = [
         n
         for n, i in items.items()
-        if i.get("section") in IDENTITY_SECTIONS and i.get("result") == "PASS"
+        if sections.get(n) in IDENTITY_SECTIONS and i.get("result") == "PASS"
     ]
     if identity_pass:
         cand = ledger.get("candidate") or {}
@@ -217,21 +262,47 @@ def check_ledger(
         elif r == (tickets.get("resolved") or {}).get("ticket_id"):
             errs.append({"code": "reopened_ticket_same_as_resolved"})
 
-    for gate in (gates or {}).get("gates", []):
+    if gates is not None and not isinstance(gates, dict):
+        return errs + [{"code": "gates_invalid"}]
+    rows = (gates or {}).get("gates", [])
+    if not isinstance(rows, list):
+        return errs + [{"code": "gates_invalid"}]
+    for gate in rows:
+        if not isinstance(gate, dict):
+            errs.append({"code": "gate_invalid"})
+            continue
         if gate.get("status") != "GREEN":
             continue
-        for src in gate.get("sources") or []:
+        no = gate.get("no")
+        if type(no) is not int or no not in gate_sources:
+            errs.append({"code": "gate_number_invalid", "gate": no})
+            continue
+        required = gate_sources[no]
+        declared: set[int] = set()
+        sources = gate.get("sources") or []
+        if not isinstance(sources, list):
+            errs.append({"code": "gate_sources_invalid", "gate": no})
+            sources = []
+        for src in sources:
+            if not isinstance(src, dict):
+                errs.append({"code": "gate_source_invalid", "gate": no})
+                continue
             if src.get("run") != "ticket-loop.run.json":
                 continue
             nos = src.get("items")
             if not isinstance(nos, list) or not nos or any(type(n) is not int for n in nos):
-                errs.append({"code": "gate_source_items_invalid", "gate": gate.get("no")})
+                errs.append({"code": "gate_source_items_invalid", "gate": no})
                 continue
-            missing = [n for n in nos if (items.get(n) or {}).get("result") != "PASS"]
+            declared.update(nos)
+        omitted = sorted(required - declared)
+        if omitted:
+            errs.append({"code": "gate_required_sources_missing", "gate": no, "items": omitted})
+        if required or declared:
+            missing = sorted(
+                n for n in required | declared if (items.get(n) or {}).get("result") != "PASS"
+            )
             if missing or errs:
-                errs.append(
-                    {"code": "gate_green_without_pass", "gate": gate.get("no"), "items": missing}
-                )
+                errs.append({"code": "gate_green_without_pass", "gate": no, "items": missing})
     return errs
 
 
@@ -240,9 +311,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ledger", type=Path, default=DEFAULT_DIR / "ticket-loop.run.json")
     ap.add_argument("--gates", type=Path, default=DEFAULT_DIR / "gates.json")
     args = ap.parse_args(argv)
-    ledger = json.loads(args.ledger.read_text(encoding="utf-8"))
-    gates = json.loads(args.gates.read_text(encoding="utf-8")) if args.gates.is_file() else None
-    errs = check_ledger(ledger, gates, args.ledger.resolve().parent)
+    try:
+        ledger = json.loads(args.ledger.read_text(encoding="utf-8"))
+        gates = json.loads(args.gates.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        errs = [{"code": "input_file_invalid", "kind": type(exc).__name__}]
+    else:
+        errs = (
+            check_ledger(ledger, gates, args.ledger.resolve().parent)
+            if isinstance(gates, dict)
+            else [{"code": "gates_invalid"}]
+        )
     print(json.dumps({"ok": not errs, "violations": errs}, ensure_ascii=False, indent=1))
     return 1 if errs else 0
 

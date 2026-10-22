@@ -73,6 +73,16 @@ jobs:
           SELF_MAINTENANCE_RUN_ID: ${{ inputs.self_maintenance_run_id }}
         run: python scripts/ci/verify_modstore_release_approval.py
 
+      - name: Validate security scan run id
+        env:
+          SECURITY_SCAN_RUN_ID: ${{ inputs.security_scan_run_id }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "${SECURITY_SCAN_RUN_ID}" | grep -Eq '^[0-9]+$'; then
+            echo "::error::security_scan_run_id must be a numeric GitHub Actions run id; got '${SECURITY_SCAN_RUN_ID}'."
+            exit 1
+          fi
+
       - name: Download normalized security evidence
         uses: actions/download-artifact@v8
         with:

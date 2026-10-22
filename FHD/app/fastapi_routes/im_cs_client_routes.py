@@ -107,8 +107,14 @@ async def _validate_market_identity(request: Request) -> dict[str, Any]:
     if result.get("__proxy_error__"):
         status = int(result.get("status_code") or 503)
         raise HTTPException(
-            status_code=401 if status in {401, 403} else 503,
-            detail="市场登录凭证无效" if status in {401, 403} else "市场身份服务暂时不可用",
+            status_code=status if status in {401, 403} else 503,
+            detail=(
+                "当前账号无权访问企业专属客服"
+                if status == 403
+                else "市场登录凭证无效"
+                if status == 401
+                else "市场身份服务暂时不可用"
+            ),
         )
 
     identity = _market_user_blob(result)
@@ -314,7 +320,9 @@ async def _proxy_to_production(
             if response.status_code == 401 and session_id:
                 from app.fastapi_routes import market_account
 
-                refreshed = await market_account.refresh_session_market_token(session_id)
+                refreshed = await market_account.refresh_session_market_token(
+                    session_id, distinguish_errors=True
+                )
                 refreshed = refreshed or market_account.session_market_token(session_id)
                 if refreshed and refreshed != token:
                     headers["Authorization"] = f"Bearer {refreshed}"

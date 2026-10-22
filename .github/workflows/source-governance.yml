@@ -24,8 +24,10 @@ jobs:
           python-version: "3.11"
       - name: Approved release admission tests
         run: python -m unittest scripts.ci.test_modstore_release_approval
+      - name: Install source-rule test runner
+        run: python -m pip install pytest
       - name: Test source governance rules
-        run: python -m unittest scripts.dev.test_source_governance
+        run: python -m pytest -q scripts/dev/test_source_governance.py scripts/dev/test_source_size_policy.py
       - name: Test unified change classifier
         run: python -m unittest scripts.dev.test_change_classifier
       - name: Check cross-stack source debt

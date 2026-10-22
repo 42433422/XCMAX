@@ -112,3 +112,22 @@ def test_cross_audit_statuses(tmp_path, monkeypatch):
         assert (result["status"], result["last_event_at"], result["count"]) == (status, stamp, 1)
     monkeypatch.setattr(Path, "read_text", Mock(side_effect=PermissionError))
     assert read_cross_tier_audit(tier="server")["status"] == "error"
+
+
+def test_cross_audit_mixed_corruption_is_not_ready(tmp_path, monkeypatch):
+    path = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(path))
+    path.write_text("{broken}\n" + json.dumps({"timestamp": datetime.now(UTC).isoformat()}))
+    result = read_cross_tier_audit(tier="server")
+    assert result["status"] == "error"
+    assert result["error_code"] == "invalid_format"
+
+
+def test_cross_audit_directory_and_stat_denial_are_explicit(tmp_path, monkeypatch):
+    monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path))
+    result = read_cross_tier_audit(tier="server")
+    assert (result["status"], result["error_code"]) == ("error", "invalid_path")
+    monkeypatch.setattr(Path, "stat", Mock(side_effect=PermissionError("private details")))
+    result = read_cross_tier_audit(tier="server")
+    assert (result["status"], result["error_code"]) == ("error", "permission_denied")
+    assert "private details" not in json.dumps(result)

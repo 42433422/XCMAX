@@ -1,4 +1,4 @@
-import type { IpcMainInvokeEvent } from 'electron'
+import { isTrustedDesktopOrigin } from './desktop-navigation'
 
 /**
  * IPC 逐 handler 来源校验（2026-09-05 审计 R02 整改）。
@@ -10,11 +10,14 @@ import type { IpcMainInvokeEvent } from 'electron'
  *
  * 1. 仅主窗口 webContents（拒绝其他窗口/隐藏视图）；
  * 2. 仅主框架（拒绝子 frame/iframe）；
- * 3. 仅预期来源：回环 http（业务前端）或 file（启动 splash），
+ * 3. 仅配置端口的业务来源，或主进程选定的唯一 splash 文件，
  *    导航到外部站点后的调用一律拒绝。
  */
 
-const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
+export interface TrustedIpcPolicy {
+  port: number
+  splashUrl: string
+}
 
 export interface TrustedSenderWindow {
   isDestroyed(): boolean
@@ -30,6 +33,7 @@ export interface IpcSenderProbe {
 export function isTrustedIpcSender(
   event: IpcSenderProbe,
   mainWindow: TrustedSenderWindow | null | undefined,
+  policy: TrustedIpcPolicy,
 ): boolean {
   if (!mainWindow || mainWindow.isDestroyed()) return false
   // 只认主窗口（当前应用没有第二台受信窗口；弹窗/其他 webContents 一律拒绝）。
@@ -43,7 +47,13 @@ export function isTrustedIpcSender(
   } catch {
     return false
   }
-  if (parsed.protocol === 'file:') return true // 启动 splash 页
-  if (parsed.protocol !== 'http:') return false
-  return LOOPBACK_HOSTS.has(parsed.hostname)
+  if (parsed.protocol === 'file:') {
+    try {
+      const splash = new URL(policy.splashUrl)
+      return splash.protocol === 'file:' && parsed.href === splash.href
+    } catch {
+      return false
+    }
+  }
+  return isTrustedDesktopOrigin(frameUrl, policy.port)
 }
