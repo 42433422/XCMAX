@@ -3,10 +3,11 @@
     <div class="page-content">
       <div class="page-header">
         <h2>库存管理</h2>
-        <div>
-          <button class="btn btn-secondary" data-testid="inventory-export" :disabled="exporting" @click="exportInventory" style="margin-right:10px;">
+        <div class="inventory-actions">
+          <button class="btn btn-secondary" data-testid="inventory-export" :disabled="exporting" @click="exportInventory('xlsx')" style="margin-right:10px;">
             {{ exporting ? '正在生成…' : '导出 Excel' }}
           </button>
+          <button class="btn btn-secondary" data-testid="inventory-export-csv" :disabled="exporting" @click="exportInventory('csv')" style="margin-right:10px;">导出 CSV</button>
           <button class="btn btn-primary" @click="showInModal">入库</button>
           <button class="btn btn-warning" @click="showOutModal" style="margin-left:10px;">出库</button>
         </div>
@@ -466,6 +467,7 @@ export default {
 </script>
 
 <style scoped>
+.inventory-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .text-danger {
   color: #dc3545;
 }

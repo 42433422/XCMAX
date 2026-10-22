@@ -1,10 +1,8 @@
-# CI SSOT: generated from 成都修茈科技有限公司/.github/workflows/ci-market.yml
+# CI SSOT: generated from 成都修茈科技有限公司/.github/workflows/ci-market.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# 组件级 CI：MODstore market 前端（MODstore_deploy/market）
 #
-# 根仓 .github/workflows/ 为唯一调度入口（cicd-e2e-prompt.md 约束）。
-# 本文件为 market 子项目的 CI 执行入口，编辑源在子目录。
-#
-# 责任边界：仅负责 成都修茈科技有限公司/MODstore_deploy/market 子项目。
-# 下游：market-live-deploy.yml 通过 workflow_run 监听本工作流。
+# 责任边界：仅负责 MODstore_deploy/market 子项目。
 
 name: CI - Market
 
@@ -13,11 +11,15 @@ on:
     paths:
       - '成都修茈科技有限公司/MODstore_deploy/market/**'
       - '.github/workflows/market-ci.yml'
+      - '成都修茈科技有限公司/.github/workflows/ci-market.yml'
+      - '.gitmodules'
   push:
     branches: [main]
     paths:
       - '成都修茈科技有限公司/MODstore_deploy/market/**'
       - '.github/workflows/market-ci.yml'
+      - '成都修茈科技有限公司/.github/workflows/ci-market.yml'
+      - '.gitmodules'
   workflow_dispatch:
 
 concurrency:
@@ -38,6 +40,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -54,6 +58,14 @@ jobs:
 
       - name: Type check
         run: npm run typecheck:ci
+
+      - name: Install independent child dependencies
+        working-directory: 成都修茈科技有限公司/MODstore_deploy/market/src/domain/客来来/desktop
+        run: npm ci --ignore-scripts
+
+      - name: Type check independent child
+        working-directory: 成都修茈科技有限公司/MODstore_deploy/market/src/domain/客来来/desktop
+        run: ./node_modules/.bin/tsc -b --force
 
       - name: Unit tests + coverage
         run: npm run test:coverage

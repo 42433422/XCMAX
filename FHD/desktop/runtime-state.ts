@@ -16,6 +16,7 @@ export type DesktopStartupMarks = {
  */
 export const desktopRuntime = {
   mainWindow: null as BrowserWindow | null,
+  splashUrl: '',
   backendProcess: null as ChildProcessWithoutNullStreams | null,
   backendLogStream: null as fs.WriteStream | null,
   tray: null as Tray | null,
