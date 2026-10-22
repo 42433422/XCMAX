@@ -13,7 +13,8 @@ jobs:
       redis:
         image: redis:7-alpine
         ports: ['6379:6379']
-        options: --health-cmd 'redis-cli ping' --health-interval 10s --health-timeout 5s --health-retries 5
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,7 +91,11 @@ jobs:
       - name: Clean task-created caches
         if: always()
         run: |
-          python3 scripts/dev/clean_agent_workspace.py
+          if [ -f scripts/dev/clean_agent_workspace.py ]; then
+            python3 scripts/dev/clean_agent_workspace.py
+          else
+            echo 'Checkout did not complete; repository cache cleanup is unavailable.'
+          fi
           df -h .
       - name: Retain diagnostic evidence separately from test artifacts
         if: always()
