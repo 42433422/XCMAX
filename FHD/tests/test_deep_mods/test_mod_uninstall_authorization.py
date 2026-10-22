@@ -239,8 +239,21 @@ def test_unverifiable_receipt_fails_closed_for_customer_and_admin(
     isolated_manager.unload_mod.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "binding",
+    [
+        {"scope": "account"},
+        {"public_listing": False},
+        {"visibility": "private"},
+        {"visibility": " PRIVATE "},
+        {"public_listing": "false"},
+        {"owner_scope": "tenant:2"},
+        {"owner_user_id": 2},
+        {"delivery_owner_user_id": 2},
+    ],
+)
 def test_account_manifest_without_receipt_is_not_admin_legacy(
-    uninstall_client, signed_runtime_mod, isolated_manager, admin_session
+    uninstall_client, signed_runtime_mod, isolated_manager, admin_session, binding
 ):
     target = signed_runtime_mod.root / "unowned-private"
     target.mkdir()
@@ -250,7 +263,7 @@ def test_account_manifest_without_receipt_is_not_admin_legacy(
                 "id": "unowned-private",
                 "name": "Private",
                 "version": "1.0",
-                "scope": "account",
+                **binding,
             }
         )
     )
@@ -260,6 +273,25 @@ def test_account_manifest_without_receipt_is_not_admin_legacy(
     )
     assert response.status_code == 403
     assert target.is_dir()
+    isolated_manager.unload_mod.assert_not_called()
+
+
+def test_ambiguous_employee_and_mod_identity_cannot_select_another_install(
+    uninstall_client, signed_runtime_mod, isolated_manager, admin_session
+):
+    root = signed_runtime_mod.root
+    for target, extra in [
+        (root / "legacy-global", {}),
+        (root / "_employees/legacy-global", {"public_listing": False}),
+    ]:
+        target.mkdir(parents=True)
+        (target / "manifest.json").write_text(json.dumps({"id": "legacy-global", **extra}))
+    response = uninstall_client.delete(
+        "/api/mods/legacy-global", headers=_authenticated(uninstall_client, admin_session)
+    )
+    assert response.status_code == 409
+    assert (root / "legacy-global").is_dir()
+    assert (root / "_employees/legacy-global").is_dir()
     isolated_manager.unload_mod.assert_not_called()
 
 

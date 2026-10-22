@@ -205,6 +205,16 @@ def _update_loop_memory(
                         existing_idx = idx
                         break
         if existing_idx is not None:
+            previous = open_items[existing_idx]
+            old_task = str(previous.get("task_id") or previous.get("para_task_id") or "").strip()
+            new_task = str(final.get("para_task_id") or "").strip()
+            old_branch = str(previous.get("branch") or "").strip()
+            new_branch = str(final.get("branch") or "").strip()
+            if ((old_task or new_task) and old_task != new_task) or (
+                old_branch and new_branch and old_branch != new_branch
+            ):
+                existing_idx = None
+        if existing_idx is not None:
             existing = open_items[existing_idx]
             existing["retry_count"] = int(existing.get("retry_count") or 1) + 1
             existing["last_attempted_at"] = _facade()._iso(_facade()._utc_now())

@@ -118,6 +118,9 @@ RSYNC_EXCLUDES=(
   --exclude '.secrets'
   --exclude '.env'
   --exclude '.env.*'
+  --exclude '.install-receipts'
+  --exclude '.install-receipts/***'
+  --exclude '.fhd-release-managed.json'
   --exclude 'routing_policies/routing_decisions.jsonl'
   --exclude 'routing_policies/.online_update_state.json'
 )
@@ -162,6 +165,7 @@ mkdir -p "$STAGING/scripts/deploy/lib" "$STAGING/docker"
 cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$SCRIPT_DIR/fhd-apply-release.sh" \
   "$SCRIPT_DIR/fhd-apply-release-compose.sh" \
+  "$SCRIPT_DIR/fhd-load-release-image.sh" \
   "$SCRIPT_DIR/fhd-install-online-update-cron.sh" \
   "$SCRIPT_DIR/fhd-install-temp-cleanup-cron.sh" \
   "$SCRIPT_DIR/fhd-clean-temp-files.sh" \
@@ -172,7 +176,11 @@ cp "$DR_RELEASE_SYNC" "$STAGING/scripts/deploy/xcmax-release-sync.sh"
 cp "$DR_RELEASE_SYNC_PRUNE" "$STAGING/scripts/deploy/xcmax_release_sync_prune.py"
 cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
   "$SCRIPT_DIR/lib/dora_event.sh" \
+  "$SCRIPT_DIR/lib/version.sh" \
   "$SCRIPT_DIR/lib/autonomy_gate.sh" \
+  "$SCRIPT_DIR/lib/service_quiescence.sh" \
+  "$SCRIPT_DIR/lib/apply_recovery.sh" \
+  "$FHD_ROOT/scripts/deploy/lib/mod_tree_guard.py" \
   "$SCRIPT_DIR/lib/verify_admin_console.py" \
   "$SCRIPT_DIR/lib/verify_release_archive.py" \
   "$SCRIPT_DIR/lib/verify_release_identity.sh" \

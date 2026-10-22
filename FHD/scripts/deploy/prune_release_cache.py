@@ -77,7 +77,10 @@ def prune_backups(backup_dir: str | Path, *, retain_backups: int = 5) -> list[st
         (
             item
             for item in root.iterdir()
-            if item.is_dir() and not item.is_symlink() and _BACKUP_RE.fullmatch(item.name)
+            if item.is_dir()
+            and not item.is_symlink()
+            and _BACKUP_RE.fullmatch(item.name)
+            and not (item / ".recovery-required").is_file()
         ),
         key=lambda item: item.stat().st_mtime,
         reverse=True,

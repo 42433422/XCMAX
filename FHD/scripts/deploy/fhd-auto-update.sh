@@ -13,6 +13,7 @@
 #   FHD_AUTO_UPDATE_LOCK  默认 /tmp/fhd-auto-update.lock（staging 须用独立锁）
 set -euo pipefail
 case "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" in 0|1) ;; *) echo "XCMAX_PRESERVE_RELEASE_HISTORY must be 0 or 1" >&2; exit 64 ;; esac
+case "${FHD_FORCE_APPLY:-0}" in 0|1) ;; *) echo "FHD_FORCE_APPLY must be 0 or 1" >&2; exit 64 ;; esac
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 APPLY_TARBALL="$SCRIPT_DIR/fhd-apply-release.sh"
@@ -254,7 +255,7 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
     LOCAL_DIGEST="$(tr -d '[:space:]' < "$DEPLOY_ROOT/.deploy-image-digest")"
   fi
 
-  if [[ "$IMAGE_DIGEST" == "$LOCAL_DIGEST" ]]; then
+  if [[ "$IMAGE_DIGEST" == "$LOCAL_DIGEST" && "${FHD_FORCE_APPLY:-0}" != "1" ]]; then
     log "已是最新（compose） version=$VERSION digest=${IMAGE_DIGEST:0:19}..."
     sync_dr_release
     exit 0
@@ -302,7 +303,7 @@ if [[ -f "$DEPLOY_ROOT/.deploy-sha256" ]]; then
   LOCAL_SHA="$(tr -d '[:space:]' < "$DEPLOY_ROOT/.deploy-sha256")"
 fi
 
-if [[ "$REMOTE_SHA" == "$LOCAL_SHA" ]]; then
+if [[ "$REMOTE_SHA" == "$LOCAL_SHA" && "${FHD_FORCE_APPLY:-0}" != "1" ]]; then
   log "已是最新 version=$VERSION sha=$GIT_SHA"
   sync_dr_release
   exit 0

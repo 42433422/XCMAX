@@ -45,6 +45,12 @@ def _is_global_or_legacy_manifest(manifest: dict[str, Any] | None) -> bool:
         return False
     if str(manifest.get("entitlement_mod_id") or "").strip():
         return False
+    if "public_listing" in manifest and manifest["public_listing"] is not True:
+        return False
+    if str(manifest.get("visibility") or "").strip().lower() not in {"", "public", "global"}:
+        return False
+    if any(manifest.get(key) for key in ("owner_scope", "owner_user_id", "delivery_owner_user_id")):
+        return False
     return True
 
 
@@ -90,6 +96,8 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
         # Keep the same lock order as install_receipts.install_extracted and
         # pending activation: process-wide install lock, then per-Mod file lock.
         with install_receipts._LOCK, state_lock(state):
+            if (root / mod_id).exists() and (root / "_employees" / mod_id).exists():
+                raise HTTPException(status_code=409, detail="扩展安装位置存在歧义，拒绝卸载")
             if receipt_path.is_symlink():
                 raise HTTPException(status_code=409, detail="安装收据路径无效，拒绝卸载")
 
@@ -108,7 +116,7 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
                     )
                     if not admin or not _is_global_or_legacy_manifest(manifest):
                         raise HTTPException(
-                            status_code=403, detail="未绑定归属的全局扩展仅限管理员卸载"
+                            status_code=403, detail="扩展归属或卸载权限未通过校验，拒绝删除"
                         )
                 if install.get("requires_restart"):
                     pending_to_remove = (
@@ -122,7 +130,9 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
                     # do not let a stale in-memory registry entry become authority.
                     return False, f"MOD {mod_id} 未加载或不存在"
                 if not admin or not _is_global_or_legacy_manifest(manifest):
-                    raise HTTPException(status_code=403, detail="旧版或全局扩展仅限管理员卸载")
+                    raise HTTPException(
+                        status_code=403, detail="旧包归属或卸载权限未通过校验，拒绝删除"
+                    )
 
             result = manager.uninstall_mod(mod_id, remove_files=True)
             if not result[0]:

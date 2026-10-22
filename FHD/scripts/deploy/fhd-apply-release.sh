@@ -18,6 +18,20 @@ else
   echo "[deploy] ERROR: autonomy gate bridge is missing" >&2
   exit 78
 fi
+if [[ -f "$SCRIPT_DIR/lib/service_quiescence.sh" ]]; then
+  # shellcheck source=lib/service_quiescence.sh
+  . "$SCRIPT_DIR/lib/service_quiescence.sh"
+else
+  echo "[deploy] ERROR: service quiescence helper is missing" >&2
+  exit 78
+fi
+if [[ -f "$SCRIPT_DIR/lib/apply_recovery.sh" ]]; then
+  # shellcheck source=lib/apply_recovery.sh
+  . "$SCRIPT_DIR/lib/apply_recovery.sh"
+else
+  echo "[deploy] ERROR: apply recovery helper is missing" >&2
+  exit 78
+fi
 if [[ -f "$SCRIPT_DIR/lib/verify_release_identity.sh" ]]; then
   # shellcheck source=lib/verify_release_identity.sh
   . "$SCRIPT_DIR/lib/verify_release_identity.sh"
@@ -110,60 +124,101 @@ fi
 rollback_from_backup() {
   autonomy_evaluate_action "rollback_release" "rollback:${TARBALL_SHA256:0:16}"
   log "执行回滚: $BACKUP"
-  for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common packages requirements-langgraph-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
+  for item in .build-identity.json app XCAGI alembic alembic.ini config xcagi_common packages requirements-langgraph-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
     if [[ -e "$BACKUP/$item" ]]; then
-      rsync -a --delete "$BACKUP/$item" "$DEPLOY_ROOT/"
+      rsync -a --delete "$BACKUP/$item" "$DEPLOY_ROOT/" || return $?
     fi
   done
+  if [[ -d "$MODS_UPDATE_STATE" ]]; then
+    local mods_guard="$TMP/scripts/deploy/lib/mod_tree_guard.py"
+    if [[ ! -f "$mods_guard" ]]; then
+      log "ERROR: release Mod ownership guard is missing; cannot safely roll back mods"
+      return 1
+    fi
+    python3 "$mods_guard" rollback --target "$DEPLOY_ROOT/mods" --state "$MODS_UPDATE_STATE" || return $?
+  fi
   if [[ -d "$BACKUP/resources" ]]; then
-    mkdir -p "$DEPLOY_ROOT/resources"
+    mkdir -p "$DEPLOY_ROOT/resources" || return $?
     rsync -a --delete \
       --exclude 'routing_policies/routing_decisions.jsonl' \
       --exclude 'routing_policies/.online_update_state.json' \
-      "$BACKUP/resources/" "$DEPLOY_ROOT/resources/"
+      "$BACKUP/resources/" "$DEPLOY_ROOT/resources/" || return $?
   fi
   if [[ "$ADMIN_BACKUP_PRESENT" == "1" ]]; then
-    mkdir -p "$DEPLOY_ROOT/templates/admin-vue-dist"
-    rsync -a --delete "$BACKUP/templates/admin-vue-dist/" "$DEPLOY_ROOT/templates/admin-vue-dist/"
+    mkdir -p "$DEPLOY_ROOT/templates/admin-vue-dist" || return $?
+    rsync -a --delete "$BACKUP/templates/admin-vue-dist/" "$DEPLOY_ROOT/templates/admin-vue-dist/" || return $?
   else
-    rm -rf -- "$DEPLOY_ROOT/templates/admin-vue-dist"
+    rm -rf -- "$DEPLOY_ROOT/templates/admin-vue-dist" || return $?
   fi
   if [[ -d "$BACKUP/scripts/autonomy" ]]; then
-    mkdir -p "$DEPLOY_ROOT/scripts/autonomy"
-    rsync -a --delete "$BACKUP/scripts/autonomy/" "$DEPLOY_ROOT/scripts/autonomy/"
+    mkdir -p "$DEPLOY_ROOT/scripts/autonomy" || return $?
+    rsync -a --delete "$BACKUP/scripts/autonomy/" "$DEPLOY_ROOT/scripts/autonomy/" || return $?
   else
-    rm -rf -- "$DEPLOY_ROOT/scripts/autonomy"
+    rm -rf -- "$DEPLOY_ROOT/scripts/autonomy" || return $?
   fi
   if [[ -d "$BACKUP/scripts/ci" ]]; then
-    mkdir -p "$DEPLOY_ROOT/scripts/ci"
-    rsync -a --delete "$BACKUP/scripts/ci/" "$DEPLOY_ROOT/scripts/ci/"
+    mkdir -p "$DEPLOY_ROOT/scripts/ci" || return $?
+    rsync -a --delete "$BACKUP/scripts/ci/" "$DEPLOY_ROOT/scripts/ci/" || return $?
   else
-    rm -rf -- "$DEPLOY_ROOT/scripts/ci"
+    rm -rf -- "$DEPLOY_ROOT/scripts/ci" || return $?
   fi
   for stamp in .deploy-last.tar.gz .deploy-git-sha .deploy-sha256 .deploy-admin-console-sha256; do
     if [[ -f "$BACKUP/$stamp" ]]; then
-      cp "$BACKUP/$stamp" "$DEPLOY_ROOT/$stamp"
+      cp "$BACKUP/$stamp" "$DEPLOY_ROOT/$stamp" || return $?
     else
-      rm -f "$DEPLOY_ROOT/$stamp"
+      rm -f "$DEPLOY_ROOT/$stamp" || return $?
     fi
   done
-  autonomy_evaluate_action "restart_service" "restart:rollback:${TARBALL_SHA256:0:16}"
-  systemctl restart "$SERVICE" || true
+  autonomy_evaluate_action "restart_service" "restart:rollback:${TARBALL_SHA256:0:16}" || return $?
+  systemctl restart "$SERVICE" || return $?
+  systemctl is-active --quiet "$SERVICE" || return 1
+  FHD_SERVICE_QUIESCED=0
 }
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/fhd-apply.XXXXXX")"
+MODS_UPDATE_STATE="$TMP/mods-update-state"
 MUTATION_STARTED=0
 ROLLBACK_DONE=0
+ROLLBACK_CONFIRMED=0
 cleanup_apply() {
   local status=$?
+  local rollback_status=0
+  local restore_status=0
+  local preserve_recovery=0
   trap - EXIT
+  set +e
   if [[ "$status" != "0" && "$MUTATION_STARTED" == "1" && "$ROLLBACK_DONE" == "0" ]]; then
     ROLLBACK_DONE=1
-    set +e
     rollback_from_backup
-    set -e
+    rollback_status=$?
+    if [[ "$rollback_status" == "0" ]]; then
+      ROLLBACK_CONFIRMED=1
+    else
+      log "ERROR: rollback did not complete (status=$rollback_status)"
+    fi
   fi
-  rm -rf -- "$TMP"
+  if [[ "$status" != "0" && "${FHD_SERVICE_STOP_ATTEMPTED:-0}" == "1" && "${FHD_SERVICE_WAS_ACTIVE:-0}" == "1" ]]; then
+    fhd_restore_service_after_failed_apply "$SERVICE" "restart:release:${TARBALL_SHA256:0:16}"
+    restore_status=$?
+    if [[ "$restore_status" != "0" ]]; then
+      log "ERROR: service recovery failed after deployment error (status=$restore_status)"
+      preserve_recovery=1
+    fi
+  fi
+  if [[ "$status" != "0" && ( "$ROLLBACK_CONFIRMED" != "1" && "$MUTATION_STARTED" == "1" || -d "$MODS_UPDATE_STATE" ) ]]; then
+    preserve_recovery=1
+  fi
+  if [[ "$preserve_recovery" == "1" ]]; then
+    if fhd_preserve_recovery_material "$TMP" "$BACKUP" "$TS"; then
+      if ! rm -rf -- "$TMP"; then
+        log "ERROR: verified recovery copy exists; original TMP could not be removed and remains at $TMP"
+      fi
+    else
+      log "ERROR: rollback is unconfirmed; original recovery material retained at $TMP"
+    fi
+  else
+    rm -rf -- "$TMP"
+  fi
   exit "$status"
 }
 trap cleanup_apply EXIT
@@ -181,9 +236,21 @@ python3 "$ADMIN_VERIFY" \
   --root "$TMP/templates/admin-vue-dist" \
   --expected-git-sha "$EXPECTED_GIT_SHA" \
   --expected-sha256 "$EXPECTED_ADMIN_CONSOLE_SHA256"
+MODS_GUARD="$TMP/scripts/deploy/lib/mod_tree_guard.py"
+[[ -f "$MODS_GUARD" ]] || {
+  log "ERROR: release Mod ownership guard is missing"
+  exit 1
+}
 
+fhd_stop_service_for_release "$SERVICE" "restart:release:${TARBALL_SHA256:0:16}"
 MUTATION_STARTED=1
-for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common packages requirements-langgraph-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
+python3 "$MODS_GUARD" apply \
+  --source "$TMP/mods" \
+  --target "$DEPLOY_ROOT/mods" \
+  --state "$MODS_UPDATE_STATE" \
+  --previous-archive "$DEPLOY_ROOT/.deploy-last.tar.gz" \
+  --deploy-root "$DEPLOY_ROOT"
+for item in .build-identity.json app XCAGI alembic alembic.ini config xcagi_common packages requirements-langgraph-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
   if [[ -e "$TMP/$item" ]]; then
     rsync -a --delete "$TMP/$item" "$DEPLOY_ROOT/"
   fi
@@ -319,11 +386,11 @@ if [[ -d "$DROPIN_SRC_DIR" ]]; then
 fi
 
 deploy_emit restart started "service=$SERVICE"
-autonomy_evaluate_action "restart_service" "restart:release:${TARBALL_SHA256:0:16}"
 echo "$TARBALL_SHA256" > "$DEPLOY_ROOT/.deploy-sha256"
 echo "$EXPECTED_GIT_SHA" > "$DEPLOY_ROOT/.deploy-git-sha"
 echo "$EXPECTED_ADMIN_CONSOLE_SHA256" > "$DEPLOY_ROOT/.deploy-admin-console-sha256"
 systemctl restart "$SERVICE"
+FHD_SERVICE_QUIESCED=1
 sleep "${FHD_HEALTH_INITIAL_SLEEP:-15}"
 
 API_CODE=000
@@ -353,7 +420,12 @@ fi
 if [[ "$API_CODE" != "200" ]]; then
   log "ERROR: /api/health 未就绪 (code=$API_CODE)，尝试回滚"
   ROLLBACK_DONE=1
-  rollback_from_backup
+  if rollback_from_backup; then
+    ROLLBACK_CONFIRMED=1
+  else
+    ROLLBACK_CONFIRMED=0
+    log "ERROR: health rollback did not complete; recovery materials will be retained"
+  fi
   deploy_emit apply failed "health_check rollback"
   exit 1
 fi
@@ -361,5 +433,6 @@ fi
 cp "$TARBALL" "${DEPLOY_ROOT}/.deploy-last.tar.gz" 2>/dev/null || true
 
 MUTATION_STARTED=0
+FHD_SERVICE_QUIESCED=0
 log "发布成功 health=200 sha256=${TARBALL_SHA256:0:16}..."
 deploy_emit apply ok "port=$HEALTH_PORT"
