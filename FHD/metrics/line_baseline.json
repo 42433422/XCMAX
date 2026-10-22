@@ -1,5 +1,5 @@
 {
-  "lines": 2328632,
+  "lines": 2328790,
   "updated": "2026-10-22",
-  "note": "User-authorized CI report reuse: verified equal-input reporting and phase timing (+140 versus main); isolate the synthetic test fixture from the real CI parent timing profile (+1), keeping production foreign-profile rejection intact."
+  "note": "2026-10-22 用户授权 CI 提速闭环：保留 main 1ab42432 的 #2524 工单证据硬门禁及回归；本 PR 仅复用同次同源相同覆盖率报告并记录阶段计时，含合成夹具隔离。相对该 main 净增141行，不删无关代码、不降低门槛。"
 }
