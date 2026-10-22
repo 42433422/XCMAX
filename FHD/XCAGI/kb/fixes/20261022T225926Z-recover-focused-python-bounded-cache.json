@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-10-22T22:59:26.805162+00:00",
+  "symptom": "Repeated focused QA command resolution reprobes up to four Python candidates with ten-second timeouts. Prior review also rejected a success-only indefinite cache because it hides interpreter replacement or dependency loss and repeats all-failure probes.",
+  "root_cause": "The mainline selector has no bounded lifetime for selection results. Caching only successful paths indefinitely would neither revalidate changed dependencies nor suppress repeated fallback probes.",
+  "fix_diff": "diff --git a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\n--- a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\n@@ -6,6 +6,10 @@\n \n from modstore_server.operational_errors import RECOVERABLE_ERRORS\n import importlib\n+from pathlib import Path\n+from time import monotonic\n+\n+_FOCUSED_TEST_PYTHON_CACHE: tuple[tuple[Path | None, ...], float, Path] | None = None\n \n \n def _facade():\n@@ -262,6 +266,7 @@\n     does not install pytest.  Prefer the MODstore venv used for repository tests\n     and expose explicit overrides for production or isolated runners.\n     \"\"\"\n+    global _FOCUSED_TEST_PYTHON_CACHE\n     command_override = (\n         _facade().os.environ.get(\"MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND\", \"\").strip()\n     )\n@@ -275,7 +280,7 @@\n         or _facade().Path(__file__).resolve().parent.parent\n     )\n     runtime_root = _facade().os.environ.get(\"MODSTORE_RUNTIME_ROOT\", \"\").strip()\n-    candidates = [\n+    candidates: tuple[Path | None, ...] = (\n         _facade().Path(test_python_override).expanduser() if test_python_override else None,\n         deploy_root / \".venv\" / \"bin\" / \"python\",\n         (\n@@ -288,15 +293,21 @@\n             else None\n         ),\n         _facade().Path(_facade().sys.executable),\n-    ]\n-    test_python = next(\n-        (\n-            candidate\n-            for candidate in candidates\n-            if candidate and _facade()._python_supports_focused_tests(candidate)\n-        ),\n-        _facade().Path(_facade().sys.executable),\n-    )\n+    )\n+    cached = _FOCUSED_TEST_PYTHON_CACHE\n+    if cached and cached[0] == candidates and monotonic() < cached[1]:\n+        test_python = cached[2]\n+    else:\n+        test_python = next(\n+            (\n+                candidate\n+                for candidate in candidates\n+                if candidate and _facade()._python_supports_focused_tests(candidate)\n+            ),\n+            _facade().Path(_facade().sys.executable),\n+        )\n+        # Bound both stale successes and repeated all-candidate failures, after probing.\n+        _FOCUSED_TEST_PYTHON_CACHE = (candidates, monotonic() + 60, test_python)\n     test_path = (\n         \"成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\"\n     )\ndiff --git a/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_focused_python.py b/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_focused_python.py\nnew file mode 100644\n--- /dev/null\n+++ b/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_focused_python.py\n@@ -0,0 +1,80 @@\n+\"\"\"Bound interpreter probing without hiding repaired or broken environments.\"\"\"\n+\n+import shlex\n+\n+import pytest\n+\n+from modstore_server import self_maintenance_loop_runner as runner\n+from modstore_server import self_maintenance_loop_runner_part06_part01_part01 as impl\n+\n+\n+@pytest.fixture\n+def probe_environment(monkeypatch, tmp_path):\n+    candidates = [\n+        tmp_path / \"override python\",\n+        tmp_path / \"deploy/.venv/bin/python\",\n+        tmp_path / \"runtime/MODstore_deploy/.venv/bin/python\",\n+        tmp_path / \"system python\",\n+    ]\n+    for candidate in candidates:\n+        candidate.parent.mkdir(parents=True, exist_ok=True)\n+        candidate.write_text(\"#!/bin/sh\\nexit 1\\n\")\n+        candidate.chmod(0o700)\n+    monkeypatch.delenv(\"MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND\", raising=False)\n+    monkeypatch.setenv(\"MODSTORE_SELF_MAINTENANCE_TEST_PYTHON\", str(candidates[0]))\n+    monkeypatch.setenv(\"MODSTORE_DEPLOY_ROOT\", str(tmp_path / \"deploy\"))\n+    monkeypatch.setenv(\"MODSTORE_RUNTIME_ROOT\", str(tmp_path / \"runtime\"))\n+    monkeypatch.setattr(runner.sys, \"executable\", str(candidates[-1]))\n+    monkeypatch.setattr(impl, \"_FOCUSED_TEST_PYTHON_CACHE\", None, raising=False)\n+    clock, calls = [100.0], []\n+    monkeypatch.setattr(impl, \"monotonic\", lambda: clock[0], raising=False)\n+    original_probe = runner._python_supports_focused_tests\n+\n+    def probe(candidate):\n+        calls.append(candidate)\n+        clock[0] += 10  # Include the worst-case probe duration in the expiry test.\n+        return original_probe(candidate)\n+\n+    monkeypatch.setattr(runner, \"_python_supports_focused_tests\", probe)\n+    return candidates, clock, calls\n+\n+\n+@pytest.mark.parametrize(\"change\", [\"dependency_loss\", \"replacement\", \"removal\", \"repair\"])\n+def test_probe_results_expire_including_fallback(probe_environment, change):\n+    candidates, clock, calls = probe_environment\n+    preferred = candidates[0]\n+    if change != \"repair\":\n+        preferred.write_text(\"#!/bin/sh\\nexit 0\\n\")\n+    expected = candidates[-1] if change == \"repair\" else preferred\n+    assert shlex.split(runner._focused_test_command())[0] == str(expected)\n+    assert calls == (candidates if change == \"repair\" else [preferred])\n+    first_calls, expires_at = calls.copy(), clock[0] + 60\n+    if change == \"removal\":\n+        preferred.unlink()\n+    elif change == \"replacement\":\n+        replacement = preferred.with_suffix(\".new\")\n+        replacement.write_text(\"#!/bin/sh\\nexit 1\\n\")\n+        replacement.chmod(0o700)\n+        replacement.replace(preferred)\n+    else:\n+        preferred.write_text(f\"#!/bin/sh\\nexit {0 if change == 'repair' else 1}\\n\")\n+    for clock[0] in (expires_at - 59, expires_at - 0.01):\n+        assert shlex.split(runner._focused_test_command())[0] == str(expected)\n+        assert calls == first_calls\n+    clock[0] = expires_at\n+    expected = preferred if change == \"repair\" else candidates[-1]\n+    assert shlex.split(runner._focused_test_command())[0] == str(expected)\n+    assert calls[len(first_calls) :] == ([preferred] if change == \"repair\" else candidates)\n+\n+\n+def test_configuration_changes_bypass_cached_fallback(probe_environment, monkeypatch):\n+    candidates, _, calls = probe_environment\n+    runner._focused_test_command()\n+    monkeypatch.setenv(\"MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND\", \"custom QA command\")\n+    assert runner._focused_test_command() == \"custom QA command\"\n+    assert calls == candidates\n+    monkeypatch.delenv(\"MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND\")\n+    candidates[1].write_text(\"#!/bin/sh\\nexit 0\\n\")\n+    monkeypatch.setenv(\"MODSTORE_SELF_MAINTENANCE_TEST_PYTHON\", str(candidates[1]))\n+    assert shlex.split(runner._focused_test_command())[0] == str(candidates[1])\n+    assert calls == candidates + [candidates[1]]\n",
+  "metadata": {
+    "component": "self_maintenance_loop_runner",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_focused_python.py"
+    ],
+    "provenance": {
+      "source_commit": "5c27dbbcfd5de524c999f723a678e3f20ffb49f3",
+      "source_path": "FHD/XCAGI/kb/fixes/20261019T000000Z-fix-focused-python-bounded-cache.json",
+      "source_json_sha256": "accbe62ed7ea3cc2fffd92beadb1bfaf2932961f2c8a278e0c068664c732a7fd",
+      "source_created_at": "2026-10-18T17:44:21.974166+00:00",
+      "recovery_baseline": "825dd80704111e0890387a37661480ccc28294a6",
+      "recovery_baseline_tree": "de49bb578d54351c0e1c74457aaead04c7e703da",
+      "adaptation": "Original production change retained; candidate tuple and cache entry explicitly typed with pathlib.Path. Original focused tests retained unchanged. Original KB source preserved separately without modification."
+    },
+    "validation": {
+      "executed_at": "2026-10-22T22:59:26.805162+00:00",
+      "environment": "macOS arm64, CPython 3.12.13; existing FHD virtual environment; full-import dependency MODstore subtree verified equal to recovery baseline; isolated test runtime",
+      "tests": {
+        "passed": 225,
+        "exit_code": 0,
+        "command": [
+          "/Users/Shared/XCMAX/FHD/.venv/bin/python",
+          "-m",
+          "pytest",
+          "--confcutdir",
+          "/private/tmp/focused-python-recovery-fm538m7k/v2/full-suite",
+          "-c",
+          "/private/tmp/focused-python-recovery-fm538m7k/v2/full-suite/pyproject.toml",
+          "-p",
+          "no:cacheprovider",
+          "-q",
+          "/private/tmp/focused-python-recovery-fm538m7k/v2/full-suite/tests/test_self_maintenance_focused_python.py",
+          "/private/tmp/focused-python-recovery-fm538m7k/v2/full-suite/tests/test_self_maintenance_loop_runner_policy.py",
+          "-o",
+          "addopts=",
+          "--junitxml",
+          "/private/tmp/focused-python-recovery-fm538m7k/v2/junit.xml"
+        ],
+        "log_sha256": "127e1302de68f507fe169632c8b528cce45d549045453e9d89822be288e6853e"
+      },
+      "portable_entry": "From repository root, choose a Python environment with MODstore test dependencies installed. Set PYTHONPATH to 成都修茈科技有限公司/MODstore_deploy and run python -m pytest -c 成都修茈科技有限公司/MODstore_deploy/pyproject.toml -p no:cacheprovider 成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_focused_python.py 成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+      "boundary": "Local regression evidence only; portable command provided for independent execution, not claimed as separately executed. Independent review/QA, source-governance candidate gate, integration and deployed acceptance remain pending."
+    }
+  },
+  "executable_template": {
+    "applicability_check": "The focused-test selector probes candidates on every call or retains successful selections without bounded expiry. Confirm command overrides, candidate precedence, and system-Python fallback are unchanged before applying.",
+    "patch_strategy": "Apply the complete unified diff in fix_diff. Keep a single candidate-keyed selection entry for sixty monotonic seconds after probing, including all-failure fallback results; re-probe at expiry and on candidate changes. Use the explicit Path-based candidate-key and (candidates, expiry_float, selected_Path) cache entry types. Run both required test files in an environment that actually supplies the current MODstore dependencies; do not reuse a historical machine-specific interpreter path.",
+    "rollback_plan": "Reverse-apply the source/test diff in fix_diff through the normal reviewed integration flow. The cache is process-local; no persistent task, retry ledger or runtime-data migration is required. Do not restart production or change original task state merely to validate rollback.",
+    "required_tests": [
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_focused_python.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  }
+}
