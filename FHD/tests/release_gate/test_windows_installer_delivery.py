@@ -255,3 +255,61 @@ async function run(address, screenshotFails = false) {
     collector = (ROOT / "scripts/package/accept-windows-candidate.ps1").read_text()
     assert "$env:XCAGI_GUI_MODE = $Mode" in collector
     assert "'resources/build-info.json') -Raw | ConvertFrom-Json).gitSha" in collector
+
+
+def test_gui_login_uses_backend_identity_not_transient_shell():
+    harness = r"""
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+assert.ok(source.includes('async function hasRetainedSession() {'));
+const probe = 'async function hasRetainedSession() {' + source.split('async function hasRetainedSession() {')[1].split('\nasync function main()')[0];
+async function run(status, body, expected, reject = false) {
+  const page = { url: () => 'http://127.0.0.1:17500/chat', request: { get: async (url, options) => {
+    assert.equal(url, 'http://127.0.0.1:17500/api/auth/me');
+    assert.equal(options.maxRedirects, 0); assert.equal(options.timeout, 10000);
+    return { status: () => status, json: async () => {
+      assert.equal(status, 200); if (body instanceof Error) throw body; return body;
+    } };
+  } } };
+  const result = vm.runInNewContext(probe + '; hasRetainedSession()', { page, URL });
+  if (reject) await assert.rejects(result); else assert.equal(await result, expected);
+}
+(async () => {
+  await run(401, null, false);
+  await run(200, { success: false, valid: false, error: { code: 'UNAUTHORIZED' } }, false);
+  await run(200, { success: true, data: { user: { id: 1 } } }, true);
+  for (const status of [302, 403, 429, 500, 503]) await run(status, null, null, true);
+  for (const body of [{}, { success: true }, { success: true, data: { user: {} } },
+    { success: false, valid: false, error: { code: 'ACCOUNT_DISABLED' } }, new Error('invalid JSON')]) {
+    await run(200, body, null, true);
+  }
+  const setup = source.split("await step('normal_login', async () => {\n")[1].split("    await page.locator('#lv-username').fill")[0];
+  for (const retained of [false, true]) {
+    const calls = [], confirmation = { getByRole: () => ({ click: async () => calls.push('confirm') }) };
+    const page = {
+      url: () => 'http://127.0.0.1:17500/chat',
+      goto: async url => { assert.equal(url, 'http://127.0.0.1:17500/login'); calls.push('login'); },
+      locator: selector => selector === '.app-dialog-host-panel' ? confirmation : { first() { return this; } },
+      waitForResponse: async predicate => { assert.ok(predicate({ url: () => 'http://127.0.0.1:17500/api/auth/logout' })); calls.push('logout'); return { ok: () => true }; },
+    };
+    await vm.runInNewContext('(async () => {' + setup + '})()', {
+      page, URL, process: { env: { XCAGI_GUI_MODE: 'Upgrade' } }, hasRetainedSession: async () => retained,
+      nav: async key => { assert.equal(key, 'settings'); calls.push('settings'); },
+      click: async name => { assert.equal(name, '退出登录'); calls.push('signout'); },
+      expect: () => ({ toBeVisible: async () => {}, toContainText: async () => {} }),
+    });
+    assert.deepEqual(calls, retained ? ['settings', 'signout', 'logout', 'confirm'] : ['login']);
+    for (const mode of ['Gui', 'Recovery']) {
+      await assert.rejects(vm.runInNewContext('(async () => {' + setup + '})()', {
+        process: { env: { XCAGI_GUI_MODE: mode } }, hasRetainedSession: async () => true,
+      }), /Fresh acceptance requires a logged-out session/);
+    }
+  }
+})().catch(error => { console.error(error); process.exitCode = 1; });
+"""
+    subprocess.run(
+        ["node", "-e", harness, str(ROOT / "scripts/dev/record_enterprise_desktop_init.mjs")],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
