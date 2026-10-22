@@ -498,5 +498,3 @@ onUnmounted(() => {
     </transition>
   </Teleport>
 </template>
-
-<style src="./DutyRosterGraphPanel.css"></style>
