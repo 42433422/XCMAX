@@ -142,3 +142,30 @@ def test_nightly_dispatch_supplies_required_inputs_and_propagates_failure(
         assert supplied == (
             {"release_sha": sha} if command[2] == "fhd-security-full-scan.yml" else {}
         )
+
+
+def test_market_checks_initialized_child_without_mixing_parent_types() -> None:
+    source = REPO_ROOT / "成都修茈科技有限公司/.github/workflows/ci-market.yml"
+    rendered = publisher._render_corp(source)
+    assert rendered is not None
+    name, body = rendered
+    assert name == "market-ci.yml"
+    assert (REPO_ROOT / ".github/workflows" / name).read_text() == body
+    workflow = yaml.load(body, Loader=yaml.BaseLoader)
+    for event in ("push", "pull_request"):
+        paths = workflow["on"][event]["paths"]
+        assert ".gitmodules" in paths
+        assert "成都修茈科技有限公司/.github/workflows/ci-market.yml" in paths
+    job = workflow["jobs"]["market-ci"]
+    steps = job["steps"]
+    assert steps[0]["with"]["submodules"] == "true"
+    assert any(step.get("run") == "npm run typecheck:ci" for step in steps)
+    for name, command in (
+        ("Install independent child dependencies", "npm ci --ignore-scripts"),
+        ("Type check independent child", "./node_modules/.bin/tsc -b --force"),
+    ):
+        step = next(step for step in steps if step["name"] == name)
+        assert step["run"] == command
+        assert step["working-directory"] == (
+            "成都修茈科技有限公司/MODstore_deploy/market/src/domain/客来来/desktop"
+        )
