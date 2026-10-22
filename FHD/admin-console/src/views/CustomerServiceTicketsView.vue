@@ -11,6 +11,35 @@
         <span>搜索编号或原文</span>
         <input v-model="search" :disabled="loading" maxlength="200" placeholder="完整编号、尾号、内部 ID 或问题关键词" />
       </label>
+      <label class="cs-filter">
+        <span>问题分类</span>
+        <select v-model="intentFilter" :disabled="loading">
+          <option value="">全部分类</option>
+          <option value="product_issue">产品问题</option>
+          <option value="account_support">账号支持</option>
+          <option value="refund">退款</option>
+          <option value="general">一般咨询</option>
+          <option value="catalog_complaint">商品投诉</option>
+          <option value="catalog_review">商品评价</option>
+          <option value="llm_extension">模型扩展</option>
+          <option value="greeting">问候</option>
+        </select>
+      </label>
+      <label class="cs-filter">
+        <span>处理状态</span>
+        <select v-model="statusFilter" :disabled="loading">
+          <option value="">全部状态</option>
+          <option value="expired">已过期不再处理</option>
+          <option value="open">待处理</option>
+          <option value="processing">处理中</option>
+          <option value="awaiting_customer">待客户确认</option>
+          <option value="reopened">已重新打开</option>
+          <option value="resolved">已完成</option>
+          <option value="closed">已关闭</option>
+          <option value="rejected">已拒绝</option>
+          <option value="cancelled">已取消</option>
+        </select>
+      </label>
       <label>
         <span>提交人身份</span>
         <select v-model="submitterType" :disabled="loading">
@@ -26,7 +55,7 @@
       <div v-else class="cs-table-wrap">
         <table class="cs-table">
           <thead>
-            <tr><th>工单编号</th><th>问题</th><th>分类</th><th>提交人</th><th>客户</th><th>状态</th><th>最近更新</th></tr>
+            <tr><th>工单编号</th><th>问题</th><th>问题分类 / 范围</th><th>提交人</th><th>客户</th><th>状态</th><th>最近更新</th></tr>
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.id" class="cs-row" tabindex="0" :aria-label="`打开工单 ${row.ticketNo}`"
@@ -36,7 +65,7 @@
                 <span class="cs-sub">内部 ID {{ row.id }}</span>
               </td>
               <td class="cs-title-cell">{{ row.title }}</td>
-              <td><span class="cs-tag">{{ row.domain }}</span></td>
+              <td><span class="cs-tag">{{ row.category }}</span><span v-if="row.domain" class="cs-sub">{{ row.domain }}</span></td>
               <td class="cs-nowrap"><span class="cs-tag">{{ row.submitterType }}</span></td>
               <td class="cs-nowrap">市场用户 {{ row.userId }}</td>
               <td><span class="cs-badge" :class="`is-${row.status.tone}`" :title="row.status.raw">{{ row.status.label }}</span></td>
@@ -64,18 +93,20 @@ import { formatBeijingTime, intentLabel, submitterTypeLabel, ticketStatusBadge, 
 
 const PAGE_SIZE = 50
 const router = useRouter()
-const search = ref(''), submitterType = ref(''), error = ref('')
+const search = ref(''), submitterType = ref(''), intentFilter = ref(''), statusFilter = ref(''), error = ref('')
 const tickets = ref<Row[]>([])
 const loading = ref(false), loaded = ref(false)
 const offset = ref(0), total = ref(0)
 let generation = 0
 let appliedSearch = ''
 let appliedSubmitterType = ''
+let appliedIntent = ''
+let appliedStatus = ''
 const page = computed(() => Math.floor(offset.value / PAGE_SIZE) + 1)
 const pages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 const rows = computed(() => tickets.value.map(t => ({
   id: Number(t.id), ticketNo: String(t.ticket_no || '未记录编号'), title: String(t.title || '（无标题）'),
-  domain: String(t.issue_domain_label || '') || intentLabel(t.intent), userId: String(t.user_id ?? '—'),
+  category: intentLabel(t.intent), domain: String(t.issue_domain_label || ''), userId: String(t.user_id ?? '—'),
   submitterType: submitterTypeLabel(t.submitter_type),
   status: ticketStatusBadge(t), updatedAt: formatBeijingTime(t.updated_at || t.created_at),
 })))
@@ -92,11 +123,15 @@ async function load(nextOffset: number, applySearch = false) {
   try {
     const term = applySearch ? search.value.trim() : appliedSearch
     const kind = applySearch ? submitterType.value : appliedSubmitterType
-    const result = await xcmaxAdminApi.fetchCustomerTickets(term, nextOffset, kind)
+    const intent = applySearch ? intentFilter.value : appliedIntent
+    const status = applySearch ? statusFilter.value : appliedStatus
+    const result = await xcmaxAdminApi.fetchCustomerTickets(term, nextOffset, kind, intent, status)
     if (request !== generation) return
     if (!Array.isArray(result.items) || !Number.isInteger(result.total) || result.total < 0) throw new Error('客服列表响应不完整')
     appliedSearch = term
     appliedSubmitterType = kind
+    appliedIntent = intent
+    appliedStatus = status
     tickets.value = result.items; total.value = result.total; offset.value = nextOffset; loaded.value = true
   } catch (cause) { if (request === generation) { tickets.value = []; error.value = message(cause) } }
   finally { if (request === generation) loading.value = false }
