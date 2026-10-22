@@ -7,6 +7,7 @@ from __future__ import annotations
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
 from collections import deque
+from typing import Any
 
 
 def _facade():
@@ -187,7 +188,7 @@ def _read_ledger(
     path = _facade().ledger_path()
     if not path.exists():
         return []
-    rows = deque(maxlen=limit if limit > 0 else None)
+    rows: deque[dict[str, Any]] = deque(maxlen=limit if limit > 0 else None)
     try:
         with path.open("r", encoding="utf-8") as fh:
             for line in fh:

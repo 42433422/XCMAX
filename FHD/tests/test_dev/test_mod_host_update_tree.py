@@ -278,6 +278,47 @@ class ModTreeGuardTests(unittest.TestCase):
 
         self.assertEqual((self.target / "local-mod/customer.py").read_text(), "keep")
 
+    def test_interrupted_backup_keeps_live_mod_and_removes_incomplete_recovery(self) -> None:
+        self.build_previous_archive({"bundled": {"logic.py": "old"}})
+        shutil.copytree(self.old_mods / "bundled", self.target / "bundled")
+        self.put(self.source, "bundled/logic.py", "new")
+        original = guard.shutil.copytree
+
+        def interrupt_backup(src, dst, *args, **kwargs):
+            if Path(dst).parent == self.state / "prior":
+                raise KeyboardInterrupt("injected backup interrupt")
+            return original(src, dst, *args, **kwargs)
+
+        with patch.object(guard.shutil, "copytree", side_effect=interrupt_backup):
+            with self.assertRaisesRegex(KeyboardInterrupt, "backup interrupt"):
+                guard.apply(self.source, self.target, self.state, self.archive, self.deploy_root)
+        self.assertEqual((self.target / "bundled/logic.py").read_text(), "old")
+        self.assertFalse(self.state.exists())
+
+    def test_interrupt_after_first_swap_restores_mods_and_retains_recovery(self) -> None:
+        self.build_previous_archive(
+            {"bundle-a": {"logic.py": "old A"}, "bundle-b": {"logic.py": "old B"}}
+        )
+        for mod_id in ("bundle-a", "bundle-b"):
+            shutil.copytree(self.old_mods / mod_id, self.target / mod_id)
+            self.put(self.source, f"{mod_id}/logic.py", "new")
+            self.put(self.target, f"{mod_id}/data/customer.txt", mod_id)
+        original = guard.os.replace
+
+        def interrupt_second_swap(src, dst):
+            if Path(src).name.startswith(".fhd-stage-") and Path(dst).name == "bundle-b":
+                raise KeyboardInterrupt("injected second swap interrupt")
+            return original(src, dst)
+
+        with patch.object(guard.os, "replace", side_effect=interrupt_second_swap):
+            with self.assertRaisesRegex(KeyboardInterrupt, "second swap interrupt"):
+                guard.apply(self.source, self.target, self.state, self.archive, self.deploy_root)
+        for mod_id, content in (("bundle-a", "old A"), ("bundle-b", "old B")):
+            self.assertEqual((self.target / mod_id / "logic.py").read_text(), content)
+            self.assertEqual((self.target / mod_id / "data/customer.txt").read_text(), mod_id)
+        self.assertTrue((self.state / "plan.json").is_file())
+        self.assertFalse(any(self.target.glob(".fhd-stage-*")))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -1,13 +1,13 @@
 import base64
 import fcntl
 import hashlib
+import importlib.util
 import io
 import json
 import os
 import subprocess
 import tarfile
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
@@ -43,8 +43,12 @@ def test_controller_inventory_is_included_in_the_release_archive():
 def setup(tmp_path):
     text = SCRIPT.read_text()
     source = text.split("<<'PY_BOOTSTRAP'\n", 1)[1].split("\nPY_BOOTSTRAP", 1)[0]
-    m = ModuleType("bootstrap_draft")
-    exec(compile(source, str(SCRIPT), "exec"), m.__dict__)
+    module_path = tmp_path / "release_controller_bootstrap.py"
+    module_path.write_text(source)
+    spec = importlib.util.spec_from_file_location("release_controller_bootstrap", module_path)
+    assert spec is not None and spec.loader is not None
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
     m.PROC_ROOT = tmp_path / "proc"
     m.PROC_ROOT.mkdir()
     m.LOCK_PATH = tmp_path / "updater.lock"

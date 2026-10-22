@@ -429,6 +429,7 @@ def apply(
             state.mkdir(parents=True)
             prior_dir = state / "prior"
             prior_dir.mkdir()
+            backup_complete = False
             try:
                 for mod_id, entry in prior.items():
                     if entry["prior_exists"]:
@@ -439,11 +440,13 @@ def apply(
                 (state / "plan.json").write_text(
                     json.dumps(prior, sort_keys=True), encoding="utf-8"
                 )
-            except BaseException:
-                shutil.rmtree(state, ignore_errors=True)
-                raise
+                backup_complete = True
+            finally:
+                if not backup_complete:
+                    shutil.rmtree(state, ignore_errors=True)
             stages: dict[str, Path] = {}
             mutated = False
+            applied = False
             try:
                 for mod_id, src in sorted(bundled.items()):
                     if mod_id not in prior:
@@ -471,15 +474,16 @@ def apply(
                 print(
                     f"[mods-guard] updated {len(stages)} bundled Mod(s); preserved {len(protected_ids)} receipt-owned Mod(s)"
                 )
-            except BaseException:
-                for stage in stages.values():
-                    if stage.exists():
-                        shutil.rmtree(stage)
-                if mutated:
-                    _rollback_locked(state, target, allow_unapplied=True)
-                else:
-                    shutil.rmtree(state, ignore_errors=True)
-                raise
+                applied = True
+            finally:
+                if not applied:
+                    for stage in stages.values():
+                        if stage.exists():
+                            shutil.rmtree(stage)
+                    if mutated:
+                        _rollback_locked(state, target, allow_unapplied=True)
+                    else:
+                        shutil.rmtree(state, ignore_errors=True)
 
 
 def rollback(state: Path, target: Path) -> None:

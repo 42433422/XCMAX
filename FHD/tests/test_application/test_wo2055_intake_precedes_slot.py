@@ -74,16 +74,18 @@ def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide, message):
     )
 
     assert "当前没有采购订单。" not in text, "缺陷上报被 normal-slot 快路径吃掉"
-    assert (
-        ("期望" in text and "实际" in text)
-        if guide["state"] == "NEEDS_MORE_EVIDENCE"
-        else "WO-fixed-path" in text
-    )
+    if guide["state"] == "NEEDS_MORE_EVIDENCE":
+        assert "期望" in text and "实际" in text
+    elif guide["state"] == "OWNER_ROUTE_UNAVAILABLE":
+        assert "暂时无法确认受理结果" in text
+        assert "WO-fixed-path" not in text
+    else:
+        assert "WO-fixed-path" in text
     events = [json.loads(line[6:]) for line in text.splitlines() if line.startswith("data: ")]
     result = next(event["result"] for event in events if event["type"] == "done")
     assert result["success"] is (guide["state"] != "OWNER_ROUTE_UNAVAILABLE")
     if guide["state"] == "OWNER_ROUTE_UNAVAILABLE":
-        assert "尚未送达" in result["message"]
+        assert "暂时无法确认受理结果" in result["message"]
         from app.application.agent_orchestrator import AgentOrchestrator
 
         run = AgentOrchestrator().get_run(result["run_id"])
