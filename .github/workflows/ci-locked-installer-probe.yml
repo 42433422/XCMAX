@@ -30,6 +30,7 @@ jobs:
         run: |
           python - <<'PY'
           import hashlib, json, os, pathlib, re, subprocess, sys, tempfile, time
+          from urllib.parse import unquote, urlsplit
           from datetime import datetime, timezone
           root = pathlib.Path.cwd()
           out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'installer-probe-evidence'
@@ -79,7 +80,19 @@ jobs:
                   expected = snapshot(seed)
                   (out/'original-dependencies.json').write_text(json.dumps(expected,indent=2))
                   frozen = out/'resolved-requirements.txt'
-                  frozen.write_text(subprocess.check_output([str(seed),'-m','pip','freeze','--all'],cwd=root,env=env,text=True))
+                  (out/'original-pip-freeze.txt').write_text(subprocess.check_output([str(seed),'-m','pip','freeze','--all'],cwd=root,env=env,text=True))
+                  requirements=[]
+                  for name, data in sorted(expected.items()):
+                      origin=data['origin']
+                      if not origin:
+                          requirements.append(f"{name}=={data['version']}")
+                          continue
+                      url=origin['url']
+                      assert url.startswith('file://') and 'vcs_info' not in origin, 'Unreviewed non-local direct dependency'
+                      local=pathlib.Path(unquote(urlsplit(url).path)).resolve()
+                      assert local.is_relative_to(root.parent) and local.is_dir(), 'Direct dependency outside tested source tree'
+                      requirements.append(f'-e {local}' if origin.get('dir_info',{}).get('editable') else f'{name} @ {local.as_uri()}')
+                  frozen.write_text('\n'.join(requirements)+'\n')
                   report['lock_sha256'] = hashlib.sha256(frozen.read_bytes()).hexdigest()
                   report['package_count'] = len(expected)
                   run('original-pip-check',[str(seed),'-m','pip','check'],env)
