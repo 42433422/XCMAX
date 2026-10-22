@@ -1,0 +1,75 @@
+name: CI acceleration exact-source audit
+on:
+  push:
+    branches: ['ci/acceleration-audit-20261022']
+    paths: ['.github/workflows/ci-acceleration-audit.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 096ced72160d9feceb83cc9e0da1bcd4adc7ced9
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Capture source and completed-run facts without changing checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, urllib.request, zipfile
+          repo = '42433422/XCMAX'
+          sha = '096ced72160d9feceb83cc9e0da1bcd4adc7ced9'
+          assert subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip() == sha
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'acceleration-inputs'
+          out.mkdir()
+          def api(path):
+              req=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+path, headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'], 'Accept':'application/vnd.github+json'})
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  return json.load(r)
+          audits=[]
+          for commit,event in [('501849c02a8e77dc887a0047f4cff6bdfec8f090','push'),(sha,'push'),('b13d5e2a72eae21f837d762e30572879becba42c','pull_request')]:
+              data=api('actions/runs?head_sha='+commit+'&event='+event+'&per_page=100')
+              assert data['total_count'] <= 100
+              for run in data['workflow_runs']:
+                  record={k:run.get(k) for k in ['id','name','head_sha','event','status','conclusion','run_attempt','created_at','updated_at','html_url','path']}
+                  if run['path'] == '.github/workflows/fhd-ci-cd.yml':
+                      jobs=api('actions/runs/'+str(run['id'])+'/jobs?per_page=100')
+                      assert jobs['total_count'] <= 100
+                      record['jobs']=[{k:j.get(k) for k in ['id','name','status','conclusion','created_at','started_at','completed_at','steps']} for j in jobs['jobs']]
+                      artifacts=api('actions/runs/'+str(run['id'])+'/artifacts?per_page=100')
+                      assert artifacts['total_count'] <= 100
+                      record['artifacts']=[{k:a.get(k) for k in ['id','name','size_in_bytes','expired','digest']} for a in artifacts['artifacts']]
+                  audits.append(record)
+          (out/'runs.json').write_text(json.dumps(audits,ensure_ascii=False,indent=2))
+          files=subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          prefixes=('FHD/scripts/ci/','FHD/scripts/dev/','FHD/tests/test_ci/','FHD/.github/','FHD/metrics/','FHD/deploy/','scripts/dev/','scripts/ci/','.github/workflows/')
+          exact={'AGENTS.md','FHD/AGENTS.md','FHD/pyproject.toml','FHD/.coveragerc','FHD/requirements-server-api.txt','FHD/requirements-dev.txt','FHD/CHANGELOG.md','FHD/tests/__init__.py','FHD/tests/test_ci/__init__.py','FHD/config/ssot.yaml'}
+          selected=[p for p in files if p and (p.startswith(prefixes) or p in exact or p.endswith('/AGENTS.md') or (p.startswith('FHD/packages/') and p.endswith('pyproject.toml')))]
+          manifest={'sha':sha,'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'files':{}}
+          with zipfile.ZipFile(out/'source.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for path in selected:
+                  raw=subprocess.check_output(['git','show',sha+':'+path])
+                  z.writestr(path,raw)
+                  manifest['files'][path]=hashlib.sha256(raw).hexdigest()
+          (out/'source-manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2))
+          print(json.dumps({'sha':sha,'selected_files':len(selected),'runs':len(audits)},ensure_ascii=False))
+          PY
+      - name: Retain scoped audit inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-acceleration-inputs-${{ github.run_id }}
+          path: ${{ runner.temp }}/acceleration-inputs/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Clean only task-created workspace caches
+        if: always()
+        run: |
+          if [ -f scripts/dev/clean_agent_workspace.py ]; then python3 scripts/dev/clean_agent_workspace.py; fi
+          df -h .
