@@ -28,6 +28,23 @@ class ShardEvidence:
         self.collection_skips = []
         self.subtests = []
         self.started = time.monotonic()
+        self.phase_seconds: dict[str, float] = {}
+
+    @pytest.hookimpl(hookwrapper=True, tryfirst=True)
+    def pytest_collection(self, session):
+        started = time.monotonic()
+        try:
+            yield
+        finally:
+            self.phase_seconds["collection"] = time.monotonic() - started
+
+    @pytest.hookimpl(hookwrapper=True, tryfirst=True)
+    def pytest_runtestloop(self, session):
+        started = time.monotonic()
+        try:
+            yield
+        finally:
+            self.phase_seconds["execution"] = time.monotonic() - started
 
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, config, items):
@@ -63,6 +80,7 @@ class ShardEvidence:
             collection_skips=sorted(self.collection_skips),
             subtests=self.subtests,
             elapsed=time.monotonic() - self.started,
+            phase_seconds=self.phase_seconds,
         )
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self.data, sort_keys=True), encoding="utf-8")
