@@ -287,7 +287,8 @@ def test_ambiguous_employee_and_mod_identity_cannot_select_another_install(
         target.mkdir(parents=True)
         (target / "manifest.json").write_text(json.dumps({"id": "legacy-global", **extra}))
     response = uninstall_client.delete(
-        "/api/mods/legacy-global", headers=_authenticated(uninstall_client, admin_session)
+        "/api/mods/legacy-global",
+        headers=_authenticated(uninstall_client, admin_session),
     )
     assert response.status_code == 409
     assert (root / "legacy-global").is_dir()
@@ -337,7 +338,11 @@ def test_session_identity_required_and_x_user_id_or_owner_claim_is_ignored(
         uninstall_client,
         route,
         method,
-        {"X-CSRF-Token": "fixture-csrf-token", "X-User-ID": "1", "X-Owner-Scope": "tenant:1"},
+        {
+            "X-CSRF-Token": "fixture-csrf-token",
+            "X-User-ID": "1",
+            "X-Owner-Scope": "tenant:1",
+        },
         "unknown-ui-fixture",
         json={"mod_id": "unknown-ui-fixture", "owner_scope": "tenant:1"},
     )
@@ -406,9 +411,9 @@ def verified_unregistered_install(monkeypatch, signed_runtime_mod, tmp_path):
             "version": "1.0.0",
             "scope": "account",
             "entitlement_mod_id": "taiyangniao-pro",
-            "dependencies": {"not-installed-fixture-dependency": "*"}
-            if mode == "dependency_failure"
-            else {},
+            "dependencies": (
+                {"not-installed-fixture-dependency": "*"} if mode == "dependency_failure" else {}
+            ),
             "frontend": {
                 "runtime": {
                     "sdk_version": 1,
@@ -426,7 +431,10 @@ def verified_unregistered_install(monkeypatch, signed_runtime_mod, tmp_path):
             (signed_runtime_mod.root / ".install-receipts/unknown-ui-fixture").glob("*.zip")
         )
         ok, message, _ = manager.install_mod_package(
-            str(archive), verify_signature=True, activate=mode != "inactive", owner_scope="tenant:1"
+            str(archive),
+            verify_signature=True,
+            activate=mode != "inactive",
+            owner_scope="tenant:1",
         )
         if mode == "inactive":
             assert ok and "未激活" in message
@@ -520,3 +528,52 @@ def test_disk_only_fallback_does_not_delete_unverified_legacy_directory(
     assert response.json()["success"] is False
     assert target.exists()
     verified_unregistered_install.manager.unload_mod.assert_not_called()
+
+
+def test_receipt_state_symlink_is_rejected(
+    uninstall_client, signed_runtime_mod, admin_session, tmp_path
+):
+    target = signed_runtime_mod.install(owner="tenant:1")
+    state = signed_runtime_mod.root / ".install-receipts/unknown-ui-fixture"
+    outside = tmp_path / "outside-state"
+    outside.mkdir()
+    (outside / "receipt.json").write_text((state / "receipt.json").read_text())
+    receipt = state / "receipt.json"
+    receipt.unlink()
+    receipt.symlink_to(outside / "receipt.json")
+    response = uninstall_client.delete(
+        "/api/mods/unknown-ui-fixture",
+        headers=_authenticated(uninstall_client, admin_session),
+    )
+    assert response.status_code == 409
+    assert target.is_dir()
+    assert (outside / "receipt.json").exists()
+
+
+def test_symlinked_legacy_directory_is_never_followed(
+    uninstall_client, signed_runtime_mod, admin_session, tmp_path
+):
+    outside = tmp_path / "outside-legacy"
+    outside.mkdir()
+    (outside / "manifest.json").write_text(
+        json.dumps({"id": "legacy-link", "name": "Legacy", "version": "1.0"})
+    )
+    (signed_runtime_mod.root / "legacy-link").symlink_to(outside)
+    response = uninstall_client.post(
+        "/api/mod-store/uninstall",
+        json={"mod_id": "legacy-link"},
+        headers=_authenticated(uninstall_client, admin_session),
+    )
+    assert response.json()["success"] is False
+    assert (outside / "manifest.json").exists()
+
+
+def test_state_lock_rejects_symlink_target(tmp_path):
+    from app.infrastructure.mods.state_lock import state_lock
+
+    target = tmp_path / "outside.lock"
+    target.write_text("")
+    (tmp_path / ".state.lock").symlink_to(target)
+    with pytest.raises(OSError):
+        with state_lock(tmp_path):
+            pass
