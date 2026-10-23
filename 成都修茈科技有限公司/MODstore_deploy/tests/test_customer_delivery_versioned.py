@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
+import shutil
 import subprocess
 import types
 import uuid
 from contextlib import nullcontext
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -50,6 +53,9 @@ def pinned_source(tmp_path, monkeypatch):
         json.dumps(
             {
                 "git_sha": sha,
+                "product_version": "2026.10.23",
+                "release_id": f"xcmax-2026.10.23-{sha}",
+                "artifact_sha256": "c" * 64,
                 "private_mod_sources": {
                     versioned.MOD_ID: {
                         "git_tree": tree,
@@ -62,7 +68,57 @@ def pinned_source(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("MODSTORE_EXPECTED_GIT_SHA", sha)
     monkeypatch.setenv("MODSTORE_GIT_SHA", sha)
+    monkeypatch.setenv("MODSTORE_RELEASE_MANIFEST", str(root / ".xcmax-release.json"))
+    monkeypatch.setenv("MODSTORE_RELEASE_ARTIFACT_SHA256", "c" * 64)
+    monkeypatch.setenv("XCMAX_RELEASE_SHA", sha)
+    monkeypatch.setenv("XCMAX_PRODUCT_VERSION", "2026.10.23")
     return root, source, {"git_sha": sha, "git_tree": tree, "sha256": digest}
+
+
+def test_probe_runtime_identity_uses_modstore_release_without_git_or_fhd_identity(
+    pinned_source, monkeypatch
+):
+    from modstore_server import customer_delivery_build, deploy_context
+
+    root, _source, provenance = pinned_source
+    assert not (root / ".git").exists()
+    assert not (root / "FHD/.build-identity.json").exists()
+    for key in ("FHD_GIT_SHA", "XCAGI_GIT_SHA", "GIT_SHA", "COMMIT_SHA"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(
+        deploy_context.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("must use MODSTORE_GIT_SHA, not git fallback"),
+    )
+    identity = customer_delivery_build.versioned_sunbird_probe_runtime_identity(provenance)
+    assert identity["host"] == {
+        "git_sha": "a" * 40,
+        "product_version": "2026.10.23",
+        "release_id": f"xcmax-2026.10.23-{'a' * 40}",
+        "artifact_sha256": "c" * 64,
+    }
+    assert len(identity["probe_runtime_sha256"]) == 64
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("MODSTORE_EXPECTED_GIT_SHA", "b" * 40),
+        ("MODSTORE_GIT_SHA", "b" * 40),
+        ("XCMAX_RELEASE_SHA", "b" * 40),
+    ],
+)
+def test_probe_runtime_identity_rejects_modstore_release_identity_drift(
+    pinned_source, monkeypatch, key, value
+):
+    from modstore_server.customer_delivery_build import (
+        versioned_sunbird_probe_runtime_identity,
+    )
+
+    _root, _source, provenance = pinned_source
+    monkeypatch.setenv(key, value)
+    with pytest.raises(ValueError, match="MODstore 不可变发行版本不匹配"):
+        versioned_sunbird_probe_runtime_identity(provenance)
 
 
 def test_release_source_matches_pinned_file_hashes_and_rejects_mutation(pinned_source):
@@ -187,6 +243,115 @@ def test_copy_rejects_wrong_entitlement_even_with_valid_release_hash(pinned_sour
     (source / "manifest.json").write_text(json.dumps(manifest))
     with pytest.raises(ValueError, match="指纹不一致"):
         _copy_validated_source(tmp_path / "other-library", provenance)
+
+
+def test_versioned_run_reaches_quality_gate_through_real_snapshot(
+    tmp_path, monkeypatch, pinned_source
+):
+    import modstore_server.customer_service_api  # noqa: F401 - initializes its router imports
+    from modstore_server import customer_delivery_versioned as versioned
+    from modstore_server import workbench_api
+    from modstore_server.customer_service_delivery_api import _custom_delivery_payload
+    from modstore_server.customer_service_delivery_quality import custom_delivery_gate
+    from modstore_server.models_cs import CustomerServiceTicket
+    from modstore_server.workbench_delivery_bridge import get_workbench_session_snapshot
+    from tests.customer_delivery_fixture import signed_artifact
+
+    signed_artifact(tmp_path, monkeypatch, owner=81, ticket=82)
+    public = tmp_path / "synthetic-public.pem"
+    from app.infrastructure.mods import trusted_keys
+
+    public.write_text(trusted_keys.TRUSTED_MOD_PUBLIC_KEYS_PEM[0])
+    monkeypatch.setenv("XCAGI_MOD_PUBLIC_KEY", str(public))
+    monkeypatch.setenv(
+        "MODSTORE_SIGNING_PRIVATE_KEY_PATH", str(tmp_path / "synthetic-signing-key.pem")
+    )
+    root, source, _ = pinned_source
+    (source / "backend/probe.py").unlink()
+    fhd = Path(__file__).resolve().parents[3] / "FHD"
+    shutil.copytree(fhd / "mods" / versioned.MOD_ID, source, dirs_exist_ok=True)
+    files, digest = versioned.source_fingerprints(source)
+    release_path = root / ".xcmax-release.json"
+    release = json.loads(release_path.read_text())
+    release["private_mod_sources"][versioned.MOD_ID].update(files=files, sha256=digest)
+    release_path.write_text(json.dumps(release))
+    monkeypatch.setattr(versioned, "assert_owner_source", lambda *_args: None)
+    store = tmp_path / "workbench-sessions"
+    store.mkdir()
+    monkeypatch.setattr(workbench_api, "_workbench_session_store_dir", lambda: store)
+    monkeypatch.setattr(workbench_api, "WORKBENCH_SESSIONS", {})
+    evidence = {
+        "kind": "module",
+        "source_mode": "versioned_main",
+        "suggested_id": versioned.MOD_ID,
+        "requirements": "Synthetic owner attendance conversion",
+    }
+
+    async def produce_and_read_back():
+        monkeypatch.setattr(workbench_api, "_SESSION_LOCK", asyncio.Lock())
+        probe_stages = []
+        real_set_step = workbench_api._set_step
+
+        async def observe_step(sid, step_id, status, *args, **kwargs):
+            await real_set_step(sid, step_id, status, *args, **kwargs)
+            if step_id == "signed_probe" and status == "running":
+                probe_stages.append((await _custom_delivery_payload(ticket))["custom_delivery"])
+
+        monkeypatch.setattr(workbench_api, "_set_step", observe_step)
+        run = await versioned.start_versioned_main_run(
+            user_id=81, ticket_id=82, evidence=evidence, attempt=1
+        )
+        sid = run["session_id"]
+        ticket = CustomerServiceTicket(
+            id=82,
+            user_id=81,
+            status="processing",
+            decision_status="pending",
+            evidence_json=json.dumps({**evidence, "runs": [run]}),
+        )
+        async with asyncio.timeout(90):
+            while True:
+                snapshot = await get_workbench_session_snapshot(sid, 81)
+                assert snapshot is not None
+                assert snapshot["status"] != "error", snapshot.get("error")
+                if snapshot.get("verified_artifacts"):
+                    break
+                await asyncio.sleep(0.05)
+        # Another worker may still hold its first, pre-probe session snapshot.
+        stale_cache = {
+            **snapshot,
+            "status": "running",
+            "artifact": {"mod_id": versioned.MOD_ID, "validation_summary": {"probe_pending": True}},
+            "verified_artifacts": [],
+        }
+        workbench_api.WORKBENCH_SESSIONS[sid] = stale_cache
+        snapshot = await get_workbench_session_snapshot(sid, 81)
+        assert snapshot is not None
+        assert snapshot["status"] == "done"
+        assert workbench_api.WORKBENCH_SESSIONS[sid] is stale_cache
+        assert snapshot["user_id"] == 81
+        assert snapshot["ticket_id"] == 82
+        assert snapshot["delivery_source_mode"] == "versioned_main"
+        assert snapshot["delivery_runtime_identity"]["host"]["git_sha"] == "a" * 40
+        assert await get_workbench_session_snapshot(sid, 999) is None
+        assert custom_delivery_gate(snapshot, owner_id=81, ticket_id=82, generation=sid)[0] is True
+        assert (
+            custom_delivery_gate(snapshot, owner_id=999, ticket_id=82, generation=sid)[0] is False
+        )
+        payload = (await _custom_delivery_payload(ticket))["custom_delivery"]
+        assert payload["gate_ok"] is True
+        assert payload["stage"] == "acceptance"
+        assert len(probe_stages) == 1
+        assert probe_stages[0]["stage"] == "production"
+        assert probe_stages[0]["gate_ok"] is False
+        record = snapshot["verified_artifacts"][0]
+        assert record["sandbox_probe"]["package_sha256"] == record["package_sha256"]
+        assert record["sandbox_probe"]["observations"]["customer_data_written"] is False
+        assert all(step["status"] == "done" for step in snapshot["steps"])
+        (store / f"{sid}.json").unlink()
+        assert await get_workbench_session_snapshot(sid, 81) is None
+
+    asyncio.run(produce_and_read_back())
 
 
 def test_signed_record_cannot_drop_or_forge_source_provenance(tmp_path, monkeypatch):
@@ -365,6 +530,397 @@ def test_signing_failure_rolls_done_session_back_to_error(pinned_source, tmp_pat
     assert snapshot["steps"][1]["status"] == "error"
     assert snapshot["error"] == "signing failed"
     assert custom_delivery_gate(snapshot)[0] is False
+
+
+@pytest.mark.parametrize("broken_probe", [False, True])
+def test_signed_sunbird_probe_executes_real_probe_and_binds_report(
+    tmp_path, monkeypatch, broken_probe, pinned_source
+):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from modstore_server import customer_delivery_build, customer_delivery_sources
+    from modstore_server.customer_delivery_receipts import canonical_sha256
+
+    fhd = Path(__file__).resolve().parents[3] / "FHD"
+    monkeypatch.syspath_prepend(str(fhd))
+    from app.infrastructure.mods import trusted_keys
+
+    key = Ed25519PrivateKey.generate()
+    private = tmp_path / "synthetic-private.pem"
+    private.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    public = tmp_path / "synthetic-public.pem"
+    public.write_bytes(
+        key.public_key().public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
+    monkeypatch.setenv("XCAGI_MOD_PUBLIC_KEY", str(public))
+    monkeypatch.setattr(
+        trusted_keys,
+        "TRUSTED_MOD_PUBLIC_KEYS_PEM",
+        (public.read_text(encoding="utf-8"),),
+    )
+    library = tmp_path / "library"
+    library.mkdir()
+    monkeypatch.setattr(customer_delivery_sources, "public_library", lambda: library)
+    mod_id = "sunbird-attendance-custom"
+    source = library / mod_id
+    shutil.copytree(fhd / "mods" / mod_id, source)
+    generation = "c" * 32
+    manifest_path = source / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest.update(
+        delivery_owner_user_id=81,
+        delivery_ticket_id=82,
+        delivery_generation=generation,
+        delivery_source_git_sha="a" * 40,
+        delivery_source_git_tree="b" * 40,
+        delivery_source_sha256="d" * 64,
+    )
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+    if broken_probe:
+        probe_path = source / "backend/sunbird_attendance/verification.py"
+        probe_text = probe_path.read_text(encoding="utf-8")
+        assert 'result.get("rows_used_for_template") == 1' in probe_text
+        probe_path.write_text(
+            probe_text.replace(
+                'result.get("rows_used_for_template") == 1',
+                'result.get("rows_used_for_template") == 2',
+            ),
+            encoding="utf-8",
+        )
+    from app.infrastructure.mods.package_signing import verify_signed_package_bytes
+
+    spec = importlib.util.spec_from_file_location(
+        "signed_probe_build_mod", fhd / "scripts/build_mod.py"
+    )
+    assert spec and spec.loader
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+
+    package_root = tmp_path / "customer-delivery-artifacts" / "81" / mod_id
+    package, _ = builder.build_xcemp(source, package_root, sign=True, private_key=private)
+    signed = verify_signed_package_bytes(package.read_bytes())
+    record = {
+        "kind": "module",
+        "id": mod_id,
+        "version": manifest["version"],
+        "owner_user_id": 81,
+        "ticket_id": 82,
+        "signed_package_path": str(package),
+        "generation": generation,
+        "package_sha256": signed["package_sha256"],
+        "verification_case_id": manifest["delivery_verification"]["case_id"],
+        "runtime_files_sha256": canonical_sha256(signed["files_sha256"]),
+        "source_mode": "versioned_main",
+        "source_git_sha": manifest["delivery_source_git_sha"],
+        "source_git_tree": manifest["delivery_source_git_tree"],
+        "source_sha256": manifest["delivery_source_sha256"],
+    }
+    _release_root, _release_source, release_provenance = pinned_source
+    if broken_probe:
+        with pytest.raises(ValueError, match="业务探针未成功完成|业务探针未通过"):
+            customer_delivery_build.run_versioned_sunbird_probe(
+                record,
+                customer_delivery_build.versioned_sunbird_probe_runtime_identity(
+                    release_provenance
+                ),
+            )
+        return
+    runtime_identity = customer_delivery_build.versioned_sunbird_probe_runtime_identity(
+        release_provenance
+    )
+    monkeypatch.setenv("MODSTORE_SIGNING_PRIVATE_KEY_PATH", str(tmp_path / "private.pem"))
+    monkeypatch.setenv("DATABASE_URL", "sqlite:////must-not-be-forwarded.db")
+    monkeypatch.setenv("XCAGI_MODS_ROOT", str(tmp_path / "production-mods"))
+    real_run = subprocess.run
+    child_env = {}
+
+    def capture_isolated_child(args, **kwargs):
+        child_env.update(kwargs.get("env") or {})
+        try:
+            return real_run(args, **kwargs)
+        except subprocess.CalledProcessError as exc:
+            pytest.fail(f"Synthetic signed probe child failed: {exc.stderr}", pytrace=False)
+
+    monkeypatch.setattr(customer_delivery_build.subprocess, "run", capture_isolated_child)
+    report = customer_delivery_build.run_versioned_sunbird_probe(record, runtime_identity)
+    assert report["passed"] is True
+    assert report["package_sha256"] == record["package_sha256"]
+    assert report["owner_user_id"] == record["owner_user_id"]
+    assert report["ticket_id"] == record["ticket_id"]
+    assert report["generation"] == generation
+    assert report["host_runtime"] == runtime_identity["host"]
+    assert report["probe_runtime_sha256"] == runtime_identity["probe_runtime_sha256"]
+    assert "MODSTORE_SIGNING_PRIVATE_KEY_PATH" not in child_env
+    assert child_env["DATABASE_URL"].startswith("sqlite:///")
+    assert child_env["XCAGI_MODS_ROOT"] == str(Path(child_env["TMPDIR"]) / "mods")
+    assert child_env["XCAGI_DESKTOP_DATA_DIR"] == str(Path(child_env["TMPDIR"]) / "data")
+    assert child_env["XDG_CACHE_HOME"] == str(Path(child_env["TMPDIR"]) / "cache")
+    assert "HOME" not in child_env and "CODEX_HOME" not in child_env
+    assert child_env["WORKSPACE_ROOT"] == str(Path(child_env["TMPDIR"]) / "workspace")
+    assert child_env["XCAGI_WORKSPACE_ROOT"] == child_env["WORKSPACE_ROOT"]
+    assert report["observations"]["rows_matched"] == 1
+    assert report["observations"]["customer_data_written"] is False
+
+
+def test_versioned_quality_gate_requires_report_bound_to_signed_package(tmp_path, monkeypatch):
+    import modstore_server.customer_service_api  # noqa: F401 - initializes its router imports
+    from modstore_server import (
+        customer_delivery_build,
+        customer_delivery_sources,
+        workbench_api,
+    )
+    from modstore_server.customer_service_delivery_quality import custom_delivery_gate
+
+    record = {
+        "id": "sunbird-attendance-custom",
+        "version": "1.0.2",
+        "owner_user_id": 81,
+        "ticket_id": 82,
+        "generation": "c" * 32,
+        "package_sha256": "d" * 64,
+        "verification_case_id": "sunbird-owner-conversion-v1",
+    }
+    signed = {"manifest": {}}
+    signed["manifest"].update(
+        {
+            "id": record["id"],
+            "version": record["version"],
+            "delivery_owner_user_id": 81,
+            "delivery_ticket_id": 82,
+            "delivery_generation": record["generation"],
+            "delivery_verification": {
+                "handler": "verify_delivery",
+                "case_id": record["verification_case_id"],
+            },
+        }
+    )
+    generated = datetime.now(UTC)
+    runtime_identity = {
+        "host": {
+            "git_sha": "a" * 40,
+            "product_version": "1.0.0",
+            "release_id": "xcagi-test",
+            "artifact_sha256": "b" * 64,
+            "image_digest": "sha256:" + "c" * 64,
+        },
+        "probe_runtime_sha256": "e" * 64,
+    }
+    report = {
+        **{
+            key: record[key]
+            for key in (
+                "id",
+                "version",
+                "owner_user_id",
+                "ticket_id",
+                "generation",
+                "package_sha256",
+            )
+        },
+        "mod_id": record["id"],
+        "case_id": record["verification_case_id"],
+        "host_runtime": runtime_identity["host"],
+        "probe_runtime_sha256": runtime_identity["probe_runtime_sha256"],
+        "generated_at": generated.isoformat().replace("+00:00", "Z"),
+        "expires_at": (generated + timedelta(hours=24)).isoformat().replace("+00:00", "Z"),
+        "passed": True,
+        "observations": {
+            "owner_schema_ready": True,
+            "rows_matched": 1,
+            "monthly_formulas_link_detail": True,
+            "customer_data_written": False,
+        },
+    }
+    from modstore_server.customer_delivery_receipts import canonical_sha256
+
+    report["report_sha256"] = canonical_sha256(report)
+    row = {**record, "source_mode": "versioned_main", "sandbox_probe": report}
+    library = tmp_path / "library"
+    library.mkdir()
+    monkeypatch.setattr(customer_delivery_sources, "public_library", lambda: library)
+    store = library.parent / "sessions"
+    store.mkdir()
+    monkeypatch.setattr(workbench_api, "_workbench_session_store_dir", lambda: store)
+    monkeypatch.setattr(workbench_api, "WORKBENCH_SESSIONS", {})
+    scope = customer_delivery_sources.create_private_source_scope(
+        81, record["generation"], record["ticket_id"]
+    )
+    snapshot = {
+        "id": record["generation"],
+        "user_id": record["owner_user_id"],
+        "ticket_id": record["ticket_id"],
+        "delivery_source_mode": "versioned_main",
+        "delivery_runtime_identity": runtime_identity,
+        "source_scope": scope,
+        "status": "done",
+        "intent": "mod",
+        "artifact": {
+            "mod_id": record["id"],
+            "validation_summary": {
+                "ok": True,
+                "signed_probe_sha256": report["report_sha256"],
+            },
+        },
+        "verified_artifacts": [row],
+    }
+    workbench_api.WORKBENCH_SESSIONS[record["generation"]] = dict(snapshot)
+    workbench_api._persist_workbench_session_unlocked(record["generation"])
+    monkeypatch.setattr(
+        customer_delivery_build,
+        "read_verified_artifact",
+        lambda *_args, **_kwargs: (b"signed", signed),
+    )
+
+    def gate(value=snapshot):
+        return custom_delivery_gate(
+            value,
+            owner_id=record["owner_user_id"],
+            ticket_id=record["ticket_id"],
+            generation=record["generation"],
+        )
+
+    assert gate()[0] is True
+    replacement = json.loads(json.dumps(snapshot))
+    replacement_report = replacement["verified_artifacts"][0]["sandbox_probe"]
+    replacement_time = generated + timedelta(seconds=1)
+    replacement_report["generated_at"] = replacement_time.isoformat().replace("+00:00", "Z")
+    replacement_report["expires_at"] = (
+        (replacement_time + timedelta(hours=24)).isoformat().replace("+00:00", "Z")
+    )
+    replacement_report["report_sha256"] = canonical_sha256(
+        {key: item for key, item in replacement_report.items() if key != "report_sha256"}
+    )
+    replacement["artifact"]["validation_summary"]["signed_probe_sha256"] = replacement_report[
+        "report_sha256"
+    ]
+    # Updating a digest does not persist a new execution.
+    assert gate(replacement)[0] is False
+    workbench_api.WORKBENCH_SESSIONS[record["generation"]] = json.loads(json.dumps(replacement))
+    workbench_api._persist_workbench_session_unlocked(record["generation"])
+    assert gate(replacement)[0] is True
+    workbench_api.WORKBENCH_SESSIONS[record["generation"]] = dict(snapshot)
+    workbench_api._persist_workbench_session_unlocked(record["generation"])
+    assert custom_delivery_gate(snapshot)[0] is False
+    persisted = workbench_api.WORKBENCH_SESSIONS[record["generation"]]
+    persisted["ticket_id"] = 999
+    workbench_api._persist_workbench_session_unlocked(record["generation"])
+    assert gate()[0] is False
+    persisted["ticket_id"] = record["ticket_id"]
+    workbench_api._persist_workbench_session_unlocked(record["generation"])
+    scope = snapshot.pop("source_scope")
+    assert gate()[0] is False
+    snapshot["source_scope"] = scope
+    for field, value in (
+        ("owner_user_id", 44),
+        ("generation", "e" * 32),
+        ("package_sha256", "f" * 64),
+    ):
+        forged = {**report, field: value}
+        forged["report_sha256"] = canonical_sha256(
+            {key: item for key, item in forged.items() if key != "report_sha256"}
+        )
+        snapshot["verified_artifacts"] = [{**row, "sandbox_probe": forged}]
+        assert gate()[0] is False
+    snapshot["verified_artifacts"] = [{**row, "sandbox_probe": None}]
+    assert gate()[0] is False
+    foreign_row = {
+        **row,
+        "owner_user_id": 44,
+        "ticket_id": 99,
+        "generation": "f" * 32,
+        "package_sha256": "f" * 64,
+    }
+    foreign_manifest = {
+        **signed["manifest"],
+        "delivery_owner_user_id": 44,
+        "delivery_ticket_id": 99,
+        "delivery_generation": "f" * 32,
+    }
+    foreign_report = {
+        **report,
+        "owner_user_id": 44,
+        "ticket_id": 99,
+        "generation": "f" * 32,
+        "package_sha256": "f" * 64,
+    }
+    foreign_report["report_sha256"] = canonical_sha256(
+        {key: item for key, item in foreign_report.items() if key != "report_sha256"}
+    )
+    foreign_row["sandbox_probe"] = foreign_report
+    snapshot["verified_artifacts"] = [foreign_row]
+    monkeypatch.setattr(
+        customer_delivery_build,
+        "read_verified_artifact",
+        lambda *_args, **_kwargs: (b"signed", {"manifest": foreign_manifest}),
+    )
+    assert gate()[0] is False  # Whole foreign owner/ticket/package/report transplantation.
+    old_generation = {**row, "generation": "e" * 32}
+    snapshot["verified_artifacts"] = [old_generation]
+    assert gate()[0] is False  # A valid report from an earlier generation cannot be replayed.
+    monkeypatch.setattr(
+        customer_delivery_build,
+        "read_verified_artifact",
+        lambda *_args, **_kwargs: (b"signed", signed),
+    )
+    stale = {
+        **report,
+        "generated_at": (generated - timedelta(days=2)).isoformat().replace("+00:00", "Z"),
+    }
+    stale["expires_at"] = (generated - timedelta(days=1)).isoformat().replace("+00:00", "Z")
+    stale["report_sha256"] = canonical_sha256(
+        {key: item for key, item in stale.items() if key != "report_sha256"}
+    )
+    snapshot["verified_artifacts"] = [{**row, "sandbox_probe": stale}]
+    workbench_api.WORKBENCH_SESSIONS[record["generation"]] = json.loads(json.dumps(snapshot))
+    workbench_api._persist_workbench_session_unlocked(record["generation"])
+    assert gate()[0] is False  # An expired host/runtime probe is not reusable.
+    snapshot["verified_artifacts"] = [{**row, "sandbox_probe": None}]
+
+    from fastapi import HTTPException
+
+    from modstore_server import customer_service_delivery_api as api
+    from modstore_server.customer_service_delivery_models import (
+        CustomDeliveryDecisionBody,
+    )
+
+    ticket = types.SimpleNamespace(
+        id=82,
+        user_id=81,
+        intent="custom_delivery",
+        evidence_json="{}",
+    )
+    monkeypatch.setattr(api, "_visible_ticket_or_404", lambda *_args: ticket)
+
+    async def payload(_ticket):
+        gate_ok, _message = gate()
+        return {
+            "custom_delivery": {
+                "stage": "acceptance" if gate_ok else "rework",
+                "gate_ok": gate_ok,
+            }
+        }
+
+    monkeypatch.setattr(api, "_custom_delivery_payload", payload)
+    with pytest.raises(HTTPException) as blocked:
+        asyncio.run(
+            api.decide_custom_delivery(
+                82,
+                CustomDeliveryDecisionBody(action="accept", note="验收确认"),
+                db=object(),
+                user=types.SimpleNamespace(id=81, is_admin=False),
+            )
+        )
+    assert blocked.value.status_code == 409
 
 
 @pytest.mark.parametrize("failure", ["owner", "release", "wrong_mod", "accept"])

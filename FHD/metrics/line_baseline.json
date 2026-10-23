@@ -1,5 +1,5 @@
 {
-  "lines": 2334726,
+  "lines": 2335944,
   "updated": "2026-10-23",
-  "note": "发布阻塞续修：市场端原覆盖仍锁DOMPurify3.4.13，补至3.4.17以修复GHSA-cg2g-xh64-v4q7与GHSA-mrv2-3pqr-j5jr；仅变更该锁节点，保留跨平台libc约束及其他版本。官方包SRI核验与5项影子根/脱离节点/常规SVG安全烟测通过，425项隐私发布回归保持。相对main825累计净增84行，安全说明和边界回归显式例外，不用无关删除凑数。"
+  "note": "Declare pandas in MODstore web because the real signed Sunbird probe imports the stable FHD Mod SDK and its application services. Formal CI reproduced two missing-pandas failures; a fresh Python3.11 environment installed only from declared web/dev extras now passes all311 targeted cases. Retain dependency isolation and expose synthetic child errors in test evidence."
 }

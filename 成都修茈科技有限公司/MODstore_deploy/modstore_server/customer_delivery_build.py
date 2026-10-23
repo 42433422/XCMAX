@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
 import re
@@ -15,6 +16,164 @@ from typing import Any
 
 from modstore_server.customer_delivery_package import verify_delivery_package
 from modstore_server.customer_delivery_receipts import canonical_sha256
+
+
+def versioned_sunbird_probe_runtime_identity(
+    source_provenance: dict[str, Any],
+) -> dict[str, Any]:
+    """Bind the probe to MODstore's immutable release, not an unrelated FHD service."""
+    from modstore_server import deploy_context, runtime_provenance
+
+    manifest_path, manifest = runtime_provenance._runtime_manifest()
+    expected_sha = str(os.environ.get("MODSTORE_EXPECTED_GIT_SHA") or "").strip().lower()
+    configured_sha = str(os.environ.get("MODSTORE_GIT_SHA") or "").strip().lower()
+    running_sha = str(deploy_context.resolve_git_sha() or "").strip().lower()
+    host_sha = str(manifest.get("git_sha") or "").strip().lower()
+    if (
+        manifest_path is None
+        or manifest_path.name != ".xcmax-release.json"
+        or not re.fullmatch(r"[0-9a-f]{40}", expected_sha)
+        or configured_sha != expected_sha
+        or running_sha != expected_sha
+        or host_sha != expected_sha
+        or source_provenance.get("git_sha") != expected_sha
+        or os.environ.get("XCMAX_RELEASE_SHA", "").strip().lower() != expected_sha
+    ):
+        raise ValueError("隔离探针宿主身份与当前 MODstore 不可变发行版本不匹配")
+    product_version = str(manifest.get("product_version") or "").strip()
+    release_id = str(manifest.get("release_id") or "").strip()
+    artifact_sha = str(manifest.get("artifact_sha256") or "").strip().lower()
+    if (
+        not product_version
+        or not release_id
+        or not re.fullmatch(r"[0-9a-f]{64}", artifact_sha)
+        or os.environ.get("XCMAX_PRODUCT_VERSION", "").strip() != product_version
+        or os.environ.get("MODSTORE_RELEASE_ARTIFACT_SHA256", "").strip().lower() != artifact_sha
+    ):
+        raise ValueError("隔离探针缺少当前 MODstore 发行版本或制品摘要")
+    root = Path(__file__).resolve().parents[3]
+    runner = root / "FHD/scripts/dev/run_sunbird_delivery_probe.py"
+    if not runner.is_file() or runner.is_symlink():
+        raise ValueError("隔离探针运行器缺失或路径无效")
+    host = {
+        "git_sha": host_sha,
+        "product_version": product_version,
+        "release_id": release_id,
+        "artifact_sha256": artifact_sha,
+    }
+    return {
+        "host": host,
+        "probe_runtime_sha256": hashlib.sha256(runner.read_bytes()).hexdigest(),
+    }
+
+
+def run_versioned_sunbird_probe(
+    record: dict[str, Any], runtime_identity: dict[str, Any]
+) -> dict[str, Any]:
+    """Run the exact signed Sunbird package probe with synthetic, isolated data."""
+    owner_id = int(record.get("owner_user_id") or 0)
+    ticket_id = int(record.get("ticket_id") or 0)
+    raw, signed = read_verified_artifact(record, owner_id=owner_id, ticket_id=ticket_id)
+    manifest = signed["manifest"]
+    if (
+        record.get("source_mode") != "versioned_main"
+        or record.get("id") != "sunbird-attendance-custom"
+        or manifest.get("delivery_verification", {}).get("case_id") != "sunbird-owner-conversion-v1"
+    ):
+        raise ValueError("仅支持已绑定主线太阳鸟业务探针的正式签名包")
+    package_sha = hashlib.sha256(raw).hexdigest()
+    if package_sha != signed["package_sha256"]:
+        raise ValueError("业务探针输入与正式签名包摘要不一致")
+    root = Path(__file__).resolve().parents[3]
+    script = root / "FHD/scripts/dev/run_sunbird_delivery_probe.py"
+    with tempfile.TemporaryDirectory(prefix="sunbird-signed-probe-") as temporary:
+        workspace = Path(temporary)
+        package = workspace / "candidate.xcmod"
+        package.write_bytes(raw)
+        package.chmod(0o600)
+        result_path = workspace / "report.json"
+        config_path = workspace / "probe.json"
+        data_root = workspace / "data"
+        data_root.mkdir(mode=0o700)
+        probe_workspace = workspace / "workspace"
+        mods_root = workspace / "mods"
+        cache_root = workspace / "cache"
+        for directory in (probe_workspace, mods_root, cache_root):
+            directory.mkdir(mode=0o700)
+        config_path.write_text(
+            json.dumps(
+                {
+                    "fhd_root": str(root / "FHD"),
+                    "package": str(package),
+                    "package_sha256": package_sha,
+                    "mod_id": record["id"],
+                    "version": record["version"],
+                    "owner_user_id": owner_id,
+                    "ticket_id": ticket_id,
+                    "generation": record["generation"],
+                    "case_id": record["verification_case_id"],
+                    "host_runtime": runtime_identity["host"],
+                    "probe_runtime_sha256": runtime_identity["probe_runtime_sha256"],
+                    "report": str(result_path),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        env = {
+            "TMPDIR": str(workspace),
+            "TEMP": str(workspace),
+            "TMP": str(workspace),
+            "XDG_CACHE_HOME": str(cache_root),
+            "PYTHONPATH": str(root / "FHD"),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "DATABASE_URL": f"sqlite:///{data_root / 'probe.db'}",
+            "DATABASE_PATH": str(data_root),
+            "XCAGI_DATA_DIR": str(data_root),
+            "XCAGI_DESKTOP_DATA_DIR": str(data_root),
+            "WORKSPACE_ROOT": str(probe_workspace),
+            "XCAGI_WORKSPACE_ROOT": str(probe_workspace),
+            "XCAGI_MODS_ROOT": str(mods_root),
+        }
+        public_key = os.environ.get("XCAGI_MOD_PUBLIC_KEY", "").strip()
+        if public_key and Path(public_key).is_file():
+            env["XCAGI_MOD_PUBLIC_KEY"] = public_key
+        try:
+            subprocess.run(
+                [sys.executable, str(script), str(config_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=45,
+                cwd=workspace,
+                env=env,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise ValueError("签名包隔离业务探针未成功完成") from exc
+        try:
+            loaded = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ValueError("签名包隔离业务探针未返回报告") from exc
+    if not isinstance(loaded, dict):
+        raise ValueError("签名包隔离业务探针报告格式无效")
+    report: dict[str, Any] = loaded
+    expected = {
+        "mod_id": record["id"],
+        "version": record["version"],
+        "owner_user_id": owner_id,
+        "ticket_id": ticket_id,
+        "generation": record["generation"],
+        "package_sha256": package_sha,
+        "case_id": record["verification_case_id"],
+        "host_runtime": runtime_identity["host"],
+        "probe_runtime_sha256": runtime_identity["probe_runtime_sha256"],
+    }
+    if any(report.get(key) != value for key, value in expected.items()):
+        raise ValueError("签名包隔离业务探针报告身份绑定不匹配")
+    if report.get("passed") is not True or not isinstance(report.get("observations"), dict):
+        raise ValueError("签名包隔离业务探针未通过")
+    report["report_sha256"] = canonical_sha256(report)
+    return report
 
 
 def read_verified_artifact(

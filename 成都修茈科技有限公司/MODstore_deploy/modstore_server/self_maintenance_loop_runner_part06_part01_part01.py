@@ -6,6 +6,10 @@ from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+from pathlib import Path
+from time import monotonic
+
+_FOCUSED_TEST_PYTHON_CACHE: tuple[tuple[Path | None, ...], float, Path] | None = None
 
 
 def _facade():
@@ -262,6 +266,7 @@ def _focused_test_command() -> str:
     does not install pytest.  Prefer the MODstore venv used for repository tests
     and expose explicit overrides for production or isolated runners.
     """
+    global _FOCUSED_TEST_PYTHON_CACHE
     command_override = (
         _facade().os.environ.get("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "").strip()
     )
@@ -275,7 +280,7 @@ def _focused_test_command() -> str:
         or _facade().Path(__file__).resolve().parent.parent
     )
     runtime_root = _facade().os.environ.get("MODSTORE_RUNTIME_ROOT", "").strip()
-    candidates = [
+    candidates: tuple[Path | None, ...] = (
         _facade().Path(test_python_override).expanduser() if test_python_override else None,
         deploy_root / ".venv" / "bin" / "python",
         (
@@ -288,15 +293,21 @@ def _focused_test_command() -> str:
             else None
         ),
         _facade().Path(_facade().sys.executable),
-    ]
-    test_python = next(
-        (
-            candidate
-            for candidate in candidates
-            if candidate and _facade()._python_supports_focused_tests(candidate)
-        ),
-        _facade().Path(_facade().sys.executable),
     )
+    cached = _FOCUSED_TEST_PYTHON_CACHE
+    if cached and cached[0] == candidates and monotonic() < cached[1]:
+        test_python = cached[2]
+    else:
+        test_python = next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate and _facade()._python_supports_focused_tests(candidate)
+            ),
+            _facade().Path(_facade().sys.executable),
+        )
+        # Bound both stale successes and repeated all-candidate failures, after probing.
+        _FOCUSED_TEST_PYTHON_CACHE = (candidates, monotonic() + 60, test_python)
     test_path = (
         "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
     )
