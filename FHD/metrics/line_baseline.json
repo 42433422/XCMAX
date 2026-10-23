@@ -1,5 +1,5 @@
 {
-  "lines": 2367569,
+  "lines": 2367652,
   "updated": "2026-10-23",
-  "note": "用户已批准 PR #2544 的净增基线例外。干净提交 0007f5ecb 当前计数 2,367,569；相较上次批准基线 2,367,504，本次 AST 路由契约校验及 3 个正反向测试净增 65 行。相对 main 基线 2,337,465 累计增加 30,104 行，其中 30,027 行来自已合入最新 main。"
+  "note": "User-approved #2544 exception. Clean commit 1de9edcb0 count: 2,367,652 (+83 vs prior approved baseline 2,367,569) for ETL root hardening/temp placement, CodeQL path resolver model, and static MODstore fallback with behavior tests; CodeQL remote validation is pending. Relative to main baseline 2,337,465 the cumulative delta is 30,187 (30,027 merged from main, 160 PR changes). Excludes user legal/eval working-tree edits."
 }
