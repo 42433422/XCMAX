@@ -138,9 +138,7 @@ def resolve_etl_output_path(
         parent = roots[0]
     else:
         parent = _safe_under_roots(parent_raw, etl_allowed_roots(workspace_root))
-    parent.mkdir(
-        parents=True, exist_ok=True
-    )  # lgtm[py/path-injection] -- parent passed _safe_under_roots
+    parent.mkdir(parents=True, exist_ok=True)
     # 文件名只用 basename；归一化后再次验证最终路径仍在已批准父目录内。
     parent_text = os.path.realpath(os.path.abspath(parent))
     candidate_text = os.path.realpath(os.path.abspath(os.path.join(parent_text, name)))

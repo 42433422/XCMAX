@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -58,7 +59,19 @@ def _scan(
         return {"success": False, "message": "非法目录", "error_code": "unsafe_path", "files": []}
     if not root.is_dir():
         return {"success": False, "message": f"目录不存在: {root}", "files": []}
-    return DirectoryFiles(root, sorted(root.glob(pattern)))
+    if not pattern or any(char in pattern for char in ("/", "\\", "\x00")):
+        return {
+            "success": False,
+            "message": "非法文件模式",
+            "error_code": "unsafe_pattern",
+            "files": [],
+        }
+    # Match only entry names. Letting a caller-supplied glob reach Path.glob would
+    # allow directory traversal patterns such as ../*.xlsx.
+    return DirectoryFiles(
+        root,
+        sorted(path for path in root.iterdir() if fnmatch.fnmatchcase(path.name, pattern)),
+    )
 
 
 def preview_directory(

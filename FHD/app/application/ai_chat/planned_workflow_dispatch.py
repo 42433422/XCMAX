@@ -22,6 +22,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _log_price_list_result(result: dict[str, Any]) -> None:
+    products = result.get("products")
+    product_count = len(products) if isinstance(products, list) else 0
+    logger.info(
+        "价格表生成已完成 success=%s product_count=%s",
+        bool(result.get("success")),
+        product_count,
+    )
+
+
 class WorkflowDispatchCallbacks(Protocol):
     def _bridge_agentic_workflow_result_to_agent_run(
         self,
@@ -186,7 +196,7 @@ class PlannedWorkflowDispatch:
                         },
                         workspace_root=str(fhd_root) if fhd_root else None,
                     )
-                    logger.info("价格表生成结果: %s", result)
+                    _log_price_list_result(result)
                     if result.get("success"):
                         product_count = len(result.get("products", []))
                         file_path = result.get("file_path", "")

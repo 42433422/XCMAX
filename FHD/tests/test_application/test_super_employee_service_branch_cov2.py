@@ -1184,7 +1184,7 @@ class TestVerifyWorkspace:
 
         monkeypatch.setenv(
             "XCMAX_CLAUDE_VERIFY_CMD",
-            f"{sys.executable} -c 'from pathlib import Path; Path(\"ran.py\").write_text(\"ok\")' "
+            f'{sys.executable} -c \'from pathlib import Path; Path("ran.py").write_text("ok")\' '
             "; touch shell-command-ran",
         )
         svc = _make_svc(tmp_path, cli_runner=_null_runner)

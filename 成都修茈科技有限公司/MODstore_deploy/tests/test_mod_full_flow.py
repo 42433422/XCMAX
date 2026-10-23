@@ -11,11 +11,19 @@ from modstore_server.mod_scaffold_runner import (
     write_mod_suite_industry_card,
     write_mod_suite_ui_shell,
 )
+from modstore_server.workbench.suite_pipeline import _safe_fallback_employee_source
 from modstore_server.workbench_api import (
     _default_steps,
     _embed_script_workflow_in_employee_pack,
     _fallback_employee_orchestration_plan,
 )
+
+
+def test_workbench_fallback_source_uses_generic_private_data_free_profile() -> None:
+    source = _safe_fallback_employee_source()
+    assert 'EMPLOYEE_LABEL = "员工"' in source
+    assert "customer fixture" not in source
+    compile(source, "fallback_employee.py", "exec")
 
 
 def _suite_payload() -> dict:

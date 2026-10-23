@@ -130,14 +130,23 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
 
     # Explicitly named creates use CRUD; underspecified onboarding remains on its legacy route.
     stripped_value = value.strip()
-    named_customer_create = re.match(
-        r"^(?:请)?(?:帮我)?\s*(?:新增|添加)\s*(?:客户|购买单位)"
-        r"(?:\s*[:：]\s*|\s+)([^，,。；;\s]{2,})",
-        stripped_value,
-    ) or re.match(
-        r"^(?:请|帮我|请帮我)\s*(?:新增|添加)\s*(?:客户|购买单位)\s*[:：]?\s*([^，,。；;\s]{2,})",
+    # Parse the small supported prefix grammar directly.  A negated character
+    # class followed by a minimum-width repeat made the old regex backtrack on
+    # long, delimiter-free user input.
+    named_customer_create = False
+    prefix_match = re.match(
+        r"^(?:请\s*)?(?:帮我\s*)?(?:新增|添加)\s*(?:客户|购买单位)",
         stripped_value,
     )
+    if prefix_match:
+        remainder = stripped_value[prefix_match.end() :].lstrip()
+        if remainder.startswith((":", "：")):
+            remainder = remainder[1:].lstrip()
+        end = next(
+            (index for index, char in enumerate(remainder) if char in "，,。；; \t\r\n"),
+            len(remainder),
+        )
+        named_customer_create = end >= 2
     if named_customer_create and not any(
         marker in value for marker in ("产品", "商品", "订单", "报价", "发货", "不要", "别", "取消")
     ):

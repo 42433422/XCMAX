@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.application import shipment_excel_etl_app_service as etl
+from app.application.shipment_etl.batching import _scan
 
 
 def _note(number):
@@ -147,6 +148,21 @@ def test_batch_does_not_report_success_when_a_file_is_rejected_before_writing(
     assert result["shipment_created"] == 0
     assert result["files"][0]["error_code"] == "ledger_confirm_required"
     assert "失败文件 1" in result["message"]
+
+
+def test_batch_pattern_cannot_escape_the_selected_directory(tmp_path):
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.xlsx"
+    outside.write_text("fixture", encoding="utf-8")
+    try:
+        result = _scan(tmp_path, "../*.xlsx", tmp_path)
+        assert result == {
+            "success": False,
+            "message": "非法文件模式",
+            "error_code": "unsafe_pattern",
+            "files": [],
+        }
+    finally:
+        outside.unlink(missing_ok=True)
 
 
 def test_failed_fingerprint_cleanup_does_not_claim_a_rollback_is_retryable(

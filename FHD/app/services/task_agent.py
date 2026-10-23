@@ -25,7 +25,7 @@ def _cn_number(token: str) -> int | None:
     t = (token or "").strip()
     if not t:
         return None
-    if re.fullmatch(r"\d+", t):
+    if t.isascii() and t.isdigit():
         return int(t)
     m = {
         "零": 0,
@@ -43,15 +43,100 @@ def _cn_number(token: str) -> int | None:
     }
     if t == "十":
         return 10
-    if re.fullmatch(r"[一二两三四五六七八九]十", t):
+    if len(t) == 2 and t[0] in "一二两三四五六七八九" and t[1] == "十":
         return m[t[0]] * 10
-    if re.fullmatch(r"十[一二三四五六七八九]", t):
+    if len(t) == 2 and t[0] == "十" and t[1] in "一二三四五六七八九":
         return 10 + m[t[1]]
-    if re.fullmatch(r"[一二两三四五六七八九]十[一二三四五六七八九]", t):
+    if (
+        len(t) == 3
+        and t[0] in "一二两三四五六七八九"
+        and t[1] == "十"
+        and t[2] in "一二三四五六七八九"
+    ):
         return m[t[0]] * 10 + m[t[2]]
     if len(t) == 1 and t in m:
         return m[t]
     return None
+
+
+_CN_NUM_CHARS = frozenset("零〇一二两三四五六七八九十")
+_CN_QTY_CHARS = _CN_NUM_CHARS | {"两"}
+
+
+def _read_number(text: str, start: int, *, chinese_only: bool = False) -> tuple[str, int]:
+    """Read one number token in a single forward pass."""
+    end = start
+    if start < len(text) and not chinese_only and text[start].isascii() and text[start].isdigit():
+        while end < len(text) and text[end].isascii() and text[end].isdigit():
+            end += 1
+    else:
+        while end < len(text) and text[end] in _CN_QTY_CHARS:
+            end += 1
+    return text[start:end], end
+
+
+def _skip_space(text: str, pos: int) -> int:
+    while pos < len(text) and text[pos].isspace():
+        pos += 1
+    return pos
+
+
+def _labeled_number(
+    text: str, labels: tuple[str, ...], *, decimal: bool = False, max_digits: int | None = None
+) -> tuple[str, int, int] | None:
+    """Find label + optional punctuation + number without backtracking regexes."""
+    for label in labels:
+        search_from = 0
+        while True:
+            label_at = text.find(label, search_from)
+            if label_at < 0:
+                break
+            pos = _skip_space(text, label_at + len(label))
+            if pos < len(text) and text[pos] in ":：":
+                pos = _skip_space(text, pos + 1)
+            token, end = _read_number(text, pos, chinese_only=not decimal)
+            if token:
+                # The former bounded regexes matched a valid prefix of longer
+                # digit runs (for example the first 6 chars of a model field).
+                # Preserve that parsing contract without regex backtracking.
+                if max_digits is not None and len(token) > max_digits:
+                    token = token[:max_digits]
+                    end = pos + max_digits
+                if decimal and end < len(text) and text[end] == ".":
+                    frac, frac_end = _read_number(text, end + 1)
+                    if frac:
+                        token += "." + frac
+                        end = frac_end
+                return token, pos, end
+            search_from = label_at + len(label)
+    return None
+
+
+def _quantity_tokens(text: str):
+    """Yield number spans immediately followed by 桶; all scans are linear."""
+    pos = 0
+    while pos < len(text):
+        token, end = _read_number(text, pos)
+        if token and end < len(text):
+            after = _skip_space(text, end)
+            if after < len(text) and text[after] == "桶":
+                yield token, pos, end
+                pos = after + 1
+                continue
+            pos = end
+        else:
+            pos += 1
+
+
+def _has_short_chinese_quantity(text: str) -> bool:
+    """Match the historical 1–3 Chinese numeral lookahead before 桶."""
+    end = 0
+    while end < len(text) and end < 3 and text[end] in _CN_QTY_CHARS:
+        end += 1
+    if not end:
+        return False
+    end = _skip_space(text, end)
+    return end < len(text) and text[end] == "桶"
 
 
 class TaskAgent:
@@ -72,9 +157,9 @@ class TaskAgent:
         pending = self.ctx.get(user_id) if user_id else None
         if pending and pending.get("task_type") == "shipment_generate":
             slots = dict(pending.get("slots") or {})
-            qty = re.search(r"(?:改成|改为)?\s*(\d+|[一二三四五六七八九十零〇两]+)\s*桶", msg)
+            qty = next(_quantity_tokens(msg), None)
             if qty:
-                n = _cn_number(qty.group(1))
+                n = _cn_number(qty[0])
                 if n:
                     slots["quantity_tins"] = n
                     return {"task_type": "shipment_generate", "slots": slots, "source": "followup"}
@@ -126,56 +211,73 @@ class TaskAgent:
         if order_action and (order_signal or any(k in msg for k in ["发货单", "送货单", "出货单"])):
             shipment_slots: dict[str, Any] = {}
             spec_span_end = -1
-            m_model = re.search(r"(?:编号|型号)\s*[:：]?\s*(\d{3,6})", msg) or re.search(
-                r"(\d{3,6})\s*(?:的)?\s*规格", msg
-            )
-            if m_model:
-                shipment_slots["model_number"] = m_model.group(1)
-            m_spec_ar = re.search(r"规格\s*[:：]?\s*(\d+(?:\.\d+)?)", msg)
-            m_spec_cn = re.search(
-                r"规格\s*[:：]?\s*([一二两三四五六七八九十零〇]{1,4})(?=(?:[两一二三四五六七八九十零〇]{1,3}\s*桶)|[，,。\s]|一共|总共|共|$)",
-                msg,
-            )
-            if m_spec_ar:
-                shipment_slots["tin_spec"] = float(m_spec_ar.group(1))
-                spec_span_end = m_spec_ar.span()[1]
-            elif m_spec_cn:
-                spec_token = m_spec_cn.group(1)
-                # 兼容“规格二十八一共三桶”这种连读，去掉被吞进来的“共”前缀“一”
-                if spec_token.endswith("一"):
-                    suffix = msg[m_spec_cn.end(1) : m_spec_cn.end(1) + 1]
-                    if suffix == "共":
-                        spec_token = spec_token[:-1]
+            m_model = _labeled_number(msg, ("编号", "型号"), decimal=True, max_digits=6)
+            if m_model and 3 <= len(m_model[0]) <= 6 and m_model[0].isascii():
+                shipment_slots["model_number"] = m_model[0]
+            else:
+                # Legacy grammar also accepts “9803 的规格12”.
+                for marker in ("的规格", "规格"):
+                    marker_at = msg.find(marker)
+                    if marker_at > 0:
+                        left = marker_at
+                        while left > 0 and msg[left - 1].isascii() and msg[left - 1].isdigit():
+                            left -= 1
+                        candidate = msg[left:marker_at]
+                        if 3 <= len(candidate) <= 6:
+                            shipment_slots["model_number"] = candidate
+                            break
+            m_spec_ar = _labeled_number(msg, ("规格",), decimal=True)
+            m_spec_cn = _labeled_number(msg, ("规格",), max_digits=4)
+            if m_spec_ar and m_spec_ar[0].isascii():
+                shipment_slots["tin_spec"] = float(m_spec_ar[0])
+                spec_span_end = m_spec_ar[2]
+            elif m_spec_cn and all(ch in _CN_NUM_CHARS for ch in m_spec_cn[0]):
+                spec_token = m_spec_cn[0]
+                # If the next character continues the quantity phrase, keep
+                # the longest valid spec prefix (e.g. 二十八两桶 / 二十八一共三桶).
+                for cut in range(len(spec_token), 0, -1):
+                    suffix = msg[m_spec_cn[1] + cut :]
+                    qty_tail = suffix.startswith(("共", "一共")) or _has_short_chinese_quantity(
+                        suffix
+                    )
+                    if qty_tail and _cn_number(spec_token[:cut]) is not None:
+                        spec_token = spec_token[:cut]
+                        break
                 n = _cn_number(spec_token)
                 if n is not None:
                     shipment_slots["tin_spec"] = float(n)
-                    spec_span_end = m_spec_cn.span()[1]
-            m_qty = re.search(
-                r"(?:一共|总共|共|要|来|拿)?\s*(\d+|[一二三四五六七八九十零〇两]+)\s*桶", msg
-            )
+                    spec_span_end = m_spec_cn[2]
+            m_qty = next(_quantity_tokens(msg), None)
             qty_value = None
             if m_qty:
-                n = self._parse_qty_token(m_qty.group(1))
+                n = self._parse_qty_token(m_qty[0])
                 if n:
                     qty_value = int(n)
             if qty_value is None and spec_span_end > 0:
                 tail = msg[spec_span_end:]
-                m_qty_tail = re.search(r"\s*(\d+|[一二三四五六七八九十零〇两]{1,3})\s*桶", tail)
+                m_qty_tail = next(_quantity_tokens(tail), None)
                 if m_qty_tail:
-                    n2 = self._parse_qty_token(m_qty_tail.group(1))
+                    n2 = self._parse_qty_token(m_qty_tail[0])
                     if n2:
                         qty_value = int(n2)
             if qty_value is not None:
                 shipment_slots["quantity_tins"] = qty_value
-            m_unit = re.search(
-                r"打印(?:一下)?\s*([^，,。]+?)\s*(?:的)?\s*(?:发货单|送货单|出货单)", msg
-            ) or re.search(r"([^，,。]+?)\s*(?:的)?\s*(?:发货单|送货单|出货单)", msg)
             unit = ""
-            if m_unit:
-                unit = m_unit.group(1).strip()
-                unit = re.sub(r"^(哎|嗯|啊|呃)\s*", "", unit)
-                unit = re.sub(r"^(帮我|给我|请)\s*", "", unit)
-                unit = unit.strip()
+            markers = ("发货单", "送货单", "出货单")
+            for marker in markers:
+                marker_at = msg.find(marker)
+                if marker_at >= 0:
+                    prefix = msg[:marker_at]
+                    if "打印" in prefix:
+                        prefix = prefix.rsplit("打印", 1)[1]
+                        if prefix.startswith("一下"):
+                            prefix = prefix[2:]
+                    if not any(p in prefix for p in "，,。"):
+                        unit = prefix.removesuffix("的").strip()
+                    break
+            for filler in ("哎", "嗯", "啊", "呃", "帮我", "给我", "请"):
+                if unit.startswith(filler):
+                    unit = unit[len(filler) :].lstrip()
             if not unit and "发货单" in msg:
                 # 兼容“发货单七彩乐园9803规格12要3桶”这类无“打印XX发货单”的语序
                 unit_part = msg.split("发货单", 1)[1]
@@ -194,6 +296,8 @@ class TaskAgent:
                 unit_part = re.sub(r"\d{3,6}", " ", unit_part)
                 unit_part = re.sub(r"[，,。；;\s]+", "", unit_part).strip()
                 unit = unit_part
+                if unit.endswith("桶") and next(_quantity_tokens(msg), None):
+                    unit = unit[:-1]
             if unit:
                 shipment_slots["unit_name"] = unit
             return {"task_type": "shipment_generate", "slots": shipment_slots, "source": "nlu"}
@@ -416,15 +520,15 @@ class TaskAgent:
 
     def _extract_product_query_slots(self, msg: str) -> dict[str, Any]:
         slots: dict[str, Any] = {}
-        model = re.search(r"(?:编号|型号)\s*[:：]?\s*(\d{3,8})", msg)
-        if model:
-            slots["model_number"] = model.group(1)
-        spec_num = re.search(r"规格\s*[:：]?\s*(\d+(?:\.\d+)?)", msg)
-        spec_cn = re.search(r"规格\s*[:：]?\s*([一二两三四五六七八九十零〇]{1,4})", msg)
-        if spec_num:
-            slots["tin_spec"] = spec_num.group(1)
-        elif spec_cn:
-            n = _cn_number(spec_cn.group(1))
+        model = _labeled_number(msg, ("编号", "型号"), decimal=True, max_digits=8)
+        if model and 3 <= len(model[0]) <= 8 and model[0].isascii():
+            slots["model_number"] = model[0]
+        spec_num = _labeled_number(msg, ("规格",), decimal=True)
+        spec_cn = _labeled_number(msg, ("规格",), max_digits=4)
+        if spec_num and spec_num[0].isascii():
+            slots["tin_spec"] = spec_num[0]
+        elif spec_cn and all(ch in _CN_NUM_CHARS for ch in spec_cn[0]):
+            n = _cn_number(spec_cn[0])
             if n is not None:
                 slots["tin_spec"] = str(n)
         m_unit_product = re.search(r"([^\s，,。]{2,20})\s*的\s*(\d{3,8})", msg)
@@ -462,7 +566,7 @@ class TaskAgent:
         if n is not None:
             return n
         # 兼容“二十八两桶”这类口语粘连，回退到末尾 1~3 位中文数词
-        if re.fullmatch(r"[一二三四五六七八九十零〇两]+", t):
+        if t and all(char in _CN_QTY_CHARS for char in t):
             for size in (1, 2, 3):
                 if len(t) >= size:
                     n2 = _cn_number(t[-size:])

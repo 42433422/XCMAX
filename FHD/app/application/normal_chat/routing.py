@@ -11,6 +11,69 @@ from typing import Any, Protocol
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _MAX_ROUTING_MESSAGE_CHARS = 4096
+_MODEL_CHARS = frozenset("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-")
+_CHINESE_QUANTITY_CHARS = frozenset("一二两三四五六七八九十零〇")
+
+
+def _has_print_spec_order(text: str) -> bool:
+    """Recognize a model followed by 规格 and an integer using a linear scan."""
+    search_from = 0
+    while (spec_index := text.find("规格", search_from)) >= 0:
+        cursor = spec_index - 1
+        while cursor >= 0 and text[cursor].isspace():
+            cursor -= 1
+        if cursor >= 0 and text[cursor] == "的":
+            cursor -= 1
+            while cursor >= 0 and text[cursor].isspace():
+                cursor -= 1
+        end = cursor + 1
+        while cursor >= 0 and text[cursor] in _MODEL_CHARS:
+            cursor -= 1
+        model = text[cursor + 1 : end]
+        boundary_ok = cursor < 0 or text[cursor] not in _MODEL_CHARS
+        digit_index = spec_index + len("规格")
+        while digit_index < len(text) and text[digit_index].isspace():
+            digit_index += 1
+        if model and boundary_ok and digit_index < len(text) and text[digit_index].isdigit():
+            return True
+        search_from = spec_index + 1
+    return False
+
+
+def _has_number_style_order(text: str) -> bool:
+    """Recognize quantity 桶 + model + 规格 number without nested repeats."""
+    search_from = 0
+    while (bucket_index := text.find("桶", search_from)) >= 0:
+        cursor = bucket_index - 1
+        while cursor >= 0 and text[cursor].isspace():
+            cursor -= 1
+        quantity_end = cursor + 1
+        allowed = _CHINESE_QUANTITY_CHARS | frozenset("0123456789")
+        while cursor >= 0 and text[cursor] in allowed:
+            cursor -= 1
+        quantity = text[cursor + 1 : quantity_end]
+        boundary_ok = cursor < 0 or not (
+            text[cursor].isdigit() or text[cursor] in _CHINESE_QUANTITY_CHARS
+        )
+        if quantity and boundary_ok:
+            model_start = bucket_index + 1
+            while model_start < len(text) and text[model_start].isspace():
+                model_start += 1
+            model_end = model_start
+            while model_end < len(text) and text[model_end] in _MODEL_CHARS:
+                model_end += 1
+            if model_end > model_start:
+                spec_start = model_end
+                while spec_start < len(text) and text[spec_start].isspace():
+                    spec_start += 1
+                if text.startswith("规格", spec_start):
+                    number_start = spec_start + 2
+                    while number_start < len(text) and text[number_start].isspace():
+                        number_start += 1
+                    if number_start < len(text) and text[number_start].isdigit():
+                        return True
+        search_from = bucket_index + 1
+    return False
 
 
 class NegationCheck(Protocol):
@@ -97,14 +160,9 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
     print_spec_order = (
         "打印" in text
         and not any(word in text for word in ("标签", "商标", "贴标"))
-        and bool(re.search(r"(?<![0-9A-Za-z-])[0-9A-Za-z-]+\s*(?:的\s*)?规格\s*\d+", text))
+        and _has_print_spec_order(text)
     )
-    number_style_order = bool(
-        re.search(
-            r"(?:(?<!\d)\d+|(?<![一二两三四五六七八九十零〇])[一二两三四五六七八九十零〇]+)\s*桶\s*[0-9A-Za-z-]+\s*规格\s*\d+(?:\.\d+)?",
-            text,
-        )
-    )
+    number_style_order = _has_number_style_order(text)
     template_preview = bool(
         re.search("(?:预览|看看|看下)[^，,。]{0,12}模板|模板[^，,。]{0,8}预览", text)
     )

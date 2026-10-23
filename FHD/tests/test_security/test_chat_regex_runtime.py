@@ -19,9 +19,10 @@ from app.application.normal_chat_dispatch import route_normal_mode_message
         ("chat", "甲" * 100_000 + "的!"),
         ("chat", "查询 " + "A-" * 50_000 + "!"),
         ("chat", "型号" + "\t" * 100_000 + "!"),
+        ("chat", "打印 " + "9" * 4000 + "桶" + "A" * 4000 + "规格" + "9" * 4000),
         ("planner", "请新增" + "\t" * 100_000 + "!"),
     ],
-    ids=["print", "quantity", "unit", "model", "label", "planner"],
+    ids=["print", "quantity", "unit", "model", "label", "number-style", "planner"],
 )
 def test_adversarial_routing_completes_in_bounded_process(mode, message):
     script = """

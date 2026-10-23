@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -21,6 +22,25 @@ from app.application.super_employee.messages import MessageSynchronizer
 from app.application.super_employee.ports import CliPorts, MessageSyncPorts
 from app.application.super_employee.profiles import CODEX_PROFILE
 from app.application.super_employee_service import CLAUDE_PROFILE, SuperEmployeeService
+
+
+def test_message_repository_encrypts_new_rows_and_reads_legacy_jsonl(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SECRET_KEY", "test-only-super-employee-storage-key")
+    repository = MessageRepository(tmp_path, "messages")
+    legacy = {"user_id": 7, "role": "user", "body": "legacy fixture"}
+    repository.messages_path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+
+    assert repository.read_all_message_rows() == [legacy]
+    assert json.loads(repository.messages_path.read_text(encoding="utf-8")) == legacy
+
+    private_row = {"user_id": 7, "role": "user", "body": "private fixture"}
+    repository.append_messages([private_row])
+    stored = repository.messages_path.read_text(encoding="utf-8")
+    assert "private fixture" not in stored
+    assert "enc:v1:" in stored
+    assert repository.read_all_message_rows() == [legacy, private_row]
 
 
 def test_invoke_preserves_the_callers_context(tmp_path: Path) -> None:

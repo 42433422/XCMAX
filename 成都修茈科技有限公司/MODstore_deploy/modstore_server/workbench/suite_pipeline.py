@@ -19,6 +19,11 @@ _LOG = logging.getLogger("modstore_server.workbench_api")
 _MAX_EMPLOYEES_FOR_LLM = 10
 
 
+def _safe_fallback_employee_source() -> str:
+    """Build a generic fallback without persisting user supplied profile text."""
+    return _fallback_employee_py("employee", "员工", "")
+
+
 @dataclass(frozen=True)
 class SuitePorts:
     sessions: SessionStore
@@ -214,8 +219,10 @@ async def _run_workbench_mod_pipeline(
                 if not eid:
                     continue
                 stem = sanitize_employee_stem(eid)
-                label = str(emp.get("label") or emp.get("panel_title") or eid).strip()
-                fb = _fallback_employee_py(eid, label, "")
+                # The fallback implementation is shared behavior, not an employee
+                # profile. Keep user supplied labels and IDs in the existing manifest
+                # only; generated source files must not duplicate that private data.
+                fb = _safe_fallback_employee_source()
                 (emp_dir / f"{stem}.py").write_text(fb, encoding="utf-8")
         await ports.progress.set_step(
             sid, "employee_impls", "running", "开始为每员工生成可执行脚本…"

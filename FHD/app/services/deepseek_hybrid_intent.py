@@ -11,6 +11,25 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 _MAX_INTENT_MESSAGE_CHARS = 4096
+_QUANTITY_CHARS = frozenset("0123456789一二两三四五六七八九十零〇")
+
+
+def _quantity_before_tins(text: str) -> str | None:
+    """Extract a contiguous quantity immediately before 桶 without regex backtracking."""
+    search_from = 0
+    while True:
+        bucket = text.find("桶", search_from)
+        if bucket < 0:
+            return None
+        end = bucket
+        while end and text[end - 1] in " \t\r\n":
+            end -= 1
+        start = end
+        while start and text[start - 1] in _QUANTITY_CHARS:
+            start -= 1
+        if start < end:
+            return text[start:end]
+        search_from = bucket + 1
 
 
 class HybridIntentWithDeepSeek:
@@ -229,9 +248,18 @@ class HybridIntentWithDeepSeek:
             idx = message.index("帮")
             after_help = message[idx + 1 :].strip()
             if after_help:
-                unit_match = re.search(r"打([^\s，,。]+?)(?:的|货)", after_help)
-                if unit_match:
-                    unit = unit_match.group(1)
+                start = after_help.find("打")
+                suffixes = (
+                    [
+                        index
+                        for marker in ("的", "货")
+                        if (index := after_help.find(marker, start + 1)) >= 0
+                    ]
+                    if start >= 0
+                    else []
+                )
+                if suffixes:
+                    unit = after_help[start + 1 : min(suffixes)]
                     if unit and len(unit) > 1 and unit not in invalid_unit_names:
                         slots["unit_name"] = unit
                 else:
@@ -241,9 +269,13 @@ class HybridIntentWithDeepSeek:
                         if unit and len(unit) > 1 and unit not in invalid_unit_names:
                             slots["unit_name"] = unit
         else:
-            unit_match = re.search(r"([^\s，,。]+?)\s*(?:的|发货单)", message)
-            if unit_match:
-                unit = unit_match.group(1)
+            suffixes = [index for marker in ("的", "发货单") if (index := message.find(marker)) > 0]
+            if suffixes:
+                suffix_index = min(suffixes)
+                start = suffix_index
+                while start and message[start - 1] not in "，,。 \t\r\n":
+                    start -= 1
+                unit = message[start:suffix_index].rstrip()
                 if unit and len(unit) > 1 and unit not in invalid_unit_names:
                     slots["unit_name"] = unit
 
@@ -268,8 +300,8 @@ class HybridIntentWithDeepSeek:
                 if unit and unit not in invalid_unit_names:
                     slots["unit_name"] = unit
 
-        qty_match = re.search(r"(\d+|[一二两三四五六七八九十零]+)\s*桶", message)
-        if qty_match:
+        quantity = _quantity_before_tins(message)
+        if quantity:
             cn_map = {
                 "零": 0,
                 "〇": 0,
@@ -284,7 +316,7 @@ class HybridIntentWithDeepSeek:
                 "八": 8,
                 "九": 9,
             }
-            qty_str = qty_match.group(1)
+            qty_str = quantity
             if qty_str in cn_map:
                 slots["quantity_tins"] = cn_map[qty_str]
             else:

@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from app.application import shipment_excel_etl_security as etl_security
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -94,12 +95,10 @@ def grid_to_workbook_path(
 ) -> Path:
     from openpyxl import Workbook
 
-    path = (
-        Path(output_path)
-        if output_path
-        else Path(tempfile.mkstemp(prefix="etl_ocr_", suffix=".xlsx")[1])
+    raw_output_path = (
+        output_path if output_path else Path(tempfile.mkstemp(prefix="etl_ocr_", suffix=".xlsx")[1])
     )
-    path = path.expanduser().resolve()
+    path = etl_security.resolve_etl_output_path(raw_output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
     ws = wb.active
@@ -180,7 +179,10 @@ def ocr_source_to_workbook(
     output_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """扫描件/图片/PDF → 临时 xlsx。"""
-    path = Path(file_path).expanduser().resolve()
+    try:
+        path = etl_security.resolve_etl_path(file_path)
+    except etl_security.ShipmentEtlPathError:
+        return {"success": False, "message": "非法输入路径", "error_code": "unsafe_path"}
     if not path.is_file():
         return {"success": False, "message": f"文件不存在: {path}", "error_code": "missing_file"}
     if not is_ocr_source(path):

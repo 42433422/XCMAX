@@ -138,15 +138,20 @@ class GroupChatRepository:
         return rows
 
     @staticmethod
-    def message_cipher() -> Fernet:
+    def message_cipher(*, data_dir: str | None = None) -> Fernet:
         secret = (
             os.environ.get("SECRET_KEY", "").strip()
             or os.environ.get("XCAGI_SECRET_KEY", "").strip()
         )
         if not secret:
             data_dir = (
-                os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
-            ).strip()
+                data_dir
+                or (
+                    os.environ.get("XCAGI_DATA_DIR")
+                    or os.environ.get("XCAGI_DESKTOP_DATA_DIR")
+                    or ""
+                ).strip()
+            )
             desktop = (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
                 "1",
                 "true",
