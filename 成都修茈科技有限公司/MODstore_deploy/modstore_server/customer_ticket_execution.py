@@ -7,7 +7,11 @@ from typing import Any
 
 from sqlalchemy import or_
 
-from modstore_server.customer_issue_delivery_contract import execution_succeeded
+from modstore_server.customer_issue_delivery_contract import (
+    execution_succeeded,
+    role_progress_state,
+    team_action_state,
+)
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_ticket_reader import _reader_text
 from modstore_server.models import IncidentEvent, User
@@ -122,7 +126,7 @@ def _work_order(db, ticket, evidence):
     )
 
 
-def _next_step(ticket, resolution, rows, receipts):
+def _next_step(ticket, resolution, rows, receipts, *, claim_verified=False):
     if ticket.status in {"resolved", "closed", "expired"}:
         return "none", "原单已结束；如问题复现，由客户从原单重开", "none"
     if any(
@@ -143,20 +147,21 @@ def _next_step(ticket, resolution, rows, receipts):
         )
     if resolution.get("repair_verified") is True:
         return "deliver_repair", "核验包含本单修复的正式发布并绑定客户目标", "release_binding"
+    current_waiting = (
+        claim_verified
+        and len(rows) == 3
+        and {row.get("role") for row in rows} == {"scout", "fix", "verify"}
+        and team_action_state(rows)[0] == "pending"
+    )
     failed = next(
-        (
-            row
-            for row in rows
-            if row.get("status")
-            in {"failed", "handler_failed", "manual_review", "unknown", "partial"}
-        ),
+        (row for row in rows if role_progress_state(row) in {"failed", "manual_review"}),
         None,
     )
-    if failed or resolution.get("state") in {
-        "repair_failed",
-        "awaiting_manual_review",
-        "dispatch_failed",
-    }:
+    if failed or (
+        not current_waiting
+        and resolution.get("state")
+        in {"repair_failed", "awaiting_manual_review", "dispatch_failed"}
+    ):
         return "review_failure", "核对失败环节及接手回执，按已有恢复流程继续", "execution_failed"
     if rows:
         return "follow_execution", "跟进当前环节；前序完成后继续后续环节", "execution_pending"
@@ -194,7 +199,8 @@ def ticket_execution_overview(db, ticket) -> dict:
     evidence = _object(json_loads(ticket.evidence_json, {}))
     resolution = _object(evidence.get("resolution"))
     event_id, claim = _current_claim(db, ticket, resolution)
-    rows = _rows(claim.get("team")) or _rows(resolution.get("team"))
+    claim_rows = _rows(claim.get("team"))
+    rows = claim_rows or _rows(resolution.get("team"))
     receipts = _receipts(claim)
     actions = (
         db.query(CustomerServiceAction)
@@ -203,7 +209,9 @@ def ticket_execution_overview(db, ticket) -> dict:
         .limit(30)
         .all()
     )
-    code, label, blocker = _next_step(ticket, resolution, rows, receipts)
+    code, label, blocker = _next_step(
+        ticket, resolution, rows, receipts, claim_verified=event_id is not None and bool(claim_rows)
+    )
     current = next((row for row in rows if row.get("ok") is not True), {})
     assignee = db.get(User, ticket.assigned_admin_id) if ticket.assigned_admin_id else None
     accepted_review = next(
