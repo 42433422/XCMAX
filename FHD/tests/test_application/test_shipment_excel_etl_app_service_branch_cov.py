@@ -27,6 +27,7 @@ import pytest
 from openpyxl import Workbook
 
 from app.application import shipment_excel_etl_app_service as svc_mod
+from app.application import shipment_excel_etl_security as etl_security
 from app.application.shipment_etl_profile import (
     CompiledMetaPatterns,
     ShipmentEtlProfile,
@@ -1607,6 +1608,27 @@ def test_write_delivery_note_workbook_multi_and_demo(tmp_path, delivery_profile)
     assert res2["sheet_count"] == 1
 
 
+def test_write_delivery_note_workbook_rejects_output_outside_trusted_roots(
+    tmp_path, delivery_profile, monkeypatch
+):
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    monkeypatch.setattr(etl_security, "_trusted_base_roots", lambda: [allowed_root])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    outside = tmp_path / "outside" / "delivery.xlsx"
+
+    result = write_delivery_note_workbook(
+        [_delivery_note()], outside, profile=_make_profile(write=dict(_WRITE_CFG))
+    )
+
+    assert result == {
+        "success": False,
+        "message": "非法输出路径",
+        "error_code": "unsafe_path",
+    }
+    assert not outside.parent.exists()
+
+
 def test_write_delivery_note_workbook_import_error(monkeypatch):
     monkeypatch.setitem(sys.modules, "openpyxl", None)
     try:
@@ -1639,6 +1661,25 @@ def test_write_ledger_workbook(tmp_path, delivery_profile):
     res2 = write_ledger_workbook([], tmp_path / "l2.xlsx", profile=prof)
     assert res2["success"] is True
     assert res2["unit_name"] == "unit"
+
+
+def test_write_ledger_workbook_rejects_output_outside_trusted_roots(
+    tmp_path, delivery_profile, monkeypatch
+):
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    monkeypatch.setattr(etl_security, "_trusted_base_roots", lambda: [allowed_root])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    outside = tmp_path / "outside" / "ledger.xlsx"
+
+    result = write_ledger_workbook([], outside, profile=_make_profile(write=dict(_WRITE_CFG)))
+
+    assert result == {
+        "success": False,
+        "message": "非法输出路径",
+        "error_code": "unsafe_path",
+    }
+    assert not outside.parent.exists()
 
 
 def test_write_ledger_workbook_import_error(monkeypatch):

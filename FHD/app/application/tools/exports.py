@@ -8,10 +8,12 @@
 from __future__ import annotations
 
 import logging
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from app.application import shipment_excel_etl_security as etl_security
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -78,14 +80,17 @@ def handle_price_list_export(
 
     # 3. 写入临时文件
     try:
-        suffix = f"价格表_{customer_name}.docx"
+        safe_customer = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", customer_name)
+        safe_customer = safe_customer.strip(" .")[:100] or "customer"
+        suffix = f"价格表_{safe_customer}.docx"
         out_dir = (
             Path(workspace_root) / "shipment_outputs"
             if workspace_root
             else Path(tempfile.gettempdir())
         )
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / suffix
+        out_path = etl_security.resolve_etl_output_path(
+            out_dir / suffix, workspace_root=workspace_root
+        )
         out_path.write_bytes(doc_bytes)
         return {
             "success": True,
@@ -95,6 +100,8 @@ def handle_price_list_export(
             "customer_name": customer_name,
             "product_count": len(products),
         }
+    except etl_security.ShipmentEtlPathError:
+        return {"success": False, "message": "非法输出路径", "error_code": "unsafe_path"}
     except RECOVERABLE_ERRORS:
         logger.exception("price_list_export: 写文件失败")
         return {"success": False, "message": "写文件失败"}

@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from app.application import shipment_excel_etl_security as etl_security
 from app.application.shipment_etl_profile import ShipmentEtlProfile
 
 from .workbook import ParseNotes
@@ -77,7 +78,14 @@ def write_delivery(
     footer = str(config.get("footer_label") or "")
     default_sheet = str(config.get("default_sheet_name") or "Sheet1")
     sheet_prefix = str(config.get("sheet_name_prefix") or "S")
-    path = Path(output_path).expanduser().resolve()
+    try:
+        path = etl_security.resolve_etl_output_path(output_path)
+    except etl_security.ShipmentEtlPathError:
+        return {
+            "success": False,
+            "message": "非法输出路径",
+            "error_code": "unsafe_path",
+        }
     path.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
     default = cast("Worksheet", workbook.active or workbook.create_sheet(default_sheet[:31]))
@@ -161,7 +169,14 @@ def write_ledger(
     columns = dict(config.get("ledger_item_columns") or {})
     samples = rows or list(config.get("ledger_sample_rows") or [])
     extra_sheet = str(config.get("ledger_extra_sheet") or "").strip()
-    path = Path(output_path).expanduser().resolve()
+    try:
+        path = etl_security.resolve_etl_output_path(output_path)
+    except etl_security.ShipmentEtlPathError:
+        return {
+            "success": False,
+            "message": "非法输出路径",
+            "error_code": "unsafe_path",
+        }
     path.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
     sheet = cast("Worksheet", workbook.active)
