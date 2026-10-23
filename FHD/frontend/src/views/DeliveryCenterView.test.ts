@@ -133,6 +133,38 @@ describe('DeliveryCenterView', () => {
     appConfirm.mockResolvedValue(true)
   })
 
+  // WO-cf7f35c30ea1 / CI230abf4d6e1038d7c941e8e3370c6d04e11c072583755805 (account 29)
+  it('keeps every quick link attached to its actual section through loading, failure and retry', async () => {
+    let finishLoading!: (value: unknown) => void
+    listCustomDeliveries.mockReturnValueOnce(new Promise((resolve) => { finishLoading = resolve }))
+    const wrapper = mount(DeliveryCenterView)
+    await flushPromises()
+    const destinations = [
+      ['交付概览', '#delivery-overview'], ['企业客户', '#delivery-enterprise-roster'],
+      ['购买交付', '#delivery-standard-roster'], ['体验交付', '#delivery-trial-roster'],
+      ['定制工单', '#delivery-custom-orders'],
+    ]
+    const checkLinks = (expected: string[][]) => {
+      const links = wrapper.findAll('.delivery-jumps a')
+      expect(links.map((link) => [link.text(), link.attributes('href')])).toEqual(expected)
+      for (const link of links) expect(wrapper.findAll(link.attributes('href'))).toHaveLength(1)
+    }
+    const alwaysAvailable = [destinations[0], destinations[4]]
+    checkLinks(alwaysAvailable)
+    finishLoading({ items: [structuredClone(delivery)] })
+    await flushPromises()
+    checkLinks(destinations)
+    listCustomDeliveries.mockRejectedValueOnce(new Error('交付数据读取失败'))
+    await wrapper.get('.delivery-refresh').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.delivery-alert').text()).toContain('交付数据读取失败')
+    checkLinks(alwaysAvailable)
+    await wrapper.get('.delivery-alert button').trigger('click')
+    await flushPromises()
+    checkLinks(destinations)
+    wrapper.unmount()
+  })
+
   it.each([[true, true, true], [true, true, false], [false, false, true]])(
     'separates commerce %s, acceptance %s and artifacts %s', async (commerce, accepted, artifacts) => {
       const ticket = structuredClone(delivery)
