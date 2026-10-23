@@ -134,13 +134,24 @@ async def get_workbench_session_snapshot(session_id: str, user_id: int) -> dict[
     from modstore_server import workbench_api as workbench
 
     async with workbench._SESSION_LOCK:
-        workbench._hydrate_workbench_session_unlocked(session_id)
-        session = workbench.WORKBENCH_SESSIONS.get(session_id)
-    if not session or int(session.get("user_id") or 0) != int(user_id):
+        session = workbench._load_workbench_session_unlocked(session_id)
+        if session is None:
+            session = workbench.WORKBENCH_SESSIONS.get(session_id)
+            if session and session.get("delivery_source_mode") == "versioned_main":
+                return None
+    if (
+        not session
+        or session.get("id") != session_id
+        or int(session.get("user_id") or 0) != int(user_id)
+    ):
         return None
     script_result = session.get("script_result") or {}
     return {
         "id": session["id"],
+        "user_id": int(session["user_id"]),
+        "ticket_id": session.get("ticket_id"),
+        "delivery_source_mode": session.get("delivery_source_mode"),
+        "delivery_runtime_identity": session.get("delivery_runtime_identity"),
         "intent": workbench._canonical_workbench_intent(str(session.get("intent") or "")),
         "status": session["status"],
         "steps": session["steps"],

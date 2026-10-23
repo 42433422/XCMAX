@@ -50,8 +50,10 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     run_rows = [r for r in evidence.get("runs", []) if isinstance(r, dict)]
     runs: list[dict[str, Any]] = []
     latest_snapshot: dict[str, Any] = {}
+    latest_generation = ""
     for row in run_rows:
         sid = str(row.get("session_id") or "")
+        latest_generation = sid
         snapshot = (
             await get_workbench_session_snapshot(sid, int(ticket.user_id or 0)) if sid else None
         )
@@ -64,8 +66,11 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
             item["error"] = snapshot.get("error")
             item["quality_report"] = snapshot.get("quality_report")
             item["sandbox_report"] = snapshot.get("sandbox_report")
+            persisted_artifacts = snapshot.get("verified_artifacts")
             item["verified_artifacts"] = (
-                snapshot.get("verified_artifacts") or item.get("verified_artifacts") or []
+                persisted_artifacts or []
+                if evidence.get("source_mode") == "versioned_main"
+                else persisted_artifacts or item.get("verified_artifacts") or []
             )
             snapshot["verified_artifacts"] = item["verified_artifacts"]
         runs.append(item)
@@ -74,6 +79,20 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     accepted = acceptance_status == "accepted"
     pricing_mode = custom_delivery_pricing_mode(evidence)
     commerce_blockers = custom_delivery_commerce_blockers(evidence)
+    artifact = (
+        latest_snapshot.get("artifact") if isinstance(latest_snapshot.get("artifact"), dict) else {}
+    )
+    raw_validation = artifact.get("validation_summary")
+    validation = raw_validation if isinstance(raw_validation, dict) else {}
+
+    def quality_gate(snapshot: dict[str, Any]) -> tuple[bool, str]:
+        return custom_delivery_gate(
+            snapshot,
+            owner_id=int(ticket.user_id or 0),
+            ticket_id=int(ticket.id),
+            generation=latest_generation,
+        )
+
     if str(ticket.status or "") in {"resolved", "closed", "done"}:
         stage, label = "delivered", "已交付并上岗"
     elif (evidence.get("resolution") or {}).get("runtime_failure") and (
@@ -110,8 +129,13 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         )
     elif str(latest_snapshot.get("status") or "") == "error":
         stage, label = "rework", "生产失败，待返工"
+    elif (
+        latest_snapshot.get("delivery_source_mode") == "versioned_main"
+        and validation.get("probe_pending") is True
+    ):
+        stage, label = "production", "正式签包及业务验证中"
     elif str(latest_snapshot.get("status") or "") == "done":
-        gate_ok, _ = custom_delivery_gate(latest_snapshot)
+        gate_ok, _ = quality_gate(latest_snapshot)
         stage, label = (
             ("acceptance", "质量门通过，待您验收") if gate_ok else ("rework", "质量门未通过")
         )
@@ -119,14 +143,11 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         stage, label = "production", "生产员工制作中"
 
     gate_ok, gate_message = (
-        custom_delivery_gate(latest_snapshot)
+        quality_gate(latest_snapshot)
         if latest_snapshot
         else (False, str(evidence.get("start_error") or ""))
     )
     artifacts: list[dict[str, str]] = []
-    artifact = (
-        latest_snapshot.get("artifact") if isinstance(latest_snapshot.get("artifact"), dict) else {}
-    )
     if artifact.get("mod_id"):
         artifacts.append({"kind": "module", "id": str(artifact["mod_id"])})
     if artifact.get("pack_id"):

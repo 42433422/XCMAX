@@ -40,7 +40,11 @@ def create_private_source_scope(owner_id: int, session_id: str, ticket_id: int) 
     if ticket_id <= 0:
         raise ValueError("私有生产必须关联原工单")
     root = _scope_path(owner_id, session_id)
-    scope = {"owner_user_id": owner_id, "session_id": session_id, "ticket_id": ticket_id}
+    scope = {
+        "owner_user_id": owner_id,
+        "session_id": session_id,
+        "ticket_id": ticket_id,
+    }
     root.mkdir(parents=True, exist_ok=True)
     marker = root / "scope.json"
     try:
@@ -55,7 +59,11 @@ def create_private_source_scope(owner_id: int, session_id: str, ticket_id: int) 
 
 
 def source_library(scope: dict[str, Any], owner_id: int, session_id: str, ticket_id: int) -> Path:
-    expected = {"owner_user_id": owner_id, "session_id": session_id, "ticket_id": ticket_id}
+    expected = {
+        "owner_user_id": owner_id,
+        "session_id": session_id,
+        "ticket_id": ticket_id,
+    }
     root = _scope_path(owner_id, session_id)
     if scope != expected or json.loads((root / "scope.json").read_text()) != expected:
         raise ValueError("私有生产源记录与账号、会话或工单不匹配")
@@ -68,7 +76,10 @@ def source_library(scope: dict[str, Any], owner_id: int, session_id: str, ticket
 @contextmanager
 def private_source_context(scope: dict[str, Any]) -> Iterator[Path]:
     library = source_library(
-        scope, int(scope["owner_user_id"]), str(scope["session_id"]), int(scope["ticket_id"])
+        scope,
+        int(scope["owner_user_id"]),
+        str(scope["session_id"]),
+        int(scope["ticket_id"]),
     )
     token = _LIBRARY.set(library)
     try:
@@ -84,11 +95,24 @@ def verified_snapshot_library(
 
     persisted = workbench_api._load_workbench_session_unlocked(session_id)
     scope = snapshot.get("source_scope")
+    versioned_main = snapshot.get("delivery_source_mode") == "versioned_main"
     if (
         not persisted
         or persisted.get("id") != session_id
         or persisted.get("user_id") != owner_id
         or persisted.get("status") != "done"
+        or (
+            versioned_main
+            and (
+                persisted.get("ticket_id") != ticket_id
+                or persisted.get("delivery_source_mode") != "versioned_main"
+                or persisted.get("delivery_runtime_identity")
+                != snapshot.get("delivery_runtime_identity")
+                or (persisted.get("verified_artifacts") or [])
+                != (snapshot.get("verified_artifacts") or [])
+                or persisted.get("artifact") != snapshot.get("artifact")
+            )
+        )
         or not isinstance(scope, dict)
         or scope != persisted.get("source_scope")
         or snapshot.get("id") != session_id
@@ -108,7 +132,9 @@ def seed_previous_delivery(scope: dict[str, Any], evidence: dict[str, Any]) -> N
     with private_source_context(scope) as library:
         for record in records:
             raw, signed = read_verified_artifact(
-                record, owner_id=int(scope["owner_user_id"]), ticket_id=int(scope["ticket_id"])
+                record,
+                owner_id=int(scope["owner_user_id"]),
+                ticket_id=int(scope["ticket_id"]),
             )
             mid = str(signed["manifest"]["id"])
             destination = library / mid

@@ -1,5 +1,5 @@
 {
-  "lines": 2334880,
+  "lines": 2335939,
   "updated": "2026-10-23",
-  "note": "原 #2538 真实 Para 任务 5c27 恢复：需要成功与全部失败 fallback 的60秒有界解释器缓存、失效和依赖丢失反例测试及规定的可追溯 KB；含变更日志本次净增154行，无可安全删除的同范围替代。主协调已明确授权此本地候选净增例外；不删无关代码，不代表事故已恢复。"
+  "note": "Customer 34 must execute and persist the signed Sunbird business probe before acceptance; bind owner, ticket, generation, source and release identity, reject substituted or expired reports, fix real snapshot metadata and cross-worker readback, and prove the actual compile-sign-probe acceptance flow. Includes bounded recovery of original Python-probe task. No unrelated code deletion used to conceal the safety-gate and regression growth."
 }
