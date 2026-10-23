@@ -131,7 +131,7 @@ export const verificationSourceLabel = plain({
   customer_decision: '原客户直接确认', customer_runtime_receipt: '原客户正式版本运行回执',
   delivery_runtime_receipt: '客户私有交付运行回执', admin_runtime: '管理员运行验收',
 })
-const workOrderLabel = plain({ candidate: '待分流', routed: '已分流', in_dev: '开发中', merged: '已合入',
+export const workOrderLabel = plain({ candidate: '待分流', routed: '已分流', in_dev: '开发中', merged: '已合入',
   released: '已发布', verifying: '验收中', closed: '已关闭', reopened: '已重开', dropped: '已停止' })
 const blockerLabel = plain({ none: '无待办', task_receipt: '任务结果待对账', review_in_progress: '复核任务处理中',
   customer_confirmation: '等待原客户验收', release_binding: '等待正式版本绑定', execution_failed: '执行失败待恢复',
@@ -151,15 +151,20 @@ export function executionOverview(value: unknown) {
     verificationSource: verificationSourceLabel(verification.source),
     release: verification.release_bound === true ? '已绑定正式版本' : '未记录正式版本绑定',
     customer: verification.customer_confirmed === true ? '原客户已确认' : '原客户尚未确认',
-    receipts: asRows(overview.receipts).map((row, index) => ({
-      key: `${row.kind}-${row.task_id || index}`, role: roleLabel(row.role), taskId: String(row.task_id || '任务编号未记录'),
-      kind: row.kind === 'escalation' ? '失败复核' : '环节执行',
-      badge: row.requires_reconciliation === true || ['unknown', 'dispatching'].includes(String(row.state))
-        ? { label: '接单结果待对账', tone: 'warning' as Tone, raw: String(row.state) }
-        : row.accepted === true && !!row.task_id
-          ? { label: row.completed === true ? '已接单并完成' : '已真实接单', tone: 'success' as Tone, raw: String(row.state) }
-          : { label: '尚无真实接单凭证', tone: 'neutral' as Tone, raw: String(row.state) },
-    })),
+    receipts: asRows(overview.receipts).map((row, index) => {
+      const accepted = row.accepted === true && !!String(row.task_id || '').trim()
+      const reconcile = row.requires_reconciliation === true || ['unknown', 'dispatching'].includes(String(row.state))
+      return {
+        key: `${row.kind}-${row.task_id || index}`, role: roleLabel(row.role), taskId: String(row.task_id || '任务编号未记录'),
+        kind: row.kind === 'escalation' ? '失败复核' : '环节执行',
+        claim: '未提供独立领取凭证',
+        execution: reconcile ? '结果待对账' : accepted && row.completed === true ? '任务结果已返回'
+          : ['accepted', 'completed', 'success', 'succeeded'].includes(String(row.state)) ? '执行凭证待核实' : runStatusBadge(row.state).label,
+        badge: reconcile ? { label: '派发结果待对账', tone: 'warning' as Tone, raw: String(row.state) }
+          : accepted ? { label: '派发已受理', tone: 'info' as Tone, raw: String(row.state) }
+            : { label: '尚无派发受理凭证', tone: 'neutral' as Tone, raw: String(row.state) },
+      }
+    }),
   }
 }
 

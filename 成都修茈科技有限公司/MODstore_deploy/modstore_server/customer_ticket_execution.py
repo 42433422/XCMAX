@@ -134,7 +134,7 @@ def _next_step(ticket, resolution, rows, receipts):
         row.get("kind") == "escalation" and row.get("accepted") and not row.get("completed")
         for row in receipts
     ):
-        return "await_review", "跟进已接单的复核任务", "review_in_progress"
+        return "await_review", "跟进已受理的复核任务，并核对执行结果", "review_in_progress"
     if resolution.get("state") == "awaiting_customer_verification":
         return (
             "customer_confirmation",

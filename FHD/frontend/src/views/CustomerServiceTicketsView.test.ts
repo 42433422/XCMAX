@@ -110,6 +110,16 @@ describe('customer service ticket list', () => {
 })
 
 describe('customer service ticket detail', () => {
+  it.each(['admin', 'customer'])('keeps %s submitter identity distinct from the customer and assigned administrator', async submitter_type => {
+    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, user_id: 29, submitter_type, assigned_admin_id: 9 } })
+    const wrapper = mountDetail(); await flushPromises()
+    const facts = wrapper.findAll('.cs-hero .cs-facts > div')
+    const value = (label: string) => facts.find(row => row.find('dt').text() === label)!.find('dd').text()
+    expect(value('客户')).toContain('市场用户 ID 29')
+    expect(value('提交人身份')).toBe(submitter_type === 'admin' ? '管理员提交' : '客户提交')
+    expect(value('指派管理员')).toBe('9')
+    wrapper.unmount()
+  })
   it('shows separate product progress, the actual review receipt and next step', async () => {
     detail.mockResolvedValue({ ...payload, execution_overview: {
       work_order: { binding: 'verified', id: 'WO-PUBLIC', status: 'in_dev' }, blocker: 'review_in_progress',
@@ -122,7 +132,8 @@ describe('customer service ticket detail', () => {
     const overview = wrapper.find('[aria-label="执行总览"]')
     expect(overview.text()).toContain('WO-PUBLIC · 开发中')
     expect(overview.text()).toContain('task-real-12')
-    expect(overview.text()).toContain('已真实接单')
+    expect(overview.text()).toContain('派发已受理')
+    expect(overview.text()).toContain('未提供独立领取凭证')
     expect(overview.text()).toContain('原客户直接确认')
     expect(overview.text()).toContain('未记录正式版本绑定')
     expect(overview.text()).toContain('2026-10-21 20:00:00')

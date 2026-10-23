@@ -4,7 +4,7 @@
 }
 .page-header, .header-actions, .panel-head, .drawer-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .page-header { flex-wrap: wrap; margin-bottom: 18px; }
-.page-header h2 { margin: 0 0 4px; color: #172033; font-size: 22px; }
+.page-header h2 { margin: 0 0 4px; color: var(--admin-text, #172033); font-size: 20px; }
 .page-header p { margin: 0; color: #64748b; font-size: 13px; }
 .updated-at, .muted { color: #64748b; font-size: 12px; }
 .btn { padding: 8px 12px; border: 1px solid #d0d7e2; border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; }
@@ -12,7 +12,7 @@
 .btn-primary { border-color: #1890ff; background: #1890ff; color: #fff; }
 .btn-danger { border-color: #ffa39e; background: #fff1f0; color: #cf1322; }
 .banner-error { padding: 10px 12px; border: 1px solid #ffa39e; border-radius: 8px; background: #fff1f0; color: #cf1322; }
-.panel { display: flex; flex-direction: column; flex-shrink: 0; margin-bottom: 16px; border: 1px solid rgba(15, 76, 129, .1); border-radius: 16px; background: rgba(255, 255, 255, .94); box-shadow: 0 4px 18px rgba(15, 76, 129, .07); }
+.panel { display: flex; flex-direction: column; flex-shrink: 0; margin-bottom: 16px; }
 .panel-head { padding: 14px 16px; border-bottom: 1px solid #eef2f7; }
 .panel-head h3 { margin: 0; font-size: 15px; }
 .risk { padding: 2px 8px; border-radius: 999px; background: #e8f3ff; color: #0f6fc6; font-size: 11px; font-weight: 700; }
@@ -27,6 +27,7 @@
 .ticket-trail .drawer-actions { padding: 0 0 8px; }
 .timeline { margin: 0; padding-left: 18px; color: #172033; font-size: 12px; }
 .timeline time { margin-right: 8px; color: #64748b; }
+.execution-receipts { margin: 0 0 12px; padding-left: 18px; font-size: 12px; overflow-wrap: anywhere; }
 .empty { padding: 28px; color: #64748b; text-align: center; }
 @media (max-width: 640px) {
   .approval-hub-view { padding: 18px 14px 28px; }
