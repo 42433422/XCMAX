@@ -247,7 +247,7 @@ def execute_installer_employee_chain(
         phase_label="C",
     )
     logger.info("phase_c installer chain completed")
-    # 真实（非 shadow）installer/major 日：回写下载版本 SSOT last_push + 刷新官网公开清单，
+    # 真实（非 shadow）installer/major 日：记录上传遥测，公开发布仍由验收同步维护，
     # 让「P5 构建 → P6 推 COS」在数据面真正落到「官网下载」这一环（解决历史断点）。
     if not shadow and block.get("ok"):
         try:

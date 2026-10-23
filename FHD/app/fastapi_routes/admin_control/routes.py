@@ -277,6 +277,11 @@ def register_routes(
                 customer_tickets.close_admin_customer_service_ticket,
             ),
             (
+                "/admin/customer-service/tickets/{ticket_id}/reply",
+                "POST",
+                customer_tickets.reply_admin_customer_service_ticket,
+            ),
+            (
                 "/admin/customer-service/tickets/{ticket_id}/expected-completion",
                 "PATCH",
                 customer_tickets.admin_update_customer_ticket_expected_completion,

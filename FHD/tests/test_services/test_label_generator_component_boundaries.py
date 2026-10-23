@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import runpy
 import subprocess
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import ModuleType
 from typing import Any, cast
 
@@ -27,9 +29,13 @@ def reference_image(tmp_path: Path) -> Path:
 
 
 def _load_class(code: str) -> type:
-    namespace: dict[str, Any] = {"__name__": "generated_label_fixture"}
-    exec(compile(code, "<generated-label>", "exec"), namespace)
-    return cast(type, namespace["FixtureLabel"])
+    # Exercise generated source through Python's normal file loader, as a real
+    # consumer does after publishing a label template.
+    with TemporaryDirectory(prefix="xcmax-generated-label-") as temporary:
+        source = Path(temporary) / "generated_label.py"
+        source.write_text(code, encoding="utf-8")
+        namespace = runpy.run_path(str(source), run_name="generated_label_fixture")
+        return cast(type, namespace["FixtureLabel"])
 
 
 def _code(reference_image: Path, *, fields: bool = False) -> str:

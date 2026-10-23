@@ -35,6 +35,7 @@ def _tarball_release(tmp_path: Path, git_sha: str, **metadata: str):
         "git_sha": git_sha,
         "deploy_mode": "tarball",
         "admin_console_sha256": "a" * 64,
+        "archive_verifier_sha256": hashlib.sha256(b"# reviewed fixture\n").hexdigest(),
         **metadata,
     }
     (out_dir / "fhd-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -114,6 +115,10 @@ esac
             + (ssh_body if name == "ssh" else "")
         )
         executable.chmod(0o755)
+    # Transport tests isolate Git/source attestation; the bootstrap tests exercise real Git.
+    git = mock_bin / "git"
+    git.write_text("#!/bin/sh\ncase \"$*\" in *show*) printf '# reviewed fixture\\n';; esac\n")
+    git.chmod(0o755)
     for key, value in {
         "PATH": f"{mock_bin}:{os.environ['PATH']}",
         "DEPLOY_COMMANDS": str(calls),
@@ -161,9 +166,11 @@ def test_server_release_is_retained_by_version_and_full_sha_before_pointer_switc
     assert "/var/www/update/releases/builds/${VERSION}/${GIT_SHA}/server" in script
     assert 'atomic_upload "$TARBALL" "${IMMUTABLE_REMOTE_DIR}/${ARTIFACT}"' in script
     assert 'atomic_upload "$MANIFEST" "${IMMUTABLE_REMOTE_DIR}/fhd-manifest.json"' in script
-    assert script.index('promote "$immutable_dir/$artifact"') < script.index(
-        'promote "$immutable_dir/fhd-manifest.json"'
+    assert (
+        'names = [artifact] + (["fhd-api-image.tar.gz"] if image == "1" else []) + ["fhd-manifest.json"]'
+        in script
     )
+    assert script.index('atomic_upload "$MANIFEST"') < script.index("def bootstrap_promote(")
 
 
 @pytest.mark.parametrize("preserve", ["0", "1"])
@@ -345,7 +352,9 @@ def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
             assert "environment" not in job, f"{path}:{job_name} still has an approval gate"
 
 
-def test_deploy_validates_autonomy_without_rewriting_server_configuration(tmp_path: Path) -> None:
+def test_deploy_validates_autonomy_without_rewriting_server_configuration(
+    tmp_path: Path,
+) -> None:
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text())
     events = workflow.get("on", workflow.get(True))
     preserve = events["workflow_dispatch"]["inputs"]["preserve_release_history"]

@@ -2922,6 +2922,45 @@ def test_update_loop_memory_closes_resumed_item_after_success(monkeypatch, tmp_p
     assert memory["last_resolution_record"]["closed_count"] == 1
 
 
+def test_update_loop_memory_does_not_inherit_retries_across_tasks(monkeypatch, tmp_path):
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    loop_memory_path().write_text(
+        json.dumps({
+            "closed_items": [],
+            "open_items": [{
+                "branch": "devfleet/cursor/old",
+                "kind": "failed_steps",
+                "para_task_id": "old-task",
+                "retry_count": 3,
+                "run_id": "old-run",
+                "steps": ["code"],
+            }],
+            "recent_runs": [],
+            "run_count": 0,
+        }),
+        encoding="utf-8",
+    )
+
+    _update_loop_memory(
+        {
+            "branch": "devfleet/cursor/new",
+            "para_task_id": "new-task",
+            "policy_decision": {"action": "stop", "reason": "loop_not_completed"},
+            "run_id": "new-run",
+            "status": "failed",
+            "steps": [{"ok": False, "step": "code"}],
+        },
+        {"reason": "force"},
+    )
+    items = _load_loop_memory()["open_items"]
+    assert len(items) == 2
+    assert items[0]["retry_count"] == 3
+    assert items[0]["para_task_id"] == "old-task"
+    assert items[1]["retry_count"] == 1
+    assert items[1]["para_task_id"] == "new-task"
+
+
 def test_update_loop_memory_retires_code_remediation_after_downstream_qa_failure(
     monkeypatch, tmp_path
 ):

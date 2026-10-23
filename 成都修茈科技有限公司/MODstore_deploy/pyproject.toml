@@ -28,6 +28,8 @@ web = [
     "python-dotenv>=1.0",
     "python-alipay-sdk>=3.4",
     "python-pptx>=0.6.23",
+    # Signed private deliveries execute FHD's Mod SDK in a fresh interpreter.
+    "pandas>=2.0",
     "PyYAML>=6.0",
     "paramiko>=3.4",
     "cryptography>=50.0.2",

@@ -133,6 +133,7 @@ export type CustomDeliveryTicket = {
   created_at?: string;
   updated_at?: string;
   custom_delivery?: {
+    suggested_id?: string;
     kind?: string;
     requirements?: string;
     acceptance_criteria?: string;
@@ -346,10 +347,10 @@ export const xcmaxAdminApi = {
       ssot?: string;
     }>('/api/xcmax/admin/customer-deliveries/trial');
   },
-  decideCustomDelivery(ticketId: number, action: 'accept' | 'rework', note = '') {
+  decideCustomDelivery(ticketId: number, action: 'accept' | 'rework', note = '', sourceMode?: 'versioned_main') {
     return api.post<CustomDeliveryTicket>(
       `/api/xcmax/market-proxy/customer-service/custom-deliveries/${ticketId}/decision`,
-      { action, note },
+      { action, note, ...(sourceMode ? { source_mode: sourceMode } : {}) },
     );
   },
   updateCustomDeliveryCrm(ticketId: number, payload: Record<string, unknown>) {

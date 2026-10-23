@@ -6,6 +6,7 @@ import json
 import os
 import socket
 from contextlib import contextmanager
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -127,7 +128,7 @@ def _read_ledger(
     path = ledger_path()
     if not path.exists():
         return []
-    rows: List[Dict[str, Any]] = []
+    rows: deque[dict[str, Any]] = deque(maxlen=limit if limit > 0 else None)
     try:
         with path.open("r", encoding="utf-8") as fh:
             for line in fh:
@@ -135,13 +136,16 @@ def _read_ledger(
                 if not line:
                     continue
                 try:
-                    rows.append(json.loads(line))
+                    row = json.loads(line)
+                    if isinstance(row, dict) and row.get("phase") == "remediation_attempt":
+                        continue
+                    rows.append(row)
                 except json.JSONDecodeError:
                     continue
     except OSError:
         config.logger.exception("failed to read self-maintenance ledger")
         return []
-    return rows[-limit:]
+    return list(rows)[-limit:]
 
 
 def _ledger_row_timestamp(

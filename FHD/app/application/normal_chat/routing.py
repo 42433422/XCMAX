@@ -93,11 +93,11 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
     print_spec_order = (
         "打印" in text
         and not any(word in text for word in ("标签", "商标", "贴标"))
-        and bool(re.search(r"[0-9A-Za-z-]+\s*(?:的\s*)?规格\s*\d+", text))
+        and bool(re.search(r"(?<![0-9A-Za-z-])[0-9A-Za-z-]+\s*(?:的\s*)?规格\s*\d+", text))
     )
     number_style_order = bool(
         re.search(
-            "(?:\\d+|[一二两三四五六七八九十零〇]+)\\s*桶\\s*[0-9A-Za-z-]+\\s*规格\\s*\\d+(?:\\.\\d+)?",
+            r"(?:(?<!\d)\d+|(?<![一二两三四五六七八九十零〇])[一二两三四五六七八九十零〇]+)\s*桶\s*[0-9A-Za-z-]+\s*规格\s*\d+(?:\.\d+)?",
             text,
         )
     )
@@ -130,8 +130,12 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
             "payload": sales_write_payload,
         }
     query_keywords = ("查询", "查一下", "查下", "查", "看看", "看下", "搜索", "找下", "找", "检索")
-    model_signal = bool(re.search("(?:型号|编号)\\s*[:：]?\\s*([0-9A-Za-z-]{2,})", text))
-    unit_model_signal = bool(re.search("([^\\s，,。]{2,})\\s*的\\s*([0-9A-Za-z-]{2,})", text))
+    m_model = re.search(r"(?:型号|编号)\s*(?:[:：]\s*)?([0-9A-Za-z-]{2,})", text)
+    model_signal = bool(m_model)
+    m_unit_model = re.search(
+        r"(?<![^\s，,。])([^\s，,。]{2,})\s*的\s*([0-9A-Za-z-]{2,})", text
+    )
+    unit_model_signal = bool(m_unit_model)
     customer_entity_markers = ("客户", "购买单位", "买家")
     if _requires_llm_planning(text, customer_entity_markers):
         return {"intent": "unknown", "slots": {}}
@@ -180,10 +184,13 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
     product_subject = any(word in text for word in ("产品", "商品", "货品"))
     model_token = bool(
         re.search(
-            r"(?<![0-9A-Za-z])(?:[A-Za-z][A-Za-z0-9-]*\d[A-Za-z0-9-]*"
-            r"|\d{2,6}[A-Za-z][A-Za-z0-9-]*|\d{3,6})(?![0-9A-Za-z])",
+            r"(?<![0-9A-Za-z])(?:\d{2,6}[A-Za-z][A-Za-z0-9-]*|\d{3,6})(?![0-9A-Za-z])",
             text,
         )
+    ) or any(
+        any(char.isdecimal() for char in match.group())
+        or (match.end() < len(text) and text[match.end()].isdecimal())
+        for match in re.finditer(r"(?<![0-9A-Za-z])[A-Za-z][A-Za-z0-9-]*", text)
     )
     if not _is_artifact_request(text) and (
         any(k in text for k in query_keywords)
@@ -192,11 +199,9 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
         or unit_model_signal
     ):
         slots: dict[str, Any] = {}
-        m_unit_model = re.search("([^\\s，,。]{2,})\\s*的\\s*([0-9A-Za-z-]{2,})", text)
         if m_unit_model:
             slots["unit_name"] = (m_unit_model.group(1) or "").strip()
             slots["model_number"] = (m_unit_model.group(2) or "").strip().upper()
-        m_model = re.search("(?:型号|编号)\\s*[:：]?\\s*([0-9A-Za-z-]{2,})", text)
         if m_model and (not slots.get("model_number")):
             slots["model_number"] = (m_model.group(1) or "").strip().upper()
         if slots.get("unit_name"):

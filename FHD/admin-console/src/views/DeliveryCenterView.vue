@@ -179,6 +179,9 @@
             <span>内部确认不会冒充客户验收；不把“已生成”冒充“已安装”。</span>
           </div>
           <div v-if="stageOf(ticket) !== 'delivered'" class="delivery-actions__controls">
+            <label v-if="ticket.custom_delivery?.kind === 'module' && ticket.custom_delivery.suggested_id === 'sunbird-attendance-custom'">
+              <input v-model="mainRework[ticket.id]" type="checkbox" />使用主线私有模块源码（保留原客户归属与权益）
+            </label>
             <input
               v-model.trim="reworkNotes[ticket.id]"
               type="text"
@@ -251,6 +254,7 @@ const loading = ref(false)
 const errorMessage = ref('')
 const busyTicketId = ref<number | null>(null)
 const reworkNotes = reactive<Record<number, string>>({})
+const mainRework = reactive<Record<number, boolean>>({})
 
 const filteredTickets = computed(() => {
   const needle = query.value.toLowerCase()
@@ -471,7 +475,8 @@ async function requestRework(ticket: CustomDeliveryTicket) {
   if (!confirmed) return
   busyTicketId.value = ticket.id
   try {
-    await xcmaxAdminApi.decideCustomDelivery(ticket.id, 'rework', note)
+    if (mainRework[ticket.id]) await xcmaxAdminApi.decideCustomDelivery(ticket.id, 'rework', note, 'versioned_main')
+    else await xcmaxAdminApi.decideCustomDelivery(ticket.id, 'rework', note)
     reworkNotes[ticket.id] = ''
     await loadAll()
   } catch (error) {

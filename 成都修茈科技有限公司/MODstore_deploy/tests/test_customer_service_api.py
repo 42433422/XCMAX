@@ -330,7 +330,13 @@ def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
     published: list = []
 
     def _fake_publish(
-        event_type, payload, *, source, fingerprint=None, dedupe_minutes=0, inbox_key=None
+        event_type,
+        payload,
+        *,
+        source,
+        fingerprint=None,
+        dedupe_minutes=0,
+        inbox_key=None,
     ):
         assert inbox_key, "Durable dispatch must forward its inbox identity"
         published.append(
@@ -1180,7 +1186,10 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
     from modstore_server.db.base import get_engine
     from modstore_server.models_cs import CustomerServiceAuditLog
 
-    customer, admin = _make_user("submitter_customer"), _make_user("submitter_admin", admin=True)
+    customer, admin = (
+        _make_user("submitter_customer"),
+        _make_user("submitter_admin", admin=True),
+    )
     marker = f"SUBMITTER-{uuid.uuid4().hex}"
     with get_session_factory()() as db:
         customer_ticket = _make_ticket(
@@ -1241,6 +1250,78 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
     with _as_user(customer):
         own_ticket = client.get(ticket_url).json()
         assert own_ticket["ticket"]["expected_completion_at"] is None
+
+
+def test_admin_reply_preserves_ticket_and_original_customer_session(client):
+    from modstore_server.models_cs import (
+        CustomerServiceAction,
+        CustomerServiceAuditLog,
+        CustomerServiceMessage,
+        CustomerServiceTicket,
+    )
+
+    owner, other, admin = (
+        _make_user("reply_owner"),
+        _make_user("reply_other"),
+        _make_user("reply_admin", admin=True),
+    )
+    with get_session_factory()() as db:
+        ticket = _make_ticket(
+            db,
+            owner,
+            ticket_no=f"REPLY-{uuid.uuid4().hex}",
+            status="processing",
+            intent="product_issue",
+        )
+        db.commit()
+        ticket_id, session_id = ticket.id, ticket.session_id
+    url = f"/api/customer-service/tickets/{ticket_id}/reply"
+    payload = {
+        "request_id": str(uuid.uuid4()),
+        "note": "请进入信息页展开问题工单处理结果查看进度。",
+    }
+    with _as_user(owner):
+        assert client.post(url, json=payload).status_code == 403
+    with _as_user(admin):
+        response = client.post(url, json=payload)
+        assert response.status_code == 200, response.text
+        assert response.json()["ticket"]["status"] == "processing"
+        assert client.post(url, json=payload).json()["replayed"] is True
+        assert (
+            client.post(url, json={**payload, "note": "同一请求不得修改答复内容"}).status_code
+            == 409
+        )
+        assert (
+            client.post(
+                url, json={**payload, "request_id": str(uuid.uuid4()), "note": "    "}
+            ).status_code
+            == 422
+        )
+    with _as_user(owner):
+        messages = client.get(f"/api/customer-service/sessions/{session_id}").json()["messages"]
+        assert [message["content"] for message in messages] == [payload["note"]]
+    with _as_user(other):
+        assert client.get(f"/api/customer-service/sessions/{session_id}").status_code == 404
+    with get_session_factory()() as db:
+        assert db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count() == 1
+        assert (
+            db.query(CustomerServiceAction)
+            .filter_by(ticket_id=ticket_id, action_type="ticket.reply")
+            .count()
+            == 1
+        )
+        assert (
+            db.query(CustomerServiceAuditLog)
+            .filter_by(ticket_id=ticket_id, event_type="admin_ticket_replied")
+            .count()
+            == 1
+        )
+        db.get(CustomerServiceTicket, ticket_id).status = "resolved"
+        db.commit()
+    with _as_user(admin):
+        assert (
+            client.post(url, json={**payload, "request_id": str(uuid.uuid4())}).status_code == 409
+        )
 
 
 def test_admin_customer_ticket_intent_and_status_filters_preserve_customer_scope(client):

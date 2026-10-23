@@ -1204,17 +1204,12 @@ class TestUninstallRoute:
         assert resp.status_code == 400
 
     def test_success_json(self):
-        mm = MagicMock()
-        mm.uninstall_mod.return_value = (True, "uninstalled")
-        old = sys.modules["app.infrastructure.mods.mod_manager"].get_mod_manager
-        sys.modules["app.infrastructure.mods.mod_manager"].get_mod_manager = MagicMock(
-            return_value=mm
-        )
-        try:
+        with patch(
+            "app.application.mod_uninstall.uninstall_mod_for_request",
+            return_value=(True, "uninstalled"),
+        ):
             with _make_client() as client:
                 resp = client.post("/uninstall", json={"mod_id": "m1"})
-        finally:
-            sys.modules["app.infrastructure.mods.mod_manager"].get_mod_manager = old
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 

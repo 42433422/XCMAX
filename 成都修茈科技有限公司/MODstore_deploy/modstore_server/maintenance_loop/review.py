@@ -8,11 +8,14 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
+from time import monotonic
 from typing import Any, Dict, List, Optional, Tuple
 
 from modstore_server import self_maintenance_quality_gate
 
 from . import config
+
+_FOCUSED_TEST_PYTHON_CACHE: tuple[tuple[Path | None, ...], float, Path] | None = None
 
 
 def _python_supports_focused_tests(candidate: Path) -> bool:
@@ -47,7 +50,7 @@ def _focused_test_command() -> str:
         os.environ.get("MODSTORE_DEPLOY_ROOT") or Path(__file__).resolve().parents[2]
     )
     runtime_root = os.environ.get("MODSTORE_RUNTIME_ROOT", "").strip()
-    candidates = [
+    candidates: tuple[Path | None, ...] = (
         Path(test_python_override).expanduser() if test_python_override else None,
         deploy_root / ".venv" / "bin" / "python",
         (
@@ -56,15 +59,21 @@ def _focused_test_command() -> str:
             else None
         ),
         Path(sys.executable),
-    ]
-    test_python = next(
-        (
-            candidate
-            for candidate in candidates
-            if candidate and _python_supports_focused_tests(candidate)
-        ),
-        Path(sys.executable),
     )
+    global _FOCUSED_TEST_PYTHON_CACHE
+    cached = _FOCUSED_TEST_PYTHON_CACHE
+    if cached and cached[0] == candidates and monotonic() < cached[1]:
+        test_python = cached[2]
+    else:
+        test_python = next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate and _python_supports_focused_tests(candidate)
+            ),
+            Path(sys.executable),
+        )
+        _FOCUSED_TEST_PYTHON_CACHE = (candidates, monotonic() + 60, test_python)
     test_path = (
         "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
     )

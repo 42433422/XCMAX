@@ -22,7 +22,6 @@ const showManagementLoopPanels = computed(() => isAdminConsole)
 // SSOT 派生：运行时从后端 /api/system/duty-roster 获取编制矩阵
 const {
   allPlannedIds: ALL_PLANNED_YUANGON_PKG_IDS,
-  employeeLabels: YUANGON_PKG_ROLE_LABELS,
   ensureLoaded: ensureDutyRosterLoaded,
 } = useDutyRoster()
 useWorkflowEmployeeRegistrySync()
@@ -39,15 +38,6 @@ const workspaceDesks = computed(() => {
     if (showManagementLoopPanels.value && !ALL_PLANNED_YUANGON_PKG_IDS.value.has(d.empId)) return false
     return workflowRegistryEntryBelongsToStack(d, stack)
   })
-  // 管理端：工作流注册表无平台编制员工时，从 SSOT 54 岗构建占位工位，确保编制员工可见
-  if (showManagementLoopPanels.value && filtered.length === 0) {
-    return [...ALL_PLANNED_YUANGON_PKG_IDS.value].map((id) => ({
-      empId: id,
-      panelTitle: `工作流 · ${YUANGON_PKG_ROLE_LABELS.value[id] ?? id}`,
-      shortName: YUANGON_PKG_ROLE_LABELS.value[id] ?? id,
-      enabled: false,
-    }))
-  }
   return filtered
 })
 

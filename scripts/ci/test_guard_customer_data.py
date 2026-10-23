@@ -28,6 +28,13 @@ class CustomerDataGuardTests(unittest.TestCase):
             guard.CORP + "taiyangniao-pro/backend/_conv_example.xlsx",
             "FHD/delivery/sunbird-seed/config/sunbird-roster.json",
             "FHD/delivery/sunbird-seed/data/mod_dbs/customer.db",
+            "FHD/XCAGI/.backups/index.json",
+            "FHD/XCAGI/.test_db_state.json",
+            "FHD/XCAGI/监控/window_2.png",
+            "FHD/XCAGI/监控/window_2.PNG",
+            "FHD/tools/bartender-monitor/window_2.png",
+            "FHD/app/resources/ai_assistant/商标导出/export.png",
+            "FHD/resources/ai_assistant/商标导出/export.png",
         ]
         for path in blocked:
             with self.subTest(path=path):
@@ -38,6 +45,8 @@ class CustomerDataGuardTests(unittest.TestCase):
             "FHD/tests/test_考勤.py",
             "docs/outputs.md",
             "FHD/delivery/sunbird-seed/README.md",
+            "FHD/XCAGI/监控/bartender_mapper.py",
+            "FHD/frontend/public/tutorial/xcagi-quickstart-sample-b.xlsx",
         ]:
             with self.subTest(path=path):
                 self.assertFalse(guard.forbidden(path))
@@ -86,14 +95,16 @@ class CustomerDataGuardTests(unittest.TestCase):
                 guard.main(Path(directory))
 
     def test_known_private_blob_cannot_be_renamed_into_fixture_directory(self):
-        with patch.object(
-            guard,
-            "indexed_entries",
-            return_value=[
-                ("tests/fixtures/renamed.xlsx", next(iter(guard.BLOCKED_BLOBS)))
-            ],
-        ):
-            self.assertEqual(guard.main(Path(".")), 1)
+        for blob in guard.BLOCKED_BLOBS:
+            with (
+                self.subTest(blob=blob),
+                patch.object(
+                    guard,
+                    "indexed_entries",
+                    return_value=[("tests/fixtures/renamed.xlsx", blob)],
+                ),
+            ):
+                self.assertEqual(guard.main(Path(".")), 1)
 
 
 if __name__ == "__main__":

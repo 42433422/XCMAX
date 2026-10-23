@@ -9,6 +9,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -191,16 +192,7 @@ def pending_automated_remediation() -> dict[str, Any] | None:
                 if isinstance(raw_steps, list)
                 else []
             )
-            try:
-                retry_count = int(item.get("retry_count") or 1)
-            except (TypeError, ValueError):
-                continue
-            max_retries = _int_env(
-                "MODSTORE_SELF_MAINTENANCE_MAX_RETRIES",
-                3,
-                minimum=1,
-            )
-            if steps and retry_count < max_retries and branch and task_id:
+            if steps and branch and task_id:
                 candidate = _with_remediation_lineage(
                     {
                         "branch": branch,
@@ -237,6 +229,145 @@ def pending_automated_remediation() -> dict[str, Any] | None:
     return max(candidates, key=lambda entry: entry[0])[1] if candidates else None
 
 
+class RemediationBlocked(RuntimeError):
+    """Unresolved work remains unhealthy even when dispatch is intentionally stopped."""
+
+    def __init__(self, reason: str, attempts: int, retry_at: str | None = None):
+        self.receipt = {
+            "status": "blocked",
+            "reason": reason,
+            "attempts": attempts,
+            "retry_at": retry_at,
+            "scheduler_status": "failed",
+        }
+        super().__init__(f"remediation_blocked:{reason}")
+
+
+def _remediation_key(item: dict[str, Any]) -> list[str]:
+    return [
+        str(item.get("branch") or "").strip(),
+        str(item.get("task_id") or item.get("para_task_id") or "").strip(),
+    ]
+
+
+def _reserve_remediation_attempt(pending: dict[str, Any]) -> set[tuple[str, ...]]:
+    """Reserve before dispatch; a crash consumes its attempt, never silently resets it.
+
+    Reuse the existing append-only ledger and its flock protocol. Scan all guard
+    receipts so history truncation in runtime views cannot reset the budget.
+    Missing task attribution is never inferred from branch alone.
+    """
+    import fcntl
+
+    from modstore_server.self_maintenance_loop_runner import (
+        _load_loop_memory,
+        ledger_path,
+    )
+
+    key = _remediation_key(pending)
+    if not all(key[:2]):
+        raise RemediationBlocked("missing_identity", 0)
+    items = _load_loop_memory().get("open_items", [])
+    counts = [int(pending.get("retry_count") or 0)]
+    counts.extend(
+        int(item.get("retry_count") or 0)
+        for item in items
+        if isinstance(item, dict) and _remediation_key(item) == key
+    )
+    if any(count < 0 for count in counts):
+        raise RemediationBlocked("invalid_attempt_count", 0)
+    limit = _int_env("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", 3, minimum=1)
+    active = {
+        tuple(_remediation_key(item))
+        for item in items
+        if isinstance(item, dict) and item.get("kind") in {"automated_remediation", "failed_steps"}
+    }
+    blocked = {
+        tuple(_remediation_key(item))
+        for item in items
+        if isinstance(item, dict)
+        and tuple(_remediation_key(item)) in active
+        and int(item.get("retry_count") or 0) >= limit
+    }
+    path = ledger_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+", encoding="utf-8") as fh:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        fh.seek(0)
+        attempts = max(counts)
+        last_attempt = 0
+        last_at = None
+        for item in items:
+            if not isinstance(item, dict) or _remediation_key(item) != key:
+                continue
+            count = int(item.get("retry_count") or 0)
+            if count != attempts or count < 1:
+                continue
+            stamp = item.get("last_attempted_at") or (
+                item.get("created_at") if count == 1 else None
+            )
+            if stamp:
+                at = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+                if at.tzinfo is None:
+                    raise RemediationBlocked("invalid_attempt_timestamp", attempts)
+                if last_at is None or at > last_at:
+                    last_attempt, last_at = count, at
+        for line in fh:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not isinstance(row, dict) or row.get("phase") != "remediation_attempt":
+                continue
+            row_key = tuple(row["remediation_key"])
+            count = int(row["attempt"])
+            if row_key in active and count >= limit:
+                blocked.add(row_key)
+            if row_key != tuple(key):
+                continue
+            at = datetime.fromisoformat(row["timestamp"])
+            if count < 1 or at.tzinfo is None:
+                raise RemediationBlocked("invalid_attempt_record", attempts)
+            attempts = max(attempts, count)
+            if count > last_attempt or (
+                count == last_attempt and (last_at is None or at > last_at)
+            ):
+                last_attempt, last_at = count, at
+        if attempts >= limit:
+            raise RemediationBlocked("retry_limit", attempts)
+        if attempts and last_at is None:
+            raise RemediationBlocked("retry_history_timestamp_missing", attempts)
+        now = datetime.now(UTC)
+        if last_at is not None:
+            delay = min(
+                86400,
+                self_maintenance_cooldown_minutes("automated_remediation")
+                * 60
+                * 2 ** min(attempts - 1, 10),
+            )
+            due = last_at + timedelta(seconds=delay)
+            if now < due:
+                raise RemediationBlocked("backoff", attempts, due.isoformat())
+        fh.seek(0, os.SEEK_END)
+        fh.write(
+            json.dumps(
+                {
+                    "ledger_schema_version": 2,
+                    "phase": "remediation_attempt",
+                    "run_id": uuid4().hex,
+                    "remediation_key": key,
+                    "attempt": attempts + 1,
+                    "timestamp": now.isoformat(),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        fh.flush()
+        os.fsync(fh.fileno())
+    return blocked - {tuple(key)}
+
+
 def run_pending_automated_remediation() -> dict[str, Any]:
     """Resume a vetoed repair only when the loop has executable stored context."""
     pending = pending_automated_remediation()
@@ -247,6 +378,7 @@ def run_pending_automated_remediation() -> dict[str, Any]:
         run_self_maintenance_loop,
     )
 
+    blocked = _reserve_remediation_attempt(pending)
     result = run_self_maintenance_loop(
         triggered_by="automated_remediation",
         force=False,
@@ -254,15 +386,25 @@ def run_pending_automated_remediation() -> dict[str, Any]:
         remediation_context=pending,
     )
     status = str(result.get("status") or "")
-    if status == "failed":
+    if status in {"failed", "blocked"}:
         error = str(result.get("error") or "unknown")
         if error in _DEFERRED_REMEDIATION_ERRORS:
-            return {
+            result = {
                 **result,
                 "scheduler_reason": error,
                 "scheduler_status": "deferred",
             }
-        raise RuntimeError(f"automated self-maintenance remediation failed: {error}")
+        else:
+            raise RuntimeError(f"automated self-maintenance remediation failed: {error}")
+    if blocked:
+        from modstore_server.self_maintenance_loop_runner import _load_loop_memory
+
+        remaining = _load_loop_memory().get("open_items", [])
+        if any(
+            isinstance(item, dict) and tuple(_remediation_key(item)) in blocked
+            for item in remaining
+        ):
+            raise RemediationBlocked("other_retry_limit", 0)
     return result
 
 

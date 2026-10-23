@@ -92,6 +92,16 @@ class CustomerTickets:
             json_body=body,
         )
 
+    async def reply_admin_customer_service_ticket(
+        self, request: Request, ticket_id: int, body: dict[str, Any]
+    ):
+        return await self._customer_ticket_proxy(
+            request,
+            f"/api/customer-service/tickets/{ticket_id}/reply",
+            method="POST",
+            json_body=body,
+        )
+
     async def admin_update_customer_ticket_expected_completion(
         self, request: Request, ticket_id: int
     ):

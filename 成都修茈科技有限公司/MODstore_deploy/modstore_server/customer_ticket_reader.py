@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from modstore_server.customer_issue_delivery_contract import projected_dispatch_status
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.incident_team_handler_digest import redact_text
 from modstore_server.models_cs import CustomerServiceAction, CustomerServiceAuditLog
@@ -201,7 +202,15 @@ def reader_ticket(db, row) -> dict:
         {
             "assignee": _reader_text(owner.username) if owner else None,
             "assignment_status": "assigned" if owner else "unassigned",
-            "latest_action_status": _reader_text(latest.status) if latest else None,
+            "latest_action_status": (
+                _reader_text(
+                    projected_dispatch_status(
+                        latest.status, latest.action_type, result, latest.error
+                    )
+                )
+                if latest
+                else None
+            ),
             "blockers": blockers,
             "responsible_roles": responsible_roles,
             "due_at": None,

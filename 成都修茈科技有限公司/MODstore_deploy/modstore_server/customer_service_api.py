@@ -28,6 +28,8 @@ from modstore_server.customer_service_orchestrator import (
 from modstore_server.customer_service_api_helpers import (
     IntegrationBody,
     TicketTitleBody,
+    TicketReplyBody,
+    reply_to_ticket,
     correct_ticket_metadata,
     StandardBody,
     close_ticket_with_evidence,
@@ -41,7 +43,11 @@ from modstore_server.customer_service_api_helpers import (
 from modstore_server import customer_service_customer_view as customer_view
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models import User
-from modstore_server.customer_ticket_reader import TicketReader, reader_ticket, reader_detail
+from modstore_server.customer_ticket_reader import (
+    TicketReader,
+    reader_ticket,
+    reader_detail,
+)
 from modstore_server.models_cs import (
     CustomerServiceAction,
     CustomerServiceAuditLog,
@@ -275,6 +281,16 @@ async def correct_ticket_title(
     user: User = Depends(_require_admin),
 ):
     return correct_ticket_metadata(db, user, ticket_id, body)
+
+
+@router.post("/tickets/{ticket_id}/reply")
+async def reply_to_ticket_as_admin(
+    ticket_id: int,
+    body: TicketReplyBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_admin),
+):
+    return reply_to_ticket(db, user, ticket_id, body)
 
 
 @router.post("/tickets/{ticket_id}/close")

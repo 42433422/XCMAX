@@ -251,10 +251,7 @@ async function downloadAttempt(options: ResumableDownloadOptions): Promise<void>
           response.stream.on('end', () => {
             output.end(() => finish())
           })
-          response.stream.on('error', (error: Error) => {
-            output.destroy()
-            finish(error)
-          })
+          response.stream.on('error', (error: Error) => finish(error))
           output.on('error', (error: Error) => finish(error))
         },
         onError: error => finish(error),

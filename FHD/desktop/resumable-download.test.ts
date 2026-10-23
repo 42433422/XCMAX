@@ -5,6 +5,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
+import { PassThrough } from 'node:stream'
 
 vi.mock('electron', () => ({
   app: { getPath: () => '/tmp' },
@@ -67,6 +68,7 @@ describe('downloadResumable', () => {
     const payload = randomBytes(300_000)
     const { destination, partFile } = await tempPaths()
     const ranges: string[] = []
+    let interrupted: ServerResponse | undefined
 
     await withServer((request, response) => {
       const range = request.headers.range
@@ -82,9 +84,8 @@ describe('downloadResumable', () => {
         return
       }
       response.writeHead(200, { 'content-length': String(payload.length) })
-      response.write(payload.subarray(0, 90_000), () => {
-        setTimeout(() => response.destroy(), 50)
-      })
+      interrupted = response
+      response.write(payload.subarray(0, 90_000))
     }, async baseUrl => {
       await downloadResumable({
         url: `${baseUrl}/XCAGI-Setup.exe`,
@@ -93,6 +94,10 @@ describe('downloadResumable', () => {
         sha512: sha512(payload),
         attempts: 3,
         retryDelayMs: 10,
+        onProgress: () => {
+          interrupted?.destroy()
+          interrupted = undefined
+        },
         createRequest: nodeRequestFactory(),
       })
     })
@@ -101,6 +106,44 @@ describe('downloadResumable', () => {
     expect(ranges[0]).toMatch(/^bytes=\d+-$/)
     expect((await fs.readFile(destination)).equals(payload)).toBe(true)
     await expect(fs.stat(partFile)).rejects.toThrow()
+  })
+
+  it('flushes a received chunk when the stream fails before the file opens', async () => {
+    const payload = randomBytes(100_000)
+    const { destination, partFile } = await tempPaths()
+    const ranges: string[] = []
+    await downloadResumable({
+      url: 'http://fixture/update.exe',
+      destination,
+      partFile,
+      sha512: sha512(payload),
+      attempts: 2,
+      retryDelayMs: 0,
+      createRequest: (_url, headers, handlers) => {
+        const stream = new PassThrough()
+        queueMicrotask(() => {
+          const start = Number(/bytes=(\d+)-/.exec(headers.Range || '')?.[1] || 0)
+          if (headers.Range) ranges.push(headers.Range)
+          handlers.onResponse({
+            statusCode: start ? 206 : 200,
+            headers: {
+              'content-length': String(payload.length - start),
+              'content-range': `bytes ${start}-${payload.length - 1}/${payload.length}`,
+            },
+            stream,
+          })
+          if (start) {
+            stream.end(payload.subarray(start))
+          } else {
+            stream.write(payload.subarray(0, 90_000))
+            stream.destroy(new Error('disconnect before open'))
+          }
+        })
+        return { abort: () => stream.destroy() }
+      },
+    })
+    expect(ranges).toEqual(['bytes=90000-'])
+    expect((await fs.readFile(destination)).equals(payload)).toBe(true)
   })
 
   it('reuses a completed part file without another network request', async () => {

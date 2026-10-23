@@ -2422,16 +2422,14 @@ class TestModsRoutesBranches:
     def test_uninstall_mod_success(self) -> None:
         """uninstall_mod 成功。"""
         app = _build_mods_app()
-        mock_mm = MagicMock()
-        mock_mm.uninstall_mod.return_value = (True, "已卸载")
         with (
             patch(
                 "app.infrastructure.mods.mod_manager.is_mods_disabled",
                 return_value=False,
             ),
             patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
-                return_value=mock_mm,
+                "app.application.mod_uninstall.uninstall_mod_for_request",
+                return_value=(True, "已卸载"),
             ),
         ):
             client = TestClient(app)
@@ -2450,7 +2448,7 @@ class TestModsRoutesBranches:
                 return_value=False,
             ),
             patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                "app.application.mod_uninstall.uninstall_mod_for_request",
                 side_effect=RuntimeError("uninstall boom"),
             ),
         ):

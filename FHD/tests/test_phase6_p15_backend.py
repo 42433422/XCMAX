@@ -3470,10 +3470,9 @@ class TestMSRoutesWithData:
         assert resp.status_code == 400
 
     def test_uninstall_route_success(self, mod_store_client) -> None:
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_get:
-            svc = MagicMock()
-            svc.uninstall_mod.return_value = (True, "ok")
-            mock_get.return_value = svc
+        with patch(
+            "app.application.mod_uninstall.uninstall_mod_for_request", return_value=(True, "ok")
+        ):
             resp = mod_store_client.post("/uninstall", json={"mod_id": "m1"})
             assert resp.status_code == 200
             data = resp.json()

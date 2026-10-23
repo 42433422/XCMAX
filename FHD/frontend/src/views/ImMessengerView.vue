@@ -103,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   createDirectConversation,
   fetchCsInbox,
@@ -444,13 +444,20 @@ const { activeCsConversation, csAutomationBusy, onChangeCsMode } = useCustomerSe
 async function loadOlderMessages(): Promise<void> {
   const id = activeConversationId.value
   if (!id || !localUserId.value || !messages.value.length || isCustomerEnterpriseCs(id)) return
+  const scrollContainer = scrollEl.value
   busy.value = true
   try {
     const beforeId = messages.value[0]?.id
     const older = await fetchImMessages(id, { limit: 50, beforeId })
     hasMoreHistory.value = older.length >= 50
     if (older.length) {
+      const previousScrollHeight = scrollContainer?.scrollHeight ?? 0
+      const previousScrollTop = scrollContainer?.scrollTop ?? 0
       messages.value = [...older, ...messages.value]
+      await nextTick()
+      if (activeConversationId.value === id && scrollEl.value === scrollContainer && scrollContainer) {
+        scrollContainer.scrollTop = previousScrollTop + scrollContainer.scrollHeight - previousScrollHeight
+      }
     }
   } catch (error) {
     showAppToast(error instanceof Error ? error.message : '加载历史失败', 'error')

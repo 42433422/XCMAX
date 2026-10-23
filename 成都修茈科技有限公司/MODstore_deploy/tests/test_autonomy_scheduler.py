@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -16,7 +17,9 @@ from modstore_server.autonomy_scheduler import (  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def _disable_real_memory_reconciliation(monkeypatch: pytest.MonkeyPatch) -> None:
+def _disable_real_memory_reconciliation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(tmp_path / "ledger.jsonl"))
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "memory.json"))
     monkeypatch.setattr(
         "modstore_server.autonomy_scheduler._reconcile_completed_loop_memory_safely",
         lambda: None,
@@ -204,8 +207,9 @@ def test_pending_remediation_prioritizes_incident_lineage(
     }
 
 
-def test_pending_remediation_skips_exhausted_failed_step(
+def test_pending_remediation_keeps_exhausted_failed_step_explicitly_blocked(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     memory = {
         "open_items": [
@@ -225,7 +229,16 @@ def test_pending_remediation_skips_exhausted_failed_step(
         lambda: memory,
     )
 
-    assert pending_automated_remediation() is None
+    pending = pending_automated_remediation()
+    assert pending is not None and pending["task_id"] == "task-42"
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_runner.ledger_path",
+        lambda: tmp_path / "ledger.jsonl",
+    )
+    from modstore_server.autonomy_scheduler import RemediationBlocked
+
+    with pytest.raises(RemediationBlocked, match="retry_limit"):
+        run_pending_automated_remediation()
 
 
 def test_pending_remediation_resumes_without_force(

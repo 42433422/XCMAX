@@ -57,6 +57,16 @@ _personal_sync_bak/
 .xcmax-pids/
 .retort/
 FHD/ai_group_chat/
+FHD/XCAGI/.backups/
+FHD/XCAGI/.test_db_state.json
+FHD/XCAGI/监控/window_*.png
+FHD/XCAGI/监控/window_*.jpg
+FHD/XCAGI/监控/window_*.jpeg
+FHD/tools/bartender-monitor/window_*.png
+FHD/tools/bartender-monitor/window_*.jpg
+FHD/tools/bartender-monitor/window_*.jpeg
+FHD/app/resources/ai_assistant/商标导出/
+FHD/resources/ai_assistant/商标导出/
 成都修茈科技有限公司/MODstore_deploy/debug_*.py
 成都修茈科技有限公司/MODstore_deploy/verify_*.py
 成都修茈科技有限公司/MODstore_deploy/test_all_employees.py

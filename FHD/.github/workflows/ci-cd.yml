@@ -833,6 +833,15 @@ jobs:
           set -euo pipefail
           artifact="$(find dist/deploy -maxdepth 1 -name 'fhd-full-*.tar.gz' -print -quit)"
           test -n "$artifact"
+          manifest="$(dirname "$artifact")/fhd-manifest.json"
+          expected_verifier="$(python3 - "$manifest" <<'PY'
+          import json, sys
+          print(json.load(open(sys.argv[1], encoding="utf-8")).get("archive_verifier_sha256", ""))
+          PY
+          )"
+          actual_verifier="$(sha256sum -- scripts/deploy/lib/verify_release_archive.py | awk '{print $1}')"
+          test "$expected_verifier" = "$actual_verifier"
+          python3 scripts/deploy/lib/verify_release_archive.py --archive "$artifact"
           tar -xzf "$artifact" ./templates/admin-vue-dist
           python3 scripts/deploy/lib/verify_admin_console.py \
             --root templates/admin-vue-dist \
@@ -902,8 +911,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Verify stable version anchors
-        run: python scripts/dev/verify_version_anchors.py
+      - name: Verify version anchors and offline startup measurements
+        run: |
+          python scripts/dev/verify_version_anchors.py
+          node --test scripts/package/macos-startup-metrics.test.cjs
 
       - name: Pack FHD server release tarball
         env:
@@ -1099,6 +1110,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
 
       - name: Validate security scan run ids
         if: ${{ inputs.release_channel == 'stable' }}
@@ -1159,9 +1171,7 @@ jobs:
           # Stable artifacts are uploaded atomically, then await the audited
           # fhd-deploy workflow approval. Staging remains immediate.
           FHD_PUSH_APPLY_NOW: ${{ (github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable')) == 'staging' && '1' || '0' }}
-          # The production link currently needs roughly 42-50 minutes for the
-          # normal release tarball. Keep a measured transfer margin while the
-          # rsync .part file preserves progress across interrupted runs.
+          # Allow slow CVM transfer and resumable retries.
           FHD_CVM_PUSH_TIMEOUT: "75m"
         run: |
           set -euo pipefail

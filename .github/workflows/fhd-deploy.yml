@@ -51,6 +51,11 @@ on:
         required: false
         type: boolean
         default: false
+      retry_failed_release:
+        description: Request a fresh approval for a failed exact release (new workflow run required)
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: fhd-deploy-${{ inputs.environment }}
@@ -68,6 +73,10 @@ jobs:
     environment:
       name: ${{ inputs.environment }}
     steps:
+      - name: Validate explicit retry scope
+        if: ${{ inputs.retry_failed_release && (inputs.environment != 'production' || inputs.action != 'apply-latest') }}
+        run: exit 64
+
       - name: Checkout exact production release for gate verification
         if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
         uses: actions/checkout@v4
@@ -165,6 +174,7 @@ jobs:
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
           AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
           AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
+          RETRY_FAILED_RELEASE: ${{ inputs.retry_failed_release && 'true' || 'false' }}
         run: |
           set -euo pipefail
           if [[ ! "$ACTION_ID" =~ ^release:[0-9a-f]{40}$ ]]; then
@@ -195,7 +205,8 @@ jobs:
             --arg action_id "$ACTION_ID" \
             --arg actor "$GITHUB_ACTOR" \
             --arg run_id "$GITHUB_RUN_ID" \
-            '{action:"apply_release_to_cvm",action_id:$action_id,source:"github.workflow_dispatch",payload:{requested_by:$actor,workflow_run_id:$run_id,workflow_action:"apply-latest"}}')"
+            --argjson retry "$RETRY_FAILED_RELEASE" \
+            '{action:"apply_release_to_cvm",action_id:$action_id,source:"github.workflow_dispatch",retry_failed:$retry,retry_approval_id:(if $retry then $run_id else "" end),payload:{requested_by:$actor,workflow_run_id:$run_id,workflow_action:"apply-latest"}}')"
           request_response="$(curl --fail-with-body --silent --show-error \
             -X POST "$request_url" \
             -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
@@ -225,6 +236,7 @@ jobs:
           TARGET_ENV: ${{ inputs.environment }}
           ACTION: ${{ inputs.action }}
           ACTION_ID: ${{ inputs.action_id }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
           PRESERVE_RELEASE_HISTORY: ${{ inputs.preserve_release_history && '1' || '0' }}
         run: |
           set -euo pipefail
@@ -291,7 +303,15 @@ jobs:
           echo "✅ Neuro Bus 7 switches verified (all =1) in \$ENV_FILE"
           NEURO_EOF
 
-          REMOTE_CMD=$(cat <<EOF
+          TRUSTED_VERIFIER_B64=""
+          if [ "${TARGET_ENV}" = "production" ]; then
+            TRUSTED_VERIFIER_B64="$(base64 < "$GITHUB_WORKSPACE/FHD/scripts/deploy/lib/verify_release_archive.py" | tr -d '\n')"
+          fi
+          ssh -i "$KEY_FILE" \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            "${USER}@${HOST}" \
+            "bash -s" <<EOF
           set -euo pipefail
           export FHD_DEPLOY_ROOT="${DEPLOY_ROOT}"
           export FHD_MANIFEST_PATH="${MANIFEST}"
@@ -318,18 +338,61 @@ jobs:
               exit 1
             fi
           else
-            EXPECTED_SHA="\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["git_sha"])' "${MANIFEST}")"
-            ARTIFACT="\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["artifact"])' "${MANIFEST}")"
+            RELEASE_FIELDS="\$(python3 - "${MANIFEST}" "${RELEASE_SHA}" "${TARGET_ENV}" "${ACTION}" <<'PY'
+          import json, re, sys
+          manifest_path, authorized_sha, environment, action = sys.argv[1:]
+          with open(manifest_path, encoding="utf-8") as stream:
+              doc = json.load(stream)
+          git_sha = str(doc.get("git_sha") or "")
+          artifact = str(doc.get("artifact") or "")
+          digest = str(doc.get("sha256") or "")
+          verifier_sha = str(doc.get("archive_verifier_sha256") or "")
+          if not re.fullmatch(r"[0-9a-f]{40}", git_sha):
+              raise SystemExit("manifest git_sha is not an exact lowercase SHA")
+          if not re.fullmatch(r"[0-9a-f]{64}", digest):
+              raise SystemExit("manifest sha256 is invalid")
+          if not re.fullmatch(r"[0-9a-f]{64}", verifier_sha):
+              raise SystemExit("manifest archive verifier SHA256 is invalid")
+          if not re.fullmatch(r"fhd-full-[A-Za-z0-9._-]+\.tar\.gz", artifact):
+              raise SystemExit("manifest artifact is not a safe FHD tarball basename")
+          if environment == "production" and action == "apply-latest" and git_sha != authorized_sha:
+              raise SystemExit("manifest git_sha differs from authorized release_sha")
+          print("|".join((git_sha, artifact, digest, verifier_sha)))
+          PY
+          )"
+            IFS='|' read -r MANIFEST_GIT_SHA ARTIFACT EXPECTED_ARCHIVE_SHA EXPECTED_VERIFIER_SHA <<<"\$RELEASE_FIELDS"
+            EXPECTED_SHA="\$MANIFEST_GIT_SHA"
             TARBALL="\$(dirname "${MANIFEST}")/\$ARTIFACT"
             test -f "\$TARBALL"
+            ACTUAL_ARCHIVE_SHA="\$(sha256sum -- "\$TARBALL" | awk '{print \$1}')"
+            if [ "\$ACTUAL_ARCHIVE_SHA" != "\$EXPECTED_ARCHIVE_SHA" ]; then
+              echo "Artifact SHA256 does not match manifest" >&2
+              exit 1
+            fi
+            TRUSTED_VERIFIER=""
+            if [ "${TARGET_ENV}" = "production" ]; then
+              TRUSTED_VERIFIER="\$(mktemp /tmp/fhd-trusted-archive-verifier.XXXXXX.py)"
+              printf '%s' "${TRUSTED_VERIFIER_B64}" | base64 --decode >"\$TRUSTED_VERIFIER"
+              chmod 600 "\$TRUSTED_VERIFIER"
+            else
+              TRUSTED_VERIFIER="${DEPLOY_ROOT}/scripts/deploy/lib/verify_release_archive.py"
+            fi
+            ACTUAL_VERIFIER_SHA="\$(sha256sum -- "\$TRUSTED_VERIFIER" | awk '{print \$1}')"
+            if [ "\$ACTUAL_VERIFIER_SHA" != "\$EXPECTED_VERIFIER_SHA" ]; then
+              echo "Checked-out verifier differs from exact release source" >&2
+              exit 1
+            fi
+            python3 "\$TRUSTED_VERIFIER" --archive "\$TARBALL"
+            if [ "${TARGET_ENV}" = "production" ]; then
+              rm -f -- "\$TRUSTED_VERIFIER"
+            fi
             BOOTSTRAP="\$(mktemp -d /tmp/fhd-deploy-bootstrap.XXXXXX)"
             trap 'rm -rf -- "\$BOOTSTRAP"' EXIT
             tar -xzf "\$TARBALL" -C "\$BOOTSTRAP" ./scripts/deploy
             AUTO="\$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"
             test -x "\$AUTO"
-            # Force re-apply even if digest matches: clear local digest stamp when present
-            rm -f "${DEPLOY_ROOT}/.deploy-image-digest" "${DEPLOY_ROOT}/.deploy-sha256" 2>/dev/null || true
-            bash "\$AUTO"
+            # Keep old identity stamps intact for archive ownership checks and rollback.
+            FHD_FORCE_APPLY=1 bash "\$AUTO"
             DEPLOYED_SHA="\$(cat "${DEPLOY_ROOT}/.deploy-git-sha" 2>/dev/null || true)"
             if [ "\$DEPLOYED_SHA" != "\$EXPECTED_SHA" ]; then
               echo "Deployed SHA mismatch: expected=\$EXPECTED_SHA actual=\${DEPLOYED_SHA:-missing}" >&2
@@ -337,13 +400,6 @@ jobs:
             fi
           fi
           EOF
-          )
-
-          ssh -i "$KEY_FILE" \
-            -o StrictHostKeyChecking=accept-new \
-            -o ConnectTimeout=30 \
-            "${USER}@${HOST}" \
-            "bash -s" <<< "$REMOTE_CMD"
 
           echo "Remote action done. Checking ${HEALTH_URL}${HEALTH_URL_ALT:+ (alt ${HEALTH_URL_ALT})}"
           EXPECTED_SHA=""

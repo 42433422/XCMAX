@@ -116,7 +116,9 @@ class LocalCommands:
         mod_id = await self._body_value(request, "mod_id")
         if not mod_id:
             raise HTTPException(status_code=400, detail="缺少 mod_id")
-        ok, message = self._mods().uninstall_mod(mod_id, remove_files=True)
+        from app.application.mod_uninstall import uninstall_mod_for_request
+
+        ok, message = uninstall_mod_for_request(request, mod_id)
         return ModStoreSimpleResponse(success=bool(ok), message=message, data={"id": mod_id})
 
     async def validate(self, mod_id: str = "") -> ModStoreSimpleResponse:
