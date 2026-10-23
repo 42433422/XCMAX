@@ -13,7 +13,7 @@
       </label>
       <label class="cs-filter">
         <span>问题分类</span>
-        <select v-model="intentFilter" :disabled="loading">
+        <select v-model="intentFilter" aria-label="问题分类" :disabled="loading">
           <option value="">全部分类</option>
           <option value="product_issue">产品问题</option>
           <option value="account_support">账号支持</option>
@@ -27,7 +27,7 @@
       </label>
       <label class="cs-filter">
         <span>处理状态</span>
-        <select v-model="statusFilter" :disabled="loading">
+        <select v-model="statusFilter" aria-label="处理状态" :disabled="loading">
           <option value="">全部状态</option>
           <option value="expired">已过期不再处理</option>
           <option value="open">待处理</option>
@@ -42,7 +42,7 @@
       </label>
       <label>
         <span>提交人身份</span>
-        <select v-model="submitterType" :disabled="loading">
+        <select v-model="submitterType" aria-label="提交人身份" :disabled="loading">
           <option value="">全部</option><option value="admin">管理员提交</option><option value="customer">客户提交</option>
         </select>
       </label>
@@ -55,7 +55,7 @@
       <div v-else class="cs-table-wrap">
         <table class="cs-table">
           <thead>
-            <tr><th>工单编号</th><th>问题</th><th>问题分类 / 范围</th><th>提交人</th><th>客户</th><th>状态</th><th>最近更新</th></tr>
+            <tr><th>工单编号</th><th>问题</th><th>问题分类 / 范围</th><th>提交人身份</th><th>客户</th><th>状态</th><th>最近更新</th></tr>
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.id" class="cs-row" tabindex="0" :aria-label="`打开工单 ${row.ticketNo}`"
