@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets as secrets
-from typing import Any
+from typing import Any, cast
 
 from app.application.mobile_relay_ports import PairingPorts, TaskPorts
 from app.db.session import get_db
@@ -159,19 +159,25 @@ class MobileRelayService:
         relay_base_url: str = "",
         ttl_seconds: int = 24 * 3600,
     ) -> dict[str, Any]:
-        return self._pairing.register_desktop(
-            label=label,
-            device_id=device_id,
-            capabilities=capabilities,
-            relay_base_url=relay_base_url,
-            ttl_seconds=ttl_seconds,
+        return cast(
+            dict[str, Any],
+            self._pairing.register_desktop(
+                label=label,
+                device_id=device_id,
+                capabilities=capabilities,
+                relay_base_url=relay_base_url,
+                ttl_seconds=ttl_seconds,
+            ),
         )
 
     def renew_desktop_pairing(
         self, *, relay_id: str, desktop_token: str, ttl_seconds: int = 24 * 3600
     ) -> dict[str, Any] | None:
-        return self._pairing.renew_desktop_pairing(
-            relay_id=relay_id, desktop_token=desktop_token, ttl_seconds=ttl_seconds
+        return cast(
+            dict[str, Any] | None,
+            self._pairing.renew_desktop_pairing(
+                relay_id=relay_id, desktop_token=desktop_token, ttl_seconds=ttl_seconds
+            ),
         )
 
     def bind_mobile_by_account(
@@ -183,29 +189,38 @@ class MobileRelayService:
         resolves a six-digit device code through the cloud relay. An existing
         binding remains owned by its original mobile account.
         """
-        return self._pairing.bind_mobile_by_account(
-            user_id=user_id, username=username, relay_id=relay_id, pairing_code=pairing_code
+        return cast(
+            dict[str, Any] | None,
+            self._pairing.bind_mobile_by_account(
+                user_id=user_id, username=username, relay_id=relay_id, pairing_code=pairing_code
+            ),
         )
 
     def create_task(
         self, *, user_id: int, relay_id: str, kind: str, payload: dict[str, Any] | None = None
     ) -> dict[str, Any] | None:
-        return self._tasks.create_task(
-            user_id=user_id, relay_id=relay_id, kind=kind, payload=payload
+        return cast(
+            dict[str, Any] | None,
+            self._tasks.create_task(user_id=user_id, relay_id=relay_id, kind=kind, payload=payload),
         )
 
     def get_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
-        return self._tasks.get_task(user_id=user_id, task_id=task_id)
+        return cast(dict[str, Any] | None, self._tasks.get_task(user_id=user_id, task_id=task_id))
 
     def cancel_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
         """手机端取消任务：仅 queued/running 可取消，标记为 cancelled。"""
-        return self._tasks.cancel_task(user_id=user_id, task_id=task_id)
+        return cast(
+            dict[str, Any] | None, self._tasks.cancel_task(user_id=user_id, task_id=task_id)
+        )
 
     def poll_desktop(
         self, *, relay_id: str, desktop_token: str, max_tasks: int = 5
     ) -> dict[str, Any] | None:
-        return self._tasks.poll_desktop(
-            relay_id=relay_id, desktop_token=desktop_token, max_tasks=max_tasks
+        return cast(
+            dict[str, Any] | None,
+            self._tasks.poll_desktop(
+                relay_id=relay_id, desktop_token=desktop_token, max_tasks=max_tasks
+            ),
         )
 
     def complete_desktop_task(
@@ -217,10 +232,13 @@ class MobileRelayService:
         status: str,
         result: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
-        return self._tasks.complete_desktop_task(
-            relay_id=relay_id,
-            desktop_token=desktop_token,
-            task_id=task_id,
-            status=status,
-            result=result,
+        return cast(
+            dict[str, Any] | None,
+            self._tasks.complete_desktop_task(
+                relay_id=relay_id,
+                desktop_token=desktop_token,
+                task_id=task_id,
+                status=status,
+                result=result,
+            ),
         )

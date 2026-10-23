@@ -66,8 +66,13 @@ class LegacyEngineAdapter:
         if engine is not None:
             self._engine = engine
         else:
+
+            def dispatch(*, tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
+                assert tool_dispatcher is not None
+                return tool_dispatcher(tool_id, action, params)
+
             self._engine = WorkflowEngine(
-                tool_dispatcher=tool_dispatcher,
+                tool_dispatcher=dispatch,
                 state_event_callback=state_event_callback,
             )
         # Dispatcher is always derived from the engine's own dispatcher, keeping

@@ -74,7 +74,7 @@ def _safe_under_roots(raw: str, roots: list[Path]) -> Path:
     if not text or "\x00" in text:
         raise ShipmentEtlPathError("empty path")
 
-    root_paths = [Path(root).resolve() for root in roots]
+    root_paths = [Path(os.path.realpath(str(root))) for root in roots]
     if not root_paths:
         raise ShipmentEtlPathError("path not under allowed dirs")
     requested = Path(text)
@@ -82,12 +82,13 @@ def _safe_under_roots(raw: str, roots: list[Path]) -> Path:
         raise ShipmentEtlPathError("path not under allowed dirs")
     for root in root_paths:
         candidate = requested if requested.is_absolute() else root / requested
-        resolved = candidate.resolve()
-        try:
-            relative = resolved.relative_to(root)
-        except ValueError:
-            continue
-        if relative.is_absolute() or ".." in relative.parts:
+        # realpath removes traversal and resolves symlinks before the boundary
+        # check. Keep the separator in the prefix test so `/root-other` is not
+        # treated as a child of `/root`.
+        resolved = Path(os.path.realpath(str(candidate)))
+        root_text = str(root)
+        resolved_text = str(resolved)
+        if resolved_text != root_text and not resolved_text.startswith(root_text + os.sep):
             continue
         return resolved
     raise ShipmentEtlPathError("path not under allowed dirs")
@@ -106,7 +107,11 @@ def resolve_etl_path(
     """
     _ = must_exist
     roots = etl_allowed_roots(workspace_root)
-    preferred = Path(workspace_root).resolve() if workspace_root else Path.cwd().resolve()
+    preferred = (
+        Path(os.path.realpath(str(workspace_root)))
+        if workspace_root
+        else Path(os.path.realpath(os.getcwd()))
+    )
     if preferred in roots:
         roots = [preferred, *(root for root in roots if root != preferred)]
     return _safe_under_roots(str(file_path or ""), roots)
@@ -133,13 +138,11 @@ def resolve_etl_output_path(
         parent = _safe_under_roots(parent_raw, etl_allowed_roots(workspace_root))
     parent.mkdir(parents=True, exist_ok=True)
     # 文件名只用 basename；归一化后再次验证最终路径仍在已批准父目录内。
-    parent_path = parent.resolve()
-    candidate = (parent_path / name).resolve()
-    try:
-        candidate.relative_to(parent_path)
-    except ValueError as exc:
-        raise ShipmentEtlPathError("output path not under allowed dirs") from exc
-    if candidate == parent_path:
+    parent_path = Path(os.path.realpath(str(parent)))
+    candidate = Path(os.path.realpath(os.path.join(str(parent_path), name)))
+    parent_text = str(parent_path)
+    candidate_text = str(candidate)
+    if candidate_text == parent_text or not candidate_text.startswith(parent_text + os.sep):
         raise ShipmentEtlPathError("output path not under allowed dirs")
     return candidate
 

@@ -40,7 +40,6 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             "summary": "ctx.call_llm 未注入；请在宿主 build_run_context 中挂载 LLM 调度。",
             "items": [],
             "warnings": ["call_llm_missing"],
-            "echo": payload,
         }
     user_msg = json.dumps(payload or {}, ensure_ascii=False)[:4000]
     result = await call_llm(

@@ -328,9 +328,49 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
 
     # 8) 生产环境探测函数可用（不要求当前就在 production）
     gates["deployment_probe"] = callable(deployment_is_production)
-
     failed = [k for k, v in gates.items() if not v]
     assert not failed, f"production gates failed: {failed}; detail={gates}"
+
+
+def test_etl_path_resolver_rejects_traversal_and_symlink_escape(tmp_path, monkeypatch):
+    """Resolved paths must stay under the configured root, including through links."""
+    from app.application import shipment_excel_etl_security as security
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "private.xlsx"
+    secret.write_bytes(b"not an ETL workbook")
+    link = allowed / "linked.xlsx"
+    link.symlink_to(secret)
+    (allowed / "input.xlsx").write_bytes(b"inside")
+
+    monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+
+    assert security.resolve_etl_path("input.xlsx") == allowed / "input.xlsx"
+    for raw in ("../outside/private.xlsx", str(secret), str(link)):
+        with pytest.raises(security.ShipmentEtlPathError):
+            security.resolve_etl_path(raw)
+
+
+def test_etl_output_resolver_rejects_symlink_escape_without_writing(tmp_path, monkeypatch):
+    """An existing output alias cannot redirect a workbook write outside the root."""
+    from app.application import shipment_excel_etl_security as security
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "outside.xlsx"
+    outside.write_bytes(b"preserve this file")
+    (allowed / "result.xlsx").symlink_to(outside)
+
+    monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+
+    with pytest.raises(security.ShipmentEtlPathError):
+        security.resolve_etl_output_path(allowed / "result.xlsx")
+    assert outside.read_bytes() == b"preserve this file"
 
 
 def test_fixtures_roundtrip_still_ok():

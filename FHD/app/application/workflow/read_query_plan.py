@@ -90,9 +90,10 @@ def customer_read_node(
     if listing:
         keyword = ""
     else:
-        keyword = _read_remainder(text, ("客户", "购买单位", "买家"))
-        if not keyword:
+        remainder = _read_remainder(text, ("客户", "购买单位", "买家"))
+        if not remainder:
             return None
+        keyword = remainder
     return WorkflowNode(
         node_id="query_customers",
         tool_id="customers",

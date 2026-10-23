@@ -68,8 +68,8 @@ def _labeled_order(message: str) -> tuple[bool, dict[str, Any]]:
     fields: dict[str, Any] = {}
     # Split only on the grammar's explicit field separators; every pass consumes
     # input, so adversarial text remains linear in the 4096-character bound.
-    pieces = []
-    current = []
+    pieces: list[str] = []
+    current: list[str] = []
     for char in remainder:
         if char in _FIELD_SEPARATORS:
             if current:
@@ -111,7 +111,7 @@ def _labeled_order(message: str) -> tuple[bool, dict[str, Any]]:
 
 def _direct_request(
     message: str, *, order: bool
-) -> tuple[str, str, str, str | None, str | None] | None:
+) -> tuple[str, str, str, float | None, float | None] | None:
     text = _strip_polite(message)
     if order:
         if not text.startswith("给客户"):
@@ -162,7 +162,8 @@ def _direct_request(
         tail = tail[3:] if tail.startswith("报个价") else tail[2:]
     else:
         tail = tail[1:]
-    quantity = price = None
+    quantity: float | None = None
+    price: float | None = None
     tail = (
         tail.strip()
         .removesuffix("。")
@@ -214,7 +215,7 @@ def sales_quote_node(
                 for token in ("请先展示销售订单执行计划", "提交人工审批后再执行")
             ):
                 return None
-        item = {
+        order_item = {
             key: fields[key]
             for key in ("model_number", "product_name", "quantity", "unit_price")
             if key in fields
@@ -225,7 +226,7 @@ def sales_quote_node(
             action="create_order",
             params={
                 "customer_name": fields.get("customer_name", ""),
-                "items": [item] if item else [],
+                "items": [order_item] if order_item else [],
             },
             risk="medium",
             idempotent=False,
@@ -235,16 +236,16 @@ def sales_quote_node(
     if request is None:
         return None
     action, customer, model, quantity, price = request
-    item: dict[str, Any] = {"model_number": model}
+    direct_item: dict[str, Any] = {"model_number": model}
     if quantity is not None:
-        item["quantity"] = quantity
+        direct_item["quantity"] = quantity
     if price is not None:
-        item["unit_price"] = price
+        direct_item["unit_price"] = price
     return WorkflowNode(
         node_id=f"sales_{action}",
         tool_id="sales",
         action=action,
-        params={"customer_name": customer, "items": [item]},
+        params={"customer_name": customer, "items": [direct_item]},
         risk="medium",
         idempotent=False,
         description=f"为{customer}创建{model}报价单"

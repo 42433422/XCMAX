@@ -20,7 +20,7 @@ from app.fastapi_routes.private_mod_delivery_context import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["mod-store", "private-delivery"])
+router: APIRouter = APIRouter(tags=["mod-store", "private-delivery"])
 
 
 async def _market_token(request: Request) -> str:

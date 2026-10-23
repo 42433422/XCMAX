@@ -753,4 +753,4 @@ extension_router.include_router(_sync.router)
 extension_router.include_router(_conversations_router)
 extension_router.include_router(_auth_router)
 
-_mobile_router.include_router(extension_router)
+cast(APIRouter, _mobile_router).include_router(extension_router)

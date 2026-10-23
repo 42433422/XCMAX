@@ -141,10 +141,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     runtime_context = _facade()._runtime_context_with_authenticated_actor(request, runtime_context)
     runtime_context = _facade().runtime_context_with_tier(runtime_context, ai_tier)
     from app.application import get_ai_chat_app_service
-    from app.application.ai_chat_app_service_dynamic_workflow_pending_mixin import (
-        CANCEL_WORDS,
-        CONFIRM_WORDS,
-    )
+    from app.application.ai_chat.workflow_session import CANCEL_WORDS, CONFIRM_WORDS
     from app.application.normal_chat_dispatch import route_normal_mode_message
     from app.application.workflow.planner import _looks_like_business_db_write
 

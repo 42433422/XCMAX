@@ -23,6 +23,7 @@ def test_workbench_fallback_source_uses_generic_private_data_free_profile() -> N
     source = _safe_fallback_employee_source()
     assert 'EMPLOYEE_LABEL = "员工"' in source
     assert "customer fixture" not in source
+    assert '"echo": payload' not in source
     compile(source, "fallback_employee.py", "exec")
 
 
