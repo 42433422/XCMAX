@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,23 @@ from app.infrastructure.mods.state_lock import state_lock
 def _is_admin(user: object) -> bool:
     """Match the host's verified admin dependency; market flags are not roles."""
     return str(getattr(user, "tier", "") or "").strip() == "admin"
+
+
+def _child_entry(parent: Path, name: str) -> Path | None:
+    """Return an existing direct child by name without joining caller data.
+
+    The path comes from the directory listing, so a caller-supplied Mod id can
+    never become a path expression. Symlinks are returned for the callers'
+    explicit lstat checks, never followed silently.
+    """
+    try:
+        with os.scandir(parent) as entries:
+            for item in entries:
+                if item.name == name:
+                    return Path(item.path)
+    except OSError:
+        return None
+    return None
 
 
 def _read_manifest(directory: Path, mod_id: str) -> dict[str, Any] | None:
@@ -58,10 +76,12 @@ def _is_global_or_legacy_manifest(manifest: dict[str, Any] | None) -> bool:
 def _manifest_for_legacy_install(root: Path, mod_id: str) -> dict[str, Any] | None:
     # Employee packs use the host-global _employees directory; regular Mods use
     # the host Mod root. Neither path is selected by caller-supplied owner data.
-    for directory in (root / mod_id, root / "_employees" / mod_id):
-        manifest = _read_manifest(directory, mod_id)
-        if manifest is not None:
-            return manifest
+    for parent in (root, root / "_employees"):
+        directory = _child_entry(parent, mod_id)
+        if directory is not None:
+            manifest = _read_manifest(directory, mod_id)
+            if manifest is not None:
+                return manifest
     return None
 
 
@@ -81,52 +101,72 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
     mod_id = str(mod_id or "").strip()
     if not mod_id:
         raise HTTPException(status_code=400, detail="缺少 mod_id")
+    if not install_receipts._ID.fullmatch(mod_id):
+        raise HTTPException(status_code=400, detail="无效的扩展包编号")
 
     from app.infrastructure.mods.mod_manager import get_mod_manager, get_mod_registry
 
     manager = get_mod_manager()
     root = install_receipts._root(str(manager.mods_root))
+    receipts_root = root / ".install-receipts"
     try:
-        state = install_receipts._state_dir(root, mod_id)
-    except (OSError, ValueError):
-        raise HTTPException(status_code=400, detail="无效的扩展包编号") from None
+        receipts_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    except OSError:
+        raise HTTPException(status_code=409, detail="安装收据目录不可用，拒绝卸载") from None
+    if receipts_root.is_symlink() or not receipts_root.is_dir():
+        raise HTTPException(status_code=409, detail="安装收据路径无效，拒绝卸载")
 
-    receipt_path = state / "receipt.json"
+    # Read receipt state only through directory listings: caller-supplied ids
+    # never become a filesystem path. Legacy installs without a receipt lock
+    # the shared receipt root instead of creating a per-id path.
+    state = _child_entry(receipts_root, mod_id)
+    if state is not None and (state.is_symlink() or not state.is_dir()):
+        raise HTTPException(status_code=409, detail="安装收据路径无效，拒绝卸载")
+    lock_dir = state if state is not None else receipts_root
+    receipt_path = state / "receipt.json" if state is not None else None
     pending_to_remove: tuple[Path, str] | None = None
     verified_regular_root: Path | None = None
     try:
         # Keep the same lock order as install_receipts.install_extracted and
         # pending activation: process-wide install lock, then per-Mod file lock.
-        with install_receipts._LOCK, state_lock(state):
-            if (root / mod_id).exists() and (root / "_employees" / mod_id).exists():
+        with install_receipts._LOCK, state_lock(lock_dir):
+            mod_dir = _child_entry(root, mod_id)
+            employee_dir = _child_entry(root / "_employees", mod_id)
+            if mod_dir is not None and employee_dir is not None:
                 raise HTTPException(status_code=409, detail="扩展安装位置存在歧义，拒绝卸载")
-            if receipt_path.is_symlink():
+            if receipt_path is not None and receipt_path.is_symlink():
                 raise HTTPException(status_code=409, detail="安装收据路径无效，拒绝卸载")
 
-            if receipt_path.exists():
+            if receipt_path is not None and receipt_path.exists():
                 install = install_receipts.read_verified_install(mod_id, mods_root=str(root))
                 if not install:
                     raise HTTPException(status_code=409, detail="安装收据或签名校验失败，拒绝卸载")
+
+                digest = str(install.get("package_sha256") or "")
+                requires_restart = bool(install.get("requires_restart"))
+                if requires_restart:
+                    installed_root = (
+                        _child_entry(state, "pending-" + digest) if state is not None else None
+                    )
+                else:
+                    installed_root = mod_dir
+                if installed_root is None or installed_root.is_symlink():
+                    raise HTTPException(status_code=409, detail="安装收据路径无效，拒绝卸载")
 
                 installed_owner = str(install.get("owner_scope") or "").strip()
                 if installed_owner:
                     if installed_owner != owner:
                         raise HTTPException(status_code=403, detail="当前账号无权卸载此账号扩展")
                 else:
-                    manifest = _read_manifest(
-                        Path(str(install.get("installed_root") or "")), mod_id
-                    )
+                    manifest = _read_manifest(installed_root, mod_id)
                     if not admin or not _is_global_or_legacy_manifest(manifest):
                         raise HTTPException(
                             status_code=403, detail="扩展归属或卸载权限未通过校验，拒绝删除"
                         )
-                if not install.get("requires_restart"):
-                    verified_regular_root = Path(str(install["installed_root"]))
-                if install.get("requires_restart"):
-                    pending_to_remove = (
-                        Path(str(install.get("installed_root") or "")),
-                        str(install.get("package_sha256") or ""),
-                    )
+                if requires_restart:
+                    pending_to_remove = (installed_root, digest)
+                else:
+                    verified_regular_root = installed_root
             else:
                 manifest = _manifest_for_legacy_install(root, mod_id)
                 if not manifest:
@@ -157,10 +197,10 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
             # only the verified pending tree while holding the same install lock.
             if pending_to_remove is not None:
                 pending, digest = pending_to_remove
-                expected_parent = state.resolve()
                 if (
-                    not pending.is_symlink()
-                    and pending.parent.resolve() == expected_parent
+                    state is not None
+                    and not pending.is_symlink()
+                    and pending.parent == state
                     and pending.name == "pending-" + digest
                 ):
                     shutil.rmtree(pending)

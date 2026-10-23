@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import shutil
 import uuid
 import zipfile
 from pathlib import Path
@@ -178,3 +179,85 @@ def test_same_id_owners_generate_compile_sign_distinct_sources(client, monkeypat
     other_scope = create_private_source_scope(second.id, uuid.uuid4().hex, 100 + second.id)
     with pytest.raises(ValueError):
         seed_previous_delivery(other_scope, {"delivery_artifacts": [records[0]]})
+
+
+@pytest.fixture
+def delivery_scope_root(tmp_path, monkeypatch):
+    from modstore_server import mod_scaffold_runner
+
+    library = tmp_path / "library"
+    library.mkdir()
+    monkeypatch.setattr(mod_scaffold_runner, "modstore_library_path", lambda: str(library))
+    return tmp_path / "customer-delivery-sources"
+
+
+def test_scope_identity_rejects_traversal_and_overlong_values(
+    delivery_scope_root, tmp_path
+):
+    from modstore_server.customer_delivery_sources import (
+        create_private_source_scope,
+        source_library,
+    )
+
+    session_id = uuid.uuid4().hex
+    scope = create_private_source_scope(7, session_id, 100)
+    assert source_library(scope, 7, session_id, 100) == (
+        delivery_scope_root / "7" / session_id / "library"
+    )
+    for bad in ("../escape", "..\\escape", "A" * 24, "a" * 12, "a" * 33, "f" * 24 + "/x"):
+        with pytest.raises(ValueError):
+            create_private_source_scope(7, bad, 100)
+
+
+def test_scope_marker_symlink_is_rejected(delivery_scope_root, tmp_path):
+    from modstore_server.customer_delivery_sources import (
+        create_private_source_scope,
+        source_library,
+    )
+
+    session_id = uuid.uuid4().hex
+    scope = create_private_source_scope(7, session_id, 100)
+    marker = delivery_scope_root / "7" / session_id / "scope.json"
+    outside = tmp_path / "outside.json"
+    outside.write_text(marker.read_text())
+    marker.unlink()
+    marker.symlink_to(outside)
+    assert outside.read_text()
+    with pytest.raises(ValueError):
+        source_library(scope, 7, session_id, 100)
+
+
+def test_scope_library_symlink_and_file_are_rejected(delivery_scope_root, tmp_path):
+    from modstore_server.customer_delivery_sources import (
+        create_private_source_scope,
+        source_library,
+    )
+
+    external = tmp_path / "external-library"
+    external.mkdir()
+    for target_kind in ("symlink", "file"):
+        session_id = uuid.uuid4().hex
+        scope = create_private_source_scope(7, session_id, 100)
+        library = delivery_scope_root / "7" / session_id / "library"
+        shutil.rmtree(library)
+        if target_kind == "symlink":
+            library.symlink_to(external)
+        else:
+            library.write_text("not a directory")
+        with pytest.raises(ValueError):
+            source_library(scope, 7, session_id, 100)
+
+
+def test_scope_of_another_account_is_rejected(delivery_scope_root):
+    from modstore_server.customer_delivery_sources import (
+        create_private_source_scope,
+        source_library,
+    )
+
+    session_id = uuid.uuid4().hex
+    scope = create_private_source_scope(7, session_id, 100)
+    other_session = uuid.uuid4().hex
+    create_private_source_scope(8, other_session, 101)
+    with pytest.raises(ValueError):
+        source_library(scope, 8, other_session, 101)
+
