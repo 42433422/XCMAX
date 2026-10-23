@@ -470,6 +470,7 @@ def test_plain_support_request_is_received_before_model_or_business_query(
         "不要帮我建工单。",
         "帮我建个生产工单，明天生产100件铝件。",
         "帮我建个工单：生产100件包装盒。",
+        "帮我建个工单：生产100件包装盒，需要走审批。",
         "帮我建个工单：包装车间制造一批纸箱。",
         "帮我建个工单：加工100件物料，生产订单需要排产。",
         "已经建个工单了，帮我查看一下。",
@@ -486,17 +487,29 @@ def test_support_intake_does_not_swallow_usage_negation_or_production(message):
 
 @pytest.mark.parametrize(
     "followup",
-    ["我要建个工单。", "刚说的这个记一单。", "按上面说的建一个工单。", "也给我开一张吧。"],
+    [
+        "我要建个工单。",
+        "刚说的这个记一单。",
+        "按上面说的建一个工单。",
+        "也给我开一张吧。",
+        "刚才说的这个问题帮我提个工单。",
+    ],
+)
+@pytest.mark.parametrize(
+    "prior",
+    [
+        "我想先聊聊每日摘要。现在反馈是它像一堆运维日志，我更想看懂今天做了什么、还有什么要处理。",
+        "刚才想反馈的是自治建议的看板，有遮挡或者错位的情况需要再复现看看。",
+        "管理端有没有市场总览、入口在哪里、内容齐不齐，这件事我还没确认，想查清楚。",
+        "工单里谁是管理员、谁是客户，以及分给哪个管理员，显示和筛选还要核实一下，现在部分页面有身份字段，但我不确定整体做好没有。",
+    ],
 )
 def test_bare_intake_inherits_only_current_conversation_customer_context(
-    intake_env, monkeypatch, followup
+    intake_env, monkeypatch, followup, prior
 ):
     from app.application import client_product_issue_intake as intake
     from app.fastapi_routes import xcagi_compat_chat_stream as stream
 
-    prior = (
-        "我想先聊聊每日摘要。现在反馈是它像一堆运维日志，我更想看懂今天做了什么、还有什么要处理。"
-    )
     bodies = []
 
     async def remote(token, route, *, method="GET", payload=None):
@@ -528,6 +541,7 @@ def test_bare_intake_inherits_only_current_conversation_customer_context(
         [],
         [{"role": "assistant", "content": "软件页面报错"}],
         [{"role": "user", "content": "明天生产100件铝件。"}],
+        [{"role": "user", "content": "明天生产100件铝件，需要走审批。"}],
         [{"role": "user", "content": "软件页面报错", "conversation_id": "other-conversation"}],
         [{"role": "user", "content": "软件页面报错", "actor_id": 88}],
         [

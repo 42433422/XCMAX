@@ -27,7 +27,7 @@ _PLAIN_INTAKE_RE = re.compile(
     r"|(?:也给我|也帮我)开一张(?:吧|[。！!\s])*$"
 )
 _SOFTWARE_CONTEXT_RE = re.compile(
-    r"软件|页面|界面|后台|客户端|桌面|功能|模块|交付中心|每日摘要|客服|菜单|侧栏|样式|显示|跨端|审计|自动化|审批"
+    r"软件|页面|界面|后台|客户端|桌面|功能|模块|交付中心|每日摘要|客服|菜单|侧栏|样式|显示|跨端|审计|自动化|审批|看板|图谱|管理端|市场总览"
 )
 _IMAGE_DATA_URL = re.compile(r"(?i)^data:image/[\w.+-]+;base64,")
 
@@ -40,7 +40,7 @@ def looks_like_issue_report(message: str) -> bool:
 
 def _manufacturing_intake(message: str) -> bool:
     return bool(re.search(r"生产|制造|车间|排产|加工|装配", message or "")) and not bool(
-        _SOFTWARE_CONTEXT_RE.search(message or "")
+        re.search(r"软件|页面|界面|后台|客户端|菜单|侧栏|样式|显示|图谱|看板|列表", message or "")
     )
 
 
@@ -108,7 +108,7 @@ def report_message_with_context(message: str, context: dict[str, Any]) -> str:
             break
         if item.get("role") != "user" or not content or content == message.strip():
             continue
-        if not _plain_intake_match(content) and (
+        if not (_plain_intake_match(content) or _manufacturing_intake(content)) and (
             _REPORT_RE.search(content) or _SOFTWARE_CONTEXT_RE.search(content)
         ):
             return f"此前客户说明：{content}\n本轮客户要求：{message}"
