@@ -33,7 +33,7 @@
     "gen:types": "bash scripts/gen-types.sh"
   },
   "dependencies": {
-    "@chenglou/pretext": "^0.0.9",
+    "@chenglou/pretext": "^1.0.0",
     "@dagrejs/dagre": "^3.1.1",
     "@element-plus/icons-vue": "^2.3.2",
     "@huggingface/transformers": "^3.8.1",
