@@ -8,7 +8,7 @@
       <article v-for="device in fleet?.devices || []" :key="device.id">
         <strong>{{ deviceTitle(device) }}</strong><span>{{ fleet?.freshness !== 'fresh' || fleet?.error ? '状态待核实' : deviceLabel(device.status) }}{{ device.id === fleet?.primary_device_id ? ' · 主设备' : '' }}</span>
         <small>设备 ID：{{ device.id }} · 最后心跳：{{ device.last_seen || '未提供' }}</small>
-        <small v-for="tool in device.tools" :key="tool.toolName">{{ tool.toolName }}：{{ deviceLabel(tool.status) }} {{ tool.currentTask || '' }}</small>
+        <small v-for="tool in device.tools" :key="tool.toolName">{{ tool.toolName }}：{{ toolLabel(device, tool) }}</small>
       </article>
     </div>
     <form @submit.prevent="submit">
@@ -20,7 +20,7 @@
       <button :disabled="sending || !draft.trim() || !fleet?.enabled">{{ sending ? '保存中…' : '交给主控' }}</button>
     </form>
     <p>客户安装与业务验收独立核对；执行器报告完成不等于已交付。</p>
-    <ul class="tasks"><li v-for="task in tasks" :key="task.id"><button @click="inspect(task.id)">{{ promptPreview(task.request.message) }}</button><span>{{ label(task.state) }} · {{ stamp(task.updated_at) }}</span><small v-if="task.reason">{{ task.reason }}</small><details><summary>查看完整任务提示词</summary><pre>{{ task.request.message }}</pre></details></li></ul>
+    <ul class="tasks"><li v-for="task in tasks" :key="task.id"><button @click="inspect(task.id)">{{ promptPreview(task.request.message) }}</button><span>{{ label(task.state) }} · {{ stamp(task.updated_at) }}</span><small v-if="task.reason" :title="task.reason">{{ reasonText(task.reason) }}</small><details><summary>查看完整任务提示词</summary><pre>{{ task.request.message }}</pre></details></li></ul>
     <article v-if="selected" class="detail">
       <details><summary>{{ promptPreview(selected.request.message) }}</summary><pre>{{ selected.request.message }}</pre></details><p>任务 {{ selected.id }} · Para {{ selected.para_task_id || '尚未派发' }} · 执行：{{ label(selected.state) }} · 客户验收：待业务回执核对</p>
       <p v-if="selected.request.parent_task_id">上游任务 <button @click="inspect(selected.request.parent_task_id!)">{{ selected.request.parent_task_id }}</button> · 提交 {{ selected.request.source_sha }} · 源码包摘要 {{ selected.request.source_archive_sha256 }}</p>
@@ -58,6 +58,11 @@ function label(state: string) { return ({ queued: '已受理', dispatching: '正
 function phaseName(name: string) { return ({ code: '代码提交', tests: 'CI 测试', approval: '代码审核', merged: '主线合并', deployed: '生产部署', installed: '客户安装', business: '客户业务验收' } as Record<string, string>)[name] || name }
 function phaseState(state: string) { return ({ recorded: '已有执行器源码回执', passed: '检查通过', failed: '检查失败', pending: '等待中', approved: '已有审核通过记录', changes_requested: '审核要求修改', not_recorded: '尚无独立审核记录', verified: '来源已核验', receipt_received: '已收到回执，仍待核验', version_or_artifact_unverified: '运行版本或产物尚未对应', unknown: '待核实' } as Record<string, string>)[state] || state }
 function deviceLabel(state: string) { return ({ online: '在线', offline: '离线', stale: '状态已过期', idle: '空闲', running: '执行中', not_installed: '未安装', unknown: '待核实' } as Record<string, string>)[state] || state }
+function toolLabel(device: Fleet['devices'][number], tool: Fleet['devices'][number]['tools'][number]) {
+  const reported = `${deviceLabel(tool.status)} ${tool.currentTask || ''}`.trim()
+  return device.status === 'online' && fleet.value?.freshness === 'fresh' && !fleet.value.error ? reported : `上次上报：${reported}；当前执行情况待核实`
+}
+function reasonText(reason: string) { return reason === 'dispatch_outcome_unknown_no_automatic_resubmit' ? '派发结果尚未核实，系统不会自动重复派发；请核对原任务回执。' : reason }
 async function refresh() {
   if (loading.value) return
   loading.value = true
