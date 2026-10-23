@@ -30,7 +30,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS as RECOVERABLE_ERROR
 from app.utils.process_lock import exclusive_file_lock
 
 if TYPE_CHECKING:
-    from app.services.user_memory.ports import MemoryStore
+    from app.application.user_memory.ports import MemoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +58,8 @@ class UserMemoryStore:
     def __init__(self, storage_type: str = "json") -> None:
         if getattr(self, "_initialized", False):
             return
-        from app.services.user_memory.json_storage import JsonMemoryStorage
-        from app.services.user_memory.persistence import MemoryRepository
+        from app.infrastructure.user_memory.json_storage import JsonMemoryStorage
+        from app.infrastructure.user_memory.persistence import MemoryRepository
 
         self.storage_type = storage_type
         self._cache_dirty: dict[str, bool] = {}
@@ -137,10 +137,10 @@ class UserMemoryService:
     def __init__(self, storage_type: str = "json") -> None:
         if getattr(self, "_initialized", False):
             return
-        from app.services.user_memory.feedback import FeedbackMemory, FeedbackPorts
-        from app.services.user_memory.patterns import ActionMemory, PatternPorts
-        from app.services.user_memory.ports import MemoryAccess, late_callback
-        from app.services.user_memory.preferences import PreferenceMemory
+        from app.application.user_memory.feedback import FeedbackMemory, FeedbackPorts
+        from app.application.user_memory.patterns import ActionMemory, PatternPorts
+        from app.application.user_memory.ports import MemoryAccess, late_callback
+        from app.application.user_memory.preferences import PreferenceMemory
 
         self._store = UserMemoryStore(storage_type=storage_type)
         access = MemoryAccess(

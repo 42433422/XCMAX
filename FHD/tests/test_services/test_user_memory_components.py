@@ -22,11 +22,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.services import user_memory_service as module
-from app.services.user_memory.models import UserMemory
-from app.services.user_memory.patterns import chronological_contexts
-from app.services.user_memory.persistence import MemoryRepository
-from app.services.user_memory.ports import MemoryAccess
-from app.services.user_memory.preferences import PreferenceMemory
+from app.application.user_memory.models import UserMemory
+from app.application.user_memory.patterns import chronological_contexts
+from app.infrastructure.user_memory.persistence import MemoryRepository
+from app.application.user_memory.ports import MemoryAccess
+from app.application.user_memory.preferences import PreferenceMemory
 
 MemoryFactory = Callable[[str], module.UserMemoryService]
 
@@ -314,9 +314,11 @@ def test_components_import_without_the_service_facade() -> None:
                     raise AssertionError("component imported service facade")
 
         sys.meta_path.insert(0, BlockFacade())
-        for name in ("models", "ports", "json_storage", "persistence", "policy",
+        for name in ("models", "ports", "policy",
                      "preferences", "candidates", "queries", "patterns", "feedback"):
-            importlib.import_module("app.services.user_memory." + name)
+            importlib.import_module("app.application.user_memory." + name)
+        for name in ("json_storage", "persistence"):
+            importlib.import_module("app.infrastructure.user_memory." + name)
         assert "app.services.user_memory_service" not in sys.modules
         """
     )

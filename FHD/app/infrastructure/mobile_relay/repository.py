@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.services.mobile_relay_ports import Database, Projection, Schema
+from app.application.mobile_relay_ports import Database, Projection, Schema
 from app.services.mobile_relay_utils import _row_dict, _token_hash
 
 

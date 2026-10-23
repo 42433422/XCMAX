@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from app.services.desktop_relay.ports import (
+from app.application.desktop_relay.ports import (
     ApiUrlCall,
     ConditionalConfigUpdate,
     HttpClientFactory,

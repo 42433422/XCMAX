@@ -259,10 +259,7 @@ def _reserve_remediation_attempt(pending: dict[str, Any]) -> set[tuple[str, ...]
     """
     import fcntl
 
-    from modstore_server.self_maintenance_loop_runner import (
-        _load_loop_memory,
-        ledger_path,
-    )
+    from modstore_server.maintenance_loop.store import _load_loop_memory, ledger_path
 
     key = _remediation_key(pending)
     if not all(key[:2]):
@@ -397,7 +394,7 @@ def run_pending_automated_remediation() -> dict[str, Any]:
         else:
             raise RuntimeError(f"automated self-maintenance remediation failed: {error}")
     if blocked:
-        from modstore_server.self_maintenance_loop_runner import _load_loop_memory
+        from modstore_server.maintenance_loop.store import _load_loop_memory
 
         remaining = _load_loop_memory().get("open_items", [])
         if any(

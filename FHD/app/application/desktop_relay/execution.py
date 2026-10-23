@@ -7,14 +7,14 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from app.services.desktop_relay.ports import (
+from app.application.desktop_relay.ports import (
     ClassifyResultCall,
     JsonObject,
     SuperEmployee,
     SuperEmployeeFactory,
     TerminalMessageCall,
 )
-from app.services.relay_gitops import GIT_OP_KINDS
+from app.infrastructure.relay.gitops import GIT_OP_KINDS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 

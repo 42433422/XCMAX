@@ -29,19 +29,19 @@ from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.neuro_bus.neuro_service_instrumentation import (
     instrument_service_layer_class as instrument_service_layer_class,
 )
-from app.services.user_memory.candidates import CandidateMemory, CandidatePorts
-from app.services.user_memory.feedback import FeedbackMemory, FeedbackPorts
-from app.services.user_memory.json_storage import JsonMemoryStorage
-from app.services.user_memory.models import ActionPattern as ActionPattern
-from app.services.user_memory.models import ContextSummary as ContextSummary
-from app.services.user_memory.models import FeedbackRecord as FeedbackRecord
-from app.services.user_memory.models import UserMemory as UserMemory
-from app.services.user_memory.patterns import ActionMemory, PatternPorts
-from app.services.user_memory.persistence import MemoryRepository
-from app.services.user_memory.policy import MemoryPolicy, PolicyPorts
-from app.services.user_memory.ports import MemoryAccess, MemoryStore, late_callback
-from app.services.user_memory.preferences import PreferenceMemory
-from app.services.user_memory.queries import MemoryQueries, QueryPorts
+from app.application.user_memory.candidates import CandidateMemory, CandidatePorts
+from app.application.user_memory.feedback import FeedbackMemory, FeedbackPorts
+from app.infrastructure.user_memory.json_storage import JsonMemoryStorage
+from app.application.user_memory.models import ActionPattern as ActionPattern
+from app.application.user_memory.models import ContextSummary as ContextSummary
+from app.application.user_memory.models import FeedbackRecord as FeedbackRecord
+from app.application.user_memory.models import UserMemory as UserMemory
+from app.application.user_memory.patterns import ActionMemory, PatternPorts
+from app.infrastructure.user_memory.persistence import MemoryRepository
+from app.application.user_memory.policy import MemoryPolicy, PolicyPorts
+from app.application.user_memory.ports import MemoryAccess, MemoryStore, late_callback
+from app.application.user_memory.preferences import PreferenceMemory
+from app.application.user_memory.queries import MemoryQueries, QueryPorts
 from app.utils.operational_errors import RECOVERABLE_ERRORS as RECOVERABLE_ERRORS
 from app.utils.process_lock import exclusive_file_lock
 

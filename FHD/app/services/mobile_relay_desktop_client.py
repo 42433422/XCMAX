@@ -23,91 +23,93 @@ from typing import cast as cast
 
 import httpx
 
-from app.services.desktop_relay.cleanup import CleanupPorts, WorkspaceCollector
-from app.services.desktop_relay.configuration import ConfigurationPorts, RelayConfigStore
-from app.services.desktop_relay.execution import ExecutionPorts, RelayTaskExecutor
-from app.services.desktop_relay.lifecycle import LifecyclePorts, RelayLifecycle
-from app.services.desktop_relay.lifecycle import poll_backoff_seconds as _relay_poll_backoff_seconds
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.cleanup import CleanupPorts, WorkspaceCollector
+from app.application.desktop_relay.configuration import ConfigurationPorts, RelayConfigStore
+from app.application.desktop_relay.execution import ExecutionPorts, RelayTaskExecutor
+from app.application.desktop_relay.lifecycle import LifecyclePorts, RelayLifecycle
+from app.application.desktop_relay.lifecycle import (
+    poll_backoff_seconds as _relay_poll_backoff_seconds,
+)
+from app.application.desktop_relay.messages import (
     _BLOCKED_STATUSES as _BLOCKED_STATUSES,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _BRANCH_TOKEN_RE as _BRANCH_TOKEN_RE,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _COMPLETED_STATUSES as _COMPLETED_STATUSES,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _DIFF_TEXT_MARKERS as _DIFF_TEXT_MARKERS,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _DISCARD_TEXT_MARKERS as _DISCARD_TEXT_MARKERS,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _EVIDENCE_FILE_RE as _EVIDENCE_FILE_RE,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _EXECUTION_EVIDENCE_MARKERS as _EXECUTION_EVIDENCE_MARKERS,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _EXECUTION_MESSAGE_MARKERS as _EXECUTION_MESSAGE_MARKERS,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _FAILED_STATUSES as _FAILED_STATUSES,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _FAILURE_BODY_MARKERS as _FAILURE_BODY_MARKERS,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _MERGE_TEXT_MARKERS as _MERGE_TEXT_MARKERS,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _body_has_execution_evidence as _body_has_execution_evidence,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _body_indicates_failed as _body_indicates_failed,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _body_indicates_unfinished as _body_indicates_unfinished,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _classify_terminal_result as _classify_terminal_result,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _extract_branch_after as _extract_branch_after,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _extract_merge_source as _extract_merge_source,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _extract_merge_target as _extract_merge_target,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _extract_target_branch as _extract_target_branch,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _extract_tool_calls as _extract_tool_calls,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _git_op_from_message as _git_op_from_message,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _message_requires_execution_evidence as _message_requires_execution_evidence,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _terminal_codex_message as _terminal_codex_message,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _terminal_error_summary as _terminal_error_summary,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _text_mentions_branch_op as _text_mentions_branch_op,
 )
-from app.services.desktop_relay.messages import (
+from app.application.desktop_relay.messages import (
     _trim_branch_token as _trim_branch_token,
 )
-from app.services.desktop_relay.polling import PollingPorts, RelayTaskDelivery
-from app.services.desktop_relay.ports import (
+from app.application.desktop_relay.polling import PollingPorts, RelayTaskDelivery
+from app.application.desktop_relay.ports import (
     CompletionCall,
     ConditionalConfigUpdate,
     JsonObject,
@@ -117,9 +119,9 @@ from app.services.desktop_relay.ports import (
     WriteConfig,
     late_callback,
 )
-from app.services.desktop_relay.registration import RegistrationPorts, RelayRegistration
-from app.services.relay_gitops import GIT_OP_KINDS as GIT_OP_KINDS
-from app.services.relay_gitops import handle_git_op
+from app.application.desktop_relay.registration import RegistrationPorts, RelayRegistration
+from app.infrastructure.relay.gitops import GIT_OP_KINDS as GIT_OP_KINDS
+from app.infrastructure.relay.gitops import handle_git_op
 from app.utils.device_system.device_identity import get_stable_device_id
 from app.utils.operational_errors import RECOVERABLE_ERRORS as RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir, get_desktop_state_dir

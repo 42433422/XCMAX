@@ -7,8 +7,13 @@ from typing import Any, Protocol
 
 from fastapi import APIRouter, Depends, Request
 
-from .legacy_index import KnowledgeIndex
-from .schemas import IngestRequest, IngestResponse, QueryRequest, QueryResponse
+from app.legacy.knowledge.legacy_index import KnowledgeIndex
+from app.fastapi_routes.knowledge.schemas import (
+    IngestRequest,
+    IngestResponse,
+    QueryRequest,
+    QueryResponse,
+)
 
 
 class LegacyMirror(Protocol):

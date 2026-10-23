@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 import os
 import socket
-from contextlib import contextmanager
 from collections import deque
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple

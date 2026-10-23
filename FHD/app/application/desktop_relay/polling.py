@@ -7,8 +7,8 @@ from _thread import LockType
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from app.services.desktop_relay.messages import _BLOCKED_STATUSES, _FAILED_STATUSES
-from app.services.desktop_relay.ports import (
+from app.application.desktop_relay.messages import _BLOCKED_STATUSES, _FAILED_STATUSES
+from app.application.desktop_relay.ports import (
     ApiUrlCall,
     CompletionCall,
     ConditionalConfigUpdate,

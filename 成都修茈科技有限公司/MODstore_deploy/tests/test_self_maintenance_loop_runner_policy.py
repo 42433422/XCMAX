@@ -40,12 +40,17 @@ from modstore_server.maintenance_loop.knowledge_gate import (
     _reject_and_retry_kb_schema_failure,
 )
 from modstore_server.maintenance_loop.memory import close_loop_memory_items
-from modstore_server.maintenance_loop.merge_policy import _assess_branch_auto_merge_policy
+from modstore_server.maintenance_loop.merge_policy import (
+    _assess_branch_auto_merge_policy,
+)
 from modstore_server.maintenance_loop.outcomes import (
     _reconcile_requested_merge_feedback,
     _update_loop_memory,
 )
-from modstore_server.maintenance_loop.para_auth import _PARA_GUEST_AUTH_CACHE, _guest_auth_headers
+from modstore_server.maintenance_loop.para_auth import (
+    _PARA_GUEST_AUTH_CACHE,
+    _guest_auth_headers,
+)
 from modstore_server.maintenance_loop.prompts import (
     _code_task_text,
     _qa_task_text,
@@ -313,7 +318,9 @@ def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypat
     )
     heads = {"main": "b" * 40, "devfleet/codex/sub-1": "a" * 40}
     monkeypatch.setattr(
-        _maintenance_workspace, "_remote_branch_head", lambda _repo, branch: heads[branch]
+        _maintenance_workspace,
+        "_remote_branch_head",
+        lambda _repo, branch: heads[branch],
     )
     ledger_rows = []
     governance_rows = []
@@ -356,7 +363,9 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
     )
     heads = {"main": "b" * 40, "devfleet/codex/sub-1": "a" * 40}
     monkeypatch.setattr(
-        _maintenance_workspace, "_remote_branch_head", lambda _repo, branch: heads[branch]
+        _maintenance_workspace,
+        "_remote_branch_head",
+        lambda _repo, branch: heads[branch],
     )
     monkeypatch.setattr(
         "modstore_server.autonomy_guard_delegate.evaluate_risk",
@@ -924,7 +933,9 @@ def test_validate_remediation_branch_delivery_requires_advanced_work_branch(
         "work-advanced": "b" * 40,
     }
     monkeypatch.setattr(
-        _maintenance_workspace, "_remote_branch_head", lambda _repo, branch: heads.get(branch)
+        _maintenance_workspace,
+        "_remote_branch_head",
+        lambda _repo, branch: heads.get(branch),
     )
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/repo.git")
 
@@ -1207,7 +1218,9 @@ def test_employee_dispatch_retries_report_only_cursor_tls_failure(monkeypatch):
     ]
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_STEP_RETRIES", "2")
     monkeypatch.setattr(
-        _maintenance_para_client, "_wait_for_para_device_online", lambda: {"online": True}
+        _maintenance_para_client,
+        "_wait_for_para_device_online",
+        lambda: {"online": True},
     )
     monkeypatch.setattr(time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(
@@ -2926,19 +2939,23 @@ def test_update_loop_memory_does_not_inherit_retries_across_tasks(monkeypatch, t
     memory_path = tmp_path / "loop_memory.json"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
     loop_memory_path().write_text(
-        json.dumps({
-            "closed_items": [],
-            "open_items": [{
-                "branch": "devfleet/cursor/old",
-                "kind": "failed_steps",
-                "para_task_id": "old-task",
-                "retry_count": 3,
-                "run_id": "old-run",
-                "steps": ["code"],
-            }],
-            "recent_runs": [],
-            "run_count": 0,
-        }),
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": [
+                    {
+                        "branch": "devfleet/cursor/old",
+                        "kind": "failed_steps",
+                        "para_task_id": "old-task",
+                        "retry_count": 3,
+                        "run_id": "old-run",
+                        "steps": ["code"],
+                    }
+                ],
+                "recent_runs": [],
+                "run_count": 0,
+            }
+        ),
         encoding="utf-8",
     )
 

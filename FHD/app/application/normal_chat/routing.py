@@ -132,9 +132,7 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
     query_keywords = ("查询", "查一下", "查下", "查", "看看", "看下", "搜索", "找下", "找", "检索")
     m_model = re.search(r"(?:型号|编号)\s*(?:[:：]\s*)?([0-9A-Za-z-]{2,})", text)
     model_signal = bool(m_model)
-    m_unit_model = re.search(
-        r"(?<![^\s，,。])([^\s，,。]{2,})\s*的\s*([0-9A-Za-z-]{2,})", text
-    )
+    m_unit_model = re.search(r"(?<![^\s，,。])([^\s，,。]{2,})\s*的\s*([0-9A-Za-z-]{2,})", text)
     unit_model_signal = bool(m_unit_model)
     customer_entity_markers = ("客户", "购买单位", "买家")
     if _requires_llm_planning(text, customer_entity_markers):

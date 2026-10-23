@@ -208,8 +208,8 @@ def test_pairing_and_queue_work_without_importing_the_service_facade(tmp_path):
 
         from app.services.mobile_relay_pairing import RelayPairing
         from app.services.mobile_relay_tasks import RelayTaskQueue
-        from app.services.mobile_relay_ports import PairingPorts, TaskPorts
-        from app.services import mobile_relay_repository as repository
+        from app.application.mobile_relay_ports import PairingPorts, TaskPorts
+        from app.infrastructure.mobile_relay import repository
 
         engine = create_engine('sqlite:///' + sys.argv[1])
         sessions = sessionmaker(bind=engine, expire_on_commit=False)

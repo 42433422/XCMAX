@@ -15,8 +15,8 @@ from app.domain.user_memory.analysis import (
 from app.domain.user_memory.analysis import (
     chronological_contexts as chronological_contexts,
 )
-from app.services.user_memory.models import ActionPattern, ContextSummary, UserMemory
-from app.services.user_memory.ports import JsonObject, MemoryAccess, memory_transaction
+from app.application.user_memory.models import ActionPattern, ContextSummary, UserMemory
+from app.application.user_memory.ports import JsonObject, MemoryAccess, memory_transaction
 
 
 class ActionFactory(Protocol):

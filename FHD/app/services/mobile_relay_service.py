@@ -8,9 +8,9 @@ import secrets as secrets
 from typing import Any
 
 from app.db.session import get_db
-from app.services import mobile_relay_repository as repository
+from app.infrastructure.mobile_relay import repository
 from app.services.mobile_relay_pairing import RelayPairing
-from app.services.mobile_relay_ports import PairingPorts, TaskPorts
+from app.application.mobile_relay_ports import PairingPorts, TaskPorts
 from app.services.mobile_relay_tasks import RelayTaskQueue
 from app.services.mobile_relay_utils import _epoch_from_iso as _epoch_from_iso
 from app.services.mobile_relay_utils import _json_dumps as _json_dumps

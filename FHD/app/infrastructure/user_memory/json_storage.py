@@ -8,8 +8,8 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
 
-from app.services.user_memory.models import UserMemory
-from app.services.user_memory.ports import JsonObject
+from app.application.user_memory.models import UserMemory
+from app.application.user_memory.ports import JsonObject
 
 
 class JsonMemoryStorage:

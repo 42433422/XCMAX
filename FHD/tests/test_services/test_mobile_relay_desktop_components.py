@@ -528,8 +528,8 @@ def test_gc_leaves_symlink_entries_and_targets_intact(relay, monkeypatch, tmp_pa
 
 
 def test_config_component_atomic_failure_preserves_private_binding(monkeypatch, tmp_path):
-    from app.services.desktop_relay import configuration
-    from app.services.desktop_relay.configuration import ConfigurationPorts, RelayConfigStore
+    from app.application.desktop_relay import configuration
+    from app.application.desktop_relay.configuration import ConfigurationPorts, RelayConfigStore
 
     path = tmp_path / "private.json"
     store: RelayConfigStore
@@ -558,9 +558,9 @@ def test_config_component_atomic_failure_preserves_private_binding(monkeypatch, 
 
 
 def test_independent_executor_waits_for_correlated_result_with_fake_clock():
-    from app.services.desktop_relay import messages
-    from app.services.desktop_relay.execution import ExecutionPorts, RelayTaskExecutor
-    from app.services.desktop_relay.ports import JsonObject
+    from app.application.desktop_relay import messages
+    from app.application.desktop_relay.execution import ExecutionPorts, RelayTaskExecutor
+    from app.application.desktop_relay.ports import JsonObject
 
     class Clock:
         now = 0.0
@@ -637,7 +637,7 @@ class DenyRoot(importlib.abc.MetaPathFinder):
 
 sys.meta_path.insert(0, DenyRoot())
 for name in ('ports', 'configuration', 'registration', 'lifecycle', 'polling', 'execution', 'messages', 'cleanup'):
-    importlib.import_module('app.services.desktop_relay.' + name)
+    importlib.import_module('app.application.desktop_relay.' + name)
 """
     result = subprocess.run(
         [sys.executable, "-c", script], capture_output=True, text=True, timeout=30

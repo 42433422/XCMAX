@@ -22,28 +22,30 @@ from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failove
 from app.infrastructure.llm.modstore_response_normalize import normalize_market_chat_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS as RECOVERABLE_ERRORS
 
-from .market_llm import (
+from app.application.market_llm import (
     account_queries,
     authentication,
     catalog,
     completions,
     multimodal,
-    openai_compat,
     routing,
     streaming,
 )
-from .market_llm.authentication import _strip_bearer_prefix as _strip_bearer_prefix
-from .market_llm.catalog import _VISION_HINT_RE as _VISION_HINT_RE
-from .market_llm.catalog import _catalog_model_vision_support as _catalog_model_vision_support
-from .market_llm.openai_compat import (
+from app.legacy.market_llm import openai_compat
+from app.application.market_llm.authentication import _strip_bearer_prefix as _strip_bearer_prefix
+from app.application.market_llm.catalog import _VISION_HINT_RE as _VISION_HINT_RE
+from app.application.market_llm.catalog import (
+    _catalog_model_vision_support as _catalog_model_vision_support,
+)
+from app.legacy.market_llm.openai_compat import (
     _market_sse_payload_has_content as _market_sse_payload_has_content,
 )
-from .market_llm.openai_compat import _normalize_stream_choice as _normalize_stream_choice
-from .market_llm.openai_compat import (
+from app.legacy.market_llm.openai_compat import _normalize_stream_choice as _normalize_stream_choice
+from app.legacy.market_llm.openai_compat import (
     _platform_stream_payload_to_openai_chunk as _platform_stream_payload_to_openai_chunk,
 )
-from .market_llm.openai_compat import _to_openai_object as _to_openai_object
-from .market_llm.ports import (
+from app.legacy.market_llm.openai_compat import _to_openai_object as _to_openai_object
+from app.application.market_llm.ports import (
     ChatInput,
     CompletionPorts,
     Connection,
@@ -51,8 +53,10 @@ from .market_llm.ports import (
     ResponsePorts,
     StreamPorts,
 )
-from .market_llm.responses import _response_status_code as _status_code
-from .market_llm.responses import neuro_notify_ai_model_roundtrip as neuro_notify_ai_model_roundtrip
+from app.application.market_llm.responses import _response_status_code as _status_code
+from app.application.market_llm.responses import (
+    neuro_notify_ai_model_roundtrip as neuro_notify_ai_model_roundtrip,
+)
 
 logger = logging.getLogger(__name__)
 _httpx_sync_client = _transport.httpx_sync_client

@@ -8,7 +8,7 @@ from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from typing import Any
 
-from app.services.user_memory.models import UserMemory
+from app.application.user_memory.models import UserMemory
 
 
 @dataclass(frozen=True)

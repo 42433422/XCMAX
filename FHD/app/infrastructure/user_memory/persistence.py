@@ -9,8 +9,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from app.services.user_memory.json_storage import JsonMemoryStorage
-from app.services.user_memory.models import UserMemory
+from app.infrastructure.user_memory.json_storage import JsonMemoryStorage
+from app.application.user_memory.models import UserMemory
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 

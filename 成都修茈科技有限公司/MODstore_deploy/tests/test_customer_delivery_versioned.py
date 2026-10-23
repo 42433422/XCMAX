@@ -321,7 +321,10 @@ def test_versioned_run_reaches_quality_gate_through_real_snapshot(
         stale_cache = {
             **snapshot,
             "status": "running",
-            "artifact": {"mod_id": versioned.MOD_ID, "validation_summary": {"probe_pending": True}},
+            "artifact": {
+                "mod_id": versioned.MOD_ID,
+                "validation_summary": {"probe_pending": True},
+            },
             "verified_artifacts": [],
         }
         workbench_api.WORKBENCH_SESSIONS[sid] = stale_cache

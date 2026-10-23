@@ -315,7 +315,10 @@ def test_bundle_selects_exact_module_after_employee_wrapping(client, monkeypatch
     with get_session_factory()() as db:
         assert (
             db.query(UserMod)
-            .filter(UserMod.user_id == user.id, UserMod.mod_id.in_([first["id"], second["id"]]))
+            .filter(
+                UserMod.user_id == user.id,
+                UserMod.mod_id.in_([first["id"], second["id"]]),
+            )
             .count()
             == 0
         )
@@ -800,7 +803,10 @@ def test_failed_business_probe_returns_to_original_ticket_once(client, monkeypat
         assert len(rows) == 1
         from modstore_server.customer_delivery_failure import apply_runtime_failure
 
-        next_failure = {**failed.json()["receipt"]["record"], "generation": "next-generation"}
+        next_failure = {
+            **failed.json()["receipt"]["record"],
+            "generation": "next-generation",
+        }
         apply_runtime_failure(db, ticket, evidence, next_failure)
         assert evidence["resolution"]["state"] == "repair_failed"
         assert evidence["automatic_rework_generations"] == ["fixture-generation"]
@@ -836,7 +842,8 @@ def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client,
 
     def pending_ready():
         rows = client.get(
-            "/api/customer-service/issues/pending-runtime", params={"host_sha": "c" * 40}
+            "/api/customer-service/issues/pending-runtime",
+            params={"host_sha": "c" * 40},
         ).json()["items"]
         return next(row for row in rows if row["id"] == tid)["ready"]
 
@@ -852,7 +859,11 @@ def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client,
     reopened = decide("reopen", "装了新版还是算错", "reopen-1")
     assert reopened.status_code == 200, reopened.text
     issue = reopened.json()["issue"]
-    assert [issue["status"], issue["state"], issue["reopen_count"]] == ["processing", "reopened", 1]
+    assert [issue["status"], issue["state"], issue["reopen_count"]] == [
+        "processing",
+        "reopened",
+        1,
+    ]
     assert woken[wakes:] == [{"ticket_id": tid}] and not pending_ready()
     assert decide("reopen", "装了新版还是算错", "reopen-2").status_code == 409
     with get_session_factory()() as db:
@@ -887,14 +898,22 @@ def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client,
         assert ticket.closed_at is not None and resolution["closed_by_user_id"] == user.id
         assert resolution["verification_mode"] == "customer_decision"
         verified = (resolution["repair_verified"], resolution["repair_verified_by"])
-        assert verified == (True, "customer_decision")  # 已验证关单不能 repair_verified=false
+        assert verified == (
+            True,
+            "customer_decision",
+        )  # 已验证关单不能 repair_verified=false
         assert resolution["handled_by"] == ["fix", "scout", "verify"]
         audits = {  # 客户接口发起的操作记成客户本人，不记成 AI 代办（#2388）
             row.event_type: (row.actor_type, row.actor_user_id)
             for row in db.query(CustomerServiceAuditLog).filter_by(ticket_id=tid).all()
         }
         assert {
-            audits[k] for k in ("customer_issue_reopen", "customer_issue_resolved", "issue_intake")
+            audits[k]
+            for k in (
+                "customer_issue_reopen",
+                "customer_issue_resolved",
+                "issue_intake",
+            )
         } == {("user", user.id)}
     stranger = _make_user("decision_stranger")
     monkeypatch.setitem(app.dependency_overrides, get_current_user, lambda: stranger)
@@ -914,11 +933,21 @@ def test_dispatch_action_matches_role_results_and_records_redispatch(client, mon
     def run(task, ok, roles="scout fix verify", status="failed", executor="incident_team"):
         out = {"handler": "para_delegate", "task_id": task, "tool_name": executor}
         team = [
-            {"role": r, "ok": ok, "status": status, "handler_outputs": {"outputs": [out]}}
+            {
+                "role": r,
+                "ok": ok,
+                "status": status,
+                "handler_outputs": {"outputs": [out]},
+            }
             for r in roles.split()
         ]
         apply_customer_ticket_incident_progress(
-            db, ticket_id=tid, event_id=7, team_ok=True, team_rows=team, executor=executor
+            db,
+            ticket_id=tid,
+            event_id=7,
+            team_ok=True,
+            team_rows=team,
+            executor=executor,
         )
 
     with (

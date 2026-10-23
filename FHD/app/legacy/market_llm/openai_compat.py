@@ -8,7 +8,7 @@ from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any, Dict
 
-from .ports import Messages, OpenAIPorts, Payload
+from app.application.market_llm.ports import Messages, OpenAIPorts, Payload
 
 
 def _to_openai_object(value: Any) -> Any:

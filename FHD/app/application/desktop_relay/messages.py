@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.services.relay_gitops import GIT_OP_KINDS
+from app.infrastructure.relay.gitops import GIT_OP_KINDS
 
 _BRANCH_TOKEN_RE = re.compile("[A-Za-z0-9][A-Za-z0-9._/-]{0,179}")
 

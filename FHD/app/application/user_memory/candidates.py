@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Any
 
-from app.services.user_memory.models import UserMemory
-from app.services.user_memory.ports import (
+from app.application.user_memory.models import UserMemory
+from app.application.user_memory.ports import (
     CandidateGovernance,
     CandidateProposal,
     JsonObject,
@@ -16,7 +16,7 @@ from app.services.user_memory.ports import (
     MemoryStatusUpdate,
     memory_transaction,
 )
-from app.services.user_memory.preferences import sync_preference_projection
+from app.application.user_memory.preferences import sync_preference_projection
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,7 @@ from typing import Any, cast
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 
-from app.services.mobile_relay_ports import TaskPorts
+from app.application.mobile_relay_ports import TaskPorts
 from app.services.mobile_relay_utils import _json_dumps, _row_dict, _utc_now
 
 

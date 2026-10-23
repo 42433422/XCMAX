@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.domain.user_memory.analysis import memory_summary
-from app.services.user_memory.ports import (
+from app.application.user_memory.ports import (
     MemoryAccess,
     MemoryListing,
 )

@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.services.user_memory.models import UserMemory
-from app.services.user_memory.ports import (
+from app.application.user_memory.models import UserMemory
+from app.application.user_memory.ports import (
     JsonObject,
     MemoryAccess,
     PreferenceLookup,

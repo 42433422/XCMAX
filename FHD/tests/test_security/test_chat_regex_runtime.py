@@ -35,7 +35,7 @@ with patch('app.application.llm_intent_gate.llm_route_message', return_value=Non
         assert route_normal_mode_message(message)['intent'] == 'unknown'
     else:
         with patch('app.application.workflow.planner.get_ai_conversation_service'), patch(
-            'app.application.workflow.planner_llmworkflowplanner_mixin02._route_by_intent_service',
+            'app.application.workflow.deterministic_planning._route_by_intent_service',
             return_value=None,
         ):
             plan = LLMWorkflowPlanner()._fallback_plan('synthetic-redos', message, {'products': {}})

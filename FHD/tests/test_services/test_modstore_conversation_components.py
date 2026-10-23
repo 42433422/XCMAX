@@ -453,11 +453,11 @@ def test_capabilities_import_without_importing_public_adapter():
         [
             sys.executable,
             "-c",
-            "import importlib, sys; prefix='app.services.conversation.'; "
+            "import importlib, sys; prefix='app.application.'; "
             "[importlib.import_module(prefix+'market_llm.'+name) for name in "
             "('ports','authentication','catalog','multimodal','responses','routing',"
-            "'completions','streaming','account_queries','openai_compat')]; "
-            "assert prefix+'modstore_adapter' not in sys.modules",
+            "'completions','streaming','account_queries')]; "
+            "importlib.import_module('app.legacy.market_llm.openai_compat'); assert 'app.services.conversation.modstore_adapter' not in sys.modules",
         ],
         cwd=Path(__file__).resolve().parents[2],
         capture_output=True,

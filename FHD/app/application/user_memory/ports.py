@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar
 
-from app.services.user_memory.models import UserMemory
+from app.application.user_memory.models import UserMemory
 
 JsonObject = dict[str, Any]
 _Params = ParamSpec("_Params")

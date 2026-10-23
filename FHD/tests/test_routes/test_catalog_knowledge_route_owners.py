@@ -34,7 +34,7 @@ def test_owner_modules_cold_import_without_starting_either_root(tmp_path: Path) 
         "mod_store.install_routes",
         "mod_store.workbench_routes",
         "mod_store.lifecycle_routes",
-        "knowledge.legacy_routes",
+        "app.legacy.knowledge.legacy_routes",
         "knowledge.document_routes",
         "knowledge.view_routes",
         "knowledge.memory_routes",

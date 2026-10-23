@@ -1324,7 +1324,9 @@ def test_admin_reply_preserves_ticket_and_original_customer_session(client):
         )
 
 
-def test_admin_customer_ticket_intent_and_status_filters_preserve_customer_scope(client):
+def test_admin_customer_ticket_intent_and_status_filters_preserve_customer_scope(
+    client,
+):
     customer, other_customer, admin = (
         _make_user("filter_customer"),
         _make_user("filter_other_customer"),
@@ -1362,7 +1364,11 @@ def test_admin_customer_ticket_intent_and_status_filters_preserve_customer_scope
     with _as_user(admin):
         filtered = client.get(
             "/api/customer-service/tickets",
-            params={"search": marker, "intent": "product_issue", "status": "processing"},
+            params={
+                "search": marker,
+                "intent": "product_issue",
+                "status": "processing",
+            },
         ).json()
         assert filtered["total"] == 1
         assert filtered["items"][0]["id"] == admin_id

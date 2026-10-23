@@ -43,7 +43,9 @@ class WorkbenchSessions:
         session_id = session_id or uuid.uuid4().hex[:24]
         source_scope = None
         if delivery_context:
-            from modstore_server.customer_delivery_sources import create_private_source_scope
+            from modstore_server.customer_delivery_sources import (
+                create_private_source_scope,
+            )
 
             source_scope = create_private_source_scope(
                 int(user_id), session_id, int(delivery_context["ticket_id"])
@@ -60,7 +62,8 @@ class WorkbenchSessions:
                     and (session_id not in self.active_inline_sessions)
                 ):
                     existing.update(
-                        status="error", error="生产进程已中断，请在原工单返工；未重复执行旧任务"
+                        status="error",
+                        error="生产进程已中断，请在原工单返工；未重复执行旧任务",
                     )
                     self.store.persist(session_id)
                 return {
@@ -126,7 +129,10 @@ class WorkbenchSessions:
                         prepare_private_artifact,
                         int(delivery_context["ticket_id"]),
                         user_id,
-                        {**delivery_context["evidence"], "delivery_generation": session_id},
+                        {
+                            **delivery_context["evidence"],
+                            "delivery_generation": session_id,
+                        },
                         snapshot,
                         artifact_kind=kind,
                     )
@@ -145,13 +151,27 @@ class WorkbenchSessions:
 
     async def snapshot(self, session_id: str, user_id: int) -> dict[str, Any] | None:
         async with self.store.lock:
-            self.store.hydrate(session_id)
-            session = self.store.data.get(session_id)
-        if not session or int(session.get("user_id") or 0) != int(user_id):
+            session = self.store.load(session_id)
+            if session is None:
+                session = self.store.data.get(session_id)
+                if session and session.get("delivery_source_mode") == "versioned_main":
+                    return None
+                if session is None:
+                    self.store.hydrate(session_id)
+                    session = self.store.data.get(session_id)
+        if (
+            not session
+            or session.get("id") != session_id
+            or int(session.get("user_id") or 0) != int(user_id)
+        ):
             return None
         script_result = session.get("script_result") or {}
         return {
             "id": session["id"],
+            "user_id": int(session["user_id"]),
+            "ticket_id": session.get("ticket_id"),
+            "delivery_source_mode": session.get("delivery_source_mode"),
+            "delivery_runtime_identity": session.get("delivery_runtime_identity"),
             "intent": _canonical_workbench_intent(str(session.get("intent") or "")),
             "status": session["status"],
             "steps": session["steps"],

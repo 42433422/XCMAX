@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from app.services.desktop_relay.ports import (
+from app.application.desktop_relay.ports import (
     PollBackoffCall,
     ReadConfig,
     StopSignal,
