@@ -21,11 +21,99 @@ _REPORT_RE = re.compile(
 _EXPLICIT_INTAKE_RE = re.compile(
     r"(提交|上报|反馈|建|创).{0,24}(产品|软件|功能|缺陷).{0,12}(问题|工单|故障|缺陷)"
 )
+_PLAIN_INTAKE_RE = re.compile(
+    r"(?:提交|上报|反馈|建立?|创建|提|登记|报|记)(?:一?[个张条项]|一下)?(?:客服|问题|反馈)?工单"
+    r"|(?:刚才|刚|上面|这个|这项|那个).{0,12}(?:记|登记)一?单"
+    r"|(?:也给我|也帮我)开一张(?:吧|[。！!\s])*$"
+)
+_SOFTWARE_CONTEXT_RE = re.compile(
+    r"软件|页面|界面|后台|客户端|桌面|功能|模块|交付中心|每日摘要|客服|菜单|侧栏|样式|显示|跨端|审计|自动化|审批|看板|图谱|管理端|市场总览"
+)
 _IMAGE_DATA_URL = re.compile(r"(?i)^data:image/[\w.+-]+;base64,")
 
 
 def looks_like_issue_report(message: str) -> bool:
-    return bool(_REPORT_RE.search(str(message or "")))
+    return not _manufacturing_intake(message) and bool(
+        _REPORT_RE.search(str(message or "")) or _plain_intake_match(message)
+    )
+
+
+def _manufacturing_intake(message: str) -> bool:
+    return bool(re.search(r"生产|制造|车间|排产|加工|装配", message or "")) and not bool(
+        re.search(r"软件|页面|界面|后台|客户端|菜单|侧栏|样式|显示|图谱|看板|列表", message or "")
+    )
+
+
+def _plain_intake_match(message: str):
+    # Manufacturing work orders remain business actions, even with a generic title.
+    if _manufacturing_intake(message):
+        return None
+    match = _PLAIN_INTAKE_RE.search(message or "")
+    # Asking how to submit is a usage question, not consent to create a ticket.
+    if match and not re.search(
+        r"(?:怎么|如何|哪里|在哪|能否|能不能|不要|不用|别|无需|不必|不想|暂不|不是要|已经|已)[^。！？\n]{0,12}$",
+        message[: match.start()],
+    ):
+        return match
+    return None
+
+
+def _bare_intake(message: str) -> bool:
+    remainder = _PLAIN_INTAKE_RE.sub("", message)
+    for prefix in (
+        "我要",
+        "我想",
+        "请",
+        "麻烦",
+        "帮我",
+        "给我",
+        "替我",
+        "把",
+        "按",
+        "就",
+        "刚才",
+        "刚",
+        "说的",
+        "上面",
+        "上述",
+        "这个",
+        "这项",
+        "那个",
+        "那项",
+        "问题",
+        "反馈",
+        "的",
+    ):
+        remainder = remainder.replace(prefix, "")
+    return not re.sub(r"[\s，。！？：；,.!?;:]", "", remainder)
+
+
+def report_message_with_context(message: str, context: dict[str, Any]) -> str:
+    """Use only this request's recent customer words for a bare follow-up request."""
+    if not _plain_intake_match(message) or not _bare_intake(message):
+        return message
+    recent = context.get("recent_messages")
+    for item in reversed(recent[-6:] if isinstance(recent, list) else []):
+        if not isinstance(item, dict):
+            continue
+        if any(
+            item.get(key) is not None and str(item[key]) != str(context.get(key) or "")
+            for key in ("conversation_id", "session_id", "actor_id", "local_user_id")
+        ):
+            continue
+        content = str(item.get("content") or "").strip()[:3000]
+        if item.get("role") == "assistant" and re.search(
+            r"(?:工单.*已(?:受理|登记)|已(?:受理|登记).*工单)", content
+        ):
+            break
+        if item.get("role") != "user" or not content or content == message.strip():
+            continue
+        if not (_plain_intake_match(content) or _manufacturing_intake(content)) and (
+            _REPORT_RE.search(content) or _SOFTWARE_CONTEXT_RE.search(content)
+        ):
+            return f"此前客户说明：{content}\n本轮客户要求：{message}"
+        break
+    return message
 
 
 def _attached_screenshots(attachments: Any) -> list[bytes]:
@@ -43,19 +131,23 @@ def _attached_screenshots(attachments: Any) -> list[bytes]:
 
 def classify_explicit_report(message: str) -> dict[str, Any] | None:
     """Recognize an explicit defect report without requiring a model or credentials."""
+    if _manufacturing_intake(message):
+        return None
     fields = dict.fromkeys(("expected", "actual"), "")
     for key in fields:
         label = "期望(?:结果|行为)?" if key == "expected" else "实际(?:结果|表现|行为)?"
         if match := re.search(label + "[：:]", message):
             value = message[match.end() :].lstrip()
             fields[key] = re.split(r"[。；;\n]", value, maxsplit=1)[0][:1000]
-    explicit = bool(_EXPLICIT_INTAKE_RE.search(message or ""))
-    if _REPORT_RE.search(message) and (explicit or all(fields.values())):
+    plain = _plain_intake_match(message)
+    explicit = bool(_EXPLICIT_INTAKE_RE.search(message or "") or plain)
+    if explicit or (_REPORT_RE.search(message) and all(fields.values())):
         return {
             "type": "product_defect",
             "confidence": 0.95 if explicit else 0.9,
             **fields,
-            "missing_evidence": [f"{key}_behavior" for key, value in fields.items() if not value],
+            "missing_evidence": (["issue_description"] if plain and _bare_intake(message) else [])
+            + [f"{key}_behavior" for key, value in fields.items() if not value],
         }
     return None
 
@@ -83,7 +175,10 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
                 {
                     "role": "user",
                     "content": json.dumps(
-                        {"customer": str(message)[:8000], "assistant": str(assistant_reply)[:8000]},
+                        {
+                            "customer": str(message)[:8000],
+                            "assistant": str(assistant_reply)[:8000],
+                        },
                         ensure_ascii=False,
                     ),
                 },
@@ -124,7 +219,9 @@ async def submit_product_issue(
     from app.application.desktop_delivery_receipt import desktop_installation_id
     from app.build_identity import build_identity
     from app.desktop_runtime.support_bundle import build_evidence_ref
-    from app.fastapi_routes.private_mod_delivery_context import _private_delivery_market_token
+    from app.fastapi_routes.private_mod_delivery_context import (
+        _private_delivery_market_token,
+    )
 
     evidence = build_evidence_ref(screenshots=_attached_screenshots(attachments))
     if not evidence:
@@ -135,7 +232,10 @@ async def submit_product_issue(
     except OSError:
         return {"state": "NEEDS_MORE_EVIDENCE", "missing_evidence": ["support_bundle"]}
     if len(bundle) > 256_000 or hashlib.sha256(bundle).hexdigest() != evidence.get("sha256"):
-        return {"state": "NEEDS_MORE_EVIDENCE", "missing_evidence": ["valid_support_bundle"]}
+        return {
+            "state": "NEEDS_MORE_EVIDENCE",
+            "missing_evidence": ["valid_support_bundle"],
+        }
     scope = f"tenant:{int(tenant_id or 0)}"
     digest = hashlib.sha256(
         json.dumps([scope, customer_message.strip()], ensure_ascii=False).encode()
@@ -234,7 +334,9 @@ async def _receive_pending_report(
     request: Any, tenant_id: int | None, message: str, missing: list[str]
 ) -> dict[str, Any]:
     """Use normal authenticated intake without inventing Work Order evidence."""
-    from app.fastapi_routes.private_mod_delivery_context import _private_delivery_market_token
+    from app.fastapi_routes.private_mod_delivery_context import (
+        _private_delivery_market_token,
+    )
 
     token = await _private_delivery_market_token(request)
     if not token:

@@ -31,7 +31,12 @@ def intake_env(tmp_path, monkeypatch):
     path = tmp_path / "support.zip"
     path.write_bytes(raw)
     sha = hashlib.sha256(raw).hexdigest()
-    evidence = {"kind": "support_bundle", "path": str(path), "sha256": sha, "bytes": len(raw)}
+    evidence = {
+        "kind": "support_bundle",
+        "path": str(path),
+        "sha256": sha,
+        "bytes": len(raw),
+    }
     monkeypatch.setattr(support_bundle, "build_evidence_ref", lambda **_: evidence)
 
     async def _token(_request):
@@ -125,7 +130,9 @@ def test_product_issue_routes_one_work_order_and_support_bundle(intake_env, monk
 
     monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
     result = _submit_issue(
-        customer_message="按钮没反应，保存操作失败", actual="按钮没有响应", confidence=0.94
+        customer_message="按钮没反应，保存操作失败",
+        actual="按钮没有响应",
+        confidence=0.94,
     )
     assert result == {
         "state": "ROUTED",
@@ -181,7 +188,10 @@ def test_screenshots_attached_to_the_report_reach_the_support_bundle(intake_env,
     monkeypatch.setattr(support_bundle, "build_evidence_ref", evidence)
     monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
     attachments = [
-        {"kind": "image", "data_url": "data:image/png;base64," + base64.b64encode(b"png").decode()},
+        {
+            "kind": "image",
+            "data_url": "data:image/png;base64," + base64.b64encode(b"png").decode(),
+        },
         {"kind": "pdf", "data_url": "data:application/pdf;base64,JVBERi0="},
         {"kind": "image", "data_url": "data:image/png;base64,@@@"},
         "not-a-row",
@@ -235,7 +245,11 @@ def test_repeat_report_reuses_existing_ticket_when_market_refuses_replay(intake_
             raise RuntimeError("相同需求标识已绑定其他内容，请使用新的 source_ref")
         return {
             "items": [
-                {"id": 7, "ticket_no": "CI-existing", "evidence": {"source_ref": "WO-other"}},
+                {
+                    "id": 7,
+                    "ticket_no": "CI-existing",
+                    "evidence": {"source_ref": "WO-other"},
+                },
                 {
                     "id": 12,
                     "ticket_no": "CI6412760e",
@@ -339,7 +353,10 @@ def test_explicit_report_does_not_initialize_llm(intake_env, monkeypatch, comple
     else:
         assert result["state"] == "RECEIVED"
         assert result["owner_ticket_no"] == "CI-synthetic"
-        assert set(result["missing_evidence"]) == {"expected_behavior", "actual_behavior"}
+        assert set(result["missing_evidence"]) == {
+            "expected_behavior",
+            "actual_behavior",
+        }
         assert [entry[0] for entry in calls] == ["/api/customer-service/issues/intake"]
         assert not calls[0][2].get("work_order_id")
         assert message in calls[0][2]["description"]
@@ -394,3 +411,161 @@ def test_model_free_report_still_requires_authenticated_formal_receipt(
     else:
         assert sum(method == "POST" for _, method in calls) == (2 if complete else 1)
         assert calls[-1][1] == "GET"
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "帮我提个工单：生产员工页面看不清当前阶段，想显示清楚。",
+        "帮我建个工单：交付流程那一块不好看，不容易看懂。",
+        "帮我建个工单：客户资料页面的字体想放大一些。",
+        "帮我建个工单：各个页面的样式不太统一，我想把整站风格统一一下。",
+        "请给客服记个工单：后台侧栏别重复放自动化方针。",
+    ],
+)
+def test_plain_support_request_is_received_before_model_or_business_query(
+    intake_env, monkeypatch, message
+):
+    from unittest.mock import Mock
+
+    from app.application import client_product_issue_intake as intake
+    from app.fastapi_routes import xcagi_compat_chat_stream as stream
+
+    model = Mock(side_effect=AssertionError("software feedback must not need a model"))
+    monkeypatch.setattr(stream._facade(), "create_modstore_openai_client_from_request", model)
+    calls = []
+
+    async def remote(token, route, *, method="GET", payload=None):
+        calls.append((route, payload))
+        return {"success": True, "ticket_id": 48, "ticket_no": "CI-synthetic-48"}
+
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    receipt = asyncio.run(
+        stream._classify_and_submit_client_issue_async(object(), {"tenant_id": 29}, message, "")
+    )
+    assert receipt["state"] == "RECEIVED"
+    assert receipt["owner_ticket_no"] == "CI-synthetic-48"
+    assert set(receipt["missing_evidence"]) == {"expected_behavior", "actual_behavior"}
+    assert calls == [
+        (
+            "/api/customer-service/issues/intake",
+            {
+                "source": "customer_feedback",
+                "source_ref": calls[0][1]["source_ref"],
+                "title": f"客户端产品问题 · {message}",
+                "description": f"客户原话：{message}",
+                "issue_domain": "platform",
+                "acceptance_criteria": "在原工单补充期望、实际与诊断证据后复现验证。",
+            },
+        )
+    ]
+    model.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "怎么提交工单？",
+        "请问如何建个工单？",
+        "不要帮我建工单。",
+        "帮我建个生产工单，明天生产100件铝件。",
+        "帮我建个工单：生产100件包装盒。",
+        "帮我建个工单：生产100件包装盒，需要走审批。",
+        "帮我建个工单：包装车间制造一批纸箱。",
+        "帮我建个工单：加工100件物料，生产订单需要排产。",
+        "已经建个工单了，帮我查看一下。",
+        "不是要建工单，只想知道怎么用。",
+        "查询客户的生产工单。",
+    ],
+)
+def test_support_intake_does_not_swallow_usage_negation_or_production(message):
+    from app.application.client_product_issue_intake import classify_explicit_report
+
+    assert not looks_like_issue_report(message)
+    assert classify_explicit_report(message) is None
+
+
+@pytest.mark.parametrize(
+    "followup",
+    [
+        "我要建个工单。",
+        "刚说的这个记一单。",
+        "按上面说的建一个工单。",
+        "也给我开一张吧。",
+        "刚才说的这个问题帮我提个工单。",
+    ],
+)
+@pytest.mark.parametrize(
+    "prior",
+    [
+        "我想先聊聊每日摘要。现在反馈是它像一堆运维日志，我更想看懂今天做了什么、还有什么要处理。",
+        "刚才想反馈的是自治建议的看板，有遮挡或者错位的情况需要再复现看看。",
+        "管理端有没有市场总览、入口在哪里、内容齐不齐，这件事我还没确认，想查清楚。",
+        "工单里谁是管理员、谁是客户，以及分给哪个管理员，显示和筛选还要核实一下，现在部分页面有身份字段，但我不确定整体做好没有。",
+    ],
+)
+def test_bare_intake_inherits_only_current_conversation_customer_context(
+    intake_env, monkeypatch, followup, prior
+):
+    from app.application import client_product_issue_intake as intake
+    from app.fastapi_routes import xcagi_compat_chat_stream as stream
+
+    bodies = []
+
+    async def remote(token, route, *, method="GET", payload=None):
+        bodies.append(payload)
+        return {"success": True, "ticket_id": 50, "ticket_no": "CI-synthetic-50"}
+
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    context = {
+        "tenant_id": 29,
+        "conversation_id": "original-chat",
+        "recent_messages": [
+            {"role": "user", "content": prior},
+            {"role": "assistant", "content": "处理失败：达到最大迭代次数"},
+            {"role": "user", "content": followup},
+        ],
+    }
+    receipt = asyncio.run(
+        stream._classify_and_submit_client_issue_async(object(), context, followup, "")
+    )
+    assert receipt["state"] == "RECEIVED" and receipt["owner_ticket_id"] == 50
+    assert prior in bodies[0]["description"] and followup in bodies[0]["description"]
+    assert "最大迭代" not in bodies[0]["description"]
+    assert "work_order_id" not in bodies[0]
+
+
+@pytest.mark.parametrize(
+    "recent",
+    [
+        [],
+        [{"role": "assistant", "content": "软件页面报错"}],
+        [{"role": "user", "content": "明天生产100件铝件。"}],
+        [{"role": "user", "content": "明天生产100件铝件，需要走审批。"}],
+        [{"role": "user", "content": "软件页面报错", "conversation_id": "other-conversation"}],
+        [{"role": "user", "content": "软件页面报错", "actor_id": 88}],
+        [
+            {"role": "user", "content": "后台页面太乱。"},
+            {"role": "assistant", "content": "产品问题已受理，市场工单：CI-existing。"},
+        ],
+    ],
+)
+def test_bare_intake_without_unhandled_customer_subject_asks_without_writing(monkeypatch, recent):
+    from unittest.mock import Mock
+
+    from app.application import client_product_issue_intake as intake
+    from app.fastapi_routes import xcagi_compat_chat_stream as stream
+
+    remote = Mock(side_effect=AssertionError("no duplicate or topic-free intake"))
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    receipt = asyncio.run(
+        stream._classify_and_submit_client_issue_async(
+            object(), {"recent_messages": recent}, "我要建个工单。", ""
+        )
+    )
+    assert receipt == {
+        "state": "NEEDS_MORE_EVIDENCE",
+        "missing_evidence": ["issue_description"],
+    }
+    assert "不用固定格式" in stream._client_issue_reply(receipt)
+    remote.assert_not_called()

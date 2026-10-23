@@ -11,6 +11,9 @@ const {
   readPlannerSseResponse,
   requestChatByModeWithTimeout,
   refreshHistorySessions,
+  syncAgentRunFromPayload,
+  attachApprovalCardToLastAiMessage,
+  attachAgentRunTraceToLastAiMessage,
 } = vi.hoisted(() => ({
   handleChatRequiresToken: vi.fn(),
   applyPlainTextToMessageIndex: vi.fn(),
@@ -20,6 +23,9 @@ const {
   readPlannerSseResponse: vi.fn(),
   requestChatByModeWithTimeout: vi.fn(),
   refreshHistorySessions: vi.fn().mockResolvedValue(undefined),
+  syncAgentRunFromPayload: vi.fn().mockResolvedValue(undefined),
+  attachApprovalCardToLastAiMessage: vi.fn(),
+  attachAgentRunTraceToLastAiMessage: vi.fn(),
 }))
 
 vi.mock('./useChatMessages', async () => {
@@ -178,10 +184,14 @@ vi.mock('./useChatResponseAttach', () => ({
     attachThinkingStepsToLastAiMessage: vi.fn(),
     attachTodoStepsToLastAiMessage: vi.fn(),
     attachWorkflowTraceToLastAiMessage: vi.fn(),
-    attachApprovalCardToLastAiMessage: vi.fn(),
+    attachApprovalCardToLastAiMessage,
+    attachAgentRunTraceToLastAiMessage,
     attachContextSummaryToLastAiMessage: vi.fn(),
     syncTaskFromChatResponse: vi.fn(),
   }),
+}))
+vi.mock('./useAgentRunEvents', () => ({
+  useAgentRunEventSync: () => ({ syncAgentRunFromPayload }),
 }))
 vi.mock('./useChatSessionHistory', () => ({
   useChatSessionHistory: () => ({
@@ -229,6 +239,7 @@ describe('useChatOrchestration stream', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     vi.clearAllMocks()
+    syncAgentRunFromPayload.mockResolvedValue(undefined)
     pushStreamingAiShell.mockReturnValue(0)
     sendChatStream.mockResolvedValue({ ok: true, body: {} })
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
@@ -292,6 +303,51 @@ describe('useChatOrchestration stream', () => {
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => onEvent({ type: 'error', message: '模型不可用' }))
     await useChatOrchestration({ sessionId: ref('s') }).sendMessage('hello')
     expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('处理失败'))
+  })
+
+  it.each(['pending', 'rejected'])('unlocks a real SSE iteration failure while run tracking is %s', async state => {
+    syncAgentRunFromPayload.mockImplementation(() => state === 'pending' ? new Promise<void>(() => {}) : Promise.reject(new Error('tracking unavailable')))
+    syncAgentRunFromPayload.mockResolvedValueOnce(undefined)
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'tool_progress', run_id: 'run_iterations' })
+      onEvent({ type: 'error', message: '对话达到最大迭代次数，未完成。' })
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    let sendError: unknown
+    const sending = api.sendMessage('先聊聊每日摘要').catch(error => { sendError = error })
+    await vi.waitFor(() => {
+      expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, '处理失败：对话达到最大迭代次数，未完成。')
+      expect(api.isLoading.value).toBe(false)
+      expect(api.isStreamingReply.value).toBe(false)
+    }, { timeout: 1000 })
+    await sending
+    expect(sendError).toBeUndefined()
+    expect(syncAgentRunFromPayload).toHaveBeenCalledWith({ run_id: 'run_iterations' }, '先聊聊每日摘要')
+  })
+
+  it.each([false, true])('shows approval before tracking resolves and guards a later reply: %s', async laterReply => {
+    let finishTracking!: () => void
+    syncAgentRunFromPayload.mockImplementation(() => new Promise<void>(resolve => { finishTracking = resolve }))
+    const payload = { response: '等待确认', data: { action: 'approval_pending', data: { approval_request_ids: ['approval-1'] } } }
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => onEvent({ type: 'done', result: payload }))
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    const sending = api.sendMessage('读取已登记应用')
+    await vi.waitFor(() => {
+      expect(attachApprovalCardToLastAiMessage).toHaveBeenCalledWith(payload)
+      expect(api.isLoading.value).toBe(false)
+    }, { timeout: 1000 })
+    await sending
+    if (laterReply) api.messages.value.push({ role: 'ai', content: '下一轮回复', time: 'later' })
+    finishTracking()
+    await Promise.resolve()
+    expect(attachAgentRunTraceToLastAiMessage).toHaveBeenCalledTimes(laterReply ? 0 : 1)
+    expect(syncAgentRunFromPayload).toHaveBeenCalledWith(payload, '读取已登记应用')
+  })
+
+  it('retains the run id carried only by a terminal error', async () => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => onEvent({ type: 'error', run_id: 'run_terminal', message: '未完成' }))
+    await useChatOrchestration({ sessionId: ref('s') }).sendMessage('先聊聊每日摘要')
+    expect(syncAgentRunFromPayload).toHaveBeenCalledWith({ run_id: 'run_terminal' }, '先聊聊每日摘要')
   })
 
 })

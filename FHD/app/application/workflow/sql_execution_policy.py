@@ -57,7 +57,11 @@ def _backup_filename(request: str) -> str | None:
 
 
 def database_maintenance_request(message: str) -> tuple[str, str] | None:
-    command = r"^\s*(?:(?:请|麻烦|你|帮我|现在|先|只|立即)\s*)*(恢复|还原|备份)(?:一次)?数据库"
+    command = (
+        r"^\s*(?:(?:请|麻烦|你|帮我|现在|先|只|立即)\s*)*"
+        r"(?:(恢复|还原|备份)(?:一次)?(?:本机|本地)?数据库"
+        r"|(?:创建|生成|做)(?:一次|一份)?(?:本机|本地)?数据库备份)"
+    )
     match = re.match(command, message)
     if not match:
         return None
@@ -67,7 +71,7 @@ def database_maintenance_request(message: str) -> tuple[str, str] | None:
     diagnostic = r"失败|报错|卡住|异常|排查|诊断"
     if re.search(question, request) or re.search(diagnostic, request):
         return None
-    return ("backup_database" if match[1] == "备份" else "restore_database", request)
+    return ("restore_database" if match[1] in {"恢复", "还原"} else "backup_database", request)
 
 
 def database_maintenance_plan(

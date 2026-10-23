@@ -10,7 +10,6 @@ export const ADMIN_OPERATOR_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'customer-service-tickets', name: '客服工单 · 客户反馈', iconClass: 'fa-comments' },
   { key: 'delivery-center', name: '客户交付中心', iconClass: 'fa-truck' },
   { key: 'founder-autonomy', name: '创始人状态', iconClass: 'fa-compass' },
-  { key: 'automation-policy', name: '自动化方针', iconClass: 'fa-random' },
   { key: 'server-functions', name: '服务器功能模块', iconClass: 'fa-server' },
   { key: 'approval-hub', name: '自治审批中心', iconClass: 'fa-check-square-o' },
   { key: 'employee-autonomy', name: '员工自治', iconClass: 'fa-users' },
@@ -67,6 +66,7 @@ export function isAdminOperatorNavContext(
 /** 管理员可访问的路由 name */
 export const ADMIN_OPERATOR_ROUTE_NAMES = new Set([
   ...ADMIN_OPERATOR_MENU_ITEMS.map((m) => m.key),
+  'automation-policy',
   'autonomy-approval-hub',
   'employee-autonomy',
   ...ADMIN_OPERATOR_VISIBLE_CORE_KEYS,

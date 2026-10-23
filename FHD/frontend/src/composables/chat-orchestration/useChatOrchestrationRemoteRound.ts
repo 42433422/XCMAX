@@ -284,6 +284,15 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const controller = new AbortController()
       let killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
       const msgIndex = pushStreamingAiShell()
+      const streamMessage = messages.value[msgIndex]
+      const syncStreamRun = (payload: unknown, attachTrace = false) => {
+        void syncAgentRunFromPayload(payload, primaryText).then(() => {
+          if (attachTrace && round.isActive() && messages.value[msgIndex] === streamMessage
+            && !messages.value.slice(msgIndex + 1).some(message => message?.role === 'ai')) {
+            attachAgentRunTraceToLastAiMessage()
+          }
+        }).catch(() => undefined)
+      }
       let streamPlain = ''
       let doneResult: unknown = null
       let sseError: string | null = null
@@ -335,7 +344,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           if (ev.type === 'tool_progress') {
             streamRunId = ev.run_id || streamRunId
             setLoadingProgress(ev.label || '正在执行任务…', requestScope.sessionId)
-            if (streamRunId) void syncAgentRunFromPayload({ run_id: streamRunId }, primaryText)
+            if (streamRunId) syncStreamRun({ run_id: streamRunId })
           } else if (ev.type === 'token') {
             streamPlain += ev.text || ''
             if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, streamPlain)
@@ -344,6 +353,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           } else if (ev.type === 'done') {
             doneResult = ev.result
           } else if (ev.type === 'error') {
+            streamRunId = ev.run_id || streamRunId
             sseError = String(ev.message || '流式接口错误')
           } else if (ev.type === 'requires_token') {
             const tokenName = ev.token_name || ''
@@ -382,8 +392,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         if (!round.isActive()) return
         const wrap: ChatPlannerPayload = doneResult && typeof doneResult === 'object' ? donePayload : { success: true, response: finalText }
         syncTaskFromChatResponse(wrap, primaryText)
-        await syncAgentRunFromPayload(wrap, primaryText)
-        attachAgentRunTraceToLastAiMessage()
+        syncStreamRun(wrap, true)
         consumeStateUpdates(wrap)
         attachContextSummaryToLastAiMessage()
         attachThinkingStepsToLastAiMessage(wrap)
@@ -414,8 +423,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               ? '对话连接已超时，任务可能仍在执行。请到任务工作区核对结果，勿重复提交。'
               : `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')
-        if (streamRunId) await syncAgentRunFromPayload({ run_id: streamRunId }, primaryText)
         if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, timedOut && streamRunId ? errText : `处理失败：${errText}`)
+        if (streamRunId) syncStreamRun({ run_id: streamRunId })
       } finally {
         round.setStreaming(false)
         window.clearTimeout(killTimer)
