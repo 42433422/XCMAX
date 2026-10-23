@@ -55,9 +55,16 @@ export function ticketStatusBadge(ticket: Row): Badge {
 }
 
 const RUN_STATUS: LabelMap = {
-  pending: ['待执行', 'neutral'], queued: ['排队中', 'neutral'], running: ['执行中', 'info'],
+  planned: ['待执行', 'neutral'], pending: ['待执行', 'neutral'], queued: ['排队中', 'neutral'], running: ['执行中', 'info'],
+  processing: ['处理中', 'info'], in_progress: ['处理中', 'info'], dispatching: ['派单中', 'info'],
+  accepted: ['已接单待结果', 'info'], reconciling: ['结果待对账', 'warning'], manual_review: ['待人工核对', 'warning'],
+  skipped_fix_unfinished: ['等待修复完成', 'neutral'], verification_invalidated: ['等待重新验证', 'neutral'],
   completed: ['已完成', 'success'], succeeded: ['成功', 'success'], success: ['成功', 'success'], ok: ['成功', 'success'],
+  para_task_completed: ['任务完成', 'success'], para_task_merged: ['任务已合入', 'success'],
   failed: ['失败', 'danger'], error: ['失败', 'danger'], skipped: ['已跳过', 'neutral'],
+  handler_failed: ['处理失败', 'danger'], orchestrator_failed: ['编排失败', 'danger'], partial: ['部分失败', 'danger'],
+  refused: ['已拒绝', 'danger'], rejected: ['已拒绝', 'danger'], blocked_by_risk_gate: ['风险门禁阻断', 'danger'],
+  para_task_failed: ['任务失败', 'danger'], para_task_merge_conflict: ['任务合并冲突', 'danger'],
   blocked: ['已阻断', 'danger'], cancelled: ['已取消', 'neutral'], unknown: ['未知', 'warning'],
 }
 export const runStatusBadge = (value: unknown) => badgeFrom(RUN_STATUS, value, 'warning')
@@ -162,12 +169,47 @@ const clip = (value: unknown, max = 240) => {
   return text.length > max ? `${text.slice(0, max)}…` : text
 }
 
+const isRow = (value: unknown): value is Row => !!value && typeof value === 'object' && !Array.isArray(value)
+const unconfirmed = (): Badge => ({ label: '结果待核对', tone: 'warning', raw: '' })
+const unresolvedReceipt = (r: Row) => r.outcome === 'unknown' || r.requires_reconciliation === true || r.completed === false
+  || r.accepted === true && r.completed !== true
+  || [r.status, r.execution_status].some(s => s !== undefined && ['neutral', 'info', 'warning'].includes(runStatusBadge(s).tone))
+/** 布尔值只是原始记录；等待状态不等于失败，完成显示也不能覆盖显式失败或坏回执。 */
+function progressBadge(row: Row): Badge {
+  const status = runStatusBadge(row.status)
+  const handler = row.handler_outputs
+  const outputs = handler === undefined ? [] : isRow(handler) ? handler.outputs === undefined ? [] : handler.outputs : null
+  const receipts = Array.isArray(outputs) && outputs.every(isRow) ? outputs : null
+  const records = [row, ...(Array.isArray(outputs) ? outputs.filter(isRow) : [])]
+  const failed = records.flatMap(r => [r.status, r.execution_status]).find(s => runStatusBadge(s).tone === 'danger')
+  if (failed !== undefined || records.some((r, i) => r.handler_failed === true
+    || (r.error || i > 0 && (r.ok === false || r.success === false)) && !unresolvedReceipt(r))) return { label: '失败', tone: 'danger', raw: String(failed ?? row.status ?? '') }
+  if (!receipts) return unconfirmed()
+  if (status.tone !== 'success') return status
+  if (row.ok === false) return { label: '未成功', tone: 'danger', raw: 'false' }
+  if (row.ok !== true || records.some(r => unresolvedReceipt(r) || r.error || r.ok === false || r.success === false || r.partial === true
+    || r.handler === 'para_delegate' && (r.accepted !== true || r.completed !== true || !String(r.task_id || r.para_task_id || '').trim()))) return unconfirmed()
+  return status
+}
+
 export type TeamMember = { role: string; employee: string; status: Badge; ok: Badge }
 export function teamMembers(value: unknown): TeamMember[] {
-  return asRows(value).map(m => ({
-    role: roleLabel(m.role), employee: String(m.employee_id || '未记录'),
-    status: runStatusBadge(m.status), ok: yesNoBadge(m.ok, '成功', '未成功'),
-  }))
+  return asRows(value).map(m => {
+    const status = progressBadge(m)
+    return { role: roleLabel(m.role), employee: String(m.employee_id || '未记录'), status,
+      ok: status.tone === 'success' ? { ...status, label: '成功' } : status }
+  })
+}
+
+function teamBadge(action: Row, request: Row, team: TeamMember[]): Badge {
+  const failed = team.find(m => m.ok.tone === 'danger')
+  const status = failed?.ok ?? progressBadge({ ...action, ok: request.team_ok })
+  if (status.tone === 'danger') return { ...status, label: '小组处理未成功' }
+  if (status.tone !== 'success') return status
+  const roles = request.roles
+  if (!Array.isArray(roles) || roles.length !== 3 || !roles.every(isRow)
+    || !['scout', 'fix', 'verify'].every(role => roles.some(r => r.role === role))) return unconfirmed()
+  return team.find(m => m.ok.tone !== 'success')?.ok ?? { ...status, label: '小组处理成功' }
 }
 
 export type TimelineItem = {
@@ -189,17 +231,21 @@ export function buildTimeline(decisions: Row[], actions: Row[], evidence: Row): 
   }
   for (const a of actions) {
     const request = (a.request && typeof a.request === 'object' ? a.request : {}) as Row
+    const team = teamMembers(request.roles)
     push({
       key: `action-${a.id}`, at: a.created_at, kind: '执行动作', title: `动作 #${a.id ?? '—'} · ${actionTypeLabel(a.action_type)}`,
-      badges: [runStatusBadge(a.status), ...('team_ok' in request ? [yesNoBadge(request.team_ok, '小组处理成功', '小组处理未成功')] : [])],
+      badges: [a.action_type === 'employee.dispatch' || 'team_ok' in request ? teamBadge(a, request, team) : runStatusBadge(a.status)],
       text: clip(a.error || (a.target_id ? `目标：${a.target_type || ''} ${a.target_id}` : '')),
-      team: teamMembers(request.roles), raw: a,
+      team, raw: a,
     })
   }
-  asRows(evidence.employee_reports).forEach((r, i) => push({
-    key: `report-${i}`, at: r.at, kind: '员工回写', title: '员工处理进展',
-    badges: [yesNoBadge(r.team_ok, '小组处理成功', '小组处理未成功')], text: clip(r.progress), team: [], raw: r,
-  }))
+  asRows(evidence.employee_reports).forEach((r, i) => {
+    const failed = [r.status, r.execution_status].some(s => runStatusBadge(s).tone === 'danger') || r.handler_failed === true
+    push({
+      key: `report-${i}`, at: r.at, kind: '员工回写', title: '员工历史回写',
+      badges: [{ label: `历史回写：${failed ? '失败' : r.team_ok === true ? '标记完成' : r.team_ok === false ? '未确认完成' : '结果未记录'}`, tone: failed ? 'danger' : 'neutral', raw: String(r.status ?? r.team_ok ?? '') }], text: clip(r.progress), team: [], raw: r,
+    })
+  })
   asRows(evidence.customer_decisions).forEach((c, i) => push({
     key: `customer-${i}`, at: c.at, kind: '客户确认', title: c.decision === 'reopen' ? '客户重新打开工单' : c.decision === 'resolved' ? '客户确认已解决' : `客户操作：${c.decision ?? '未记录'}`,
     badges: [c.decision === 'reopen' ? { label: '重新打开', tone: 'warning', raw: 'reopen' } : { label: '已确认', tone: 'success', raw: String(c.decision ?? '') }],

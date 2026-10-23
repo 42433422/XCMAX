@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  auditItems, buildTimeline, executionOverview, formatBeijingTime, parseServerTime, resolutionStateBadge, runStatusBadge, submitterTypeLabel, ticketStatusBadge, yesNoBadge,
+  auditItems, buildTimeline, executionOverview, formatBeijingTime, parseServerTime, resolutionStateBadge, runStatusBadge, submitterTypeLabel, teamMembers, ticketStatusBadge, yesNoBadge,
 } from '../../../admin-console/src/utils/customerServiceTicketFormat'
 
 describe('customer service ticket formatting', () => {
@@ -55,6 +55,92 @@ describe('customer service ticket formatting', () => {
     expect(items[1].badges.map(b => b.label)).toEqual(['已受理', '未记录'])
     expect(items[2].title).toBe('客户操作：other')
     expect(items[3].title).toBe('客户确认已解决')
+  })
+  it.each(['planned', 'pending', 'queued', 'running', 'processing', 'dispatching', 'reconciling', 'manual_review'])(
+    'shows %s as waiting or in progress regardless of the legacy completion boolean', status => {
+      const members = teamMembers([false, true].map(ok => ({ role: 'fix', status, ok })))
+      expect(members.map(m => m.status)).toEqual([runStatusBadge(status), runStatusBadge(status)])
+      expect(members.every(m => !['danger', 'success'].includes(m.ok.tone))).toBe(true)
+    },
+  )
+  it('keeps explicit failures ahead of completed booleans and does not invent missing results', () => {
+    const failed = teamMembers([
+      { status: 'failed', ok: true }, { status: 'error', ok: true },
+      { status: 'completed', ok: true, error: 'failed' }, { status: 'completed', ok: true, handler_failed: true },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ status: 'handler_failed', ok: true }] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [null, { status: 'handler_failed', ok: false }] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ status: 'completed', execution_status: 'failed', ok: true }] } },
+      { status: 'pending', ok: false, handler_outputs: { outputs: [{ ok: false, error: 'permission_denied' }] } },
+    ])
+    const uncertain = teamMembers([
+      { ok: true }, { status: 'completed' }, { status: 'completed', ok: 'true' },
+      { status: 'completed', execution_status: 'pending', ok: true },
+      { status: 'completed', ok: true, handler_outputs: { outputs: null } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [null] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ accepted: true, completed: false }] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ status: 'pending', ok: true }] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ status: 'completed', execution_status: 'pending', ok: true }] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ status: 'unknown', ok: true }] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ ok: true, outcome: 'unknown' }] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ ok: true, partial: true }] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ handler: 'para_delegate', ok: true, accepted: true, completed: true }] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ ok: false, error: 'timeout', requires_reconciliation: true }] } },
+    ])
+    const completed = teamMembers([
+      { status: 'completed', ok: true },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ status: 'para_task_completed', ok: true, completed: true }] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ handler: 'para_delegate', status: 'para_task_completed', ok: true, accepted: true, completed: true, task_id: 'task-1' }] } },
+    ])
+    expect(failed.every(m => m.status.tone === 'danger' && m.ok.tone === 'danger')).toBe(true)
+    expect(uncertain.every(m => m.status.tone === 'warning' && m.ok.tone === 'warning')).toBe(true)
+    expect(completed.every(m => m.ok.label === '成功' && m.ok.tone === 'success')).toBe(true)
+    const waiting = teamMembers([true, false].map(requires_reconciliation => ({ status: 'pending', ok: false,
+      handler_outputs: { outputs: [{ ok: false, error: 'timeout', accepted: true, requires_reconciliation }] } })))
+    expect(waiting.every(m => m.status.tone === 'neutral' && m.ok.tone === 'neutral')).toBe(true)
+  })
+  it('renders the original ticket 45 waiting shape without changing its raw action or historical reports', () => {
+    // Same state/receipt shape as ticket45-projection-baseline.json action62/event85793;
+    // identifiers and progress text are synthetic, with no customer content copied into source.
+    const roles = [
+      { role: 'scout', status: 'pending', ok: false, attempt_id: 'attempt-1', handler_outputs: { outputs: [
+        { handler: 'para_delegate', status: 'para_task_accepted', ok: true, accepted: true, completed: false, task_id: 'task-1' },
+      ] } },
+      { role: 'fix', status: 'planned', ok: false, attempt_id: null, handler_outputs: { outputs: [] } },
+      { role: 'verify', status: 'planned', ok: false, attempt_id: null, handler_outputs: { outputs: [] } },
+    ]
+    const action = { id: 62, action_type: 'employee.dispatch', status: 'pending', error: '',
+      recorded_status: 'failed', recorded_error: '未成功角色：fix、verify', request: { team_ok: false, roles }, result: { roles } }
+    const evidence = { employee_reports: [{ team_ok: false, progress: '待执行' }, { team_ok: true }, {},
+      { status: 'error', team_ok: true }, { status: 'completed', execution_status: 'failed', team_ok: true }] }
+    const before = JSON.stringify({ action, evidence })
+    const items = buildTimeline([], [action], evidence)
+    expect(items[0].badges).toEqual([runStatusBadge('pending')])
+    expect(items[0].team.map(m => m.ok.label)).toEqual(['待执行', '待执行', '待执行'])
+    expect(items.slice(1).map(i => i.badges[0])).toMatchObject([
+      { label: '历史回写：未确认完成', tone: 'neutral' }, { label: '历史回写：标记完成', tone: 'neutral' },
+      { label: '历史回写：结果未记录', tone: 'neutral' }, { label: '历史回写：失败', tone: 'danger' },
+      { label: '历史回写：失败', tone: 'danger' },
+    ])
+    expect(items[0].raw).toBe(action)
+    expect(items[1].raw).toBe(evidence.employee_reports[0])
+    expect(JSON.stringify({ action, evidence })).toBe(before)
+  })
+  it('does not show a completed group as successful when role state or required result fields disagree', () => {
+    const completed = { role: 'fix', status: 'completed', ok: true }
+    const roles = ['scout', 'fix', 'verify'].map(role => ({ ...completed, role }))
+    const requests = [
+      { team_ok: true, roles },
+      { team_ok: true, roles: [roles[0], { ...completed, status: 'error' }, roles[2]] },
+      { team_ok: true, roles: [roles[0], { ...completed, status: 'planned' }, roles[2]] },
+      { team_ok: true }, { roles: [completed] },
+      { team_ok: true, roles: [completed, null] }, { team_ok: 'true', roles: [completed] },
+      { team_ok: true, roles: [completed] }, { team_ok: true, roles: [roles[0], completed, completed] },
+    ]
+    const items = buildTimeline([], requests.map((request, id) => ({ id, action_type: 'employee.dispatch', status: 'completed', request })), {})
+    expect(items[0].badges[0]).toMatchObject({ label: '小组处理成功', tone: 'success' })
+    expect(items[1].badges[0]).toMatchObject({ label: '小组处理未成功', tone: 'danger' })
+    expect(items[2].badges[0]).toMatchObject({ label: '待执行', tone: 'neutral' })
+    expect(items.slice(3).every(i => i.badges.every(b => b.tone === 'warning'))).toBe(true)
   })
   it('summarises audit rows from detail or detail_json', () => {
     const [a, b] = auditItems([

@@ -19,7 +19,7 @@
 - 明确产品报障先由当前账号正式受理并返回编号，缺期望或实际时在原单补证，不再被模型初始化阻断或补造 Work Order 证据；字段解析改为线性，OpenTelemetry 服务端与 uv 锁对齐 1.45.1；保留身份与正式回执校验，待同 SHA 安全复扫、部署和原场景验收。
 - 普通对话与确定性规划移除旧规则中重复尝试标识符和重叠空白的回溯，复用型号及单位解析；保留混合数量、连字符和 Unicode 十进制型号语义，以十万字符坏例做进程超时回归。未表示全仓正则风险已清除。
 - 企业客服发送区分登录、权限与服务失败；未知回执停止重复发送，草稿仅在当前身份内存恢复，切换会话或账号拒绝旧请求回写。
-- 跨端审计明确区分文件缺失、权限、目录配置和损坏数据；展示动作原因及执行结果，不把部分坏记录显示为正常。
+- 跨端审计明确区分文件缺失、权限、目录配置和损坏数据；工单按执行状态显示待执行、处理中及真实失败，旧员工回写标明历史含义，保留原始审计并拒绝将坏回执显示为成功；尚待同 SHA 发布与页面验收。
 
 - 独立管理端登录回跳统一按应用挂载前缀归一化，避免 /admin/admin/ 重复路径；兼容既有回跳链接并保留外站、登录循环及 onboarding 查询保护，不放宽管理员身份校验。
 - Security: shared-library authoring routes now require administrator identity, including snapshots, frontend and AI scaffolds; preserve private customer generation and add real JWT denial/snapshot acceptance tests.
