@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
@@ -196,11 +197,7 @@ def _check_unified_stack(errors: list[str]) -> None:
     ):
         if fastapi_ext and snippet not in fastapi_ext:
             errors.append(f"mobile_api_extensions.py 缺少移动路由组合: {snippet}")
-    mobile_router_compositions = (
-        "_mobile_router.include_router(extension_router)",
-        "cast(APIRouter, _mobile_router).include_router(extension_router)",
-    )
-    if fastapi_ext and not any(item in fastapi_ext for item in mobile_router_compositions):
+    if fastapi_ext and not _has_mobile_router_composition(fastapi_ext):
         errors.append(
             "mobile_api_extensions.py 缺少移动路由组合: _mobile_router.include_router(extension_router)"
         )
@@ -212,6 +209,37 @@ def _check_unified_stack(errors: list[str]) -> None:
     fastapi_ai_groups = _read_text(FASTAPI_MOBILE_AI_GROUPS, errors)
     if fastapi_ai_groups and '@router.get("/ai-groups"' not in fastapi_ai_groups:
         errors.append('routes_ai_groups.py 缺少移动 AI 群组路由: @router.get("/ai-groups")')
+
+
+def _has_mobile_router_composition(source: str) -> bool:
+    """Require the extension router to be mounted on the mobile API router."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "include_router" or not node.args:
+            continue
+        if not isinstance(node.args[0], ast.Name) or node.args[0].id != "extension_router":
+            continue
+        target = node.func.value
+        if isinstance(target, ast.Name) and target.id == "_mobile_router":
+            return True
+        if (
+            isinstance(target, ast.Call)
+            and isinstance(target.func, ast.Name)
+            and target.func.id == "cast"
+            and len(target.args) == 2
+            and isinstance(target.args[0], ast.Name)
+            and target.args[0].id == "APIRouter"
+            and isinstance(target.args[1], ast.Name)
+            and target.args[1].id == "_mobile_router"
+        ):
+            return True
+    return False
 
 
 def _check_tokens(errors: list[str]) -> None:
