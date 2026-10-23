@@ -19,6 +19,8 @@ def _facade():
 def _client_issue_reply(receipt: dict | None) -> str:
     if not receipt:
         return ""
+    if "issue_description" in (receipt.get("missing_evidence") or []):
+        return "你要登记哪个软件功能或使用反馈？请说说想改的内容或遇到的情况，我会据此受理，不用固定格式。"
     shots = receipt.get("screenshots") or {}
     attachment = "本次诊断附件保存尚未确认，请在原工单继续补报。"
     if receipt.get("support_bundle_saved") is True and receipt.get("support_bundle_sha256"):
@@ -30,7 +32,7 @@ def _client_issue_reply(receipt: dict | None) -> str:
         "ROUTED": f"产品问题已登记，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。{attachment}",
         "NEEDS_MORE_EVIDENCE": (
             "这看起来是产品缺陷上报，但还缺少必要信息，暂未自动建单。"
-            "请按「期望：… 实际：…」补充后重发，我会立即建单并把工单号回给你。"
+            "请用自己的话补充期望和实际表现，不用固定格式。"
             "（若只是使用咨询，请再发一次，我会直接回答。）"
         ),
         "OWNER_ROUTE_UNAVAILABLE": "暂时无法确认受理结果。请先查看客服工单列表，避免重复提交；登录失效时请重新登录。",
@@ -46,15 +48,22 @@ def _apply_client_issue_outcome(payload: dict, receipt: dict | None) -> dict:
 
 
 async def _classify_and_submit_client_issue_async(
-    request, runtime_context, message, reply, client=None, *, guide_unavailable: bool = True
+    request,
+    runtime_context,
+    message,
+    reply,
+    client=None,
+    *,
+    guide_unavailable: bool = True,
 ):
     """客户缺陷上报 → 工单受理（async 版，供 async 生成器直接 await）。
 
     与同步变体共用同一套判定与回执文案：只有明确判为使用咨询才回落正常对话；
-    分类不可用/异常一律引导客户补齐「期望/实际」走确定性建单路径。
+    分类不可用时保留补证引导；明确建单无需模型或固定字段格式。
     """
     from app.application import client_product_issue_intake as intake
 
+    message = intake.report_message_with_context(message, runtime_context)
     if not intake.looks_like_issue_report(message):
         return None
 
@@ -82,6 +91,11 @@ async def _classify_and_submit_client_issue_async(
         return None
     if str(triage.get("type") or "") != "product_defect":
         return _unavailable()
+    if "issue_description" in (triage.get("missing_evidence") or []):
+        return {
+            "state": "NEEDS_MORE_EVIDENCE",
+            "missing_evidence": ["issue_description"],
+        }
     try:
         return await intake.submit_product_issue(
             request=request,
@@ -96,7 +110,13 @@ async def _classify_and_submit_client_issue_async(
 
 
 def _classify_and_submit_client_issue(
-    request, runtime_context, message, reply, client=None, *, guide_unavailable: bool = True
+    request,
+    runtime_context,
+    message,
+    reply,
+    client=None,
+    *,
+    guide_unavailable: bool = True,
 ):
     """同步变体：供同步生成器（运行在后台线程）调用。实现见 async 版。"""
     return asyncio.run(
@@ -141,7 +161,16 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     message_text = str(body.message or "")
     controlled_entity_named = any(
         token in message_text
-        for token in ("客户", "购买单位", "产品", "商品", "原材料", "物料", "出货", "发货")
+        for token in (
+            "客户",
+            "购买单位",
+            "产品",
+            "商品",
+            "原材料",
+            "物料",
+            "出货",
+            "发货",
+        )
     )
     from app.infrastructure.tenant_scope import tenant_scope
 
@@ -161,7 +190,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             source=body.source,
             channel="compat_chat_stream",
         )
-        for event in ({"type": "token", "text": issue_reply}, {"type": "done", "result": payload}):
+        for event in (
+            {"type": "token", "text": issue_reply},
+            {"type": "done", "result": payload},
+        ):
             yield _facade()._sse_event_line(event)
         return
     if (
@@ -190,7 +222,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     from app.application.chat_business_safety import try_handle_business_chat_action
 
     business_payload = try_handle_business_chat_action(
-        body.message, runtime_context=runtime_context, user_id=body.user_id, request=request
+        body.message,
+        runtime_context=runtime_context,
+        user_id=body.user_id,
+        request=request,
     )
     if business_payload is not None:
         response_text = str(
@@ -204,7 +239,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     )
     if not ok_read and read_req:
         yield _facade()._sse_event_line(
-            {"type": "token", "text": f"[需要授权: {read_req.get('token_description')}]"}
+            {
+                "type": "token",
+                "text": f"[需要授权: {read_req.get('token_description')}]",
+            }
         )
         yield _facade()._sse_event_line(
             {
@@ -370,7 +408,11 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
         if not thinking:
             thinking = marker_lines
-        done_reply = {"response": visible_text, "thinking_steps": thinking, **planner_result}
+        done_reply = {
+            "response": visible_text,
+            "thinking_steps": thinking,
+            **planner_result,
+        }
         payload = _facade()._xcagi_compat_reply_payload(done_reply)
         payload.update(planner_result)
         _apply_client_issue_outcome(payload, issue_receipt)

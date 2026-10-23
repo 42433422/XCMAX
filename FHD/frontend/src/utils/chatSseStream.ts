@@ -4,7 +4,7 @@ export type PlannerSseEvent =
   | { type: 'token'; text: string; ephemeral?: boolean }
   | { type: 'tool_progress'; label?: string; text?: string; phase?: string; run_id?: string }
   | { type: 'done'; result?: unknown }
-  | { type: 'error'; message?: string; status_code?: number }
+  | { type: 'error'; message?: string; status_code?: number; run_id?: string }
   | { type: 'requires_token'; token_name?: string; token_description?: string }
 
 function parseSseDataLine(line: string): PlannerSseEvent | null {
@@ -27,6 +27,15 @@ export async function readPlannerSseResponse(response: Response, onEvent: (ev: P
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let terminalError = false
+  const emitLine = (line: string) => {
+    const ev = parseSseDataLine(line)
+    if (ev) {
+      terminalError = ev.type === 'error'
+      onEvent(ev)
+    }
+    return terminalError
+  }
   try {
     while (true) {
       const { done, value } = await reader.read()
@@ -36,18 +45,17 @@ export async function readPlannerSseResponse(response: Response, onEvent: (ev: P
       buffer = parts.pop() || ''
       for (const part of parts) {
         for (const line of part.split('\n')) {
-          const ev = parseSseDataLine(line)
-          if (ev) onEvent(ev)
+          if (emitLine(line)) return
         }
       }
     }
     if (buffer.trim()) {
       for (const line of buffer.split('\n')) {
-        const ev = parseSseDataLine(line)
-        if (ev) onEvent(ev)
+        if (emitLine(line)) return
       }
     }
   } finally {
+    if (terminalError) void reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }
 }
