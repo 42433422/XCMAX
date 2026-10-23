@@ -82,7 +82,7 @@ dev = [
   "PyYAML>=6.0",
   "black==26.10.1",
   "isort==6.1.0",
-  "jsonschema>=4.21",
+  "jsonschema>=4.26.0",
   # 工具精确固定；升级必须同时验证格式和类型检查。
   "mypy==2.4.0",
   "openpyxl>=3.1",
