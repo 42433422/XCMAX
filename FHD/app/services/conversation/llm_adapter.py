@@ -86,7 +86,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
     DEFAULT_MODELS: Dict[str, str] = {
         "xcauto": "xcauto-account",
         "xiuci": "xcauto-account",
-        "xiaomi": "mimo-v2.5-pro",
+        "xiaomi": "mimo-v2.6-pro",
         "deepseek": "deepseek-chat",
         "openai": "gpt-4o-mini",
         "siliconflow": "Qwen/Qwen2.5-7B-Instruct",
@@ -112,13 +112,15 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         {"xcauto-account", "xcauto-default", "xcauto", "xiuci-account", "xiuci-default", "xiuci"}
     )
 
-    # 小米 2026-06-30 下线 V2；缓存/环境变量里的旧 ID 映射到官方替代（与 MODstore llm_chat_proxy 对齐）
+    # 小米 V2.5 于 2026-10-21 下线；缓存中的官方旧 ID 映射到现有 V2.6 端点。
     _XIAOMI_MODEL_ALIASES: Dict[str, str] = {
-        "mimo-v2-base": "mimo-v2.5-pro",
-        "MiMo-7B-RL-Think": "mimo-v2.5-pro",
-        "mimo-v2-flash": "mimo-v2.5-pro",
-        "mimo-v2-pro": "mimo-v2.5-pro",
-        "mimo-v2-omni": "mimo-v2.5",
+        "mimo-v2.5-pro": "mimo-v2.6-pro",
+        "mimo-v2.5": "mimo-v2.6-flash",
+        "mimo-v2-base": "mimo-v2.6-pro",
+        "MiMo-7B-RL-Think": "mimo-v2.6-pro",
+        "mimo-v2-flash": "mimo-v2.6-pro",
+        "mimo-v2-pro": "mimo-v2.6-pro",
+        "mimo-v2-omni": "mimo-v2.6-flash",
         "mimo-v2-tts": "mimo-v2.5-tts",
     }
 
@@ -176,7 +178,10 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
             else self.PROVIDER_DEFAULT_URLS.get(self.provider, "https://api.openai.com")
         )
         raw_model = model or self.DEFAULT_MODELS.get(self.provider, "gpt-3.5-turbo")
-        if self.provider == "xiaomi":
+        host = (urlsplit(self._base_url or "").hostname or "").lower()
+        if self.provider == "xiaomi" and (
+            host == "xiaomimimo.com" or host.endswith(".xiaomimimo.com")
+        ):
             raw_model = self._XIAOMI_MODEL_ALIASES.get(raw_model, raw_model)
         # 账户虚拟名（xcauto-account 等）只在修茈网关（xiu-ci.com）有效；
         # base_url 被显式改指其他端点（如小米 token-plan 直连）时必须映射为
@@ -184,9 +189,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         # 主机判定用 urlsplit 精确匹配（子串 in 会被 CodeQL 判 incomplete-url-sanitization，
         # 且理论上可被 evil.com/?x=xiaomimimo.com 类 URL 绕过）。
         if self.provider in ("xcauto", "xiuci") and raw_model in self._XCAUTO_VIRTUAL_MODELS:
-            host = (urlsplit(self._base_url or "").hostname or "").lower()
             if host == "xiaomimimo.com" or host.endswith(".xiaomimimo.com"):
-                raw_model = self.DEFAULT_MODELS.get("xiaomi", "mimo-v2.5-pro")
+                raw_model = self.DEFAULT_MODELS.get("xiaomi", "mimo-v2.6-pro")
         self._model = raw_model
 
         self._client: Optional[httpx.AsyncClient] = None

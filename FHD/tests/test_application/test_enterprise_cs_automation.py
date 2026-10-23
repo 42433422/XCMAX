@@ -295,3 +295,49 @@ async def test_manual_takeover_stops_ai_and_preserves_operator_provenance(
         )
     ).scalar_one()
     assert manual.operator_user_id == 99
+
+
+@pytest.mark.asyncio
+async def test_unsupported_model_retains_message_and_records_safe_failure(cs_db, monkeypatch):
+    import httpx
+
+    svc, cs_id, conversation_id = _conversation(cs_db)
+    message = svc.send_message(conversation_id, 7, "怎样首次登录？", origin="customer")["message"]
+    audits = []
+
+    async def failed_completion(*_args, **_kwargs):
+        request = httpx.Request("POST", "https://example.invalid/v1/chat/completions")
+        response = httpx.Response(
+            400,
+            request=request,
+            json={"error": {"code": "400", "message": "Unsupported model private-model-secret"}},
+        )
+        response.raise_for_status()
+
+    monkeypatch.setattr(
+        "app.infrastructure.llm.invoke.chat_completion_openai_format", failed_completion
+    )
+    monkeypatch.setattr(
+        "app.application.enterprise_cs_automation._audit", lambda **kwargs: audits.append(kwargs)
+    )
+    result = await EnterpriseCsAutomationService(cs_db).handle_customer_message(
+        conversation_id=conversation_id,
+        customer_user_id=7,
+        message_id=int(message["id"]),
+        body=message["body"],
+    )
+    assert result["action"] == "transfer"
+    originals = [
+        row
+        for row in svc.list_messages(conversation_id, cs_id, limit=20)
+        if row["origin"] == "customer"
+    ]
+    assert [row["id"] for row in originals] == [message["id"]]
+    failure = next(row for row in audits if row["action"] == "enterprise_cs.ai_failed")
+    assert failure["payload"] == {
+        "conversation_id": conversation_id,
+        "customer_message_id": message["id"],
+        "reason": "unsupported_model",
+        "status_code": 400,
+    }
+    assert "private-model-secret" not in json.dumps(audits)

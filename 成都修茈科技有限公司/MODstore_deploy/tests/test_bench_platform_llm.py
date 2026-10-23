@@ -93,7 +93,7 @@ def test_resolve_platform_bench_llm_xiaomi_uses_current_default_model(monkeypatc
         prov, mdl = resolve_platform_bench_llm()
 
     assert prov == "xiaomi"
-    assert mdl == "mimo-v2.5-pro"
+    assert mdl == "mimo-v2.6-pro"
 
 
 def test_resolve_platform_bench_llm_minimax_uses_current_default_model(monkeypatch):
@@ -118,11 +118,16 @@ def test_resolve_platform_bench_llm_minimax_uses_current_default_model(monkeypat
 def test_xiaomi_legacy_7b_model_alias_maps_to_pro():
     from modstore_server.llm_chat_proxy import normalize_model
 
-    assert normalize_model("xiaomi", "MiMo-7B-RL-Think") == "mimo-v2.5-pro"
-    assert normalize_model("xiaomi", "mimo-v2-flash") == "mimo-v2.5-pro"
+    assert normalize_model("xiaomi", "mimo-v2.5-pro") == "mimo-v2.6-pro"
+    assert normalize_model("xiaomi", "mimo-v2.5") == "mimo-v2.6-flash"
+    assert normalize_model("xiaomi", "mimo-v2.5-pro", "https://models.example.invalid/v1") == "mimo-v2.5-pro"
+    assert normalize_model("xiaomi", "mimo-v2.5-pro", "https://evil.invalid/?x=xiaomimimo.com") == "mimo-v2.5-pro"
+    assert normalize_model("deepseek", "mimo-v2.5-pro") == "mimo-v2.5-pro"
+    assert normalize_model("xiaomi", "MiMo-7B-RL-Think") == "mimo-v2.6-pro"
+    assert normalize_model("xiaomi", "mimo-v2-flash") == "mimo-v2.6-pro"
     # 2026-06-30 下线：账户/前端仍可能缓存旧 ID
-    assert normalize_model("xiaomi", "mimo-v2-omni") == "mimo-v2.5"
-    assert normalize_model("xiaomi", "mimo-v2-pro") == "mimo-v2.5-pro"
+    assert normalize_model("xiaomi", "mimo-v2-omni") == "mimo-v2.6-flash"
+    assert normalize_model("xiaomi", "mimo-v2-pro") == "mimo-v2.6-pro"
     assert normalize_model("xiaomi", "mimo-v2-tts") == "mimo-v2.5-tts"
 
 
