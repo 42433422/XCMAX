@@ -129,7 +129,7 @@ def evaluate_self_maintenance_need() -> Dict[str, Any]:
     device_id = os.environ.get("MODSTORE_PARA_DEVICE_ID", "").strip()
     api_base = os.environ.get("MODSTORE_PARA_API_BASE", "").strip()
     branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
-    runtime_provenance = runtime_provenance.collect_runtime_provenance(
+    runtime_provenance_result = runtime_provenance.collect_runtime_provenance(
         target_branch=branch or "main"
     )
     if not api_base:
@@ -145,9 +145,11 @@ def evaluate_self_maintenance_need() -> Dict[str, Any]:
     if not branch:
         gaps.append("missing MODSTORE_PARA_BRANCH")
     if config._env_bool("MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME", True) and (
-        not runtime_provenance.get("ok")
+        not runtime_provenance_result.get("ok")
     ):
-        reasons = ",".join((str(item) for item in runtime_provenance.get("reasons") or []))
+        reasons = ",".join(
+            str(item) for item in runtime_provenance_result.get("reasons") or []
+        )
         gaps.append(f"runtime provenance blocked: {reasons or 'unknown'}")
     repo_path = config._file_url_to_path(repo_url)
     if repo_path is not None and (not repo_path.exists()):
