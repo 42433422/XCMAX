@@ -287,7 +287,8 @@ def test_ambiguous_employee_and_mod_identity_cannot_select_another_install(
         target.mkdir(parents=True)
         (target / "manifest.json").write_text(json.dumps({"id": "legacy-global", **extra}))
     response = uninstall_client.delete(
-        "/api/mods/legacy-global", headers=_authenticated(uninstall_client, admin_session)
+        "/api/mods/legacy-global",
+        headers=_authenticated(uninstall_client, admin_session),
     )
     assert response.status_code == 409
     assert (root / "legacy-global").is_dir()
@@ -337,7 +338,11 @@ def test_session_identity_required_and_x_user_id_or_owner_claim_is_ignored(
         uninstall_client,
         route,
         method,
-        {"X-CSRF-Token": "fixture-csrf-token", "X-User-ID": "1", "X-Owner-Scope": "tenant:1"},
+        {
+            "X-CSRF-Token": "fixture-csrf-token",
+            "X-User-ID": "1",
+            "X-Owner-Scope": "tenant:1",
+        },
         "unknown-ui-fixture",
         json={"mod_id": "unknown-ui-fixture", "owner_scope": "tenant:1"},
     )
@@ -406,9 +411,9 @@ def verified_unregistered_install(monkeypatch, signed_runtime_mod, tmp_path):
             "version": "1.0.0",
             "scope": "account",
             "entitlement_mod_id": "taiyangniao-pro",
-            "dependencies": {"not-installed-fixture-dependency": "*"}
-            if mode == "dependency_failure"
-            else {},
+            "dependencies": (
+                {"not-installed-fixture-dependency": "*"} if mode == "dependency_failure" else {}
+            ),
             "frontend": {
                 "runtime": {
                     "sdk_version": 1,
@@ -426,7 +431,10 @@ def verified_unregistered_install(monkeypatch, signed_runtime_mod, tmp_path):
             (signed_runtime_mod.root / ".install-receipts/unknown-ui-fixture").glob("*.zip")
         )
         ok, message, _ = manager.install_mod_package(
-            str(archive), verify_signature=True, activate=mode != "inactive", owner_scope="tenant:1"
+            str(archive),
+            verify_signature=True,
+            activate=mode != "inactive",
+            owner_scope="tenant:1",
         )
         if mode == "inactive":
             assert ok and "未激活" in message
@@ -569,4 +577,3 @@ def test_state_lock_rejects_symlink_target(tmp_path):
     with pytest.raises(OSError):
         with state_lock(tmp_path):
             pass
-

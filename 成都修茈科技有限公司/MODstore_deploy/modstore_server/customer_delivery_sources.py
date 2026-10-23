@@ -11,7 +11,9 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Iterator
 
-_LIBRARY: ContextVar[Path | None] = ContextVar("private_delivery_source_library", default=None)
+_LIBRARY: ContextVar[Path | None] = ContextVar(
+    "private_delivery_source_library", default=None
+)
 _SESSION_ID = re.compile(r"[0-9a-f]{16,32}\Z")
 
 
@@ -55,7 +57,7 @@ def _read_scope(root: Path) -> dict[str, Any]:
         if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
             raise ValueError("私有生产目录记录无效")
         stream = os.fdopen(fd, "r", encoding="utf-8")
-    except Exception:
+    except (OSError, ValueError):
         os.close(fd)
         raise
     with stream:
@@ -102,7 +104,9 @@ def _existing_scope_path(owner_id: int, session_id: str) -> Path:
     return target
 
 
-def create_private_source_scope(owner_id: int, session_id: str, ticket_id: int) -> dict[str, Any]:
+def create_private_source_scope(
+    owner_id: int, session_id: str, ticket_id: int
+) -> dict[str, Any]:
     if ticket_id <= 0:
         raise ValueError("私有生产必须关联原工单")
     created = _scope_path(owner_id, session_id)
@@ -132,7 +136,9 @@ def create_private_source_scope(owner_id: int, session_id: str, ticket_id: int) 
     return scope
 
 
-def source_library(scope: dict[str, Any], owner_id: int, session_id: str, ticket_id: int) -> Path:
+def source_library(
+    scope: dict[str, Any], owner_id: int, session_id: str, ticket_id: int
+) -> Path:
     expected = {
         "owner_user_id": owner_id,
         "session_id": session_id,
@@ -219,7 +225,9 @@ def seed_previous_delivery(scope: dict[str, Any], evidence: dict[str, Any]) -> N
                 for name, digest in signed["files_sha256"].items():
                     import hashlib
 
-                    data = archive.read(name if name in archive.namelist() else f"{mid}/{name}")
+                    data = archive.read(
+                        name if name in archive.namelist() else f"{mid}/{name}"
+                    )
                     path = (destination / name).resolve()
                     if (
                         not path.is_relative_to(destination.resolve())
@@ -244,7 +252,9 @@ def _previous_source_records(
             continue
         rows = run.get("verified_artifacts") or []
         if not rows and run.get("session_id"):
-            persisted = workbench_api._load_workbench_session_unlocked(str(run["session_id"]))
+            persisted = workbench_api._load_workbench_session_unlocked(
+                str(run["session_id"])
+            )
             if (
                 persisted
                 and persisted.get("id") == run["session_id"]
@@ -254,11 +264,17 @@ def _previous_source_records(
                 rows = persisted.get("verified_artifacts") or []
         full.extend(rows)
     records = list(evidence.get("delivery_artifacts") or []) or full
-    failed_id = str(evidence.get("runtime_mod_id") or "") if evidence.get("runtime_failure") else ""
+    failed_id = (
+        str(evidence.get("runtime_mod_id") or "")
+        if evidence.get("runtime_failure")
+        else ""
+    )
     if failed_id:
         records = [row for row in records if row.get("id") == failed_id]
         if not records:
-            raise ValueError("失败产物缺少上一轮可信源码记录，原单等待恢复，不能从零覆盖")
+            raise ValueError(
+                "失败产物缺少上一轮可信源码记录，原单等待恢复，不能从零覆盖"
+            )
     selected: list[dict[str, Any]] = []
     failed_generation = (evidence.get("resolution") or {}).get("failed_generation")
     for row in records:
@@ -275,12 +291,16 @@ def _previous_source_records(
                 and item.get("owner_user_id") == scope["owner_user_id"]
                 and item.get("ticket_id") == scope["ticket_id"]
                 and item.get("generation") != scope["session_id"]
-                and (not failed_generation or item.get("generation") == failed_generation)
+                and (
+                    not failed_generation or item.get("generation") == failed_generation
+                )
             ),
             None,
         )
         if match is None:
-            raise ValueError("上一轮交付身份、版本或摘要没有匹配的可信源码记录，不能从零覆盖")
+            raise ValueError(
+                "上一轮交付身份、版本或摘要没有匹配的可信源码记录，不能从零覆盖"
+            )
         if match not in selected:
             selected.append(match)
     return selected

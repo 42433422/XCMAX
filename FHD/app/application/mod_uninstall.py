@@ -66,7 +66,11 @@ def _is_global_or_legacy_manifest(manifest: dict[str, Any] | None) -> bool:
         return False
     if "public_listing" in manifest and manifest["public_listing"] is not True:
         return False
-    if str(manifest.get("visibility") or "").strip().lower() not in {"", "public", "global"}:
+    if str(manifest.get("visibility") or "").strip().lower() not in {
+        "",
+        "public",
+        "global",
+    }:
         return False
     if any(manifest.get(key) for key in ("owner_scope", "owner_user_id", "delivery_owner_user_id")):
         return False
@@ -161,7 +165,8 @@ def uninstall_mod_for_request(request: Request, mod_id: str) -> tuple[bool, str]
                     manifest = _read_manifest(installed_root, mod_id)
                     if not admin or not _is_global_or_legacy_manifest(manifest):
                         raise HTTPException(
-                            status_code=403, detail="扩展归属或卸载权限未通过校验，拒绝删除"
+                            status_code=403,
+                            detail="扩展归属或卸载权限未通过校验，拒绝删除",
                         )
                 if requires_restart:
                     pending_to_remove = (installed_root, digest)

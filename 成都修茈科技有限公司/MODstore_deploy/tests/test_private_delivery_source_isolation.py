@@ -10,7 +10,9 @@ from pathlib import Path
 import pytest
 
 
-def test_same_id_owners_generate_compile_sign_distinct_sources(client, monkeypatch, tmp_path):
+def test_same_id_owners_generate_compile_sign_distinct_sources(
+    client, monkeypatch, tmp_path
+):
     from cryptography.hazmat.primitives import serialization
 
     from modman.repo_config import RepoConfig
@@ -38,7 +40,9 @@ def test_same_id_owners_generate_compile_sign_distinct_sources(client, monkeypat
     unknown_global = (library / "same-private-id/manifest.json").read_bytes()
     monkeypatch.setattr(mod_scaffold_runner, "modstore_library_path", actual_library)
     monkeypatch.setattr(
-        mod_scaffold_runner, "load_config", lambda: RepoConfig(library_root=str(library))
+        mod_scaffold_runner,
+        "load_config",
+        lambda: RepoConfig(library_root=str(library)),
     )
     key_path = tmp_path / "synthetic-signing-key.pem"
     key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
@@ -74,7 +78,10 @@ def test_same_id_owners_generate_compile_sign_distinct_sources(client, monkeypat
                     "entry": "frontend/runtime/index.js",
                 },
             },
-            "delivery_verification": {"handler": "verify_delivery", "case_id": "calculate-five"},
+            "delivery_verification": {
+                "handler": "verify_delivery",
+                "case_id": "calculate-five",
+            },
         }
         with get_session_factory()() as db:
             imported = mod_scaffold_runner.import_mod_suite_repository(
@@ -121,7 +128,8 @@ def test_same_id_owners_generate_compile_sign_distinct_sources(client, monkeypat
             )
         )
         return [
-            await get_workbench_session_snapshot(ids[user.id], user.id) for user in (first, second)
+            await get_workbench_session_snapshot(ids[user.id], user.id)
+            for user in (first, second)
         ]
 
     snapshots = asyncio.run(run())
@@ -134,14 +142,18 @@ def test_same_id_owners_generate_compile_sign_distinct_sources(client, monkeypat
         record = prepare_private_artifact(
             100 + user.id, user.id, {"delivery_generation": ids[user.id]}, snapshot
         )
-        raw, signed = read_verified_artifact(record, owner_id=user.id, ticket_id=100 + user.id)
+        raw, signed = read_verified_artifact(
+            record, owner_id=user.id, ticket_id=100 + user.id
+        )
         records.append(record)
         with zipfile.ZipFile(io.BytesIO(raw)) as archive:
             import importlib.util
 
             probe = tmp_path / f"verified-probe-{user.id}.py"
             probe.write_bytes(archive.read("backend/probe.py"))
-            spec = importlib.util.spec_from_file_location(f"owner_probe_{user.id}", probe)
+            spec = importlib.util.spec_from_file_location(
+                f"owner_probe_{user.id}", probe
+            )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             assert module.calculate(5) == 5 * multipliers[user.id]
@@ -161,7 +173,10 @@ def test_same_id_owners_generate_compile_sign_distinct_sources(client, monkeypat
         )
     with pytest.raises(ValueError, match="持久生产会话"):
         prepare_private_artifact(
-            100 + second.id, second.id, {"delivery_generation": ids[first.id]}, snapshots[0]
+            100 + second.id,
+            second.id,
+            {"delivery_generation": ids[first.id]},
+            snapshots[0],
         )
     own_scope = create_private_source_scope(first.id, uuid.uuid4().hex, 100 + first.id)
     with pytest.raises(ValueError, match="持久生产会话"):
@@ -176,7 +191,9 @@ def test_same_id_owners_generate_compile_sign_distinct_sources(client, monkeypat
         assert (seeded / "same-private-id/backend/probe.py").read_bytes() == (
             paths[first.id] / "backend/probe.py"
         ).read_bytes()
-    other_scope = create_private_source_scope(second.id, uuid.uuid4().hex, 100 + second.id)
+    other_scope = create_private_source_scope(
+        second.id, uuid.uuid4().hex, 100 + second.id
+    )
     with pytest.raises(ValueError):
         seed_previous_delivery(other_scope, {"delivery_artifacts": [records[0]]})
 
@@ -187,7 +204,9 @@ def delivery_scope_root(tmp_path, monkeypatch):
 
     library = tmp_path / "library"
     library.mkdir()
-    monkeypatch.setattr(mod_scaffold_runner, "modstore_library_path", lambda: str(library))
+    monkeypatch.setattr(
+        mod_scaffold_runner, "modstore_library_path", lambda: str(library)
+    )
     return tmp_path / "customer-delivery-sources"
 
 
@@ -204,7 +223,14 @@ def test_scope_identity_rejects_traversal_and_overlong_values(
     assert source_library(scope, 7, session_id, 100) == (
         delivery_scope_root / "7" / session_id / "library"
     )
-    for bad in ("../escape", "..\\escape", "A" * 24, "a" * 12, "a" * 33, "f" * 24 + "/x"):
+    for bad in (
+        "../escape",
+        "..\\escape",
+        "A" * 24,
+        "a" * 12,
+        "a" * 33,
+        "f" * 24 + "/x",
+    ):
         with pytest.raises(ValueError):
             create_private_source_scope(7, bad, 100)
 
@@ -260,4 +286,3 @@ def test_scope_of_another_account_is_rejected(delivery_scope_root):
     create_private_source_scope(8, other_session, 101)
     with pytest.raises(ValueError):
         source_library(scope, 8, other_session, 101)
-
