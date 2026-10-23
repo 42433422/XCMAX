@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import py_compile
+import shlex
 import subprocess
 import tempfile
 from pathlib import Path
@@ -85,13 +86,16 @@ def _verify_merged(wt: str, base: str) -> tuple[bool, str]:
     custom = str(os.environ.get("XCMAX_CLAUDE_VERIFY_CMD") or "").strip()
     if custom:
         try:
+            command = shlex.split(custom)
+            if not command:
+                return False, "自定义验证命令为空"
             r = subprocess.run(
-                custom,
-                shell=True,
+                command,
+                shell=False,
                 cwd=wt,
                 capture_output=True,
                 text=True,
-                timeout=1800,  # nosec B602 – operator-supplied env var, may use shell syntax
+                timeout=1800,
             )
             return (
                 r.returncode == 0,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -98,10 +99,13 @@ class DevelopmentWorkflow:
         custom = str(os.environ.get("XCMAX_CLAUDE_VERIFY_CMD") or "").strip()
         if custom:
             try:
+                command = shlex.split(custom)
+                if not command:
+                    return (False, "自定义验证命令为空")
                 cap = self._coding.hard_cap()
                 r = subprocess.run(
-                    custom,
-                    shell=True,
+                    command,
+                    shell=False,
                     cwd=cwd,
                     capture_output=True,
                     text=True,

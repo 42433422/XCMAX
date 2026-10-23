@@ -146,6 +146,8 @@ class TestVerifyMerged:
                 ok, msg = relay_gitops._verify_merged(str(tmp_path), "main")
                 assert ok is True
                 assert "通过" in msg
+                assert mock_run.call_args.args[0] == ["true"]
+                assert mock_run.call_args.kwargs["shell"] is False
 
     def test_custom_verify_command_failure(self, tmp_path: Path) -> None:
         with patch.dict("os.environ", {"XCMAX_CLAUDE_VERIFY_CMD": "false"}):
