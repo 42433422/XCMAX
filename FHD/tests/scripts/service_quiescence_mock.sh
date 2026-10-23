@@ -13,13 +13,24 @@ GATE_LOG="$STATE/gates"
 
 systemctl() {
   case "$1" in
-    show) [[ "${MOCK_QUERY_FAIL:-0}" != 1 ]] && cat "$STATE/unit" ;;
+    show)
+      [[ "${MOCK_QUERY_FAIL:-0}" != 1 ]] || return 1
+      if [[ "$2" == --property=MainPID ]]; then
+        if [[ "$(cat "$STATE/unit")" == inactive ]]; then echo 0; else echo "${MOCK_PID:-42}"; fi
+      else cat "$STATE/unit"; fi ;;
     is-active) [[ "$(cat "$STATE/unit")" == "active" ]] ;;
-    stop) [[ "${MOCK_REFUSE_STOP:-0}" == 1 ]] || printf 'inactive\n' > "$STATE/unit" ;;
+    stop)
+      [[ "${MOCK_STREAM:-0}" != 1 ]] || { echo deactivating > "$STATE/unit"; return; }
+      [[ "${MOCK_REFUSE_STOP:-0}" == 1 ]] || printf 'inactive\n' > "$STATE/unit" ;;
+    kill)
+      [[ "$*" == 'kill --kill-who=main --signal=SIGINT fhd-full.service' ]] || return 91
+      echo interrupt >> "$GATE_LOG"
+      [[ "${MOCK_IGNORE_INTERRUPT:-0}" == 1 ]] || echo inactive > "$STATE/unit" ;;
     start) printf 'active\n' > "$STATE/unit" ;;
     *) return 90 ;;
   esac
 }
+sleep() { SECONDS=$((SECONDS + 1)); }
 autonomy_evaluate_action() {
   printf '%s %s\n' "$1" "$2" >> "$GATE_LOG"
   [[ "${MOCK_REJECT_GATE:-0}" != 1 ]]
@@ -61,6 +72,18 @@ fi
 systemctl is-active --quiet fhd-full.service
 [[ "$FHD_SERVICE_STOP_ATTEMPTED" == 0 ]]
 MOCK_QUERY_FAIL=0
+
+# An open stream needs a scoped interrupt, followed by actual inactive readback.
+MOCK_STREAM=1
+fhd_stop_service_for_release fhd-full.service restart:release:stream
+[[ "$FHD_SERVICE_QUIESCED" == 1 ]]
+grep -q '^interrupt$' "$GATE_LOG"
+MOCK_IGNORE_INTERRUPT=1
+echo active > "$STATE/unit"
+if fhd_stop_service_for_release fhd-full.service restart:release:unresponsive 2>/dev/null; then exit 1; fi
+[[ "$FHD_SERVICE_QUIESCED" == 0 ]]
+MOCK_IGNORE_INTERRUPT=0
+MOCK_STREAM=0
 echo 'service quiescence mock passed'
 rollback_from_backup_mock() { return 1; } # model receipt/data validation refusal
 

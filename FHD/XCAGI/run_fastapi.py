@@ -429,6 +429,7 @@ def main(argv: list[str] | None = None) -> None:
         reload=reload,
         reload_dirs=[str(_REPO_ROOT)] if reload else None,
         log_level="info",
+        timeout_graceful_shutdown=30,
     )
 
 

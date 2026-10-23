@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -125,17 +126,48 @@ def record_pending_action(
     source: str,
     executor_name: str = "",
     executor: Callable[[dict[str, Any]], Any] | None = None,
+    retry_failed: bool = False,
+    retry_approval_id: str = "",
 ) -> dict[str, Any]:
     if not decision.requires_confirmation or decision.allowed:
         raise ApprovalStateError("only a pending RiskDecision can enter pending_approval")
     existing = _latest(action_id)
+    retry = {}
+    if retry_failed:
+        previous_ids = (existing or {}).get("previous_approval_ids", [])
+        if (
+            action != "apply_release_to_cvm"
+            or not re.fullmatch(r"release:[0-9a-f]{40}", action_id)
+            or not re.fullmatch(r"[1-9][0-9]*", retry_approval_id)
+            or not existing
+        ):
+            raise ApprovalStateError(
+                "retry requires a failed exact release and a fresh workflow run"
+            )
+        if (
+            existing.get("retry_approval_id") == retry_approval_id
+            and existing.get("state") in _AWAITING_REVIEW_STATES
+        ):
+            return existing
+        if existing.get("state") != "execution_failed" or retry_approval_id in [
+            existing.get("approval_id"),
+            *previous_ids,
+        ]:
+            raise ApprovalStateError(
+                "only an execution_failed release can request another approval"
+            )
+        retry = {
+            "retry_approval_id": retry_approval_id,
+            "previous_approval_ids": [*previous_ids, existing.get("approval_id", "")],
+            "retry_of_failed_at": existing.get("execution_failed_at"),
+        }
     if existing and str(existing.get("action") or "") != action:
         raise ApprovalStateError(
             f"action_id {action_id} already belongs to {existing.get('action')}"
         )
     if existing and str(existing.get("state") or "") in _AWAITING_REVIEW_STATES:
         return existing
-    if existing and str(existing.get("state") or "") in _TERMINAL_STATES:
+    if existing and str(existing.get("state") or "") in _TERMINAL_STATES and not retry:
         # Idempotent scheduler retries must not resurrect rejected/finished work.
         return existing
     if existing and str(existing.get("state") or "") == "approved":
@@ -153,6 +185,7 @@ def record_pending_action(
             "executor_name": executor_name,
             "payload": _safe_payload(payload or {}),
             "risk_decision": decision.to_dict(),
+            **retry,
         }
     )
     append_autonomy_audit(
@@ -171,6 +204,12 @@ def record_pending_action(
     return row
 
 
+def _check_retry_approval(latest: dict[str, Any], approval_id: str) -> None:
+    expected = latest.get("retry_approval_id")
+    if expected and approval_id != expected:
+        raise ApprovalStateError("callback does not belong to the current release retry")
+
+
 def mark_approval_requested(
     action_id: str,
     *,
@@ -180,6 +219,7 @@ def mark_approval_requested(
     latest = _latest(action_id)
     if latest is None:
         raise ApprovalStateError(f"pending action not found: {action_id}")
+    _check_retry_approval(latest, approval_id)
     state = str(latest.get("state") or "")
     if state == "approval_requested":
         return latest
@@ -217,6 +257,8 @@ def request_action(
     source: str = "runtime",
     executor_name: str = "",
     executor: Callable[[dict[str, Any]], Any] | None = None,
+    retry_failed: bool = False,
+    retry_approval_id: str = "",
 ) -> tuple[RiskDecision, dict[str, Any] | None]:
     resolved_id = str(action_id or uuid.uuid4().hex)
     decision = evaluate_risk(action, action_id=resolved_id, source=source)
@@ -230,6 +272,8 @@ def request_action(
             source=source,
             executor_name=executor_name,
             executor=executor,
+            retry_failed=retry_failed,
+            retry_approval_id=retry_approval_id,
         )
     return decision, pending
 
@@ -264,6 +308,7 @@ def resume_action(
     latest = _latest(action_id)
     if latest is None:
         raise ApprovalStateError(f"pending action not found: {action_id}")
+    _check_retry_approval(latest, approval_id)
     state = str(latest.get("state") or "")
     if state == "rejected":
         raise ApprovalStateError(f"action {action_id} was rejected and cannot be retried")
@@ -357,6 +402,7 @@ def complete_action(
     latest = _latest(action_id)
     if latest is None:
         raise ApprovalStateError(f"approved action not found: {action_id}")
+    _check_retry_approval(latest, approval_id)
     state = str(latest.get("state") or "")
     terminal_state = "executed" if success else "execution_failed"
     if state == terminal_state:
@@ -424,6 +470,7 @@ def reject_action(
     latest = _latest(action_id)
     if latest is None:
         raise ApprovalStateError(f"pending action not found: {action_id}")
+    _check_retry_approval(latest, approval_id)
     if str(latest.get("state") or "") not in _AWAITING_REVIEW_STATES:
         raise ApprovalStateError(f"action {action_id} is not pending")
     actor = str(approver or "").strip()

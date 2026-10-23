@@ -16,6 +16,29 @@ def test_service_and_failed_rollback_recovery():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_replaced_service_pid_never_gets_interrupted(tmp_path):
+    helper = Path(__file__).resolve().parents[2] / "scripts/deploy/lib/service_quiescence.sh"
+    trace = tmp_path / "trace"
+    script = f"""
+source {shlex.quote(str(helper))}
+TRACE={shlex.quote(str(trace))}
+autonomy_evaluate_action() {{ return 0; }}
+systemctl() {{
+  case "$1" in
+    show) if [[ "$2" == --property=ActiveState ]]; then echo active;
+          elif [[ -f "$TRACE" ]]; then echo 43; else echo 42; fi ;;
+    stop) touch "$TRACE" ;;
+    kill) echo interrupted >> "$TRACE" ;;
+    *) return 1 ;;
+  esac
+}}
+if fhd_stop_service_for_release fixture.service release:test; then exit 2; fi
+[[ "$FHD_SERVICE_QUIESCED" == 0 && ! -s "$TRACE" ]]
+"""
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.parametrize(
     "mode,status", [("ok", 0), ("deny_rollback", 77), ("deny_restart", 78), ("stop_fails", 79)]
 )
@@ -47,7 +70,9 @@ def test_real_rollback_checks_both_gates_and_stops_writes_first(tmp_path, mode, 
             """systemctl() {
           printf '%s\\n' "$1" >> "$TRACE"
           case "$1" in
-            show) printf '%s\\n' "$MOCK_STATE" ;;
+            show) if [[ "$2" == --property=MainPID ]]; then
+              if [[ "$MOCK_STATE" == inactive ]]; then echo 0; else echo 42; fi
+              else printf '%s\\n' "$MOCK_STATE"; fi ;;
             stop) [[ "$MODE" != stop_fails ]] || return 79; MOCK_STATE=inactive ;;
             restart) MOCK_STATE=active ;;
             is-active) [[ "$MOCK_STATE" == active ]] ;;
