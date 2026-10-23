@@ -132,8 +132,8 @@ def _resume_review_qa_candidate(
     for item in reversed(open_items):
         if not isinstance(item, dict) or item.get("kind") != "failed_steps":
             continue
-        steps = item.get("steps")
-        if not isinstance(steps, list) or "code" not in steps:
+        failed_steps = item.get("steps")
+        if not isinstance(failed_steps, list) or "code" not in failed_steps:
             continue
         retry_count = int(item.get("retry_count") or 1)
         if retry_count >= max_retries:
@@ -147,7 +147,7 @@ def _resume_review_qa_candidate(
             return {
                 "branch": branch,
                 "failed_run_id": run_id,
-                "failed_steps": list(steps),
+                "failed_steps": list(failed_steps),
                 "para_task_id": para_task_id,
                 "reason": "resume_failed_code_step",
             }
@@ -198,24 +198,24 @@ def _resume_review_qa_candidate(
             "human_strategy_approval",
         }:
             continue
-        candidate = (
+        ai_review_candidate = (
             self_maintenance_para_merge_remediation.resume_candidate_from_para_ai_review_item(
                 memory, item
             )
         )
-        if candidate is not None:
-            return candidate
+        if ai_review_candidate is not None:
+            return ai_review_candidate
     review_failed_run_ids = set()
     for item in open_items:
         if not isinstance(item, dict) or item.get("kind") != "failed_steps":
             continue
-        steps = item.get("steps")
-        if not isinstance(steps, list):
+        review_steps = item.get("steps")
+        if not isinstance(review_steps, list):
             continue
-        if any((str(step) in {"review", "qa"} for step in steps)):
+        if any((str(step) in {"review", "qa"} for step in review_steps)):
             run_id = str(item.get("run_id") or "")
             if run_id:
-                review_failed_run_ids.add((run_id, tuple((str(step) for step in steps))))
+                review_failed_run_ids.add((run_id, tuple((str(step) for step in review_steps))))
     for run in reversed(recent_runs):
         if not isinstance(run, dict):
             continue
@@ -246,13 +246,13 @@ def _resume_review_qa_candidate(
         reason = self_maintenance_remediation_lineage.normalize_automated_remediation_reason(
             memory, item
         )
-        candidate = (
+        ai_review_candidate = (
             self_maintenance_para_merge_remediation.resume_candidate_from_para_ai_review_item(
                 memory, item
             )
         )
-        if candidate is not None:
-            return candidate
+        if ai_review_candidate is not None:
+            return ai_review_candidate
         if reason in {
             "auto_merge_safety_score_v2_too_low",
             "auto_merge_safety_score_v3_too_low",
@@ -279,7 +279,7 @@ def _resume_review_qa_candidate(
         para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
         run_id = str(item.get("run_id") or "").strip()
         if branch and para_task_id:
-            candidate: Dict[str, Any] = {
+            remediation_candidate: Dict[str, Any] = {
                 "branch": branch,
                 "failed_run_id": run_id,
                 "failed_steps": list(failed_steps),
@@ -287,20 +287,20 @@ def _resume_review_qa_candidate(
                 "reason": "resume_automated_remediation_candidate",
             }
             if reason.startswith("para_merge_"):
-                candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
-                candidate["remediation_reason"] = reason
+                remediation_candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
+                remediation_candidate["remediation_reason"] = reason
             elif reason == retort_remediation.RETORT_SCOPE_REASON:
-                candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
-                candidate["remediation_reason"] = reason
+                remediation_candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
+                remediation_candidate["remediation_reason"] = reason
             if continue_existing_code_task:
                 if reason.startswith("para_merge_"):
                     if self_maintenance_para_merge_remediation.para_merge_resume_pins_rejected_branch(
                         item
                     ):
-                        candidate["continue_existing_code_task"] = True
+                        remediation_candidate["continue_existing_code_task"] = True
                 elif not item.get("resume_from_clean_baseline"):
-                    candidate["continue_existing_code_task"] = True
-            return candidate
+                    remediation_candidate["continue_existing_code_task"] = True
+            return remediation_candidate
     return None
 
 

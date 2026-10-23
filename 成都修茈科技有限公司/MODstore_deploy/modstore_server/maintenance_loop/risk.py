@@ -172,7 +172,9 @@ def _auto_merge_risk_score_v1(
     per_file_scores = [
         {"file": file_name, "score": _file_type_risk(file_name)} for file_name in normalized_files
     ]
-    file_score = max([int(item["score"]) for item in per_file_scores] or [0])
+    file_score = max(
+        [score for item in per_file_scores if isinstance((score := item.get("score")), int)] or [0]
+    )
     line_score = min(25, line_changes // 20)
     keyword_terms = (
         "auth",

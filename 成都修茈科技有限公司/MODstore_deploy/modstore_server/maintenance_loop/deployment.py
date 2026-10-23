@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import re
 import subprocess
@@ -193,8 +194,8 @@ def _emit_deploy_callback(
             if candidate and (candidate / "autonomy_callback.py").is_file():
                 if str(candidate) not in sys.path:
                     sys.path.insert(0, str(candidate))
-                from autonomy_callback import deploy_callback
-
+                callback_module = importlib.import_module("autonomy_callback")
+                deploy_callback = getattr(callback_module, "deploy_callback")
                 deploy_callback(phase, payload, source="self_maintenance", action_id=action_id)
                 return
     except RECOVERABLE_ERRORS:

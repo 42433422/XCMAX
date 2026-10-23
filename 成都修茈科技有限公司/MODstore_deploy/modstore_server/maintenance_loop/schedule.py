@@ -6,7 +6,7 @@ import json
 import os
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from apscheduler.triggers.cron import CronTrigger
 
@@ -51,7 +51,7 @@ def _recent_employee_failure_count(lookback_hours: int) -> int:
     try:
         return (
             db.query(models.EmployeeExecutionMetric)
-            .filter(models.EmployeeExecutionMetric.created_at >= since)
+            .filter(cast(Any, models.EmployeeExecutionMetric.created_at) >= since)
             .filter(models.EmployeeExecutionMetric.status != "success")
             .count()
         )
@@ -81,7 +81,7 @@ def _recent_incident_signals(lookback_hours: int, *, limit: int = 8) -> Dict[str
     try:
         query = (
             db.query(models.IncidentEvent)
-            .filter(models.IncidentEvent.created_at >= since)
+            .filter(cast(Any, models.IncidentEvent.created_at) >= since)
             .filter(models.IncidentEvent.event_type.in_(sorted(event_types)))
             .order_by(models.IncidentEvent.created_at.desc())
         )
@@ -386,17 +386,11 @@ def record_self_maintenance_heartbeat(
     still evaluating that gate without pretending code work was performed.
     """
     evaluation = should_run_self_maintenance_loop(force=False, triggered_by=triggered_by)
-    provenance = (
-        evaluation.get("runtime_provenance")
-        if isinstance(evaluation.get("runtime_provenance"), dict)
-        else {}
-    )
-    metrics_gate = (
-        evaluation.get("evolution_metrics_gate")
-        if isinstance(evaluation.get("evolution_metrics_gate"), dict)
-        else {}
-    )
-    record = {
+    provenance_value = evaluation.get("runtime_provenance")
+    provenance = provenance_value if isinstance(provenance_value, dict) else {}
+    metrics_value = evaluation.get("evolution_metrics_gate")
+    metrics_gate = metrics_value if isinstance(metrics_value, dict) else {}
+    record: Dict[str, Any] = {
         "created_at": config._iso(config._utc_now()),
         "phase": "heartbeat",
         "run_id": f"heartbeat-{uuid.uuid4().hex[:16]}",

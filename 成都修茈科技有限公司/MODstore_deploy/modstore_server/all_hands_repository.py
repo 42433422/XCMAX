@@ -6,7 +6,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 from sqlalchemy import desc
 
@@ -42,9 +42,9 @@ class AllHandsRepository:
         xc = employee_pack_records_from_store()
         sf = self.session_provider()
         with sf() as session:
-            rows = (
+            rows: Any = (
                 session.query(CatalogItem.pkg_id, CatalogItem.name)
-                .filter(CatalogItem.artifact == "employee_pack")
+                .filter_by(artifact="employee_pack")
                 .all()
             )
         db_ids = {str(r[0]) for r in rows}
@@ -92,9 +92,9 @@ class AllHandsRepository:
                 EmployeeExecutionMetric.employee_id == employee_id
             )
             if cutoff is not None:
-                q = q.filter(EmployeeExecutionMetric.created_at >= cutoff)
-            rows = q.order_by(desc(EmployeeExecutionMetric.id)).limit(120).all()
-            for r in rows:
+                q = q.filter(cast(Any, EmployeeExecutionMetric.created_at) >= cutoff)
+            metric_rows = q.order_by(desc(EmployeeExecutionMetric.id)).limit(120).all()
+            for r in metric_rows:
                 status = str(getattr(r, "status", "") or "")
                 err = (getattr(r, "error", "") or "").strip()
                 is_real_failure = status in ("failed", "error")

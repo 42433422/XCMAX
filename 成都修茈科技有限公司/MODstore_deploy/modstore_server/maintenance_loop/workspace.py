@@ -346,11 +346,15 @@ def _diff_stats_changed_files_consistency(
     stats_changed = diff_stats.get("changed_files")
     if not isinstance(stats_changed, list):
         file_stats = diff_stats.get("files") if isinstance(diff_stats.get("files"), dict) else {}
+        if not isinstance(file_stats, dict):
+            file_stats = {}
         binary_files = (
             diff_stats.get("binary_files")
             if isinstance(diff_stats.get("binary_files"), list)
             else []
         )
+        if not isinstance(binary_files, list):
+            binary_files = []
         stats_changed = list(file_stats.keys()) + binary_files
     actual = {_normalize_repo_path(str(file_name)) for file_name in stats_changed if str(file_name)}
     missing_from_numstat = sorted(expected - actual)

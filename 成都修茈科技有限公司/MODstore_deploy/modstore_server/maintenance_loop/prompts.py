@@ -95,26 +95,18 @@ def _code_task_text(
     )
     score_remediation = ""
     if isinstance(selected_remediation, dict):
-        merge_result = (
-            selected_remediation.get("merge_result")
-            if isinstance(selected_remediation.get("merge_result"), dict)
-            else {}
+        merge_result_value = selected_remediation.get("merge_result")
+        merge_result: Dict[str, Any] = (
+            merge_result_value if isinstance(merge_result_value, dict) else {}
         )
-        v2 = (
-            merge_result.get("safety_score_v2")
-            if isinstance(merge_result.get("safety_score_v2"), dict)
-            else {}
-        )
-        v3 = (
-            merge_result.get("safety_score_v3")
-            if isinstance(merge_result.get("safety_score_v3"), dict)
-            else {}
-        )
-        review = (
-            (v2.get("semantic_llm_analysis") or {}).get("reports", {}).get("review", {})
-            if isinstance(v2.get("semantic_llm_analysis"), dict)
-            else {}
-        )
+        v2_value = merge_result.get("safety_score_v2")
+        v2: Dict[str, Any] = v2_value if isinstance(v2_value, dict) else {}
+        v3_value = merge_result.get("safety_score_v3")
+        v3: Dict[str, Any] = v3_value if isinstance(v3_value, dict) else {}
+        semantic_analysis = v2.get("semantic_llm_analysis")
+        reports = semantic_analysis.get("reports") if isinstance(semantic_analysis, dict) else None
+        review_data = reports.get("review") if isinstance(reports, dict) else None
+        review = review_data if isinstance(review_data, dict) else {}
         remediation_evidence = {
             "branch": selected_remediation.get("branch"),
             "failed_run_id": selected_remediation.get("failed_run_id")

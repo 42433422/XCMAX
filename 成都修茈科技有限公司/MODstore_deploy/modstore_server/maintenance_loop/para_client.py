@@ -323,7 +323,10 @@ def _mark_para_task_merged(*, api_base: str, task_id: str, merge_sha: str) -> Di
             json={"merge_commit_sha": merge_sha},
         )
         resp.raise_for_status()
-        return resp.json()
+        payload = resp.json()
+        if not isinstance(payload, dict):
+            raise ValueError("Para merge response must be a JSON object")
+        return payload
 
 
 def _request_para_task_merge(*, api_base: str, task_id: str) -> Dict[str, Any]:

@@ -242,7 +242,7 @@ def _structured_report_gate(steps: List[Dict[str, Any]], branch=None) -> Dict[st
             review_steps[-1], config.STRUCTURED_REVIEW_MARKER
         )
         protocol_ok, protocol_reason = _validate_structured_review_protocol(review_json)
-        if not protocol_ok:
+        if not protocol_ok or not isinstance(review_json, dict):
             return {
                 "ok": False,
                 "reason": protocol_reason or "missing_structured_review_result",
@@ -250,14 +250,13 @@ def _structured_report_gate(steps: List[Dict[str, Any]], branch=None) -> Dict[st
             }
         severity = str(review_json.get("max_severity") or "high").lower()
         blocking = review_json.get("blocking_findings")
-        dimensions = (
-            review_json.get("dimensions") if isinstance(review_json.get("dimensions"), dict) else {}
-        )
-        failed_dims = [
-            key
-            for key in config._REVIEW_DIMENSION_KEYS
-            if str((dimensions.get(key) or {}).get("status") or "").lower() == "fail"
-        ]
+        dimensions_value = review_json.get("dimensions")
+        dimensions = dimensions_value if isinstance(dimensions_value, dict) else {}
+        failed_dims = []
+        for key in config._REVIEW_DIMENSION_KEYS:
+            dimension = dimensions.get(key)
+            if isinstance(dimension, dict) and str(dimension.get("status") or "").lower() == "fail":
+                failed_dims.append(key)
         if severity not in {"none", "low", "medium"}:
             return {
                 "ok": False,
@@ -283,7 +282,7 @@ def _structured_report_gate(steps: List[Dict[str, Any]], branch=None) -> Dict[st
     if qa_steps:
         qa_json = _structured_report_from_step(qa_steps[-1], config.STRUCTURED_QA_MARKER)
         qa_ok, qa_reason = _validate_structured_qa_protocol(qa_json)
-        if not qa_ok:
+        if not qa_ok or not isinstance(qa_json, dict):
             return {
                 "ok": False,
                 "reason": qa_reason or "missing_structured_qa_result",
@@ -318,7 +317,7 @@ def _structured_report_gate(steps: List[Dict[str, Any]], branch=None) -> Dict[st
                 and self_maintenance_quality_gate.matches_focused_test_command(
                     item.get("command"), focused_command
                 )
-                and (int(item.get("exit_code") if item.get("exit_code") is not None else -1) == 0)
+                and item.get("exit_code") == 0
                 and str(item.get("status") or "").lower().startswith("passed")
                 for item in tested_commands
             )
@@ -334,9 +333,8 @@ def _structured_report_gate(steps: List[Dict[str, Any]], branch=None) -> Dict[st
         )
         if quality_failure:
             return {"ok": False, "reason": quality_failure, "qa": qa_json}
-        test_delta = (
-            qa_json.get("test_delta") if isinstance(qa_json.get("test_delta"), dict) else {}
-        )
+        delta_value = qa_json.get("test_delta")
+        test_delta = delta_value if isinstance(delta_value, dict) else {}
         for key in ("new_failures", "new_errors"):
             values = test_delta.get(key)
             if isinstance(values, list) and values:

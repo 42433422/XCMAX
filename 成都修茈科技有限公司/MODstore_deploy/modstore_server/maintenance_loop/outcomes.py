@@ -242,10 +242,13 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
         closed_items = []
     memory["closed_items"] = closed_items
     decision = final.get("policy_decision") or {}
-    steps = final.get("steps") if isinstance(final.get("steps"), list) else []
-    failed_steps = [step.get("step") for step in steps if not step.get("ok")]
+    raw_steps = final.get("steps")
+    steps = raw_steps if isinstance(raw_steps, list) else []
+    failed_steps = [
+        step.get("step") for step in steps if isinstance(step, dict) and not step.get("ok")
+    ]
     if failed_steps:
-        run_id = final.get("run_id")
+        run_id = str(final.get("run_id") or "")
         existing_idx = None
         for idx, item in enumerate(open_items):
             if (
@@ -367,7 +370,7 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
         )
         para_workspace = Path(ws_root) / para_task_id if para_task_id else Path(ws_root)
         salvage_summary = self_evolution_knowledge.salvage_kb_from_workspace(
-            para_workspace=para_workspace, run_id=final.get("run_id")
+            para_workspace=para_workspace, run_id=str(final.get("run_id") or "")
         )
         if salvage_summary and (
             salvage_summary.get("salvaged_fixes") or salvage_summary.get("salvaged_patterns")

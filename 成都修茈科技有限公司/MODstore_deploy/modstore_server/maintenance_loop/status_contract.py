@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 from . import config, deployment, merge_policy, review, risk, store
 
 
-def render_runtime_contract(state):
+def render_runtime_contract(state: Dict[str, Any]) -> Dict[str, Any]:
     latest_timestamp = store._ledger_row_timestamp(state["rows"][-1]) if state["rows"] else None
     latest_event_at = latest_timestamp.isoformat() if latest_timestamp is not None else None
     runtime_source = {
@@ -436,7 +436,7 @@ def _build_runtime_status_result(
     contract_status,
     runtime_source,
     latest_event_at,
-):
+) -> Dict[str, Any]:
     return {
         "ok": True,
         "cron": {

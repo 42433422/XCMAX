@@ -27,7 +27,8 @@ def _employee_result_ok(result: Dict[str, Any]) -> bool:
         )
     ):
         return False
-    inner = result.get("result") if isinstance(result.get("result"), dict) else result
+    nested_result = result.get("result")
+    inner: Dict[str, Any] = nested_result if isinstance(nested_result, dict) else result
     if str(inner.get("status", "")).lower() in {"failed", "error"}:
         return False
     if not bool(inner.get("ok", True)):
@@ -123,8 +124,9 @@ def _collect_delivery_validation_candidates(
     if isinstance(obj, dict):
         dv = obj.get("delivery_validation")
         if isinstance(dv, dict):
-            cmds = dv.get("commands") if isinstance(dv.get("commands"), list) else []
-            failed = sum((1 for c in cmds if _delivery_validation_command_failed(c)))
+            raw_cmds = dv.get("commands")
+            cmds = raw_cmds if isinstance(raw_cmds, list) else []
+            failed = len([c for c in cmds if _delivery_validation_command_failed(c)])
             out.append(((1 if cmds else 0, failed, len(cmds), rank), dv))
             rank += 1
         preferred_present = [
@@ -171,13 +173,15 @@ def _extract_failure_reason(
                     handler = str(item.get("handler") or item.get("name") or "")
                     err = item.get("error") or item.get("message") or item.get("stderr")
                     detail = item.get("detail") or item.get("reason")
-                    parts = [f"handler={handler}"] if handler else []
+                    output_parts = [f"handler={handler}"] if handler else []
                     if err:
-                        parts.append(f"error={str(err)[:200]}")
+                        output_parts.append(f"error={str(err)[:200]}")
                     if detail:
-                        parts.append(f"detail={str(detail)[:120]}")
+                        output_parts.append(f"detail={str(detail)[:120]}")
                     inner_outputs_failure = (
-                        "output_failed: " + " ".join(parts) if parts else "output ok=False"
+                        "output_failed: " + " ".join(output_parts)
+                        if output_parts
+                        else "output ok=False"
                     )
                     break
     path_guard_failure = ""

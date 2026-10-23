@@ -155,8 +155,9 @@ class MaintenanceRuntime:
         if candidate:
             start_record["resume_candidate"] = candidate
         self.state.append(start_record)
-        steps_to_run = resume._resume_steps(candidate)
-        task_id, branch = resume._resume_dispatch_context(candidate, steps_to_run)
+        resume_steps = resume._resume_steps(candidate)
+        task_id, branch = resume._resume_dispatch_context(candidate, resume_steps)
+        steps_to_run = sorted(resume_steps)
         context = _RunContext(
             run_id=run_id,
             started_at=started_at,
@@ -398,7 +399,7 @@ class MaintenanceRuntime:
                 "auto_merged_low_risk": "completed_merged",
                 "auto_merge_requested_low_risk": "completed_merge_requested",
                 "hold_for_automated_remediation": "completed_held_for_remediation",
-            }.get(policy.get("action"), status)
+            }.get(str(policy.get("action") or ""), status)
         final = {
             "branch": context.branch,
             "completed_at": config._iso(self.now()),
