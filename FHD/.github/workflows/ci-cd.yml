@@ -1110,6 +1110,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
 
       - name: Validate security scan run ids
         if: ${{ inputs.release_channel == 'stable' }}
@@ -1170,9 +1171,7 @@ jobs:
           # Stable artifacts are uploaded atomically, then await the audited
           # fhd-deploy workflow approval. Staging remains immediate.
           FHD_PUSH_APPLY_NOW: ${{ (github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable')) == 'staging' && '1' || '0' }}
-          # The production link currently needs roughly 42-50 minutes for the
-          # normal release tarball. Keep a measured transfer margin while the
-          # rsync .part file preserves progress across interrupted runs.
+          # Allow slow CVM transfer and resumable retries.
           FHD_CVM_PUSH_TIMEOUT: "75m"
         run: |
           set -euo pipefail
