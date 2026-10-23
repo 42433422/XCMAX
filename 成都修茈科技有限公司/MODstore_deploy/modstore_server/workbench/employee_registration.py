@@ -98,8 +98,7 @@ async def register_and_verify_workflow(
                     )
                 except RECOVERABLE_ERRORS as _cat_exc:
                     _LOG.warning(
-                        "register_pack catalog sync failed session=%s error_type=%s",
-                        state.session_id,
+                        "register_pack catalog sync failed error_type=%s",
                         type(_cat_exc).__name__,
                     )
                     _reg_msg = f"目录登记失败：{_cat_exc!s}"[:480]
@@ -119,8 +118,7 @@ async def register_and_verify_workflow(
                 return True
         except RECOVERABLE_ERRORS as _reg_exc:
             _LOG.warning(
-                "register_pack failed for employee session=%s error_type=%s",
-                state.session_id,
+                "register_pack failed for employee error_type=%s",
                 type(_reg_exc).__name__,
             )
             state.registration_missing = True

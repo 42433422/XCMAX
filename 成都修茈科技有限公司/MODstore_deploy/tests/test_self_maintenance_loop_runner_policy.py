@@ -1269,6 +1269,21 @@ def test_device_diagnostic_logging_redacts_employee_and_device_details(monkeypat
     assert "attempt=1/1" in caplog.text
 
 
+def test_ledger_append_keeps_records_and_restricts_file_permissions(tmp_path, monkeypatch):
+    ledger = tmp_path / "private-ledger.jsonl"
+    ledger.write_text('{"phase":"earlier"}\n', encoding="utf-8")
+    ledger.chmod(0o644)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(ledger))
+
+    _maintenance_store._append_ledger({"phase": "next", "status": "complete"})
+
+    rows = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+    assert [row["phase"] for row in rows] == ["earlier", "next"]
+    assert rows[1]["ledger_schema_version"] == 2
+    if hasattr(_maintenance_store.os, "fchmod"):
+        assert ledger.stat().st_mode & 0o077 == 0
+
+
 def test_business_failure_is_not_retryable():
     result = {"result": {"outputs": [{"error": "pytest failed: assertion error"}]}}
 

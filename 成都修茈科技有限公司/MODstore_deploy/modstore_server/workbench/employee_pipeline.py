@@ -147,17 +147,14 @@ async def run_employee_pipeline(
         state.restore(checkpoint)
         if state.resume_from:
             _LOG.info(
-                "pipeline resume session=%s from step=%s pack_dir=%s",
-                sid,
+                "pipeline resume from step=%s",
                 state.resume_from,
-                state.package_path,
             )
     try:
         await services.run(state)
     except RECOVERABLE_ERRORS as error:
         _LOG.error(
-            "workbench employee pipeline failed session=%s step=%s error_type=%s",
-            sid,
+            "workbench employee pipeline failed step=%s error_type=%s",
             state.current_step,
             type(error).__name__,
         )
@@ -168,7 +165,7 @@ async def run_employee_pipeline(
             if failed_pack:
                 cleanup_experimental_pack(failed_pack, metadata=state.payload)
         except RECOVERABLE_ERRORS:
-            _LOG.warning("experimental cleanup on error failed session=%s", sid, exc_info=True)
+            _LOG.warning("experimental cleanup on error failed", exc_info=True)
         async with services.sessions.lock:
             session = services.sessions.data.get(sid)
             if session:

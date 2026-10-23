@@ -112,7 +112,10 @@ def _append_ledger(record: Dict[str, Any]) -> None:
     record.setdefault("ledger_schema_version", 2)
     path = ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as fh:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fh.fileno(), 0o600)
         try:
             import fcntl
 
