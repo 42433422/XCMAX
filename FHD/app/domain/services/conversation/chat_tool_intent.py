@@ -39,6 +39,8 @@ _UNAMBIGUOUS_BUSINESS_DB_MUTATION_KEYWORDS = frozenset(
     }
 )
 
+_MAX_CHAT_INTENT_CHARS = 4096
+
 # 输入先去空白；只认否定词紧邻动作，避免「特别好用」「别的客户」假阳性。
 _NEGATED_ACTION_RE = re.compile(
     r"(?:不要|不用|不需要|不必|不想|不想再|不允许|不准|别再|禁止|千万别|别|不)"
@@ -55,6 +57,8 @@ def is_negated_action_request(text: str) -> bool:
     value = str(text or "")
     if not value:
         return False
+    if len(value) > _MAX_CHAT_INTENT_CHARS:
+        return True
     normalized = re.sub(r"\s+", "", value)
     return bool(_NEGATED_ACTION_RE.search(normalized))
 
@@ -100,6 +104,9 @@ def attach_explicit_tenant_id(payload: dict[str, Any], message: str) -> dict[str
 def looks_like_business_db_write(message: str, lower: str | None = None) -> bool:
     """Recognize explicit CRUD without requiring users to say database jargon."""
     value = str(message or "")
+    if len(value) > _MAX_CHAT_INTENT_CHARS:
+        # Fail closed: let oversized requests enter the guarded write/clarification path.
+        return True
     # 原始 SQL 永不进入写规划：安全闸从执行层前移到规划层（审计 safety.raw_sql.reject_021）。
     if looks_like_raw_sql(value):
         return False
@@ -149,6 +156,8 @@ def looks_like_explicit_workflow_tool_intent(text: str) -> bool:
     """Return whether the user explicitly asked for an executable workflow tool."""
     value = str(text or "").strip()
     if not value:
+        return False
+    if len(value) > _MAX_CHAT_INTENT_CHARS:
         return False
     lower = value.lower()
     employee_mentioned = any(k in value for k in ("员工", "调用", "交给")) or "employee" in lower

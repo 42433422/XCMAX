@@ -83,6 +83,9 @@ _INTENT_SCHEMA = {
     },
 }
 
+_MAX_INTENT_MESSAGE_CHARS = 4096
+_MAX_INTENT_RESPONSE_CHARS = 32_768
+
 
 class DeepSeekIntentRecognizer:
     def __init__(
@@ -125,6 +128,8 @@ class DeepSeekIntentRecognizer:
         self, message: str, context: list[dict[str, str]] | None = None
     ) -> dict[str, Any]:
         """带槽位提取的意图识别（带缓存）"""
+        if len(message) > _MAX_INTENT_MESSAGE_CHARS:
+            return self._fallback_result(message)
         cache_key = _make_intent_cache_key(message)
         cached = _intent_recognition_cache.get(cache_key)
         if cached:
@@ -212,6 +217,8 @@ class DeepSeekIntentRecognizer:
         import json
 
         content = content.strip()
+        if len(content) > _MAX_INTENT_RESPONSE_CHARS:
+            return self._fallback_result(original_message)
         if content.startswith("```"):
             lines = content.split("\n")
             for i, line in enumerate(lines):

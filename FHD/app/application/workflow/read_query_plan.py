@@ -11,10 +11,14 @@ from typing import Any
 
 from app.application.workflow.types import WorkflowNode
 
+_MAX_PLANNER_TEXT_CHARS = 4096
+
 
 def customer_read_node(
     message: str, route: dict[str, Any], registry: dict[str, Any]
 ) -> WorkflowNode | None:
+    if len(message) > _MAX_PLANNER_TEXT_CHARS:
+        return None
     if route.get("intent") != "customers_query" or "customers" not in registry:
         return None
     if re.search(
@@ -51,6 +55,8 @@ def customer_read_node(
 
 
 def report_read_node(message: str, registry: dict[str, Any], *, today=None) -> WorkflowNode | None:
+    if len(message) > _MAX_PLANNER_TEXT_CHARS:
+        return None
     from calendar import monthrange
     from datetime import date
 
@@ -96,6 +102,8 @@ def report_read_node(message: str, registry: dict[str, Any], *, today=None) -> W
 
 def sales_export_node(message: str, registry: dict[str, Any], *, today=None) -> WorkflowNode | None:
     """Export explicit sales requests; an omitted period means all recorded sales."""
+    if len(message) > _MAX_PLANNER_TEXT_CHARS:
+        return None
     from calendar import monthrange
     from datetime import date
 

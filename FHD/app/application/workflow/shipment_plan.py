@@ -5,8 +5,12 @@ from typing import Any
 
 from app.application.workflow.types import WorkflowNode
 
+_MAX_PLANNER_TEXT_CHARS = 4096
+
 
 def shipment_document_node(message: str, registry: dict[str, Any]) -> WorkflowNode | None:
+    if len(message) > _MAX_PLANNER_TEXT_CHARS:
+        return None
     if "shipment_orders" not in registry or not re.search(r"发货单|送货单|出货单", message):
         return None
     if not re.match(r"^(?:请|帮我)?\s*(?:打印|打个|打一张|开一张|生成)", message.strip()):

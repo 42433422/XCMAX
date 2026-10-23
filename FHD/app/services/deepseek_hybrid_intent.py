@@ -10,6 +10,8 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+_MAX_INTENT_MESSAGE_CHARS = 4096
+
 
 class HybridIntentWithDeepSeek:
     """混合意图识别（规则 + DeepSeek/BERT + 槽位）"""
@@ -191,6 +193,8 @@ class HybridIntentWithDeepSeek:
 
     def _extract_slots_from_rule(self, message: str, rule_result: dict) -> dict[str, Any]:
         """从规则匹配结果中提取槽位"""
+        if len(message) > _MAX_INTENT_MESSAGE_CHARS:
+            return {}
         slots = {}
         import re
 

@@ -6,10 +6,14 @@ from typing import Any
 from app.application.workflow.types import WorkflowNode
 from app.domain.services.conversation.chat_tool_intent import is_negated_action_request
 
+_MAX_PLANNER_TEXT_CHARS = 4096
+
 
 def sales_quote_node(
     message: str, registry: dict[str, Any], *, single_request: bool = False
 ) -> WorkflowNode | None:
+    if len(message) > _MAX_PLANNER_TEXT_CHARS:
+        return None
     if "sales" not in registry or is_negated_action_request(message):
         return None
     if re.search(r"(?:创建|新建|新增)\s*(?:一[张个]\s*)?销售订单(?=[:：，,\s]|$)", message):

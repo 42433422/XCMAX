@@ -18,6 +18,8 @@ SLOT_LABELS = {
     "customer_name": "客户名称",
 }
 
+_MAX_TASK_MESSAGE_CHARS = 4096
+
 
 def _cn_number(token: str) -> int | None:
     t = (token or "").strip()
@@ -60,6 +62,8 @@ class TaskAgent:
         self, message: str, context: dict[str, Any] | None = None
     ) -> dict[str, Any] | None:
         msg = (message or "").strip()
+        if len(msg) > _MAX_TASK_MESSAGE_CHARS:
+            return None
         context = context or {}
 
         user_id = context.get("user_id") or ""

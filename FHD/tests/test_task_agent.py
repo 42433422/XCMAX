@@ -16,6 +16,12 @@ def test_task_agent_parse_long_colloquial_shipment():
     assert "3 桶" in result["data"]["params"]["order_text"]
 
 
+def test_task_agent_declines_oversized_input_before_slot_regexes():
+    from app.services.task_agent import get_task_agent
+
+    assert get_task_agent().parse_task("编号" + "0" * 100_000) is None
+
+
 def test_task_agent_should_parse_spec_and_qty_without_separator():
     from app.services.task_agent import get_task_agent
 

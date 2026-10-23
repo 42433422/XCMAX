@@ -8,8 +8,12 @@ from typing import Any
 
 from app.application.workflow.types import WorkflowNode
 
+_MAX_PLANNER_TEXT_CHARS = 4096
+
 
 def finance_transaction_node(message: str, registry: dict[str, Any]) -> WorkflowNode | None:
+    if len(message) > _MAX_PLANNER_TEXT_CHARS:
+        return None
     if "finance" not in registry:
         return None
     match = re.fullmatch(

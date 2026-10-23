@@ -10,6 +10,8 @@ from typing import Any, Protocol
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+_MAX_ROUTING_MESSAGE_CHARS = 4096
+
 
 class NegationCheck(Protocol):
     def __call__(self, text: str, /, *, action_keywords: list[str]) -> bool: ...
@@ -80,6 +82,8 @@ def _requires_llm_planning(text: str, entity_markers: tuple[str, ...]) -> bool:
 def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
     """普通版轻量槽位提取与任务分流。"""
     text = (message or "").strip()
+    if len(text) > _MAX_ROUTING_MESSAGE_CHARS:
+        return {"intent": "unknown", "slots": {}}
     lower = text.lower()
 
     if ports.database_maintenance(text) is not None:
