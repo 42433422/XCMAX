@@ -9,7 +9,7 @@ import stat
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, cast
 
 _LIBRARY: ContextVar[Path | None] = ContextVar("private_delivery_source_library", default=None)
 _SESSION_ID = re.compile(r"[0-9a-f]{16,32}\Z")
@@ -59,7 +59,10 @@ def _read_scope(root: Path) -> dict[str, Any]:
         os.close(fd)
         raise
     with stream:
-        return json.load(stream)
+        payload = json.load(stream)
+    if not isinstance(payload, dict):
+        raise ValueError("私有生产目录记录无效")
+    return cast(dict[str, Any], payload)
 
 
 def active_private_library() -> Path | None:
@@ -95,7 +98,7 @@ def _existing_scope_path(owner_id: int, session_id: str) -> Path:
     delivery_root = _child_entry(public_library().parent, "customer-delivery-sources")
     owner_root = _child_entry(delivery_root, str(owner_id)) if delivery_root else None
     target = _child_entry(owner_root, session_id) if owner_root else None
-    if target is None:
+    if delivery_root is None or owner_root is None or target is None:
         raise ValueError("私有生产目录不存在")
     for path in (delivery_root, owner_root, target):
         _require_directory(path)
