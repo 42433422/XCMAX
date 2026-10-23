@@ -41,7 +41,9 @@ def test_task_agent_followup_then_fill_bucket():
     from app.services.task_agent import get_task_agent
 
     agent = get_task_agent()
-    first = agent.process_message("u_task_2", "给我打印七彩乐园的发货单，编号9803，规格28")
+    first = agent.process_message(
+        "u_task_2", "给我打印七彩乐园的发货单，编号9803，规格28"
+    )
     assert first is not None
     assert first["action"] == "followup"
     assert "多少桶" in first["text"]
@@ -153,6 +155,26 @@ def test_task_agent_linear_number_parser_preserves_common_shipment_grammar():
         "quantity_tins": 3,
         "unit_name": "太阳鸟",
     }
+
+
+def test_task_agent_shipment_unit_cleanup_is_linear_and_keeps_customer_name():
+    from app.services.task_agent import get_task_agent
+
+    parsed = get_task_agent().parse_task("发货单七彩乐园9803规格12要3桶")
+    assert parsed is not None
+    assert parsed["slots"]["unit_name"] == "七彩乐园"
+    assert parsed["slots"]["model_number"] == "9803"
+    assert parsed["slots"]["tin_spec"] == 12.0
+    assert parsed["slots"]["quantity_tins"] == 3
+
+
+def test_task_agent_customer_query_handles_long_whitespace_without_regex_backtracking():
+    from app.services.task_agent import get_task_agent
+
+    parsed = get_task_agent().parse_task("查客户" + "\t" * 3000 + "太阳鸟贸易")
+    assert parsed is not None
+    assert parsed["task_type"] == "customer_query"
+    assert parsed["slots"]["customer_name"] == "太阳鸟贸易"
 
 
 def test_task_agent_linear_number_parser_handles_near_miss_user_text():

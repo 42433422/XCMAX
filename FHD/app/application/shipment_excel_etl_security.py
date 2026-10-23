@@ -69,34 +69,27 @@ def etl_allowed_roots(workspace_root: str | Path | None = None) -> list[Path]:
 
 
 def _safe_under_roots(raw: str, roots: list[Path]) -> Path:
-    """用 commonpath/startswith 消毒后，在命中根下按相对片段重建路径。"""
+    """Resolve a path and require it to remain beneath one configured root."""
     text = str(raw or "").strip()
     if not text or "\x00" in text:
         raise ShipmentEtlPathError("empty path")
 
-    root_reals = [os.path.realpath(str(r)) for r in roots]
-    if not root_reals:
+    root_paths = [Path(root).resolve() for root in roots]
+    if not root_paths:
         raise ShipmentEtlPathError("path not under allowed dirs")
-
-    parts = [p for p in Path(text).parts if p not in ("", ".")]
-    if any(p == ".." for p in parts):
+    requested = Path(text)
+    if ".." in requested.parts:
         raise ShipmentEtlPathError("path not under allowed dirs")
-
-    if os.path.isabs(text):
-        candidate = os.path.realpath(text)
-    else:
-        candidate = os.path.realpath(os.path.join(root_reals[0], *parts))
-
-    for root in root_reals:
-        if candidate != root and not candidate.startswith(root + os.sep):
+    for root in root_paths:
+        candidate = requested if requested.is_absolute() else root / requested
+        resolved = candidate.resolve()
+        try:
+            relative = resolved.relative_to(root)
+        except ValueError:
             continue
-        rel = os.path.relpath(candidate, root)
-        if rel.startswith("..") or os.path.isabs(rel):
+        if relative.is_absolute() or ".." in relative.parts:
             continue
-        rel_parts = [p for p in Path(rel).parts if p not in ("", ".", "..")]
-        safe = root if not rel_parts else os.path.realpath(os.path.join(root, *rel_parts))
-        if safe == root or safe.startswith(root + os.sep):
-            return Path(safe)
+        return resolved
     raise ShipmentEtlPathError("path not under allowed dirs")
 
 
@@ -113,7 +106,9 @@ def resolve_etl_path(
     """
     _ = must_exist
     roots = etl_allowed_roots(workspace_root)
-    preferred = Path(workspace_root).resolve() if workspace_root else Path.cwd().resolve()
+    preferred = (
+        Path(workspace_root).resolve() if workspace_root else Path.cwd().resolve()
+    )
     if preferred in roots:
         roots = [preferred, *(root for root in roots if root != preferred)]
     return _safe_under_roots(str(file_path or ""), roots)
@@ -131,7 +126,9 @@ def resolve_etl_output_path(
     name = Path(raw).name
     if not name or name in (".", ".."):
         raise ShipmentEtlPathError("invalid output name")
-    parent_raw = str(Path(raw).parent) if Path(raw).parent.as_posix() not in (".", "") else "."
+    parent_raw = (
+        str(Path(raw).parent) if Path(raw).parent.as_posix() not in (".", "") else "."
+    )
     if parent_raw in (".", ""):
         # 仅文件名：落到第一个受信根
         roots = etl_allowed_roots(workspace_root)
@@ -140,12 +137,15 @@ def resolve_etl_output_path(
         parent = _safe_under_roots(parent_raw, etl_allowed_roots(workspace_root))
     parent.mkdir(parents=True, exist_ok=True)
     # 文件名只用 basename；归一化后再次验证最终路径仍在已批准父目录内。
-    parent_text = os.path.realpath(os.path.abspath(parent))
-    candidate_text = os.path.realpath(os.path.abspath(os.path.join(parent_text, name)))
-    parent_prefix = parent_text.rstrip(os.sep) + os.sep
-    if candidate_text != parent_text and not candidate_text.startswith(parent_prefix):
+    parent_path = parent.resolve()
+    candidate = (parent_path / name).resolve()
+    try:
+        candidate.relative_to(parent_path)
+    except ValueError as exc:
+        raise ShipmentEtlPathError("output path not under allowed dirs") from exc
+    if candidate == parent_path:
         raise ShipmentEtlPathError("output path not under allowed dirs")
-    return Path(candidate_text)
+    return candidate
 
 
 def tenant_key_for_etl() -> str:
