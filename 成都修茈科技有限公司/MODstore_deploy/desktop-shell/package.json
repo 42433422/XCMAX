@@ -19,7 +19,7 @@
     "dist:win": "electron-builder --win --x64 --publish never --config electron-builder.config.cjs"
   },
   "devDependencies": {
-    "electron": "^44.7.1",
+    "electron": "^44.9.2",
     "electron-builder": "^26.15.3"
   },
   "overrides": {
