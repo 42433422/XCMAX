@@ -38,9 +38,6 @@ from app.fastapi_routes.knowledge.agent import DatasetAgent
 from app.fastapi_routes.knowledge.agent import _agent_node_output as _agent_node_output
 from app.fastapi_routes.knowledge.agent import _dataset_agent_user_id as _dataset_agent_user_id
 from app.fastapi_routes.knowledge.document_routes import DocumentRoutes
-from app.legacy.knowledge.legacy_index import KnowledgeIndex
-from app.legacy.knowledge.legacy_ingest import mirror_legacy_ingest
-from app.legacy.knowledge.legacy_routes import LegacyRoutes
 from app.fastapi_routes.knowledge.maintenance_routes import MaintenanceRoutes
 from app.fastapi_routes.knowledge.memory import MemoryReview, dataset_error, memory_response
 from app.fastapi_routes.knowledge.memory_routes import MemoryReviewRoutes
@@ -112,6 +109,9 @@ from app.infrastructure.rag import (
     get_default_embedder,
     is_rag_enabled,
 )
+from app.legacy.knowledge.legacy_index import KnowledgeIndex
+from app.legacy.knowledge.legacy_ingest import mirror_legacy_ingest
+from app.legacy.knowledge.legacy_routes import LegacyRoutes
 
 if TYPE_CHECKING:
     from app.application.dataset_rag_app_service import DatasetRagApplicationService

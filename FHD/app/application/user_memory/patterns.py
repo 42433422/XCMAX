@@ -8,6 +8,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from app.application.user_memory.models import ActionPattern, ContextSummary, UserMemory
+from app.application.user_memory.ports import JsonObject, MemoryAccess, memory_transaction
 from app.domain.user_memory.analysis import (
     analyze_action_sequence,
     suggestions_for_sequences,
@@ -15,8 +17,6 @@ from app.domain.user_memory.analysis import (
 from app.domain.user_memory.analysis import (
     chronological_contexts as chronological_contexts,
 )
-from app.application.user_memory.models import ActionPattern, ContextSummary, UserMemory
-from app.application.user_memory.ports import JsonObject, MemoryAccess, memory_transaction
 
 
 class ActionFactory(Protocol):

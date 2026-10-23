@@ -7,9 +7,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from app.domain.user_memory.analysis import feedback_stats
 from app.application.user_memory.models import FeedbackRecord, UserMemory
 from app.application.user_memory.ports import JsonObject, MemoryAccess, memory_transaction
+from app.domain.user_memory.analysis import feedback_stats
 
 
 class FeedbackFactory(Protocol):

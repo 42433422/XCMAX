@@ -21,12 +21,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.services import user_memory_service as module
 from app.application.user_memory.models import UserMemory
 from app.application.user_memory.patterns import chronological_contexts
-from app.infrastructure.user_memory.persistence import MemoryRepository
 from app.application.user_memory.ports import MemoryAccess
 from app.application.user_memory.preferences import PreferenceMemory
+from app.infrastructure.user_memory.persistence import MemoryRepository
+from app.services import user_memory_service as module
 
 MemoryFactory = Callable[[str], module.UserMemoryService]
 

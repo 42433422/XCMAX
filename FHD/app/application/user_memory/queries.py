@@ -8,11 +8,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.domain.user_memory.analysis import memory_summary
 from app.application.user_memory.ports import (
     MemoryAccess,
     MemoryListing,
 )
+from app.domain.user_memory.analysis import memory_summary
 
 
 @dataclass(frozen=True)
