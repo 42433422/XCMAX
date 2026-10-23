@@ -1,5 +1,5 @@
 {
-  "lines": 2337032,
-  "updated": "2026-10-23",
-  "note": "本轮用户授权修复原45管理端等待状态误报；显示逻辑净增49行、真实数据同shape及失败/未知运输/验证绑定/raw不变反例净增93行，共142行，既有CHANGELOG净0。按AGENTS Pre-push明示规则公开必要回归的最小基线例外，不删除无关代码凑数，不声称得到Grok/Dot分类或合入豁免。"
+  "lines": 2337033,
+  "updated": "2026-10-24",
+  "note": "用户持续授权完成正常发布；将PR2577普通merge同步至当前main38cb56c17a92ee9f5416378bc2a4731e6bedf495并保留其已评审基线。相对该main仅ops/releases/7b984452ea79d7ec30910a21ec75da2528e010a4.json净增1行、产品逻辑和文档净0，发布源与原CI/security证据不变。按AGENTS Pre-push明示规则公开这一最小基线例外，不声称得到Grok/Dot分类或人类合入豁免。"
 }
