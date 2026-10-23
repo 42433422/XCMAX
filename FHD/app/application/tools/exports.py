@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import logging
 import re
-import tempfile
 from pathlib import Path
 from typing import Any
 
 from app.application import shipment_excel_etl_security as etl_security
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_shipment_output_dir
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ def handle_price_list_export(
         out_dir = (
             Path(workspace_root) / "shipment_outputs"
             if workspace_root
-            else Path(tempfile.gettempdir())
+            else Path(get_shipment_output_dir())
         )
         out_path = etl_security.resolve_etl_output_path(
             out_dir / suffix, workspace_root=workspace_root

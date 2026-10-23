@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -371,6 +372,35 @@ def test_etl_output_resolver_rejects_symlink_escape_without_writing(tmp_path, mo
     with pytest.raises(security.ShipmentEtlPathError):
         security.resolve_etl_output_path(allowed / "result.xlsx")
     assert outside.read_bytes() == b"preserve this file"
+
+
+def test_etl_path_resolver_does_not_trust_cwd_or_global_temp(tmp_path, monkeypatch):
+    from app.application import shipment_excel_etl_security as security
+
+    app_data = tmp_path / "app-data"
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(app_data))
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    outsider = tmp_path / "other-workspace"
+    outsider.mkdir()
+    private_file = outsider / "private.xlsx"
+    private_file.write_bytes(b"private")
+
+    roots = security._trusted_base_roots()
+    assert Path.cwd() not in roots
+    assert Path(tempfile.gettempdir()) not in roots
+    with pytest.raises(security.ShipmentEtlPathError):
+        security.resolve_etl_path(private_file)
+
+
+def test_ocr_workbook_output_stays_in_configured_workspace(tmp_path, monkeypatch):
+    from app.application.shipment_excel_etl_ocr import grid_to_workbook_path
+
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    output = grid_to_workbook_path(
+        [["型号", "数量"], ["A-1", "2"]], output_path=tmp_path / "ocr.xlsx"
+    )
+    assert output == tmp_path / "ocr.xlsx"
+    assert output.is_file()
 
 
 def test_fixtures_roundtrip_still_ok():

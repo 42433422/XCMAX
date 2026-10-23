@@ -143,7 +143,8 @@ def test_mixed_workbook_roles(tmp_path):
     assert both["ledger_note_count"] >= 1
 
 
-def test_ocr_text_blocks_to_grid_and_parse(tmp_path):
+def test_ocr_text_blocks_to_grid_and_parse(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     blocks = [
         {"text": "客户：OCR客户", "left": 10, "top": 10, "width": 120, "height": 20},
         {"text": "联系人：甲", "left": 150, "top": 10, "width": 80, "height": 20},

@@ -95,9 +95,16 @@ def grid_to_workbook_path(
 ) -> Path:
     from openpyxl import Workbook
 
-    raw_output_path = (
-        output_path if output_path else Path(tempfile.mkstemp(prefix="etl_ocr_", suffix=".xlsx")[1])
-    )
+    if output_path:
+        raw_output_path = output_path
+    else:
+        from app.utils.path_io.path_utils import get_app_data_dir
+
+        temp_root = Path(get_app_data_dir()) / "temp_excel"
+        temp_root.mkdir(parents=True, exist_ok=True)
+        descriptor, temp_name = tempfile.mkstemp(prefix="etl_ocr_", suffix=".xlsx", dir=temp_root)
+        os.close(descriptor)
+        raw_output_path = Path(temp_name)
     path = etl_security.resolve_etl_output_path(raw_output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
@@ -271,7 +278,11 @@ def parse_ocr_document(
             "notes": [],
         }
 
-    out_dir = Path(tempfile.mkdtemp(prefix="etl_ocr_out_"))
+    from app.utils.path_io.path_utils import get_app_data_dir
+
+    temp_root = Path(get_app_data_dir()) / "temp_excel"
+    temp_root.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(tempfile.mkdtemp(prefix="etl_ocr_out_", dir=temp_root))
     try:
         out_xlsx = resolve_etl_output_path(
             out_dir / f"{src.stem}_ocr.xlsx",

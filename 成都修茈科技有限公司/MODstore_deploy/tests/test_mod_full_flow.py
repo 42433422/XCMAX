@@ -11,7 +11,10 @@ from modstore_server.mod_scaffold_runner import (
     write_mod_suite_industry_card,
     write_mod_suite_ui_shell,
 )
-from modstore_server.workbench.suite_pipeline import _safe_fallback_employee_source
+from modstore_server.workbench.suite_pipeline import (
+    _copy_fallback_employee_source,
+    _safe_fallback_employee_source,
+)
 from modstore_server.workbench_api import (
     _default_steps,
     _embed_script_workflow_in_employee_pack,
@@ -25,6 +28,16 @@ def test_workbench_fallback_source_uses_generic_private_data_free_profile() -> N
     assert "customer fixture" not in source
     assert '"echo": payload' not in source
     compile(source, "fallback_employee.py", "exec")
+
+
+def test_workbench_fallback_consumer_copies_fixed_private_data_free_asset(tmp_path) -> None:
+    destination = tmp_path / "employee.py"
+    _copy_fallback_employee_source(destination)
+    source = destination.read_text(encoding="utf-8")
+    assert source == _safe_fallback_employee_source()
+    assert 'EMPLOYEE_LABEL = "员工"' in source
+    assert '"echo": payload' not in source
+    compile(source, str(destination), "exec")
 
 
 def _suite_payload() -> dict:

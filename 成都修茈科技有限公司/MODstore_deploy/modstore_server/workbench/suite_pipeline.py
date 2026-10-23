@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,48 +21,17 @@ _MAX_EMPLOYEES_FOR_LLM = 10
 
 
 def _safe_fallback_employee_source() -> str:
-    """Return a fixed fallback module without serializing profile or request data."""
-    return '''"""Generic fallback employee implementation."""
-
-from __future__ import annotations
-
-import json
-from typing import Any, Dict
+    """Return the repository-owned generic fallback source for compatibility."""
+    return _fallback_employee_template_path().read_text(encoding="utf-8")
 
 
-EMPLOYEE_LABEL = "员工"
-SYSTEM_PROMPT = "根据 payload 完成员工任务并返回结构化结果。"
+def _fallback_employee_template_path() -> Path:
+    return Path(__file__).with_name("_generic_fallback_employee.py")
 
 
-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
-    call_llm = ctx.get("call_llm")
-    if not callable(call_llm):
-        return {
-            "summary": "ctx.call_llm 未注入；请在宿主 build_run_context 中挂载 LLM 调度。",
-            "items": [],
-            "warnings": ["call_llm_missing"],
-        }
-    user_msg = json.dumps(payload or {}, ensure_ascii=False)[:4000]
-    result = await call_llm(
-        [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_msg},
-        ],
-        max_tokens=1024,
-        temperature=0.2,
-    )
-    if not result.get("ok"):
-        return {
-            "summary": f"员工 {EMPLOYEE_LABEL} 调用 LLM 失败：" + str(result.get("error") or "")[:300],
-            "items": [],
-            "warnings": ["call_llm_failed"],
-        }
-    return {
-        "summary": str(result.get("content") or "").strip()[:2000],
-        "items": [],
-        "warnings": [],
-    }
-'''
+def _copy_fallback_employee_source(destination: Path) -> None:
+    """Copy a fixed, private-data-free source asset into the generated MOD."""
+    shutil.copyfile(_fallback_employee_template_path(), destination)
 
 
 @dataclass(frozen=True)
@@ -259,11 +229,9 @@ async def _run_workbench_mod_pipeline(
                 if not eid:
                     continue
                 stem = sanitize_employee_stem(eid)
-                # The fallback implementation is shared behavior, not an employee
-                # profile. Keep user supplied labels and IDs in the existing manifest
-                # only; generated source files must not duplicate that private data.
-                fb = _safe_fallback_employee_source()
-                (emp_dir / f"{stem}.py").write_text(fb, encoding="utf-8")
+                # The fallback implementation is a static, repository-owned asset.
+                # Profile/request data remains in the existing manifest only.
+                _copy_fallback_employee_source(emp_dir / f"{stem}.py")
         await ports.progress.set_step(
             sid, "employee_impls", "running", "开始为每员工生成可执行脚本…"
         )

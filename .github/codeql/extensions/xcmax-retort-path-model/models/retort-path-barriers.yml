@@ -16,3 +16,7 @@ extensions:
       # The FHD workspace SDK rejects absolute/traversal paths and symlink
       # escapes before returning the canonical path.
       - ["app.infrastructure.workspace", "Member[resolve_safe_workspace_relpath].ReturnValue", "path-injection"]
+      # Shipment ETL resolvers canonicalize candidates, enforce operator-managed
+      # roots, and reject traversal and symlink escapes before returning paths.
+      - ["app.application.shipment_excel_etl_security", "Member[resolve_etl_path].ReturnValue", "path-injection"]
+      - ["app.application.shipment_excel_etl_security", "Member[resolve_etl_output_path].ReturnValue", "path-injection"]

@@ -13,21 +13,37 @@ class ShipmentEtlPathError(ValueError):
 
 
 def _trusted_base_roots() -> list[Path]:
-    """不可被请求参数扩展的受信根目录。"""
+    """Return managed data roots plus an explicitly configured workspace."""
     roots: list[Path] = []
     try:
-        from app.utils.path_io.path_utils import get_app_data_dir, get_data_dir
+        from app.utils.path_io.path_utils import (
+            get_app_data_dir,
+            get_data_dir,
+            get_shipment_output_dir,
+            get_upload_dir,
+        )
 
-        roots.append(Path(get_app_data_dir()).resolve())
-        roots.append(Path(get_data_dir()).resolve())
-        roots.append((Path(get_app_data_dir()) / "temp_excel").resolve())
+        app_data = Path(get_app_data_dir()).resolve()
+        roots.extend(
+            (
+                app_data / "temp_excel",
+                Path(get_upload_dir()),
+                Path(get_data_dir()),
+                Path(get_shipment_output_dir()),
+            )
+        )
     except RECOVERABLE_ERRORS:  # noqa: BLE001
         pass
-    roots.append(Path.cwd().resolve())
-    # OCR/上传临时文件落系统 temp
-    import tempfile
+    # A workspace is trusted only when the server operator configures its exact
+    # root. Never add the whole current directory or system temp as a fallback.
+    configured = str(os.environ.get("WORKSPACE_ROOT") or "").strip()
+    if configured and not any(ch in configured for ch in ("\x00", "\n", "\r")):
+        import tempfile
 
-    roots.append(Path(tempfile.gettempdir()).resolve())
+        configured_root = Path(os.path.realpath(configured))
+        broad_roots = {os.path.realpath(os.getcwd()), os.path.realpath(tempfile.gettempdir())}
+        if configured_root not in broad_roots and configured_root != Path(configured_root.anchor):
+            roots.append(configured_root)
     seen: set[str] = set()
     out: list[Path] = []
     for r in roots:
