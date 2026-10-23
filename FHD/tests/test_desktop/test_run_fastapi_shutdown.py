@@ -8,7 +8,12 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
 
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="systemd/SIGTERM shutdown is a POSIX server contract"
+)
 def test_entrypoint_drains_open_stream_within_shutdown_bound(tmp_path):
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
