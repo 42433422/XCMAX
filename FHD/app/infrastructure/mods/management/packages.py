@@ -16,7 +16,7 @@ from ..artifact_constants import ARTIFACT_BUNDLE, ARTIFACT_EMPLOYEE_PACK, normal
 from ..manifest import ModMetadata
 from ..package import ModPackageError, ModSignatureError
 from ..registry import ModRegistry
-from .paths import is_package_directory_name
+from .paths import is_package_directory_name, trusted_child_path
 from .ports import (
     ExtractPackage,
     InstallPackage,
@@ -184,8 +184,8 @@ class ModPackages:
                 from ..employee_registry import get_employee_registry
 
                 er = get_employee_registry(self._state.mods_root)
-                emp_path = os.path.join(er._root(), mod_id)
-                if os.path.isdir(emp_path):
+                emp_path = trusted_child_path(er._root(), mod_id, directory=True)
+                if emp_path is not None:
                     ok, msg = er.uninstall_pack(mod_id, remove_files=remove_files)
                     return (ok, msg)
                 return (False, f"MOD {mod_id} 未加载或不存在")
@@ -193,10 +193,10 @@ class ModPackages:
             if mod_id in self._state._loaded_mods:
                 self._ports.unload(mod_id)
             if remove_files:
-                mod_path = os.path.join(self._state.mods_root, mod_id)
-                if os.path.exists(mod_path):
+                mod_path = trusted_child_path(self._state.mods_root, mod_id, directory=True)
+                if mod_path is not None:
                     shutil.rmtree(mod_path)
-                    self._ports.logger.info("MOD files removed: %s", mod_path)
+                    self._ports.logger.info("MOD files removed")
             return (True, f"MOD {mod_id} 卸载成功")
         except RECOVERABLE_ERRORS as e:
             self._ports.logger.exception("MOD uninstallation failed")

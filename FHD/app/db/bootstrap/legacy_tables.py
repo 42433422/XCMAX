@@ -4,38 +4,50 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import text
+from sqlalchemy import DDL, text
 from sqlalchemy.engine import Engine
 
 from app.db.bootstrap.contracts import InspectorFactory, SqliteConnection
 
 
 def init_distillation_tables(engine: Engine) -> None:
-    primary_key = (
-        "INTEGER PRIMARY KEY AUTOINCREMENT"
-        if engine.dialect.name == "sqlite"
-        else "BIGSERIAL PRIMARY KEY"
-    )
-    confidence_type = "REAL" if engine.dialect.name == "sqlite" else "DOUBLE PRECISION"
-    with engine.begin() as connection:
-        connection.execute(
-            text(f"""
+    if engine.dialect.name == "sqlite":
+        statements = (
+            """
             CREATE TABLE IF NOT EXISTS distillation_log (
-                id {primary_key}, query TEXT NOT NULL, intent TEXT NOT NULL,
-                slots TEXT, confidence {confidence_type} DEFAULT 1.0,
+                id INTEGER PRIMARY KEY AUTOINCREMENT, query TEXT NOT NULL, intent TEXT NOT NULL,
+                slots TEXT, confidence REAL DEFAULT 1.0,
                 source TEXT DEFAULT 'manual', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 used_for_training INTEGER DEFAULT 0
             )
-        """)
-        )
-        connection.execute(
-            text(f"""
+            """,
+            """
             CREATE TABLE IF NOT EXISTS training_stats (
-                id {primary_key}, intent TEXT NOT NULL, count INTEGER DEFAULT 0,
+                id INTEGER PRIMARY KEY AUTOINCREMENT, intent TEXT NOT NULL, count INTEGER DEFAULT 0,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """)
+            """,
         )
+    else:
+        statements = (
+            """
+            CREATE TABLE IF NOT EXISTS distillation_log (
+                id BIGSERIAL PRIMARY KEY, query TEXT NOT NULL, intent TEXT NOT NULL,
+                slots TEXT, confidence DOUBLE PRECISION DEFAULT 1.0,
+                source TEXT DEFAULT 'manual', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                used_for_training INTEGER DEFAULT 0
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS training_stats (
+                id BIGSERIAL PRIMARY KEY, intent TEXT NOT NULL, count INTEGER DEFAULT 0,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+        )
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(DDL(statement))
         connection.execute(
             text("CREATE INDEX IF NOT EXISTS idx_intent ON distillation_log(intent)")
         )
@@ -50,18 +62,28 @@ def init_extract_logs_tables(engine: Engine) -> None:
         if engine.dialect.name == "sqlite"
         else "BIGSERIAL PRIMARY KEY"
     )
-    with engine.begin() as connection:
-        connection.execute(
-            text(f"""
+    if primary_key == "INTEGER PRIMARY KEY AUTOINCREMENT":
+        statement = """
             CREATE TABLE IF NOT EXISTS extract_logs (
-                id {primary_key}, file_name TEXT, file_path TEXT, data_type TEXT,
+                id INTEGER PRIMARY KEY AUTOINCREMENT, file_name TEXT, file_path TEXT, data_type TEXT,
                 total_rows INTEGER DEFAULT 0, valid_rows INTEGER, imported_rows INTEGER,
                 skipped_rows INTEGER, failed_rows INTEGER, status TEXT DEFAULT 'pending',
                 error_message TEXT, field_mapping TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """)
-        )
+        """
+    else:
+        statement = """
+            CREATE TABLE IF NOT EXISTS extract_logs (
+                id BIGSERIAL PRIMARY KEY, file_name TEXT, file_path TEXT, data_type TEXT,
+                total_rows INTEGER DEFAULT 0, valid_rows INTEGER, imported_rows INTEGER,
+                skipped_rows INTEGER, failed_rows INTEGER, status TEXT DEFAULT 'pending',
+                error_message TEXT, field_mapping TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """
+    with engine.begin() as connection:
+        connection.execute(DDL(statement))
 
 
 @dataclass(frozen=True)

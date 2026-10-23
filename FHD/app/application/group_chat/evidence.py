@@ -216,10 +216,12 @@ class ExecutionResultPolicy:
             return ""
         if isinstance(value, str):
             return value.strip()
-        try:
-            return json.dumps(value, ensure_ascii=False, separators=(",", ":"))[:1200]
-        except TypeError:
-            return str(value)[:1200]
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=str,
+        )[:1200]
 
     @staticmethod
     def compact_result(result: dict[str, Any]) -> dict[str, Any]:

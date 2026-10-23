@@ -13,13 +13,11 @@ from xcagi_common.employee_pack import build_employee_pack
 
 
 def main() -> None:
-    print(
-        build_employee_pack(
-            Path(__file__).resolve().parent,
-            pack_id="pdf-generate-employee",
-            backend_suffixes=[".py", ".xlsx", ".xlsm", ".xls"],
-            extra_files=["README.md"],
-        )
+    build_employee_pack(
+        Path(__file__).resolve().parent,
+        pack_id="pdf-generate-employee",
+        backend_suffixes=[".py", ".xlsx", ".xlsm", ".xls"],
+        extra_files=["README.md"],
     )
 
 

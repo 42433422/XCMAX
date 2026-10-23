@@ -11,9 +11,7 @@ def test_assets_and_preflight_share_external_runtime(monkeypatch, tmp_path):
     runtime = tmp_path / "private-runtime"
     monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime))
     monkeypatch.setattr(pipeline, "modstore_library_path", lambda: tmp_path / "library")
-    ok, errors, paths = pipeline._preflight_scaffold_write_access(
-        session_id="session-a", user_id=7
-    )
+    ok, errors, paths = pipeline._preflight_scaffold_write_access(session_id="session-a", user_id=7)
     assert ok, errors
     result = pipeline.prepare_employee_assets(
         session_id="session-a",
@@ -51,9 +49,7 @@ def test_repository_and_symlink_destinations_are_rejected(monkeypatch, tmp_path)
     assert not (checkout / "private").exists()
     runtime = tmp_path / "runtime"
     (runtime / "employee_draft_assets").mkdir(parents=True)
-    (runtime / "employee_draft_assets" / "1").symlink_to(
-        checkout, target_is_directory=True
-    )
+    (runtime / "employee_draft_assets" / "1").symlink_to(checkout, target_is_directory=True)
     monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime))
     with pytest.raises(ValueError, match="symlink"):
         draft_asset_directory(user_id=1, session_id="s1")

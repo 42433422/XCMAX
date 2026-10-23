@@ -107,13 +107,11 @@ from xcagi_common.employee_pack import build_employee_pack
 
 
 def main() -> None:
-    print(
-        build_employee_pack(
-            Path(__file__).resolve().parent,
-            pack_id={json.dumps(pack_id, ensure_ascii=False)},
-            backend_suffixes={json.dumps(list(backend_suffixes))},
-            extra_files={json.dumps(list(extra_files))},
-        )
+    build_employee_pack(
+        Path(__file__).resolve().parent,
+        pack_id={json.dumps(pack_id, ensure_ascii=False)},
+        backend_suffixes={json.dumps(list(backend_suffixes))},
+        extra_files={json.dumps(list(extra_files))},
     )
 
 

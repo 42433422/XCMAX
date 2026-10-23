@@ -110,9 +110,7 @@ class PackageInstaller:
             ok, message = install_aux_employee_pack_from_repo_seed(pkg_id, activate=activate)
             if ok:
                 return ModStoreInstallResult(success=True, message=message, data={"id": pkg_id})
-            self._logger.info(
-                "aux employee seed install failed for %s: %s; try catalog", pkg_id, message
-            )
+            self._logger.info("aux employee seed install failed; trying catalog")
         if not pkg_id:
             raise HTTPException(status_code=400, detail="缺少 pkg_id")
         headers = {"Authorization": authorization} if authorization else None

@@ -29,7 +29,7 @@ def apply_message_provenance(operations: Operations) -> None:
             # where Operations.add_column did not yet accept if_not_exists.
             definition = str(CreateColumn(column).compile(dialect=bind.dialect))
             operations.execute(
-                sa.text(f"ALTER TABLE im_messages ADD COLUMN IF NOT EXISTS {definition}")
+                sa.DDL("ALTER TABLE im_messages ADD COLUMN IF NOT EXISTS " + definition)
             )
         else:
             operations.add_column("im_messages", column)

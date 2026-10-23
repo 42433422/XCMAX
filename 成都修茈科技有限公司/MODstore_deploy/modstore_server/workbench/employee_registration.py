@@ -98,10 +98,9 @@ async def register_and_verify_workflow(
                     )
                 except RECOVERABLE_ERRORS as _cat_exc:
                     _LOG.warning(
-                        "register_pack catalog sync failed session=%s pack=%s: %s",
+                        "register_pack catalog sync failed session=%s error_type=%s",
                         state.session_id,
-                        _emp_pack_id,
-                        _cat_exc,
+                        type(_cat_exc).__name__,
                     )
                     _reg_msg = f"目录登记失败：{_cat_exc!s}"[:480]
                     await ports.progress.set_step(
@@ -119,8 +118,10 @@ async def register_and_verify_workflow(
                 await ports.progress.fail(state.session_id, "register_pack", msg[:1000])
                 return True
         except RECOVERABLE_ERRORS as _reg_exc:
-            _LOG.exception(
-                "register_pack failed for employee session=%s: %s", state.session_id, _reg_exc
+            _LOG.warning(
+                "register_pack failed for employee session=%s error_type=%s",
+                state.session_id,
+                type(_reg_exc).__name__,
             )
             state.registration_missing = True
             msg = f"保存异常: {_reg_exc!s}"

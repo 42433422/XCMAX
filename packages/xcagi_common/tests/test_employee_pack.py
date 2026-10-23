@@ -106,7 +106,8 @@ def test_generated_builder_runs_from_an_unrelated_directory(tmp_path):
         capture_output=True,
         check=True,
     )
-    assert Path(completed.stdout.strip()).is_file()
+    assert completed.stdout == ""
+    assert (root / "sample-employee.xcemp").is_file()
     with zipfile.ZipFile(root / "sample-employee.xcemp") as archive:
         assert "sample-employee/backend/blueprints.py" in archive.namelist()
 

@@ -14,6 +14,8 @@ from unittest.mock import Mock
 import httpx
 import pytest
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 
 @pytest.fixture
 def relay(monkeypatch, tmp_path):
@@ -305,7 +307,7 @@ def test_real_poll_thread_stops_after_http_closes_without_dispatch(relay, monkey
     def stop():
         try:
             relay.stop_desktop_relay_poller()
-        except BaseException as exc:
+        except BOUNDARY_ERRORS as exc:
             errors.append(exc)
 
     clients = fake_transport(relay, monkeypatch, handler)
@@ -409,7 +411,7 @@ def test_stop_during_startup_waits_without_holding_state_lock(relay, monkeypatch
     def start():
         try:
             results.append(relay.start_desktop_relay_poller())
-        except BaseException as exc:
+        except BOUNDARY_ERRORS as exc:
             errors.append(exc)
 
     monkeypatch.setattr(relay, "_gc_orphan_workspaces", collect)
@@ -461,7 +463,7 @@ def test_poller_can_request_its_own_stop(relay, monkeypatch):
         try:
             relay.stop_desktop_relay_poller()
             called.set()
-        except BaseException as exc:
+        except BOUNDARY_ERRORS as exc:
             errors.append(exc)
 
     monkeypatch.setattr(relay, "_poll_loop", loop)

@@ -87,6 +87,24 @@ def test_discovery_does_not_follow_package_directory_symlinks(isolated_library, 
     assert manager.resolve_mod_directory("linked") is None
 
 
+def test_uninstall_does_not_follow_mod_directory_symlink(isolated_library):
+    root, manager, registry = isolated_library
+    outside = root.parent / "outside"
+    _manifest(outside, "outside")
+    payload = outside / "customer-record.txt"
+    payload.write_text("private fixture data", encoding="utf-8")
+    expected = payload.read_bytes()
+    linked = root / "linked"
+    linked.symlink_to(outside, target_is_directory=True)
+    registry.register_mod(ModMetadata("linked", "Linked", "1.0.0"))
+
+    ok, _ = manager.uninstall_mod("linked")
+
+    assert ok is True
+    assert linked.is_symlink()
+    assert payload.read_bytes() == expected
+
+
 def test_build_index_cannot_promote_an_external_directory(isolated_library):
     root, manager, _ = isolated_library
     outside = root.parent / "outside"

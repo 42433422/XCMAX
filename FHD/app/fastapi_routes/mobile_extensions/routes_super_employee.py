@@ -40,6 +40,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _StreamRead = tuple[dict[str, Any] | None, BaseException | None]
+_STREAM_FAILURES: tuple[type[BaseException], ...] = (Exception, asyncio.CancelledError)
 
 
 @dataclass(frozen=True)
@@ -267,7 +268,7 @@ class SuperEmployeeRoutes:
                                 reply.set_result((None, None))
                                 return
                             reply.set_result((event, None))
-                    except BaseException as exc:
+                    except _STREAM_FAILURES as exc:
                         # Transfer failures as values so a disconnected consumer cannot
                         # leave an unobserved Future exception. The owner awaits this task.
                         if not reply.done():

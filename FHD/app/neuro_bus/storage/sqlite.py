@@ -53,6 +53,7 @@ class SQLiteOwner:
         if create_parent:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
+        initialized = False
         try:
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA journal_mode=WAL").close()
@@ -60,12 +61,12 @@ class SQLiteOwner:
             connection.execute("BEGIN IMMEDIATE").close()
             initialize(connection)
             connection.commit()
-        except BaseException:
-            # Construction owns this connection, including failures before it
-            # can be published to the facade or its components.
-            connection.close()
-            raise
-        self.connection = connection
+            self.connection = connection
+            initialized = True
+        finally:
+            if not initialized:
+                # Construction owns this connection until it is published.
+                connection.close()
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -75,12 +76,14 @@ class SQLiteOwner:
             # Do not silently commit a transaction begun through the legacy
             # private _conn escape hatch. BEGIN fails before any mutation.
             connection.execute("BEGIN IMMEDIATE").close()
+            committed = False
             try:
                 yield connection
                 connection.commit()
-            except BaseException:
-                connection.rollback()
-                raise
+                committed = True
+            finally:
+                if not committed:
+                    connection.rollback()
 
     def rows(self, sql: str, params: Sequence[object] = ()) -> list[sqlite3.Row]:
         with self.lock:

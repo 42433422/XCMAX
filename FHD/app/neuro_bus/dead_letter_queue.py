@@ -173,6 +173,7 @@ class DeadLetterQueue:
         self._replay_callbacks: list[Callable[[NeuroEvent], None]] = []
         self._replay_paused = False
         self._runtime = _runtime()
+        initialized = False
         try:
             if storage_path is not None:
                 self._init_sqlite(storage_path)
@@ -215,9 +216,10 @@ class DeadLetterQueue:
                 ),
                 self._runtime,
             )
-        except BaseException:
-            self._storage.close()
-            raise
+            initialized = True
+        finally:
+            if not initialized:
+                self._storage.close()
         logger.info(
             "[DeadLetterQueue] 初始化完成 (max_size=%s, retention=%sh, storage=%s, alert_window=%ss, alert_threshold=%s)",
             max_size,

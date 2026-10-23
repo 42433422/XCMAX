@@ -125,6 +125,7 @@ class RelayTaskDelivery:
                     return
                 claim = self._claims[task_id] = object()
                 inflight.add(task_id)
+        started = False
         try:
             complete = self.ports.complete_task()
 
@@ -139,12 +140,12 @@ class RelayTaskDelivery:
 
             worker = self.ports.create_worker(run, f"relay-task-{task_id[:8]}")
             if stop.is_set():
-                self._release(task_id, claim)
                 return
             worker.start()
-        except BaseException:
-            self._release(task_id, claim)
-            raise
+            started = True
+        finally:
+            if not started:
+                self._release(task_id, claim)
 
     def complete(self, task: JsonObject, relay_id: str, desktop_token: str, base_url: str) -> None:
         task_id = str(task.get("task_id") or "")

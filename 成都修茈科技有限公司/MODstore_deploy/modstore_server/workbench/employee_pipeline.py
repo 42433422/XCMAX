@@ -155,12 +155,11 @@ async def run_employee_pipeline(
     try:
         await services.run(state)
     except RECOVERABLE_ERRORS as error:
-        _LOG.exception(
-            "workbench employee pipeline failed session=%s step=%s err=%s%s",
+        _LOG.error(
+            "workbench employee pipeline failed session=%s step=%s error_type=%s",
             sid,
             state.current_step,
-            error,
-            _manifest_diagnostic(state),
+            type(error).__name__,
         )
         try:
             failed_pack = str(state.result.get("id") or "")

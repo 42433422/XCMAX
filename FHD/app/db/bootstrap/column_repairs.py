@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from logging import Logger
 
-from sqlalchemy import text
+from sqlalchemy import DDL, text
 from sqlalchemy.engine import Engine
 
 from app.db.bootstrap.contracts import InspectorFactory
@@ -146,20 +146,12 @@ class LegacyColumnRepairs:
                     if name in cols:
                         continue
                     self.logger.info("sessions 缺少 %s 列，正在补齐 …", name)
+                    default_clause = " DEFAULT " + default_sql if default_sql else ""
+                    statement = "ALTER TABLE sessions ADD COLUMN"
                     if dialect == "postgresql":
-                        default_clause = f" DEFAULT {default_sql}" if default_sql else ""
-                        conn.execute(
-                            text(
-                                f"ALTER TABLE sessions ADD COLUMN IF NOT EXISTS {name} {col_type}{default_clause}"
-                            )
-                        )
-                    else:
-                        default_clause = f" DEFAULT {default_sql}" if default_sql else ""
-                        conn.execute(
-                            text(
-                                f"ALTER TABLE sessions ADD COLUMN {name} {col_type}{default_clause}"
-                            )
-                        )
+                        statement += " IF NOT EXISTS"
+                    statement += " " + name + " " + col_type + default_clause
+                    conn.execute(DDL(statement))
         except RECOVERABLE_ERRORS as exc:
             self.logger.warning("sessions 账号元数据列兼容补列失败: %s", exc)
 
@@ -215,12 +207,10 @@ class LegacyColumnRepairs:
                     if "tenant_id" in cols:
                         continue
                     self.logger.info("%s 缺少 tenant_id 列，正在补齐 …", table)
+                    statement = "ALTER TABLE " + table + " ADD COLUMN"
                     if dialect == "postgresql":
-                        conn.execute(
-                            text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS tenant_id INTEGER")
-                        )
-                    else:
-                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN tenant_id INTEGER"))
+                        statement += " IF NOT EXISTS"
+                    conn.execute(DDL(statement + " tenant_id INTEGER"))
         except RECOVERABLE_ERRORS as exc:
             self.logger.warning("业务表 tenant_id 兼容补列失败: %s", exc)
 
@@ -249,17 +239,12 @@ class LegacyColumnRepairs:
                     if name in cols:
                         continue
                     self.logger.info("users 缺少 %s 列，正在补齐 …", name)
-                    default_clause = f" DEFAULT {default_sql}" if default_sql else ""
+                    default_clause = " DEFAULT " + default_sql if default_sql else ""
+                    statement = "ALTER TABLE users ADD COLUMN"
                     if dialect == "postgresql":
-                        conn.execute(
-                            text(
-                                f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {name} {col_type}{default_clause}"
-                            )
-                        )
-                    else:
-                        conn.execute(
-                            text(f"ALTER TABLE users ADD COLUMN {name} {col_type}{default_clause}")
-                        )
+                        statement += " IF NOT EXISTS"
+                    statement += " " + name + " " + col_type + default_clause
+                    conn.execute(DDL(statement))
                 # NULL 可重复，非空市场用户 ID 必须唯一；账号改名后仍能命中同一客户资料。
                 conn.execute(
                     text(

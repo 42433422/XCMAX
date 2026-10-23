@@ -48,10 +48,19 @@ class RangeHandler(SimpleHTTPRequestHandler):
         ctype = self.guess_type(path)
         if range_header:
             m = re.match(r"bytes=(\d*)-(\d*)$", range_header.strip())
-            if m:
-                start = int(m.group(1)) if m.group(1) else 0
-                end = int(m.group(2)) if m.group(2) else size - 1
-                end = min(end, size - 1)
+            if m and (m.group(1) or m.group(2)):
+                if not m.group(1):
+                    suffix_length = int(m.group(2))
+                    if suffix_length <= 0 or size == 0:
+                        self.send_error(416, "Requested Range Not Satisfiable")
+                        f.close()
+                        return None
+                    start = max(0, size - suffix_length)
+                    end = size - 1
+                else:
+                    start = int(m.group(1))
+                    end = int(m.group(2)) if m.group(2) else size - 1
+                    end = min(end, size - 1)
                 if start > end or start >= size:
                     self.send_error(416, "Requested Range Not Satisfiable")
                     f.close()
@@ -67,6 +76,9 @@ class RangeHandler(SimpleHTTPRequestHandler):
                 class _Partial:
                     def read(self, n=-1):
                         return f.read(min(n if n > 0 else rest, rest))
+
+                    def close(self):
+                        f.close()
 
                 return _Partial()
         self.send_response(200)

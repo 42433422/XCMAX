@@ -63,7 +63,9 @@ def test_corrupt_original_stops_before_any_publication(repository):
     assert not (root / ASSETS["PUBLIC"]).exists()
 
 
-@pytest.mark.parametrize("source", ["../../outside.png", "FHD/docs/evidence/../../private.png", "config/secret.png"])
+@pytest.mark.parametrize(
+    "source", ["../../outside.png", "FHD/docs/evidence/../../private.png", "config/secret.png"]
+)
 def test_unreviewed_source_paths_are_rejected(repository, source):
     root, _, manifest, data = repository
     data["assets"]["old-public-url.png"]["source"] = source
@@ -131,7 +133,9 @@ def test_historical_source_alias_keeps_record_bytes_and_reconstructs_original_la
     data["source_aliases"] = {alias: next(iter(data["assets"].values()))}
     manifest.write_text(json.dumps(data))
     record = original.with_name("run.json")
-    receipt = json.dumps({"path": alias, "sha256": data["source_aliases"][alias]["sha256"]}).encode()
+    receipt = json.dumps(
+        {"path": alias, "sha256": data["source_aliases"][alias]["sha256"]}
+    ).encode()
     record.write_bytes(receipt)
     ASSETS["verified_sources"](root, ASSETS["load"](root))
     assert not (root / alias).exists()
@@ -160,13 +164,17 @@ def test_reconstruction_cannot_destroy_a_new_capture_at_a_historical_alias(repos
     fresh_capture = root / alias
     fresh_capture.parent.mkdir(parents=True)
     fresh_capture.write_bytes(b"new capture awaiting review")
-    with pytest.raises(ValueError, match="refusing to overwrite different historical evidence alias"):
+    with pytest.raises(
+        ValueError, match="refusing to overwrite different historical evidence alias"
+    ):
         ASSETS["materialize_sources"](root)
     assert fresh_capture.read_bytes() == b"new capture awaiting review"
 
 
 @pytest.mark.parametrize("reader", ["macos", "webadmin"])
-def test_historical_registration_reads_alias_without_rewriting_evidence(repository, monkeypatch, reader):
+def test_historical_registration_reads_alias_without_rewriting_evidence(
+    repository, monkeypatch, reader
+):
     root, original, manifest, data = repository
     alias = "FHD/docs/evidence/other-run/old-shot.png"
     data["source_aliases"] = {alias: next(iter(data["assets"].values()))}
@@ -176,18 +184,31 @@ def test_historical_registration_reads_alias_without_rewriting_evidence(reposito
     helper.write_bytes((ROOT / ASSETS["SITE"] / "scripts/evidence_assets.py").read_bytes())
     if reader == "macos":
         monkeypatch.setitem(sys.modules, "acc_core", SimpleNamespace(REPO=root, OUT=root / "round"))
-        module = runpy.run_path(str(ROOT / "FHD/docs/evidence/e2e/feature-acceptance-20260929/macos/acc_finalize.py"))
+        module = runpy.run_path(
+            str(ROOT / "FHD/docs/evidence/e2e/feature-acceptance-20260929/macos/acc_finalize.py")
+        )
         digest_file = module["sha"]
     else:
-        module = runpy.run_path(str(ROOT / "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/register_evidence.py"))
+        module = runpy.run_path(
+            str(
+                ROOT
+                / "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/register_evidence.py"
+            )
+        )
         digest_file = module["sha256_file"]
         monkeypatch.setitem(digest_file.__globals__, "REPO_ROOT", root)
     assert digest_file(root / alias) == hashlib.sha256(original.read_bytes()).hexdigest()
-    assert not (root / alias).exists(), "reading a historical alias must not recapture or rewrite evidence"
+    assert not (root / alias).exists(), (
+        "reading a historical alias must not recapture or rewrite evidence"
+    )
 
 
 def _git(root, *args):
-    return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.DEVNULL).decode().strip()
+    return (
+        subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.DEVNULL)
+        .decode()
+        .strip()
+    )
 
 
 def test_guard_rejects_new_duplicate_media_but_allows_removing_legacy_copies(repository):
@@ -196,7 +217,16 @@ def test_guard_rejects_new_duplicate_media_but_allows_removing_legacy_copies(rep
     historical = original.with_name("historical-copy.png")
     historical.write_bytes(original.read_bytes())
     _git(root, "add", "FHD", ASSETS["MANIFEST"])
-    _git(root, "-c", "user.name=Evidence test", "-c", "user.email=evidence@example.invalid", "commit", "-qm", "baseline")
+    _git(
+        root,
+        "-c",
+        "user.name=Evidence test",
+        "-c",
+        "user.email=evidence@example.invalid",
+        "commit",
+        "-qm",
+        "baseline",
+    )
     base = _git(root, "rev-parse", "HEAD")
     ASSETS["guard"](root, base)
     new_copy = original.with_name("new-copy.png")
@@ -223,7 +253,9 @@ def test_guard_rejects_static_alias_even_when_it_differs_from_its_source(reposit
     alias = "FHD/frontend/public/brand-copy.png"
     registry = root / "config/media-aliases.json"
     registry.parent.mkdir()
-    registry.write_text(json.dumps({"aliases": {alias: {"source": original.relative_to(root).as_posix()}}}))
+    registry.write_text(
+        json.dumps({"aliases": {alias: {"source": original.relative_to(root).as_posix()}}})
+    )
     _git(root, "add", str(original))
     ASSETS["guard"](root)
     (root / alias).parent.mkdir(parents=True)
@@ -248,28 +280,50 @@ def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repo
     brand.write_bytes(b"reviewed brand image")
     registry = root / "config/media-aliases.json"
     registry.parent.mkdir()
-    registry.write_text(json.dumps({"schema": "xcmax.media-aliases/v1", "aliases": {
-        f"{ASSETS['SITE']}/corp-butler/brand.jpg": {
-            "scope": "marketing", "source": "FHD/frontend/public/brand.jpg",
-            "sha256": hashlib.sha256(brand.read_bytes()).hexdigest(), "size": brand.stat().st_size,
-        }
-    }}))
+    registry.write_text(
+        json.dumps(
+            {
+                "schema": "xcmax.media-aliases/v1",
+                "aliases": {
+                    f"{ASSETS['SITE']}/corp-butler/brand.jpg": {
+                        "scope": "marketing",
+                        "source": "FHD/frontend/public/brand.jpg",
+                        "sha256": hashlib.sha256(brand.read_bytes()).hexdigest(),
+                        "size": brand.stat().st_size,
+                    }
+                },
+            }
+        )
+    )
     (site / "index.html").write_text("new page")
     live = root / "live"
     live.mkdir()
     (live / "index.html").write_text("previous page")
-    (live / "download-release.json").write_text("{\"verified\":true}")
+    (live / "download-release.json").write_text('{"verified":true}')
     if corrupt == "evidence":
         original.write_bytes(b"changed after acceptance")
     elif corrupt == "branding":
         brand.write_bytes(b"unreviewed replacement")
-    script = (ROOT / ASSETS["SITE"] / "MODstore_deploy/scripts/xcmax-site-auto-update.sh").read_text()
+    script = (
+        ROOT / ASSETS["SITE"] / "MODstore_deploy/scripts/xcmax-site-auto-update.sh"
+    ).read_text()
     function = re.search(r"^publish_site_static_to_live\(\) \{.*?^\}", script, re.M | re.S)
     assert function is not None
-    env = {**os.environ, "XCMAX_ROOT": str(root), "SITE_SUBDIR": ASSETS["SITE"], "SITE_ROOT": str(live)}
+    env = {
+        **os.environ,
+        "XCMAX_ROOT": str(root),
+        "SITE_SUBDIR": ASSETS["SITE"],
+        "SITE_ROOT": str(live),
+    }
     run = subprocess.run(
-        ["bash", "-c", "set -eu\nlog() { :; }\n" + function.group() + "\npublish_site_static_to_live"],
-        env=env, capture_output=True, text=True,
+        [
+            "bash",
+            "-c",
+            "set -eu\nlog() { :; }\n" + function.group() + "\npublish_site_static_to_live",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
     )
     if corrupt:
         assert run.returncode != 0
@@ -278,6 +332,8 @@ def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repo
     else:
         assert run.returncode == 0, run.stderr
         assert (live / "index.html").read_text() == "new page"
-        assert (live / "capabilities/assets/evidence/old-public-url.png").read_bytes() == original.read_bytes()
+        assert (
+            live / "capabilities/assets/evidence/old-public-url.png"
+        ).read_bytes() == original.read_bytes()
         assert (live / "corp-butler/brand.jpg").read_bytes() == brand.read_bytes()
         assert json.loads((live / "download-release.json").read_text()) == {"verified": True}

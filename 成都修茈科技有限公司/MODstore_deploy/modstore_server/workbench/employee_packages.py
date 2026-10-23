@@ -215,7 +215,7 @@ async def employee_save_impl(
                         json.dumps(mf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
                     )
         except RECOVERABLE_ERRORS as exc:
-            _LOG.warning("employee_save: Skill 注册异常（保存继续）pack=%s: %s", pack_id, exc)
+            _LOG.warning("employee_save: Skill registration failed; saving continues")
             eskill_result["skipped"] = True
             eskill_result["error"] = str(exc)[:400]
     try:
@@ -278,7 +278,7 @@ async def employee_save_impl(
 
         sync_triggers_after_registration(mf)
     except RECOVERABLE_ERRORS:
-        _LOG.exception("employee_save: sync triggers failed pack=%s", pack_id)
+        _LOG.warning("employee_save: sync triggers failed")
     return {
         "ok": True,
         "pack_id": pack_id,
@@ -320,7 +320,7 @@ async def employee_export(
     mf["id"] = mf.get("id") or pack_id
     mf, registry_errs = ports.normalize_manifest(mf, pack_id)
     if registry_errs:
-        _LOG.info("employee_export: manifest 校验警告 pack=%s: %s", pack_id, registry_errs)
+        _LOG.info("employee_export: manifest validation warnings count=%s", len(registry_errs))
     ref_warnings: List[str] = []
     sf_ref = ports.database()
     with sf_ref() as db_ref:
@@ -331,7 +331,7 @@ async def employee_export(
 
             embed_workflow_bundles_in_manifest(db_ref, mf)
         except RECOVERABLE_ERRORS as _bundle_exc:
-            _LOG.warning("employee_export: embed bundles failed pack=%s: %s", pack_id, _bundle_exc)
+            _LOG.warning("employee_export: workflow bundles could not be embedded")
             ref_warnings = _write_workflow_reference_report(db_ref, user, mf)
     from modstore_server.employee_asset_pipeline import (
         DIRECT_PYTHON_RUNTIME_MISSING_MSG,

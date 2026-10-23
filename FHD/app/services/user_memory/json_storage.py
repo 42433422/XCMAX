@@ -40,19 +40,19 @@ class JsonMemoryStorage:
         data = {user_id: memory.to_dict() for user_id, memory in memories.items()}
         temporary = self.path.with_name(f".{self.path.name}.{self.temporary_id()}.tmp")
         descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        descriptor_owned = True
         try:
-            try:
-                stream = os.fdopen(descriptor, "w", encoding="utf-8")
-            except BaseException:
-                try:
-                    os.close(descriptor)
-                except OSError:
-                    pass
-                raise
+            stream = os.fdopen(descriptor, "w", encoding="utf-8")
+            descriptor_owned = False
             with stream:
                 json.dump(data, stream, ensure_ascii=False, indent=2)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, self.path)
         finally:
+            if descriptor_owned:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
             temporary.unlink(missing_ok=True)

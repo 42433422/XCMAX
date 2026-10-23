@@ -215,8 +215,7 @@ async def _run_workbench_mod_pipeline(
                     continue
                 stem = sanitize_employee_stem(eid)
                 label = str(emp.get("label") or emp.get("panel_title") or eid).strip()
-                panel_summary = str(emp.get("panel_summary") or "").strip()
-                fb = _fallback_employee_py(eid, label, panel_summary)
+                fb = _fallback_employee_py(eid, label, "")
                 (emp_dir / f"{stem}.py").write_text(fb, encoding="utf-8")
         await ports.progress.set_step(
             sid, "employee_impls", "running", "开始为每员工生成可执行脚本…"

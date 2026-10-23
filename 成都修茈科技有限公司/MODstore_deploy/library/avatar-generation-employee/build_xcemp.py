@@ -13,13 +13,11 @@ from xcagi_common.employee_pack import build_employee_pack
 
 
 def main() -> None:
-    print(
-        build_employee_pack(
-            Path(__file__).resolve().parent,
-            pack_id="avatar-generation-employee",
-            backend_suffixes=[".py"],
-            extra_files=["README.md", "rule_spec.json", "asset_manifest.json"],
-        )
+    build_employee_pack(
+        Path(__file__).resolve().parent,
+        pack_id="avatar-generation-employee",
+        backend_suffixes=[".py"],
+        extra_files=["README.md", "rule_spec.json", "asset_manifest.json"],
     )
 
 

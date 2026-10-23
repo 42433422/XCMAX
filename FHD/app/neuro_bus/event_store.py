@@ -122,6 +122,7 @@ class EventStore:
         """初始化 SQLITE 持久化存储"""
         if not self._storage_path:
             raise ValueError("[EventStore] SQLITE 模式必须提供 storage_path")
+        initialized = False
         try:
             self._storage.open(self._storage_path, initialize_event_store)
             self._sequence_counter = int(
@@ -129,9 +130,10 @@ class EventStore:
                     0
                 ]
             )
-        except BaseException:
-            self._storage.close()
-            raise
+            initialized = True
+        finally:
+            if not initialized:
+                self._storage.close()
         logger.info(
             "[EventStore] SQLITE 模式初始化完成 (path=%s, seq_start=%s)",
             self._storage_path,

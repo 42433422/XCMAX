@@ -34,9 +34,7 @@ def _infer_accepted_extensions(
             suffixes - _facade().EXCEL_SUFFIXES
         )
     if suffixes & _facade().DOC_SUFFIXES:
-        return sorted(suffixes & _facade().DOC_SUFFIXES) + sorted(
-            suffixes - _facade().DOC_SUFFIXES
-        )
+        return sorted(suffixes & _facade().DOC_SUFFIXES) + sorted(suffixes - _facade().DOC_SUFFIXES)
     return sorted(suffixes)
 
 
@@ -114,9 +112,7 @@ def _infer_asset_runtime_kind(
         if any((k in text for k in _contract_keywords)):
             return "contract_doc_review"
         return "doc_template_transform"
-    if has_excel and (
-        has_rules or any((k in text for k in ("规则", "模板", "转换", "考勤")))
-    ):
+    if has_excel and (has_rules or any((k in text for k in ("规则", "模板", "转换", "考勤")))):
         return "excel_rules_transform"
     if has_excel:
         return "generic_excel_transform"
@@ -192,15 +188,11 @@ def prepare_employee_assets(
     raw_files: _facade().List[_facade().Dict[str, _facade().Any]],
     repo_root: _facade().Optional[_facade().Path] = None,
 ) -> _facade().Dict[str, _facade().Any]:
-    root = draft_asset_directory(
-        user_id=user_id, session_id=session_id, repo_root=repo_root
-    )
+    root = draft_asset_directory(user_id=user_id, session_id=session_id, repo_root=repo_root)
     reset_draft_directory(root)
     assets: _facade().List[_facade().Dict[str, _facade().Any]] = []
     for idx, item in enumerate(raw_files or []):
-        filename = _facade()._safe_basename(
-            str(item.get("filename") or f"asset-{idx}.bin")
-        )
+        filename = _facade()._safe_basename(str(item.get("filename") or f"asset-{idx}.bin"))
         content = item.get("content") or b""
         if not isinstance(content, (bytes, bytearray)):
             continue
