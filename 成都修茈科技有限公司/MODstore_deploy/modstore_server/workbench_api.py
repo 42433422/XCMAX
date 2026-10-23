@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from sqlalchemy.orm import Session
@@ -576,13 +576,17 @@ async def workbench_unified_tts(
 ):
     """优先小米 MiMo-V2.5 TTS，失败回退 edge-tts；不提供浏览器系统 TTS。"""
     return await speech_api.workbench_unified_tts(
-        body, _user, ports=speech_api.SpeechPorts(_EDGE_TTS)
+        body,
+        _user,
+        ports=speech_api.SpeechPorts(cast(speech_api.EdgeBackend | None, _EDGE_TTS)),
     )
 
 
 @router.post("/tts/edge", summary="微软在线神经 TTS（edge-tts，返回 MP3）")
 async def workbench_edge_tts(body: WorkbenchEdgeTtsBody, _user: User = Depends(_get_current_user)):
-    return await speech_api.workbench_edge_tts(body, _user, ports=speech_api.SpeechPorts(_EDGE_TTS))
+    return await speech_api.workbench_edge_tts(
+        body, _user, ports=speech_api.SpeechPorts(cast(speech_api.EdgeBackend | None, _EDGE_TTS))
+    )
 
 
 @router.post("/tts/edge/stream", summary="微软在线神经 TTS（edge-tts，chunked MP3 流）")
@@ -590,7 +594,9 @@ async def workbench_edge_tts_stream(
     body: WorkbenchEdgeTtsBody, _user: User = Depends(_get_current_user)
 ):
     return await speech_api.workbench_edge_tts_stream(
-        body, _user, ports=speech_api.SpeechPorts(_EDGE_TTS)
+        body,
+        _user,
+        ports=speech_api.SpeechPorts(cast(speech_api.EdgeBackend | None, _EDGE_TTS)),
     )
 
 

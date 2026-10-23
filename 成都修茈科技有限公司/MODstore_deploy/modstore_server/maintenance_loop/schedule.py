@@ -91,7 +91,10 @@ def _recent_incident_signals(lookback_hours: int, *, limit: int = 8) -> Dict[str
         for row in rows:
             payload: Dict[str, Any] = {}
             try:
-                loaded = json.loads(row.payload_json or "{}")
+                payload_json = row.payload_json
+                if not isinstance(payload_json, str):
+                    payload_json = "{}"
+                loaded = json.loads(payload_json or "{}")
                 if isinstance(loaded, dict):
                     payload = loaded
             except json.JSONDecodeError:
