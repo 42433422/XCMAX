@@ -1,5 +1,5 @@
 {
-  "lines": 2367667,
+  "lines": 2367884,
   "updated": "2026-10-23",
-  "note": "User-approved #2544 exception. Clean commit fb1df9ad3 count 2,367,667 (+8 vs prior baseline 2,367,659) adds rejection of explicitly configured WORKSPACE_ROOT values that cover the repository cwd, with boundary regression. Cumulative vs main baseline 2,337,465 is +30,202 (30,027 merged from main, 175 PR changes); excludes user legal/eval working-tree edits."
+  "note": "Approved PR #2544 exceptions: previous clean count 2,367,667 was +30,202 vs main baseline 2,337,465 (+30,027 merged-main lines and 175 PR lines), including the prior approved +8-line WORKSPACE_ROOT containment fix. This approved clean increment is +217 lines for Postgres direct-batch namespace validation backported from LangGraph PR #9217, sync/async positive-negative regressions, replayable vendor provenance, and SSOT router-cast module-scope regressions. New count 2,367,884; user legal/eval working-tree edits excluded."
 }
