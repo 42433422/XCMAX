@@ -6,7 +6,10 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 import modstore_server.models as models
+from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
 
 
 def test_parse_daily_digest_recipient_emails() -> None:
@@ -44,12 +47,33 @@ def test_digest_event_summary_distinguishes_volume_from_incidents() -> None:
     assert summarize_digest_events(rows) == (4, 1)
 
 
-def test_build_digest_html_contains_sections(tmp_path, monkeypatch):
+@pytest.mark.parametrize("product_count", ["6", "0", "", "fatal: unavailable"])
+def test_build_digest_html_contains_sections(tmp_path, monkeypatch, product_count):
+    """WO-59603e801088: business progress precedes operations, without claiming delivery."""
     models._engine = None
     models._SessionFactory = None
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "digest.sqlite"))
     monkeypatch.setenv("MODSTORE_REPO_ROOT", str(tmp_path))
     models.init_db()
+    with models.get_session_factory()() as session:
+        session.add(models.User(id=29, username="digest-reader", password_hash="test"))
+        conversation = CustomerServiceSession(user_id=29)
+        session.add(conversation)
+        session.flush()
+        for index, status in enumerate(
+            ["open", "processing", "awaiting_customer", "reopened", "resolved", "expired", "closed"]
+        ):
+            session.add(
+                CustomerServiceTicket(
+                    session_id=conversation.id,
+                    user_id=29,
+                    ticket_no=f"WO-59603e801088-{index}",
+                    title=f"核对客户反馈<{status}>",
+                    status=status,
+                    updated_at=datetime.now(timezone.utc) - timedelta(days=3 if index < 4 else 0),
+                )
+            )
+        session.commit()
 
     from modstore_server.daily_digest import build_digest_html
     from modstore_server.tools import doc_consistency_checker
@@ -63,19 +87,62 @@ def test_build_digest_html_contains_sections(tmp_path, monkeypatch):
         }
 
     monkeypatch.setattr(doc_consistency_checker, "run_full_consistency_check", _fake_consistency)
+    monkeypatch.setattr(
+        "modstore_server.daily_digest._git_worktree_root",
+        lambda root: root if product_count else None,
+    )
+
+    def _fake_git(args, root):
+        assert args == ["rev-list", "--count", "--since=24 hours ago", "HEAD"]
+        return product_count
+
+    monkeypatch.setattr("modstore_server.daily_digest._git_line", _fake_git)
 
     html = build_digest_html()
     assert "MODstore" in html
     assert "产品与客户进展" in html
     assert "近 24 小时产品更新" in html
     assert "近 24 小时工单结果" in html
+    assert "还有 4 张客户工单需要跟进" in html  # Old pending tickets stay visible.
+    assert "接下来要处理什么" in html
+    assert "核对客户反馈&lt;processing&gt;：处理中" in html
+    assert "核对客户反馈&lt;resolved&gt;" not in html
+    assert "标记已解决（客户验收待核实）：1 张" in html
+    assert "标记已关闭（关闭原因及客户验收待核实）：1 张" in html
+    assert "已过期：1 张" in html
+    assert "代码更新和工单状态不代表客户已收到修复或完成验收" in html
+    assert html.index("产品与客户进展") < html.index("今日总览")
+    if product_count.isdigit():
+        assert f"记录到 {product_count} 次代码更新，是否已正式发布到客户端待核实" in html
+    else:
+        assert "今天的产品变化待核实" in html
+        assert "fatal: unavailable" not in html
     assert "待决策" in html
-    assert "仓库未连接 Git" in html
     assert "每日运营摘要" in html
     assert "文档一致性" in html
 
     models._engine = None
     models._SessionFactory = None
+
+
+def test_digest_empty_records_and_decisions_are_readable_and_escaped():
+    from modstore_server.daily_digest import _digest_product_work_summary_html
+
+    html = _digest_product_work_summary_html(
+        product_updates=[],
+        ticket_outcomes=[],
+        pending_decisions=["核对客户反馈<script>alert(1)</script>"],
+        pending_decision_count=6,
+        pending_tickets=["核对客户原场景"],
+        pending_ticket_count=6,
+    )
+    assert "暂未获取产品更新记录，待核实" in html
+    assert "没有工单状态更新记录，不代表所有问题已解决" in html
+    assert "核对客户反馈&lt;script&gt;" in html
+    assert "<script>" not in html
+    assert "另有 5 项" in html
+    assert "核对客户原场景" in html
+    assert "另有 5 张，请在客服工单查看" in html
 
 
 def test_build_digest_approval_bundle_empty_pending() -> None:

@@ -78,6 +78,22 @@ def build_digest_html(
             .group_by(_facade().CustomerServiceTicket.status)
             .all()
         )
+        pending_ticket_query = session.query(
+            _facade().CustomerServiceTicket.title, _facade().CustomerServiceTicket.status
+        ).filter(
+            _facade().CustomerServiceTicket.status.in_(
+                ["open", "processing", "awaiting_customer", "reopened"]
+            )
+        )
+        pending_ticket_count = pending_ticket_query.count()
+        pending_ticket_rows = (
+            pending_ticket_query.order_by(
+                _facade().CustomerServiceTicket.created_at.asc(),
+                _facade().CustomerServiceTicket.id.asc(),
+            )
+            .limit(5)
+            .all()
+        )
         pending_decision_count = (
             session.query(_facade().func.count(_facade().StrategicDecision.id))
             .filter(_facade().StrategicDecision.status == "proposed")
@@ -85,9 +101,9 @@ def build_digest_html(
             or 0
         )
         pending_decisions = [
-            f"{title}（{scope or '全局'}）"
-            for title, scope in (
-                session.query(_facade().StrategicDecision.title, _facade().StrategicDecision.scope)
+            str(title)
+            for (title,) in (
+                session.query(_facade().StrategicDecision.title)
                 .filter(_facade().StrategicDecision.status == "proposed")
                 .order_by(_facade().StrategicDecision.created_at.desc())
                 .limit(5)
@@ -105,26 +121,30 @@ def build_digest_html(
         event_n=int(event_n),
     )
     consistency_block = _facade()._consistency_check_html(root)
-    product_updates = (
-        [
-            line.strip()
-            for line in _facade()
-            ._git_line(["log", "--since=24 hours ago", "--format=%h %s", "-n", "5"], root)
-            .splitlines()
-            if line.strip()
-        ]
+    product_count = (
+        _facade()._git_line(["rev-list", "--count", "--since=24 hours ago", "HEAD"], root)
         if _facade()._git_worktree_root(root)
-        else ["仓库未连接 Git，无法核实产品更新"]
+        else ""
     )
+    product_updates = [
+        (
+            f"近 24 小时记录到 {int(product_count)} 次代码更新，是否已正式发布到客户端待核实。"
+            if product_count.isdigit()
+            else "暂时无法读取产品更新记录，今天的产品变化待核实。"
+        )
+    ]
     ticket_status_labels = {
         "open": "待受理",
         "processing": "处理中",
-        "resolved": "已解决",
-        "closed": "已关闭",
+        "awaiting_customer": "待客户反馈",
+        "reopened": "重新处理",
+        "resolved": "标记已解决（客户验收待核实）",
+        "closed": "标记已关闭（关闭原因及客户验收待核实）",
+        "expired": "已过期",
         "rejected": "已拒绝",
     }
     ticket_outcomes = [
-        f"{ticket_status_labels.get(str(status), str(status) or '未记录')}: {int(count)} 张"
+        f"{ticket_status_labels.get(str(status), '状态待核实')}：{int(count)} 张"
         for status, count in ticket_status_rows
     ]
     work_summary_html = _facade()._digest_product_work_summary_html(
@@ -132,6 +152,11 @@ def build_digest_html(
         ticket_outcomes=ticket_outcomes,
         pending_decisions=pending_decisions,
         pending_decision_count=int(pending_decision_count),
+        pending_ticket_count=int(pending_ticket_count),
+        pending_tickets=[
+            f"{(title or '未命名工单')[:120]}：{ticket_status_labels.get(status, '状态待核实')}"
+            for title, status in pending_ticket_rows
+        ],
     )
     briefs_block = ""
     if (employee_briefs_html or "").strip():
