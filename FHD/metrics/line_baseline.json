@@ -1,5 +1,5 @@
 {
-  "lines": 2335944,
+  "lines": 2336206,
   "updated": "2026-10-23",
-  "note": "Declare pandas in MODstore web because the real signed Sunbird probe imports the stable FHD Mod SDK and its application services. Formal CI reproduced two missing-pandas failures; a fresh Python3.11 environment installed only from declared web/dev extras now passes all311 targeted cases. Retain dependency isolation and expose synthetic child errors in test evidence."
+  "note": "CodeQL 3844-3858 路径边界安全修复：新增目录枚举、符号链接拒绝与回归测试，净增约262行；本轮安全门禁收口经用户 2026-10-23 指令批准，未删除无关代码"
 }
