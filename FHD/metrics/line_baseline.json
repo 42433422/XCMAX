@@ -1,5 +1,5 @@
 {
-  "lines": 2335939,
+  "lines": 2335944,
   "updated": "2026-10-23",
-  "note": "Customer 34 must execute and persist the signed Sunbird business probe before acceptance; bind owner, ticket, generation, source and release identity, reject substituted or expired reports, fix real snapshot metadata and cross-worker readback, and prove the actual compile-sign-probe acceptance flow. Includes bounded recovery of original Python-probe task. No unrelated code deletion used to conceal the safety-gate and regression growth."
+  "note": "Declare pandas in MODstore web because the real signed Sunbird probe imports the stable FHD Mod SDK and its application services. Formal CI reproduced two missing-pandas failures; a fresh Python3.11 environment installed only from declared web/dev extras now passes all311 targeted cases. Retain dependency isolation and expose synthetic child errors in test evidence."
 }

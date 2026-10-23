@@ -646,7 +646,10 @@ def test_signed_sunbird_probe_executes_real_probe_and_binds_report(
 
     def capture_isolated_child(args, **kwargs):
         child_env.update(kwargs.get("env") or {})
-        return real_run(args, **kwargs)
+        try:
+            return real_run(args, **kwargs)
+        except subprocess.CalledProcessError as exc:
+            pytest.fail(f"Synthetic signed probe child failed: {exc.stderr}", pytrace=False)
 
     monkeypatch.setattr(customer_delivery_build.subprocess, "run", capture_isolated_child)
     report = customer_delivery_build.run_versioned_sunbird_probe(record, runtime_identity)
