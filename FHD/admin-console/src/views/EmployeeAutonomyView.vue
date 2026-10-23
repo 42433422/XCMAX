@@ -126,7 +126,7 @@
           {{ q.question || q.content || q.title }}
         </div>
         <div class="qa-meta">
-          {{ q.employee_id || '—' }} · {{ q.asked_at || q.created_at || '' }}
+          {{ q.employee_id ? employeeLabel(q.employee_id) : '—' }} · {{ q.asked_at || q.created_at || '' }}
           <template v-if="countdownText(q)"> · {{ countdownText(q) }}</template>
           <template v-else-if="q.expires_at"> · 截止 {{ q.expires_at }}</template>
         </div>
@@ -164,7 +164,7 @@
         </thead>
         <tbody>
           <tr v-for="(row, idx) in scorecard" :key="String(row.employee_id || idx)">
-            <td>{{ row.employee_id || row.name || '—' }}</td>
+            <td>{{ row.employee_id ? employeeLabel(row.employee_id) : row.name || '—' }}</td>
             <td>{{ row.total_tasks ?? row.task_count ?? '—' }}</td>
             <td>{{ formatRate(row.success_rate) }}</td>
             <td>{{ row.last_run_at || row.last_active_at || row.updated_at || '—' }}</td>

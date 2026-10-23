@@ -12,7 +12,12 @@ vi.mock('../../../admin-console/src/api/xcmaxEmployeeAutonomy', () => ({ xcmaxEm
   executionCoverage: async () => ({ planned_count: 2, unproven_employee_ids: ['unknown-employee'] }),
   listSuggestions: async () => ({ items: [{ id: 3, source_employee_id: 'evolution-engine',
     target_employee_ids: ['test-qa-runner', 'site-content-editor'], summary: '核对失败的页面检查', status: 'pending' }] }),
-  listQuestions: async () => ({ items: [] }), scorecard: async () => ({ items: [] }),
+  listQuestions: async () => ({ items: ['test-qa-runner', 'future-employee', undefined]
+    .map((employee_id, id) => ({ id, employee_id, question: '核对岗位' })) }),
+  scorecard: async () => ({ items: [
+    { employee_id: 'site-content-editor' }, { employee_id: 'future-employee', name: '不能遮盖未知ID' },
+    { name: '外部审核员' }, {},
+  ] }),
 } }))
 
 it('uses the real suggestion source/target contract and keeps unknown employee identities', async () => {
@@ -31,6 +36,20 @@ it('uses the real suggestion source/target contract and keeps unknown employee i
   wrapper.unmount()
 })
 
+it('labels nonempty questions and scorecards while preserving unknown IDs, supplied names and missing identities', async () => {
+  const wrapper = mount(EmployeeAutonomyView)
+  try {
+    await flushPromises()
+    await wrapper.findAll('.tabs button')[2].trigger('click')
+    const identities = wrapper.findAll('.qa-meta').map(row => row.text().split(' ·')[0])
+    expect(identities).toEqual(['测试质量运行员', 'future-employee', '—'])
+    await wrapper.findAll('.tabs button')[3].trigger('click')
+    expect(wrapper.findAll('.data-table:not(.suggestion-table) tbody tr').map(row => row.find('td').text()))
+      .toEqual(['静态站内容编辑员', 'future-employee', '外部审核员', '—'])
+  } finally {
+    wrapper.unmount()
+  }
+})
 
 it('replaces an unavailable refresh with unknown state rather than old healthy claims', async () => {
   const wrapper = mount(EmployeeAutonomyView)

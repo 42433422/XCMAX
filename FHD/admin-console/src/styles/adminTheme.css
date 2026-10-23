@@ -34,7 +34,7 @@
 }
 #app .page-content .attention-card.clear { border-color: rgba(33, 152, 97, 0.3); }
 
-#app .page-content > .page-header h2 {
+#app .page-content > .page-header :is(h1, h2) {
   margin: 0;
   font-size: 20px;
   font-weight: 700;
