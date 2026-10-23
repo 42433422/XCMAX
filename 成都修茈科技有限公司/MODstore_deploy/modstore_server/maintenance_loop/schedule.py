@@ -147,9 +147,7 @@ def evaluate_self_maintenance_need() -> Dict[str, Any]:
     if config._env_bool("MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME", True) and (
         not runtime_provenance_result.get("ok")
     ):
-        reasons = ",".join(
-            str(item) for item in runtime_provenance_result.get("reasons") or []
-        )
+        reasons = ",".join(str(item) for item in runtime_provenance_result.get("reasons") or [])
         gaps.append(f"runtime provenance blocked: {reasons or 'unknown'}")
     repo_path = config._file_url_to_path(repo_url)
     if repo_path is not None and (not repo_path.exists()):
