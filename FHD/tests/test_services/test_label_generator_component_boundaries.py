@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import ast
+import json
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
@@ -17,6 +18,86 @@ from app.services.skills.label_template_generator import analysis as image_analy
 from app.services.skills.label_template_generator import label_template_generator as generator
 from app.services.skills.label_template_generator import ocr as image_ocr
 from app.services.skills.label_template_generator.ports import Grid, ImageAnalysisPorts, OCRPorts
+
+_GENERATED_CONSUMER = r"""
+import importlib.util
+import json
+import socket
+import sys
+from io import BytesIO
+from pathlib import Path
+
+from PIL import Image
+
+
+def _no_network(*_args, **_kwargs):
+    raise AssertionError("network access is disabled in generated-code tests")
+
+
+socket.create_connection = _no_network
+socket.socket.connect = _no_network
+socket.socket.connect_ex = _no_network
+socket.getaddrinfo = _no_network
+source = Path(sys.argv[1]).resolve()
+spec = importlib.util.spec_from_file_location("generated_label_fixture", source)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+Label = module.FixtureLabel
+case = sys.argv[2]
+root = Path.cwd()
+
+if case == "dimensions":
+    label = Label()
+    result = {"width": label.width, "height": label.height}
+elif case == "fields":
+    print(json.dumps(Label().fields, ensure_ascii=False))
+    raise SystemExit(0)
+elif case == "error":
+    blocked = root / "blocked-output"
+    blocked.write_text("owned by test", encoding="utf-8")
+    result = {"filename": Label(output_dir=str(blocked)).generate_label(
+        {"product_name": "sample"}, "ORDER", 1
+    ), "content": blocked.read_text(encoding="utf-8")}
+elif case == "filename":
+    output = root / "labels"
+    filename = Label(output_dir=str(output)).generate_label(
+        {"product_name": "sample"}, "../outside/escape", 1
+    )
+    result = {
+        "filename": filename,
+        "files": sorted(path.name for path in output.iterdir()),
+        "size": Image.open(output / filename).size if filename else None,
+        "outside_exists": (root / "outside").exists(),
+    }
+elif case == "barcode":
+    import types
+
+    class Barcode:
+        def __init__(self, _value, writer):
+            self.writer = writer
+
+        def write(self, buffer, options):
+            with Image.new("RGB", (360, 40), "black") as barcode_image:
+                barcode_image.save(buffer, format="PNG")
+
+    barcode = types.ModuleType("barcode")
+    barcode.Code128 = Barcode
+    barcode.EAN13 = Barcode
+    barcode_writer = types.ModuleType("barcode.writer")
+    barcode_writer.ImageWriter = object
+    sys.modules["barcode"] = barcode
+    sys.modules["barcode.writer"] = barcode_writer
+    output = root / "labels"
+    filename = Label(output_dir=str(output)).generate_label(
+        {"product_name": "sample", "barcode_data": "ABC123"}, "ORDER", 1
+    )
+    with Image.open(output / filename) as generated:
+        result = {"filename": filename, "barcode_pixel": generated.getpixel((400, 120))}
+else:
+    raise AssertionError(f"unknown generated consumer case: {case}")
+
+print(json.dumps(result, ensure_ascii=False))
+"""
 
 
 @pytest.fixture
@@ -63,6 +144,28 @@ def _method(node: ast.ClassDef, name: str) -> ast.FunctionDef:
     )
 
 
+def _consume_generated(code: str, tmp_path: Path, case: str) -> dict[str, Any]:
+    """Exercise generated code in an offline child process confined to tmp_path."""
+    source = tmp_path / f"generated-{case}.py"
+    source.write_text(code, encoding="utf-8")
+    env = {
+        "HOME": str(tmp_path),
+        "PATH": os.environ.get("PATH", ""),
+        "TMPDIR": str(tmp_path),
+    }
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", _GENERATED_CONSUMER, str(source), case],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr + completed.stdout
+    return json.loads(completed.stdout)
+
+
 def _code(reference_image: Path, *, fields: bool = False) -> str:
     ocr = (
         {
@@ -99,6 +202,30 @@ def test_field_text_round_trips_through_generated_python(reference_image, text):
         "type": "dynamic",
         "editable": False,
     }
+    assert _consume_generated(code, reference_image.parent, "fields")[text] == {
+        "label": text,
+        "default_value": text,
+        "type": "dynamic",
+        "editable": False,
+    }
+
+
+def test_generated_field_text_cannot_execute_in_the_consumer(reference_image, tmp_path):
+    marker = tmp_path / "injected.txt"
+    text = "'); __import__('pathlib').Path(" + repr(str(marker)) + ").write_text('executed') #"
+    code = generator.generate_template_code(
+        str(reference_image),
+        "FixtureLabel",
+        {
+            "success": True,
+            "fields": [{"field_key": text, "label": text, "value": text, "type": "dynamic"}],
+        },
+    )
+
+    consumer_result = _consume_generated(code, tmp_path, "fields")
+
+    assert consumer_result[text]["default_value"] == text
+    assert not marker.exists()
 
 
 def test_reference_filename_cannot_break_generated_python(tmp_path):
@@ -112,6 +239,7 @@ def test_reference_filename_cannot_break_generated_python(tmp_path):
     assert ast.literal_eval(_self_assignment(generated, "width")) == 200
     assert ast.literal_eval(_self_assignment(generated, "height")) == 200
     assert source.name in ast.literal_eval(ast.parse(code).body[0].value)
+    assert _consume_generated(code, tmp_path, "dimensions") == {"width": 200, "height": 200}
 
 
 @pytest.mark.parametrize("class_name", ["class", "invalid-name", "Label:\n    pass\n"])
@@ -128,8 +256,8 @@ def test_invalid_class_name_does_not_publish_a_python_file(reference_image, tmp_
 
 
 @pytest.mark.parametrize("fields", [False, True])
-def test_generated_label_handles_real_output_errors(reference_image, tmp_path, monkeypatch, fields):
-    del tmp_path, monkeypatch
+def test_generated_label_handles_real_output_errors(reference_image, tmp_path, fields):
+    code = _code(reference_image, fields=fields)
     generated = _generated_class(_code(reference_image, fields=fields))
     method = _method(generated, "generate_label")
     handlers = [node for node in ast.walk(method) if isinstance(node, ast.ExceptHandler)]
@@ -151,6 +279,10 @@ def test_generated_label_handles_real_output_errors(reference_image, tmp_path, m
         and node.func.attr == "makedirs"
         for node in ast.walk(method)
     )
+    assert _consume_generated(code, tmp_path, "error") == {
+        "filename": None,
+        "content": "owned by test",
+    }
     assert any(
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
@@ -160,11 +292,9 @@ def test_generated_label_handles_real_output_errors(reference_image, tmp_path, m
 
 
 @pytest.mark.parametrize("fields", [False, True])
-def test_generated_filename_stays_inside_the_output_directory(
-    reference_image, tmp_path, monkeypatch, fields
-):
-    del tmp_path, monkeypatch
-    generated = _generated_class(_code(reference_image, fields=fields))
+def test_generated_filename_stays_inside_the_output_directory(reference_image, tmp_path, fields):
+    code = _code(reference_image, fields=fields)
+    generated = _generated_class(code)
     filename_component = ast.unparse(_method(generated, "_filename_component"))
     generate_label = ast.unparse(_method(generated, "generate_label"))
 
@@ -172,32 +302,26 @@ def test_generated_filename_stays_inside_the_output_directory(
     assert "value.strip" in filename_component
     assert "_filename_component" in generate_label
     assert "os.path.join(self.output_dir, filename)" in generate_label
+    result = _consume_generated(code, tmp_path, "filename")
+    assert result["filename"] is not None
+    assert not result["outside_exists"]
+    assert result["files"] == [result["filename"]]
+    assert Path(result["filename"]).name == result["filename"]
+    assert result["size"] == [800, 600]
 
 
-def test_generated_barcode_is_pasted_into_its_owned_image(reference_image, tmp_path, monkeypatch):
-    class Barcode:
-        def __init__(self, value, writer):
-            self.value = value
-
-        def write(self, buffer, options):
-            with Image.new("RGB", (360, 40), "black") as image:
-                image.save(buffer, format="PNG")
-
-    barcode = ModuleType("barcode")
-    for name in ("Code128", "EAN13", "Code39"):
-        setattr(barcode, name, Barcode)
-    writer = ModuleType("barcode.writer")
-    monkeypatch.setattr(writer, "ImageWriter", object, raising=False)
-    monkeypatch.setitem(sys.modules, "barcode", barcode)
-    monkeypatch.setitem(sys.modules, "barcode.writer", writer)
-    del tmp_path, monkeypatch
-    generated = _generated_class(_code(reference_image, fields=True))
+def test_generated_barcode_is_pasted_into_its_owned_image(reference_image, tmp_path):
+    code = _code(reference_image, fields=True)
+    generated = _generated_class(code)
     barcode_method = ast.unparse(_method(generated, "_draw_barcode"))
 
     assert "from barcode import Code128, EAN13" in barcode_method
     assert "barcode.write" in barcode_method
     assert "image.paste" in barcode_method
     assert "RECOVERABLE_ERRORS" in barcode_method
+    result = _consume_generated(code, tmp_path, "barcode")
+    assert result["filename"] is not None
+    assert result["barcode_pixel"] == [0, 0, 0]
 
 
 @pytest.mark.parametrize("size", [(1, 1), (5, 12), (20, 20)])
@@ -241,6 +365,10 @@ def test_cli_publishes_importable_generator(reference_image, tmp_path):
     generated = _generated_class(output.read_text(encoding="utf-8"))
     assert ast.literal_eval(_self_assignment(generated, "width")) == 800
     assert ast.literal_eval(_self_assignment(generated, "height")) == 600
+    assert _consume_generated(output.read_text(encoding="utf-8"), tmp_path, "dimensions") == {
+        "width": 800,
+        "height": 600,
+    }
 
 
 def test_capability_modules_import_without_facade_or_optional_ocr_engines():
