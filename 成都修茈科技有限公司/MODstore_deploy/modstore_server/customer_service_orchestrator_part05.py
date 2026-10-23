@@ -7,7 +7,10 @@ import importlib
 from typing import Any
 
 from modstore_server.customer_issue_delivery_contract import (
+    projected_dispatch_status,
     record_team_progress,
+    role_progress_state,
+    team_action_state,
     team_succeeded,
 )
 
@@ -49,9 +52,8 @@ def _summarize_incident_team_rows(
         if not isinstance(row, dict):
             continue
         role = role_cn.get(str(row.get("role") or "").strip(), str(row.get("role") or "执行"))
-        outcome = (
-            "已完成" if row.get("ok") else "处理中" if row.get("status") == "pending" else "未完成"
-        )
+        state = role_progress_state(row)
+        outcome = "已完成" if state == "completed" else "未完成" if state == "failed" else "处理中"
         outputs = (row.get("handler_outputs") or {}).get("outputs", [])
         details = [
             "；".join(
@@ -87,9 +89,11 @@ def _customer_incident_progress(team_rows: list[dict[str, Any]]) -> str:
     bits, failed = [], False
     for row in [r for r in team_rows or [] if isinstance(r, dict)][:6]:
         role = role_cn.get(str(row.get("role") or "").strip(), "处理")
-        pending = row.get("status") in ("pending", "manual_review")
-        failed = failed or not (row.get("ok") or pending)
-        bits.append(f"{role}{'已完成' if row.get('ok') else '处理中' if pending else '暂未完成'}")
+        state = role_progress_state(row)
+        failed = failed or state == "failed"
+        bits.append(
+            f"{role}{'已完成' if state == 'completed' else '暂未完成' if state == 'failed' else '处理中'}"
+        )
     note = "处理过程中遇到内部问题，值班人员正在继续跟进，您无需操作" if failed else ""
     return "；".join(bits + [note] if note else bits) or "值班员工已接手"
 
@@ -156,7 +160,7 @@ def apply_customer_ticket_incident_progress(
             "ticket_id": int(ticket.id),
             "team_ok": team_ok,
         }
-    resolution = record_team_progress(ticket, ev, event_id=event_id, rows=rows)
+    resolution = record_team_progress(ticket, ev, event_id=event_id, rows=rows, team_ok=team_ok)
     # 内部明细（含报错原文）只进 action.result_json 与审计 detail；客户消息/证据只用客服话术。
     progress = _facade()._summarize_incident_team_rows(rows)
     customer_progress = _customer_incident_progress(rows)
@@ -203,14 +207,7 @@ def apply_customer_ticket_incident_progress(
         target_id=f"{event_id or ''}:{','.join(tasks) or progress_digest[:16]}"[:240],
         request=request,
     )
-    bad = [r for r in rows if not r.get("ok")]
-    seen = {str(r.get("status")) for r in bad}
-    failed = [
-        str(r.get("role")) for r in bad if r.get("status") not in ("pending", "manual_review")
-    ]
-    # 动作状态必须与角色结果一致：角色失败不能标 completed。
-    waiting = next((state for state in ("manual_review", "pending") if state in seen), "partial")
-    action.status = "completed" if team_ok else "failed" if failed or not rows else waiting
+    action.status, failed = team_action_state(rows, team_ok=team_ok)
     action.request_json = _facade().json_dumps(request)
     action.result_json = _facade().json_dumps({"ok": team_ok, **progress_record, **request})
     action.error = f"未成功角色：{'、'.join(failed)}" if failed else ""
@@ -385,6 +382,8 @@ def decision_payload(
 
 
 def action_payload(row: _facade().Any) -> _facade().Dict[str, _facade().Any]:
+    result = _facade().json_loads(row.result_json, {})
+    status = projected_dispatch_status(row.status, row.action_type, result, row.error)
     return {
         "id": row.id,
         "ticket_id": row.ticket_id,
@@ -392,10 +391,15 @@ def action_payload(row: _facade().Any) -> _facade().Dict[str, _facade().Any]:
         "action_type": row.action_type,
         "target_type": row.target_type,
         "target_id": row.target_id,
-        "status": row.status,
+        "status": status,
+        **(
+            {"recorded_status": row.status, "recorded_error": row.error}
+            if status != row.status
+            else {}
+        ),
         "request": _facade().json_loads(row.request_json, {}),
-        "result": _facade().json_loads(row.result_json, {}),
-        "error": row.error,
+        "result": result,
+        "error": row.error if status == row.status else "",
         "created_at": row.created_at.isoformat() if row.created_at else "",
         "updated_at": row.updated_at.isoformat() if row.updated_at else "",
     }
