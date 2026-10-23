@@ -1,5 +1,5 @@
 {
-  "lines": 2367652,
+  "lines": 2367659,
   "updated": "2026-10-23",
-  "note": "User-approved #2544 exception. Clean commit 1de9edcb0 count: 2,367,652 (+83 vs prior approved baseline 2,367,569) for ETL root hardening/temp placement, CodeQL path resolver model, and static MODstore fallback with behavior tests; CodeQL remote validation is pending. Relative to main baseline 2,337,465 the cumulative delta is 30,187 (30,027 merged from main, 160 PR changes). Excludes user legal/eval working-tree edits."
+  "note": "User-approved #2544 exception. Clean commit 23753899c count 2,367,659 (+7 vs prior approved baseline 2,367,652) from tests declaring per-test WORKSPACE_ROOT for ETL tmp_path paths; this keeps production free of global cwd/system-temp trust and restores 155 compatibility regressions. Cumulative vs main baseline 2,337,465 is +30,194 (30,027 merged from main, 167 PR changes); excludes all user legal/eval working-tree edits."
 }
