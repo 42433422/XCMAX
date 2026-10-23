@@ -1,4 +1,5 @@
 import json
+import logging
 import sqlite3
 import subprocess
 import time
@@ -1239,6 +1240,33 @@ def test_employee_dispatch_retries_report_only_cursor_tls_failure(monkeypatch):
     assert result["self_maintenance_retry_attempts"] == 2
     assert result["result"]["ok"] is True
     assert attempts == []
+
+
+def test_device_diagnostic_logging_redacts_employee_and_device_details(monkeypatch, caplog):
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_STEP_RETRIES", "0")
+    monkeypatch.setattr(
+        _maintenance_para_client,
+        "_wait_for_para_device_online",
+        lambda: {"online": False, "detail": "private-device-response"},
+    )
+    monkeypatch.setattr(
+        _maintenance_employee_executor,
+        "execute_employee_task",
+        lambda *_args, **_kwargs: {"result": {"ok": True}},
+    )
+
+    with caplog.at_level(logging.WARNING, logger=_maintenance_config.logger.name):
+        result = _maintenance_dispatch._execute_employee_task_with_retries(
+            "private-employee-id",
+            "safe task",
+            {},
+            user_id=0,
+        )
+
+    assert result["result"]["ok"] is True
+    assert "private-employee-id" not in caplog.text
+    assert "private-device-response" not in caplog.text
+    assert "attempt=1/1" in caplog.text
 
 
 def test_business_failure_is_not_retryable():

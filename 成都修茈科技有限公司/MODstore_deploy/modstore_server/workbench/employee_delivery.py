@@ -47,7 +47,7 @@ async def deliver_employee(state: EmployeeBuildState, *, ports: EmployeeDelivery
                         qi["note"] = "重试 manifest 对齐成功（未自动上架）"
         except RECOVERABLE_ERRORS as _retry_exc:
             _LOG.warning(
-                "register_pack local retry failed session=%s: %s", state.session_id, _retry_exc
+                "register_pack local retry failed error_type=%s", type(_retry_exc).__name__
             )
             for qi in state.quality_items:
                 if qi["check"] == "员工包登记":
@@ -121,12 +121,7 @@ async def deliver_employee(state: EmployeeBuildState, *, ports: EmployeeDelivery
             ),
         )
     except RECOVERABLE_ERRORS as _clean_exc:
-        _LOG.warning(
-            "experimental pack cleanup failed session=%s pack=%s: %s",
-            state.session_id,
-            _pack_id_final,
-            _clean_exc,
-        )
+        _LOG.warning("experimental pack cleanup failed error_type=%s", type(_clean_exc).__name__)
     await ports.progress.finish(
         state.session_id,
         {

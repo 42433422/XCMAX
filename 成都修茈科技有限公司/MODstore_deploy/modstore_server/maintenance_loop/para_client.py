@@ -34,7 +34,7 @@ def _fetch_para_task_report_excerpt(
             resp.raise_for_status()
             task = (resp.json() or {}).get("task") or {}
     except RECOVERABLE_ERRORS:
-        config.logger.exception("failed to fetch Para task report logs task_id=%s", task_id)
+        config.logger.warning("failed to fetch Para task report logs")
         return ""
     chunks: List[str] = []
     for subtask in task.get("subTasks") or task.get("subtasks") or []:
@@ -110,10 +110,9 @@ def _kickstart_para_agent() -> Dict[str, Any]:
             }
         except RECOVERABLE_ERRORS as second_exc:
             config.logger.warning(
-                "failed to bootstrap/kickstart Para agent target=%s first=%s second=%s",
-                target,
-                first_exc,
-                second_exc,
+                "failed to bootstrap/kickstart Para agent first_error_type=%s second_error_type=%s",
+                type(first_exc).__name__,
+                type(second_exc).__name__,
             )
             return {
                 "attempted": True,

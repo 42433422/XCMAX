@@ -57,7 +57,7 @@ async def employee_save_impl(
     mf["id"] = mf.get("id") or pack_id
     mf, registry_errs = ports.normalize_manifest(mf, pack_id)
     if registry_errs:
-        _LOG.info("employee_save: manifest 校验警告 pack=%s: %s", pack_id, registry_errs)
+        _LOG.info("employee_save: manifest validation warnings count=%s", len(registry_errs))
     ref_warnings: List[str] = []
     sf_ref = ports.database()
     with sf_ref() as db_ref:
@@ -68,7 +68,9 @@ async def employee_save_impl(
 
             embed_workflow_bundles_in_manifest(db_ref, mf)
         except RECOVERABLE_ERRORS as _bundle_exc:
-            _LOG.warning("employee_save: embed bundles failed pack=%s: %s", pack_id, _bundle_exc)
+            _LOG.warning(
+                "employee_save: embed bundles failed error_type=%s", type(_bundle_exc).__name__
+            )
             ref_warnings = _write_workflow_reference_report(db_ref, user, mf)
     from modman.artifact_constants import normalize_artifact
 
@@ -117,7 +119,7 @@ async def employee_save_impl(
                         if not member.endswith("/"):
                             dest.write_bytes(zf.read(member))
         except RECOVERABLE_ERRORS as exc:
-            _LOG.warning("employee_save: zip 解压失败 pack=%s: %s", pack_id, exc)
+            _LOG.warning("employee_save: zip extraction failed error_type=%s", type(exc).__name__)
         finally:
             try:
                 tmp_zip_path.unlink(missing_ok=True)
@@ -133,7 +135,9 @@ async def employee_save_impl(
             if mf_path_rh.is_file():
                 mf = json.loads(mf_path_rh.read_text(encoding="utf-8"))
     except RECOVERABLE_ERRORS as _rh_exc:
-        _LOG.warning("employee_save: rehydrate bundles failed pack=%s: %s", pack_id, _rh_exc)
+        _LOG.warning(
+            "employee_save: rehydrate bundles failed error_type=%s", type(_rh_exc).__name__
+        )
     eskill_result: Dict[str, Any] = {"registered": 0, "skipped": False, "error": ""}
     if body.register_skills:
         try:

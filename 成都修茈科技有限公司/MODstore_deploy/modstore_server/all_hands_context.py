@@ -20,7 +20,7 @@ def _snapshot_employee_cron_overview(limit: int = 24) -> List[Dict[str, Any]]:
 
         jobs = list_employee_cron_jobs() or []
     except RECOVERABLE_ERRORS as exc:
-        logger.debug("all_hands: cron overview failed: %s", exc)
+        logger.debug("all_hands: cron overview failed error_type=%s", type(exc).__name__)
         return []
     out: List[Dict[str, Any]] = []
     for row in jobs[: max(1, min(limit, 40))]:
@@ -62,7 +62,7 @@ class AllHandsContext:
 
             data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
         except RECOVERABLE_ERRORS as exc:
-            logger.debug("all_hands: employee.yaml read failed pkg_id=%s err=%s", pkg_id, exc)
+            logger.debug("all_hands: employee.yaml read failed error_type=%s", type(exc).__name__)
             return {"area": area}
         if not isinstance(data, dict):
             return {"area": area}
@@ -208,7 +208,7 @@ class AllHandsContext:
                     :12
                 ]
         except RECOVERABLE_ERRORS as exc:
-            logger.debug("all_hands: manifest read failed pkg_id=%s err=%s", pkg_id, exc)
+            logger.debug("all_hands: manifest read failed error_type=%s", type(exc).__name__)
         if "ci_coverage_artifacts" not in out:
             yg_ci = yuangon_meta.get("ci_coverage_artifacts")
             if isinstance(yg_ci, list) and yg_ci:

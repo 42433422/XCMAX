@@ -54,11 +54,9 @@ def _execute_employee_task_with_retries(
         device_wait = para_client._wait_for_para_device_online()
         if not device_wait.get("online"):
             config.logger.warning(
-                "self-maintenance para device not online before dispatch employee=%s attempt=%s/%s detail=%s",
-                employee_id,
+                "self-maintenance para device not online before dispatch attempt=%s/%s",
                 attempt,
                 attempts,
-                device_wait,
             )
         result = employee_executor.execute_employee_task(
             employee_id,
@@ -74,8 +72,7 @@ def _execute_employee_task_with_retries(
             result["self_maintenance_retry_attempts"] = attempt
             return result
         config.logger.warning(
-            "self-maintenance employee step transient dispatch failure; retrying employee=%s attempt=%s/%s",
-            employee_id,
+            "self-maintenance employee step transient dispatch failure; retrying attempt=%s/%s",
             attempt,
             attempts,
         )

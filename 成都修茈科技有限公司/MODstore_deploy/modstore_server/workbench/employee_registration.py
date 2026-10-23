@@ -232,7 +232,10 @@ async def register_and_verify_workflow(
                         ports.refresh_catalog(ports.db, ports.user, state.pack_dir)
                         state.published_to_catalog = True
                     except RECOVERABLE_ERRORS as _cat_retry_exc:
-                        _LOG.warning("workflow_sandbox catalog retry failed: %s", _cat_retry_exc)
+                        _LOG.warning(
+                            "workflow_sandbox catalog retry failed error_type=%s",
+                            type(_cat_retry_exc).__name__,
+                        )
                 if not ports.catalog_registered(ports.db, _biz_pack_id):
                     state.workflow_business_ok = False
                     _wf_sb_msg = (
