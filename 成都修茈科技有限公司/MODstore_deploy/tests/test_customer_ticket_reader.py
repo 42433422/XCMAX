@@ -122,6 +122,64 @@ def test_company_reader_list_detail_pagination_and_redaction(reader_case, audit_
     assert client.get("/api/customer-service/tickets", headers=headers).status_code == 200
 
 
+@pytest.mark.parametrize(
+    "case",
+    [
+        "waiting",
+        "failure",
+        "other_error",
+        "unknown",
+        "missing",
+        "duplicate",
+        "bad_role",
+        "bad_handler",
+        "bad_outputs",
+    ],
+)
+def test_legacy_waiting_projection_preserves_raw_history_and_uncertain_records(reader_case, case):
+    from modstore_server.customer_service_orchestrator import action_payload
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceAction
+
+    client, headers, ids, *_ = reader_case
+    roles = [
+        {"role": r, "ok": False, "status": s}
+        for r, s in zip(("scout", "fix", "verify"), ("pending", "planned", "planned"))
+    ]
+    if case == "failure":
+        roles[1]["status"] = "handler_failed"
+    if case == "unknown":
+        for r in roles:
+            r["status"] = "unknown"
+    if case == "missing":
+        roles.pop()
+    if case == "duplicate":
+        roles.append(dict(roles[0]))
+    if case == "bad_role":
+        roles[0]["role"] = []
+    if case == "bad_handler":
+        roles[0]["handler_outputs"] = "invalid"
+    if case == "bad_outputs":
+        roles[0]["handler_outputs"] = {"outputs": None}
+    error = "real dispatch failure" if case == "other_error" else "未成功角色：fix、verify"
+    with get_session_factory()() as db:
+        action = db.query(CustomerServiceAction).filter_by(ticket_id=ids[0]).one()
+        action.result_json, action.error = json.dumps({"roles": roles}), error
+        db.commit()
+        original = (action.status, action.error, action.result_json, action.updated_at)
+    response = client.get(f"/api/customer-service/tickets/{ids[0]}", headers=headers)
+    assert response.status_code == 200, response.text
+    expected = "pending" if case == "waiting" else "failed"
+    assert response.json()["ticket"]["latest_action_status"] == expected
+    with get_session_factory()() as db:
+        action = db.query(CustomerServiceAction).filter_by(ticket_id=ids[0]).one()
+        assert (action.status, action.error, action.result_json, action.updated_at) == original
+        payload = action_payload(action)
+        assert payload["status"] == expected
+        assert payload.get("recorded_status", payload["status"]) == "failed"
+        assert payload.get("recorded_error", payload["error"]) == error
+
+
 @pytest.mark.parametrize("kind", ["quoted_json", "chinese", "private_key", "database_uri"])
 def test_free_text_credentials_are_redacted_in_list_and_detail(reader_case, kind):
     from modstore_server.models import get_session_factory

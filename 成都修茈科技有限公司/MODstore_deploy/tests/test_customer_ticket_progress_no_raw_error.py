@@ -58,7 +58,7 @@ def test_progress_never_writes_raw_error_into_customer_message(client, team_ok):
         msg = db.get(cs.CustomerServiceMessage, out["message_id"])
         assert not LEAK_RE.search(msg.content) and not LEAK_RE.search(msg.payload_json)
         assert "排查" in msg.content and "下一步" in msg.content
-        assert ("内部问题" in msg.content) is not team_ok
+        assert "内部问题" in msg.content and out["team_ok"] is False
         db.refresh(ticket)
         reports = json.loads(ticket.evidence_json)["employee_reports"]
         assert reports and not LEAK_RE.search(json.dumps(reports, ensure_ascii=False))

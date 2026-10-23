@@ -925,7 +925,8 @@ def test_dispatch_action_matches_role_results_and_records_redispatch(client, mon
         get_session_factory()() as db
     ):  # 角色全失败、Para 待定→终态、只出报告的重派、外部执行器全成功
         run("t1", False), run("t2", False, status="pending"), run("t2", False)
-        run("t3", True, "scout", executor="grok_bot"), run("t4", True, executor="grok_bot")
+        run("t3", True, "scout", status="success", executor="grok_bot")
+        run("t4", True, status="success", executor="grok_bot")
         rows = (
             db.query(Action)
             .filter_by(ticket_id=tid, action_type="employee.dispatch")

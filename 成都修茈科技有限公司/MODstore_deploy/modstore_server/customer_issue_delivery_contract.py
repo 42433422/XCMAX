@@ -182,9 +182,138 @@ def execution_pending(result: dict[str, Any]) -> bool:
     )
 
 
+_WAITING_ROLE_STATES = frozenset(
+    {
+        "planned",
+        "queued",
+        "running",
+        "dispatching",
+        "pending",
+        "skipped_fix_unfinished",
+        "verification_invalidated",
+    }
+)
+
+
+def role_progress_state(row: dict[str, Any]) -> str:
+    """Project receipt state without executing, retrying or inventing completion."""
+    status = row.get("status") or ""
+    if not isinstance(status, str):
+        return "manual_review"
+    status = status.lower()
+    terminal_failure = {
+        "failed",
+        "error",
+        "handler_failed",
+        "orchestrator_failed",
+        "refused",
+        "rejected",
+        "blocked_by_risk_gate",
+        "skipped",
+        "partial",
+        "para_task_failed",
+        "para_task_merge_conflict",
+    }
+    if status in terminal_failure:
+        return "failed"
+    handler = row.get("handler_outputs")
+    if handler is not None and not isinstance(handler, dict):
+        return "manual_review"
+    outputs = (handler or {}).get("outputs", [])
+    if not isinstance(outputs, list) or not all(isinstance(o, dict) for o in outputs):
+        return "manual_review"
+    outputs = [o for o in outputs if not _is_informational_row(o)]
+    if any(
+        str(o.get("status") or o.get("execution_status") or "").lower() in terminal_failure
+        or (
+            (o.get("ok") is False or o.get("success") is False or o.get("error"))
+            and not execution_requires_reconciliation(o)
+        )
+        for o in outputs
+    ):
+        return "failed"
+    if status == "manual_review":
+        return status
+    receipt_rows = outputs or (
+        [row]
+        if status in {"unknown", "accepted", "reconciling"}
+        or row.get("accepted")
+        or row.get("requires_reconciliation")
+        else []
+    )
+    receipts = [o for o in receipt_rows if execution_requires_reconciliation(o)]
+    if receipts:
+        return "pending" if all(_para_task_id(o) for o in receipts) else "manual_review"
+    if status in _WAITING_ROLE_STATES:
+        return "pending"
+    if status in {"unknown", "accepted", "reconciling"}:
+        return "manual_review"
+    return "completed" if row.get("ok") is True else "failed"
+
+
+def team_action_state(
+    rows: list[dict[str, Any]], *, team_ok: bool | None = None
+) -> tuple[str, list[str]]:
+    states = {role_progress_state(row) for row in rows}
+    failed = [str(row.get("role")) for row in rows if role_progress_state(row) == "failed"]
+    if failed or not rows:
+        return "failed", failed
+    return (
+        next(
+            (s for s in ("manual_review", "pending") if s in states),
+            "completed" if team_ok is not False and team_succeeded(rows) else "partial",
+        ),
+        [],
+    )
+
+
+def projected_dispatch_status(status: str, action_type: str, result: Any, error: str = "") -> str:
+    """Correct only provable legacy waiting projections; retain the stored history."""
+    rows = result.get("roles") if isinstance(result, dict) else None
+    if status != "failed" or action_type != "employee.dispatch" or not isinstance(rows, list):
+        return status
+    if (
+        len(rows) != 3
+        or not all(
+            isinstance(r, dict)
+            and isinstance(r.get("role"), str)
+            and isinstance(r.get("status"), str)
+            and type(r.get("ok")) is bool
+            for r in rows
+        )
+        or {r.get("role") for r in rows} != {"scout", "fix", "verify"}
+    ):
+        return status
+    for row in rows:
+        handler = row.get("handler_outputs", {})
+        if (
+            not isinstance(handler, dict)
+            or not isinstance(handler.get("outputs", []), list)
+            or not all(isinstance(o, dict) for o in handler.get("outputs", []))
+        ):
+            return status
+    old_failed = [
+        str(r.get("role"))
+        for r in rows
+        if not r.get("ok") and r.get("status") not in {"pending", "manual_review"}
+    ]
+    if not old_failed or error != "未成功角色：" + "、".join(old_failed):
+        return status
+    projected, _ = team_action_state(rows)
+    return (
+        projected
+        if projected in {"pending", "manual_review"}
+        and any(r.get("status") in _WAITING_ROLE_STATES for r in rows)
+        else status
+    )
+
+
 def team_succeeded(rows: list[dict[str, Any]]) -> bool:
     by_role = {str(row.get("role") or ""): row for row in rows if isinstance(row, dict)}
-    successful = all(by_role.get(role, {}).get("ok") is True for role in ("scout", "fix", "verify"))
+    successful = all(
+        role_progress_state(by_role.get(role, {})) == "completed"
+        for role in ("scout", "fix", "verify")
+    )
     fix_attempt = by_role.get("fix", {}).get("attempt_id")
     return successful and (
         not fix_attempt or by_role.get("verify", {}).get("verified_fix_attempt_id") == fix_attempt
@@ -233,37 +362,23 @@ def repair_verification(source: str | None) -> dict[str, Any]:
 
 
 def record_team_progress(
-    ticket: Any, evidence: dict[str, Any], *, event_id: int, rows: list[dict[str, Any]]
+    ticket: Any,
+    evidence: dict[str, Any],
+    *,
+    event_id: int,
+    rows: list[dict[str, Any]],
+    team_ok: bool | None = None,
 ) -> dict[str, Any]:
     resolution = issue_resolution(ticket, evidence)
-    successful = team_succeeded(rows)
+    successful = team_ok is not False and team_succeeded(rows)
+    action_state, _ = team_action_state(rows, team_ok=team_ok)
     # An employee run cannot establish release or customer-runtime postconditions.
     resolution.update(
-        state=(
-            "awaiting_manual_review"
-            if any(row.get("status") == "manual_review" for row in rows)
-            else (
-                "awaiting_delivery"
-                if successful
-                else (
-                    "processing"
-                    if rows
-                    and all(
-                        row.get("ok")
-                        or row.get("status")
-                        in {
-                            "planned",
-                            "dispatching",
-                            "pending",
-                            "skipped_fix_unfinished",
-                            "verification_invalidated",
-                        }
-                        for row in rows
-                    )
-                    else "repair_failed"
-                )
-            )
-        ),
+        state={
+            "failed": "repair_failed",
+            "manual_review": "awaiting_manual_review",
+            "completed": "awaiting_delivery",
+        }.get(action_state, "processing"),
         incident_event_id=int(event_id),
         **repair_verification("incident_team" if successful else None),
         team=[{k: row.get(k) for k in ("role", "employee_id", "ok", "status")} for row in rows],
