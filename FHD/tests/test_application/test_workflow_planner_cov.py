@@ -336,10 +336,15 @@ class TestValidateRequiredParams:
         "麻烦你先恢复数据库 xcagi.db.20261011_160815.bak",
         "请备份数据库。执行前先给我确认，需要审批的操作提交审批。",
         "备份数据库，不恢复",
+        "请现在创建一次本机数据库备份，用于本次自动审批实测。只创建备份，不恢复、不删除、不修改业务数据。",
+        "帮我生成一份本地数据库备份，执行前先给我确认。",
     ],
 )
 @pytest.mark.parametrize("entry", ["plan", "_fallback_plan"])
 def test_actual_restore_requests_use_one_registered_high_risk_step(message, entry):
+    from app.application.normal_chat_dispatch import route_normal_mode_message
+
+    assert route_normal_mode_message(message)["intent"] == "workflow"
     registry = {
         "system_maintenance": {"actions": {"restore_database": {}, "backup_database": {}}},
         **_SAMPLE_REGISTRY,
@@ -355,7 +360,7 @@ def test_actual_restore_requests_use_one_registered_high_risk_step(message, entr
         )
     assert len(plan.nodes) == 1 and validate_plan_graph(plan) is None
     node = plan.nodes[0]
-    backup = message.startswith(("请备份", "备份"))
+    backup = "备份数据库" in message or "数据库备份" in message
     assert (node.tool_id, node.action) == (
         "system_maintenance",
         "backup_database" if backup else "restore_database",
@@ -370,6 +375,8 @@ def test_actual_restore_requests_use_one_registered_high_risk_step(message, entr
     [
         "如何恢复数据库",
         "不要备份数据库",
+        "请不要创建一次本机数据库备份",
+        "创建一次本机数据库备份应该怎么操作",
         "备份数据库失败，帮我排查",
         "不要恢复数据库",
         "不恢复数据库",

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { readPlannerSseResponse, isChatStreamEnabled, resolveChatStreamPath } from './chatSseStream'
 import { resolvePlannerChatStreamPath } from './plannerChatPaths'
 
@@ -95,5 +95,33 @@ describe('chatSseStream', () => {
     const events: Array<{ type: string; message?: string }> = []
     await readPlannerSseResponse(mockSseResponse(['data: {"type":"error","message":"boom"}\n\n']), (ev) => events.push(ev))
     expect(events[0]).toMatchObject({ type: 'error', message: 'boom' })
+  })
+
+  it('returns on iteration failure without EOF or waiting for cancellation', async () => {
+    const cancel = vi.fn(() => new Promise<void>(() => {}))
+    let close!: () => void
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        close = () => controller.close()
+        controller.enqueue(new TextEncoder().encode('data: {"type":"error","message":"对话达到最大迭代次数，未完成。"}\n\ndata: {"type":"token","text":"不能算成功"}\n\n'))
+      }, cancel,
+    }))
+    const events: string[] = []
+    const reading = readPlannerSseResponse(response, ev => events.push(ev.type))
+    const returned = await Promise.race([reading.then(() => true), new Promise<boolean>(resolve => setTimeout(() => resolve(false), 30))])
+    if (!cancel.mock.calls.length) close()
+    expect(returned).toBe(true)
+    expect(events).toEqual(['error'])
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
+  it('keeps later progress, authorization and results after a done event', async () => {
+    const events: string[] = []
+    await readPlannerSseResponse(mockSseResponse([
+      'data: {"type":"done","result":{"response":"初步结果"}}\n\n',
+      'data: {"type":"tool_progress","run_id":"run_pending"}\n\ndata: {"type":"requires_token","token_name":"READ_TOKEN"}\n\n',
+      'data: {"type":"done","result":{"data":{"action":"approval_pending"}}}\n\n',
+    ]), ev => events.push(ev.type))
+    expect(events).toEqual(['done', 'tool_progress', 'requires_token', 'done'])
   })
 })

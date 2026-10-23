@@ -1,3 +1,4 @@
+@import '../../../../docs/xcagi-dashboard/admin-tokens.css';
 /* Shared /admin visual tokens. Component styles retain semantic colors and layout. */
 #app .page-content > .page-header {
   display: flex;
@@ -8,12 +9,6 @@
   margin: 0 0 16px;
 }
 
-#app {
-  --admin-primary: #1677ff; --admin-text: #172033; --admin-muted: #64748b;
-  --admin-border: #d7dee9; --admin-control-radius: 8px; --admin-card-radius: 12px;
-  --admin-control-size: 13px; --admin-card-shadow: 0 1px 3px rgba(23, 32, 51, 0.08);
-  --admin-warning-bg: #fff7ef; --admin-warning-border: #d5a071; --admin-warning-text: #a65d26;
-}
 #app .page-content { color: var(--admin-text); font-size: 14px; }
 #app .page-content :is(button, [role="button"], .btn, .cs-btn) {
   min-height: 32px; border-radius: var(--admin-control-radius); font-family: inherit;
