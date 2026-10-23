@@ -1373,6 +1373,53 @@ def test_admin_customer_ticket_intent_and_status_filters_preserve_customer_scope
             params={"search": marker, "intent": "product_issue", "status": "open"},
         ).json()
         assert [row["id"] for row in by_category["items"]] == [other_id]
+        # WO-d33badb5975a / 原单 58：组合条件必须在计数和分页前应用。
+        with get_session_factory()() as db:
+            for index, kind in enumerate(("customer", "customer", "unknown")):
+                _make_ticket(
+                    db,
+                    customer,
+                    ticket_no=f"{marker}-delivery-{index}",
+                    summary=marker,
+                    intent="custom_delivery",
+                    status="processing",
+                    submitter_type=kind,
+                )
+            db.commit()
+        params = {
+            "search": marker,
+            "intent": "custom_delivery",
+            "status": "processing",
+            "submitter_type": "customer",
+            "limit": 1,
+        }
+        pages = [
+            client.get("/api/customer-service/tickets", params={**params, "offset": offset}).json()
+            for offset in range(3)
+        ]
+        assert [page["total"] for page in pages] == [2, 2, 2]
+        assert pages[2]["items"] == []
+        rows = [page["items"][0] for page in pages[:2]]
+        assert rows[0]["id"] > rows[1]["id"]
+        assert all(
+            row["user_id"] == customer.id
+            and row["submitter_type"] == "customer"
+            and row["intent"] == "custom_delivery"
+            and row["status"] == "processing"
+            for row in rows
+        )
+        assert (
+            client.get(
+                "/api/customer-service/tickets", params={**params, "submitter_type": "admin"}
+            ).json()["total"]
+            == 0
+        )
+        assert (
+            client.get(
+                "/api/customer-service/tickets", params={**params, "submitter_type": "unknown"}
+            ).json()["total"]
+            == 1
+        )
 
     with _as_user(customer):
         own = client.get(

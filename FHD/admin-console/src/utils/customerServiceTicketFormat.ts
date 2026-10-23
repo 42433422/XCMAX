@@ -103,7 +103,7 @@ const plain = (map: Record<string, string>) => (value: unknown) => {
   return map[raw.toLowerCase()] || raw || '未记录'
 }
 export const intentLabel = plain({
-  greeting: '问候', general: '一般咨询', product_issue: '产品问题', refund: '退款',
+  greeting: '问候', general: '一般咨询', product_issue: '产品问题', custom_delivery: '定制交付', refund: '退款',
   catalog_complaint: '商品投诉', catalog_review: '商品评价', account_support: '账号支持', llm_extension: '模型扩展',
 })
 export const submitterTypeLabel = plain({
