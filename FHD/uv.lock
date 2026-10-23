@@ -2404,7 +2404,7 @@ test = [
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "3.1.1"
+version = "3.1.1+xcagi.1"
 source = { editable = "packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres" }
 dependencies = [
     { name = "langgraph-checkpoint" },
