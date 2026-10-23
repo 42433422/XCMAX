@@ -392,6 +392,9 @@ def test_etl_path_resolver_does_not_trust_cwd_or_global_temp(tmp_path, monkeypat
     with pytest.raises(security.ShipmentEtlPathError):
         security.resolve_etl_path(private_file)
 
+    monkeypatch.setenv("WORKSPACE_ROOT", str(Path.cwd().parent))
+    assert Path.cwd().parent.resolve() not in security._trusted_base_roots()
+
 
 def test_ocr_workbook_output_stays_in_configured_workspace(tmp_path, monkeypatch):
     from app.application.shipment_excel_etl_ocr import grid_to_workbook_path

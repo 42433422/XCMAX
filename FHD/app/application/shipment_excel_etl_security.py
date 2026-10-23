@@ -42,7 +42,12 @@ def _trusted_base_roots() -> list[Path]:
 
         configured_root = Path(os.path.realpath(configured))
         broad_roots = {os.path.realpath(os.getcwd()), os.path.realpath(tempfile.gettempdir())}
-        if configured_root not in broad_roots and configured_root != Path(configured_root.anchor):
+        covers_cwd = configured_root in Path(os.path.realpath(os.getcwd())).parents
+        if (
+            configured_root not in broad_roots
+            and not covers_cwd
+            and configured_root != Path(configured_root.anchor)
+        ):
             roots.append(configured_root)
     seen: set[str] = set()
     out: list[Path] = []
