@@ -171,9 +171,9 @@ const clip = (value: unknown, max = 240) => {
 
 const isRow = (value: unknown): value is Row => !!value && typeof value === 'object' && !Array.isArray(value)
 const unconfirmed = (): Badge => ({ label: '结果待核对', tone: 'warning', raw: '' })
-const unresolvedReceipt = (r: Row) => r.outcome === 'unknown' || r.requires_reconciliation === true || r.completed === false
-  || r.accepted === true && r.completed !== true
-  || [r.status, r.execution_status].some(s => s !== undefined && ['neutral', 'info', 'warning'].includes(runStatusBadge(s).tone))
+const unresolvedReceipt = (r: Row) => r.outcome === 'unknown' || r.requires_reconciliation === true
+  || r.completed !== true && (r.accepted === true || r.queued === true || !!r.outbox_path
+    || [r.status, r.execution_status].some(s => ['unknown', 'reconciling', 'dispatching', 'para_task_timeout', 'para_task_poll_failed', 'para_api_missing_task_id'].includes(String(s ?? '').toLowerCase())))
 /** 布尔值只是原始记录；等待状态不等于失败，完成显示也不能覆盖显式失败或坏回执。 */
 function progressBadge(row: Row): Badge {
   const status = runStatusBadge(row.status)
@@ -182,12 +182,13 @@ function progressBadge(row: Row): Badge {
   const receipts = Array.isArray(outputs) && outputs.every(isRow) ? outputs : null
   const records = [row, ...(Array.isArray(outputs) ? outputs.filter(isRow) : [])]
   const failed = records.flatMap(r => [r.status, r.execution_status]).find(s => runStatusBadge(s).tone === 'danger')
-  if (failed !== undefined || records.some((r, i) => r.handler_failed === true
+  if (failed !== undefined || records.some((r, i) => r.handler_failed === true || r.blocked_by_risk_gate === true
     || (r.error || i > 0 && (r.ok === false || r.success === false)) && !unresolvedReceipt(r))) return { label: '失败', tone: 'danger', raw: String(failed ?? row.status ?? '') }
   if (!receipts) return unconfirmed()
   if (status.tone !== 'success') return status
   if (row.ok === false) return { label: '未成功', tone: 'danger', raw: 'false' }
-  if (row.ok !== true || records.some(r => unresolvedReceipt(r) || r.error || r.ok === false || r.success === false || r.partial === true
+  if (row.ok !== true || records.some(r => unresolvedReceipt(r) || r.error || r.ok === false || r.success === false || r.partial === true || r.completed === false
+    || [r.status, r.execution_status].some(s => s !== undefined && runStatusBadge(s).tone !== 'success')
     || r.handler === 'para_delegate' && (r.accepted !== true || r.completed !== true || !String(r.task_id || r.para_task_id || '').trim()))) return unconfirmed()
   return status
 }
@@ -209,6 +210,8 @@ function teamBadge(action: Row, request: Row, team: TeamMember[]): Badge {
   const roles = request.roles
   if (!Array.isArray(roles) || roles.length !== 3 || !roles.every(isRow)
     || !['scout', 'fix', 'verify'].every(role => roles.some(r => r.role === role))) return unconfirmed()
+  const fixAttempt = roles.find(r => r.role === 'fix')?.attempt_id
+  if (fixAttempt && roles.find(r => r.role === 'verify')?.verified_fix_attempt_id !== fixAttempt) return unconfirmed()
   return team.find(m => m.ok.tone !== 'success')?.ok ?? { ...status, label: '小组处理成功' }
 }
 

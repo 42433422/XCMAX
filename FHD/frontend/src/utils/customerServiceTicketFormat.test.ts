@@ -67,10 +67,12 @@ describe('customer service ticket formatting', () => {
     const failed = teamMembers([
       { status: 'failed', ok: true }, { status: 'error', ok: true },
       { status: 'completed', ok: true, error: 'failed' }, { status: 'completed', ok: true, handler_failed: true },
+      { status: 'completed', ok: true, blocked_by_risk_gate: true },
       { status: 'completed', ok: true, handler_outputs: { outputs: [{ status: 'handler_failed', ok: true }] } },
       { status: 'completed', ok: true, handler_outputs: { outputs: [null, { status: 'handler_failed', ok: false }] } },
       { status: 'completed', ok: true, handler_outputs: { outputs: [{ status: 'completed', execution_status: 'failed', ok: true }] } },
       { status: 'pending', ok: false, handler_outputs: { outputs: [{ ok: false, error: 'permission_denied' }] } },
+      { status: 'pending', ok: false, handler_outputs: { outputs: [{ status: 'pending', ok: false, error: 'permission_denied' }] } },
     ])
     const uncertain = teamMembers([
       { ok: true }, { status: 'completed' }, { status: 'completed', ok: 'true' },
@@ -78,6 +80,7 @@ describe('customer service ticket formatting', () => {
       { status: 'completed', ok: true, handler_outputs: { outputs: null } },
       { status: 'completed', ok: true, handler_outputs: { outputs: [null] } },
       { status: 'completed', ok: true, handler_outputs: { outputs: [{ accepted: true, completed: false }] } },
+      { status: 'completed', ok: true, handler_outputs: { outputs: [{ completed: false }] } },
       { status: 'completed', ok: true, handler_outputs: { outputs: [{ status: 'pending', ok: true }] } },
       { status: 'completed', ok: true, handler_outputs: { outputs: [{ status: 'completed', execution_status: 'pending', ok: true }] } },
       { status: 'completed', ok: true, handler_outputs: { outputs: [{ status: 'unknown', ok: true }] } },
@@ -135,12 +138,16 @@ describe('customer service ticket formatting', () => {
       { team_ok: true }, { roles: [completed] },
       { team_ok: true, roles: [completed, null] }, { team_ok: 'true', roles: [completed] },
       { team_ok: true, roles: [completed] }, { team_ok: true, roles: [roles[0], completed, completed] },
+      { team_ok: true, roles: [roles[0], { ...roles[1], attempt_id: 'new-fix' }, { ...roles[2], verified_fix_attempt_id: 'old-fix' }] },
     ]
     const items = buildTimeline([], requests.map((request, id) => ({ id, action_type: 'employee.dispatch', status: 'completed', request })), {})
     expect(items[0].badges[0]).toMatchObject({ label: '小组处理成功', tone: 'success' })
     expect(items[1].badges[0]).toMatchObject({ label: '小组处理未成功', tone: 'danger' })
     expect(items[2].badges[0]).toMatchObject({ label: '待执行', tone: 'neutral' })
     expect(items.slice(3).every(i => i.badges.every(b => b.tone === 'warning'))).toBe(true)
+    const current = buildTimeline([], [{ action_type: 'employee.dispatch', status: 'completed', request: { team_ok: true,
+      roles: [roles[0], { ...roles[1], attempt_id: 'new-fix' }, { ...roles[2], verified_fix_attempt_id: 'new-fix' }] } }], {})
+    expect(current[0].badges[0]).toMatchObject({ label: '小组处理成功', tone: 'success' })
   })
   it('summarises audit rows from detail or detail_json', () => {
     const [a, b] = auditItems([
