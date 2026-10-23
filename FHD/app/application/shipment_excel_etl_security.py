@@ -106,9 +106,7 @@ def resolve_etl_path(
     """
     _ = must_exist
     roots = etl_allowed_roots(workspace_root)
-    preferred = (
-        Path(workspace_root).resolve() if workspace_root else Path.cwd().resolve()
-    )
+    preferred = Path(workspace_root).resolve() if workspace_root else Path.cwd().resolve()
     if preferred in roots:
         roots = [preferred, *(root for root in roots if root != preferred)]
     return _safe_under_roots(str(file_path or ""), roots)
@@ -126,9 +124,7 @@ def resolve_etl_output_path(
     name = Path(raw).name
     if not name or name in (".", ".."):
         raise ShipmentEtlPathError("invalid output name")
-    parent_raw = (
-        str(Path(raw).parent) if Path(raw).parent.as_posix() not in (".", "") else "."
-    )
+    parent_raw = str(Path(raw).parent) if Path(raw).parent.as_posix() not in (".", "") else "."
     if parent_raw in (".", ""):
         # 仅文件名：落到第一个受信根
         roots = etl_allowed_roots(workspace_root)

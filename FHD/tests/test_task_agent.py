@@ -41,9 +41,7 @@ def test_task_agent_followup_then_fill_bucket():
     from app.services.task_agent import get_task_agent
 
     agent = get_task_agent()
-    first = agent.process_message(
-        "u_task_2", "给我打印七彩乐园的发货单，编号9803，规格28"
-    )
+    first = agent.process_message("u_task_2", "给我打印七彩乐园的发货单，编号9803，规格28")
     assert first is not None
     assert first["action"] == "followup"
     assert "多少桶" in first["text"]

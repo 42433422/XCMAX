@@ -63,17 +63,10 @@ _CN_NUM_CHARS = frozenset("零〇一二两三四五六七八九十")
 _CN_QTY_CHARS = _CN_NUM_CHARS | {"两"}
 
 
-def _read_number(
-    text: str, start: int, *, chinese_only: bool = False
-) -> tuple[str, int]:
+def _read_number(text: str, start: int, *, chinese_only: bool = False) -> tuple[str, int]:
     """Read one number token in a single forward pass."""
     end = start
-    if (
-        start < len(text)
-        and not chinese_only
-        and text[start].isascii()
-        and text[start].isdigit()
-    ):
+    if start < len(text) and not chinese_only and text[start].isascii() and text[start].isdigit():
         while end < len(text) and text[end].isascii() and text[end].isdigit():
             end += 1
     else:
@@ -106,20 +99,14 @@ def _strip_shipment_unit_fields(text: str) -> str:
         return "".join(output)
 
     def marker_code(source: str, pos: int) -> int | None:
-        marker = next(
-            (item for item in ("编号", "型号") if source.startswith(item, pos)), None
-        )
+        marker = next((item for item in ("编号", "型号") if source.startswith(item, pos)), None)
         if marker is None:
             return None
         cursor = _skip_space(source, pos + len(marker))
         if cursor < len(source) and source[cursor] in ":：":
             cursor = _skip_space(source, cursor + 1)
         digit_start = cursor
-        while (
-            cursor < len(source)
-            and source[cursor].isascii()
-            and source[cursor].isdigit()
-        ):
+        while cursor < len(source) and source[cursor].isascii() and source[cursor].isdigit():
             cursor += 1
         if 3 <= cursor - digit_start <= 6:
             return cursor
@@ -127,11 +114,7 @@ def _strip_shipment_unit_fields(text: str) -> str:
 
     def number_before_spec(source: str, pos: int) -> int | None:
         cursor = pos
-        while (
-            cursor < len(source)
-            and source[cursor].isascii()
-            and source[cursor].isdigit()
-        ):
+        while cursor < len(source) and source[cursor].isascii() and source[cursor].isdigit():
             cursor += 1
         if not 3 <= cursor - pos <= 6:
             return None
@@ -144,27 +127,17 @@ def _strip_shipment_unit_fields(text: str) -> str:
         if cursor < len(source) and source[cursor] in ":：":
             cursor = _skip_space(source, cursor + 1)
         start = cursor
-        while (
-            cursor < len(source)
-            and source[cursor].isascii()
-            and source[cursor].isdigit()
-        ):
+        while cursor < len(source) and source[cursor].isascii() and source[cursor].isdigit():
             cursor += 1
         if cursor < len(source) and source[cursor] == ".":
             fraction = cursor + 1
             cursor = fraction
-            while (
-                cursor < len(source)
-                and source[cursor].isascii()
-                and source[cursor].isdigit()
-            ):
+            while cursor < len(source) and source[cursor].isascii() and source[cursor].isdigit():
                 cursor += 1
             if cursor == fraction:
                 cursor = fraction - 1
         if cursor == start:
-            while (
-                cursor < len(source) and source[cursor] in "一二两三四五六七八九十零〇"
-            ):
+            while cursor < len(source) and source[cursor] in "一二两三四五六七八九十零〇":
                 cursor += 1
         return cursor
 
@@ -175,20 +148,14 @@ def _strip_shipment_unit_fields(text: str) -> str:
         if cursor < len(source) and source[cursor] in ":：":
             cursor = _skip_space(source, cursor + 1)
         start = cursor
-        while (
-            cursor < len(source)
-            and source[cursor].isascii()
-            and source[cursor].isdigit()
-        ):
+        while cursor < len(source) and source[cursor].isascii() and source[cursor].isdigit():
             cursor += 1
         if cursor > start:
             if cursor < len(source) and source[cursor] == ".":
                 fraction = cursor + 1
                 cursor = fraction
                 while (
-                    cursor < len(source)
-                    and source[cursor].isascii()
-                    and source[cursor].isdigit()
+                    cursor < len(source) and source[cursor].isascii() and source[cursor].isdigit()
                 ):
                     cursor += 1
                 if cursor == fraction:
@@ -212,11 +179,7 @@ def _strip_shipment_unit_fields(text: str) -> str:
         if cursor >= len(source):
             return None
         if source[cursor].isascii() and source[cursor].isdigit():
-            while (
-                cursor < len(source)
-                and source[cursor].isascii()
-                and source[cursor].isdigit()
-            ):
+            while cursor < len(source) and source[cursor].isascii() and source[cursor].isdigit():
                 cursor += 1
         elif source[cursor] in _CN_QTY_CHARS:
             while cursor < len(source) and source[cursor] in _CN_QTY_CHARS:
@@ -265,11 +228,7 @@ def _customer_name_from_message(text: str) -> str | None:
             cursor = _skip_space(text, cursor + len(qualifier))
             break
     start = cursor
-    while (
-        cursor < len(text)
-        and not text[cursor].isspace()
-        and text[cursor] not in "，,。"
-    ):
+    while cursor < len(text) and not text[cursor].isspace() and text[cursor] not in "，,。":
         cursor += 1
         if cursor - start == 30:
             break
@@ -413,14 +372,10 @@ class TaskAgent:
                         }
 
         # 3) 发货/打印任务
-        order_action = any(
-            k in msg for k in ["打印", "发货单", "送货单", "出货单", "开单", "打单"]
-        )
+        order_action = any(k in msg for k in ["打印", "发货单", "送货单", "出货单", "开单", "打单"])
         order_signal = any(k in msg for k in ["编号", "型号", "规格", "桶"])
         # 只要明显是发货单语境，就进入结构化审查；有槽位就抽取，缺项就追问
-        if order_action and (
-            order_signal or any(k in msg for k in ["发货单", "送货单", "出货单"])
-        ):
+        if order_action and (order_signal or any(k in msg for k in ["发货单", "送货单", "出货单"])):
             shipment_slots: dict[str, Any] = {}
             spec_span_end = -1
             m_model = _labeled_number(msg, ("编号", "型号"), decimal=True, max_digits=6)
@@ -432,11 +387,7 @@ class TaskAgent:
                     marker_at = msg.find(marker)
                     if marker_at > 0:
                         left = marker_at
-                        while (
-                            left > 0
-                            and msg[left - 1].isascii()
-                            and msg[left - 1].isdigit()
-                        ):
+                        while left > 0 and msg[left - 1].isascii() and msg[left - 1].isdigit():
                             left -= 1
                         candidate = msg[left:marker_at]
                         if 3 <= len(candidate) <= 6:
@@ -453,9 +404,9 @@ class TaskAgent:
                 # the longest valid spec prefix (e.g. 二十八两桶 / 二十八一共三桶).
                 for cut in range(len(spec_token), 0, -1):
                     suffix = msg[m_spec_cn[1] + cut :]
-                    qty_tail = suffix.startswith(
-                        ("共", "一共")
-                    ) or _has_short_chinese_quantity(suffix)
+                    qty_tail = suffix.startswith(("共", "一共")) or _has_short_chinese_quantity(
+                        suffix
+                    )
                     if qty_tail and _cn_number(spec_token[:cut]) is not None:
                         spec_token = spec_token[:cut]
                         break
@@ -572,20 +523,14 @@ class TaskAgent:
         }
         ordered_keys = ["unit_name", "model_number", "tin_spec", "quantity_tins"]
         questions = [
-            question_map[k]
-            for k in ordered_keys
-            if k in missing_slots and k in question_map
+            question_map[k] for k in ordered_keys if k in missing_slots and k in question_map
         ]
         if questions:
-            return (
-                "我先帮你审查了一下这句话，麻烦确认一下：" + "，".join(questions) + "。"
-            )
+            return "我先帮你审查了一下这句话，麻烦确认一下：" + "，".join(questions) + "。"
         zh_slots = [SLOT_LABELS.get(slot, slot) for slot in missing_slots]
         return "我先帮你审查了一下这句话，请补充：" + "、".join(zh_slots)
 
-    def execute_plan(
-        self, plan: dict[str, Any], original_message: str = ""
-    ) -> dict[str, Any]:
+    def execute_plan(self, plan: dict[str, Any], original_message: str = "") -> dict[str, Any]:
         task_type = plan.get("task_type")
         slots = plan.get("slots") or {}
         if task_type == "shipment_generate":
@@ -611,7 +556,9 @@ class TaskAgent:
                     },
                 }
 
-            order_text = f"{unit_name}{int(quantity_tins)} 桶 {model_number} 规格 {int(float(tin_spec))}"
+            order_text = (
+                f"{unit_name}{int(quantity_tins)} 桶 {model_number} 规格 {int(float(tin_spec))}"
+            )
             return {
                 "tool_key": "shipment_generate",
                 "intent": "shipment_generate",
