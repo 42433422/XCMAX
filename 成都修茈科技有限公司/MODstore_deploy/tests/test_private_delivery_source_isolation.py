@@ -10,9 +10,7 @@ from pathlib import Path
 import pytest
 
 
-def test_same_id_owners_generate_compile_sign_distinct_sources(
-    client, monkeypatch, tmp_path
-):
+def test_same_id_owners_generate_compile_sign_distinct_sources(client, monkeypatch, tmp_path):
     from cryptography.hazmat.primitives import serialization
 
     from modman.repo_config import RepoConfig
@@ -128,8 +126,7 @@ def test_same_id_owners_generate_compile_sign_distinct_sources(
             )
         )
         return [
-            await get_workbench_session_snapshot(ids[user.id], user.id)
-            for user in (first, second)
+            await get_workbench_session_snapshot(ids[user.id], user.id) for user in (first, second)
         ]
 
     snapshots = asyncio.run(run())
@@ -142,18 +139,14 @@ def test_same_id_owners_generate_compile_sign_distinct_sources(
         record = prepare_private_artifact(
             100 + user.id, user.id, {"delivery_generation": ids[user.id]}, snapshot
         )
-        raw, signed = read_verified_artifact(
-            record, owner_id=user.id, ticket_id=100 + user.id
-        )
+        raw, signed = read_verified_artifact(record, owner_id=user.id, ticket_id=100 + user.id)
         records.append(record)
         with zipfile.ZipFile(io.BytesIO(raw)) as archive:
             import importlib.util
 
             probe = tmp_path / f"verified-probe-{user.id}.py"
             probe.write_bytes(archive.read("backend/probe.py"))
-            spec = importlib.util.spec_from_file_location(
-                f"owner_probe_{user.id}", probe
-            )
+            spec = importlib.util.spec_from_file_location(f"owner_probe_{user.id}", probe)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             assert module.calculate(5) == 5 * multipliers[user.id]
@@ -191,9 +184,7 @@ def test_same_id_owners_generate_compile_sign_distinct_sources(
         assert (seeded / "same-private-id/backend/probe.py").read_bytes() == (
             paths[first.id] / "backend/probe.py"
         ).read_bytes()
-    other_scope = create_private_source_scope(
-        second.id, uuid.uuid4().hex, 100 + second.id
-    )
+    other_scope = create_private_source_scope(second.id, uuid.uuid4().hex, 100 + second.id)
     with pytest.raises(ValueError):
         seed_previous_delivery(other_scope, {"delivery_artifacts": [records[0]]})
 
@@ -204,15 +195,11 @@ def delivery_scope_root(tmp_path, monkeypatch):
 
     library = tmp_path / "library"
     library.mkdir()
-    monkeypatch.setattr(
-        mod_scaffold_runner, "modstore_library_path", lambda: str(library)
-    )
+    monkeypatch.setattr(mod_scaffold_runner, "modstore_library_path", lambda: str(library))
     return tmp_path / "customer-delivery-sources"
 
 
-def test_scope_identity_rejects_traversal_and_overlong_values(
-    delivery_scope_root, tmp_path
-):
+def test_scope_identity_rejects_traversal_and_overlong_values(delivery_scope_root, tmp_path):
     from modstore_server.customer_delivery_sources import (
         create_private_source_scope,
         source_library,
