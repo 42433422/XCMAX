@@ -1,5 +1,5 @@
 {
-  "lines": 2367659,
+  "lines": 2367667,
   "updated": "2026-10-23",
-  "note": "User-approved #2544 exception. Clean commit 23753899c count 2,367,659 (+7 vs prior approved baseline 2,367,652) from tests declaring per-test WORKSPACE_ROOT for ETL tmp_path paths; this keeps production free of global cwd/system-temp trust and restores 155 compatibility regressions. Cumulative vs main baseline 2,337,465 is +30,194 (30,027 merged from main, 167 PR changes); excludes all user legal/eval working-tree edits."
+  "note": "User-approved #2544 exception. Clean commit fb1df9ad3 count 2,367,667 (+8 vs prior baseline 2,367,659) adds rejection of explicitly configured WORKSPACE_ROOT values that cover the repository cwd, with boundary regression. Cumulative vs main baseline 2,337,465 is +30,202 (30,027 merged from main, 175 PR changes); excludes user legal/eval working-tree edits."
 }
