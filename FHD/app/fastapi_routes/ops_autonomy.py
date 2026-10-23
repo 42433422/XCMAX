@@ -140,13 +140,20 @@ async def request_autonomy_action(
     raw_payload = body.get("payload")
     payload: dict[str, Any] = dict(raw_payload) if isinstance(raw_payload, dict) else {}
     source = str(body.get("source") or "").strip() or "ops_autonomy.request"
-    decision, pending = request_action(
-        action,
-        action_id=action_id,
-        payload={**payload, "workflow_action": workflow_action},
-        source=source,
-        executor_name="github_deploy",
-    )
+    if not isinstance(body.get("retry_failed", False), bool):
+        raise HTTPException(status_code=400, detail="retry_failed must be a boolean")
+    try:
+        decision, pending = request_action(
+            action,
+            action_id=action_id,
+            payload={**payload, "workflow_action": workflow_action},
+            source=source,
+            executor_name="github_deploy",
+            retry_failed=body.get("retry_failed", False),
+            retry_approval_id=str(body.get("retry_approval_id") or ""),
+        )
+    except ApprovalStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if pending is None:
         raise HTTPException(
             status_code=409,

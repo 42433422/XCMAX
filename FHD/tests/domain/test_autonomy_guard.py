@@ -775,6 +775,83 @@ def test_pending_approval_resumes_and_rejection_never_retries(monkeypatch) -> No
     assert summary["veto_count"] > 0
 
 
+def test_failed_release_retry_requires_new_approval_and_rejects_old_callbacks() -> None:
+    action_id = "release:" + "a" * 40
+    request_action("apply_release_to_cvm", action_id=action_id)
+    resume_action(action_id, approver="reviewer", approval_id="100", defer_execution=True)
+    complete_action(action_id, success=False, approval_id="100")
+    _, repeated = request_action("apply_release_to_cvm", action_id=action_id)
+    assert repeated["state"] == "execution_failed"
+    for invalid_id in ("", "100", "deployment-101"):
+        with pytest.raises(ApprovalStateError):
+            request_action(
+                "apply_release_to_cvm",
+                action_id=action_id,
+                retry_failed=True,
+                retry_approval_id=invalid_id,
+            )
+    _, pending = request_action(
+        "apply_release_to_cvm", action_id=action_id, retry_failed=True, retry_approval_id="101"
+    )
+    assert pending["state"] == "pending_approval" and "approved_at" not in pending
+    assert pending["previous_approval_ids"] == ["100"]
+    for callback in (
+        lambda: mark_approval_requested(action_id, approval_id="100"),
+        lambda: resume_action(
+            action_id, approver="reviewer", approval_id="100", defer_execution=True
+        ),
+        lambda: reject_action(action_id, approver="reviewer", approval_id="100"),
+        lambda: complete_action(action_id, success=False, approval_id="100"),
+    ):
+        with pytest.raises(ApprovalStateError, match="current release retry"):
+            callback()
+    mark_approval_requested(action_id, approval_id="101")
+    _, repeated = request_action(
+        "apply_release_to_cvm", action_id=action_id, retry_failed=True, retry_approval_id="101"
+    )
+    assert repeated["state"] == "approval_requested"
+    with pytest.raises(ApprovalStateError):
+        request_action(
+            "apply_release_to_cvm", action_id=action_id, retry_failed=True, retry_approval_id="102"
+        )
+    resume_action(action_id, approver="reviewer", approval_id="101", defer_execution=True)
+    with pytest.raises(ApprovalStateError):
+        complete_action(action_id, success=True, approval_id="100")
+    assert complete_action(action_id, success=True, approval_id="101")["state"] == "executed"
+    assert complete_action(action_id, success=True, approval_id="101")["state"] == "executed"
+    with pytest.raises(ApprovalStateError):
+        request_action(
+            "apply_release_to_cvm", action_id=action_id, retry_failed=True, retry_approval_id="102"
+        )
+
+
+@pytest.mark.parametrize(
+    "action,action_id",
+    [
+        ("rollback_release", "release:" + "b" * 40),
+        ("apply_release_to_cvm", "release:short"),
+    ],
+)
+def test_failed_retry_cannot_expand_action_scope(monkeypatch, action, action_id) -> None:
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
+    request_action(action, action_id=action_id)
+    resume_action(action_id, approver="reviewer", approval_id="100", defer_execution=True)
+    complete_action(action_id, success=False, approval_id="100")
+    with pytest.raises(ApprovalStateError):
+        request_action(action, action_id=action_id, retry_failed=True, retry_approval_id="101")
+
+
+def test_rejected_release_cannot_be_retried() -> None:
+    action_id = "release:" + "c" * 40
+    request_action("apply_release_to_cvm", action_id=action_id)
+    reject_action(action_id, approver="reviewer", approval_id="100")
+    with pytest.raises(ApprovalStateError):
+        request_action(
+            "apply_release_to_cvm", action_id=action_id, retry_failed=True, retry_approval_id="101"
+        )
+
+
 def test_deferred_workflow_only_marks_executed_after_real_outcome(monkeypatch) -> None:
     monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
     reload_autonomy_guard()

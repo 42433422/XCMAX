@@ -6,7 +6,12 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.autonomy.approval_resume import mark_approval_requested, request_action
+from app.application.autonomy.approval_resume import (
+    complete_action,
+    mark_approval_requested,
+    request_action,
+    resume_action,
+)
 from app.domain.autonomy.autonomy_guard import reload_autonomy_guard
 from app.fastapi_routes import ops_autonomy, xcmax_admin
 
@@ -18,6 +23,28 @@ def _isolate(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH", str(tmp_path / "approval.jsonl"))
     monkeypatch.delenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", raising=False)
     reload_autonomy_guard()
+
+
+def test_request_route_requires_explicit_fresh_retry(tmp_path, monkeypatch) -> None:
+    _isolate(tmp_path, monkeypatch)
+    action_id = "release:" + "d" * 40
+    request_action("apply_release_to_cvm", action_id=action_id)
+    resume_action(action_id, approver="reviewer", approval_id="200", defer_execution=True)
+    complete_action(action_id, success=False, approval_id="200")
+    monkeypatch.setattr(ops_autonomy, "_auth", lambda *args, **kwargs: None)
+    app = FastAPI()
+    app.include_router(ops_autonomy.router)
+    payload = {"action": "apply_release_to_cvm", "action_id": action_id}
+    with TestClient(app) as client:
+        route = "/api/ops/autonomy/actions/request"
+        assert client.post(route, json=payload).json()["state"] == "execution_failed"
+        assert client.post(route, json={**payload, "retry_failed": "true"}).status_code == 400
+        assert client.post(route, json={**payload, "retry_failed": True}).status_code == 409
+        response = client.post(
+            route, json={**payload, "retry_failed": True, "retry_approval_id": "201"}
+        )
+        assert response.status_code == 200
+        assert response.json()["state"] == "pending_approval"
 
 
 def test_admin_audit_log_endpoint_returns_highlighted_veto(tmp_path, monkeypatch) -> None:
