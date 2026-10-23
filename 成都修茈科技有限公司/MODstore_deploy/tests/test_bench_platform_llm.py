@@ -120,8 +120,14 @@ def test_xiaomi_legacy_7b_model_alias_maps_to_pro():
 
     assert normalize_model("xiaomi", "mimo-v2.5-pro") == "mimo-v2.6-pro"
     assert normalize_model("xiaomi", "mimo-v2.5") == "mimo-v2.6-flash"
-    assert normalize_model("xiaomi", "mimo-v2.5-pro", "https://models.example.invalid/v1") == "mimo-v2.5-pro"
-    assert normalize_model("xiaomi", "mimo-v2.5-pro", "https://evil.invalid/?x=xiaomimimo.com") == "mimo-v2.5-pro"
+    assert (
+        normalize_model("xiaomi", "mimo-v2.5-pro", "https://models.example.invalid/v1")
+        == "mimo-v2.5-pro"
+    )
+    assert (
+        normalize_model("xiaomi", "mimo-v2.5-pro", "https://evil.invalid/?x=xiaomimimo.com")
+        == "mimo-v2.5-pro"
+    )
     assert normalize_model("deepseek", "mimo-v2.5-pro") == "mimo-v2.5-pro"
     assert normalize_model("xiaomi", "MiMo-7B-RL-Think") == "mimo-v2.6-pro"
     assert normalize_model("xiaomi", "mimo-v2-flash") == "mimo-v2.6-pro"

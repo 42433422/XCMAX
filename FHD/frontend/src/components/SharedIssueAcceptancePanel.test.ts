@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, expect, it, vi } from 'vitest'
 import SharedIssueAcceptancePanel from './SharedIssueAcceptancePanel.vue'
@@ -8,12 +8,12 @@ import { apiFetch } from '@/utils/apiBase'
 vi.mock('@/utils/apiBase', () => ({ apiFetch: vi.fn() }))
 const repair = { id: 12, ticket_no: 'CS-12', summary: '保存订单失败', ready: true }
 const response = (items = [repair]) => new Response(JSON.stringify({ success: true, data: { items } }))
-async function setup(open = true) {
+async function setup(open = true, teleportStub = true) {
   const pinia = createPinia()
   setActivePinia(pinia)
   const account = useAccountProfileStore()
   account.marketUserId = 1
-  const wrapper = mount(SharedIssueAcceptancePanel, { global: { plugins: [pinia], stubs: { Teleport: true } } })
+  const wrapper = mount(SharedIssueAcceptancePanel, { global: { plugins: [pinia], stubs: { Teleport: teleportStub } } })
   await flushPromises()
   if (open) await wrapper.get(".repair-acceptance > button").trigger("click")
   return { wrapper, account }
@@ -47,6 +47,21 @@ it('never confirms automatically; accepts only an explicit customer result', asy
   await flushPromises()
   expect(apiFetch).toHaveBeenNthCalledWith(2, '/api/mod-store/issue-runtime/12', expect.objectContaining({ method: 'POST', body: JSON.stringify({ confirmed: true, note: '保存成功了' }) }))
   expect(wrapper.find('article').exists()).toBe(false)
+  wrapper.unmount()
+})
+
+it('keeps the open dialog mounted through a refresh so the modal stays usable', async () => {
+  const { wrapper } = await setup(true, false)
+  const dialog = new DOMWrapper(document.body.querySelector('dialog')!)
+  let finish!: (response: Response) => void
+  vi.mocked(apiFetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  await dialog.findAll('button').find(button => button.text() === '刷新')!.trigger('click')
+  expect(document.body.querySelector('dialog')).toBe(dialog.element)
+  expect(dialog.get('[role="status"]').text()).toContain('正在同步工单')
+  finish(response())
+  await flushPromises()
+  expect(document.body.querySelector('dialog')).toBe(dialog.element)
+  expect(dialog.attributes('open')).toBeDefined()
   wrapper.unmount()
 })
 

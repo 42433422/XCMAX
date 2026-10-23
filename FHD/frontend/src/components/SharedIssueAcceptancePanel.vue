@@ -23,6 +23,7 @@ const failed = ref<RequestAttempt | null>(null)
 const dialog = ref<HTMLDialogElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const opened = ref(false)
+const loading = ref(false)
 let attempts: Record<number, { decision: Decision; note: string; key: string }> = {}
 let generation = 0
 let pending: AbortController | undefined
@@ -46,6 +47,7 @@ async function refresh() {
   repairs.value = []
   busy.value = null
   if (!failed.value) error.value = ''
+  loading.value = account.marketUserId !== null
   if (account.marketUserId === null) return
   try {
     const response = await apiFetch('/api/mod-store/issue-runtime', { signal: controller.signal })
@@ -55,6 +57,8 @@ async function refresh() {
     if (current === generation) repairs.value = Array.isArray(body.data?.items) ? body.data.items : []
   } catch (cause) {
     if (current === generation && !controller.signal.aborted) error.value = cause instanceof Error ? cause.message : '工单处理结果暂时无法同步'
+  } finally {
+    if (current === generation) loading.value = false
   }
 }
 
@@ -119,12 +123,14 @@ onBeforeUnmount(() => { generation++; pending?.abort() })
 </script>
 
 <template>
-  <section v-if="repairs.length || error || failed" class="repair-acceptance">
+  <section v-if="repairs.length || error || failed || opened" class="repair-acceptance">
     <button ref="trigger" type="button" :aria-expanded="opened" aria-haspopup="dialog" @click="openResults">问题工单处理结果（{{ repairs.length }}）<span v-if="error || failed"> · 同步或保存失败</span></button>
     <Teleport to="body">
     <dialog v-if="opened" ref="dialog" aria-label="问题工单处理结果" class="repair-dialog" @cancel.prevent="closeResults" @click="($event.target === dialog) && closeResults()">
-    <header><strong>问题工单处理结果（{{ repairs.length }}）</strong><button type="button" autofocus @click="closeResults">关闭</button></header>
+    <header><strong>问题工单处理结果（{{ repairs.length }}）</strong><button type="button" :disabled="loading || busy !== null" @click="refresh">刷新</button><button type="button" autofocus @click="closeResults">关闭</button></header>
     <div class="repair-list">
+    <p v-if="loading" role="status">正在同步工单…</p>
+    <p v-else-if="!repairs.length && !error && !failed">当前没有待核对的工单。</p>
     <p v-if="error || failed" role="alert">{{ error || failed?.message }} <button type="button" :disabled="busy !== null" @click="retry">重试</button></p>
     <article v-for="repair in repairs" :key="repair.id">
       <strong>{{ repair.ticket_no }}</strong>
