@@ -148,7 +148,7 @@ def test_mobile_tri_platform_rejects_missing_or_misdirected_router_composition()
     )
 
 
-def test_mobile_tri_platform_reads_the_declared_mobile_extension_module(tmp_path, monkeypatch):
+def test_mobile_tri_platform_does_not_accept_composition_from_another_module(tmp_path, monkeypatch):
     from scripts.dev.ssot_plugins import mobile_tri_platform
 
     wrong_module = tmp_path / "wrong_module.py"
@@ -156,7 +156,12 @@ def test_mobile_tri_platform_reads_the_declared_mobile_extension_module(tmp_path
         "cast(APIRouter, _mobile_router).include_router(extension_router)\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(mobile_tri_platform, "FASTAPI_MOBILE_EXT", wrong_module)
+    declared_module = tmp_path / "mobile_api_extensions.py"
+    declared_module.write_text(
+        "extension_router = APIRouter()\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(mobile_tri_platform, "FASTAPI_MOBILE_EXT", declared_module)
     errors: list[str] = []
 
     mobile_tri_platform._check_unified_stack(errors)
