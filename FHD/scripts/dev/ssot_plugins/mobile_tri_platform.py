@@ -193,10 +193,17 @@ def _check_unified_stack(errors: list[str]) -> None:
     for snippet in (
         "extension_router.include_router(_admin.router)",
         "extension_router.include_router(_ai_groups.router)",
-        "_mobile_router.include_router(extension_router)",
     ):
         if fastapi_ext and snippet not in fastapi_ext:
             errors.append(f"mobile_api_extensions.py 缺少移动路由组合: {snippet}")
+    mobile_router_compositions = (
+        "_mobile_router.include_router(extension_router)",
+        "cast(APIRouter, _mobile_router).include_router(extension_router)",
+    )
+    if fastapi_ext and not any(item in fastapi_ext for item in mobile_router_compositions):
+        errors.append(
+            "mobile_api_extensions.py 缺少移动路由组合: _mobile_router.include_router(extension_router)"
+        )
 
     fastapi_admin = _read_text(FASTAPI_MOBILE_ADMIN, errors)
     if fastapi_admin and '@router.get("/admin/home"' not in fastapi_admin:
