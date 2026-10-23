@@ -1583,7 +1583,8 @@ _WRITE_CFG = {
 }
 
 
-def test_write_delivery_note_workbook(tmp_path, delivery_profile):
+def test_write_delivery_note_workbook(tmp_path, delivery_profile, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     prof = _make_profile(write=dict(_WRITE_CFG))
     out = tmp_path / "out" / "delivery.xlsx"
     res = write_delivery_note_workbook([_delivery_note()], out, profile=prof)
@@ -1592,7 +1593,8 @@ def test_write_delivery_note_workbook(tmp_path, delivery_profile):
     assert Path(res["file_path"]).is_file()
 
 
-def test_write_delivery_note_workbook_multi_and_demo(tmp_path, delivery_profile):
+def test_write_delivery_note_workbook_multi_and_demo(tmp_path, delivery_profile, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     prof = _make_profile(write=dict(_WRITE_CFG))
     out = tmp_path / "multi.xlsx"
     notes = [
@@ -1638,7 +1640,8 @@ def test_write_delivery_note_workbook_import_error(monkeypatch):
     assert res["success"] is False
 
 
-def test_write_ledger_workbook(tmp_path, delivery_profile):
+def test_write_ledger_workbook(tmp_path, delivery_profile, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     prof = _make_profile(write=dict(_WRITE_CFG))
     out = tmp_path / "ledger.xlsx"
     rows = [

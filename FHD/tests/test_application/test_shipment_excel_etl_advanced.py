@@ -23,6 +23,7 @@ from app.application.shipment_excel_etl_security import direct_execute_allowed
 
 @pytest.fixture(autouse=True)
 def _kb(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")

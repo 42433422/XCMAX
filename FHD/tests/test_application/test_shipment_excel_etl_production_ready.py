@@ -77,6 +77,7 @@ def orm_fp_db(tmp_path, monkeypatch):
             self.db.close()
 
     monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "orm")
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setattr("app.db.session.get_db", lambda: _Ctx())
     monkeypatch.setattr(
         "app.application.shipment_excel_etl_fingerprint_store._legacy_db_path",
@@ -403,7 +404,7 @@ def test_ocr_workbook_output_stays_in_configured_workspace(tmp_path, monkeypatch
     assert output.is_file()
 
 
-def test_fixtures_roundtrip_still_ok():
+def test_fixtures_roundtrip_still_ok(monkeypatch):
     fixture = (
         Path(__file__).resolve().parents[1]
         / "fixtures"
@@ -412,6 +413,7 @@ def test_fixtures_roundtrip_still_ok():
     )
     if not fixture.is_file():
         pytest.skip("fixture missing")
+    monkeypatch.setenv("WORKSPACE_ROOT", str(fixture.parent))
     from app.application.shipment_excel_etl_app_service import parse_delivery_notes
 
     parsed = parse_delivery_notes(fixture, include_ledger=False)

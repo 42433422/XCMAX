@@ -329,6 +329,7 @@ async def test_mounted_template_preview_regeneration_round_trip(
     )
     monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
     monkeypatch.setattr(api, "TEMP_EXCEL_DIR", str(tmp_path))
     clear_profile_cache()
