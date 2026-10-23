@@ -1,9 +1,18 @@
 """Receipt-based ticket progress; waiting is neither failure nor delivery."""
 
+import uuid
+
 import pytest
 
 from modstore_server.customer_service_tools import json_loads
 from tests.test_customer_issue_delivery_pipeline import make_ticket
+
+
+@pytest.fixture
+def progress_client(client, monkeypatch):
+    """Keep parametrized intake requests out of other tests' rate-limit bucket."""
+    monkeypatch.setitem(client.headers, "x-modstore-user", f"progress-{uuid.uuid4().hex}")
+    return client
 
 
 @pytest.mark.parametrize("team_ok", [False, True])
@@ -31,7 +40,7 @@ from tests.test_customer_issue_delivery_pipeline import make_ticket
     ],
 )
 def test_planned_roles_wait_for_the_original_scout_without_reporting_failure(
-    client, monkeypatch, statuses, expected, team_ok
+    progress_client, monkeypatch, statuses, expected, team_ok
 ):
     from modstore_server.customer_service_orchestrator import (
         apply_customer_ticket_incident_progress,
@@ -39,7 +48,7 @@ def test_planned_roles_wait_for_the_original_scout_without_reporting_failure(
     from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceAction, CustomerServiceTicket
 
-    _, tid = make_ticket(client, monkeypatch)
+    _, tid = make_ticket(progress_client, monkeypatch)
     rows = [
         {"role": r, "ok": s == "success", "status": s}
         for r, s in zip(("scout", "fix", "verify"), statuses)
