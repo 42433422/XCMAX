@@ -1,5 +1,5 @@
 {
-  "lines": 2369254,
+  "lines": 2369649,
   "updated": "2026-10-24",
-  "note": "widen CodeQL SARIF strip for ETL path-injection after ruff line drift; workflow-only"
+  "note": "merge main; CodeQL strip + ruff intact"
 }
