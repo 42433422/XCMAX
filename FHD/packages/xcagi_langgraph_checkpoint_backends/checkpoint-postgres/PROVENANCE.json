@@ -29,7 +29,7 @@
   "security_backport": {
     "reported_ci_finding": "pip-audit reported CVE-2026-115883 and fix version 3.1.3; the local vendored editable package is not published to PyPI, so pip-audit does not analyze its source.",
     "upstream_pull_request": "https://github.com/langchain-ai/langgraph/pull/9217",
-    "merged_commit": "bfcfea5",
+    "merged_commit": "bfcfea554ed5c7f7be562cebf8825e911b493ab1",
     "release_pull_request": "https://github.com/langchain-ai/langgraph/pull/9287",
     "scope": "Reject empty, non-string, and dotted namespace labels in Postgres direct GetOp/PutOp/SearchOp/ListNamespacesOp batches before SQL. Sync batch() and async abatch() both pass through _group_ops. Standard store API checks were already present in the vendored checkpoint 4.1.1 core. No other Postgres 3.1.2/3.1.3 features are claimed."
   }
