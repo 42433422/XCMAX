@@ -16,6 +16,12 @@ def test_task_agent_parse_long_colloquial_shipment():
     assert "3 桶" in result["data"]["params"]["order_text"]
 
 
+def test_task_agent_declines_oversized_input_before_slot_regexes():
+    from app.services.task_agent import get_task_agent
+
+    assert get_task_agent().parse_task("编号" + "0" * 100_000) is None
+
+
 def test_task_agent_should_parse_spec_and_qty_without_separator():
     from app.services.task_agent import get_task_agent
 
@@ -127,3 +133,60 @@ def test_task_agent_should_parse_compact_shipment_with_qty_verb():
     assert "9803" in result["data"]["params"]["order_text"]
     assert "12" in result["data"]["params"]["order_text"]
     assert "3 桶" in result["data"]["params"]["order_text"]
+
+
+def test_task_agent_linear_number_parser_preserves_common_shipment_grammar():
+    from app.services.task_agent import get_task_agent
+
+    agent = get_task_agent()
+    arabic = agent.parse_task("打印七彩乐园的发货单编号9803规格12.5要3桶")
+    chinese = agent.parse_task("发货单太阳鸟型号12345规格二十八一共三桶")
+    assert arabic["slots"] == {
+        "model_number": "9803",
+        "tin_spec": 12.5,
+        "quantity_tins": 3,
+        "unit_name": "七彩乐园",
+    }
+    assert chinese["slots"] == {
+        "model_number": "12345",
+        "tin_spec": 28.0,
+        "quantity_tins": 3,
+        "unit_name": "太阳鸟",
+    }
+
+
+def test_task_agent_shipment_unit_cleanup_is_linear_and_keeps_customer_name():
+    from app.services.task_agent import get_task_agent
+
+    parsed = get_task_agent().parse_task("发货单七彩乐园9803规格12要3桶")
+    assert parsed is not None
+    assert parsed["slots"]["unit_name"] == "七彩乐园"
+    assert parsed["slots"]["model_number"] == "9803"
+    assert parsed["slots"]["tin_spec"] == 12.0
+    assert parsed["slots"]["quantity_tins"] == 3
+
+
+def test_task_agent_customer_query_handles_long_whitespace_without_regex_backtracking():
+    from app.services.task_agent import get_task_agent
+
+    parsed = get_task_agent().parse_task("查客户" + "\t" * 3000 + "太阳鸟贸易")
+    assert parsed is not None
+    assert parsed["task_type"] == "customer_query"
+    assert parsed["slots"]["customer_name"] == "太阳鸟贸易"
+
+
+def test_task_agent_linear_number_parser_handles_near_miss_user_text():
+    from app.services.task_agent import get_task_agent
+
+    agent = get_task_agent()
+    # Under the established 4096-character input limit these long numeric runs
+    # must be scanned once and rejected as invalid model/spec/quantity tokens.
+    near_miss = "打印单位的发货单编号" + "9" * 4000 + "规格" + "一" * 40 + "桶"
+    plan = agent.parse_task(near_miss)
+    assert plan is not None
+    # Legacy {3,6} model grammar captured the first six digits of a longer run.
+    assert plan["slots"]["model_number"] == "999999"
+    assert "tin_spec" not in plan["slots"]
+    # The existing colloquial fallback treats the final Chinese numeral in a
+    # glued run as the quantity, so preserve that established interpretation.
+    assert plan["slots"]["quantity_tins"] == 1

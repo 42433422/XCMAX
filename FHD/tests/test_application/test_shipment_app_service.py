@@ -14,7 +14,7 @@ import pytest
 
 from app.application.shipment_app_service import ShipmentApplicationService
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
-from app.legacy.domain.legacy_vo import ContactInfo, Money, Quantity
+from app.domain.shipment.value_objects import ContactInfo, Money, Quantity
 
 # ---------------------------------------------------------------------------
 # Dummy implementations for testing (reuse pattern from existing test)

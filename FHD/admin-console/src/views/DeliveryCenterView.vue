@@ -107,13 +107,15 @@
           </div>
         </header>
 
+        <p class="delivery-next-step"><strong :title="stageOf(ticket)">当前：{{ stageLabel(stageOf(ticket)) }}</strong><span>下一步：{{ nextStepLabel(stageOf(ticket)) }}</span></p>
         <ol class="delivery-timeline" aria-label="交付阶段">
           <li
-            v-for="step in timelineStepsFor(ticket)"
+            v-for="(step, index) in timelineStepsFor(ticket)"
             :key="step.key"
             :class="timelineClass(ticket, step.key)"
+            :aria-current="timelineClass(ticket, step.key).active || timelineClass(ticket, step.key).failed ? 'step' : undefined"
           >
-            <span><i :class="`fa ${step.icon}`" aria-hidden="true"></i></span>
+            <span>{{ index + 1 }}</span>
             <div><strong>{{ step.label }}</strong><small>{{ step.hint }}</small></div>
           </li>
         </ol>
@@ -235,6 +237,7 @@ import {
   addonTimelineSteps,
   initialTimelineSteps,
   kindLabel,
+  nextStepLabel,
   stageLabel,
   stageOf,
   stageOptions,
@@ -375,7 +378,7 @@ function timelineStepsFor(ticket: CustomDeliveryTicket) {
 function stageRank(ticket: CustomDeliveryTicket, stage: string): number {
   const normalized = stage === 'rework' ? 'production' : stage
   const index = timelineStepsFor(ticket).findIndex((step) => step.key === normalized)
-  return index < 0 ? 0 : index
+  return index
 }
 
 function updateDeliveryTicket(updated: CustomDeliveryTicket) {

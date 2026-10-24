@@ -25,7 +25,20 @@
           <span class="app-launcher-desc">进入客户交付中心，承接企业客户的标准交付与定制生产闭环</span>
         </button>
         <button
-          v-if="!isAdminConsoleSpa()"
+          v-if="isAdminConsoleSpa()"
+          class="app-launcher app-launcher--market"
+          type="button"
+          data-tour="ecosystem-launcher-market-overview"
+          @click="goShellPage('market-overview')"
+        >
+          <span class="app-launcher-icon app-launcher-icon--modstore" aria-hidden="true">
+            <ModStoreLauncherIcon />
+          </span>
+          <span class="app-launcher-name">市场总览</span>
+          <span class="app-launcher-desc">市场目录规模、注册账号等业务指标（管理端正式入口）</span>
+        </button>
+        <button
+          v-else
           class="app-launcher app-launcher--modstore"
           type="button"
           data-tour="ecosystem-launcher-modstore"

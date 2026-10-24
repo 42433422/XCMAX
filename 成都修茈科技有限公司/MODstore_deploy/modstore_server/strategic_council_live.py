@@ -80,7 +80,7 @@ def live_para_evidence(*, goal_id: str, loop_run_id: str, para_task_id: str) -> 
         goal_status = ""
     loop_rows: list[dict[str, Any]] = []
     try:
-        from modstore_server.self_maintenance_loop_runner import _read_ledger
+        from modstore_server.maintenance_loop.store import _read_ledger
 
         loop_rows = [
             row

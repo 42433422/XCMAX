@@ -14,7 +14,8 @@
         </button>
       </div>
     </div>
-    <p v-if="error" class="banner-error">{{ error }}</p>
+    <p v-if="error" class="banner-error" role="alert">{{ error }}</p>
+    <p class="muted" role="status">运营总览：{{ overviewReady ? '已读取' : loading ? '读取中' : '待核实' }} · 跨端门禁：{{ gateReady ? '已读取' : loading ? '读取中' : '待核实' }} · GitHub：{{ githubReady ? '已读取' : loading ? '读取中' : '待核实' }} · 总览数据时间：{{ overview?.generated_at || overview?.operating_metrics?.generated_at || '未提供' }}</p>
     <p v-if="forceMsg" class="banner-ok">{{ forceMsg }}</p>
 
     <div class="kpi-grid">
@@ -42,7 +43,7 @@
         <table v-if="section.rows.length" class="data-table">
           <thead><tr><th v-for="column in section.columns" :key="column">{{ column }}</th></tr></thead>
           <tbody><tr v-for="(row, idx) in section.rows" :key="idx">
-            <td v-for="(value, col) in row" :key="col">{{ value || '—' }}</td>
+            <td v-for="(value, col) in row" :key="col">{{ value ?? '—' }}</td>
           </tr></tbody>
         </table>
         <div v-else class="empty">{{ section.empty }}</div>
@@ -52,11 +53,12 @@
     <div class="split">
       <section class="card">
         <h3>跨端门禁</h3>
-        <ul class="gate-list">
+        <p v-if="!gateRules.length" class="empty">{{ gateReady ? '当前未返回适用规则，动作许可仍待核实。' : '门禁规则尚未读取成功，请重新读取。' }}</p>
+        <ul v-else class="gate-list">
           <li v-for="rule in gateRules" :key="rule.tier + rule.action_type">
-            <span class="badge" :class="rule.allow ? 'ok' : 'err'">{{ rule.allow ? '通过' : '阻断' }}</span>
+            <span class="badge" :class="rule.allow === true ? 'ok' : rule.allow === false ? 'err' : ''">{{ rule.allow === true ? '允许' : rule.allow === false ? '阻断' : '待核实' }}</span>
             <div>
-              <strong>{{ rule.label }}</strong>
+              <strong>{{ rule.label || rule.action_type || '未标明动作' }}</strong>
               <div class="muted">{{ (rule.reasons || []).join('；') || '—' }}</div>
             </div>
           </li>
@@ -75,7 +77,7 @@
             </a>
           </li>
         </ul>
-        <div v-else class="empty">{{ githubError || '暂无 needs-human / ai-self-heal 条目' }}</div>
+        <div v-else class="empty">{{ githubError || (githubReady ? '暂无需要人工处理的条目' : 'GitHub 条目尚未核实，请重新读取。') }}</div>
       </section>
     </div>
 
@@ -124,7 +126,8 @@ const loading = ref(false)
 const forcing = ref(false)
 const error = ref('')
 const forceMsg = ref('')
-const overview = ref<Record<string, any>>({})
+const overview = ref<Record<string, any> | null>(null)
+const overviewReady = ref(false), gateReady = ref(false), githubReady = ref(false)
 const deployEvents = ref<AutonomyDeployEvent[]>([])
 const auditItems = ref<Record<string, any>[]>([])
 const githubItems = ref<AutonomyGithubItem[]>([])
@@ -156,23 +159,27 @@ function auditSummary(row: Record<string, any>): string {
 function auditAction(row: Record<string, any>): Record<string, any> {
   return row.action && typeof row.action === 'object' ? row.action : { type: row.action }
 }
+function recordsKnown(value: unknown): value is Array<Record<string, any>> {
+  return Array.isArray(value) && value.every(row => row && typeof row === 'object' && !Array.isArray(row))
+}
 
 const window30 = computed(() => overview.value?.operating_metrics?.windows?.['30'] || {})
 const kpis = computed(() => [
-  ['待办', String(overview.value?.pending?.count || 0)], ['30 天动作', String(window30.value.action_count ?? '—')],
+  ['待办', String(overview.value?.pending?.count ?? '待核实')], ['30 天动作', String(window30.value.action_count ?? '待核实')],
   ['30 天否决', String(window30.value.blocked_count ?? '—')], ['30 天 veto rate', formatRate(window30.value.veto_rate)],
 ])
 const recentSections = computed(() => [
-  { title: '最近部署事件', empty: '暂无部署事件', columns: ['deploy_id', '时间', '状态', '分支', 'workflow'],
+  { title: '最近部署事件', empty: recordsKnown(overview.value?.deploy_events?.items) ? '暂无部署事件' : '部署记录尚未核实，请重新读取总览。', columns: ['发布编号', '时间', '状态', '分支', '工作流'],
     rows: deployEvents.value.map(r => [r.deploy_id, r.deployed_at, r.status, r.head_branch, r.source_workflow]) },
-  { title: '最近审计日志', empty: '暂无审计日志', columns: ['action', 'risk', 'decision', 'actor', 'time'],
-    rows: auditItems.value.map(r => [r.action, r.risk_level, r.decision, r.actor || r.approver || r.source, r.timestamp || r.created_at]) },
+  { title: '最近审计日志', empty: recordsKnown(overview.value?.audit?.items) ? '暂无审计日志' : '审计记录尚未核实，请重新读取总览。', columns: ['动作', '说明', '风险', '结果', '操作方', '时间'],
+    rows: auditItems.value.map(r => [auditAction(r).type || auditAction(r).action || '未标注动作', auditSummary(r), r.risk_level, r.decision, r.actor || r.approver || r.source, r.timestamp || r.created_at]) },
 ])
 
 const trendPoints = computed(() => {
   const rows = overview.value?.operating_metrics?.veto_rate_trend_30d || []
   if (!Array.isArray(rows) || rows.length < 2) return []
-  const rates = rows.map((r: any) => Number(r.veto_rate || 0))
+  const rates = rows.filter((r: any) => typeof r?.veto_rate === 'number' && Number.isFinite(r.veto_rate)).map((r: any) => r.veto_rate)
+  if (rates.length < 2) return []
   const max = Math.max(...rates, 1)
   const min = Math.min(...rates, 0)
   const span = Math.max(max - min, 0.01)
@@ -183,27 +190,44 @@ const trendPoints = computed(() => {
 })
 
 function formatRate(value: unknown) {
-  if (value == null || value === '') return '—'
-  const n = Number(value)
-  if (Number.isNaN(n)) return String(value)
-  return `${n.toFixed(2)}%`
+  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(2)}%` : '待核实'
 }
 
 async function loadAll() {
   loading.value = true
   error.value = ''
+  overview.value = null; overviewReady.value = gateReady.value = githubReady.value = false
+  deployEvents.value = []; auditItems.value = []; gateRules.value = []; githubItems.value = []; githubError.value = ''
   try {
-    const [ov, gh, gate] = await Promise.all([
+    const results = await Promise.allSettled([
       xcmaxAdminApi.fetchAutonomyOverview(),
       xcmaxAdminApi.fetchAutonomyGithubItems(30),
       xcmaxAdminApi.fetchAutonomyCrossTierGate(),
     ])
-    overview.value = ov || {}
-    deployEvents.value = Array.isArray(ov?.deploy_events?.items) ? ov.deploy_events.items : []
-    auditItems.value = Array.isArray(ov?.audit?.items) ? ov.audit.items : []
-    githubItems.value = Array.isArray(gh?.items) ? gh.items : []
-    githubError.value = Array.isArray(gh?.errors) && gh.errors.length ? String(gh.errors[0]) : ''
-    gateRules.value = Array.isArray((gate as any)?.rules) ? (gate as any).rules : []
+    const failures: string[] = []
+    const labels = ['运营总览', 'GitHub 条目', '跨端门禁']
+    results.forEach((result, index) => {
+      try {
+        if (result.status === 'rejected') throw result.reason
+        const data = result.value as Record<string, any>
+        if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('返回数据无法识别')
+        if (index === 0) {
+          if (!data.pending || typeof data.pending.count !== 'number' || !Number.isInteger(data.pending.count) || data.pending.count < 0) throw new Error('未返回可核实的待办状态')
+          overview.value = data; overviewReady.value = true
+          deployEvents.value = recordsKnown(data.deploy_events?.items) ? data.deploy_events.items : []
+          auditItems.value = recordsKnown(data.audit?.items) ? data.audit.items : []
+        } else if (index === 1) {
+          if (!recordsKnown(data.items)) throw new Error('未返回有效条目清单')
+          githubItems.value = data.items
+          githubError.value = Array.isArray(data.errors) && data.errors.length ? String(data.errors[0]) : ''
+          githubReady.value = !githubError.value
+        } else {
+          if (!recordsKnown(data.rules)) throw new Error('未返回有效门禁规则')
+          gateRules.value = data.rules; gateReady.value = true
+        }
+      } catch (cause) { failures.push(`${labels[index]}读取失败：${cause instanceof Error ? cause.message : '暂时无法核实'}`) }
+    })
+    error.value = failures.join('；')
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -266,7 +290,7 @@ onMounted(() => {
 }
 .page-header h2 { margin: 0 0 4px; font-size: 20px; }
 .page-header p { margin: 0; color: #64748b; font-size: 13px; }
-.header-actions { display: flex; gap: 8px; }
+.header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .banner-error, .banner-ok {
   border-radius: 8px; padding: 10px 12px; margin: 0; font-size: 13px;
@@ -278,17 +302,17 @@ onMounted(() => {
 }
 @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
 .kpi, .card {
-  padding: 14px;
+  padding: 14px; min-width: 0; overflow-x: auto;
 }
-.kpi-label { color: #64748b; font-size: 12px; }
-.kpi-value { font-size: 24px; font-weight: 700; color: #172033; margin-top: 4px; }
+.kpi-label { color: var(--admin-muted, #64748b); font-size: 12px; }
+.kpi-value { font-size: 24px; font-weight: 700; color: var(--admin-text, #172033); margin-top: 4px; }
 .card h3 { margin: 0 0 10px; font-size: 15px; }
 .chart { width: 100%; height: 120px; background: #f8fafc; border-radius: 8px; }
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 960px) { .split { grid-template-columns: 1fr; } }
-.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 12px; }
 .data-table th, .data-table td {
-  text-align: left; padding: 6px 8px; border-bottom: 1px solid #eef2f7; vertical-align: top;
+  text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--admin-border, #eef2f7); vertical-align: top; overflow-wrap: anywhere;
 }
 .data-table pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 480px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
@@ -299,14 +323,14 @@ onMounted(() => {
 }
 .badge {
   display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
-  border-radius: 999px; font-size: 11px; font-weight: 700;
+  border-radius: 999px; font-size: 11px; font-weight: 700; flex-shrink: 0;
 }
 .badge.ok { background: #e6f9f0; color: #10b759; }
 .badge.err { background: #fff1f0; color: #e53e3e; }
-.muted { color: #94a3b8; font-size: 12px; }
-.card-head-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.muted { color: var(--admin-muted, #94a3b8); font-size: 12px; }
+.card-head-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 .card-head-row h3 { margin: 0; }
-.tabs { display: flex; gap: 6px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .tabs button {
   border: 1px solid #d0d7e2; background: #fff; border-radius: 999px;
   padding: 4px 10px; cursor: pointer; font-size: 12px;

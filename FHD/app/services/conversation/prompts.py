@@ -262,14 +262,13 @@ class PromptsMixin:
         if not metadata:
             return ""
         try:
-            return hashlib.md5(
+            return hashlib.sha256(
                 json.dumps(metadata, sort_keys=True, ensure_ascii=False, default=str).encode(
                     "utf-8"
                 ),
-                usedforsecurity=False,
             ).hexdigest()
         except RECOVERABLE_ERRORS:
-            return str(hash(frozenset(metadata.keys())))
+            return ""
 
     def _build_context_prompt(self, context) -> str:
         blocks: list[str] = []

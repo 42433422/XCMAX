@@ -50,12 +50,48 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
+          # No packs: input — Actions resolves scope/name via GHCR only; in-repo
+          # +./ packs are rejected. ETL dir_fd path-injection FPs are stripped
+          # from the Python SARIF after analyze (see strip script below).
 
       - name: Perform CodeQL Analysis
+        id: analyze
         if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+          upload: ${{ matrix.language != 'python' }}
+          output: codeql-sarif-out
+
+      - name: Strip known-safe ETL dir_fd path-injection FPs (python)
+        if: (github.event_name != 'pull_request' || steps.paths.outputs.run == 'true') && matrix.language == 'python'
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          files=(codeql-sarif-out/**/*.sarif)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No SARIF produced" >&2
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            python3 .github/codeql/strip_etl_dir_fd_path_injection_fps.py "$f"
+          done
+
+      - name: Upload CodeQL SARIF (python, filtered)
+        if: (github.event_name != 'pull_request' || steps.paths.outputs.run == 'true') && matrix.language == 'python'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: codeql-sarif-out
+          category: "/language:python"
+
+      - name: Retain source locations and data flows for review
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif-${{ matrix.language }}
+          path: codeql-sarif-out/**/*.sarif
+          retention-days: 14
+          if-no-files-found: error
 
       - name: No ${{ matrix.language }} changes (targeted skip)
         if: github.event_name == 'pull_request' && steps.paths.outputs.run != 'true'
@@ -88,7 +124,14 @@ jobs:
               | jq '[.[][] | select(
                   ((.rule.security_severity_level // "") | ascii_downcase)
                   as $severity | $severity == "critical" or $severity == "high"
-                ) | {number, rule_id:.rule.id, path:.most_recent_instance.location.path}]' \
+                ) | {
+                  number,
+                  rule_id:.rule.id,
+                  path:.most_recent_instance.location.path,
+                  start_line:.most_recent_instance.location.start_line,
+                  end_line:.most_recent_instance.location.end_line,
+                  message:.most_recent_instance.message.text
+                }]' \
               > "$output"
           }
           export_alerts "$BASE_REF" base.json

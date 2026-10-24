@@ -224,7 +224,7 @@ import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
-import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
+import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { resolveWorkspaceSessionId, useRoutedTaskWorkspace, useTaskApprovalFeedback } from '@/composables/useRoutedTaskWorkspace'
 
 const props = withDefaults(

@@ -1,6 +1,6 @@
 <template>
-  <main class="founder-view" id="view-founder-autonomy">
-    <header class="founder-hero">
+  <main class="founder-view page-content" id="view-founder-autonomy">
+    <header class="founder-hero page-header">
       <div>
         <p class="eyebrow">创始人视角 · 只看战略</p>
         <h1>创始人自治驾驶舱</h1>

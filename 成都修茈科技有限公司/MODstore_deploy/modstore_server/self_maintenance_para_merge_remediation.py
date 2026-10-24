@@ -8,6 +8,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
 
+import modstore_server.maintenance_loop.config as _maintenance_config
+import modstore_server.maintenance_loop.memory as _maintenance_memory
+
 from .self_maintenance_policy import (
     is_auxiliary_self_maintenance_evidence_path,
     normalize_merge_review_veto_code,
@@ -348,8 +351,6 @@ def reconcile_absorbed_para_merge_remediations(
 ) -> Dict[str, Any]:
     """Close para_merge_conflict holds when main already has the production fix."""
 
-    from modstore_server import self_maintenance_loop_runner as runner
-
     open_items = memory.get("open_items")
     if not isinstance(open_items, list):
         return {"changed": False, "closed_count": 0, "closed_task_ids": []}
@@ -389,7 +390,7 @@ def reconcile_absorbed_para_merge_remediations(
         if not assessment.get("absorbed"):
             continue
         task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
-        resolution = runner._close_open_items_in_memory(
+        resolution = _maintenance_memory._close_open_items_in_memory(
             memory,
             actor="para_merge_absorption_reconciler",
             branches=[rejected_branch],
@@ -401,14 +402,14 @@ def reconcile_absorbed_para_merge_remediations(
             memory.setdefault("absorbed_para_merge_reconciliations", []).append(
                 {
                     "assessment": assessment,
-                    "closed_at": runner._iso(runner._utc_now()),
+                    "closed_at": _maintenance_config._iso(_maintenance_config._utc_now()),
                     "rejected_branch": rejected_branch,
                     "task_id": task_id,
                 }
             )
 
     if closed_task_ids:
-        memory["updated_at"] = runner._iso(runner._utc_now())
+        memory["updated_at"] = _maintenance_config._iso(_maintenance_config._utc_now())
     return {
         "changed": bool(closed_task_ids),
         "closed_count": len(closed_task_ids),

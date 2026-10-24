@@ -72,6 +72,65 @@ def execution_case(client):
         return user, ticket.id, event.id, payload
 
 
+@pytest.mark.parametrize("legacy", ["repair_failed", "awaiting_manual_review", "dispatch_failed"])
+@pytest.mark.parametrize("problem", ["waiting", "failed_receipt", "missing_task", "empty_claim"])
+def test_current_bound_receipts_project_waiting_without_rewriting_history(
+    execution_case, legacy, problem
+):
+    from modstore_server.customer_ticket_execution import ticket_execution_overview
+    from modstore_server.models import IncidentEvent, get_session_factory
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    _, tid, event_id, payload = execution_case
+    output = {
+        "handler": "para_delegate",
+        "task_id": "current-fix-task",
+        "accepted": True,
+        "completed": False,
+        "status": "para_task_accepted",
+        "ok": True,
+    }
+    if problem == "failed_receipt":
+        output.update(status="para_task_failed", ok=False, error="actual execution failure")
+    elif problem == "missing_task":
+        output["task_id"] = ""
+    payload["_team_claim"] = {
+        "team": [
+            {"role": "scout", "employee_id": "scout", "status": "completed", "ok": True},
+            {
+                "role": "fix",
+                "employee_id": "fixer",
+                "status": "pending",
+                "ok": False,
+                "handler_outputs": {"outputs": [output]},
+            },
+            {"role": "verify", "employee_id": "verifier", "status": "planned", "ok": False},
+        ]
+    }
+    with get_session_factory()() as db:
+        event = db.get(IncidentEvent, event_id)
+        ticket = db.get(CustomerServiceTicket, tid)
+        evidence = json.loads(ticket.evidence_json)
+        evidence["resolution"]["state"] = legacy
+        evidence["resolution"]["team"] = payload["_team_claim"]["team"]
+        if problem == "empty_claim":
+            payload["_team_claim"]["team"] = []
+        event.payload_json = json_dumps(payload)
+        ticket.evidence_json = json_dumps(evidence)
+        db.commit()
+        history = ticket.evidence_json
+        view = ticket_execution_overview(db, ticket)
+        assert view["next_step"]["code"] == (
+            "follow_execution" if problem == "waiting" else "review_failure"
+        )
+        assert view["blocker"] == (
+            "execution_pending" if problem == "waiting" else "execution_failed"
+        )
+        assert view["verification"]["repair_verified"] is False
+        assert ticket.evidence_json == history and event.payload_json == json_dumps(payload)
+        assert ticket.status == "processing" and ticket.closed_at is None
+
+
 def test_requested_review_is_not_acceptance_and_fresh_receipt_updates_overview(execution_case):
     from modstore_server.customer_ticket_execution import ticket_execution_overview
     from modstore_server.models import IncidentEvent, get_session_factory

@@ -83,6 +83,15 @@ def _load_taiyangniao_attendance_compat_router():
     return __import__("app.legacy.routes.taiyangniao_attendance_compat", fromlist=["router"]).router
 
 
+def _load_mobile_api_router():
+    """Load mobile route components before returning their shared public router."""
+    # mobile_api_extensions imports the stable get_mobile_user dependency from
+    # mobile_api; import it first so it can attach a fully built extension router
+    # without the former partially initialized circular-import path.
+    __import__("app.fastapi_routes.mobile_api_extensions", fromlist=["extension_router"])
+    return __import__("app.fastapi_routes.mobile_api", fromlist=["router"]).router
+
+
 def _mount(
     registry: RouteRegistry,
     name: str,
@@ -308,7 +317,7 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "mobile_api",
-        lambda: __import__("app.fastapi_routes.mobile_api", fromlist=["router"]).router,
+        _load_mobile_api_router,
     )
     _mount(
         registry,

@@ -23,7 +23,7 @@ import os
 import threading
 from typing import Any, Literal
 
-from app.application.ports.embedder import EmbedderPort
+from app.domain.ports.embedder import EmbedderPort
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

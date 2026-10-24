@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 import httpx
@@ -59,29 +59,36 @@ def httpx_sync_client(**kwargs: Any) -> httpx.Client:
     return httpx.Client(**kwargs)
 
 
-def iter_market_sse_data_payloads(
-    response: Any,
-    *,
-    payload_has_content: Callable[[str], bool],
-) -> Iterator[str]:
-    """Yield data payloads, ignoring meta and avoiding duplicate done content."""
-    current_event = ""
-    saw_delta_content = False
-    for line in response.iter_lines():
+class MarketSSEDecoder:
+    """Decode market data lines while tracking event boundaries and final content."""
+
+    def __init__(self, payload_has_content: Callable[[str], bool], *, accept_raw: bool = True):
+        self.payload_has_content = payload_has_content
+        self.accept_raw = accept_raw
+        self.current_event = ""
+        self.saw_delta_content = False
+        self.done = False
+
+    def feed(self, line: str) -> str | None:
         line_text = (line or "").strip()
         if not line_text:
-            continue
+            self.current_event = ""
+            return None
         if line_text.startswith("event:"):
-            current_event = line_text[6:].strip().lower()
-            continue
+            self.current_event = line_text[6:].strip().lower()
+            return None
         if line_text.startswith("data:"):
             line_text = line_text[5:].strip()
+        elif line_text.startswith((":", "id:", "retry:")) or not self.accept_raw:
+            return None
         if line_text == "[DONE]":
-            break
-        if current_event == "meta":
-            continue
-        if current_event == "done":
-            if not saw_delta_content:
+            self.done = True
+            return None
+        if self.current_event == "meta":
+            return None
+        if self.current_event == "done":
+            self.done = True
+            if not self.saw_delta_content:
                 try:
                     raw = json.loads(line_text)
                 except json.JSONDecodeError:
@@ -89,8 +96,38 @@ def iter_market_sse_data_payloads(
                 if isinstance(raw, dict):
                     content = raw.get("content") or raw.get("text") or raw.get("delta") or ""
                     if content:
-                        yield json.dumps({"delta": str(content)}, ensure_ascii=False)
+                        return json.dumps({"delta": str(content)}, ensure_ascii=False)
+            return None
+        if self.payload_has_content(line_text):
+            self.saw_delta_content = True
+        return line_text
+
+
+def iter_market_sse_data_payloads(
+    response: Any,
+    *,
+    payload_has_content: Callable[[str], bool],
+) -> Iterator[str]:
+    """Yield data payloads, ignoring meta and avoiding duplicate done content."""
+    decoder = MarketSSEDecoder(payload_has_content)
+    for line in response.iter_lines():
+        data = decoder.feed(line)
+        if data is not None:
+            yield data
+        if decoder.done:
             break
-        if payload_has_content(line_text):
-            saw_delta_content = True
-        yield line_text
+
+
+async def aiter_market_sse_data_payloads(
+    response: httpx.Response,
+    *,
+    payload_has_content: Callable[[str], bool],
+) -> AsyncIterator[str]:
+    """Apply the same event and completion rules to an async HTTP response."""
+    decoder = MarketSSEDecoder(payload_has_content, accept_raw=False)
+    async for line in response.aiter_lines():
+        data = decoder.feed(line)
+        if data is not None:
+            yield data
+        if decoder.done:
+            break

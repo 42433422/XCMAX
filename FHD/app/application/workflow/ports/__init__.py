@@ -1,33 +1,31 @@
-"""Workflow application ports — LG-W1-T2.
+"""Workflow application ports.
 
-DDD ports defining the contracts the workflow application layer depends on.
-The application layer must not import ``app.infrastructure``, ``app.neuro_bus``,
-``langgraph``, ``sqlalchemy``, or ``fastapi`` directly — it depends on these
-ports, which are implemented by infrastructure adapters.
-
-Modules
--------
-- ``runtime.py``    : ``WorkflowRuntime`` (run / resume_run / replay_run)
-- ``checkpoint.py`` : ``CheckpointStore`` (save / get / list / latest)
-- ``events.py``     : ``EventBusPort`` + ``StateEventPublisher`` + ``StateUpdateEvent``
-- ``tools.py``      : ``ToolDispatcher`` (+ ``ToolCall`` / ``ToolResult``)
+``WorkflowRuntime`` is defined here (needs application plan/result types).
+Checkpoint/events/tools protocols are re-exported from ``app.domain.workflow.ports``.
+Do not add new port modules under this package (structure gate G5).
 """
 
 from __future__ import annotations
 
-from .checkpoint import Checkpoint, CheckpointStore
-from .events import (
+from typing import Any, Protocol, runtime_checkable
+
+from app.application.workflow.types import PlanGraph, StateSchema, WorkflowRunResult
+from app.domain.workflow.ports import (
+    Checkpoint,
+    CheckpointStore,
     EventBusPort,
     StateEventPublisher,
     StateUpdateEvent,
     StateUpdatePayload,
     StateUpdateStatus,
+    ToolCall,
+    ToolDispatcher,
+    ToolResult,
 )
-from .runtime import WorkflowRuntime
-from .tools import ToolCall, ToolDispatcher, ToolResult
 
 __all__ = [
     "WorkflowRuntime",
+    "Callback",
     "CheckpointStore",
     "Checkpoint",
     "EventBusPort",
@@ -38,4 +36,58 @@ __all__ = [
     "ToolDispatcher",
     "ToolCall",
     "ToolResult",
+    "PlanGraph",
+    "StateSchema",
+    "WorkflowRunResult",
 ]
+
+
+@runtime_checkable
+class Callback(Protocol):
+    """A state event callback (e.g. ``{"type": "state.update", ...}``)."""
+
+    def __call__(self, event: dict[str, Any]) -> None: ...
+
+
+@runtime_checkable
+class WorkflowRuntime(Protocol):
+    """Execute, resume, and replay a workflow plan."""
+
+    def run(
+        self,
+        plan: PlanGraph,
+        runtime_context: dict[str, Any] | None = None,
+        max_retries: int = 1,
+        agentic_loop: bool = False,
+        tool_registry: dict[str, Any] | None = None,
+        user_id: str | None = None,
+        state_schema: StateSchema | None = None,
+        parallel: bool = True,
+        checkpointer: Any | None = None,
+        state_event_callback: Callback | None = None,
+    ) -> WorkflowRunResult:
+        """Execute ``plan`` and return the run result."""
+        ...
+
+    def resume_run(
+        self,
+        plan: PlanGraph,
+        checkpoint_id: str,
+        *,
+        checkpointer: Any,
+        max_retries: int = 1,
+        state_schema: StateSchema | None = None,
+        parallel: bool = True,
+    ) -> WorkflowRunResult:
+        """Resume execution from ``checkpoint_id`` without re-running completed nodes."""
+        ...
+
+    def replay_run(
+        self,
+        plan_id: str,
+        checkpoint_id: str | None = None,
+        *,
+        checkpointer: Any,
+    ) -> WorkflowRunResult:
+        """Read-only replay of executed node outputs from a checkpoint."""
+        ...
