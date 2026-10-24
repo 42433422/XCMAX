@@ -179,6 +179,15 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
     return business_entity and unambiguous_mutation
 
 
+def references_recent_business_record(text: str) -> bool:
+    return bool(
+        re.search(r"刚才(?:[的那这]|新增|创建|修改|更新|查询|查到|读取|导入)", text or "")
+    ) and any(
+        token in (text or "")
+        for token in ("客户", "产品", "原材料", "物料", "记录", "那条", "这条")
+    )
+
+
 def looks_like_explicit_workflow_tool_intent(text: str) -> bool:
     """Return whether the user explicitly asked for an executable workflow tool."""
     value = str(text or "").strip()
@@ -186,6 +195,8 @@ def looks_like_explicit_workflow_tool_intent(text: str) -> bool:
         return False
     if len(value) > _MAX_CHAT_INTENT_CHARS:
         return False
+    if references_recent_business_record(value):
+        return True
     lower = value.lower()
     employee_mentioned = any(k in value for k in ("员工", "调用", "交给")) or "employee" in lower
     employee_action = any(k in value for k in ("调用", "执行", "运行", "交给", "让")) or any(

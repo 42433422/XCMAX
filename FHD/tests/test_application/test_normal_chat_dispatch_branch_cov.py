@@ -862,6 +862,63 @@ class TestBuildCustomersQueryResponseDict:
         result = build_customers_query_response_dict({"intent": "shipment", "slots": {}})
         assert result is None
 
+    @pytest.mark.parametrize(
+        "customer_id,response_kind",
+        [(value, "mapping") for value in ["10", "-1", "0", "10.5", "unknown", ""]]
+        + [("10", "json"), ("10", "memoryview")],
+    )
+    def test_explicit_customer_id_never_lists_other_customers(
+        self, monkeypatch, customer_id, response_kind
+    ):
+        from types import SimpleNamespace
+
+        payload = {
+            "success": True,
+            "data": {"id": 10, "customer_name": "AI闭环验收", "contact_person": "验收员"},
+        }
+        if response_kind != "mapping":
+            from starlette.responses import JSONResponse
+
+            payload = JSONResponse(payload)
+            if response_kind == "memoryview":
+                payload.body = memoryview(payload.body)
+        exact = MagicMock(return_value=payload)
+        listing = MagicMock()
+        dispatch = MagicMock(return_value=None)
+        monkeypatch.setattr(
+            "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler", dispatch
+        )
+        monkeypatch.setattr("app.mod_sdk.erp_customers_facade.customers_get", exact)
+        monkeypatch.setattr("app.mod_sdk.erp_customers_facade.customers_list", listing)
+        result = build_customers_query_response_dict(
+            {"intent": "customers_query", "slots": {"id": customer_id}},
+            request=SimpleNamespace(state=SimpleNamespace(tenant_id=1)),
+        )
+        listing.assert_not_called()
+        if customer_id == "10":
+            assert result["success"] is True
+            assert [row["id"] for row in result["data"]["customers"]] == [10]
+            assert "验收员" in result["response"]
+            assert result["legacy_tool_records"][0]["params"] == {"id": 10}
+            exact.assert_called_once()
+            assert dispatch.call_args.args == ("customers", "get")
+        else:
+            assert result["success"] is False
+            exact.assert_not_called()
+            dispatch.assert_not_called()
+
+    def test_explicit_id_is_preserved_by_customer_route(self):
+        result = route_normal_mode_message("客户 ID10 现在的联系人是谁？请查询实际记录。")
+        assert result["intent"] == "customers_query"
+        assert str(result["slots"]["id"]) == "10"
+
+    def test_in_process_customer_read_preserves_active_tenant(self):
+        from app.application.normal_chat_dispatch import _request_tenant_id
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        with tenant_scope(7):
+            assert _request_tenant_id(None) == 7
+
     def test_with_keyword_no_customers(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": "不存在客户"}}
         mock_svc = MagicMock()
@@ -1787,10 +1844,13 @@ class TestBuildKnowledgeQueryResponseDict:
 class TestRequestTenantId:
     """_request_tenant_id 分支测试。"""
 
-    def test_none_request(self):
+    def test_none_request(self, monkeypatch):
         from app.application.normal_chat_dispatch import _request_tenant_id
+        from app.infrastructure.tenant_scope import tenant_scope
 
-        assert _request_tenant_id(None) is None
+        monkeypatch.setattr("app.infrastructure.request_context.get_current_request", lambda: None)
+        with tenant_scope(None):
+            assert _request_tenant_id(None) is None
 
     def test_state_tenant_id(self):
         from app.application.normal_chat_dispatch import _request_tenant_id

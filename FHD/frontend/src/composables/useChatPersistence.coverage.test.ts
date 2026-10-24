@@ -1297,6 +1297,17 @@ describe('useChatPersistence — coverage ramp', () => {
         expect(stored.taskList).toHaveLength(TASK_HISTORY_LIMIT)
       })
 
+      it('restores all paused tasks even beyond the history limit', () => {
+        const paused = Array.from({ length: TASK_HISTORY_LIMIT + 1 }, (_, i) => makeTaskItem(`paused-${i}`, 'paused'))
+        const deps = makeDeps({ taskList: paused, activeTaskId: 'paused-20' })
+        const persistence = useChatTaskPanelPersistence(deps)
+        persistence.persistTaskPanelStateForSession('s1')
+        deps.taskList.value = []
+        persistence.applyPersistedTaskPanelStateForSession('s1')
+        expect(deps.taskList.value).toHaveLength(paused.length)
+        expect(deps.activeTaskId.value).toBe('paused-20')
+      })
+
       it('truncates expandedTaskIds to 80', () => {
         const longExpanded = Array.from({ length: 100 }, (_, i) => `t${i}`)
         const deps = makeDeps({ expandedTaskIds: longExpanded })

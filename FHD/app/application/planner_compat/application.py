@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -13,6 +14,7 @@ from app.fastapi_routes.xcagi_compat_chat_models import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .admission import ChatAdmission
 from .ports import ChatBody, ChatTurn, Context, Payload
@@ -50,6 +52,7 @@ class CompatChatApplication:
     assert_access: Callable[[Request], None]
     resolve_tier: Callable[[Request], str]
     timeout_seconds: Callable[[], float]
+    single_turn: Callable[[Request, XcagiCompatChatBody], Awaitable[Payload]]
 
     def _mode(self, body: ChatBody) -> None:
         mode = (body.mode or "").strip().lower()
@@ -108,34 +111,36 @@ class CompatChatApplication:
         if not messages:
             raise HTTPException(status_code=400, detail="messages 须为非空字符串数组")
         self.assert_access(request)
-        tier = self.resolve_tier(request)
-        self._mode(body)
-        timeout = self.timeout_seconds()
-        rolling_context = body.context
-        client = self.execution.backends.client(request)
+        values = body.model_dump(exclude={"messages", "context"})
+        rolling_context = dict(body.context or {})
+        batch_turn = str(rolling_context.get("turn_id") or uuid.uuid4().hex)
         results: list[Payload] = []
-        for message in messages:
-            context = self.admission.context(request, rolling_context, message)
-            context = self.admission.with_tier(context, tier)
-            business = self.fast_paths.business(
-                message, runtime_context=context, user_id=body.user_id, request=request
-            )
-            if business is not None:
-                results.append(business)
-                continue
-            turn = ChatTurn(body, message, context, "compat_chat_batch")
-            admitted = self.admission.check(request, turn)
-            if admitted.payload is not None:
-                if admitted.context_update is not None:
-                    rolling_context = admitted.context_update
-                    turn = ChatTurn(body, message, rolling_context, turn.channel)
-                results.append(self._attach(admitted.payload, turn))
-                continue
-            results.append(
-                await self.execution.execute(request, turn, timeout=timeout, batch_client=client)
-            )
+        for index, message in enumerate(messages):
+            context = {
+                **rolling_context,
+                "turn_id": uuid.uuid5(uuid.NAMESPACE_URL, f"{batch_turn}:{index}").hex,
+            }
+            single = XcagiCompatChatBody(message=message, context=context, **values)
+            try:
+                result = await self.single_turn(request, single)
+            except (HTTPException,) + RECOVERABLE_ERRORS as exc:
+                error = (
+                    exc
+                    if isinstance(exc, HTTPException)
+                    else self.execution.responses.http_error(exc)
+                )
+                result = {
+                    "success": False,
+                    "message": str(error.detail),
+                    "response": str(error.detail),
+                }
+            data = result.get("data")
+            update = data.get("runtime_context") if isinstance(data, dict) else None
+            if isinstance(update, dict):
+                rolling_context = update
+            results.append(result)
         return {
-            "success": all(result.get("success") for result in results),
+            "success": all(item.get("success") for item in results),
             "batch": True,
             "results": results,
             "count": len(results),

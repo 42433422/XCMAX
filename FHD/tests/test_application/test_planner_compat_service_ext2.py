@@ -9,6 +9,7 @@ mixed results), compat_chat_stream_async.
 from __future__ import annotations
 
 import asyncio
+from contextlib import ExitStack, contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -50,6 +51,78 @@ def _make_request(*, ip: str = "127.0.0.1", is_admin: bool = False) -> Request:
 # ---------------------------------------------------------------------------
 
 
+@contextmanager
+def _chat_dependencies():
+    with ExitStack() as stack:
+        stack.enter_context(
+            patch(
+                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
+                return_value=({}, None),
+            )
+        )
+        stack.enter_context(
+            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise")
+        )
+        stack.enter_context(
+            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1")
+        )
+        stack.enter_context(
+            patch(
+                "app.application.planner_compat_service.runtime_context_with_tier", return_value={}
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
+                new_callable=AsyncMock,
+                return_value={},
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.kitten_planner_context.kitten_reply_attachments", return_value={}
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
+                return_value=(True, None),
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.planner_compat_service._message_requires_db_read_token",
+                return_value=False,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
+                return_value=None,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.planner_compat_service._ensure_vector_index_if_needed",
+                return_value=None,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
+                return_value=30.0,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
+                return_value=MagicMock(),
+            )
+        )
+        stack.enter_context(patch("app.application.planner_compat_service.set_llm_mode"))
+        yield
+
+
 class TestExecuteCompatChatMode:
     @pytest.mark.asyncio
     async def test_mode_online_sets_llm_mode(self):
@@ -57,53 +130,10 @@ class TestExecuteCompatChatMode:
         request = _make_request()
 
         with (
+            _chat_dependencies(),
             patch("app.application.planner_compat_service.set_llm_mode") as mock_set_mode,
             patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-                new_callable=AsyncMock,
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.kitten_reply_attachments",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "app.application.planner_compat_service.run_agent_chat",
-                return_value="hello back",
+                "app.application.planner_compat_service.run_agent_chat", return_value="hello back"
             ),
             patch(
                 "app.application.planner_compat_service._xcagi_compat_reply_payload",
@@ -120,53 +150,10 @@ class TestExecuteCompatChatMode:
         request = _make_request()
 
         with (
+            _chat_dependencies(),
             patch("app.application.planner_compat_service.set_llm_mode") as mock_set_mode,
             patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-                new_callable=AsyncMock,
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.kitten_reply_attachments",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "app.application.planner_compat_service.run_agent_chat",
-                return_value="hello back",
+                "app.application.planner_compat_service.run_agent_chat", return_value="hello back"
             ),
             patch(
                 "app.application.planner_compat_service._xcagi_compat_reply_payload",
@@ -182,53 +169,10 @@ class TestExecuteCompatChatMode:
         request = _make_request()
 
         with (
+            _chat_dependencies(),
             patch("app.application.planner_compat_service.set_llm_mode") as mock_set_mode,
             patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-                new_callable=AsyncMock,
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.kitten_reply_attachments",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "app.application.planner_compat_service.run_agent_chat",
-                return_value="hello back",
+                "app.application.planner_compat_service.run_agent_chat", return_value="hello back"
             ),
             patch(
                 "app.application.planner_compat_service._xcagi_compat_reply_payload",
@@ -257,29 +201,10 @@ class TestExecuteCompatChatDbReadToken:
         }
 
         with (
+            _chat_dependencies(),
             patch(
                 "app.application.normal_chat_dispatch.try_normal_slot_read_payload",
                 return_value=None,
-            ),
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-                new_callable=AsyncMock,
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.kitten_reply_attachments",
-                return_value={},
             ),
             patch(
                 "app.application.planner_compat_service._ensure_chat_db_read_authorized",
@@ -304,34 +229,7 @@ class TestExecuteCompatChatWorkflowInterrupt:
         request = _make_request()
 
         with (
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-                new_callable=AsyncMock,
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.kitten_reply_attachments",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
+            _chat_dependencies(),
             patch(
                 "app.application.planner_compat_service.planner_workflow_interrupt_reply",
                 return_value="已中断当前流程。",
@@ -362,38 +260,7 @@ class TestExecuteCompatChatVectorError:
         request = _make_request()
 
         with (
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-                new_callable=AsyncMock,
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.kitten_reply_attachments",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
+            _chat_dependencies(),
             patch(
                 "app.application.planner_compat_service._ensure_vector_index_if_needed",
                 return_value="向量索引失败",
@@ -420,50 +287,7 @@ class TestExecuteCompatChatTimeout:
         request = _make_request()
 
         with (
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-                new_callable=AsyncMock,
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.kitten_reply_attachments",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
+            _chat_dependencies(),
             patch(
                 "app.application.planner_compat_service.run_agent_chat",
                 side_effect=TimeoutError("timed out"),
@@ -492,57 +316,13 @@ class TestExecuteCompatChatRecoverableErrors:
         http_exc = HTTPException(status_code=503, detail="service unavailable")
 
         with (
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-                new_callable=AsyncMock,
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.kitten_reply_attachments",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
+            _chat_dependencies(),
             patch(
                 "app.application.planner_compat_service.run_agent_chat",
                 side_effect=RuntimeError("db error"),
             ),
             patch(
-                "app.application.planner_compat_service._xcagi_chat_http_exc",
-                return_value=http_exc,
+                "app.application.planner_compat_service._xcagi_chat_http_exc", return_value=http_exc
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -569,54 +349,8 @@ class TestExecuteCompatChatReplyParsing:
         }
 
         with (
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-                new_callable=AsyncMock,
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.kitten_reply_attachments",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "app.application.planner_compat_service.run_agent_chat",
-                return_value=reply_dict,
-            ),
+            _chat_dependencies(),
+            patch("app.application.planner_compat_service.run_agent_chat", return_value=reply_dict),
         ):
             result = await execute_compat_chat(request, body)
             assert result["success"] is True
@@ -640,54 +374,8 @@ class TestExecuteCompatChatReplyParsing:
         )
 
         with (
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-                new_callable=AsyncMock,
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.kitten_reply_attachments",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "app.application.planner_compat_service.run_agent_chat",
-                return_value=reply_str,
-            ),
+            _chat_dependencies(),
+            patch("app.application.planner_compat_service.run_agent_chat", return_value=reply_str),
         ):
             result = await execute_compat_chat(request, body)
             assert result["success"] is True
@@ -699,53 +387,9 @@ class TestExecuteCompatChatReplyParsing:
         request = _make_request()
 
         with (
-            patch("app.application.planner_compat_service.set_llm_mode"),
+            _chat_dependencies(),
             patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
-                new_callable=AsyncMock,
-                return_value={},
-            ),
-            patch(
-                "app.application.kitten_planner_context.kitten_reply_attachments",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "app.application.planner_compat_service.run_agent_chat",
-                return_value="not json {",
+                "app.application.planner_compat_service.run_agent_chat", return_value="not json {"
             ),
             patch(
                 "app.application.planner_compat_service._xcagi_compat_reply_payload",
@@ -769,50 +413,13 @@ class TestExecuteCompatChatKittenError:
         request = _make_request()
 
         with (
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
+            _chat_dependencies(),
             patch(
                 "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("kitten failed"),
             ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "app.application.planner_compat_service.run_agent_chat",
-                return_value="ok",
-            ),
+            patch("app.application.planner_compat_service.run_agent_chat", return_value="ok"),
             patch(
                 "app.application.planner_compat_service._xcagi_compat_reply_payload",
                 return_value={"success": True, "response": "ok"},
@@ -833,7 +440,7 @@ class TestExecuteCompatChatBatch:
         body = XcagiCompatChatBatchBody(messages=[])
         request = _make_request()
 
-        with patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"):
+        with _chat_dependencies():
             with pytest.raises(HTTPException) as exc_info:
                 await execute_compat_chat_batch(request, body)
             assert exc_info.value.status_code == 400
@@ -843,7 +450,7 @@ class TestExecuteCompatChatBatch:
         body = XcagiCompatChatBatchBody(messages=["  ", "", "  "])
         request = _make_request()
 
-        with patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"):
+        with _chat_dependencies():
             with pytest.raises(HTTPException) as exc_info:
                 await execute_compat_chat_batch(request, body)
             assert exc_info.value.status_code == 400
@@ -854,45 +461,8 @@ class TestExecuteCompatChatBatch:
         request = _make_request()
 
         with (
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "app.application.planner_compat_service.run_agent_chat",
-                return_value="reply",
-            ),
+            _chat_dependencies(),
+            patch("app.application.planner_compat_service.run_agent_chat", return_value="reply"),
             patch(
                 "app.application.planner_compat_service._xcagi_compat_reply_payload",
                 return_value={"success": True, "response": "reply"},
@@ -916,24 +486,14 @@ class TestExecuteCompatChatBatch:
         }
 
         with (
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
+            _chat_dependencies(),
             patch(
                 "app.application.planner_compat_service._ensure_chat_db_read_authorized",
                 return_value=(False, read_req),
             ),
         ):
             result = await execute_compat_chat_batch(request, body)
-            assert result["success"] is True  # token required counts as success
+            assert result["success"] is True
             assert result["results"][0]["requires_token"] is True
 
     @pytest.mark.asyncio
@@ -942,25 +502,7 @@ class TestExecuteCompatChatBatch:
         request = _make_request()
 
         with (
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
+            _chat_dependencies(),
             patch(
                 "app.application.planner_compat_service.planner_workflow_interrupt_reply",
                 return_value="已中断",
@@ -983,41 +525,7 @@ class TestExecuteCompatChatBatch:
         request = _make_request()
 
         with (
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
+            _chat_dependencies(),
             patch(
                 "app.application.planner_compat_service.run_agent_chat",
                 side_effect=TimeoutError("timed out"),
@@ -1028,7 +536,7 @@ class TestExecuteCompatChatBatch:
             ),
         ):
             result = await execute_compat_chat_batch(request, body)
-            assert result["success"] is False  # one failed
+            assert result["success"] is False
             assert result["results"][0]["success"] is False
 
     @pytest.mark.asyncio
@@ -1039,48 +547,13 @@ class TestExecuteCompatChatBatch:
         http_exc = HTTPException(status_code=503, detail="service down")
 
         with (
-            patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
-            patch("app.application.planner_compat_service.set_llm_mode"),
-            patch(
-                "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.application.planner_compat_service.runtime_context_with_tier",
-                return_value={},
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.application.planner_compat_service._message_requires_db_read_token",
-                return_value=False,
-            ),
-            patch(
-                "app.application.planner_compat_service.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
-                return_value=30.0,
-            ),
-            patch(
-                "app.application.planner_compat_service.create_modstore_openai_client_from_request",
-                return_value=MagicMock(),
-            ),
+            _chat_dependencies(),
             patch(
                 "app.application.planner_compat_service.run_agent_chat",
                 side_effect=RuntimeError("db error"),
             ),
             patch(
-                "app.application.planner_compat_service._xcagi_chat_http_exc",
-                return_value=http_exc,
+                "app.application.planner_compat_service._xcagi_chat_http_exc", return_value=http_exc
             ),
         ):
             result = await execute_compat_chat_batch(request, body)
@@ -1104,7 +577,7 @@ class TestCompatChatStreamAsync:
             yield b"chunk2"
 
         with (
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
+            _chat_dependencies(),
             patch(
                 "app.application.planner_compat_service._xcagi_planner_stream_bytes_async",
                 return_value=mock_stream(),
@@ -1124,7 +597,7 @@ class TestCompatChatStreamAsync:
             yield b"data"
 
         with (
-            patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
+            _chat_dependencies(),
             patch(
                 "app.application.planner_compat_service._xcagi_planner_stream_bytes_async",
                 return_value=mock_stream(),
@@ -1134,6 +607,5 @@ class TestCompatChatStreamAsync:
             async for chunk in compat_chat_stream_async(request, body, ai_tier="p2"):
                 chunks.append(chunk)
             assert chunks == [b"data"]
-            # Verify ai_tier was passed through
-            _, kwargs = mock_planner_stream.call_args
+            (_, kwargs) = mock_planner_stream.call_args
             assert kwargs.get("ai_tier") == "p2"

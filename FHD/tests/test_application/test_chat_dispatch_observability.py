@@ -11,6 +11,8 @@ import logging
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from fastapi import Request
+
 from app.application.agent_orchestrator import AgentArtifact, AgentRun
 from app.application.agent_orchestrator.chat_trace import (
     _append_artifacts_to_run,
@@ -18,6 +20,7 @@ from app.application.agent_orchestrator.chat_trace import (
 )
 from app.application.normal_chat_dispatch import try_normal_slot_read_payload
 from app.application.planner_compat_service import compat_chat_stream_async
+from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody
 
 FACADE = "app.application.planner_compat_service"
 
@@ -67,14 +70,14 @@ def test_normal_slot_unmatched_intent_is_logged(caplog) -> None:
 
 def test_compat_slot_logs_run_id_and_intent(caplog) -> None:
     caplog.set_level(logging.INFO)
-    body = SimpleNamespace(
+    body = XcagiCompatChatBody(
         message="有哪些客户？",
         context={},
         system_prompt="keep",
         user_id="u1",
         source="desktop",
     )
-    request = SimpleNamespace()
+    request = Request({"type": "http", "headers": []})
     with (
         patch(
             "app.application.normal_chat_dispatch.try_normal_slot_read_payload",
@@ -101,15 +104,11 @@ def test_compat_slot_logs_run_id_and_intent(caplog) -> None:
 
 def test_llm_planner_path_is_distinguishable(caplog) -> None:
     caplog.set_level(logging.INFO)
-    body = SimpleNamespace(
+    body = XcagiCompatChatBody(
         message="帮我看看这个月的情况", context={}, system_prompt="keep", user_id="u1"
     )
-    request = SimpleNamespace(
-        state=SimpleNamespace(tutorial_active=False),
-        headers={},
-        cookies={},
-        url=SimpleNamespace(path="/api/ai/chat/stream"),
-        method="POST",
+    request = Request(
+        {"type": "http", "headers": [], "method": "POST", "path": "/api/ai/chat/stream"}
     )
 
     async def _fake_stream(*args, **kwargs):

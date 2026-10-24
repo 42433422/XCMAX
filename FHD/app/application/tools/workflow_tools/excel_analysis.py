@@ -74,22 +74,32 @@ def natural_language_query(
 def aggregate_frame(df: pd.DataFrame, args: Payload) -> pd.DataFrame:
     group_by = [str(value) for value in args.get("group_by") or [] if str(value)]
     metrics = args.get("metrics") or []
-    if not group_by or not isinstance(metrics, list):
-        return df
     operations: dict[str, list[str]] = {}
-    for metric in metrics:
-        if isinstance(metric, dict):
-            column, op = (
-                str(metric.get("column") or "").strip(),
-                str(metric.get("op") or "").strip(),
-            )
-            if column and op:
-                operations.setdefault(column, []).append(op)
+    for metric in metrics if isinstance(metrics, list) else []:
+        if not isinstance(metric, dict):
+            continue
+        column, op = str(metric.get("column") or "").strip(), str(metric.get("op") or "").strip()
+        if column not in df.columns or op not in {"sum", "mean", "count", "min", "max"}:
+            raise ValueError("invalid_aggregation_metrics")
+        if op not in operations.setdefault(column, []):
+            operations[column].append(op)
     if not operations:
-        return df
+        raise ValueError("missing_aggregation_metrics")
+    if any(column not in df.columns for column in group_by):
+        raise ValueError("invalid_group_by")
+    if not group_by:
+        return pd.DataFrame(
+            [
+                {
+                    f"{column}_{op}": df[column].agg(op)
+                    for column, ops in operations.items()
+                    for op in ops
+                }
+            ]
+        )
     result = df.groupby(group_by, dropna=False).agg(operations).reset_index()
     result.columns = [
-        "_".join(str(part) for part in column if str(part) != "").strip("_")
+        "_".join(str(part) for part in column if str(part)).strip("_")
         if isinstance(column, tuple)
         else str(column)
         for column in result.columns
@@ -169,7 +179,24 @@ class ExcelAnalysis:
             result = self.filter_frame(df, str(args.get("query_expression") or "").strip())
             return {**base, **table_result(result)}
         if action == "aggregate":
-            return {**base, **table_result(aggregate_frame(df, args))}
+            try:
+                result = aggregate_frame(df, args)
+            except (ValueError, TypeError) as exc:
+                code = str(exc)
+                if code not in {
+                    "invalid_aggregation_metrics",
+                    "missing_aggregation_metrics",
+                    "invalid_group_by",
+                }:
+                    code = "aggregation_failed"
+                return {"success": False, "error": code}
+            return {
+                **base,
+                **table_result(result),
+                "source_row_count": len(df),
+                "returned_rows": min(len(result), 200),
+                "truncated": len(result) > 200,
+            }
         if action == "statistics":
             return {
                 **base,

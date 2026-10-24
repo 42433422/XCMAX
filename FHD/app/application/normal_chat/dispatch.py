@@ -17,7 +17,9 @@ SlotHandler = Callable[[JsonObject], JsonObject | None]
 def request_tenant_id(request: Any | None) -> int | None:
     """Prefer middleware identity, falling back to the authenticated session."""
     if request is None:
-        return None
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        return current_tenant_id()
     try:
         value = getattr(getattr(request, "state", None), "tenant_id", None)
         if value is not None:

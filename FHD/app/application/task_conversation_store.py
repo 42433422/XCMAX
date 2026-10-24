@@ -125,7 +125,9 @@ class TaskConversationStore:
                 return {"session": None, "messages": []}
             messages = (
                 db.query(AIConversation)
-                .filter(AIConversation.session_id == session_id)
+                .filter(
+                    AIConversation.session_id == session_id, AIConversation.user_id == str(user_id)
+                )
                 .order_by(AIConversation.created_at.asc(), AIConversation.id.asc())
                 .all()
             )
@@ -133,6 +135,19 @@ class TaskConversationStore:
                 "session": _session_row(session),
                 "messages": [_message_row(message) for message in messages],
             }
+
+    def get_history(self, *, session_id: str, user_id: int, mod_id: str = "") -> dict[str, Any]:
+        durable = self.get_conversation(session_id=session_id, user_id=user_id)
+        session = durable.get("session")
+        return {
+            "success": True,
+            "id": session_id,
+            "title": session.get("title") if isinstance(session, dict) else None,
+            "mod_id": mod_id,
+            "messages": durable.get("messages") or [],
+            "metadata": {},
+            "durable": True,
+        }
 
     def list_sessions(self, *, user_id: int, limit: int) -> list[dict[str, Any]]:
         with get_db() as db:

@@ -38,7 +38,7 @@ def excel_tool_specs() -> list[Payload]:
                 "group_by": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "当 action=aggregate 时的分组列名",
+                    "description": "当 action=aggregate 时的分组列名；空数组表示全表汇总，指标由 metrics 指定",
                 },
                 "metrics": {
                     "type": "array",
