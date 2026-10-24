@@ -452,14 +452,16 @@ def test_etl_output_writer_rejects_leaf_symlink_replaced_after_validation(tmp_pa
     )
     inserted_link = False
 
-    def insert_leaf_link_before_publish(name, parent_fd):
+    def insert_leaf_link_before_publish(*args):
         nonlocal inserted_link
+        if os.name == "nt":
+            parent_fd, name = args
+        else:
+            name, parent_fd = args
         if name == destination.name and not inserted_link:
             _create_test_symlink(destination, outside)
             inserted_link = True
-        if os.name == "nt":
-            return reject_symlink(parent_fd, name)
-        return reject_symlink(name, parent_fd)
+        return reject_symlink(*args)
 
     monkeypatch.setattr(
         security,
