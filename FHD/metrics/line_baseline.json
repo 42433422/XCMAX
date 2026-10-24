@@ -1,11 +1,5 @@
 {
-<<<<<<< HEAD
-  "lines": 2336728,
+  "lines": 2336768,
   "updated": "2026-10-24",
-  "note": "remove duplicate marketOverviewMetrics.ts (keep admin-console SSOT + aliases)"
-=======
-  "lines": 2336398,
-  "updated": "2026-10-24",
-  "note": "arch-phase2 E: legacy retirement board only on main tip"
->>>>>>> e0d2ba733 (docs(arch): Legacy 退役看板与豁免登记（阶段二列车 E）)
+  "note": "valid baseline after rebase onto #2611"
 }
