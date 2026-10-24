@@ -6,7 +6,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from research_tools_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -63,7 +62,6 @@ def _resolve_counter_key(
 # --- from research_tools_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -551,7 +549,6 @@ async def web_search_with_fallback(
 # --- from research_tools_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -695,7 +692,6 @@ def contact_web_company_search_enabled() -> bool:
 # --- from research_tools_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1065,7 +1061,6 @@ async def github_repo_snapshot_tool(
 # --- from research_tools_part04_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib

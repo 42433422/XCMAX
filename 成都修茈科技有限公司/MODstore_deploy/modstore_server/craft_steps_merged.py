@@ -6,7 +6,6 @@ import importlib
 # --- from craft_steps_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -312,7 +311,6 @@ async def _craft_generate(
 # --- from craft_steps_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -711,7 +709,6 @@ async def _craft_workflow_sandbox(
 # --- from craft_steps_part01_part01_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -870,7 +867,6 @@ async def _craft_mod_sandbox(
 # --- from craft_steps_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

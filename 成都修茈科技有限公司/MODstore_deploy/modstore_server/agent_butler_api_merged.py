@@ -7,7 +7,6 @@ from typing import Any, Dict
 # --- from agent_butler_api_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -321,7 +320,6 @@ async def butler_daily_digest_artifacts(
 # --- from agent_butler_api_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -546,7 +544,6 @@ class CorpTranslateDTO(_facade().BaseModel):
 # --- from agent_butler_api_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -1023,7 +1020,6 @@ async def butler_corp_tts(request: _facade().Request, body: _facade().CorpTtsDTO
 # --- from agent_butler_api_part04.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -1040,7 +1036,6 @@ class CorpIntakeFillDTO(_facade().BaseModel):
 # --- from agent_butler_api_part05.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 from typing import Any, Dict
@@ -1505,7 +1500,6 @@ async def update_butler_skill_active(
 # --- from agent_butler_api_part06_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1930,7 +1924,6 @@ async def butler_all_hands_report_session_start(
 # --- from agent_butler_api_part06_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib

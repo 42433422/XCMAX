@@ -6,7 +6,6 @@ import importlib
 # --- from self_evolution_operations_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -418,7 +417,6 @@ def _knowledge_query(
 # --- from self_evolution_operations_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib

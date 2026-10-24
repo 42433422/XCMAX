@@ -311,6 +311,28 @@ class TestMatchRules:
         findings = review.match_high_risk_rules(hunks)
         assert len(findings) == 0
 
+    def test_retort_fixture_json_does_not_trigger_executable_code_rules(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="packages/retort_engine/tests/data/behavior_matrix_density.json",
+                start_line=1,
+                lines=[
+                    (
+                        1,
+                        "+",
+                        '"value = eval(user_input)","subprocess.run(cmd, shell=True)","pickle.loads(payload)"',
+                    )
+                ],
+                raw_header="@@ -1,1 +1,1 @@",
+            )
+        ]
+        findings = review.match_high_risk_rules(hunks)
+        assert not any(
+            finding.rule
+            in {"subprocess-shell-true", "eval", "exec", "pickle-loads"}
+            for finding in findings
+        )
+
     def test_kb_evidence_diff_does_not_trigger_executable_code_rules(self) -> None:
         hunks = [
             review.DiffHunk(

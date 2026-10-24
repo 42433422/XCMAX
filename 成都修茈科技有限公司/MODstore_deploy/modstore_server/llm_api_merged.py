@@ -6,7 +6,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from llm_api_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -179,7 +178,6 @@ async def resolve_chat_default(
 # --- from llm_api_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -610,7 +608,6 @@ def _price_row_to_dict(r: _facade().AiModelPrice) -> _facade().Dict[str, _facade
 # --- from llm_api_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 from modstore_server.llm_api_part02_part01_part01 import LlmPriceDTO
 
@@ -934,7 +931,6 @@ async def llm_conversations(
 # --- from llm_api_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

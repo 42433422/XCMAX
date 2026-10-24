@@ -6,7 +6,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from employee_executor_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -53,7 +52,6 @@ def _emp_im_notify_boss(employee_id: str, manifest: _facade().Any, body: str, ho
 # --- from employee_executor_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -128,7 +126,6 @@ def _resolve_metric_user_id(session: _facade().Any, user_id: object) -> int:
 # --- from employee_executor_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -562,7 +559,6 @@ def _perception_web_rankings(
 # --- from employee_executor_part03_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -947,7 +943,6 @@ def _cognition_sync(
 # --- from employee_executor_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1284,7 +1279,6 @@ def _trusted_system_duty_contract_execution(
 # --- from employee_executor_part04_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1574,7 +1568,6 @@ def _action_agent_runner(
 # --- from employee_executor_part05_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1873,7 +1866,6 @@ def _filter_handlers_vibe_coding_maintainer(
 # --- from employee_executor_part05_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -2147,7 +2139,6 @@ def _extract_token_count(reasoning: _facade().Dict[str, _facade().Any]) -> int:
 # --- from employee_executor_part06.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -2377,7 +2368,6 @@ def _evaluate_employee_risk_gate(
 # --- from employee_executor_part07_phase01.py ---
 """Employee execution transaction phase."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -2597,7 +2587,6 @@ def _execute_employee_phase_01(state):
 # --- from employee_executor_part07_phase04.py ---
 """Employee execution transaction phase."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -2786,7 +2775,6 @@ def _execute_employee_phase_04(state):
 # --- from employee_executor_part07_phase03.py ---
 """Employee execution transaction phase."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -2916,7 +2904,6 @@ def _execute_employee_phase_03(state):
 # --- from employee_executor_part07_phase02.py ---
 """Employee execution transaction phase."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -3209,7 +3196,6 @@ def _execute_employee_phase_02(state):
 # --- from employee_executor_part07.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -3382,7 +3368,6 @@ def get_employee_status(employee_id: str) -> _facade().Dict[str, _facade().Any]:
 # --- from employee_executor_part08.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

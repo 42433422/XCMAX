@@ -6,7 +6,6 @@ import importlib
 # --- from employee_autonomy_service_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -431,7 +430,6 @@ def _build_subtask_text(
 # --- from employee_autonomy_service_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -587,7 +585,6 @@ def dispatch_pending_suggestions(limit: int = 20) -> _facade().Dict[str, _facade
 # --- from employee_autonomy_service_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -913,7 +910,6 @@ class _PlatformBenchLlmClient:
 # --- from employee_autonomy_service_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -1330,7 +1326,6 @@ def aggregate_admin_suggestion_dashboard(
 # --- from employee_autonomy_service_part04.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

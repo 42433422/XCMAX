@@ -6,7 +6,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from routes_registry_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -358,7 +357,6 @@ def api_mod_workflow_employee_scaffold(
 # --- from routes_registry_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -637,7 +635,6 @@ async def api_mod_ai_scaffold(
 # --- from routes_registry_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -1020,7 +1017,6 @@ def _include_optional(app: _facade().FastAPI, module_path: str) -> None:
 # --- from routes_registry_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

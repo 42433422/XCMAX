@@ -6,7 +6,6 @@ import importlib
 # --- from market_routes_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -437,7 +436,6 @@ class PasswordChangeDTO(_facade().BaseModel):
 # --- from market_routes_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 from modstore_server.api.market_routes_part01_part01_part01 import (
     AdminResetUserPasswordDTO,
@@ -567,7 +565,6 @@ def api_admin_status(
 # --- from market_routes_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -950,7 +947,6 @@ def api_wallet_ai_preauthorize(
 # --- from market_routes_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 from modstore_server.api.market_routes_part01_part01_part01 import AiWalletRefundDTO
 from modstore_server.api.market_routes_part01_part01_part01 import AiWalletReleaseDTO
@@ -1359,7 +1355,6 @@ def api_download_item(
 # --- from market_routes_part02_part01_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -1424,7 +1419,6 @@ def _upload_chunks_dir() -> _facade().Path:
 # --- from market_routes_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -1798,7 +1792,6 @@ def api_complete_upload(
 # --- from market_routes_part03_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -2061,7 +2054,6 @@ def api_admin_purge_all_mods(
 # --- from market_routes_part04.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

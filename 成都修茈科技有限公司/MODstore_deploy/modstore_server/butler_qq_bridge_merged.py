@@ -6,7 +6,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from butler_qq_bridge_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -38,7 +37,6 @@ class _CredsState:
 # --- from butler_qq_bridge_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -284,7 +282,6 @@ class _TokenState:
 # --- from butler_qq_bridge_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -340,7 +337,6 @@ async def get_access_token(force_refresh: bool = False) -> str:
 # --- from butler_qq_bridge_part04.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -369,7 +365,6 @@ class _SeqRegistry:
 # --- from butler_qq_bridge_part05.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -537,7 +532,6 @@ class _BotContext:
 # --- from butler_qq_bridge_part06.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -696,7 +690,6 @@ async def _get_bot_ctx_by_employee(
 # --- from butler_qq_bridge_part07.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -822,7 +815,6 @@ async def _resolve_reply(employee_id: str, user_text: str) -> str:
 # --- from butler_qq_bridge_part08.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -884,7 +876,6 @@ async def _execute_employee_for_qq(employee_id: str, user_text: str) -> str:
 # --- from butler_qq_bridge_part09.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -1011,7 +1002,6 @@ async def _butler_chat(user_text: str) -> str:
 # --- from butler_qq_bridge_part10.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -1092,7 +1082,6 @@ async def qq_webhook_probe() -> _facade().JSONResponse:
 # --- from butler_qq_bridge_part11.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

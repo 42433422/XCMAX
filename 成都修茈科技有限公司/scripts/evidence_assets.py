@@ -164,6 +164,25 @@ def resolve_source(root: Path, rel: str) -> Path:
     return inside(root, entry["source"] if entry else rel)
 
 
+def readable_evidence_source(root: Path, entry: dict) -> Path | None:
+    """Return a readable path for an evidence entry, or None when only the archive
+    MANIFEST verifies the bytes (CI without archive blobs mounted).
+    """
+    rel = relative(entry["source"])
+    source = inside(root, rel)
+    if source.is_file():
+        return source
+    meta = archive_manifest_index().get(rel)
+    if not meta or meta.get("sha256") != entry["sha256"]:
+        raise ValueError(f"missing original evidence: {entry['source']}")
+    if int(meta.get("bytes") or 0) != int(entry["size"]):
+        raise ValueError(f"archived evidence size mismatch: {entry['source']}")
+    archive_path = Path(meta["archive_path"])
+    if archive_path.is_file():
+        return archive_path
+    return None
+
+
 def verified_sources(root: Path, data: dict) -> dict[str, Path]:
     sources = {}
     archived = 0
@@ -196,22 +215,35 @@ def verified_sources(root: Path, data: dict) -> dict[str, Path]:
 
 def materialize(root: Path = ROOT, destination: Path | None = None) -> int:
     data = load(root)
-    sources = verified_sources(root, data)  # Verify all inputs before creating output.
+    verified_sources(root, data)  # Verify all inputs before creating output.
     publications = data["assets"]
     if destination is not None:
         publications = {**publications, **data["retained_sources"]}
-        sources.update({name: inside(root, entry["source"]) for name, entry in data["retained_sources"].items()})
     output = destination or inside(root, PUBLIC)
     if output.is_symlink():
         raise ValueError("evidence output must not be a symlink")
     output.mkdir(parents=True, exist_ok=True)
-    for name, source in sources.items():
-        copy_verified(source, inside(output, name), publications[name])
+    published = 0
+    skipped = 0
+    for name, entry in publications.items():
+        source = readable_evidence_source(root, entry)
+        if source is None:
+            # Manifest-verified historical media: capability-center serves via COS;
+            # CI without archive mounts skips local publication of those bytes.
+            skipped += 1
+            continue
+        copy_verified(source, inside(output, name), entry)
+        published += 1
+    if skipped:
+        print(
+            f"[evidence-assets] INFO: skipped {skipped} archive-only assets "
+            "(manifest-verified; blob not mounted)"
+        )
     # Reviewed records keep their original paths and checksums. Reconstruct that
     # layout for historical scripts without changing or re-certifying the records.
     if destination is None:
         materialize_sources(root, data)
-    return len(sources) + (len(data.get("source_aliases", {})) if destination is None else 0)
+    return published + (len(data.get("source_aliases", {})) if destination is None else 0)
 
 
 def materialize_sources(root: Path = ROOT, verified: dict | None = None) -> int:

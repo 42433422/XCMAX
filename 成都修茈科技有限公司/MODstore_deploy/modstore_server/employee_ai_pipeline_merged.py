@@ -5,7 +5,6 @@ import importlib
 # --- from employee_ai_pipeline_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -418,7 +417,6 @@ async def stage_suggest_skills(
 # --- from employee_ai_pipeline_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 from modstore_server.employee_ai_pipeline_part01_part01_part01 import EmployeeConfigV2
 from modstore_server.employee_ai_pipeline_part01_part01_part01 import Intent
@@ -640,7 +638,6 @@ class GeneratedCode:
 # --- from employee_ai_pipeline_part02_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -994,7 +991,6 @@ async def stage_generate_code(
 # --- from employee_ai_pipeline_part02_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

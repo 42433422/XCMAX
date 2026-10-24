@@ -8,7 +8,6 @@ from modstore_server.daily_digest_metrics import summarize_digest_events
 # --- from daily_digest_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -32,7 +31,6 @@ def digest_calendar_day() -> str:
 # --- from daily_digest_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -159,7 +157,6 @@ def count_catalog_employee_packs(session) -> int:
 # --- from daily_digest_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -562,7 +559,6 @@ def _digest_commit_display(raw: str) -> str:
 # --- from daily_digest_part03_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from collections.abc import Sequence
 
@@ -829,7 +825,6 @@ def _digest_product_work_summary_html(
 # --- from daily_digest_part03_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -962,7 +957,6 @@ def _digest_kpi_cards_html(
 # --- from daily_digest_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1325,7 +1319,6 @@ def _build_meeting_minutes_html_bounded(
 # --- from daily_digest_part04_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.daily_digest_metrics import summarize_digest_events
@@ -1672,7 +1665,6 @@ def _build_surface_audit_bundle() -> _facade().Dict[str, _facade().Any]:
 # --- from daily_digest_part05.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

@@ -14,7 +14,6 @@ from modstore_server.customer_issue_delivery_contract import (
 # --- from customer_service_orchestrator_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -62,7 +61,6 @@ def _parse_domain_clarify_reply(text: str) -> str:
 # --- from customer_service_orchestrator_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -409,7 +407,6 @@ def _llm_classify_intent(
 # --- from customer_service_orchestrator_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -498,7 +495,6 @@ def ensure_session(
 # --- from customer_service_orchestrator_part02_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -942,7 +938,6 @@ def handle_customer_message(
 # --- from customer_service_orchestrator_part02_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -993,7 +988,6 @@ def _chat_only_reply(
 # --- from customer_service_orchestrator_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -1314,7 +1308,6 @@ def _maybe_dispatch_employee_followup(
 # --- from customer_service_orchestrator_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1724,7 +1717,6 @@ def resolve_issue_domain(
 # --- from customer_service_orchestrator_part04_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -1875,7 +1867,6 @@ def session_payload(
 # --- from customer_service_orchestrator_part05.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 from typing import Any

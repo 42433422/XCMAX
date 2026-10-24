@@ -7,7 +7,6 @@ from modstore_server.time_rail_workflow_derive_tail import _derive_from_sources_
 # --- from time_rail_workflow_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -273,7 +272,6 @@ def _line_total_sections(
 # --- from time_rail_workflow_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -514,7 +512,6 @@ def _retention_metric() -> _facade().Optional[_facade().Any]:
 # --- from time_rail_workflow_part02_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -789,7 +786,6 @@ def graph_api_payload() -> _facade().Dict[str, _facade().Any]:
 # --- from time_rail_workflow_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

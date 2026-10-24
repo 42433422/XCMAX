@@ -10,7 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from employee_asset_pipeline_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -121,7 +120,6 @@ def _runtime_package_name(pack_id: str, employee_id: str = "") -> str:
 # --- from employee_asset_pipeline_part02_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -385,7 +383,6 @@ def _preflight_scaffold_write_access(
 # --- from employee_asset_pipeline_part02_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -632,7 +629,6 @@ def _employee_id_from_pack_id(pack_id: str) -> str:
 # --- from employee_asset_pipeline_part03_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -795,7 +791,6 @@ def _sanitize_workflow_bundles(manifest: _facade().Dict[str, _facade().Any]) -> 
 # --- from employee_asset_pipeline_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -1262,7 +1257,6 @@ def _fallback_manifest(
 # --- from employee_asset_pipeline_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1702,7 +1696,6 @@ def render_build_xcemp_py(pack_id: str) -> str:
 # --- from employee_asset_pipeline_part04_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -2133,7 +2126,6 @@ def manifest_expects_word_runtime(
 # --- from employee_asset_pipeline_part05.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -2180,7 +2172,6 @@ def pack_has_direct_python_runtime(pack_dir: _facade().Path) -> bool:
 # --- from employee_asset_pipeline_part06_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -2475,7 +2466,6 @@ def validate_asset_employee_pack(
 # --- from employee_asset_pipeline_part06_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 

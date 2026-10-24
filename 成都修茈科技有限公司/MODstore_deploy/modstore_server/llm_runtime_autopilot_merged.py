@@ -5,7 +5,6 @@ import importlib
 # --- from llm_runtime_autopilot_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -201,7 +200,6 @@ def _quota_by_provider(
 # --- from llm_runtime_autopilot_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 

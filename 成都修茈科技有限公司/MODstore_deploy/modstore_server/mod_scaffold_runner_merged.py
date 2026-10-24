@@ -6,7 +6,6 @@ import importlib
 # --- from mod_scaffold_runner_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -420,7 +419,6 @@ def materialize_employee_pack_if_missing(employee_id: str) -> bool:
 # --- from mod_scaffold_runner_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -575,7 +573,6 @@ def employee_pack_consistency_warnings(mod_dir: _facade().Path) -> _facade().Lis
 # --- from mod_scaffold_runner_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1018,7 +1015,6 @@ async def run_employee_pack_code_validation_report(
 # --- from mod_scaffold_runner_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1132,7 +1128,6 @@ async def resolve_llm_provider_model_auto(
 # --- from mod_scaffold_runner_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -1502,7 +1497,6 @@ async def generate_mod_suite_blueprint_async(
 # --- from mod_scaffold_runner_part03_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1943,7 +1937,6 @@ def run_mod_suite_mod_sandbox(
 # --- from mod_scaffold_runner_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -2325,7 +2318,6 @@ async def attach_nl_workflow_to_employee_pack_dir(
 # --- from mod_scaffold_runner_part04_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -2549,7 +2541,6 @@ async def run_employee_ai_scaffold_async(
 # --- from mod_scaffold_runner_part05_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -2964,7 +2955,6 @@ def _ensure_workflow_start_end_skeleton(
 # --- from mod_scaffold_runner_part05_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib

@@ -6,7 +6,6 @@ import importlib
 # --- from retort_clarification_operations_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -439,7 +438,6 @@ def _latest_session_for_subject(
 # --- from retort_clarification_operations_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 

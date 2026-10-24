@@ -6,7 +6,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from employee_bench_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -152,7 +151,6 @@ async def generate_bench_tasks(
 # --- from employee_bench_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -398,7 +396,6 @@ def _weighted_overall(level_scores: _facade().Dict[int, float]) -> float:
 # --- from employee_bench_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -792,7 +789,6 @@ def _load_audit_dimension_env_defaults() -> _facade().Dict[str, str]:
 # --- from employee_bench_part03_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -935,7 +931,6 @@ async def _run_five_dim_audit(
 # --- from employee_bench_part04.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

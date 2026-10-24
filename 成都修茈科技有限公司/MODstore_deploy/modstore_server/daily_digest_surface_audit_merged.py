@@ -6,7 +6,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from daily_digest_surface_audit_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -24,7 +23,6 @@ def _internal_api_base() -> str:
 # --- from daily_digest_surface_audit_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -46,7 +44,6 @@ class SurfaceTarget:
 # --- from daily_digest_surface_audit_part03_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -397,7 +394,6 @@ def _build_pw_full_targets(
 # --- from daily_digest_surface_audit_part03_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -567,7 +563,6 @@ def _save_dir(day: str) -> _facade().Optional[_facade().Path]:
 # --- from daily_digest_surface_audit_part04.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -972,7 +967,6 @@ async def _goto_with_retry(page: _facade().Any, url: str, *, timeout_ms: int) ->
 # --- from daily_digest_surface_audit_part05.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -1148,7 +1142,6 @@ async def _capture_one(
 # --- from daily_digest_surface_audit_part06.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -1236,7 +1229,6 @@ def _build_lane_analysis_user_content(
 # --- from daily_digest_surface_audit_part07_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1474,7 +1466,6 @@ async def _capture_surface_target_async(
 # --- from daily_digest_surface_audit_part07_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1874,7 +1865,6 @@ def _lane_count_overview_html(
 # --- from daily_digest_surface_audit_part07_part01_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 

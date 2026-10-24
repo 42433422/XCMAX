@@ -13,7 +13,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from mod_employee_agent_runner_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -46,7 +45,6 @@ def _llm_timeout_seconds() -> float:
 # --- from mod_employee_agent_runner_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 import os
@@ -386,7 +384,6 @@ async def tool_analyze_project_summary(
 # --- from mod_employee_agent_runner_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

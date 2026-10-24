@@ -6,7 +6,6 @@ from modstore_server.api.service_auth import require_admin_user
 # --- from authoring_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -359,7 +358,6 @@ def api_capture_mod_snapshot(
 # --- from authoring_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

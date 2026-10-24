@@ -5,7 +5,6 @@ import importlib
 # --- from mod_ai_scaffold_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -51,7 +50,6 @@ def build_scaffold_zip(
 # --- from mod_ai_scaffold_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

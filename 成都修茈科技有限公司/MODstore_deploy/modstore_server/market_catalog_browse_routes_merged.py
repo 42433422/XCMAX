@@ -5,7 +5,6 @@ import importlib
 # --- from market_catalog_browse_routes_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -295,7 +294,6 @@ def api_host_foundation_employee_pack_download(
 # --- from market_catalog_browse_routes_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

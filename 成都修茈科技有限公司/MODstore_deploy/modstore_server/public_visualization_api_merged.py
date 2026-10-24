@@ -6,7 +6,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from public_visualization_api_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -324,7 +323,6 @@ def _prom_instant(expr: str) -> float | None:
 # --- from public_visualization_api_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -579,7 +577,6 @@ def _coalesce(*values: float | None) -> float | None:
 # --- from public_visualization_api_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -977,7 +974,6 @@ def _empty_made_token_metrics() -> dict[str, _facade().Any]:
 # --- from public_visualization_api_part02_part01_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -1231,7 +1227,6 @@ def _build_public_visualization_data() -> dict[str, _facade().Any]:
 # --- from public_visualization_api_part02_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -1249,7 +1244,6 @@ def clear_public_visualization_cache() -> None:
 # --- from public_visualization_api_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

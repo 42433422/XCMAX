@@ -5,7 +5,6 @@ import importlib
 # --- from strategic_layer_api_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -367,7 +366,6 @@ def list_autonomy_rules(
 # --- from strategic_layer_api_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

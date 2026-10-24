@@ -5,7 +5,6 @@ import importlib
 # --- from app_factory_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -234,7 +233,6 @@ def _register_core_routes(app: _facade().FastAPI, cfg: _facade().AppConfig) -> N
 # --- from app_factory_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

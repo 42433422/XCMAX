@@ -6,7 +6,6 @@ import importlib
 # --- from market_auth_api_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -441,7 +440,6 @@ def api_internal_cs_intake_ensure_enterprise_profile(
 # --- from market_auth_api_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -653,7 +651,6 @@ def _verify_and_consume_verification_code(email: str, code: str) -> None:
 # --- from market_auth_api_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 from modstore_server.market_auth_api_part01_part01_part02 import (
     AdminResetUserPasswordDTO,
@@ -756,7 +753,6 @@ def api_avatar_file(
 # --- from market_auth_api_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 from modstore_server.market_auth_api_part01_part01_part02 import RefreshTokenDTO
 

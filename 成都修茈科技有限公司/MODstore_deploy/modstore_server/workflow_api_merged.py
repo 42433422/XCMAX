@@ -6,7 +6,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from workflow_api_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -107,7 +106,6 @@ def _repair_empty_employee_workflow_graph(
 # --- from workflow_api_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -488,7 +486,6 @@ async def list_workflows_by_employee(
 # --- from workflow_api_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 from modstore_server.workflow_api_part02_part01_part01 import AddWorkflowEdgeBody
 from modstore_server.workflow_api_part02_part01_part01 import AddWorkflowNodeBody
@@ -878,7 +875,6 @@ async def sandbox_run_workflow(
 # --- from workflow_api_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -1272,7 +1268,6 @@ async def get_workflow_version(
 # --- from workflow_api_part03_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib

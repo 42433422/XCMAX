@@ -6,7 +6,6 @@ import importlib
 # --- from admin_duty_graph_api_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -413,7 +412,6 @@ def _topo_sort(
 # --- from admin_duty_graph_api_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -651,7 +649,6 @@ def get_duty_graph_no_key_employees(
 # --- from admin_duty_graph_api_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

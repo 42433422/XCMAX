@@ -6,7 +6,6 @@ from dataclasses import dataclass
 # --- from openapi_connector_runtime_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -20,7 +19,6 @@ class OutboundBlocked(RuntimeError):
 # --- from openapi_connector_runtime_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 from dataclasses import dataclass
 
@@ -196,7 +194,6 @@ def _apply_auth(
 # --- from openapi_connector_runtime_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -257,7 +254,6 @@ def _oauth_client_credentials_token(cfg: _facade().Mapping[str, _facade().Any]) 
 # --- from openapi_connector_runtime_part04.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 

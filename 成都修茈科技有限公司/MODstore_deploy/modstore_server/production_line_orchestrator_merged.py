@@ -8,7 +8,6 @@ from modstore_server.production_line_orchestrator_productionlineorchestrator_mix
 # --- from production_line_orchestrator_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -70,7 +69,6 @@ class FlowStep:
 # --- from production_line_orchestrator_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -90,7 +88,6 @@ def _bind_step_executors(
 # --- from production_line_orchestrator_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -110,7 +107,6 @@ class StepResult:
 # --- from production_line_orchestrator_part04.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -140,7 +136,6 @@ class FiveLineDefinition:
 # --- from production_line_orchestrator_part05.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -205,7 +200,6 @@ def get_five_line_status() -> _facade().Dict[str, _facade().Any]:
 # --- from production_line_orchestrator_part06.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

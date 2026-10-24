@@ -39,6 +39,11 @@ _AI_REVIEW_TOOLING_FILES = {
 }
 _KB_EVIDENCE_JSON = re.compile(r"^FHD/XCAGI/kb/(?:fixes|patterns)/.+\.json$")
 _KB_EVIDENCE_SECRET_RULES = {"hardcoded-aws-secret", "js-hardcoded-third-party-key"}
+# Retort/behavior matrix fixture JSON stores inert pattern seeds (eval/exec/shell=True
+# strings) for density tests — not executable code.
+_TEST_FIXTURE_JSON = re.compile(
+    r"^packages/retort_engine/tests/data/.+\.json$"
+)
 
 
 # =====================================================================
@@ -427,6 +432,7 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
     for hunk in hunks:
         is_tooling_file = hunk.file_path in _AI_REVIEW_TOOLING_FILES
         is_kb_evidence_json = bool(_KB_EVIDENCE_JSON.match(hunk.file_path))
+        is_test_fixture_json = bool(_TEST_FIXTURE_JSON.match(hunk.file_path))
         for line_no, prefix, content in hunk.lines:
             if prefix != "+" or line_no == 0:
                 continue
@@ -439,6 +445,9 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
                     # KB fix/pattern JSON stores historical unified diffs as inert evidence.
                     # Execution/control-flow regexes inside those JSON strings are not live
                     # code, but secret scanners still apply because repository disclosure is real.
+                    continue
+                if is_test_fixture_json and rule_name not in _KB_EVIDENCE_SECRET_RULES:
+                    # Behavior-matrix density fixtures embed pattern seeds as JSON strings.
                     continue
                 if pattern.search(content):
                     key = (hunk.file_path, line_no, rule_name)

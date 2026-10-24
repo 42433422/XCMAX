@@ -5,7 +5,6 @@ import importlib
 # --- from employee_ai_scaffold_part_1.py ---
 """Employee scaffold helpers split by generation responsibility."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -442,7 +441,6 @@ def _normalize_action_handlers(raw_handlers: _facade().Any) -> _facade().List[st
 # --- from employee_ai_scaffold_part_2_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -775,7 +773,6 @@ def append_employee_stub_files_to_zip(
 # --- from employee_ai_scaffold_part_2_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

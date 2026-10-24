@@ -19,7 +19,6 @@ from modstore_server.para_delegate_task_payloads import (
 # --- from para_delegate_handler_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 
@@ -474,7 +473,6 @@ def _first_para_error(snapshot: _facade().Dict[str, _facade().Any]) -> str:
 # --- from para_delegate_handler_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 from typing import Any
@@ -758,7 +756,6 @@ def _post_para_api(
 # --- from para_delegate_handler_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 import json
@@ -1242,7 +1239,6 @@ def _para_subtask_title(req: _facade().Dict[str, _facade().Any], index: int, tot
 # --- from para_delegate_handler_part04.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 
 import importlib
 

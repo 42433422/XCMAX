@@ -5,7 +5,6 @@ import importlib
 # --- from llm_catalog_part01.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -20,7 +19,6 @@ def clear_all_catalog_cache() -> None:
 # --- from llm_catalog_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -284,7 +282,6 @@ def _models_detailed(
 # --- from llm_catalog_part03.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
@@ -428,7 +425,6 @@ async def get_models_for_credentials(
 # --- from llm_catalog_part04.py ---
 """Implementation extracted from the public facade module."""
 
-from __future__ import annotations
 import importlib
 
 
