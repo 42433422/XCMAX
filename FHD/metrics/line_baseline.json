@@ -1,5 +1,5 @@
 {
   "lines": 2336055,
   "updated": "2026-10-24",
-  "note": "Apply official namespace-isolation security patch, verify backported provenance and fix original delivery lint; archive unregistered June intake snapshot with verified recovery copy. Net deletion preserved."
+  "note": "Bind exact-SHA 670dfb15 unified FHD+MODstore release clearance for ticket closeout (#2581/#2604); security scan 40057904508 paired single-mode."
 }
