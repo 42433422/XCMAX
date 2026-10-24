@@ -1,4 +1,5 @@
 """兼容入口：canonical 位于 domains.excel.excel_extract_shipment。"""
+
 from __future__ import annotations
 
 import sys
