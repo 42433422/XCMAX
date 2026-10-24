@@ -1,5 +1,5 @@
 {
-  "lines": 2368120,
+  "lines": 2368774,
   "updated": "2026-10-24",
-  "note": "PR #2544 CodeQL 输出路径加固：基线 2,367,928 增加 192 行净增（路径授权目录按 dir_fd/O_NOFOLLOW 逐组件创建、最终文件相对已打开目录描述符打开；覆盖写入路径改用安全文件句柄；增加父目录和叶文件在校验后被替换为符号链接时拒绝的回归测试）。保留现有 API 路径和业务文件格式；未调整 CodeQL 门禁。"
+  "note": "PR #2544 cross-platform ETL output safety: replace the Windows path fallback with handle-relative no-reparse traversal and atomic same-directory replace; add explicit managed app-data/outputs root, narrow temporary-workspace test fixtures, failure-cleanup coverage, and Windows/macOS CI coverage. Current exact net increase: 654 maintained lines. PR body was not changed."
 }

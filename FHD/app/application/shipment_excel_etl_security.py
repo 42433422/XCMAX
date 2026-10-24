@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import errno
 import os
+import secrets
+import stat
 from contextlib import contextmanager
 from pathlib import Path
 from typing import BinaryIO, Iterator
@@ -13,6 +15,390 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 class ShipmentEtlPathError(ValueError):
     """ETL 路径不在允许沙箱内。"""
+
+
+def _secure_output_handles_available() -> bool:
+    """Whether this platform can pin directories and atomically replace a leaf."""
+    if os.name == "nt":
+        return True  # Windows backend uses handle-relative NT file operations.
+    return (
+        os.name == "posix"
+        and os.open in getattr(os, "supports_dir_fd", set())
+        and os.mkdir in getattr(os, "supports_dir_fd", set())
+        and os.rename in getattr(os, "supports_dir_fd", set())
+        and os.unlink in getattr(os, "supports_dir_fd", set())
+        and bool(getattr(os, "O_NOFOLLOW", 0))
+        and bool(getattr(os, "O_DIRECTORY", 0))
+    )
+
+
+def _windows_file_api():
+    """Bind the small Win32/NT API surface used for handle-relative file I/O."""
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    ntdll = ctypes.WinDLL("ntdll")
+    kernel32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    kernel32.GetFileInformationByHandleEx.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_int,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+    ]
+    kernel32.GetFileInformationByHandleEx.restype = wintypes.BOOL
+    kernel32.SetFileInformationByHandle.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_int,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+    ]
+    kernel32.SetFileInformationByHandle.restype = wintypes.BOOL
+
+    class UnicodeString(ctypes.Structure):
+        _fields_ = [
+            ("Length", wintypes.USHORT),
+            ("MaximumLength", wintypes.USHORT),
+            ("Buffer", wintypes.LPWSTR),
+        ]
+
+    class ObjectAttributes(ctypes.Structure):
+        _fields_ = [
+            ("Length", wintypes.ULONG),
+            ("RootDirectory", wintypes.HANDLE),
+            ("ObjectName", ctypes.POINTER(UnicodeString)),
+            ("Attributes", wintypes.ULONG),
+            ("SecurityDescriptor", wintypes.LPVOID),
+            ("SecurityQualityOfService", wintypes.LPVOID),
+        ]
+
+    class IoStatusBlock(ctypes.Structure):
+        _fields_ = [("Status", ctypes.c_long), ("Information", ctypes.c_size_t)]
+
+    ntdll.NtCreateFile.argtypes = [
+        ctypes.POINTER(wintypes.HANDLE),
+        wintypes.DWORD,
+        ctypes.POINTER(ObjectAttributes),
+        ctypes.POINTER(IoStatusBlock),
+        ctypes.c_void_p,
+        wintypes.ULONG,
+        wintypes.ULONG,
+        wintypes.ULONG,
+        wintypes.ULONG,
+        ctypes.c_void_p,
+        wintypes.ULONG,
+    ]
+    ntdll.NtCreateFile.restype = ctypes.c_long
+    ntdll.RtlNtStatusToDosError.argtypes = [ctypes.c_long]
+    ntdll.RtlNtStatusToDosError.restype = wintypes.ULONG
+    return ctypes, wintypes, kernel32, ntdll, UnicodeString, ObjectAttributes, IoStatusBlock
+
+
+def _windows_os_error():
+    import ctypes
+
+    return ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+
+
+def _windows_binary_flag() -> int:
+    return int(getattr(os, "O_BINARY", 0))
+
+
+def _windows_file_attributes(handle: int) -> int:
+    import ctypes
+
+    class FileAttributeTagInfo(ctypes.Structure):
+        _fields_ = [("FileAttributes", ctypes.c_ulong), ("ReparseTag", ctypes.c_ulong)]
+
+    _, wintypes, kernel32, *_ = _windows_file_api()
+    info = FileAttributeTagInfo()
+    if not kernel32.GetFileInformationByHandleEx(
+        wintypes.HANDLE(handle), 9, ctypes.byref(info), ctypes.sizeof(info)
+    ):
+        raise _windows_os_error()
+    return int(info.FileAttributes)
+
+
+def _windows_wrap_handle(handle: int, flags: int) -> int:
+    import msvcrt
+
+    _, _, kernel32, *_ = _windows_file_api()
+    descriptor: int | None = None
+    accepted = False
+    try:
+        descriptor = msvcrt.open_osfhandle(  # type: ignore[attr-defined]
+            handle, flags | _windows_binary_flag()
+        )
+        if _windows_file_attributes(handle) & 0x400:
+            raise ShipmentEtlPathError("output path contains a reparse point")
+        accepted = True
+        return descriptor
+    finally:
+        if descriptor is None:
+            kernel32.CloseHandle(handle)
+        elif not accepted:
+            os.close(descriptor)
+
+
+def _windows_open_anchor(anchor: str) -> int:
+    import msvcrt
+    from ctypes import wintypes
+
+    _, _, kernel32, *_ = _windows_file_api()
+    handle = kernel32.CreateFileW(
+        anchor,
+        0x20 | 0x80 | 0x100000,
+        0x1 | 0x2 | 0x4,
+        None,
+        3,
+        0x02000000 | 0x00200000,
+        None,
+    )
+    if handle == wintypes.HANDLE(-1).value:
+        raise _windows_os_error()
+    transferred = False
+    try:
+        attrs = _windows_file_attributes(int(handle))
+        if not attrs & 0x10 or attrs & 0x400:
+            raise ShipmentEtlPathError("trusted output root is not a plain directory")
+        descriptor = msvcrt.open_osfhandle(  # type: ignore[attr-defined]
+            int(handle), os.O_RDONLY | _windows_binary_flag()
+        )
+        transferred = True
+        return descriptor
+    finally:
+        if not transferred:
+            kernel32.CloseHandle(handle)
+
+
+def _windows_open_relative(
+    parent_fd: int,
+    name: str,
+    *,
+    directory: bool,
+    create: bool,
+    for_output: bool = False,
+) -> int:
+    """Open/create one child relative to a pinned directory handle."""
+    import msvcrt
+
+    name = _validated_path_component(name)
+    ctypes, wintypes, _, ntdll, UnicodeString, ObjectAttributes, IoStatusBlock = _windows_file_api()
+    from_handle = msvcrt.get_osfhandle(parent_fd)  # type: ignore[attr-defined]
+    name_buffer = ctypes.create_unicode_buffer(name)
+    name_bytes = len(name) * ctypes.sizeof(ctypes.c_wchar)
+    unicode_name = UnicodeString(
+        name_bytes, name_bytes + ctypes.sizeof(ctypes.c_wchar), name_buffer
+    )
+    attributes = ObjectAttributes(
+        ctypes.sizeof(ObjectAttributes),
+        wintypes.HANDLE(from_handle),
+        ctypes.pointer(unicode_name),
+        0x40 | 0x1000,  # case-insensitive and fail if a reparse point is encountered
+        None,
+        None,
+    )
+    io_status = IoStatusBlock()
+    result = wintypes.HANDLE()
+    if for_output:
+        access, disposition = (
+            0x40000000 | 0x10000 | 0x100000,
+            2,
+        )  # WRITE | DELETE | SYNCHRONIZE, CREATE
+        options = 0x40 | 0x00200000 | 0x20  # NON_DIRECTORY | OPEN_REPARSE_POINT | SYNCHRONOUS
+        attributes_on_create = 0x80
+        fd_flags = os.O_WRONLY | _windows_binary_flag()
+    elif directory:
+        access = 0x80 | 0x20 | 0x100000  # READ_ATTRIBUTES | TRAVERSE | SYNCHRONIZE
+        disposition = 3 if create else 1  # OPEN_IF / OPEN
+        options = 0x1 | 0x00200000 | 0x20  # DIRECTORY | OPEN_REPARSE_POINT | SYNCHRONOUS
+        attributes_on_create = 0x10
+        fd_flags = os.O_RDONLY | _windows_binary_flag()
+    else:
+        access, disposition = 0x80 | 0x100000, 1
+        options = 0x40 | 0x00200000 | 0x20
+        attributes_on_create = 0
+        fd_flags = os.O_RDONLY | _windows_binary_flag()
+    status = ntdll.NtCreateFile(
+        ctypes.byref(result),
+        access,
+        ctypes.byref(attributes),
+        ctypes.byref(io_status),
+        None,
+        attributes_on_create,
+        0x1 | 0x2 | 0x4,
+        disposition,
+        options,
+        None,
+        0,
+    )
+    if status < 0:
+        if status & 0xFFFFFFFF == 0xC000050B:
+            raise ShipmentEtlPathError("output path contains a reparse point")
+        win_error = int(ntdll.RtlNtStatusToDosError(status))
+        raise OSError(win_error, ctypes.FormatError(win_error), name)
+    raw_handle = int(result.value)
+    return _windows_wrap_handle(raw_handle, fd_flags)
+
+
+def _windows_rename_relative(file_fd: int, parent_fd: int, target_name: str) -> None:
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    target_name = _validated_path_component(target_name)
+    _, _, kernel32, *_ = _windows_file_api()
+
+    class FileRenameInfo(ctypes.Structure):
+        _fields_ = [
+            ("ReplaceIfExists", ctypes.c_ubyte),
+            ("RootDirectory", wintypes.HANDLE),
+            ("FileNameLength", wintypes.DWORD),
+            ("FileName", ctypes.c_wchar * 1),
+        ]
+
+    encoded = target_name.encode("utf-16-le")
+    size = ctypes.sizeof(FileRenameInfo) + len(encoded) - ctypes.sizeof(ctypes.c_wchar)
+    buffer = ctypes.create_string_buffer(size)
+    info = ctypes.cast(buffer, ctypes.POINTER(FileRenameInfo)).contents
+    info.ReplaceIfExists = 1
+    info.RootDirectory = wintypes.HANDLE(
+        msvcrt.get_osfhandle(parent_fd)  # type: ignore[attr-defined]
+    )
+    info.FileNameLength = len(encoded)
+    ctypes.memmove(ctypes.addressof(info) + FileRenameInfo.FileName.offset, encoded, len(encoded))
+    handle = wintypes.HANDLE(msvcrt.get_osfhandle(file_fd))  # type: ignore[attr-defined]
+    if not kernel32.SetFileInformationByHandle(handle, 3, buffer, size):
+        raise _windows_os_error()
+
+
+def _windows_set_delete_pending(file_fd: int) -> None:
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    _, _, kernel32, *_ = _windows_file_api()
+
+    class FileDispositionInfo(ctypes.Structure):
+        _fields_ = [("DeleteFile", wintypes.BOOLEAN)]
+
+    info = FileDispositionInfo(True)
+    handle = wintypes.HANDLE(msvcrt.get_osfhandle(file_fd))  # type: ignore[attr-defined]
+    if not kernel32.SetFileInformationByHandle(handle, 4, ctypes.byref(info), ctypes.sizeof(info)):
+        raise _windows_os_error()
+
+
+def _windows_reject_existing_reparse_leaf(parent_fd: int, name: str) -> None:
+    try:
+        existing_fd = _windows_open_relative(
+            parent_fd,
+            name,
+            directory=False,
+            create=False,
+        )
+    except ShipmentEtlPathError:
+        raise
+    except OSError as exc:
+        if exc.errno in (2, 3) or getattr(exc, "winerror", None) in (2, 3):
+            return
+        raise
+    os.close(existing_fd)
+
+
+@contextmanager
+def _open_windows_etl_output_file(path: Path, parent_fd: int) -> Iterator[BinaryIO]:
+    """Write beside the destination, then rename through the pinned directory handle."""
+    temp_name = f".{path.name}.{secrets.token_hex(12)}.tmp"
+    descriptor: int | None = None
+    stream: BinaryIO | None = None
+    published = False
+    try:
+        descriptor = _windows_open_relative(
+            parent_fd,
+            temp_name,
+            directory=False,
+            create=False,
+            for_output=True,
+        )
+        stream = os.fdopen(descriptor, "wb")
+        descriptor = None  # ownership transferred to stream
+        yield stream
+        stream.flush()
+        os.fsync(stream.fileno())
+        output_name = _validated_path_component(path.name)
+        _windows_reject_existing_reparse_leaf(parent_fd, output_name)
+        _windows_rename_relative(stream.fileno(), parent_fd, output_name)
+        published = True
+    finally:
+        try:
+            if stream is not None:
+                try:
+                    if not published:
+                        _windows_set_delete_pending(stream.fileno())
+                finally:
+                    stream.close()
+            elif descriptor is not None:
+                try:
+                    _windows_set_delete_pending(descriptor)
+                finally:
+                    os.close(descriptor)
+        finally:
+            # Handles are CRT descriptors opened from native directory handles.
+            os.close(parent_fd)
+
+
+def _reject_output_symlink(name: str, parent_fd: int) -> None:
+    """Reject an existing leaf link immediately before atomic publication."""
+    try:
+        metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(metadata.st_mode):
+        raise ShipmentEtlPathError("output file was replaced by a symbolic link")
+
+
+def _validated_path_component(value: str) -> str:
+    """Return one literal path component, rejecting separators and dot names."""
+    component = os.path.basename(value)
+    if (
+        not component
+        or component in (".", "..")
+        or component != value
+        or "/" in component
+        or "\\" in component
+        or "\x00" in component
+    ):
+        raise ShipmentEtlPathError("path contains an invalid component")
+    if os.name == "nt":
+        windows_device = component.split(".", 1)[0].upper()
+        if (
+            any(character in component for character in '<>:"|?*')
+            or component.endswith((".", " "))
+            or windows_device in {"CON", "PRN", "AUX", "NUL"}
+            or len(windows_device) == 4
+            and windows_device[:3] in {"COM", "LPT"}
+            and windows_device[3] in "123456789"
+        ):
+            raise ShipmentEtlPathError("path contains an invalid Windows filename")
+    return component
+
+
+def _is_under_root(path: str, root: str) -> bool:
+    """Compare canonical paths by components, including Windows case rules."""
+    try:
+        common = os.path.commonpath((os.path.normpath(path), os.path.normpath(root)))
+    except ValueError:
+        return False
+    return os.path.normcase(common) == os.path.normcase(os.path.normpath(root))
 
 
 def _trusted_base_roots() -> list[Path]:
@@ -30,6 +416,7 @@ def _trusted_base_roots() -> list[Path]:
         roots.extend(
             (
                 app_data / "temp_excel",
+                app_data / "outputs",
                 Path(get_upload_dir()),
                 Path(get_data_dir()),
                 Path(get_shipment_output_dir()),
@@ -78,7 +465,7 @@ def etl_allowed_roots(workspace_root: str | Path | None = None) -> list[Path]:
             wr_real = os.path.realpath(wr)
         except (OSError, ValueError):
             continue
-        if any(wr_real == r or wr_real.startswith(r + os.sep) for r in root_reals):
+        if any(_is_under_root(wr_real, r) for r in root_reals):
             roots.append(Path(wr_real))
             root_reals.append(wr_real)
     seen: set[str] = set()
@@ -108,30 +495,22 @@ def _safe_under_roots(raw: str, roots: list[Path]) -> Path:
         candidate = requested if requested.is_absolute() else root / requested
         normalized = os.path.normpath(str(candidate))
         root_text = os.path.normpath(str(root))
-        # Normalize first, then enforce a component-boundary prefix before any
-        # filesystem operation. The second check protects against `/root-other`
-        # while the following realpath check rejects symlink escapes.
-        if not normalized.startswith(root_text):
+        # Check component ancestry before any filesystem operation. This also
+        # honors Windows' case-insensitive path comparison.
+        if not _is_under_root(normalized, root_text):
             continue
-        if normalized != root_text and not normalized.startswith(root_text + os.sep):
-            continue
-        # realpath removes traversal and resolves symlinks before the boundary
-        # check. Keep the separator in the prefix test so `/root-other` is not
-        # treated as a child of `/root`.
+        # realpath removes traversal and resolves symlinks before the second
+        # component-ancestry check.
         resolved = Path(os.path.realpath(normalized))
         resolved_root_text = os.path.realpath(root_text)
         resolved_text = str(resolved)
-        if not resolved_text.startswith(resolved_root_text):
-            continue
-        if resolved_text != resolved_root_text and not resolved_text.startswith(
-            resolved_root_text + os.sep
-        ):
+        if not _is_under_root(resolved_text, resolved_root_text):
             continue
         return resolved
     raise ShipmentEtlPathError("path not under allowed dirs")
 
 
-def _open_directory_under_root(root: Path, directory: Path, *, create: bool) -> int | None:
+def _open_directory_under_root(root: Path, directory: Path, *, create: bool) -> int:
     """Open a managed directory by walking components without following links."""
     root = Path(os.path.realpath(str(root)))
     directory = Path(os.path.normpath(str(directory)))
@@ -143,15 +522,29 @@ def _open_directory_under_root(root: Path, directory: Path, *, create: bool) -> 
     if any(part in ("", ".", "..") or "\\" in part for part in parts):
         raise ShipmentEtlPathError("path not under allowed dirs")
 
-    if os.name != "posix" or os.open not in getattr(os, "supports_dir_fd", set()):
-        # Keep Windows and other platforms working. Their path-based fallback
-        # revalidates the canonical parent immediately before each filesystem
-        # operation; POSIX uses directory descriptors and O_NOFOLLOW below.
-        if create:
-            directory.mkdir(parents=True, exist_ok=True)
-        if Path(os.path.realpath(str(directory))) != directory:
-            raise ShipmentEtlPathError("output directory changed during validation")
-        return None
+    if os.name == "nt":
+        fd = _windows_open_anchor(root.anchor)
+        try:
+            for part in (*root.parts[1:], *parts):
+                next_fd = _windows_open_relative(
+                    fd,
+                    _validated_path_component(part),
+                    directory=True,
+                    create=create,
+                )
+                os.close(fd)
+                fd = next_fd
+            result = fd
+            fd = -1
+            return result
+        finally:
+            if fd >= 0:
+                os.close(fd)
+
+    if not _secure_output_handles_available():
+        raise ShipmentEtlPathError(
+            "secure ETL output is unavailable: this platform lacks no-follow directory handles"
+        )
 
     directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
     nofollow = getattr(os, "O_NOFOLLOW", 0)
@@ -161,23 +554,25 @@ def _open_directory_under_root(root: Path, directory: Path, *, create: bool) -> 
     fd = os.open(root.anchor, directory_flags)
     try:
         for part in (*root.parts[1:], *parts):
+            component = _validated_path_component(part)
             if create:
                 try:
-                    os.mkdir(part, 0o777, dir_fd=fd)
+                    os.mkdir(component, 0o777, dir_fd=fd)
                 except FileExistsError:
                     pass
-            next_fd = os.open(part, directory_flags, dir_fd=fd)
+            next_fd = os.open(component, directory_flags, dir_fd=fd)
             os.close(fd)
             fd = next_fd
-        return fd
+        result = fd
+        fd = -1  # ownership transferred to the caller
+        return result
     except OSError as exc:
-        os.close(fd)
         if exc.errno in (errno.ELOOP, errno.ENOTDIR):
             raise ShipmentEtlPathError("output directory contains a link or non-directory") from exc
         raise
-    except BaseException:
-        os.close(fd)
-        raise
+    finally:
+        if fd >= 0:
+            os.close(fd)
 
 
 def resolve_etl_path(
@@ -212,7 +607,7 @@ def resolve_etl_output_path(
     raw = str(output_path or "").strip()
     if not raw:
         raise ShipmentEtlPathError("empty output path")
-    name = Path(raw).name
+    name = _validated_path_component(Path(raw).name)
     if not name or name in (".", "..") or "\\" in name or "\x00" in name:
         raise ShipmentEtlPathError("invalid output name")
     parent_raw = str(Path(raw).parent) if Path(raw).parent.as_posix() not in (".", "") else "."
@@ -249,8 +644,7 @@ def resolve_etl_output_path(
     if root is None:
         raise ShipmentEtlPathError("path not under allowed dirs")
     parent_fd = _open_directory_under_root(root, parent_path, create=True)
-    if parent_fd is not None:
-        os.close(parent_fd)
+    os.close(parent_fd)
     return candidate
 
 
@@ -274,23 +668,51 @@ def open_etl_output_file(
     )
     if root is None:
         raise ShipmentEtlPathError("path not under allowed dirs")
+    if not _secure_output_handles_available():
+        raise ShipmentEtlPathError(
+            "secure ETL output is unavailable: this platform lacks no-follow directory handles"
+        )
     parent_fd = _open_directory_under_root(root, path.parent, create=True)
-    if parent_fd is None:
-        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(path, flags, 0o666)
-    else:
-        try:
-            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
-            flags |= getattr(os, "O_CLOEXEC", 0)
-            descriptor = os.open(path.name, flags, 0o666, dir_fd=parent_fd)
-        except OSError as exc:
-            if exc.errno in (errno.ELOOP, errno.EISDIR):
-                raise ShipmentEtlPathError("output file was replaced by a link") from exc
-            raise
-        finally:
-            os.close(parent_fd)
-    with os.fdopen(descriptor, "wb") as stream:
+    if os.name == "nt":
+        with _open_windows_etl_output_file(path, parent_fd) as output_stream:
+            yield output_stream
+        return
+    temp_name = f".{path.name}.{secrets.token_hex(12)}.tmp"
+    descriptor: int | None = None
+    stream: BinaryIO | None = None
+    published = False
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+        flags |= getattr(os, "O_CLOEXEC", 0)
+        descriptor = os.open(temp_name, flags, 0o666, dir_fd=parent_fd)
+        stream = os.fdopen(descriptor, "wb")
+        descriptor = None  # ownership transferred to stream
         yield stream
+        stream.flush()
+        os.fsync(stream.fileno())
+        stream.close()
+        stream = None
+        # Rename within the already-open, verified parent. This atomically
+        # overwrites an existing regular file without following a leaf link.
+        _reject_output_symlink(path.name, parent_fd)
+        output_name = _validated_path_component(path.name)
+        os.rename(temp_name, output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+        published = True
+    finally:
+        try:
+            if stream is not None:
+                stream.close()
+            if descriptor is not None:
+                os.close(descriptor)
+        finally:
+            try:
+                if not published:
+                    try:
+                        os.unlink(temp_name, dir_fd=parent_fd)
+                    except FileNotFoundError:
+                        pass
+            finally:
+                os.close(parent_fd)
 
 
 def tenant_key_for_etl() -> str:

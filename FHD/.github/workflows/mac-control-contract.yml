@@ -28,7 +28,7 @@ jobs:
     if: needs.classify.outputs.run != 'false'
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-2022]
+        os: [ubuntu-latest, windows-2022, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +42,10 @@ jobs:
       - run: python -m pytest --noconftest -o addopts= tests/test_application/test_tool_process.py -q -rP
         env:
           SECRET_KEY: isolated-process-contract-not-production
+          DATABASE_URL: sqlite://
+      - run: python -m pytest --noconftest -o addopts= tests/test_application/test_shipment_excel_etl_production_ready.py -k "etl_output_writer or etl_output_resolver" -q -rP
+        env:
+          SECRET_KEY: isolated-etl-output-contract-not-production
           DATABASE_URL: sqlite://
       - run: node --test scripts/autonomy/runtime_tools/control_receipt_outbox.test.mjs scripts/autonomy/runtime_tools/control_git_handoff.test.mjs scripts/autonomy/runtime_tools/e2e_agent_runtime_policy.test.mjs scripts/autonomy/runtime_tools/pushed_branch_pr.test.mjs scripts/autonomy/runtime_tools/codex_model_gateway.test.mjs
       - uses: actions/checkout@v4
