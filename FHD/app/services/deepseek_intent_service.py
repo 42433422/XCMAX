@@ -19,6 +19,26 @@ from app.utils.performance.cache_manager import get_intent_deepseek_cache
 
 logger = logging.getLogger(__name__)
 
+_QUANTITY_CHARS = frozenset("0123456789一二两三四五六七八九十零")
+
+
+def _quantity_before_tins(text: str) -> str | None:
+    """Return the first contiguous quantity immediately before 桶 in linear time."""
+    search_from = 0
+    while True:
+        bucket = text.find("桶", search_from)
+        if bucket < 0:
+            return None
+        start = bucket
+        while start and text[start - 1] in " \t\r\n":
+            start -= 1
+        end = start
+        while start and text[start - 1] in _QUANTITY_CHARS:
+            start -= 1
+        if start < end:
+            return text[start:end]
+        search_from = bucket + 1
+
 
 _intent_recognition_cache = get_intent_deepseek_cache()
 
@@ -83,6 +103,9 @@ _INTENT_SCHEMA = {
     },
 }
 
+_MAX_INTENT_MESSAGE_CHARS = 4096
+_MAX_INTENT_RESPONSE_CHARS = 32_768
+
 
 class DeepSeekIntentRecognizer:
     def __init__(
@@ -125,6 +148,8 @@ class DeepSeekIntentRecognizer:
         self, message: str, context: list[dict[str, str]] | None = None
     ) -> dict[str, Any]:
         """带槽位提取的意图识别（带缓存）"""
+        if len(message) > _MAX_INTENT_MESSAGE_CHARS:
+            return self._fallback_result(message)
         cache_key = _make_intent_cache_key(message)
         cached = _intent_recognition_cache.get(cache_key)
         if cached:
@@ -212,6 +237,8 @@ class DeepSeekIntentRecognizer:
         import json
 
         content = content.strip()
+        if len(content) > _MAX_INTENT_RESPONSE_CHARS:
+            return self._fallback_result(original_message)
         if content.startswith("```"):
             lines = content.split("\n")
             for i, line in enumerate(lines):
@@ -272,11 +299,9 @@ class DeepSeekIntentRecognizer:
             value = str(value).strip()
 
             if key == "quantity_tins":
-                match = re.search(r"(\d+|[一二两三四五六七八九十零]+)\s*桶", value) or re.search(
-                    r"(\d+|[一二两三四五六七八九十零]+)\s*桶", message
-                )
-                if match:
-                    normalized[key] = self._cn_to_number(match.group(1))
+                quantity = _quantity_before_tins(value) or _quantity_before_tins(message)
+                if quantity:
+                    normalized[key] = self._cn_to_number(quantity)
                 else:
                     digits = re.search(r"\d+", value)
                     normalized[key] = int(digits.group()) if digits else value
@@ -290,9 +315,28 @@ class DeepSeekIntentRecognizer:
                     normalized[key] = float(digits.group()) if digits else value
 
             elif key == "unit_name":
-                match = re.search(r"给\s*([^\s，,。]+)|([^\s，,。]+)\s*(?:的|发货单)", message)
-                if match:
-                    normalized[key] = match.group(1) or match.group(2)
+                give_index = message.find("给")
+                unit = ""
+                if give_index >= 0:
+                    start = give_index + 1
+                    while start < len(message) and message[start].isspace():
+                        start += 1
+                    end = start
+                    while end < len(message) and message[end] not in "，,。 \t\r\n":
+                        end += 1
+                    unit = message[start:end]
+                if not unit:
+                    suffix_indices = [
+                        index for suffix in ("的", "发货单") if (index := message.find(suffix)) > 0
+                    ]
+                    if suffix_indices:
+                        suffix_index = min(suffix_indices)
+                        start = suffix_index
+                        while start and message[start - 1] not in "，,。 \t\r\n":
+                            start -= 1
+                        unit = message[start:suffix_index].rstrip()
+                if unit:
+                    normalized[key] = unit
                 else:
                     normalized[key] = value
 

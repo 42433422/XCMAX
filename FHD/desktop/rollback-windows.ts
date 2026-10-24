@@ -373,7 +373,7 @@ export function buildWindowsRollbackFileLoader(scriptPath: string, sha256: strin
     `$stream = [IO.File]::Open(${powershellLiteral(scriptPath)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)`,
     '$hash = [Security.Cryptography.SHA256]::Create()',
     'try {',
-    `  if ([BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '') -ne '${sha256}') { throw 'rollback script checksum mismatch' }`,
+    `  if ([BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() -ne '${sha256}'.ToLowerInvariant()) { throw 'rollback script checksum mismatch' }`,
     '  $stream.Position = 0',
     `  $env:XCAGI_ROLLBACK_VERIFIED_SCRIPT_SHA256 = '${sha256}'`,
     '  $reader = New-Object IO.StreamReader($stream, [Text.Encoding]::UTF8, $true)',

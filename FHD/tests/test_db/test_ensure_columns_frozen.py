@@ -48,6 +48,77 @@ from app.db.base import Base
 
 INIT_DB_PATH = Path(init_db.__file__)
 
+
+def _runtime_source_paths() -> tuple[Path, ...]:
+    """Scan live implementation modules, including any legacy re-export chain.
+
+    Scanning only the public entry file silently passed when it became a facade.
+    The whole semantic bootstrap package is covered even before a new helper is
+    wired up. Historical migration-owned steps have a separate ownership guard.
+    """
+    pending = [INIT_DB_PATH, *sorted((INIT_DB_PATH.parent / "bootstrap").glob("*.py"))]
+    found: set[Path] = set()
+    while pending:
+        path = pending.pop()
+        if path in found:
+            continue
+        found.add(path)
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
+                "app.db.init_db"
+            ):
+                dependency = INIT_DB_PATH.parent / f"{node.module.rsplit('.', 1)[-1]}.py"
+                if dependency.exists() and dependency not in found:
+                    pending.append(dependency)
+    return tuple(sorted(found))
+
+
+def _runtime_functions(paths: tuple[Path, ...] | None = None):
+    for path in _runtime_source_paths() if paths is None else paths:
+        source = path.read_text(encoding="utf-8")
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                yield node
+
+
+def _is_column_ddl(node: ast.AST) -> bool:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return bool(re.search(r"ADD\s+COLUMN", node.value, re.IGNORECASE))
+    if isinstance(node, ast.Call):
+        name = (
+            node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        )
+        return name in {
+            "add_column",
+            "batch_alter_table",
+            "AddColumn",
+            "AddColumnOp",
+            "Column",
+            "CreateColumn",
+        }
+    return False
+
+
+def _adds_columns(node: ast.AST) -> bool:
+    return any(_is_column_ddl(child) for child in ast.walk(node))
+
+
+def _schema_owners(paths: tuple[Path, ...] | None = None) -> set[str]:
+    owners: set[str] = set()
+
+    def visit(node: ast.AST, owner: str = "<module data>") -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            owner = node.name
+        if _is_column_ddl(node):
+            owners.add(owner)
+        for child in ast.iter_child_nodes(node):
+            visit(child, owner)
+
+    for path in _runtime_source_paths() if paths is None else paths:
+        visit(ast.parse(path.read_text(encoding="utf-8")))
+    return owners
+
+
 # Column-patching ``ensure_*`` functions exercised by guard 1. Each accepts
 # ``engine=`` and ALTERs any missing columns into already-existing ORM tables.
 ENSURE_COLUMN_PATCHERS = (
@@ -199,14 +270,7 @@ def test_ensure_star_introduces_no_orm_absent_column() -> None:
 
 
 def test_no_new_add_column_callsites() -> None:
-    source = INIT_DB_PATH.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    found = {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and "ADD COLUMN" in (ast.get_source_segment(source, node) or "")
-    }
+    found = _schema_owners()
 
     new = sorted(found - FROZEN_ADD_COLUMN_FUNCS)
 
@@ -221,15 +285,9 @@ def test_no_new_add_column_callsites() -> None:
 
 
 def test_ensure_emitted_columns_frozen() -> None:
-    source = INIT_DB_PATH.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-
     live: set[str] = set()
-    for node in tree.body:
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name in FROZEN_ADD_COLUMN_FUNCS
-        ):
+    for node in _runtime_functions():
+        if node.name in FROZEN_ADD_COLUMN_FUNCS:
             live |= _emitted_columns(node)
 
     grew = sorted(live - FROZEN_EMITTED_COLUMNS)
@@ -242,3 +300,65 @@ def test_ensure_emitted_columns_frozen() -> None:
         "only back-fills an ORM-declared column into legacy DBs, add it to "
         "FROZEN_EMITTED_COLUMNS deliberately."
     )
+
+
+def test_freeze_scanner_reaches_class_methods_and_alembic_operations(tmp_path) -> None:
+    source = tmp_path / "new_schema_owner.py"
+    source.write_text(
+        "HIDDEN_DDL = 'ALTER TABLE users ADD COLUMN outside TEXT'\n"
+        "class HiddenPatch:\n"
+        "    def raw(self):\n"
+        "        return 'ALTER TABLE users ADD COLUMN surprise TEXT'\n"
+        "    def operation(self, operations):\n"
+        "        operations.add_column('users', column)\n",
+        encoding="utf-8",
+    )
+    assert {node.name for node in _runtime_functions((source,)) if _adds_columns(node)} == {
+        "raw",
+        "operation",
+    }
+    assert _schema_owners((source,)) == {"<module data>", "raw", "operation"}
+    assert any(_adds_columns(node) for node in _runtime_functions()), (
+        "Runtime DDL scan became vacuous"
+    )
+
+
+def test_im_provenance_is_owned_by_its_existing_revision() -> None:
+    """The historical exception is a shared migration step, never a new runtime patch."""
+    revision_path = (
+        INIT_DB_PATH.parents[2] / "alembic" / "versions" / "2026_08_31_enterprise_cs_ai.py"
+    )
+    adapter_path = INIT_DB_PATH.parent / "bootstrap" / "im_migration.py"
+    owner = "app.db.schema_migrations.im_message_provenance"
+    for path in (revision_path, adapter_path):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        assert any(
+            isinstance(node, ast.ImportFrom)
+            and node.module == owner
+            and any(alias.name == "apply_message_provenance" for alias in node.names)
+            for node in ast.walk(tree)
+        ), f"{path.name} must reuse the historical migration owner"
+        assert (
+            sum(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "apply_message_provenance"
+                for node in ast.walk(tree)
+            )
+            == 1
+        )
+    upgrade = next(
+        node
+        for node in ast.parse(revision_path.read_text()).body
+        if isinstance(node, ast.FunctionDef) and node.name == "upgrade"
+    )
+    inline_columns = {
+        node.args[0].value
+        for node in ast.walk(upgrade)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "Column"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+    }
+    assert not {"origin", "operator_user_id"} & inline_columns

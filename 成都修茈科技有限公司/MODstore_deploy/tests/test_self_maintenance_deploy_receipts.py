@@ -6,11 +6,9 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from modstore_server import (
-    models,
-    self_maintenance_loop_api,
-    self_maintenance_loop_runner,
-)
+import modstore_server.maintenance_loop.deployment as _maintenance_deployment
+import modstore_server.maintenance_loop.store as _maintenance_store
+from modstore_server import models, self_maintenance_loop_api
 from modstore_server.self_maintenance_deploy_receipts import (
     BuildIdentity,
     DeploymentReceiptError,
@@ -30,7 +28,7 @@ ARTIFACT_SHA = "b" * 64
 def test_loop_runner_deployment_receipts_are_disabled_by_default(monkeypatch) -> None:
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_DEPLOY_RECEIPTS_ENABLED", raising=False)
 
-    result = self_maintenance_loop_runner._run_deploy_receipts_after_merge(
+    result = _maintenance_deployment._run_deploy_receipts_after_merge(
         run_id="run-disabled",
         merge_result={"ok": True, "merge_commit_sha": MERGE_SHA},
     )
@@ -114,10 +112,10 @@ def test_only_verified_production_receipt_credits_release_officer(tmp_path, monk
         "merge_sha": MERGE_SHA,
         "workflow_run_id": "98765",
     }
-    assert self_maintenance_loop_runner._record_verified_deploy_employee_metric(base) is True
-    assert self_maintenance_loop_runner._record_verified_deploy_employee_metric(base) is False
+    assert _maintenance_deployment._record_verified_deploy_employee_metric(base) is True
+    assert _maintenance_deployment._record_verified_deploy_employee_metric(base) is False
     assert (
-        self_maintenance_loop_runner._record_verified_deploy_employee_metric(
+        _maintenance_deployment._record_verified_deploy_employee_metric(
             {**base, "environment": "staging", "workflow_run_id": "98766"}
         )
         is False
@@ -150,14 +148,14 @@ def test_deployment_receipt_callback_routes_verified_event_to_employee_metric(
         "modstore_server.deploy_context.health_payload",
         lambda: {"git_sha": MERGE_SHA, "artifact_sha256": ARTIFACT_SHA},
     )
-    monkeypatch.setattr(self_maintenance_loop_runner, "_append_ledger", events.append)
-    monkeypatch.setattr(self_maintenance_loop_runner, "_append_governance_audit", lambda _e: None)
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", events.append)
+    monkeypatch.setattr(_maintenance_store, "_append_governance_audit", lambda _e: None)
     monkeypatch.setattr(
-        self_maintenance_loop_runner,
+        _maintenance_deployment,
         "_record_verified_deploy_employee_metric",
         lambda event: metric_events.append(dict(event)) or True,
     )
-    monkeypatch.setattr(self_maintenance_loop_runner, "_read_ledger", lambda limit=5000: [])
+    monkeypatch.setattr(_maintenance_store, "_read_ledger", lambda limit=5000: [])
 
     callback_kwargs: dict = {}
 

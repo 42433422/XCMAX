@@ -1,5 +1,5 @@
 <template>
-  <main class="approval-hub-view" id="view-autonomy-approval-hub">
+  <main class="approval-hub-view page-content" id="view-autonomy-approval-hub">
     <header class="page-header">
       <div><h2>产品问题工单审批</h2><p>共享 Work Order 与完整闸门时间线；每 30 秒刷新</p></div>
       <div class="header-actions">
@@ -8,9 +8,9 @@
       </div>
     </header>
     <p v-if="error" class="banner-error">工单刷新失败：{{ error }}</p>
-    <section v-if="!orders.length && !error" class="panel empty">当前没有共享工单</section>
-    <section v-for="item in orders" :key="item.wo_id" class="panel work-order">
-      <header class="panel-head"><h3>{{ item.wo_id }}</h3><span class="risk">{{ statusLabel(item.status) }}</span></header>
+    <section v-if="!orders.length && !error" class="panel admin-card empty">{{ loading ? '正在读取共享工单…' : '当前没有共享工单' }}</section>
+    <section v-for="item in orders" :key="item.wo_id" class="panel admin-card work-order">
+      <header class="panel-head"><h3>{{ item.wo_id }}</h3><span class="risk">{{ workOrderLabel(item.status) }}</span></header>
       <dl class="facts">
         <dt>客户 / 租户</dt><dd>{{ item.context?.customer_user_id || item.context?.tenant_id || '—' }}</dd>
         <dt>客户实例</dt><dd>{{ item.context?.client_instance_id || '—' }}</dd>
@@ -30,6 +30,12 @@
         </div>
         <p v-if="trails[item.wo_id]?.error" class="banner-error">{{ trails[item.wo_id]?.error }}</p>
         <pre v-if="trails[item.wo_id]?.ticket?.summary" class="payload" aria-label="客户问题完整正文">{{ trails[item.wo_id]?.ticket?.summary }}</pre>
+        <section v-if="trails[item.wo_id]?.overview" aria-label="审批后实际执行进度">
+          <dl class="facts"><dt>当前卡点 / 责任方</dt><dd>{{ trails[item.wo_id].overview!.blocker }} · {{ trails[item.wo_id].overview!.responsible }}</dd><dt>下一步</dt><dd>{{ trails[item.wo_id].overview!.next }}</dd><dt>交付与客户确认</dt><dd>{{ trails[item.wo_id].overview!.release }} · {{ trails[item.wo_id].overview!.customer }}</dd></dl>
+          <ul class="execution-receipts"><li v-for="receipt in trails[item.wo_id].overview!.receipts" :key="receipt.key">{{ receipt.role }} · {{ receipt.taskId }} · {{ receipt.badge.label }} · 领取：{{ receipt.claim }} · 执行：{{ receipt.execution }}</li></ul>
+          <p v-if="!trails[item.wo_id].overview!.receipts.length" class="muted">尚未返回可核验的派发与执行凭证。</p>
+        </section>
+        <p v-else-if="trails[item.wo_id]?.ticket" class="muted">未返回执行证据；签字或工单状态不能证明员工已领取、执行或完成。</p>
         <ol class="timeline"><li v-for="(row, index) in timelineOf(item)" :key="index"><time>{{ formatTime(row.at) }}</time>{{ row.label }}</li></ol>
       </div>
       <div v-if="item.can_decide" class="drawer-actions">
@@ -49,10 +55,11 @@ export default { name: 'ApprovalHubView' }
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { statusLabel } from '../utils/statusLabel'
+import { executionOverview, workOrderLabel } from '../utils/customerServiceTicketFormat'
 import { xcmaxAdminApi, type OwnerWorkOrder } from '@/api/xcmaxAdmin'
 import { appAlert, appPrompt } from '@/utils/appDialog'
 
-type Trail = { loading: boolean; error: string; ticket?: Record<string, unknown>; audits: Record<string, unknown>[] }
+type Trail = { loading: boolean; error: string; ticket?: Record<string, unknown>; audits: Record<string, unknown>[]; overview: ReturnType<typeof executionOverview> }
 const AUDIT_LABELS: Record<string, string> = {
   ticket_created: '客服工单已创建', issue_intake: '客户工单已受理', employee_progress: 'AI 员工回写处理结果',
   customer_issue_resolved: '客户确认已解决', customer_issue_reopen: '客户重新打开工单',
@@ -99,14 +106,16 @@ function timelineOf(item: OwnerWorkOrder) {
 }
 
 async function loadTrail(item: OwnerWorkOrder) {
-  trails.value[item.wo_id] ||= { loading: false, error: '', audits: [] }
+  trails.value[item.wo_id] ||= { loading: false, error: '', audits: [], overview: null }
   const trail = trails.value[item.wo_id]
   if (trail.loading) return
   trail.loading = true
   trail.error = ''
+  trail.overview = null; trail.ticket = undefined; trail.audits = []
   try {
     const result = await xcmaxAdminApi.fetchCustomerTicket(ticketIdOf(item))
     trail.ticket = obj(result.ticket)
+    trail.overview = executionOverview(result.execution_overview)
     trail.audits = Array.isArray(result.audit_logs) ? result.audit_logs : []
   } catch (cause: unknown) {
     trail.error = cause instanceof Error ? cause.message : String(cause)
@@ -144,10 +153,13 @@ async function refresh() {
   loading.value = true
   try {
     const result = await xcmaxAdminApi.fetchOwnerWorkOrders()
-    orders.value = Array.isArray(result.items) ? result.items : []
+    if (!Array.isArray(result?.items)) throw new Error('共享工单响应不完整')
+    orders.value = result.items
+    await Promise.all(orders.value.filter(item => trails.value[item.wo_id]).map(loadTrail))
     error.value = ''
     updatedAt.value = new Date().toISOString()
   } catch (cause: unknown) {
+    orders.value = []
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally { loading.value = false }
 }

@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { effectScope, ref } from 'vue'
+import { useEnterpriseCsBridge } from '@/composables/messenger/useEnterpriseCsBridge'
 import { useCsInboxBridge } from '@/composables/messenger/useCsInboxBridge'
 import type { ImConversationSummary, ImMessage } from '@/api/im'
 
 const imMocks = vi.hoisted(() => ({
   fetchCsInbox: vi.fn(),
   fetchCsInboxMessages: vi.fn(),
+  fetchEnterpriseCsThread: vi.fn(),
 }))
 
 vi.mock('@/api/im', () => imMocks)
@@ -62,20 +64,20 @@ describe('useCsInboxBridge', () => {
     imMocks.fetchCsInboxMessages.mockResolvedValue([oldMessage, newMessage])
   })
 
-  it('polls the selected admin thread and refreshes messages plus automation state', async () => {
+  it.each([[0, 200, 200], [120, 1000, 120]])('refreshes admin messages while preserving reading position %s', async (top, height, expected) => {
     const enabled = ref(true)
     const conversations = ref<ImConversationSummary[]>([{ ...csConversation, cs_mode: 'ai', cs_status: 'ai_active' }, regularConversation])
     const activeConversationId = ref<number | null>(21)
     const messages = ref<ImMessage[]>([oldMessage])
     const playIncoming = vi.fn()
-    const scrollToBottom = vi.fn()
+    const el = { scrollTop: top, scrollHeight: height, clientHeight: 200 } as HTMLElement
     const bridge = useCsInboxBridge({
       enabled,
       conversations,
       activeConversationId,
       messages,
       playIncoming,
-      scrollToBottom,
+      scrollEl: ref(el),
     })
 
     bridge.startCsInboxPolling()
@@ -93,7 +95,7 @@ describe('useCsInboxBridge', () => {
       last_message_preview: '请转人工客服',
     })
     expect(playIncoming).toHaveBeenCalledWith('请转人工客服')
-    expect(scrollToBottom).toHaveBeenCalledTimes(1)
+    expect(el.scrollTop).toBe(expected)
 
     bridge.stopCsInboxPolling()
     await vi.advanceTimersByTimeAsync(5000)
@@ -111,7 +113,7 @@ describe('useCsInboxBridge', () => {
       activeConversationId,
       messages: ref<ImMessage[]>([]),
       playIncoming: vi.fn(),
-      scrollToBottom: vi.fn(),
+      scrollEl: ref(null),
     })
 
     bridge.startCsInboxPolling()
@@ -119,5 +121,34 @@ describe('useCsInboxBridge', () => {
     expect(imMocks.fetchCsInbox).not.toHaveBeenCalled()
     expect(imMocks.fetchCsInboxMessages).not.toHaveBeenCalled()
     vi.useRealTimers()
+  })
+})
+
+
+describe('customer CS reading position', () => {
+  it.each([
+    ['unchanged history', 120, 1000, false, 120],
+    ['new message while reading history', 120, 1400, true, 120],
+    ['new message at the end', 800, 1400, true, 1400],
+  ] as const)('preserves %s', async (_case, top, height, incoming, expected) => {
+    const scope = effectScope()
+    const el = { scrollTop: top, scrollHeight: 1000, clientHeight: 200 } as HTMLElement
+    const messages = ref([oldMessage])
+    const notify = vi.fn()
+    imMocks.fetchEnterpriseCsThread.mockImplementationOnce(async () => ({
+      conversation: { ...csConversation }, messages: incoming ? [oldMessage, newMessage] : [oldMessage],
+    }))
+    const bridge = scope.run(() => useEnterpriseCsBridge({
+      enabled: true,
+      conversations: ref([{ ...csConversation, is_cs_inbox: false, is_enterprise_dedicated_cs: true }]),
+      activeConversationId: ref<number | null>(21), messages, playIncoming: notify, scrollEl: ref(el),
+    }))!
+    const refresh = bridge.refreshEnterpriseCsThread()
+    await Promise.resolve()
+    el.scrollHeight = height
+    await refresh
+    expect(el.scrollTop).toBe(expected)
+    expect(notify).toHaveBeenCalledTimes(incoming ? 1 : 0)
+    scope.stop()
   })
 })

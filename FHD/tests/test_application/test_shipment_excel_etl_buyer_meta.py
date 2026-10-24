@@ -11,6 +11,7 @@ from app.application.shipment_excel_etl_app_service import parse_delivery_notes
 
 
 def test_english_to_adjacent_buyer(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     clear_profile_cache()
@@ -49,6 +50,7 @@ def test_pi_bill_to_not_buyer_po(tmp_path, monkeypatch):
     fixture = (
         Path(__file__).resolve().parents[1] / "fixtures" / "network_forms" / "net_PI_sample.xlsx"
     )
+    monkeypatch.setenv("WORKSPACE_ROOT", str(fixture.parent))
     if not fixture.is_file():
         return
     out = parse_delivery_notes(fixture, include_ledger=False)
@@ -72,6 +74,7 @@ def test_purchase_unit_label(tmp_path, monkeypatch):
         / "network_forms"
         / "form_采购订单_七彩乐园.xlsx"
     )
+    monkeypatch.setenv("WORKSPACE_ROOT", str(fixture.parent))
     if not fixture.is_file():
         return
     out = parse_delivery_notes(fixture, include_ledger=False)

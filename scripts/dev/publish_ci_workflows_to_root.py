@@ -198,7 +198,7 @@ def _prefix_mod_paths(content: str, out_name: str) -> str:
     def repl_path(m: re.Match[str]) -> str:
         indent = m.group(1)
         raw = m.group(2)
-        if raw.startswith(("成都", ".github/", "scripts/")):
+        if raw.startswith(("成都", ".github/", "scripts/", "packages/")):
             return f'{indent}- "{raw}"'
         if raw.startswith("FHD/"):
             return f'{indent}- "{raw}"'

@@ -25,6 +25,7 @@ SAMPLE_DIR = Path("/Users/a4243342/Desktop/新建文件夹 (4)/产品文件夹/�
 
 @pytest.fixture(autouse=True)
 def _etl_universal_kb(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
     monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
@@ -381,12 +382,17 @@ def test_batch_preview_and_execute(tmp_path, monkeypatch):
     executed = batch_execute_shipment_excel_etl(
         batch_dir,
         idempotent=True,
-        include_ledger=False,
+        # Both files are part of this successful batch; admit and confirm its
+        # ledger instead of relying on the old aggregate to hide that rejection.
+        include_ledger=True,
+        confirm_ledger=True,
         workspace_root=tmp_path,
     )
     assert executed["success"] is True
     assert executed["shipment_created"] >= 1
     assert len(calls) >= 1
+    assert executed["failed_file_count"] == 0
+    assert all(result["success"] for result in executed["files"])
 
 
 def test_execute_creates_shipment(tmp_path, monkeypatch):

@@ -164,7 +164,11 @@ def apply_customer_ticket_incident_progress(
     # 内部明细（含报错原文）只进 action.result_json 与审计 detail；客户消息/证据只用客服话术。
     progress = _facade()._summarize_incident_team_rows(rows)
     customer_progress = _customer_incident_progress(rows)
-    progress_record = {"event_id": int(event_id or 0), "team_ok": team_ok, "progress": progress}
+    progress_record = {
+        "event_id": int(event_id or 0),
+        "team_ok": team_ok,
+        "progress": progress,
+    }
     customer_record = {**progress_record, "progress": customer_progress}
     hint = str(summary_hint or ticket.summary or ticket.title or "").strip()[:120]
     if team_ok:
@@ -298,7 +302,11 @@ def ticket_lifecycle_payload(
     status: str | None = None, decision_status: str | None = None
 ) -> _facade().Dict[str, _facade().Any]:
     if status == "expired":
-        return {"lifecycle_stage": 5, "lifecycle_label": "已过期不再处理", "lifecycle_steps": []}
+        return {
+            "lifecycle_stage": 5,
+            "lifecycle_label": "已过期不再处理",
+            "lifecycle_steps": [],
+        }
     stage = _facade().ticket_lifecycle_stage(status, decision_status)
     label = next(
         (name for (num, name) in _facade().TICKET_LIFECYCLE_STEPS if num == stage),

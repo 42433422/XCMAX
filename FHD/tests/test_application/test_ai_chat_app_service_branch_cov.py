@@ -3077,6 +3077,33 @@ class TestTryHandleDynamicWorkflow:
         svc.workflow_engine.run.assert_not_called()
         svc.approval_service.create_approval_request.assert_not_called()
 
+    @pytest.mark.parametrize("message", ["刚才修改的客户联系人是什么", "查询刚才那个客户"])
+    @pytest.mark.parametrize("target", [None, {"entity": "customers", "id": 42}])
+    def test_recent_record_followup_uses_only_session_target(self, message, target):
+        svc = _make_svc()
+        svc.workflow_planner.plan.return_value = None
+        with patch(
+            "app.services.tools_workflow_registered.get_recent_business_db_target",
+            return_value=target,
+        ) as recent:
+            result = svc._try_handle_dynamic_workflow_after_excel(
+                "owner-session",
+                message,
+                "pro",
+                {"tool_execution_profile": "pro_default"},
+                message,
+                False,
+            )
+        recent.assert_called_once_with("owner-session")
+        if target is None:
+            assert result["data"]["data"]["reason"] == "missing_recent_database_target"
+            svc.workflow_planner.plan.assert_not_called()
+        else:
+            assert (
+                svc.workflow_planner.plan.call_args.kwargs["message"]
+                == f"{message}；数据库客户 ID: 42"
+            )
+
     def test_pending_workflow_confirm(self):
         svc = _make_svc()
         plan = _make_plan(nodes=[_make_node()])

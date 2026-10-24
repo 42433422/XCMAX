@@ -451,6 +451,31 @@ class TestModstorePlatformAdapterNormalizeResponse:
 class TestModstorePlatformAdapterChatCompletion:
     """Cover ``chat_completion`` async method."""
 
+    @pytest.fixture
+    def chat_discovery_http(self, monkeypatch):
+        import httpx
+
+        monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
+        monkeypatch.setattr("app.services.conversation.modstore_adapter._CATALOG_CACHE", {})
+        calls = []
+        client_type = httpx.Client
+
+        def respond(request):
+            calls.append((request.method, request.url.path))
+            return httpx.Response(200, json={})
+
+        monkeypatch.setattr(
+            httpx,
+            "Client",
+            lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs),
+        )
+        yield
+        assert calls == [
+            ("GET", "/api/llm/status"),
+            ("GET", "/api/llm/catalog"),
+            ("GET", "/api/llm/resolve-chat-default"),
+        ]
+
     @pytest.mark.asyncio
     async def test_chat_completion_no_url_raises_value_error(self, monkeypatch):
         from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
@@ -462,7 +487,7 @@ class TestModstorePlatformAdapterChatCompletion:
             await a.chat_completion([{"role": "user", "content": "hi"}])
 
     @pytest.mark.asyncio
-    async def test_chat_completion_success(self):
+    async def test_chat_completion_success(self, chat_discovery_http):
         from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test", auth_token="tok")
@@ -493,7 +518,7 @@ class TestModstorePlatformAdapterChatCompletion:
         assert result["choices"][0]["message"]["content"] == "hello"
 
     @pytest.mark.asyncio
-    async def test_chat_completion_http_error_raises_value_error(self):
+    async def test_chat_completion_http_error_raises_value_error(self, chat_discovery_http):
         from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test", auth_token="tok")
@@ -510,7 +535,7 @@ class TestModstorePlatformAdapterChatCompletion:
             await a.chat_completion([{"role": "user", "content": "hi"}])
 
     @pytest.mark.asyncio
-    async def test_chat_completion_with_user_id_in_payload(self):
+    async def test_chat_completion_with_user_id_in_payload(self, chat_discovery_http):
         from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test", user_id=99)

@@ -23,13 +23,14 @@ vi.mock('@/utils/sanitizeHtml', () => ({
   sanitizeChatBubbleHtml: vi.fn((html: string) => html),
 }))
 
-vi.mock('@/utils/xcagiStorageKeys', () => ({
+vi.mock('@/utils/chatStorageKeys', async importOriginal => ({
+  ...await importOriginal<typeof import('@/utils/chatStorageKeys')>(),
   readAiSessionIdFromStorage: vi.fn(() => 'test-session-id'),
   writeAiSessionIdToStorage: vi.fn(),
 }))
 
 import FloatingChatAssistant from '@/components/FloatingChatAssistant.vue'
-import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
+import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 enableAutoUnmount(afterEach)
 
 function mountAssistant(propsOverrides = {}) {

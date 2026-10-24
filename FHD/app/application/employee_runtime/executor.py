@@ -22,7 +22,8 @@ from app.application.employee_runtime.loader import (
 )
 from app.application.shipment_excel_etl_security import (
     ShipmentEtlPathError,
-    resolve_etl_output_path,
+    open_etl_input_file,
+    prepare_etl_output_path,
     resolve_etl_path,
 )
 from app.application.tool_execution_deadline import build_http_helpers
@@ -105,9 +106,11 @@ def _resolve_file_path(args: dict[str, Any], workspace_root: str | None) -> Path
         return None
     try:
         candidate = resolve_etl_path(raw, workspace_root=workspace_root)
-    except ShipmentEtlPathError:
+        with open_etl_input_file(candidate, workspace_root=workspace_root):
+            pass
+    except (OSError, ShipmentEtlPathError):
         return None
-    return candidate if candidate.is_file() else None  # lgtm[py/path-injection]
+    return candidate
 
 
 def _import_module_from_path(module_path: Path, module_label: str):
@@ -180,7 +183,7 @@ def _action_vendor_convert(
     # the final path under that root.
     requested_root = str(workspace_root or get_app_data_dir()).strip()
     try:
-        output_path = resolve_etl_output_path(
+        output_path = prepare_etl_output_path(
             str(Path(requested_root) / "outputs" / output_name),
             workspace_root=workspace_root,
         )

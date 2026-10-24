@@ -1,6 +1,7 @@
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
+from app.infrastructure.llm.client import resolve_chat_model
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.conversation.api_llm import ConversationLlmMixin
 from app.services.conversation.context import ConversationContext
@@ -302,9 +303,19 @@ class ApiMixin(ConversationLlmMixin, NeuroEventPublisherMixin):
     async def _call_ai(
         self, message: str, context: ConversationContext, intent_result: dict[str, Any]
     ) -> dict[str, Any]:
-        context_hash = self._metadata_cache_hash(context.metadata)
+        context_hash = self._metadata_cache_hash(
+            {
+                "owner": context.user_id,
+                "metadata": context.metadata,
+                "history": context.conversation_history,
+                "intent": intent_result,
+                "last_action": context.last_action,
+                "pending_confirmation": context.pending_confirmation,
+                "model": resolve_chat_model(),
+            }
+        )
         cache_key = _make_ai_response_cache_key(message, context_hash)
-        cached_response = _ai_response_cache.get(cache_key)
+        cached_response = _ai_response_cache.get(cache_key) if context_hash else None
         if cached_response:
             logger.debug("返回缓存的 AI 响应")
             # 获取当前使用的模型信息
@@ -373,7 +384,8 @@ class ApiMixin(ConversationLlmMixin, NeuroEventPublisherMixin):
             self.add_to_history(context.user_id, "user", message)
             self.add_to_history(context.user_id, "assistant", ai_reply)
 
-            _ai_response_cache.set(cache_key, ai_reply)
+            if context_hash:
+                _ai_response_cache.set(cache_key, ai_reply)
 
             # 获取当前使用的模型和供应商信息
             llm_trace = dict(response.get("_xcagi_trace") or {})
