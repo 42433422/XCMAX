@@ -288,7 +288,7 @@ class PlannedWorkflowDispatch:
 
         tool_registry = get_workflow_tool_registry()
         planner_message = message
-        if _facade().re.search(
+        if re.search(
             r"刚才(?:[的那这]|新增|创建|修改|更新|查询|查到|读取|导入)", str(message or "")
         ) and any(
             token in str(message or "")

@@ -210,11 +210,14 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         )
     ):
         from app.infrastructure.llm.client import llm_client_factory_scope
+        from app.fastapi_routes.xcagi_compat_chat_helpers import (
+            create_modstore_openai_client_from_request,
+        )
 
         with (
             tenant_scope(authenticated_tenant_id),
             llm_client_factory_scope(
-                lambda: _facade().create_modstore_openai_client_from_request(request)
+                lambda: create_modstore_openai_client_from_request(request)
             ),
         ):
             payload = chat_service.process_chat(
