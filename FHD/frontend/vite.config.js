@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from 'vite'
+import { materializeMediaAssets } from '../../scripts/dev/materialize_media_assets.mjs'
 import path from 'path'
 import { buildDevProxy } from './vite/devProxy.js'
 import { createBuildOptions } from './vite/build.js'
@@ -10,6 +11,7 @@ const API_BASE = resolveApiBase(process.env.VITE_API_BASE)
 const devHmrHost = (process.env.VITE_DEV_HMR_HOST || '').trim()
 
 export default defineConfig(({ mode }) => {
+  materializeMediaAssets('frontend')
   // 加载环境变量
   const env = loadEnv(mode, process.cwd(), 'VITE_')
   const apiBase = env.VITE_API_BASE || API_BASE

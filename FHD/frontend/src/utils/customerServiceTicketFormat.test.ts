@@ -11,10 +11,15 @@ describe('customer service ticket formatting', () => {
       { state: 'accepted', accepted: true, task_id: '' },
       { state: 'unknown', accepted: true, task_id: 'await-result', requires_reconciliation: true },
       { state: 'completed', accepted: true, task_id: 'done-task', completed: true },
+      { state: 'pending', accepted: true, task_id: 'queued-task', completed: false },
     ] })!
     expect(overview.receipts.map(row => row.badge.label)).toEqual([
-      '尚无真实接单凭证', '尚无真实接单凭证', '接单结果待对账', '已接单并完成',
+      '尚无派发受理凭证', '尚无派发受理凭证', '派发结果待对账', '派发已受理', '派发已受理',
     ])
+    expect(overview.receipts[3].execution).toBe('任务结果已返回')
+    expect(overview.receipts[4].execution).toBe('待执行')
+    expect(overview.receipts.every(row => row.claim === '未提供独立领取凭证')).toBe(true)
+    expect(overview.receipts.every(row => row.badge.tone !== 'success')).toBe(true)
     expect(overview.progressAt).toBe('时间未记录')
     expect(overview.workOrder).toBe('未关联产品工作单')
   })

@@ -4,7 +4,7 @@
 import json
 from pathlib import Path
 
-from app.domain.services.industry_rules import (
+from app.domain.shipment.services.industry_rules import (
     FieldError,
     compute_subsystem_derived,
     register_validator,
@@ -120,7 +120,7 @@ def test_register_custom_validator():
 
 # --- 与 ShipmentRulesEngine 集成（真实方法，非孤儿）-----------------------
 def test_shipment_rules_engine_delegates():
-    from app.domain.services.shipment_rules_engine import get_shipment_rules_engine
+    from app.domain.shipment.services.shipment_rules_engine import get_shipment_rules_engine
 
     engine = get_shipment_rules_engine()
     result = engine.validate_subsystem(

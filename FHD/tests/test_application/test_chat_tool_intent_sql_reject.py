@@ -14,8 +14,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.domain.services.conversation.chat_tool_intent import (
+from app.domain.conversation.services.chat_tool_intent import (
+    is_negated_action_request,
     looks_like_business_db_write,
+    looks_like_explicit_workflow_tool_intent,
     looks_like_raw_sql,
 )
 
@@ -30,6 +32,15 @@ RAW_SQL_POSITIVES = [
     "执行　DELETE　FROM　customers",  # 全角空格
     "DELETE  FROM  customers",  # 多个半角空格
 ]
+
+
+def test_oversized_chat_intent_fails_closed_without_regex_matching():
+    message = "新增客户 " + "x" * 100_000
+
+    assert looks_like_business_db_write(message) is True
+    assert is_negated_action_request(message) is True
+    assert looks_like_explicit_workflow_tool_intent(message) is False
+
 
 BUSINESS_NEGATIVES = [
     "删除客户张三",

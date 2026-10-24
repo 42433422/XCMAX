@@ -670,18 +670,24 @@ def test_sqlite_get_replay_candidates_no_filter_and_event_type(tmp_path):
     assert set(by_type) == {a1, a2}
 
 
-def test_sqlite_get_replay_candidates_max_age_is_buggy(tmp_path):
-    """已知源码缺陷：SQLITE 模式下传 max_age_seconds 时 SELECT 仅取
-    entry_id/first_failure_time 两列，却调用 _row_to_entry（需 event_data 等列），
-    导致 IndexError。此用例锁定当前真实行为，便于源码修复后回归捕捉。"""
+def test_sqlite_get_replay_candidates_max_age_preserves_entries(tmp_path):
+    """年龄和类型筛选不再误解码部分列，且不会清除年龄超限的死信。"""
+    from datetime import datetime, timedelta
+
     dlq = DeadLetterQueue(storage_path=str(tmp_path / "d.db"))
-    dlq.enqueue(make_event("type.a"), DeadLetterReason.TIMEOUT, "e", 0)
+    old = dlq.enqueue(make_event("type.a"), DeadLetterReason.TIMEOUT, "e", 0)
+    young = dlq.enqueue(make_event("type.a"), DeadLetterReason.TIMEOUT, "e", 0)
+    other = dlq.enqueue(make_event("type.b"), DeadLetterReason.TIMEOUT, "e", 0)
+    dlq._conn.execute(
+        "UPDATE neuro_dead_letters SET first_failure_time = ? WHERE entry_id = ?",
+        ((datetime.now() - timedelta(hours=1)).isoformat(), old),
+    )
     # 仅 max_age
-    with pytest.raises(IndexError):
-        dlq._get_replay_candidates(max_age_seconds=1e9)
+    assert set(dlq._get_replay_candidates(max_age_seconds=60)) == {young, other}
     # event_type + max_age
-    with pytest.raises(IndexError):
-        dlq._get_replay_candidates(event_type="type.a", max_age_seconds=1e9)
+    assert dlq._get_replay_candidates(event_type="type.a", max_age_seconds=60) == [young]
+    assert {entry.entry_id for entry in dlq.get_all_entries()} == {old, young, other}
+    dlq._conn.close()
 
 
 def test_sqlite_replay_all_filter(tmp_path):

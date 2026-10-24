@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -24,6 +26,16 @@ ACTIVE_POLICY = _PolicyView()
 def set_attendance_policy(policy: dict[str, Any] | None) -> None:
     """用毕可传 ``{}`` 清空，避免测试间串味。"""
     _POLICY.set(dict(policy or {}))
+
+
+@contextmanager
+def attendance_policy_scope(policy: dict[str, Any] | None) -> Iterator[None]:
+    """Restore the caller's policy even after a nested or failed conversion."""
+    token = _POLICY.set(dict(policy or {}))
+    try:
+        yield
+    finally:
+        _POLICY.reset(token)
 
 
 @dataclass(frozen=True)

@@ -181,8 +181,16 @@ def read_verified_artifact(
 ) -> tuple[bytes, dict[str, Any]]:
     from modstore_server.customer_delivery_sources import public_library
 
-    path = Path(str(record.get("signed_package_path") or "")).resolve()
     root = public_library().parent / "customer-delivery-artifacts" / str(owner_id)
+    path = Path(str(record.get("signed_package_path") or ""))
+    if not path.is_relative_to(root):
+        path = _relocated_artifact_path(record, owner_id=owner_id, ticket_id=ticket_id, root=root)
+    for member in (path, *path.parents):
+        if member.is_symlink():
+            raise ValueError("私有产物路径不接受符号链接")
+        if member == root:
+            break
+    path = path.resolve()
     if (
         not path.is_relative_to(root)
         or not path.is_file()
@@ -190,6 +198,75 @@ def read_verified_artifact(
     ):
         raise ValueError("没有绑定本账号和本工单的正式签名产物")
     raw = path.read_bytes()
+    return raw, _verify_artifact_record(raw, record, owner_id=owner_id, ticket_id=ticket_id)
+
+
+def _relocated_artifact_path(
+    record: dict[str, Any], *, owner_id: int, ticket_id: int, root: Path
+) -> Path:
+    from modstore_server import workbench_api
+    from modstore_server.catalog_publication_policy import stable_version
+    from modstore_server.customer_delivery_sources import (
+        _require_directory,
+        verified_snapshot_library,
+    )
+
+    release = Path(__file__).resolve().parents[3]
+    source_sha = str(record.get("source_git_sha") or "")
+    mod_id = str(record.get("id") or "")
+    generation = str(record.get("generation") or "")
+    version = str(record.get("version") or "")
+    stable_version(version)
+    if (
+        record.get("source_mode") != "versioned_main"
+        or not re.fullmatch(r"[0-9a-f]{40}", source_sha)
+        or not re.fullmatch(r"[0-9a-f]{40}", release.name)
+        or release.parent.name != "releases"
+        or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,127}", mod_id)
+        or not re.fullmatch(r"[0-9a-f]{16,32}", generation)
+        or record.get("owner_user_id") != owner_id
+        or record.get("ticket_id") != ticket_id
+    ):
+        raise ValueError("旧私有产物路径或身份无效")
+    filename = f"{mod_id}-{version}.xcmod"
+    legacy = (
+        release.parent
+        / source_sha
+        / "成都修茈科技有限公司/MODstore_deploy/customer-delivery-artifacts"
+        / str(owner_id)
+        / mod_id
+        / filename
+    )
+    if Path(str(record.get("signed_package_path") or "")) != legacy:
+        raise ValueError("旧私有产物不属于固定发行路径")
+    for member in reversed((legacy, *legacy.parents)):
+        if member.is_relative_to(release.parent) and member.is_symlink():
+            raise ValueError("旧私有产物路径不接受符号链接")
+    snapshot = workbench_api._load_workbench_session_unlocked(generation)
+    if (
+        not snapshot
+        or snapshot.get("delivery_source_mode") != "versioned_main"
+        or snapshot.get("id") != generation
+        or snapshot.get("user_id") != owner_id
+        or snapshot.get("ticket_id") != ticket_id
+        or snapshot.get("status") != "done"
+        or record not in (snapshot.get("verified_artifacts") or [])
+    ):
+        raise ValueError("旧私有产物没有匹配的原持久会话")
+    verified_snapshot_library(snapshot, owner_id, generation, ticket_id)
+    for directory in (root.parent, root, root / mod_id):
+        _require_directory(directory)
+    path = root / mod_id / filename
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("迁移后的私有产物不存在或为链接")
+    return path
+
+
+def _verify_artifact_record(
+    raw: bytes, record: dict[str, Any], *, owner_id: int, ticket_id: int
+) -> dict[str, Any]:
+    if record.get("owner_user_id") != owner_id or record.get("ticket_id") != ticket_id:
+        raise ValueError("签名产物账号或工单绑定不匹配")
     signed = verify_delivery_package(raw)
     manifest = signed["manifest"]
     if (
@@ -215,7 +292,7 @@ def read_verified_artifact(
         )
     ):
         raise ValueError("签名包主线源码溯源与工单产物不匹配")
-    return raw, signed
+    return signed
 
 
 def prepare_private_artifact(

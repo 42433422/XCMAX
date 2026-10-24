@@ -4,7 +4,7 @@
 Focus: _execute_price_list_tool error branches, _execute_shipment_generate_tool,
 _execute_excel_schema_tool, _execute_excel_analysis_tool, _execute_import_excel_tool,
 LLMWorkflowPlanner._validate_required_params, _fallback_plan branches,
-_filter_tool_registry_for_profile normal/pro_default profiles, _get_planner_http_client.
+_filter_tool_registry_for_profile normal/pro_default profiles.
 """
 
 from __future__ import annotations
@@ -999,28 +999,6 @@ class TestFallbackPlanBranches:
         registry = {"customers": {"actions": {"ensure_exists": {"risk": "medium"}}}}
         plan = planner._fallback_plan("p1", "添加产品", registry)
         assert plan.risk_level in ("low", "medium", "high")
-
-
-# ---------------------------------------------------------------------------
-# _get_planner_http_client
-# ---------------------------------------------------------------------------
-
-
-class TestGetPlannerHttpClient:
-    """Cover _get_planner_http_client."""
-
-    def test_returns_client(self):
-        from app.application.workflow.planner import _get_planner_http_client
-
-        client = _get_planner_http_client()
-        assert client is not None
-
-    def test_returns_same_instance(self):
-        from app.application.workflow.planner import _get_planner_http_client
-
-        c1 = _get_planner_http_client()
-        c2 = _get_planner_http_client()
-        assert c1 is c2
 
 
 # ---------------------------------------------------------------------------

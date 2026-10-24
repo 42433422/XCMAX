@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.domain.services.product_import_validator import (
+from app.domain.product.services.product_import_validator import (
     ProductImportValidator,
     get_product_import_validator,
 )

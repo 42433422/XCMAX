@@ -20,7 +20,7 @@ EMPLOYEE_LABEL = "太阳鸟考勤员"
 SOURCE_MOD_ID = "taiyangniao-pro"
 
 DEFAULT_OUTPUT_RELPATH = "424/考勤转换输出.xlsx"
-DEFAULT_TEMPLATE_RELPATH = "424/考勤-2026-3月份考勤统计表.xlsx"
+DEFAULT_TEMPLATE_RELPATH = "synthetic/attendance-template.xlsx"
 
 SYSTEM_PROMPT = (
     "你是太阳鸟考勤员。你直接使用 taiyangniao-pro 的 Python 考勤转换模块；"

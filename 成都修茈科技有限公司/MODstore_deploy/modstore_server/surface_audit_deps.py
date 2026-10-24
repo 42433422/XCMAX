@@ -1,76 +1,110 @@
-# isort: skip_file
-# ruff: noqa: E402, F401, I001
-"""三端截图巡检依赖：截图前自动检测并拉起本地服务。
+"""Public surface-audit dependency API and explicit runtime composition.
 
-默认在 ``build_surface_audit_html_sync`` / ``run_surface_audit_async`` 入口调用。
-可通过 ``MODSTORE_SURFACE_AUDIT_AUTO_START=0`` 关闭自动拉起（仅探活、记日志）。
-
-本地依赖（按 lane）：
-- P-S：FHD API（默认 :5000）+ Vite 企业端（默认 :5001）
-- P-W/P-App（base 为 localhost 时）：本地营销/market 静态服（默认 :5176）
-- 目录/登录：MODstore 内部 API（``MODSTORE_INTERNAL_API_BASE``，默认 :8788）
-- Playwright Chromium（``playwright install chromium``）
+The persistent MODstore API remains running after an audit. Desktop, Vite,
+marketing and emulator processes are cleaned up by the existing opt-in policy.
 """
 
 from __future__ import annotations
 
-import logging
-import os
-import shutil
-import subprocess
-import time
-import urllib.error
-import urllib.request
+import os as os
+import subprocess as subprocess
+import time as time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from typing import Any
 
-from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
-from modstore_server.surface_audit_paths import (
-    auto_start_enabled as _auto_start_enabled,
+from modstore_server.surface_audit_paths import auto_start_enabled as _auto_start_enabled
+from modstore_server.surface_audit_paths import fhd_root as _fhd_root
+from modstore_server.surface_audit_paths import is_local_url as _is_local_url
+from modstore_server.surface_audit_paths import modstore_deploy_root as _modstore_deploy_root
+from modstore_server.surface_audit_paths import repo_root as _repo_root
+from modstore_server.surface_audit_processes import (
+    SurfaceProcessLauncher,
 )
-from modstore_server.surface_audit_paths import (
-    fhd_root as _fhd_root,
-)
-from modstore_server.surface_audit_paths import (
-    is_local_url as _is_local_url,
-)
-from modstore_server.surface_audit_paths import (
-    modstore_deploy_root as _modstore_deploy_root,
-)
-from modstore_server.surface_audit_paths import (
-    repo_root as _repo_root,
-)
-from modstore_server.surface_audit_paths import (
-    runtime_state_root as _runtime_state_root,
-)
-
-logger = logging.getLogger(__name__)
-
-
-from modstore_server.surface_audit_deps_part01 import (
-    _pids_dir as _pids_dir,
-    _logs_dir as _logs_dir,
-    _python_bin as _python_bin,
-    _http_ok as _http_ok,
-    _fhd_api_health_ok as _fhd_api_health_ok,
-    _wait_http as _wait_http,
-    _wait_fhd_api_health as _wait_fhd_api_health,
-    _spawn as _spawn,
-    _ensure_fhd_api as _ensure_fhd_api,
-    _ensure_vite as _ensure_vite,
-    _ensure_modstore_api as _ensure_modstore_api,
-    _ensure_marketing_static as _ensure_marketing_static,
-    _ensure_playwright as _ensure_playwright,
+from modstore_server.surface_audit_processes import _kill_pid_file as _kill_pid_file
+from modstore_server.surface_audit_processes import stop_surface_audit_ephemeral as _stop_ephemeral
+from modstore_server.surface_audit_readiness import SurfaceDependencyChecks
+from modstore_server.surface_audit_runtime import _fhd_api_health_ok as _fhd_api_health_ok
+from modstore_server.surface_audit_runtime import _http_ok as _http_ok
+from modstore_server.surface_audit_runtime import _logs_dir as _logs_dir
+from modstore_server.surface_audit_runtime import _parse_port as _parse_port
+from modstore_server.surface_audit_runtime import _pids_dir as _pids_dir
+from modstore_server.surface_audit_runtime import _python_bin as _python_bin
+from modstore_server.surface_audit_runtime import (
     resolve_internal_api_base as resolve_internal_api_base,
-    _parse_port as _parse_port,
-    _ensure_android_emulator as _ensure_android_emulator,
 )
-
-
-from modstore_server.surface_audit_deps_part02 import (
-    ensure_surface_audit_deps as ensure_surface_audit_deps,
+from modstore_server.surface_audit_runtime import (
     surface_audit_stop_after_enabled as surface_audit_stop_after_enabled,
-    _kill_pid_file as _kill_pid_file,
-    stop_surface_audit_ephemeral as stop_surface_audit_ephemeral,
 )
+from modstore_server.surface_audit_services import SurfaceServices, wait_for_health
+
+
+def _spawn(
+    name: str, cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None
+) -> dict[str, Any]:
+    return SurfaceProcessLauncher(_pids_dir(), _logs_dir()).spawn(name, cmd, cwd=cwd, env=env)
+
+
+def _wait_http(url: str, *, label: str, tries: int = 45) -> bool:
+    return wait_for_health(url, label=label, probe=_http_ok, tries=tries)
+
+
+def _wait_fhd_api_health(url: str, *, label: str, tries: int = 45) -> bool:
+    return wait_for_health(url, label=label, probe=_fhd_api_health_ok, tries=tries)
+
+
+def _services() -> SurfaceServices:
+    return SurfaceServices(
+        fhd_root=_fhd_root,
+        deploy_root=_modstore_deploy_root,
+        repo_root=_repo_root,
+        python_bin=_python_bin,
+        auto_start_enabled=_auto_start_enabled,
+        http_ok=_http_ok,
+        fhd_health_ok=_fhd_api_health_ok,
+        spawn=_spawn,
+        wait_http=_wait_http,
+        wait_fhd_health=_wait_fhd_api_health,
+    )
+
+
+def _ensure_fhd_api(api_port: int) -> dict[str, Any]:
+    return _services().fhd_api(api_port)
+
+
+def _ensure_vite(web_port: int, api_port: int) -> dict[str, Any]:
+    return _services().vite(web_port, api_port)
+
+
+def _ensure_modstore_api(port: int) -> dict[str, Any]:
+    return _services().modstore_api(port)
+
+
+def _ensure_marketing_static(port: int) -> dict[str, Any]:
+    return _services().marketing_static(port)
+
+
+def _ensure_playwright() -> dict[str, Any]:
+    return _services().playwright()
+
+
+def _ensure_android_emulator() -> dict[str, Any]:
+    return _services().android_emulator()
+
+
+def ensure_surface_audit_deps() -> dict[str, Any]:
+    return SurfaceDependencyChecks(
+        playwright=_ensure_playwright,
+        fhd_api=_ensure_fhd_api,
+        vite=_ensure_vite,
+        marketing=_ensure_marketing_static,
+        modstore_api=_ensure_modstore_api,
+        android=_ensure_android_emulator,
+        internal_api_base=resolve_internal_api_base,
+        is_local_url=_is_local_url,
+    ).run()
+
+
+def stop_surface_audit_ephemeral() -> dict[str, Any]:
+    return _stop_ephemeral(
+        pids_directory=_pids_dir(), fhd_directory=_fhd_root(), stop_process=_kill_pid_file
+    )

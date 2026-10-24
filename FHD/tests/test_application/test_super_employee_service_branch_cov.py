@@ -156,8 +156,10 @@ class _FakeStream:
             return self._lines.pop(0)
         return b""
 
-    async def read(self):
-        return self._read_data
+    async def read(self, size=-1):
+        data = self._read_data if size < 0 else self._read_data[:size]
+        self._read_data = self._read_data[len(data) :]
+        return data
 
 
 def _fake_proc(stdout_lines, returncode=0):

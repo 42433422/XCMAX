@@ -12,7 +12,7 @@ pure-memory (storage_path=None) mode.
 import sqlite3
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -486,30 +486,30 @@ class TestGetReplayCandidatesSqlite:
         dlq._conn.close()
 
     def test_sqlite_max_age_only_663_664(self, tmp_path) -> None:
-        """Branch [663→664]: max_age_seconds only, event_type None.
-
-        The source code at this branch performs a partial SELECT (only
-        entry_id + first_failure_time) and then calls _row_to_entry which
-        requires all columns — this triggers an IndexError.  The test
-        exercises the branch and accepts the known source-code bug.
-        """
+        """Age-only selection excludes old entries without deleting them."""
         dlq = self._make_sqlite_dlq(tmp_path)
-        _enqueue(dlq)
-        with pytest.raises((IndexError, KeyError)):
-            dlq._get_replay_candidates(max_age_seconds=9999.0)
+        old = _enqueue(dlq)
+        young = _enqueue(dlq)
+        dlq._conn.execute(
+            "UPDATE neuro_dead_letters SET first_failure_time = ? WHERE entry_id = ?",
+            ((datetime.now() - timedelta(hours=1)).isoformat(), old),
+        )
+        assert dlq._get_replay_candidates(max_age_seconds=60) == [young]
+        assert {entry.entry_id for entry in dlq.get_all_entries()} == {old, young}
         dlq._conn.close()
 
     def test_sqlite_both_filters_645_646(self, tmp_path) -> None:
-        """Branch [645→646]: both event_type and max_age_seconds given.
-
-        Same partial-SELECT bug as the max_age_only branch — the query only
-        fetches entry_id + first_failure_time but _row_to_entry needs all
-        columns.  The branch IS taken; the IndexError is a known source bug.
-        """
+        """Type and age filters both apply, preserving all persisted entries."""
         dlq = self._make_sqlite_dlq(tmp_path)
-        _enqueue(dlq, "ev.both")
-        with pytest.raises((IndexError, KeyError)):
-            dlq._get_replay_candidates(event_type="ev.both", max_age_seconds=9999.0)
+        old = _enqueue(dlq, "ev.both")
+        young = _enqueue(dlq, "ev.both")
+        other = _enqueue(dlq, "ev.other")
+        dlq._conn.execute(
+            "UPDATE neuro_dead_letters SET first_failure_time = ? WHERE entry_id = ?",
+            ((datetime.now() - timedelta(hours=1)).isoformat(), old),
+        )
+        assert dlq._get_replay_candidates(event_type="ev.both", max_age_seconds=60) == [young]
+        assert {entry.entry_id for entry in dlq.get_all_entries()} == {old, young, other}
         dlq._conn.close()
 
 

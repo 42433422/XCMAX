@@ -1,5 +1,5 @@
 <template>
-  <div class="employee-autonomy-view" id="view-employee-autonomy">
+  <div class="employee-autonomy-view page-content" id="view-employee-autonomy">
     <div class="page-header">
       <div>
         <h2>员工自治</h2>
@@ -14,7 +14,7 @@
         </button>
       </div>
     </div>
-    <p v-if="error" class="banner-error">{{ error }}</p>
+    <p v-if="error" role="alert" class="banner-error">{{ error }}</p>
 
     <nav class="tabs">
       <button type="button" :class="{ active: tab === 'consistency' }" @click="tab = 'consistency'">自洽总览</button>
@@ -25,27 +25,27 @@
 
     <section v-show="tab === 'consistency'" class="consistency-panel">
       <div class="summary-grid">
-        <article class="metric-card" :class="systemHealthy ? 'healthy' : 'degraded'">
+        <article class="metric-card" :class="runtimeKnown ? systemHealthy ? 'healthy' : 'degraded' : 'unknown'">
           <span>系统运行态</span>
-          <strong>{{ systemHealthy ? '健康' : '降级' }}</strong>
-          <small>
+          <strong>{{ runtimeKnown ? systemHealthy ? '健康' : '降级' : '待核实' }}</strong>
+          <small v-if="runtimeKnown">
             失败 {{ numberValue(runtimeSummary.actionable_failing) }} · 停摆 {{ numberValue(runtimeSummary.actionable_stale) }}
           </small>
         </article>
-        <article class="metric-card" :class="numberValue(runtimeSummary.actionable_never_run) ? 'degraded' : 'healthy'">
+        <article class="metric-card" :class="runtimeKnown ? numberValue(runtimeSummary.actionable_never_run) ? 'degraded' : 'healthy' : 'unknown'">
           <span>定时履职</span>
-          <strong>{{ numberValue(employeeDuty.observed_cron_count) }} / {{ numberValue(employeeDuty.registered_cron_count) }}</strong>
-          <small>未运行 {{ numberValue(runtimeSummary.actionable_never_run) }} · 审批保留 {{ numberValue(employeeDuty.approval_required_count) }}</small>
+          <strong>{{ runtimeKnown ? `${numberValue(employeeDuty.observed_cron_count)} / ${numberValue(employeeDuty.registered_cron_count)}` : '待核实' }}</strong>
+          <small v-if="runtimeKnown">未运行 {{ numberValue(runtimeSummary.actionable_never_run) }} · 审批保留 {{ numberValue(employeeDuty.approval_required_count) }}</small>
         </article>
-        <article class="metric-card" :class="coverage.workforce_ready ? 'healthy' : 'degraded'">
+        <article class="metric-card" :class="coverageKnown ? coverage.workforce_ready ? 'healthy' : 'degraded' : 'unknown'">
           <span>能力证明</span>
-          <strong>{{ numberValue(coverage.proven_count) }} / {{ numberValue(coverage.planned_count) }}</strong>
-          <small>门槛 {{ numberValue(coverage.proof_required_count) }} · {{ formatPercent(coverage.proof_ratio) }}</small>
+          <strong>{{ coverageKnown ? `${numberValue(coverage.proven_count)} / ${numberValue(coverage.planned_count)}` : '待核实' }}</strong>
+          <small v-if="coverageKnown">门槛 {{ numberValue(coverage.proof_required_count) }} · {{ formatPercent(coverage.proof_ratio) }}</small>
         </article>
-        <article class="metric-card" :class="coverage.production_workforce_ready ? 'healthy' : 'degraded'">
+        <article class="metric-card" :class="coverageKnown ? coverage.production_workforce_ready ? 'healthy' : 'degraded' : 'unknown'">
           <span>生产履职</span>
-          <strong>{{ numberValue(coverage.production_proven_count) }} / {{ numberValue(coverage.planned_count) }}</strong>
-          <small>{{ formatPercent(coverage.production_proof_ratio) }} · {{ platformLlmLabel }}</small>
+          <strong>{{ coverageKnown ? `${numberValue(coverage.production_proven_count)} / ${numberValue(coverage.planned_count)}` : '待核实' }}</strong>
+          <small v-if="coverageKnown">{{ formatPercent(coverage.production_proof_ratio) }} · {{ platformLlmLabel }}</small>
         </article>
       </div>
 
@@ -59,41 +59,41 @@
               <code>{{ job.last_error_code || '无安全错误码' }}</code>
             </div>
           </div>
-          <div v-else class="empty compact">没有失败或停摆任务</div>
+          <div v-else class="empty compact">{{ runtimeKnown ? '没有失败或停摆任务' : '运行明细尚待核实' }}</div>
         </article>
 
         <article class="card consistency-card">
           <h3>未履职定时岗位</h3>
           <div v-if="neverRunEmployeeIds.length" class="employee-tags">
-            <span v-for="employeeId in neverRunEmployeeIds" :key="employeeId">{{ employeeId }}</span>
+            <span v-for="employeeId in neverRunEmployeeIds" :key="employeeId" :title="employeeId">{{ employeeLabel(employeeId) }}</span>
           </div>
-          <div v-else class="empty compact">所有已注册定时岗位均有运行回执</div>
+          <div v-else class="empty compact">{{ Array.isArray(employeeDutyDetails.never_run_employee_ids) ? '所有已注册定时岗位均有运行回执' : '定时岗位回执尚待核实' }}</div>
         </article>
 
         <article class="card consistency-card">
           <h3>未完成能力证明</h3>
           <div v-if="unprovenEmployeeIds.length" class="employee-tags">
-            <span v-for="employeeId in unprovenEmployeeIds" :key="employeeId">{{ employeeId }}</span>
+            <span v-for="employeeId in unprovenEmployeeIds" :key="employeeId" :title="employeeId">{{ employeeLabel(employeeId) }}</span>
           </div>
-          <div v-else class="empty compact">全部员工均有有效能力回执</div>
+          <div v-else class="empty compact">{{ coverageKnown ? '全部员工均有有效能力回执' : '能力回执尚待核实' }}</div>
         </article>
 
         <article class="card consistency-card">
           <h3>需人工审批岗位</h3>
           <div v-if="approvalRequiredEmployeeIds.length" class="employee-tags policy">
-            <span v-for="employeeId in approvalRequiredEmployeeIds" :key="employeeId">{{ employeeId }}</span>
+            <span v-for="employeeId in approvalRequiredEmployeeIds" :key="employeeId" :title="employeeId">{{ employeeLabel(employeeId) }}</span>
           </div>
-          <div v-else class="empty compact">没有待审批的高风险岗位</div>
+          <div v-else class="empty compact">{{ Array.isArray(employeeDutyDetails.approval_required_employee_ids) ? '没有待审批的高风险岗位' : '岗位审批状态尚待核实' }}</div>
         </article>
       </div>
     </section>
 
     <section v-show="tab === 'suggestions'" class="card table-card">
-      <table v-if="suggestions.length" class="data-table">
+      <table v-if="suggestions.length" class="data-table suggestion-table">
         <thead>
           <tr>
             <th></th>
-            <th>员工</th>
+            <th>提出方 / 关联员工</th>
             <th>建议</th>
             <th>状态</th>
             <th>操作</th>
@@ -104,9 +104,9 @@
             <td>
               <input v-model="selectedIds" type="checkbox" :value="row.id" />
             </td>
-            <td>{{ row.employee_id || row.employee || '—' }}</td>
+            <td><span>{{ employeeLabel(row.source_employee_id || row.employee_id || row.employee) }}</span><small v-if="Array.isArray(row.target_employee_ids)" class="suggestion-targets">{{ row.target_employee_ids.map(employeeLabel).join('、') }}</small></td>
             <td>{{ row.title || row.summary || row.suggestion || '—' }}</td>
-            <td>{{ row.status || 'pending' }}</td>
+            <td>{{ suggestionStates[String(row.status)] || row.status || '未记录' }}</td>
             <td><div class="ops"><button type="button" class="link" @click="approveOne(row.id)">通过</button><button type="button" class="link danger" @click="rejectOne(row.id)">拒绝</button></div></td>
           </tr>
         </tbody>
@@ -126,7 +126,7 @@
           {{ q.question || q.content || q.title }}
         </div>
         <div class="qa-meta">
-          {{ q.employee_id || '—' }} · {{ q.asked_at || q.created_at || '' }}
+          {{ q.employee_id ? employeeLabel(q.employee_id) : '—' }} · {{ q.asked_at || q.created_at || '' }}
           <template v-if="countdownText(q)"> · {{ countdownText(q) }}</template>
           <template v-else-if="q.expires_at"> · 截止 {{ q.expires_at }}</template>
         </div>
@@ -164,7 +164,7 @@
         </thead>
         <tbody>
           <tr v-for="(row, idx) in scorecard" :key="String(row.employee_id || idx)">
-            <td>{{ row.employee_id || row.name || '—' }}</td>
+            <td>{{ row.employee_id ? employeeLabel(row.employee_id) : row.name || '—' }}</td>
             <td>{{ row.total_tasks ?? row.task_count ?? '—' }}</td>
             <td>{{ formatRate(row.success_rate) }}</td>
             <td>{{ row.last_run_at || row.last_active_at || row.updated_at || '—' }}</td>
@@ -182,8 +182,11 @@ export default { name: 'EmployeeAutonomyView' }
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { xcmaxEmployeeAutonomyApi } from '@/api/xcmaxEmployeeAutonomy'
+import { xcmaxEmployeeAutonomyApi } from '../api/xcmaxEmployeeAutonomy'
 import { appAlert, appPrompt } from '@/utils/appDialog'
+import { YUANGON_PKG_ROLE_LABELS } from '@/domain/yuangonDutyRoster'
+const employeeLabel = (id: unknown) => id === 'evolution-engine' ? '自进化服务' : YUANGON_PKG_ROLE_LABELS[String(id)] || String(id || '未记录提出方')
+const suggestionStates: Record<string, string> = { pending: '待审批', approved: '已批准', rejected: '已拒绝', dispatched: '已派发', done: '已完成' }
 const route = useRoute()
 type Row = Record<string, any>
 const tab = ref<'consistency' | 'suggestions' | 'questions' | 'scorecard'>('consistency')
@@ -209,6 +212,8 @@ const retortStats = computed(() => ({
 const runtimeSummary = computed<Row>(() => asRecord(runtime.value.summary))
 const employeeDuty = computed<Row>(() => asRecord(runtime.value.employee_duty))
 const employeeDutyDetails = computed<Row>(() => asRecord(runtime.value.employee_duty_details))
+const runtimeKnown = computed(() => typeof runtime.value.ok === 'boolean' && Array.isArray(runtime.value.jobs))
+const coverageKnown = computed(() => coverage.value.planned_count !== undefined && Array.isArray(coverage.value.unproven_employee_ids))
 const systemHealthy = computed(() => runtime.value.ok === true && String(runtime.value.status || '') !== 'degraded')
 const neverRunEmployeeIds = computed<string[]>(() => stringList(employeeDutyDetails.value.never_run_employee_ids))
 const approvalRequiredEmployeeIds = computed<string[]>(() => stringList(employeeDutyDetails.value.approval_required_employee_ids))
@@ -346,10 +351,10 @@ async function refresh() {
     ])
 
     if (runtimeResult.status === 'fulfilled') runtime.value = asRecord(runtimeResult.value)
-    else failures.push(`运行态：${errorText(runtimeResult.reason)}`)
+    else { runtime.value = {}; failures.push(`运行态：${errorText(runtimeResult.reason)}`) }
 
     if (coverageResult.status === 'fulfilled') coverage.value = asRecord(coverageResult.value)
-    else failures.push(`履职覆盖：${errorText(coverageResult.reason)}`)
+    else { coverage.value = {}; failures.push(`履职覆盖：${errorText(coverageResult.reason)}`) }
 
     if (suggestionsResult.status === 'fulfilled') suggestions.value = asList(suggestionsResult.value)
     else failures.push(`建议：${errorText(suggestionsResult.reason)}`)

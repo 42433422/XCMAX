@@ -82,15 +82,16 @@ const autoRefresh = computed({
 <template>
           <div class="dg-header">
             <div class="dg-header-left">
-              <span class="dg-title">在岗员工节点图</span>
+              <span class="dg-title">编制员工节点图</span>
               <span
                 class="dg-roster-hint"
-                title="节点仅 yuangonDutyRoster 编制内岗位 + 数字管家；不含 catalog 中其它员工包。若仍出现编制外名称，说明浏览器仍在使用旧前端资源，请重新构建并强刷（Ctrl+F5）或清 CDN 缓存。"
+                title="节点来自当前编制和数字管家；包安装与实际执行分别核对。包与目录状态可查看缺包、目录缺岗及编制外包。"
               >编制 {{ ALL_PLANNED_IDS.size }} 岗</span>
 
               <div v-if="employees.length" class="dg-stats">
-                <span class="dg-stat">共 <strong>{{ stats.total }}</strong> 人</span>
-                <span class="dg-stat dg-stat--ok">✓ {{ stats.catalogOk }}</span>
+                <span class="dg-stat">共 <strong>{{ stats.total }}</strong> 节点</span>
+                <span v-if="stats.catalogKnown" class="dg-stat dg-stat--ok">目录 {{ stats.catalogOk }}</span>
+                <span v-else class="dg-stat dg-stat--muted">目录待核实</span>
                 <span class="dg-stat dg-stat--healthy">♥ {{ stats.healthy }}</span>
                 <span v-if="stats.execReady" class="dg-stat dg-stat--ok">▶ {{ stats.execReady }}</span>
                 <button
@@ -170,7 +171,7 @@ const autoRefresh = computed({
                       :class="['dg-more-item', { 'dg-more-item--active': showGapPanel }]"
                       @click="togglePanel('gap')"
                     >
-                      缺岗分析
+                      包与目录状态
                       <span v-if="gapSummary.missing" class="dg-badge dg-badge--red">{{ gapSummary.missing }}</span>
                     </button>
                     <button

@@ -1,13 +1,62 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Protocol
 
 from .types import NodeExecutionResult, PlanGraph, StateSchema, WorkflowRunResult
 
 
+class AgentLoopEngine(Protocol):
+    """Only the decision, tool and state hooks needed by the agentic loop."""
+
+    _default_state_schema: StateSchema
+
+    def _llm_decide_next_step(
+        self,
+        user_message: str,
+        tool_registry: dict[str, Any],
+        runtime_context: dict[str, Any],
+        agent_history: list[dict[str, Any]],
+        user_id: str | None,
+    ) -> dict[str, Any] | None: ...
+
+    def _run_single_tool(
+        self,
+        tool_id: str,
+        action: str,
+        params: dict[str, Any],
+        runtime_context: dict[str, Any],
+        max_retries: int,
+        retryable: bool = True,
+    ) -> NodeExecutionResult: ...
+
+    def _agentic_tool_allows_auto_retry(
+        self,
+        tool_registry: dict[str, Any],
+        tool_id: str,
+        action: str,
+    ) -> bool: ...
+
+    def _append_node_trace(
+        self,
+        runtime_context: dict[str, Any],
+        result: NodeExecutionResult,
+    ) -> None: ...
+
+    def _merge_state_schema(
+        self,
+        runtime_context: dict[str, Any],
+        result: NodeExecutionResult,
+        schema: StateSchema,
+    ) -> None: ...
+
+    def _emit_state_update(self, result: NodeExecutionResult) -> None: ...
+
+    def _summarize_output(self, output: dict[str, Any]) -> str: ...
+
+
 def run_agentic_loop(
-    engine: Any,
+    engine: AgentLoopEngine,
     event_logger: logging.Logger,
     plan: PlanGraph,
     runtime_context: dict[str, Any] | None,

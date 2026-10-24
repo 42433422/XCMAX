@@ -36,6 +36,32 @@ def _registered_router_business_db(
             "message": "business_db 不接受任意 SQL，请使用 entity/operation/payload。",
         }
     if action in ("read", "query", "list"):
+        if params.get("id") is not None:
+            from app.application.business_db_write_verification import _model_config
+            from app.db.session import get_db
+            from app.infrastructure.tenant_scope import tenant_id_for_write
+
+            record_id = params["id"]
+            if isinstance(record_id, bool) or not isinstance(record_id, int) or record_id <= 0:
+                return {"success": False, "data": [], "message": "id 必须为正整数"}
+            model, _, _ = _model_config(entity)
+            with get_db() as db:
+                record = (
+                    db.query(model)
+                    .filter(model.tenant_id == tenant_id_for_write(), model.id == record_id)
+                    .first()
+                )
+                data = (
+                    [
+                        {
+                            column.name: getattr(record, column.name)
+                            for column in model.__table__.columns
+                        }
+                    ]
+                    if record is not None
+                    else []
+                )
+            return {"success": True, "data": data}
         read_params = dict(params)
         read_params.setdefault("keyword", params.get("keyword") or params.get("query") or "")
         if entity == "customers":

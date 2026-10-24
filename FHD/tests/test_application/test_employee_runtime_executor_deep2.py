@@ -132,6 +132,10 @@ class TestMemoryLightDeep:
 
 
 class TestResolveFilePathDeep:
+    @pytest.fixture(autouse=True)
+    def _configured_workspace(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     def test_workspace_root_none_uses_cwd(self, tmp_path, monkeypatch) -> None:
         f = tmp_path / "x.txt"
         f.write_text("hi")
@@ -302,6 +306,10 @@ class TestLoadRuleSpecDeep:
 
 
 class TestActionVendorConvertDeep:
+    @pytest.fixture(autouse=True)
+    def _configured_workspace(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     def test_generate_with_existing_src_file(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
         backend = tmp_path / "backend" / "vendor" / "csv"

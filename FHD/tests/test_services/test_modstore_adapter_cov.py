@@ -97,9 +97,11 @@ class TestFromSessionBranches:
             adapter = ModstorePlatformAdapter.from_session(session_id=None, request=None)
             assert adapter is not None
 
-    def test_session_id_but_no_token_falls_back_to_latest(self):
+    @pytest.mark.parametrize("owner", [17, None])
+    def test_session_id_but_no_token_falls_back_only_to_the_same_owner(self, owner):
         """L244=True, L258=True (no token yet), L260=True: latest_token found."""
         mock_mods = MagicMock()
+        mock_mods._user_id_from_session.return_value = owner
         mock_mods.session_id_from_request.return_value = "sess123"
         mock_mods.session_market_token.return_value = ""  # nothing for session
         mock_mods.latest_session_market_token.return_value = "latest_tok"
@@ -117,7 +119,11 @@ class TestFromSessionBranches:
                 {"app.fastapi_routes.market_account": mock_mods},
             ):
                 adapter = ModstorePlatformAdapter.from_session(session_id="sess123")
-        assert adapter.auth_token == "latest_tok"
+        assert adapter.auth_token == ("latest_tok" if owner is not None else "")
+        if owner is None:
+            mock_mods.latest_session_market_token.assert_not_called()
+        else:
+            mock_mods.latest_session_market_token.assert_called_once_with(user_id=owner)
 
     def test_session_id_token_already_found_skips_latest(self):
         """L258=False: auth_token already set from session_market_token → no latest lookup."""

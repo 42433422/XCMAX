@@ -5,10 +5,16 @@ on:
     branches: [main, develop, master]
     paths:
       - "**"
+      - "packages/xcagi_common/**"
+      - "packages/retort_engine/**"
+      - "FHD/mods/_employees/**"
   pull_request:
     branches: [main, develop, master]
     paths:
       - "**"
+      - "packages/xcagi_common/**"
+      - "packages/retort_engine/**"
+      - "FHD/mods/_employees/**"
   workflow_dispatch:
 
 env:
@@ -32,7 +38,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[web,dev]"
+          pip install -e "$GITHUB_WORKSPACE/packages/retort_engine" \
+            -e "$GITHUB_WORKSPACE/packages/xcagi_common" -e ".[web,dev,governance]"
 
       - name: Release gate subset (hard)
         run: python -m pytest -m release_gate -q --tb=short
@@ -53,7 +60,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[web,dev]"
+          pip install -e "$GITHUB_WORKSPACE/packages/retort_engine" \
+            -e "$GITHUB_WORKSPACE/packages/xcagi_common" -e ".[web,dev,governance]"
+
+      - name: Test shared employee archive builds
+        run: python -m pytest "$GITHUB_WORKSPACE/packages/xcagi_common/tests" -q
 
       - name: Set up the real private Mod frontend compiler
         uses: actions/setup-node@v7

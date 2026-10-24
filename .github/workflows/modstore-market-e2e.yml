@@ -31,12 +31,19 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "22.13.0"
+          node-version: "24.19.0"
           cache: "npm"
           cache-dependency-path: 成都修茈科技有限公司/MODstore_deploy/market/package-lock.json
 
       - name: Install deps
-        run: npm ci
+        env:
+          # Browser ASR uses WASM. Keep npm hooks and bundled CPU bindings;
+          # omit only optional CUDA/TensorRT downloads on this CPU runner.
+          # https://github.com/microsoft/onnxruntime/blob/v1.30.0/js/node/README.md#cuda-ep-installation
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: |
+          npm ci
+          node --input-type=module -e "import { listSupportedBackends } from 'onnxruntime-node'; if (!listSupportedBackends().some(({ name, bundled }) => name === 'cpu' && bundled)) throw new Error('ONNX CPU binding unavailable')"
 
       - name: Install Playwright Chromium
         run: npm run test:e2e:install

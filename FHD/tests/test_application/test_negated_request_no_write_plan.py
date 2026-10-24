@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.application.normal_chat_dispatch import route_normal_mode_message
-from app.domain.services.conversation.chat_tool_intent import (
+from app.domain.conversation.services.chat_tool_intent import (
     is_negated_action_request,
     looks_like_business_db_write,
 )
