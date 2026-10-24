@@ -1,7 +1,7 @@
 import json
 
 from modstore_server.incident_model_router import route_for_incident
-from modstore_server.para_delegate_handler_part01 import _build_para_prompt, _build_request
+from modstore_server.para_delegate_handler import _build_para_prompt, _build_request
 
 
 def test_role_budgets_and_candidates_come_from_server_policy(monkeypatch):
@@ -67,7 +67,7 @@ def test_ordinary_requests_do_not_inherit_incident_budget():
 def test_platform_cognition_applies_output_token_cap(monkeypatch):
     import asyncio
 
-    from modstore_server.employee_executor_part03_part01_part02 import _cognition_real
+    from modstore_server.employee_executor import _cognition_real
 
     captured = {}
 

@@ -326,7 +326,7 @@ def test_workspace_rejects_symlink_escape(tmp_path, directory):
 
 
 def test_workspace_directory_replacement_does_not_follow_link(tmp_path, monkeypatch):
-    from modstore_server import mod_employee_agent_runner_part02 as tools
+    from modstore_server import mod_employee_agent_runner as tools
 
     root = tmp_path / "workspace"
     (root / "child").mkdir(parents=True)

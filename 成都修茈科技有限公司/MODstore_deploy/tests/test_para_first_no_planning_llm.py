@@ -120,7 +120,7 @@ def test_skip_can_be_disabled_and_ignores_non_para_roles(monkeypatch):
         "modstore_server.para_delegate_handler.para_delegate_ready_for_dispatch",
         lambda: True,
     )
-    from modstore_server.employee_executor_part03_part01_part02 import (
+    from modstore_server.employee_executor import (
         _para_first_skip_cognition,
     )
 
@@ -160,7 +160,7 @@ def test_dynamic_team_member_uses_the_existing_plan(para_ready, role):
     "plan", [None, {"team": None}, {"team": [{"employee_id": "other", "role": "fix"}]}]
 )
 def test_unselected_dynamic_employee_does_not_skip_cognition(plan):
-    from modstore_server.employee_executor_part03_part01_part02 import _para_first_skip_cognition
+    from modstore_server.employee_executor import _para_first_skip_cognition
 
     assert not _para_first_skip_cognition(
         "dynamic-code-owner",

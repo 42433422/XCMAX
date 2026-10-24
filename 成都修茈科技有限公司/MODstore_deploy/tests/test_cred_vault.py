@@ -158,7 +158,7 @@ def test_ticket_digest_redact_text_hides_loaded_credentials(monkeypatch):
 
 
 def test_para_dispatch_attaches_grant_reference(monkeypatch):
-    from modstore_server import para_delegate_handler_part04 as part04
+    from modstore_server import para_delegate_handler as part04
 
     monkeypatch.setenv("MODSTORE_CREDENTIAL_GRANT_SCOPES", "OPENAI_API_KEY")
     prompt, grant = part04._attach_credential_grant("fix it", "para-task-1")

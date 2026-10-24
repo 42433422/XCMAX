@@ -176,7 +176,7 @@ def test_blocked_contract_never_posts_and_revokes_created_grant(monkeypatch):
     client = _Client("dolt")
     monkeypatch.setattr(para.httpx, "Client", lambda *a, **k: client)
     monkeypatch.setattr(
-        "modstore_server.para_delegate_handler_part04._attach_credential_grant",
+        "modstore_server.para_delegate_handler._attach_credential_grant",
         lambda prompt, task: (prompt, SimpleNamespace(task_id=task)),
     )
     revoked = []

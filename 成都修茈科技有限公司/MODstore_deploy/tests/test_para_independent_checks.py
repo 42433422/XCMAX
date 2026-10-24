@@ -288,7 +288,7 @@ def test_mixed_dolt_check_group_is_rejected_before_any_child_post(check_request,
 
 
 def test_preparation_failure_keeps_original_scope_and_submits_nothing(check_request, monkeypatch):
-    from modstore_server import para_delegate_handler_part04 as dispatch_impl
+    from modstore_server import para_delegate_handler as dispatch_impl
 
     client = _IntegClient([_online_codex("w1"), _online_codex("w2")])
     monkeypatch.setattr(h.httpx, "Client", lambda *a, **kw: client)

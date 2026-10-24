@@ -103,16 +103,15 @@ def test_request_error_fragment_falls_back_to_exception_type() -> None:
 
 def test_ddg_result_url_uses_exact_hostname_boundary() -> None:
     from modstore_server import research_tools as rt
-    from modstore_server import research_tools_part02 as rt_part02
 
     redirected = "https://html.duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fsafe"
     lookalike = "https://duckduckgo.com.evil.example/l/?uddg=https%3A%2F%2Fexample.com%2Funsafe"
 
     assert rt.ddg_result_url(redirected) == "https://example.com/safe"
     assert rt.ddg_result_url(lookalike) == lookalike
-    assert rt_part02.is_duckduckgo_host("duckduckgo.com") is True
-    assert rt_part02.is_duckduckgo_host("html.duckduckgo.com.") is True
-    assert rt_part02.is_duckduckgo_host("duckduckgo.com.evil.example") is False
+    assert rt.is_duckduckgo_host("duckduckgo.com") is True
+    assert rt.is_duckduckgo_host("html.duckduckgo.com.") is True
+    assert rt.is_duckduckgo_host("duckduckgo.com.evil.example") is False
 
 
 @pytest.mark.asyncio

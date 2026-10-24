@@ -87,6 +87,8 @@ from modstore_server.para_delegate_handler_merged import (
     _post_para_api as _post_para_api,
     _req_with_excluded_tools as _req_with_excluded_tools,
     _attach_tool_fallback_meta as _attach_tool_fallback_meta,
+    _attach_credential_grant as _attach_credential_grant,
+    _independent_check_plan as _independent_check_plan,
 )
 
 _PARA_GUEST_AUTH_CACHE: Dict[str, str] = {}

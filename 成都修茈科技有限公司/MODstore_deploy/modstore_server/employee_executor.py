@@ -70,6 +70,7 @@ from modstore_server.employee_executor_merged import (
     _perception_web_rankings as _perception_web_rankings,
     _memory_real as _memory_real,
     _cognition_real as _cognition_real,
+    _para_first_skip_cognition as _para_first_skip_cognition,
     _cognition_sync as _cognition_sync,
     _action_wechat_notify as _action_wechat_notify,
     _action_openapi_tool as _action_openapi_tool,

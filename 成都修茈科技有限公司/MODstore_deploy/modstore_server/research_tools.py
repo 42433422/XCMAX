@@ -32,6 +32,7 @@ from modstore_server.research_tools_merged import (
     tavily_search as tavily_search,
     strip_html as strip_html,
     ddg_result_url as ddg_result_url,
+    is_duckduckgo_host as is_duckduckgo_host,
     duckduckgo_html_search as duckduckgo_html_search,
     web_crawl_engines_from_env as web_crawl_engines_from_env,
     web_crawl_per_engine_limit as web_crawl_per_engine_limit,
