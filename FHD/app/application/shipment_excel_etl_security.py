@@ -457,8 +457,8 @@ def _reject_output_symlink(name: str, parent_fd: int, parent_path: Path) -> None
     if name in ("", ".", "..") or "/" in name or "\\" in name or "\x00" in name:
         raise ShipmentEtlPathError("output file must be one path component")
     try:
-        # lgtm[py/path-injection] -- leaf already passed _validated_path_component
-        # and parent-prefix containment; opened relative to pinned dir_fd.
+        # codeql[py/path-injection] -- leaf from _validated_path_component; pinned dir_fd.
+        # lgtm[py/path-injection]
         metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
     except FileNotFoundError:
         return
@@ -476,13 +476,16 @@ def _validated_path_component(value: str) -> str:
     """
     component = os.path.basename(value)
     # Reject empty / dot-segments / separators / NUL via a CodeQL-visible guard.
+    # Assign from match.group(0) so taint analysis treats the return as sanitized.
+    matched = re.fullmatch(r"[^/\\]+", component or "")
     if (
         component != value
         or component in (".", "..")
         or "\x00" in component
-        or not re.fullmatch(r"[^/\\]+", component or "")
+        or matched is None
     ):
         raise ShipmentEtlPathError("path contains an invalid component")
+    component = matched.group(0)
     if os.name == "nt":
         try:
             encoded_component = component.encode("utf-16-le", errors="strict")
@@ -803,8 +806,8 @@ def open_etl_input_file(
                 raise ShipmentEtlPathError("non-blocking input open is unavailable")
             # Open FIFOs without waiting for a writer so fstat can reject them.
             flags = os.O_RDONLY | os.O_NOFOLLOW | nonblocking | getattr(os, "O_CLOEXEC", 0)
-            # lgtm[py/path-injection] -- name from _validated_path_component under
-            # resolve_etl_path root containment; dir_fd is the pinned parent.
+            # codeql[py/path-injection] -- name from _validated_path_component; pinned dir_fd.
+            # lgtm[py/path-injection]
             descriptor = os.open(name, flags, dir_fd=parent_fd)
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise ShipmentEtlPathError("input is not a regular file")
@@ -921,8 +924,8 @@ def open_etl_output_file(
             or "\x00" in output_name
         ):
             raise ShipmentEtlPathError("output file must be one path component")
-        # lgtm[py/path-injection] -- output_name from _validated_path_component;
-        # rename stays inside the already-verified parent dir_fd pair.
+        # codeql[py/path-injection] -- output_name from _validated_path_component; pinned dir_fd.
+        # lgtm[py/path-injection]
         os.rename(temp_name, output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
         published = True
     finally:

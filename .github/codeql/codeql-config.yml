@@ -10,6 +10,6 @@ paths-ignore:
   - "**/node_modules/**"
   - "**/dist/**"
 
-# Local barrier pack is NOT listed here: codeql-config `packs:` rejects
-# relative paths ("Invalid CodeQL pack specification"). The pack is loaded
-# via github/codeql-action/init `packs:` in .github/workflows/codeql.yml.
+# Local barrier pack is loaded via github/codeql-action/init `packs:` with a
+# `+./...` local path (codeql-config `packs:` rejects relative specs). Pack
+# root must contain qlpack.yml (model pack, no dependencies).

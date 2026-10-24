@@ -50,6 +50,8 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
+          # Local model pack: + prefix required; qlpack.yml at pack root.
+          packs: ${{ matrix.language == 'python' && '+./.github/codeql/extensions/xcmax-retort-path-model' || '' }}
 
       - name: Perform CodeQL Analysis
         id: analyze

@@ -1,8 +1,7 @@
 name: xcmax/retort-path-model
 version: 1.0.0
 library: true
-dependencies:
-  codeql/python-all: "*"
+# Model packs must not declare dependencies (GitHub CodeQL model-pack rules).
 extensionTargets:
   codeql/python-all: "*"
 dataExtensions:
