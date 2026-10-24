@@ -1,5 +1,5 @@
 {
-  "lines": 2370042,
+  "lines": 2370255,
   "updated": "2026-10-24",
-  "note": "CodeQL SARIF strip covers domains excel_extract resolve_etl_path FP"
+  "note": "merge main conversation ports train B; regenerate after conflict"
 }
