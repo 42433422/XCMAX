@@ -100,6 +100,14 @@ def _windows_file_api():
     ntdll.NtCreateFile.restype = ctypes.c_long
     ntdll.RtlNtStatusToDosError.argtypes = [ctypes.c_long]
     ntdll.RtlNtStatusToDosError.restype = wintypes.ULONG
+    ntdll.NtSetInformationFile.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(IoStatusBlock),
+        wintypes.LPVOID,
+        wintypes.ULONG,
+        wintypes.ULONG,
+    ]
+    ntdll.NtSetInformationFile.restype = ctypes.c_long
     return ctypes, wintypes, kernel32, ntdll, UnicodeString, ObjectAttributes, IoStatusBlock
 
 
@@ -222,6 +230,8 @@ def _windows_open_relative(
         fd_flags = os.O_WRONLY | _windows_binary_flag()
     elif directory:
         access = 0x80 | 0x20 | 0x100000  # READ_ATTRIBUTES | TRAVERSE | SYNCHRONIZE
+        if create:
+            access |= 0x2 | 0x4 | 0x40  # ADD_FILE | ADD_SUBDIRECTORY | DELETE_CHILD
         disposition = 3 if create else 1  # OPEN_IF / OPEN
         options = 0x1 | 0x00200000 | 0x20  # DIRECTORY | OPEN_REPARSE_POINT | SYNCHRONOUS
         attributes_on_create = 0x10
@@ -265,7 +275,7 @@ def _windows_rename_relative(file_fd: int, parent_fd: int, target_name: str) -> 
     from ctypes import wintypes
 
     target_name = _validated_path_component(target_name)
-    _, _, kernel32, *_ = _windows_file_api()
+    _, _, _, ntdll, _, _, IoStatusBlock = _windows_file_api()
 
     class FileRenameInfo(ctypes.Structure):
         _fields_ = [
@@ -286,8 +296,20 @@ def _windows_rename_relative(file_fd: int, parent_fd: int, target_name: str) -> 
     info.FileNameLength = len(encoded)
     ctypes.memmove(ctypes.addressof(info) + FileRenameInfo.FileName.offset, encoded, len(encoded))
     handle = wintypes.HANDLE(msvcrt.get_osfhandle(file_fd))  # type: ignore[attr-defined]
-    if not kernel32.SetFileInformationByHandle(handle, 3, buffer, size):
-        raise _windows_os_error()
+    io_status = IoStatusBlock()
+    # SetFileInformationByHandle converts relative FileName values to absolute
+    # paths while retaining RootDirectory on Windows. NtSetInformationFile
+    # preserves the pinned directory-relative target needed to avoid a path race.
+    status = ntdll.NtSetInformationFile(
+        handle,
+        ctypes.byref(io_status),
+        buffer,
+        size,
+        10,  # FileRenameInformation
+    )
+    if status < 0:
+        win_error = int(ntdll.RtlNtStatusToDosError(status))
+        raise OSError(win_error, ctypes.FormatError(win_error), target_name)
 
 
 def _windows_set_delete_pending(file_fd: int) -> None:
@@ -639,21 +661,8 @@ def resolve_etl_output_path(
     resolved_candidate = Path(os.path.realpath(candidate_text))
     if resolved_candidate != candidate:
         raise ShipmentEtlPathError("output path resolves through a symbolic link")
-    # Create parent components only after validating the complete destination;
-    # the descriptor walk rejects links inserted during directory creation.
-    root = next(
-        (
-            Path(os.path.realpath(str(allowed_root)))
-            for allowed_root in etl_allowed_roots(workspace_root)
-            if parent_path == Path(os.path.realpath(str(allowed_root)))
-            or Path(os.path.realpath(str(allowed_root))) in parent_path.parents
-        ),
-        None,
-    )
-    if root is None:
-        raise ShipmentEtlPathError("path not under allowed dirs")
-    parent_fd = _open_directory_under_root(root, parent_path, create=True)
-    os.close(parent_fd)
+    # Resolve and validate without mutating the filesystem. The secure writer
+    # creates parent components only after confirming safe handle support.
     return candidate
 
 

@@ -480,6 +480,7 @@ def test_etl_output_writer_rejects_parent_symlink_replaced_after_validation(tmp_
     allowed = tmp_path / "allowed"
     allowed.mkdir()
     parent = allowed / "nested"
+    parent.mkdir()
     outside = tmp_path / "outside"
     outside.mkdir()
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
@@ -491,7 +492,7 @@ def test_etl_output_writer_rejects_parent_symlink_replaced_after_validation(tmp_
     def replace_parent_before_open(root, directory, *, create):
         nonlocal calls
         calls += 1
-        if calls == 2:
+        if calls == 1:
             directory.rmdir()
             _create_test_symlink(directory, outside, target_is_directory=True)
         return open_directory(root, directory, create=create)
