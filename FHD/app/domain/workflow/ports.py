@@ -1,16 +1,14 @@
 """Workflow bounded-context ports (canonical).
 
 Application re-exports via ``app.application.workflow.ports``.
-PlanGraph/StateSchema/WorkflowRunResult are Any aliases here.
+PlanGraph/StateSchema/WorkflowRunResult come from application.workflow.types.
 """
 
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-PlanGraph = Any
-StateSchema = Any
-WorkflowRunResult = Any
+from app.application.workflow.types import PlanGraph, StateSchema, WorkflowRunResult
 
 # Re-export the domain types used by the runtime contract so callers can depend
 # on this single port module.
