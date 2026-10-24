@@ -11,11 +11,13 @@ vi.mock('@/api/agentRuns', () => ({
 
 import { buildAgentRunTaskUpdate, extractAgentRunId, useAgentRunEventSync } from './useAgentRunEvents'
 import { isFirstAiTaskPending, queueFirstAiTaskPrompt, readProductFlowCompleted } from '@/constants/productFlow'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 
 describe('useAgentRunEvents', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
     agentRunsApiMock.getRun.mockRejectedValue(new Error('not configured'))
   })
 
@@ -24,6 +26,20 @@ describe('useAgentRunEvents', () => {
     expect(extractAgentRunId({ data: { run_id: 'run_data' } })).toBe('run_data')
     expect(extractAgentRunId({ data: { agent_run: { run_id: 'run_nested' } } })).toBe('run_nested')
     expect(extractAgentRunId({})).toBe('')
+  })
+
+  it.each(['events', 'run', 'error'])('does not apply a late %s result to the next owner', async stage => {
+    const switchOwner = () => setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 2 })
+    agentRunsApiMock.listEvents.mockImplementation(async () => {
+      if (stage !== 'run') switchOwner()
+      if (stage === 'error') throw new Error('old account unavailable')
+      return { data: [{ event_id: 'e', run_id: 'r', event_type: 'tool.completed' }] }
+    })
+    agentRunsApiMock.getRun.mockImplementation(async () => { switchOwner(); return { data: undefined } })
+    const upsertTask = vi.fn(), removeTask = vi.fn()
+    await useAgentRunEventSync({ upsertTask, removeTask }).syncAgentRunEvents('r')
+    expect(upsertTask).not.toHaveBeenCalled()
+    expect(removeTask).not.toHaveBeenCalled()
   })
 
   it('does not turn an ordinary chat lifecycle into a task', () => {

@@ -616,4 +616,19 @@ class WorkflowSession:
                     "workflow_cancelled",
                     {"plan_id": plan.plan_id, "task_id": runtime.get("task_id", "")},
                 )
+            plan = pending["plan"]
+            return _control_reply(
+                "原操作仍在等待确认，尚未执行；请先回复「确认」或「取消」，再处理新的请求。",
+                "workflow_confirmation_required",
+                _enrich_confirmation_inner(
+                    {
+                        "plan_id": plan.plan_id,
+                        "run_id": str(pending.get("agent_run_id") or ""),
+                        "requires_confirmation": True,
+                        "approval_required": bool(pending.get("approval_required")),
+                        "approval_nodes": pending.get("approval_nodes") or [],
+                    },
+                    action="workflow_confirmation_required",
+                ),
+            )
         return (False, None)

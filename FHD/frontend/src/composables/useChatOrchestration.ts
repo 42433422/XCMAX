@@ -30,6 +30,7 @@ import { useApprovalMode } from './useApprovalMode'
 import { useCanonicalChatTaskBridge } from './useCanonicalChatTaskBridge'
 import type { UseChatViewOptions } from './useChatView'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
+import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 import { isStartPrintMessage } from '../utils/textParser'
 import { generateSessionId, normalizeServerContentToHtml } from './chat-orchestration/chatOrchestrationShared'
 import { useChatOrchestrationAutoActions } from './chat-orchestration/useChatOrchestrationAutoActions'
@@ -217,6 +218,13 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     clearPersistedTaskPanelState,
     generateSessionId,
     normalizeServerContentToHtml,
+    onIdentityChange: () => {
+      pendingDbWriteChatRetryMessages.value = null
+      plannerWriteUnlockResumeDraft.value = ''
+      chatSessionActivity.runningIds.value.clear()
+      chatSessionActivity.streamingIds.value.clear()
+      clearVoiceQueue()
+    },
   })
   const {
     showHistory,
@@ -420,6 +428,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const taskSessionId = String(sessionId.value || '').trim() || 'default'
     addMessage(message, 'user')
     const requestScope = {
+      identity: resolveChatIdentity(String(modsStore.activeModId || '')),
       sessionId: taskSessionId,
       messages: [...messages.value],
       turnId: createBusinessHarnessId('turn'),
@@ -429,7 +438,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       await refreshHistorySessions()
       return
     }
+    const isCurrent = () => requestScope.identity === resolveChatIdentity(String(modsStore.activeModId || ''))
+    if (!isCurrent()) return
     const previewModified = await handleShipmentModify(message)
+    if (!isCurrent()) return
     if (previewModified) {
       await saveMessage('user', message, taskSessionId)
       await refreshHistorySessions()
@@ -437,6 +449,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
 
     const printHandled = await handleStartPrintCommand(message)
+    if (!isCurrent()) return
     if (printHandled) {
       await saveMessage('user', message, taskSessionId)
       await refreshHistorySessions()

@@ -417,19 +417,16 @@ class TestFromSession:
         # Authorization 是 FHD JWT，不能当 market token；无 session 绑定时保持空。
         assert adapter.auth_token == ""
 
-    def test_from_session_request_token_overrides_env(self, monkeypatch):
-        """环境变量 MODSTORE_AUTH_TOKEN 优先于无效的 Authorization 头。
-
-        移动端/Web 的 Authorization 是 FHD JWT，不是 MODstore market token；
-        不能用请求头覆盖已配置的 env market token。
-        """
+    def test_request_without_market_binding_cannot_use_the_hosts_account(self, monkeypatch):
         monkeypatch.setenv("MODSTORE_AUTH_TOKEN", "stale_env_token")
+        monkeypatch.setenv("MODSTORE_USER_ID", "999")
         monkeypatch.setenv("MODSTORE_PLATFORM_URL", "http://example.com")
         request = MagicMock()
         request.headers.get.return_value = "Bearer fresh_request_token"
         adapter = ModstorePlatformAdapter.from_session(request=request)
-        assert adapter.auth_token == "stale_env_token"
-        assert adapter._source == "env"
+        assert adapter.auth_token == ""
+        assert adapter.user_id is None
+        assert adapter._source == "session"
 
     def test_from_session_request_headers_exception(self, monkeypatch):
         monkeypatch.delenv("MODSTORE_AUTH_TOKEN", raising=False)

@@ -135,7 +135,6 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
                     runtime_context,
                     _normalize_business_db_entity(params.get("entity"), user_message),
                     str(params.get("operation") or params.get("op") or "create").strip().lower(),
-                    payload,
                     result,
                 )
         return result

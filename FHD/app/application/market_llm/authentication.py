@@ -65,10 +65,12 @@ def resolve_credential(
 ) -> Credential:
     if explicit:
         return Credential(explicit, "kwargs")
-    if environment:
+    # Session-bound calls must not silently inherit a process-wide env token
+    # (#2619 request-model isolation).
+    if environment and not (session_id or request):
         return Credential(environment, "env")
     if not session_id and not request:
-        return Credential("", "env")
+        return Credential(environment or "", "env")
     try:
         ports = load()
         sid = session_id or (ports.session_id(cast(Request, request)) if request else "")

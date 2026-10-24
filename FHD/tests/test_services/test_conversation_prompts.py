@@ -371,9 +371,9 @@ class TestMetadataCacheHash:
     def test_empty_dict_returns_empty(self, mixin):
         assert mixin._metadata_cache_hash({}) == ""
 
-    def test_dict_returns_md5(self, mixin):
+    def test_dict_returns_sha256(self, mixin):
         result = mixin._metadata_cache_hash({"a": 1, "b": 2})
-        expected = hashlib.md5(
+        expected = hashlib.sha256(
             json.dumps({"a": 1, "b": 2}, sort_keys=True, ensure_ascii=False, default=str).encode(
                 "utf-8"
             )

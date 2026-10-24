@@ -136,8 +136,6 @@ class TestPlanWithReactMultiagent:
     def test_with_api_key_llm_failure(self):
         mock_response = Mock()
         mock_response.status_code = 500
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
 
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
@@ -147,8 +145,8 @@ class TestPlanWithReactMultiagent:
             mock_svc.get_context.return_value = None
             mock_get.return_value = mock_svc
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=None,
             ):
                 planner = LLMWorkflowPlanner()
                 result = planner._plan_with_react_multiagent(

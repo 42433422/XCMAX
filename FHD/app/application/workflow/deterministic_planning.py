@@ -276,12 +276,17 @@ class DeterministicPlanner:
                 intent = "business_db_read"
                 entity = self.dependencies.entity(message)
                 keyword = self.dependencies.read_keyword(message, entity)
+                record_id = re.search(r"\bID\s*[:：]?\s*(\d+)", message, re.I)
                 nodes.append(
                     WorkflowNode(
                         node_id="read_business_db",
                         tool_id="business_db",
                         action="read",
-                        params={"entity": entity, "keyword": keyword},
+                        params={
+                            "entity": entity,
+                            "keyword": keyword,
+                            **({"id": int(record_id[1])} if record_id else {}),
+                        },
                         risk="low",
                         description="读取受控业务数据库",
                         idempotent=True,

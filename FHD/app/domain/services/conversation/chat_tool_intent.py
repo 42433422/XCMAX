@@ -25,19 +25,14 @@ _BUSINESS_DB_MUTATION_KEYWORDS = frozenset(
     }
 )
 
-_UNAMBIGUOUS_BUSINESS_DB_MUTATION_KEYWORDS = frozenset(
-    {
-        "新建",
-        "创建",
-        "写入",
-        "修改",
-        "更新",
-        "改为",
-        "改成",
-        "删除",
-        "移除",
-    }
-)
+_UNAMBIGUOUS_BUSINESS_DB_MUTATION_KEYWORDS = _BUSINESS_DB_MUTATION_KEYWORDS - {
+    "新增",
+    "添加",
+    "加入数据库",
+    "添加到数据库",
+    "保存到数据库",
+    "入库",
+}
 
 _MAX_CHAT_INTENT_CHARS = 4096
 
@@ -111,7 +106,11 @@ def attach_explicit_tenant_id(payload: dict[str, Any], message: str) -> dict[str
 
 def looks_like_business_db_write(message: str, lower: str | None = None) -> bool:
     """Recognize explicit CRUD without requiring users to say database jargon."""
-    value = str(message or "")
+    value = re.sub(
+        r"(刚才|刚刚|之前|上次)(?:新增|添加|新建|创建|修改|更新|删除|移除)的",
+        r"\1的",
+        str(message or ""),
+    )
     if len(value) > _MAX_CHAT_INTENT_CHARS:
         # Fail closed: let oversized requests enter the guarded write/clarification path.
         return True
