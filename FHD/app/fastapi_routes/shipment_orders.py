@@ -4,10 +4,4 @@
 在迁移期 ImportError；业务语义不变。
 """
 
-from __future__ import annotations
-
-import sys
-
-from app.fastapi_routes.domains.shipment import shipment_orders as _canonical
-
-sys.modules[__name__] = _canonical
+from app.fastapi_routes.domains.shipment.shipment_orders import *  # noqa: F403
