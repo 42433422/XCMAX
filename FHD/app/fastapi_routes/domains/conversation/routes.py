@@ -68,9 +68,14 @@ def _history_actor(request: Request) -> str:
 
 @router.get("/api/conversations/{session_id}")
 def conversations_get(request: Request, session_id: str, limit: int = Query(default=50)):
-    from app.legacy.routes.conversation.compat_extra import conversations_get as read_history
+    from app.application.task_conversation_store import task_conversation_store
+    from app.request_active_mod_ctx import get_request_active_mod_id
 
-    return read_history(request, session_id, user_id=_history_actor(request), mod_id="")
+    return task_conversation_store.get_history(
+        session_id=session_id.strip(),
+        user_id=int(_history_actor(request)),
+        mod_id=get_request_active_mod_id() or "",
+    )
 
 
 @router.delete("/api/conversations/{session_id}")
