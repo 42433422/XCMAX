@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+_PRE_EXECUTION_STATES = frozenset("accepted approved signed assigned claimed dispatched".split())
+
 
 def execution_succeeded(result: Any) -> bool:
     """Require an explicit successful execution, including nested handler results."""
@@ -18,8 +20,10 @@ def execution_succeeded(result: Any) -> bool:
         or result.get("handler_failed")
         or result.get("blocked_by_risk_gate")
         or result.get("partial")
+        or (result.get("accepted") is True and result.get("completed") is not True)
         or result.get("outcome") == "unknown"
         or result.get("requires_reconciliation")
+        or status in _PRE_EXECUTION_STATES
         or status
         in {
             "failed",
@@ -244,10 +248,14 @@ def role_progress_state(row: dict[str, Any]) -> str:
     receipts = [o for o in receipt_rows if execution_requires_reconciliation(o)]
     if receipts:
         return "pending" if all(_para_task_id(o) for o in receipts) else "manual_review"
-    if status in _WAITING_ROLE_STATES:
-        return "pending"
     if status in {"unknown", "accepted", "reconciling"}:
         return "manual_review"
+    if status in _WAITING_ROLE_STATES | _PRE_EXECUTION_STATES or any(
+        str(o.get("status") or o.get("execution_status") or "").lower()
+        in _WAITING_ROLE_STATES | _PRE_EXECUTION_STATES
+        for o in outputs
+    ):
+        return "pending"
     return "completed" if row.get("ok") is True else "failed"
 
 
