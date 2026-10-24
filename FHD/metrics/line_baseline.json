@@ -1,5 +1,5 @@
 {
-  "lines": 2370033,
+  "lines": 2370042,
   "updated": "2026-10-24",
-  "note": "CodeQL SARIF strip: domains excel_extract resolve_etl_path path-injection FP"
+  "note": "CodeQL SARIF strip covers domains excel_extract resolve_etl_path FP"
 }
