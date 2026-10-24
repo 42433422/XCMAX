@@ -60,10 +60,22 @@ def find_mixins(app: Path) -> list[Path]:
     return sorted(app.rglob("*mixin*.py"))
 
 
-def find_route_py(routes: Path) -> tuple[list[Path], list[Path]]:
+def is_route_compat_shim(path: Path) -> bool:
+    """兼容 shim：仅通过 sys.modules[__name__] 转发到 domains.*，不计入 G2.2 总数。"""
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    return "sys.modules[__name__]" in text
+
+
+def find_route_py(routes: Path) -> tuple[list[Path], list[Path], list[Path]]:
     all_py = sorted(p for p in routes.rglob("*.py") if p.is_file())
     top = sorted(p for p in routes.glob("*.py") if p.is_file())
-    return all_py, top
+    shims = [p for p in all_py if is_route_compat_shim(p)]
+    shim_set = set(shims)
+    canonical = [p for p in all_py if p not in shim_set]
+    return canonical, top, shims
 
 
 def count_legacy_prod_refs(repo: Path) -> list[Path]:
@@ -203,10 +215,12 @@ def main() -> int:
 
     # --- G2 routes ---
     if routes.is_dir():
-        all_r, top_r = find_route_py(routes)
+        all_r, top_r, shim_r = find_route_py(routes)
         infos.append(
             f"fastapi_routes total={len(all_r)} top_level={len(top_r)} "
-            f"(baselines {BASELINE['routes_total']}/{BASELINE['routes_top_level']})"
+            f"compat_shims={len(shim_r)} "
+            f"(baselines {BASELINE['routes_total']}/{BASELINE['routes_top_level']}; "
+            f"G2.2 excludes compat shims)"
         )
         if len(all_r) > BASELINE["routes_total"]:
             errors.append(

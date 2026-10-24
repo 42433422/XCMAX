@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """Shipment ETL HTTP contracts composed from explicit application adapters."""
 
 from __future__ import annotations
@@ -329,3 +330,14 @@ def get_extract_log(log_id: int) -> JSONResponse:
 @router.get("/preview/{log_id}")
 def get_preview(log_id: int) -> JSONResponse:
     return _history().detail(log_id, preview=True)
+=======
+"""兼容入口：canonical 位于 domains.excel.excel_extract_shipment。"""
+
+from __future__ import annotations
+
+import sys
+
+from app.fastapi_routes.domains.excel import excel_extract_shipment as _canonical
+
+sys.modules[__name__] = _canonical
+>>>>>>> origin/main

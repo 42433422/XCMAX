@@ -1,16 +1,12 @@
-"""Excel 提取与生成 API（自归档 excel_extract 蓝图迁移）。"""
+"""兼容入口：canonical 位于 domains.excel.excel_extract。"""
 
 from __future__ import annotations
 
-import logging
-import os
-from datetime import datetime
-from pathlib import Path
-from typing import Any
+import sys
 
-from fastapi import APIRouter, Body, Depends, File, Form, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from app.fastapi_routes.domains.excel import excel_extract as _canonical
 
+<<<<<<< HEAD
 from app.application.shipment_excel_etl_security import (
     ShipmentEtlPathError,
     open_etl_input_file,
@@ -502,3 +498,6 @@ from app.fastapi_routes.excel_extract_shipment import (
 from app.fastapi_routes.excel_extract_shipment import (
     shipment_etl_regenerate as shipment_etl_regenerate,
 )
+=======
+sys.modules[__name__] = _canonical
+>>>>>>> origin/main

@@ -1,5 +1,5 @@
 {
-  "lines": 2369652,
+  "lines": 2370859,
   "updated": "2026-10-24",
-  "note": "Dockerfile.fhd-api: pin brotli>=1.2.0-r7 for CVE-2026-111497 (container-scan)"
+  "note": "merge main; keep CodeQL/ratchet/brotli fixes"
 }

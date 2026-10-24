@@ -585,10 +585,15 @@ def test_excel_generate_missing_data(excel_client: TestClient) -> None:
     assert r.status_code == 400
 
 
+<<<<<<< HEAD
 def test_excel_generate_and_download(
     excel_client: TestClient, tmp_path, configured_excel_workspace: Path
 ) -> None:
     with patch("app.fastapi_routes.excel_extract.TEMP_EXCEL_DIR", str(tmp_path)):
+=======
+def test_excel_generate_and_download(excel_client: TestClient, tmp_path) -> None:
+    with patch("app.fastapi_routes.domains.excel.excel_extract.TEMP_EXCEL_DIR", str(tmp_path)):
+>>>>>>> origin/main
         rows = [{"产品": "漆", "单价": 88}]
         r = excel_client.post(
             "/api/excel/data/generate",
@@ -618,7 +623,7 @@ def test_excel_extract_upload_ok(
     buf = BytesIO()
     _write_xlsx(Path(buf.name) if False else tmp_path / "up.xlsx", [["a"], [1]])
     p = tmp_path / "up.xlsx"
-    with patch("app.fastapi_routes.excel_extract.TEMP_EXCEL_DIR", str(tmp_path)):
+    with patch("app.fastapi_routes.domains.excel.excel_extract.TEMP_EXCEL_DIR", str(tmp_path)):
         with open(p, "rb") as f:
             r = excel_client.post(
                 "/api/excel/data/extract/upload",
