@@ -106,6 +106,43 @@ def test_runtime_context_discards_untrusted_tenant_when_session_has_none():
     assert "tenant_id" not in context
 
 
+@pytest.mark.parametrize("session_state", ["missing", "failed", "authenticated"])
+def test_runtime_context_discards_client_actor_claims(session_state):
+    from types import SimpleNamespace
+
+    from fastapi import Request
+
+    request = Request({"type": "http", "headers": []})
+    claims = {
+        "actor_id": 999,
+        "local_user_id": 999,
+        "authenticated_local_user_id": "victim",
+        "authenticated_username": "victim",
+        "authenticated_display_name": "victim",
+    }
+    mod_authorization = {"mod_id": "authorized-mod"}
+    original = {
+        **claims,
+        "user_id": "web_pro_session",
+        "_mod_authorization": mod_authorization,
+    }
+    with (
+        patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            return_value=SimpleNamespace(id=17) if session_state == "authenticated" else None,
+            side_effect=RuntimeError("session unavailable") if session_state == "failed" else None,
+        ),
+        patch("app.infrastructure.auth.tenant_context.resolve_tenant_id", return_value=None),
+    ):
+        context = ch._runtime_context_with_authenticated_actor(request, original)
+
+    expected = {"actor_id": 17, "local_user_id": 17} if session_state == "authenticated" else {}
+    assert {key: context[key] for key in claims if key in context} == expected
+    assert context["user_id"] == "web_pro_session"
+    assert context["_mod_authorization"] is mod_authorization
+    assert all(original[key] == value for key, value in claims.items())
+
+
 def test_runtime_context_uses_server_verified_tutorial_tenant():
     request = MagicMock()
     request.state.tutorial_active = True
@@ -196,9 +233,10 @@ def test_stream_controls_and_business_writes_use_stateful_mainline(
     message, pending, use_app, source
 ):
     service = MagicMock()
-    service._pending_workflows = (
-        {"web_pro_session": {"agent_run_id": "original"}} if pending else {}
-    )
+    from app.application.agent_task_context import scoped_conversation_user_id
+
+    owner_key = scoped_conversation_user_id("web_pro_session", {"local_user_id": 17})
+    service._pending_workflows = {owner_key: {"agent_run_id": "original"}} if pending else {}
     service.process_chat.return_value = {
         "success": True,
         "response": "已处理",
@@ -332,10 +370,6 @@ def test_executable_sse_request_uses_real_plan_and_waits_for_approval(
         ),
         patch(
             "app.application.workflow.planner.request_planner_completion",
-            side_effect=_bomb,
-        ),
-        patch(
-            "app.application.workflow.planner._get_planner_http_client",
             side_effect=_bomb,
         ),
     ):

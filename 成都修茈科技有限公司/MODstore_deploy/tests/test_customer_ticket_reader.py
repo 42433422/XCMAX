@@ -95,7 +95,9 @@ def test_company_reader_list_detail_pagination_and_redaction(reader_case, audit_
     audit_capture.set_level("INFO", logger="modstore_server.customer_ticket_reader")
     pages = [
         client.get(
-            "/api/customer-service/tickets", headers=headers, params={"limit": 1, "offset": offset}
+            "/api/customer-service/tickets",
+            headers=headers,
+            params={"limit": 1, "offset": offset},
         )
         for offset in (0, 1, 2)
     ]
@@ -173,7 +175,12 @@ def test_legacy_waiting_projection_preserves_raw_history_and_uncertain_records(r
     assert response.json()["ticket"]["latest_action_status"] == expected
     with get_session_factory()() as db:
         action = db.query(CustomerServiceAction).filter_by(ticket_id=ids[0]).one()
-        assert (action.status, action.error, action.result_json, action.updated_at) == original
+        assert (
+            action.status,
+            action.error,
+            action.result_json,
+            action.updated_at,
+        ) == original
         payload = action_payload(action)
         assert payload["status"] == expected
         assert payload.get("recorded_status", payload["status"]) == "failed"
@@ -204,7 +211,10 @@ def test_free_text_credentials_are_redacted_in_list_and_detail(reader_case, kind
         row.title = "Safe issue context " + values[kind]
         row.summary = values[kind]
         db.commit()
-    for path in ("/api/customer-service/tickets", f"/api/customer-service/tickets/{ids[0]}"):
+    for path in (
+        "/api/customer-service/tickets",
+        f"/api/customer-service/tickets/{ids[0]}",
+    ):
         response = client.get(path, headers=headers)
         assert response.status_code == 200
         assert canary not in response.text
@@ -230,7 +240,10 @@ def test_service_grant_cannot_be_used_as_login_or_write_token(reader_case, metho
 @pytest.mark.parametrize("parameter", ["company_id", "instance_id", "tenant_id", "user_id"])
 def test_scope_cannot_be_changed_by_query(reader_case, parameter):
     client, headers, ids, *_ = reader_case
-    for path in ("/api/customer-service/tickets", f"/api/customer-service/tickets/{ids[0]}"):
+    for path in (
+        "/api/customer-service/tickets",
+        f"/api/customer-service/tickets/{ids[0]}",
+    ):
         assert client.get(path, headers=headers, params={parameter: "foreign"}).status_code == 403
 
 

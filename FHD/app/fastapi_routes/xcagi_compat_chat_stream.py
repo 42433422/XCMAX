@@ -141,15 +141,17 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     runtime_context = _facade()._runtime_context_with_authenticated_actor(request, runtime_context)
     runtime_context = _facade().runtime_context_with_tier(runtime_context, ai_tier)
     from app.application import get_ai_chat_app_service
-    from app.application.ai_chat_app_service_dynamic_workflow_pending_mixin import (
-        CANCEL_WORDS,
-        CONFIRM_WORDS,
-    )
+    from app.application.ai_chat.workflow_session import CANCEL_WORDS, CONFIRM_WORDS
     from app.application.normal_chat_dispatch import route_normal_mode_message
     from app.application.workflow.planner import _looks_like_business_db_write
 
     chat_service = get_ai_chat_app_service()
-    scoped_user_id = str(body.user_id or "default")
+    from app.application.agent_task_context import scoped_conversation_user_id
+
+    runtime_context.setdefault(
+        "conversation_id", runtime_context.get("session_id") or str(body.user_id or "default")
+    )
+    scoped_user_id = scoped_conversation_user_id(str(body.user_id or "default"), runtime_context)
     has_pending_workflow = scoped_user_id in chat_service._pending_workflows
     _sales_route = route_normal_mode_message(str(body.message or ""))
     sales_closed_loop_route = (
@@ -207,7 +209,15 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             and _looks_like_business_db_write(message_text, message_text.lower())
         )
     ):
-        with tenant_scope(authenticated_tenant_id):
+        from app.fastapi_routes.xcagi_compat_chat_helpers import (
+            create_modstore_openai_client_from_request,
+        )
+        from app.infrastructure.llm.client import llm_client_factory_scope
+
+        with (
+            tenant_scope(authenticated_tenant_id),
+            llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)),
+        ):
             payload = chat_service.process_chat(
                 user_id=scoped_user_id,
                 message=body.message,

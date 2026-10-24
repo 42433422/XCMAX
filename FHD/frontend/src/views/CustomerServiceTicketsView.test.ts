@@ -94,22 +94,30 @@ describe('customer service ticket list', () => {
     expect(list).toHaveBeenLastCalledWith('UPDATELOG-20261016', 0, '', '', '')
     wrapper.unmount()
   })
-  it('connects category and status filters to the list endpoint and preserves them across pages', async () => {
-    list.mockResolvedValue({ items: [ticket], total: 51 })
+  it.each([['product_issue', 'customer', '产品问题', '客户提交'], ['custom_delivery', 'unknown', '定制交付', '提交人待确认']])('combines %s with status and submitter identity across pages', async (intent, submitter, category, identity) => {
+    list.mockResolvedValue({ items: [{ ...ticket, intent, submitter_type: submitter }], total: 51 })
     const wrapper = mount(CustomerServiceTicketsView); await flushPromises()
-    const filters = wrapper.findAll('select')
-    await filters[0].setValue('product_issue')
-    await filters[1].setValue('resolved')
+    for (const [label, value] of [['问题分类', intent], ['处理状态', 'resolved'], ['提交人身份', submitter]]) await wrapper.get(`select[aria-label="${label}"]`).setValue(value)
     await wrapper.find('form').trigger('submit'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('', 0, '', 'product_issue', 'resolved')
-    expect(wrapper.find('tbody tr').text()).toContain('产品问题')
+    expect(list).toHaveBeenLastCalledWith('', 0, submitter, intent, 'resolved')
+    for (const label of [category, identity]) expect(wrapper.find('tbody tr').text()).toContain(label)
     await wrapper.findAll('button').find(row => row.text() === '下一页')!.trigger('click'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('', 50, '', 'product_issue', 'resolved')
+    expect(list).toHaveBeenLastCalledWith('', 50, submitter, intent, 'resolved')
     wrapper.unmount()
   })
 })
 
 describe('customer service ticket detail', () => {
+  it.each(['admin', 'customer'])('keeps %s submitter identity distinct from the customer and assigned administrator', async submitter_type => {
+    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, user_id: 29, submitter_type, assigned_admin_id: 9 } })
+    const wrapper = mountDetail(); await flushPromises()
+    const facts = wrapper.findAll('.cs-hero .cs-facts > div')
+    const value = (label: string) => facts.find(row => row.find('dt').text() === label)!.find('dd').text()
+    expect(value('客户')).toContain('市场用户 ID 29')
+    expect(value('提交人身份')).toBe(submitter_type === 'admin' ? '管理员提交' : '客户提交')
+    expect(value('指派管理员')).toBe('9')
+    wrapper.unmount()
+  })
   it('shows separate product progress, the actual review receipt and next step', async () => {
     detail.mockResolvedValue({ ...payload, execution_overview: {
       work_order: { binding: 'verified', id: 'WO-PUBLIC', status: 'in_dev' }, blocker: 'review_in_progress',
@@ -122,7 +130,8 @@ describe('customer service ticket detail', () => {
     const overview = wrapper.find('[aria-label="执行总览"]')
     expect(overview.text()).toContain('WO-PUBLIC · 开发中')
     expect(overview.text()).toContain('task-real-12')
-    expect(overview.text()).toContain('已真实接单')
+    expect(overview.text()).toContain('派发已受理')
+    expect(overview.text()).toContain('未提供独立领取凭证')
     expect(overview.text()).toContain('原客户直接确认')
     expect(overview.text()).toContain('未记录正式版本绑定')
     expect(overview.text()).toContain('2026-10-21 20:00:00')

@@ -45,32 +45,32 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/mobile/v1", tags=["mobile-api"])
+router: APIRouter = APIRouter(prefix="/api/mobile/v1", tags=["mobile-api"])
 
 
 async def get_mobile_user(
     request: Request,
     authorization: str | None = Header(default=None, alias="Authorization"),
-):
+) -> Any:
     """Bearer 移动端 JWT 或会话 Cookie / X-Session-ID。"""
     from app.db.models import User
     from app.db.session import get_db
 
     authorization_value = authorization or ""
-    jwt_payload = {}
+    jwt_payload: dict[str, Any] = {}
     if authorization_value.startswith("Bearer "):
         jwt_payload = verify_mobile_jwt(authorization_value[7:].strip()) or {}
     from app.infrastructure.auth.mobile_session import ADMIN_ACCOUNT_KINDS, current_mobile_admin
 
-    if str((jwt_payload or {}).get("account_kind") or "").strip().lower() in ADMIN_ACCOUNT_KINDS:
-        if (jwt_payload or {}).get("typ") != "access":
+    if str(jwt_payload.get("account_kind") or "").strip().lower() in ADMIN_ACCOUNT_KINDS:
+        if jwt_payload.get("typ") != "access":
             return None
         user = current_mobile_admin(jwt_payload.get("user_id"), jwt_payload.get("session_id"))
         _bind_mobile_user_tenant_to_request(request, user)
         return user
     uid = user_id_from_mobile_bearer(authorization_value)
     if uid is None and authorization_value.startswith("Bearer "):
-        fallback_user = _mobile_user_from_jwt_payload(jwt_payload or {})
+        fallback_user = _mobile_user_from_jwt_payload(jwt_payload)
         if fallback_user is not None:
             _bind_mobile_user_tenant_to_request(request, fallback_user)
             return fallback_user
@@ -96,7 +96,7 @@ async def get_mobile_user(
                     return user
         except RECOVERABLE_ERRORS as exc:
             logger.warning("mobile user db lookup failed, falling back to JWT: %s", exc)
-        fallback_user = _mobile_user_from_jwt_payload(jwt_payload or {})
+        fallback_user = _mobile_user_from_jwt_payload(jwt_payload)
         _bind_mobile_user_tenant_to_request(request, fallback_user)
         return fallback_user
 
@@ -439,8 +439,3 @@ async def mobile_health():
     return format_mobile_response(
         data={"service": "xcagi-mobile", "status": "ok"},
     )
-
-
-from app.fastapi_routes.mobile_api_extensions import extension_router  # noqa: E402
-
-router.include_router(extension_router)

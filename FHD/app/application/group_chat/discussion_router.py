@@ -1,104 +1,49 @@
-"""Super-discussion and reply-routing behavior."""
+"""Bounded pre-dispatch discussion and target routing."""
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import Any
 
 from app.application.group_chat.constants import (
     _SUPER_EMPLOYEE_IDS,
     _XIAOC_ASSISTANT_ID,
     CONTEXT_TURNS,
     MAX_RESPONDERS,
-    SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC,
     SUPER_DISCUSSION_DEFAULT_ROUNDS,
     SUPER_DISCUSSION_MAX_ROUNDS,
+    CompletionFn,
 )
-from app.application.group_chat.employee_registry import _is_required_group_member
+from app.application.group_chat.dispatch_targeting import DispatchTargeting
+from app.application.group_chat.ports import (
+    MessageFactory,
+    MessageStore,
+    RouteDiscussion,
+    SuperDiscussionReply,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
-class DiscussionRoutingMixin:
-    if TYPE_CHECKING:
-
-        def __getattr__(self, name: str) -> Any: ...
-
-    def _pick_responders(
+class GroupDiscussion:
+    def __init__(
         self,
-        members: list[dict[str, Any]],
-        text: str,
-        mentions: list[str] | None,
-    ) -> list[dict[str, Any]]:
-        if not members:
-            return []
-        if self._is_broadcast_mention(text):
-            return members[:MAX_RESPONDERS]
-        explicit = self._explicit_member_ids(members, text, mentions)
-        if explicit:
-            targeted = [m for m in members if str(m.get("employee_id")) in explicit]
-            return targeted[:MAX_RESPONDERS]
-        xiaoc = next(
-            (m for m in members if str(m.get("employee_id") or "") == _XIAOC_ASSISTANT_ID),
-            None,
-        )
-        # 真实工作群默认不会全员接话：先由小C接待，点名/广播才拉对应员工响应。
-        return [xiaoc or members[0]]
+        messages: MessageStore,
+        make_row: MessageFactory,
+        *,
+        complete: CompletionFn,
+        timeout: Callable[[], float],
+        reply: SuperDiscussionReply,
+        route: RouteDiscussion,
+    ) -> None:
+        self.messages = messages
+        self.make_row = make_row
+        self.complete = complete
+        self.timeout = timeout
+        self.reply = reply
+        self.route = route
 
-    def _pick_dispatch_targets(
-        self,
-        members: list[dict[str, Any]],
-        text: str,
-        mentions: list[str] | None,
-    ) -> list[dict[str, Any]]:
-        work_capable = [
-            m for m in members if not _is_required_group_member(str(m.get("employee_id") or ""))
-        ]
-        if self._mode != "admin":
-            # 超级员工仅管理端可派工：企业端即便历史已入群也不会被选为派工对象。
-            work_capable = [
-                m
-                for m in work_capable
-                if str(m.get("employee_id") or "") not in _SUPER_EMPLOYEE_IDS
-            ]
-        if not work_capable:
-            return []
-        if self._is_broadcast_mention(text):
-            return work_capable[:MAX_RESPONDERS]
-        explicit = self._explicit_member_ids(members, text, mentions)
-        if explicit:
-            targeted = [m for m in work_capable if str(m.get("employee_id")) in explicit]
-            return targeted[:MAX_RESPONDERS]
-        return work_capable[:MAX_RESPONDERS]
-
-    def _explicit_member_ids(
-        self,
-        members: list[dict[str, Any]],
-        text: str,
-        mentions: list[str] | None,
-    ) -> set[str]:
-        explicit = {str(m).strip() for m in (mentions or []) if str(m).strip()}
-        for member in members:
-            employee_id = str(member.get("employee_id") or "").strip()
-            name = str(member.get("name") or "").strip()
-            if name and f"@{name}" in text:
-                explicit.add(employee_id)
-            if employee_id and f"@{employee_id}" in text:
-                explicit.add(employee_id)
-        return explicit
-
-    @staticmethod
-    def _is_broadcast_mention(text: str) -> bool:
-        lower = (text or "").lower()
-        return any(marker in lower for marker in ("@所有人", "@全体", "@全员", "@all", "@everyone"))
-
-    @staticmethod
-    def _should_run_super_discussion(members: list[dict[str, Any]]) -> bool:
-        super_count = sum(
-            1 for m in members if str(m.get("employee_id") or "") in _SUPER_EMPLOYEE_IDS
-        )
-        return super_count >= 2
-
-    async def _run_super_discussion_then_route(
+    async def run_super_discussion_then_route(
         self,
         *,
         group: dict[str, Any],
@@ -115,8 +60,8 @@ class DiscussionRoutingMixin:
         ][:3]
         discussion_rows: list[dict[str, Any]] = []
         discussion_turns: list[dict[str, str]] = []
-        rounds = self._discussion_round_count()
-        assessment = self._xiaoc_dispatch_assessment(task=task, candidates=candidates)
+        rounds = GroupDiscussion.discussion_round_count()
+        assessment = GroupDiscussion.xiaoc_dispatch_assessment(task=task, candidates=candidates)
         discussion_turns.append(
             {
                 "employee_id": _XIAOC_ASSISTANT_ID,
@@ -125,7 +70,7 @@ class DiscussionRoutingMixin:
                 "round": "0",
             }
         )
-        assessment_row = self._message_row(
+        assessment_row = self.make_row(
             user_id=user_id,
             group_id=group_id,
             role="ai",
@@ -139,15 +84,15 @@ class DiscussionRoutingMixin:
                 "round": 0,
                 "task": task,
                 "phase": "pre_dispatch_assessment",
-                "difficulty": self._dispatch_difficulty(task),
+                "difficulty": DispatchTargeting.dispatch_difficulty(task),
             },
         )
         discussion_rows.append(assessment_row)
         if persist:
-            self._append_messages([assessment_row])
+            self.messages.append([assessment_row])
         for round_index in range(1, rounds + 1):
             for member in super_members:
-                content = await self._super_discussion_reply(
+                content = await self.reply(
                     group=group,
                     member=member,
                     task=task,
@@ -162,7 +107,7 @@ class DiscussionRoutingMixin:
                     "round": str(round_index),
                 }
                 discussion_turns.append(turn)
-                row = self._message_row(
+                row = self.make_row(
                     user_id=user_id,
                     group_id=group_id,
                     role="ai",
@@ -176,9 +121,8 @@ class DiscussionRoutingMixin:
                 )
                 discussion_rows.append(row)
                 if persist:
-                    self._append_messages([row])
-
-        selected, rationale = await self._route_after_discussion(
+                    self.messages.append([row])
+        selected, rationale = await self.route(
             group=group,
             task=task,
             candidates=candidates,
@@ -188,14 +132,14 @@ class DiscussionRoutingMixin:
         selected_names = "、".join(
             str(m.get("name") or m.get("employee_id") or "") for m in selected
         )
-        row = self._message_row(
+        row = self.make_row(
             user_id=user_id,
             group_id=group_id,
             role="ai",
             sender_id="ai-group-dispatcher",
             sender_name="工作流调度",
             sender_avatar="",
-            body=self._format_routing_decision_message(selected_names, rationale),
+            body=DispatchTargeting.format_routing_decision_message(selected_names, rationale),
             kind="routing_decision",
             status="completed" if selected else "blocked",
             payload={
@@ -207,16 +151,15 @@ class DiscussionRoutingMixin:
         )
         discussion_rows.append(row)
         if persist:
-            self._append_messages([row])
-        return discussion_rows, selected
+            self.messages.append([row])
+        return (discussion_rows, selected)
 
-    def _xiaoc_dispatch_assessment(self, *, task: str, candidates: list[dict[str, Any]]) -> str:
-        difficulty = self._dispatch_difficulty(task)
-        difficulty_label = {
-            "simple": "简单",
-            "medium": "中等",
-            "large": "较大",
-        }.get(difficulty, "中等")
+    @staticmethod
+    def xiaoc_dispatch_assessment(*, task: str, candidates: list[dict[str, Any]]) -> str:
+        difficulty = DispatchTargeting.dispatch_difficulty(task)
+        difficulty_label = {"simple": "简单", "medium": "中等", "large": "较大"}.get(
+            difficulty, "中等"
+        )
         candidate_names = "、".join(
             str(m.get("name") or m.get("employee_id") or "")
             for m in candidates
@@ -228,17 +171,13 @@ class DiscussionRoutingMixin:
             strategy = "先讨论模块边界和风险，再按职责拆给多人并行，避免多人做同一件事。"
         else:
             strategy = "先讨论工作量和风险，优先选 1 个负责人；只有跨端或需要复核时才加第 2 人。"
-        return (
-            "【任务讨论】小C先评估，再选负责人。\n"
-            f"难度：{difficulty_label}\n"
-            f"候选：{candidate_names or '暂无超级员工'}\n"
-            f"策略：{strategy}"
-        )
+        return f"【任务讨论】小C先评估，再选负责人。\n难度：{difficulty_label}\n候选：{candidate_names or '暂无超级员工'}\n策略：{strategy}"
 
-    def _discussion_round_count(self) -> int:
+    @staticmethod
+    def discussion_round_count() -> int:
         return max(1, min(SUPER_DISCUSSION_DEFAULT_ROUNDS, SUPER_DISCUSSION_MAX_ROUNDS))
 
-    async def _super_discussion_reply(
+    async def super_discussion_reply(
         self,
         *,
         group: dict[str, Any],
@@ -259,39 +198,28 @@ class DiscussionRoutingMixin:
         prior = "\n".join(
             f"{turn.get('name')}：{turn.get('body')}" for turn in discussion_turns[-6:]
         )
-        system = (
-            f"你是群聊「{group_name}」里的超级员工「{me}」。群成员有：{roster}。\n"
-            "这是执行前讨论阶段，只能做判断、拆解和建议，不要声称已经执行，不要调用 CLI，不要修改文件。\n"
-            "讨论最多 1-2 轮，所以每次发言必须短、具体、可分工。\n"
-            "先判断任务难度和工作量：简单任务建议只派一个最合适 CLI；只有跨领域或工作量大才多人并行，避免多人做同一件事。"
-        )
-        user_content = (
-            f"【用户任务】\n{task}\n\n"
-            f"【群最近对话】\n{transcript or '无'}\n\n"
-            f"【前序讨论】\n{prior or '无'}\n\n"
-            f"第 {round_index} 轮，请以「{me}」身份给出你的执行判断："
-            "任务难不难、是否值得拆、你适合负责什么、需要谁配合、下一步如何派工。用 1-2 句话。"
-        )
+        system = f"你是群聊「{group_name}」里的超级员工「{me}」。群成员有：{roster}。\n这是执行前讨论阶段，只能做判断、拆解和建议，不要声称已经执行，不要调用 CLI，不要修改文件。\n讨论最多 1-2 轮，所以每次发言必须短、具体、可分工。\n先判断任务难度和工作量：简单任务建议只派一个最合适 CLI；只有跨领域或工作量大才多人并行，避免多人做同一件事。"
+        user_content = f"【用户任务】\n{task}\n\n【群最近对话】\n{transcript or '无'}\n\n【前序讨论】\n{prior or '无'}\n\n第 {round_index} 轮，请以「{me}」身份给出你的执行判断：任务难不难、是否值得拆、你适合负责什么、需要谁配合、下一步如何派工。用 1-2 句话。"
         try:
             res = await asyncio.wait_for(
-                self._completion_fn(
+                self.complete(
                     [
                         {"role": "system", "content": system},
                         {"role": "user", "content": user_content},
                     ]
                 ),
-                timeout=SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC,
+                timeout=self.timeout(),
             )
         except TimeoutError:
-            return self._fallback_super_discussion_reply(
+            return GroupDiscussion.fallback_super_discussion_reply(
                 group=group,
                 member=member,
                 task=task,
                 round_index=round_index,
                 reason="模型讨论超时",
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
-            return self._fallback_super_discussion_reply(
+        except RECOVERABLE_ERRORS:
+            return GroupDiscussion.fallback_super_discussion_reply(
                 group=group,
                 member=member,
                 task=task,
@@ -300,9 +228,9 @@ class DiscussionRoutingMixin:
             )
         if isinstance(res, dict) and res.get("success") and str(res.get("content") or "").strip():
             content = str(res["content"]).strip()[:600]
-            if not self._discussion_reply_is_placeholder(content):
+            if not GroupDiscussion.discussion_reply_is_placeholder(content):
                 return content
-            return self._fallback_super_discussion_reply(
+            return GroupDiscussion.fallback_super_discussion_reply(
                 group=group,
                 member=member,
                 task=task,
@@ -310,7 +238,7 @@ class DiscussionRoutingMixin:
                 reason="模型回复过于空泛",
             )
         err = str((res or {}).get("error") or "").strip() if isinstance(res, dict) else ""
-        return self._fallback_super_discussion_reply(
+        return GroupDiscussion.fallback_super_discussion_reply(
             group=group,
             member=member,
             task=task,
@@ -318,8 +246,8 @@ class DiscussionRoutingMixin:
             reason=err or "模型没有给出有效讨论",
         )
 
-    def _fallback_super_discussion_reply(
-        self,
+    @staticmethod
+    def fallback_super_discussion_reply(
         *,
         group: dict[str, Any],
         member: dict[str, Any],
@@ -329,22 +257,22 @@ class DiscussionRoutingMixin:
     ) -> str:
         employee_id = str(member.get("employee_id") or "").strip()
         me = str(member.get("name") or employee_id or "超级员工")
-        difficulty = self._dispatch_difficulty(task)
-        difficulty_label = {
-            "simple": "简单",
-            "medium": "中等",
-            "large": "较大",
-        }.get(difficulty, "中等")
+        difficulty = DispatchTargeting.dispatch_difficulty(task)
+        difficulty_label = {"simple": "简单", "medium": "中等", "large": "较大"}.get(
+            difficulty, "中等"
+        )
         group_members = [
             m
             for m in group.get("members", [])
             if isinstance(m, dict) and str(m.get("employee_id") or "") in _SUPER_EMPLOYEE_IDS
         ]
-        preferred = self._preferred_single_dispatch_target(group_members or [member], task)
+        preferred = DispatchTargeting.preferred_single_dispatch_target(
+            group_members or [member], task
+        )
         preferred_name = str(
             (preferred or {}).get("name") or (preferred or {}).get("employee_id") or me
         )
-        focus = self._super_employee_focus(employee_id, task)
+        focus = DispatchTargeting.super_employee_focus(employee_id, task)
         if difficulty == "simple":
             split_advice = f"不建议拆分，派 {preferred_name} 一个负责人就够，避免重复消耗。"
         elif difficulty == "large":
@@ -358,13 +286,12 @@ class DiscussionRoutingMixin:
             "trae-super-employee": "我适合承接 Trae 执行端、IDE 自动化和备用额度执行。",
         }.get(employee_id, f"我适合负责{focus}。")
         reason_line = f"（{reason}，走确定性讨论兜底）" if reason else ""
-        return (
-            f"{me}：我判断这是{difficulty_label}任务，{split_advice}"
-            f"{collaboration}如果派到我，我只处理这条边界，并在群里回报改动文件、命令和测试结果。{reason_line}"
-        )[:600]
+        return f"{me}：我判断这是{difficulty_label}任务，{split_advice}{collaboration}如果派到我，我只处理这条边界，并在群里回报改动文件、命令和测试结果。{reason_line}"[
+            :600
+        ]
 
     @staticmethod
-    def _discussion_reply_is_placeholder(content: str) -> bool:
+    def discussion_reply_is_placeholder(content: str) -> bool:
         text = str(content or "").strip()
         if not text:
             return True
@@ -386,11 +313,11 @@ class DiscussionRoutingMixin:
             "建议",
         )
         has_judgment = any(k in text for k in judgment_markers)
-        if len(compact) <= 34 and not has_judgment:
+        if len(compact) <= 34 and (not has_judgment):
             return True
-        return any(k in text for k in generic_markers) and not has_judgment
+        return any(k in text for k in generic_markers) and (not has_judgment)
 
-    async def _route_after_discussion(
+    async def route_after_discussion(
         self,
         *,
         group: dict[str, Any],
@@ -399,54 +326,43 @@ class DiscussionRoutingMixin:
         discussion_turns: list[dict[str, str]],
         mentions: list[str] | None,
     ) -> tuple[list[dict[str, Any]], str]:
-        if self._is_broadcast_mention(task) or self._explicit_member_ids(
+        if DispatchTargeting.is_broadcast_mention(task) or DispatchTargeting.explicit_member_ids(
             candidates, task, mentions
         ):
-            return candidates[:MAX_RESPONDERS], "用户已明确点名或广播，按指定成员执行。"
+            return (candidates[:MAX_RESPONDERS], "用户已明确点名或广播，按指定成员执行。")
         candidate_lines = "\n".join(
             f"- {m.get('employee_id')}: {m.get('name')}，{m.get('summary')}" for m in candidates
         )
         discussion = "\n".join(
             f"{turn.get('name')}：{turn.get('body')}" for turn in discussion_turns
         )
-        system = (
-            "你是 XCAGI 群聊工作流调度器。请根据任务、候选员工和讨论，"
-            "先判断工作量，再选择最少但足够的执行员工。简单任务只能选 1 人；"
-            "中等任务优先 1 人、最多 2 人；大任务才多人并行，且不能让多人做同一件事。"
-            "只输出 JSON，不要输出 Markdown。"
-        )
-        user_content = (
-            f"【群】{group.get('name')}\n"
-            f"【任务】{task}\n"
-            f"【候选员工】\n{candidate_lines}\n"
-            f"【讨论】\n{discussion or '无'}\n\n"
-            '输出格式：{"difficulty":"simple|medium|large","target_employee_ids":["..."],"rationale":"一句话说明任务难度、为什么派这些人"}'
-        )
-        difficulty = self._dispatch_difficulty(task)
+        system = "你是 XCAGI 群聊工作流调度器。请根据任务、候选员工和讨论，先判断工作量，再选择最少但足够的执行员工。简单任务只能选 1 人；中等任务优先 1 人、最多 2 人；大任务才多人并行，且不能让多人做同一件事。只输出 JSON，不要输出 Markdown。"
+        user_content = f"""【群】{group.get("name")}\n【任务】{task}\n【候选员工】\n{candidate_lines}\n【讨论】\n{discussion or "无"}\n\n输出格式：{{"difficulty":"simple|medium|large","target_employee_ids":["..."],"rationale":"一句话说明任务难度、为什么派这些人"}}"""
+        difficulty = DispatchTargeting.dispatch_difficulty(task)
         try:
             res = await asyncio.wait_for(
-                self._completion_fn(
+                self.complete(
                     [
                         {"role": "system", "content": system},
                         {"role": "user", "content": user_content},
                     ]
                 ),
-                timeout=SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC,
+                timeout=self.timeout(),
             )
             content = str(res.get("content") or "") if isinstance(res, dict) else ""
-            target_ids, rationale = self._parse_routing_json(content, candidates)
+            target_ids, rationale = DispatchTargeting.parse_routing_json(content, candidates)
             if target_ids:
                 by_id = {str(m.get("employee_id") or ""): m for m in candidates}
                 selected = [by_id[eid] for eid in target_ids if eid in by_id]
                 if difficulty == "simple":
                     selected = selected[:1]
                 if selected:
-                    return selected[:MAX_RESPONDERS], rationale or "按讨论结论分流执行。"
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 调度 LLM 不可用时走确定性兜底
+                    return (selected[:MAX_RESPONDERS], rationale or "按讨论结论分流执行。")
+        except RECOVERABLE_ERRORS:
             pass
-        selected = self._heuristic_dispatch_targets(candidates, task)
+        selected = DispatchTargeting.heuristic_dispatch_targets(candidates, task)
         names = "、".join(str(m.get("name") or m.get("employee_id") or "") for m in selected)
         difficulty_label = {"simple": "简单任务", "medium": "中等任务", "large": "大任务"}.get(
             difficulty, "任务"
         )
-        return selected, f"{difficulty_label}，按工作量和成员职责分工给：{names or '无'}。"
+        return (selected, f"{difficulty_label}，按工作量和成员职责分工给：{names or '无'}。")

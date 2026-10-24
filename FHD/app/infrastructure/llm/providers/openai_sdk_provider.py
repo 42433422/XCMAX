@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import time
+from types import SimpleNamespace
 from typing import Any, cast
 
 from app.utils.metrics import record_ai_call
@@ -52,6 +54,8 @@ class OpenAISdkProvider:
             )
             if hasattr(resp, "model_dump"):
                 return cast("dict[str, Any]", resp.model_dump())
+            if isinstance(resp, SimpleNamespace):
+                return cast("dict[str, Any]", json.loads(json.dumps(resp, default=vars)))
             return dict(resp)
 
         try:

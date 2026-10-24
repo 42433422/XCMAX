@@ -31,12 +31,14 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
         apply_customer_ticket_incident_progress,
     )
     from modstore_server.incident_team_execution import locked_ticket_repair
+    from modstore_server.maintenance_loop.para_client import (
+        _fetch_para_task_state,
+    )
     from modstore_server.para_delegate_handler import (
         _api_base,
         _first_para_error,
         _task_result_snapshot,
     )
-    from modstore_server.self_maintenance_loop_runner import _fetch_para_task_state
 
     global _PENDING_CURSOR
     fetcher = fetcher or _fetch_para_task_state

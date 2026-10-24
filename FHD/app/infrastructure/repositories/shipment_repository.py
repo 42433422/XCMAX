@@ -5,6 +5,6 @@
 `app.infrastructure.repositories.shipment_repository` 引用它。
 """
 
-from app.application.ports.shipment_repository import ShipmentRepository
+from app.domain.shipment.ports import ShipmentRepository
 
 __all__ = ["ShipmentRepository"]

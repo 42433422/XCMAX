@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.security import lan_config, lan_settings_store
 from XCAGI import run_fastapi
 
@@ -36,3 +38,28 @@ def test_lan_settings_use_desktop_data_dir(monkeypatch, tmp_path):
     monkeypatch.delenv("LAN_SETTINGS_FILE", raising=False)
 
     assert lan_settings_store._settings_path() == tmp_path / "data" / "lan_settings.json"
+
+
+@pytest.mark.parametrize("custom_directory", [False, True])
+def test_memory_json_and_lock_stay_outside_packaged_resources(
+    monkeypatch, tmp_path, custom_directory
+):
+    from app.desktop_runtime.paths import configure_desktop_environment
+    from app.services import user_memory_service as memory
+
+    for name in ("XCAGI_USER_MEMORY_DIR", "XCAGI_USER_MEMORY_JSON_PATH"):
+        monkeypatch.delenv(name, raising=False)
+    packaged = tmp_path / "signed-app" / "user_memory"
+    monkeypatch.setattr(memory, "MEMORY_DIR", str(packaged))
+    monkeypatch.setattr(memory, "JSON_MEMORY_PATH", str(packaged / "memory_store.json"))
+    monkeypatch.setattr(memory.UserMemoryStore, "_instance", None)
+    profile = tmp_path / "profile"
+    expected = tmp_path / "custom-memory" if custom_directory else profile / "user_memory"
+    if custom_directory:
+        monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(expected))
+    configure_desktop_environment(profile)
+    store = memory.UserMemoryStore()
+    store.save_memory("desktop-test", store.get_memory("desktop-test"))
+    assert (expected / "memory_store.json").is_file()
+    assert (expected / "memory_store.json.lock").is_file()
+    assert not packaged.exists()

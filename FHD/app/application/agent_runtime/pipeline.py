@@ -66,7 +66,7 @@ def recall_knowledge_context(
         base["status"] = "skipped"
         return base
     try:
-        from app.application.dataset_rag_app_service_part05 import (
+        from app.application.dataset_rag_app_service import (
             get_dataset_rag_app_service,
         )
 

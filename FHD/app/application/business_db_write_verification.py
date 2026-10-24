@@ -7,22 +7,7 @@ from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
 
-
-def _nested_id(value: Any) -> int | None:
-    if not isinstance(value, dict):
-        return None
-    for key in ("id", "customer_id", "product_id", "material_id", "record_id"):
-        try:
-            record_id = int(value.get(key) or 0)
-        except (TypeError, ValueError):
-            record_id = 0
-        if record_id > 0:
-            return record_id
-    for key in ("data", "raw", "result", "record", "shipment"):
-        nested_record_id = _nested_id(value.get(key))
-        if nested_record_id:
-            return nested_record_id
-    return None
+from app.services.tools_workflow_common import _result_record_id as _nested_id
 
 
 def _normalized_fields(payload: dict[str, Any]) -> dict[str, Any]:

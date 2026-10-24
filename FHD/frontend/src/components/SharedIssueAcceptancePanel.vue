@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { apiFetch } from '@/utils/apiBase'
 
@@ -20,6 +20,10 @@ const notes = ref<Record<number, string>>({})
 const error = ref('')
 const busy = ref<number | null>(null)
 const failed = ref<RequestAttempt | null>(null)
+const dialog = ref<HTMLDialogElement | null>(null)
+const trigger = ref<HTMLButtonElement | null>(null)
+const opened = ref(false)
+const loading = ref(false)
 let attempts: Record<number, { decision: Decision; note: string; key: string }> = {}
 let generation = 0
 let pending: AbortController | undefined
@@ -31,7 +35,7 @@ function decisionKey(id: number, decision: Decision) {
 
 function stateText(repair: Repair) {
   if (repair.ready) return '修复已到达当前客户端，请按原来的操作验证是否恢复。'
-  if (repair.can_resolve === false) return '工单已关闭，如问题仍存在可以重新打开。'
+  if (repair.state === 'resolved' || repair.state === 'closed') return '工单已关闭，如问题仍存在可以重新打开。'
   return STATE_TEXT[repair.state || ''] || '修复尚未到达当前客户端，工单将继续跟进交付。'
 }
 
@@ -43,6 +47,7 @@ async function refresh() {
   repairs.value = []
   busy.value = null
   if (!failed.value) error.value = ''
+  loading.value = account.marketUserId !== null
   if (account.marketUserId === null) return
   try {
     const response = await apiFetch('/api/mod-store/issue-runtime', { signal: controller.signal })
@@ -52,6 +57,8 @@ async function refresh() {
     if (current === generation) repairs.value = Array.isArray(body.data?.items) ? body.data.items : []
   } catch (cause) {
     if (current === generation && !controller.signal.aborted) error.value = cause instanceof Error ? cause.message : '工单处理结果暂时无法同步'
+  } finally {
+    if (current === generation) loading.value = false
   }
 }
 
@@ -99,16 +106,31 @@ async function send(request: RequestAttempt) {
 }
 
 function retry() { return failed.value ? send(failed.value) : refresh() }
+async function openResults() {
+  opened.value = true
+  await nextTick()
+  dialog.value?.showModal()
+}
+function closeResults() {
+  dialog.value?.close()
+  opened.value = false
+  trigger.value?.focus()
+}
 watch(() => [account.tenantId, account.marketUserId, account.localUserId, account.impersonatingMarketUserId], () => {
-  failed.value = null; attempts = {}; notes.value = {}; return refresh()
+  closeResults(); failed.value = null; attempts = {}; notes.value = {}; return refresh()
 }, { immediate: true })
 onBeforeUnmount(() => { generation++; pending?.abort() })
 </script>
 
 <template>
-  <details v-if="repairs.length || error || failed" class="repair-acceptance" aria-label="问题工单处理结果">
-    <summary>问题工单处理结果（{{ repairs.length }}）<span v-if="error || failed"> · 同步或保存失败，请展开重试</span></summary>
+  <section v-if="repairs.length || error || failed || opened" class="repair-acceptance">
+    <button ref="trigger" type="button" :aria-expanded="opened" aria-haspopup="dialog" @click="openResults">问题工单处理结果（{{ repairs.length }}）<span v-if="error || failed"> · 同步或保存失败</span></button>
+    <Teleport to="body">
+    <dialog v-if="opened" ref="dialog" aria-label="问题工单处理结果" class="repair-dialog" @cancel.prevent="closeResults" @click="($event.target === dialog) && closeResults()">
+    <header><strong>问题工单处理结果（{{ repairs.length }}）</strong><button type="button" :disabled="loading || busy !== null" @click="refresh">刷新</button><button type="button" autofocus @click="closeResults">关闭</button></header>
     <div class="repair-list">
+    <p v-if="loading" role="status">正在同步工单…</p>
+    <p v-else-if="!repairs.length && !error && !failed">当前没有待核对的工单。</p>
     <p v-if="error || failed" role="alert">{{ error || failed?.message }} <button type="button" :disabled="busy !== null" @click="retry">重试</button></p>
     <article v-for="repair in repairs" :key="repair.id">
       <strong>{{ repair.ticket_no }}</strong>
@@ -131,20 +153,24 @@ onBeforeUnmount(() => { generation++; pending?.abort() })
       </template>
     </article>
     </div>
-  </details>
+    </dialog>
+    </Teleport>
+  </section>
 </template>
 
 <style scoped>
-.repair-acceptance { flex: 0 0 auto; min-width: 0; margin-bottom: 8px; border: 1px solid var(--border-color, #ddd); border-radius: 8px; overflow: hidden; background: var(--xc-color-surface, #fff); }
-.repair-acceptance > summary { padding: 8px 12px; }
-.repair-list { max-height: min(24vh, 200px); overflow: auto; padding: 0 12px 12px; overflow-wrap: anywhere; }
+.repair-acceptance { flex: none; min-width: 0; }
+.repair-dialog { box-sizing: border-box; width: min(720px, calc(100vw - 32px)); max-height: 80dvh; padding: 0; border: 1px solid var(--xc-color-border, #ddd); border-radius: 12px; color: var(--xc-color-text, #1f2329); background: var(--xc-color-surface, #fff); }
+.repair-dialog::backdrop { background: #0006; }
+.repair-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
+.repair-list { max-height: 65dvh; overflow: auto; padding: 0 16px 16px; overflow-wrap: anywhere; }
 .repair-description summary { font-weight: normal; line-height: 1.5; }
 article { padding: 8px 0; border-top: 1px solid var(--border-color, #ddd); }
 summary { cursor: pointer; }
-summary span { color: var(--xc-color-danger, #b42318); }
+.repair-acceptance span { color: var(--xc-color-danger, #b42318); }
 article + article { margin-top: 16px; }
 p { margin: 8px 0; }
-input { box-sizing: border-box; margin: 4px 8px; padding: 8px; width: min(240px, 100%); max-width: 100%; }
+input { box-sizing: border-box; display: block; margin: 8px 0; padding: 8px; width: min(360px, 100%); max-width: 100%; }
 button { padding: 8px 12px; cursor: pointer; }
 button + button { margin-left: 8px; }
 button:disabled { cursor: default; opacity: .6; }

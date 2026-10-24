@@ -9,7 +9,8 @@ import threading
 import uuid
 import weakref
 from contextlib import ExitStack
-from typing import Any
+from pathlib import Path
+from typing import Any, Protocol
 
 import psutil
 
@@ -31,32 +32,38 @@ def owner_alive(owner: str) -> bool:
         return False
 
 
+class PersistentDatasetState(Protocol):
+    storage_path: Path
+
+    def _load_persisted_state(self) -> None: ...
+
+
 class DatasetStateLock:
-    def __init__(self, service):
-        self.service = weakref.proxy(service)
+    def __init__(self, repository: PersistentDatasetState) -> None:
+        self.repository = weakref.proxy(repository)
         self.thread_lock = threading.Lock()
         self.connection: sqlite3.Connection | None = None
         self.revision: tuple[int, int] | None = None
 
-    def revision_now(self):
-        path = self.service._storage_path
+    def revision_now(self) -> tuple[int, int] | None:
+        path = self.repository.storage_path
         return (path.stat().st_mtime_ns, path.stat().st_size) if path.exists() else None
 
-    def __enter__(self):
+    def __enter__(self) -> DatasetStateLock:
         with ExitStack() as cleanup:
             self.thread_lock.acquire()
             cleanup.callback(self.__exit__, None, None, None)
-            path = self.service._storage_path
+            path = self.repository.storage_path
             path.parent.mkdir(parents=True, exist_ok=True)
             self.connection = sqlite3.connect(str(path) + ".lock.sqlite3", timeout=1)
             self.connection.execute("BEGIN IMMEDIATE")
             if self.revision != self.revision_now():
-                self.service._load_persisted_state()
+                self.repository._load_persisted_state()
                 self.revision = self.revision_now()
             cleanup.pop_all()
             return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args: object) -> None:
         if self.connection is not None:
             self.connection.close()
             self.connection = None

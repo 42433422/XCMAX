@@ -11,7 +11,10 @@ from typing import Any, Dict, List
 
 import pytest
 
-from modstore_server import self_maintenance_loop_runner as mod
+import modstore_server.maintenance_loop.dispatch as _maintenance_dispatch
+import modstore_server.maintenance_loop.para_client as _maintenance_para_client
+import modstore_server.maintenance_loop.results as _maintenance_results
+import modstore_server.maintenance_loop.store as _maintenance_store
 
 
 @pytest.fixture
@@ -22,7 +25,7 @@ def captured_ledger(monkeypatch):
     def _fake_append(record: Dict[str, Any]) -> None:
         records.append(record)
 
-    monkeypatch.setattr(mod, "_append_ledger", _fake_append)
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", _fake_append)
     return records
 
 
@@ -53,8 +56,12 @@ def _patch_dispatch(monkeypatch, sequence: List[Dict[str, Any]]):
             )
         return sequence[len(calls) - 1]
 
-    monkeypatch.setattr(mod, "_execute_employee_task_with_retries", _fake_dispatch)
-    monkeypatch.setattr(mod, "_fetch_para_task_report_excerpt", lambda *a, **k: "")
+    monkeypatch.setattr(
+        _maintenance_dispatch, "_execute_employee_task_with_retries", _fake_dispatch
+    )
+    monkeypatch.setattr(
+        _maintenance_para_client, "_fetch_para_task_report_excerpt", lambda *a, **k: ""
+    )
     return calls
 
 
@@ -69,7 +76,7 @@ def test_code_step_first_failure_then_success(monkeypatch, captured_ledger):
     )
 
     result, ok, failure_reason, para_meta, report, code_fix_rounds, marker_rounds = (
-        mod._run_step_with_inner_retries(
+        _maintenance_dispatch._run_step_with_inner_retries(
             employee_id="vibe-coding-maintainer",
             step_name="code",
             task_text="base task",
@@ -104,13 +111,15 @@ def test_code_step_all_attempts_fail(monkeypatch, captured_ledger):
         ],
     )
 
-    _, ok, failure_reason, _, _, code_fix_rounds, _ = mod._run_step_with_inner_retries(
-        employee_id="vibe-coding-maintainer",
-        step_name="code",
-        task_text="base task",
-        extra={},
-        user_id=1,
-        run_id="run-2",
+    _, ok, failure_reason, _, _, code_fix_rounds, _ = (
+        _maintenance_dispatch._run_step_with_inner_retries(
+            employee_id="vibe-coding-maintainer",
+            step_name="code",
+            task_text="base task",
+            extra={},
+            user_id=1,
+            run_id="run-2",
+        )
     )
 
     assert ok is False
@@ -148,7 +157,7 @@ def test_code_step_accepted_para_timeout_does_not_start_duplicate_retry(
     }
     calls = _patch_dispatch(monkeypatch, [timeout])
 
-    outcome = mod._run_step_with_inner_retries(
+    outcome = _maintenance_dispatch._run_step_with_inner_retries(
         employee_id="vibe-coding-maintainer",
         step_name="code",
         task_text="base task",
@@ -165,8 +174,8 @@ def test_code_step_accepted_para_timeout_does_not_start_duplicate_retry(
     assert len(calls) == 1
     assert not [record for record in captured_ledger if record.get("phase") == "step_retry"]
     # Outer dispatch retry path must also refuse to treat this as transient.
-    assert mod._is_accepted_para_wait_timeout(timeout) is True
-    assert mod._is_transient_employee_dispatch_failure(timeout) is False
+    assert _maintenance_results._is_accepted_para_wait_timeout(timeout) is True
+    assert _maintenance_results._is_transient_employee_dispatch_failure(timeout) is False
 
 
 def test_para_success_nested_delivery_validation_marks_completion(monkeypatch, captured_ledger):
@@ -211,7 +220,7 @@ def test_para_success_nested_delivery_validation_marks_completion(monkeypatch, c
     calls = _patch_dispatch(monkeypatch, [success])
 
     result, ok, failure_reason, para_meta, _, code_fix_rounds, marker_rounds = (
-        mod._run_step_with_inner_retries(
+        _maintenance_dispatch._run_step_with_inner_retries(
             employee_id="vibe-coding-maintainer",
             step_name="code",
             task_text="base task with kb writeback",
@@ -228,12 +237,12 @@ def test_para_success_nested_delivery_validation_marks_completion(monkeypatch, c
     assert len(calls) == 1
     assert para_meta["task_id"] == "task-dv-ok"
     assert para_meta["branch"] == "devfleet/codex/fix-dv-ok"
-    gate = mod._delivery_validation_gate(result)
+    gate = _maintenance_results._delivery_validation_gate(result)
     assert gate["found"] is True
     assert gate["ok"] is True
     assert gate["reason"] == "delivery_validation_passed"
     assert gate["delivery_validation"] is dv
-    assert mod._employee_result_ok(result) is True
+    assert _maintenance_results._employee_result_ok(result) is True
     assert not [record for record in captured_ledger if record.get("phase") == "step_retry"]
 
 
@@ -263,12 +272,12 @@ def test_nested_delivery_validation_failure_blocks_completion_even_if_envelope_o
         }
     }
 
-    gate = mod._delivery_validation_gate(result)
+    gate = _maintenance_results._delivery_validation_gate(result)
     assert gate["found"] is True
     assert gate["ok"] is False
     assert gate["reason"] == "delivery_validation_failed"
-    assert mod._employee_result_ok(result) is False
-    reason = mod._extract_failure_reason(result, {})
+    assert _maintenance_results._employee_result_ok(result) is False
+    reason = _maintenance_results._extract_failure_reason(result, {})
     assert "delivery_validation_failed" in reason
     assert "exit=1" in reason
 
@@ -294,13 +303,15 @@ def test_review_step_marker_missing_then_present(monkeypatch, captured_ledger):
         ],
     )
 
-    _, ok, _, _, _, code_fix_rounds, marker_rounds = mod._run_step_with_inner_retries(
-        employee_id="change-request-auditor",
-        step_name="review",
-        task_text="base review",
-        extra={},
-        user_id=1,
-        run_id="run-3",
+    _, ok, _, _, _, code_fix_rounds, marker_rounds = (
+        _maintenance_dispatch._run_step_with_inner_retries(
+            employee_id="change-request-auditor",
+            step_name="review",
+            task_text="base review",
+            extra={},
+            user_id=1,
+            run_id="run-3",
+        )
     )
 
     assert ok is True
@@ -340,7 +351,7 @@ def test_review_step_incomplete_dimensions_protocol_rerun(monkeypatch, captured_
         ],
     )
 
-    _, ok, _, _, _, _, marker_rounds = mod._run_step_with_inner_retries(
+    _, ok, _, _, _, _, marker_rounds = _maintenance_dispatch._run_step_with_inner_retries(
         employee_id="change-request-auditor",
         step_name="review",
         task_text="base review",
@@ -389,7 +400,7 @@ def test_qa_executor_outage_retries_fresh_report_only_task(monkeypatch, captured
         ],
     )
 
-    _, ok, _, _, report, _, marker_rounds = mod._run_step_with_inner_retries(
+    _, ok, _, _, report, _, marker_rounds = _maintenance_dispatch._run_step_with_inner_retries(
         employee_id="test-qa-runner",
         step_name="qa",
         task_text="base qa",
@@ -415,13 +426,15 @@ def test_review_step_dispatch_failure_no_inner_retry(monkeypatch, captured_ledge
         ],
     )
 
-    _, ok, failure_reason, _, _, _, marker_rounds = mod._run_step_with_inner_retries(
-        employee_id="test-qa-runner",
-        step_name="qa",
-        task_text="base qa",
-        extra={},
-        user_id=1,
-        run_id="run-4",
+    _, ok, failure_reason, _, _, _, marker_rounds = (
+        _maintenance_dispatch._run_step_with_inner_retries(
+            employee_id="test-qa-runner",
+            step_name="qa",
+            task_text="base qa",
+            extra={},
+            user_id=1,
+            run_id="run-4",
+        )
     )
 
     assert ok is False
@@ -442,7 +455,7 @@ def test_code_step_env_overrides_retry_count(monkeypatch, captured_ledger):
         ],
     )
 
-    _, ok, _, _, _, code_fix_rounds, _ = mod._run_step_with_inner_retries(
+    _, ok, _, _, _, code_fix_rounds, _ = _maintenance_dispatch._run_step_with_inner_retries(
         employee_id="vibe-coding-maintainer",
         step_name="code",
         task_text="base task",
@@ -466,7 +479,7 @@ def test_step_retry_trace_does_not_pollute_final_phase(monkeypatch, captured_led
         ],
     )
 
-    mod._run_step_with_inner_retries(
+    _maintenance_dispatch._run_step_with_inner_retries(
         employee_id="vibe-coding-maintainer",
         step_name="code",
         task_text="base task",
