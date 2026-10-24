@@ -1,5 +1,5 @@
 {
-  "lines": 2352051,
+  "lines": 2352059,
   "updated": "2026-10-25",
-  "note": "debt24 follow-up：evidence_assets 支持归档校验；恢复门禁所需 capability 原件；巨型矩阵种子外置 JSON；ruff format"
+  "note": "debt24：提交 evidence 归档 MANIFEST（无 blob）供 CI 无 ~/XCMAX-archives 时校验；脚本+8 行"
 }

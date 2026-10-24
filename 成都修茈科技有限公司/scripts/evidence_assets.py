@@ -44,7 +44,14 @@ def archive_manifest_index() -> dict[str, dict]:
     if env:
         roots.append(Path(env))
     roots.append(Path.home() / "XCMAX-archives")
+    # Committed manifests travel with the repo so CI can verify without blobs.
     index: dict[str, dict] = {}
+    in_repo = []
+    # ROOT may not be defined yet at function definition time; resolve relative to this file.
+    repo_root = Path(__file__).resolve().parents[2]
+    in_repo_dir = repo_root / "FHD" / "docs" / "evidence" / "archives"
+    if in_repo_dir.is_dir():
+        roots.append(in_repo_dir)
     for root in roots:
         if not root.is_dir():
             continue

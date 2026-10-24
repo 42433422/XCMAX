@@ -52,3 +52,6 @@ CI runners that lack the archive mounts must either:
 
 Capability-center public assets remain COS-served; local git copies are not required
 for every historical acceptance video.
+
+
+Committed MANIFEST copies (no blobs): `FHD/docs/evidence/archives/evidence-bulk-*/MANIFEST.json` — CI uses these when `~/XCMAX-archives` is absent.
