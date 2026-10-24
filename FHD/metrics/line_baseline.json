@@ -1,5 +1,5 @@
 {
-  "lines": 2337408,
+  "lines": 2336055,
   "updated": "2026-10-24",
-  "note": "PR2581 preserves private delivery across releases and fixes refund failure replies; archive three unregistered superseded historical documents with byte-verified external recovery copies; ratchet decreases and whole PR is net-deleting."
+  "note": "Apply official namespace-isolation security patch, verify backported provenance and fix original delivery lint; archive unregistered June intake snapshot with verified recovery copy. Net deletion preserved."
 }

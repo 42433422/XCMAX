@@ -466,8 +466,6 @@ def seed_previous_delivery(scope: dict[str, Any], evidence: dict[str, Any]) -> N
                 continue
             with zipfile.ZipFile(io.BytesIO(raw)) as archive:
                 for name, digest in signed["files_sha256"].items():
-                    import hashlib
-
                     data = archive.read(name if name in archive.namelist() else f"{mid}/{name}")
                     path = (destination / name).resolve()
                     if (

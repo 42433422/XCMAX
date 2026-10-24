@@ -26,14 +26,18 @@ EXPECTED_PROVENANCE: Final[dict[str, tuple[str | None, str, str | None]]] = {
     "xcagi_langgraph_checkpoint_backends/checkpoint-postgres": (
         None,
         "fcdf520938469c8e0992ca2075d6a9582c33260f",
-        "3.1.1",
+        "3.1.3",
     ),
     "xcagi_langgraph_checkpoint_backends/checkpoint-sqlite": (
         None,
         "b2926a0ff9589c28c7e01fe7cdbb337b86d5a4b4",
-        "3.1.1",
+        "3.1.2",
     ),
-    "xcagi_langgraph_sdk": ("sdk==0.4.4", "d5f4b2aa960940effc8430165ab3604038e817af", "0.4.4"),
+    "xcagi_langgraph_sdk": (
+        "sdk==0.4.4",
+        "d5f4b2aa960940effc8430165ab3604038e817af",
+        "0.4.4",
+    ),
 }
 
 # vendored module -> package directory relative to FHD/packages that must own it.
@@ -86,12 +90,16 @@ def _assert_module_source(module_name: str, expected_pkg: str) -> None:
         if not resolved.is_relative_to(frozen_root):
             raise AssertionError(f"{module_name} 逃逸冻结应用目录: {resolved}")
         if resolved not in _frozen_module_candidates(frozen_root, module_name):
-            raise AssertionError(f"{module_name} 冻结模块路径与模块名不匹配: {resolved}")
+            raise AssertionError(
+                f"{module_name} 冻结模块路径与模块名不匹配: {resolved}"
+            )
         return
     if not resolved.is_relative_to(_packages_root()):
         raise AssertionError(f"{module_name} 未解析到 vendored packages: {resolved}")
     if expected_pkg not in resolved.as_posix():
-        raise AssertionError(f"{module_name} 来自 {resolved}，不属于期望包 {expected_pkg}")
+        raise AssertionError(
+            f"{module_name} 来自 {resolved}，不属于期望包 {expected_pkg}"
+        )
 
 
 def _assert_provenance(package_dir: str) -> None:
@@ -112,7 +120,9 @@ def _assert_provenance(package_dir: str) -> None:
             f"{package_dir} PROVENANCE upstream_tag={actual_tag!r} != {expected_tag!r}"
         )
     if actual_sha != expected_sha:
-        raise AssertionError(f"{package_dir} PROVENANCE commit={actual_sha!r} != {expected_sha!r}")
+        raise AssertionError(
+            f"{package_dir} PROVENANCE commit={actual_sha!r} != {expected_sha!r}"
+        )
     if expected_version is not None and actual_version != expected_version:
         raise AssertionError(
             f"{package_dir} PROVENANCE version={actual_version!r} != {expected_version!r}"
