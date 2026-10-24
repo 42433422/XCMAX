@@ -537,7 +537,6 @@ PY
 fi
 unset BUILD_JWT_SECRET
 
-# Immutable release root must stay traversable for unprivileged nginx (mode 0700 from mktemp).
 chmod 0555 "$FINAL_ROOT"
 
 DEPLOY_DIR="$FINAL_ROOT/$MODSTORE_SUBDIR"
