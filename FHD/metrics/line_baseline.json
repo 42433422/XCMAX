@@ -1,5 +1,5 @@
 {
-  "lines": 2336434,
+  "lines": 2336768,
   "updated": "2026-10-24",
-  "note": "完整检出：统一 Critic 路由并适配实际模型入口与跨平台临时路径测试"
+  "note": "valid baseline after rebase onto #2611"
 }
