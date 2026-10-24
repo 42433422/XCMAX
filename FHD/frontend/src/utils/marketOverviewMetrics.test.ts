@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMetric, parseMarketOverviewStats } from './marketOverviewMetrics'
+import { formatMetric, parseMarketOverviewStats } from '../../../admin-console/src/utils/marketOverviewMetrics'
 
 describe('parseMarketOverviewStats', () => {
   it('reads catalog and user business metrics', () => {

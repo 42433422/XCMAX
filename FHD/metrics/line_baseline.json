@@ -1,5 +1,5 @@
 {
-  "lines": 2336751,
+  "lines": 2336728,
   "updated": "2026-10-24",
-  "note": "tickets #61/#65: business-language daily digest + admin MarketOverviewPanel/route/tests (no iframe); baseline was under-counted by ~317 vs actual tracked lines"
+  "note": "remove duplicate marketOverviewMetrics.ts (keep admin-console SSOT + aliases)"
 }

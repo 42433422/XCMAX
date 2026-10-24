@@ -58,6 +58,7 @@ const adminModuleAliases = [
   'composables/useWechatGroupBridge.ts',
   'utils/dutyRosterEmployeeList.ts',
   'utils/automationPolicyLines.ts',
+  'utils/marketOverviewMetrics.ts',
   'components/admin/AutomationPolicyPanel.vue',
 ].flatMap((sub) => {
   const full = path.join(adminSrc, sub)

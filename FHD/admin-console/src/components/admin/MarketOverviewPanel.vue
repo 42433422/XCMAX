@@ -59,7 +59,7 @@ import {
   formatMetric,
   parseMarketOverviewStats,
   type MarketOverviewStats,
-} from '../../utils/marketOverviewMetrics'
+} from '@/utils/marketOverviewMetrics'
 
 const loading = ref(true)
 const loadError = ref('')
