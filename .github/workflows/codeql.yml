@@ -44,15 +44,28 @@ jobs:
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
 
+      - name: Install local CodeQL path-barrier model pack
+        if: (github.event_name != 'pull_request' || steps.paths.outputs.run == 'true') && matrix.language == 'python'
+        run: |
+          set -euo pipefail
+          # Actions `packs:` only accepts scope/name; stage the in-repo model pack
+          # into the CLI package cache so init can resolve xcmax/retort-path-model@1.0.0
+          # without a GHCR publish (barriers for _validated_path_component ReturnValue).
+          dest="${HOME}/.codeql/packages/xcmax/retort-path-model/1.0.0"
+          rm -rf "${dest}"
+          mkdir -p "${dest}"
+          cp -a .github/codeql/extensions/xcmax-retort-path-model/. "${dest}/"
+          test -f "${dest}/qlpack.yml"
+          echo "Installed local model pack at ${dest}"
+
       - name: Initialize CodeQL
         if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
-          # Do not pass local +./ packs here: Actions packs: requires scope/name
-          # (published packs). ETL path sinks are covered by _validated_path_component
-          # + codeql[py/path-injection] suppressions; qlpack kept for offline CLI.
+          # Published-style name; pack body staged into ~/.codeql/packages above.
+          packs: ${{ matrix.language == 'python' && 'xcmax/retort-path-model@1.0.0' || '' }}
 
       - name: Perform CodeQL Analysis
         id: analyze

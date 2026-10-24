@@ -10,6 +10,5 @@ paths-ignore:
   - "**/node_modules/**"
   - "**/dist/**"
 
-# Local model pack lives under extensions/ for offline CLI use. GitHub
-# Actions `packs:` only accepts published scope/name packs; ETL sinks use
-# _validated_path_component + codeql[py/path-injection] suppressions.
+# Local model pack staged into ~/.codeql/packages in codeql.yml, then loaded
+# as xcmax/retort-path-model@1.0.0 (barrierModel for ETL path helpers).
