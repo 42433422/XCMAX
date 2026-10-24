@@ -330,3 +330,30 @@ def test_real_adapter_transports_database_scalars_and_reports_unsupported_result
     assert time.monotonic() - started < 10
     assert invalid["outcome"] == "unknown" and invalid["retryable"] is False
     assert "tool_result_transport_failed" in str(invalid)
+
+
+@pytest.mark.parametrize("cleanup_error", [FileNotFoundError, PermissionError])
+def test_cleanup_races_preserve_results_and_unresolved_cleanup_blocks_reuse(
+    monkeypatch, cleanup_error
+):
+    from app.application.agent_orchestrator import tool_process
+
+    remove = tool_process.shutil.rmtree
+
+    def raced_cleanup(folder, *, onerror):
+        remove(folder, onerror=onerror)
+        onerror(os.unlink, folder, (cleanup_error, cleanup_error("cleanup race"), None))
+
+    monkeypatch.setattr(tool_process.shutil, "rmtree", raced_cleanup)
+    executor = FixtureExecutor()
+    result = execute_with_tool_deadline(
+        executor, _step(), runtime_context={"tenant_id": 9}, timeout_seconds=5
+    )
+    if cleanup_error is FileNotFoundError:
+        assert result["success"] and result["tenant"] == 9
+        assert not getattr(executor, "_tool_cleanup_failed", False)
+    else:
+        assert result["outcome"] == "unknown"
+        assert executor._tool_cleanup_failed
+        again = execute_with_tool_deadline(executor, _step(), runtime_context={}, timeout_seconds=5)
+        assert again["error_code"] == "tool_cleanup_unresolved"

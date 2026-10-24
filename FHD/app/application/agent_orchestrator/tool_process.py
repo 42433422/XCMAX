@@ -121,6 +121,11 @@ def _reap(process) -> bool:
     return not process.is_alive()
 
 
+def _ignore_missing_cleanup_entry(_function, _path, error):
+    if not isinstance(error[1], FileNotFoundError):
+        raise error[1]
+
+
 def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
     from app.infrastructure.llm.client import capture_worker_llm_scope
 
@@ -168,8 +173,11 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
             if clean:
                 process.close()
         if clean:
-            shutil.rmtree(folder)
-        else:
+            try:
+                shutil.rmtree(folder, onerror=_ignore_missing_cleanup_entry)
+            except OSError:
+                clean = False
+        if not clean:
             executor._tool_cleanup_failed = True
     if not clean:
         return {"outcome": "unknown", "error_code": "tool_cleanup_failed", "retryable": False}
