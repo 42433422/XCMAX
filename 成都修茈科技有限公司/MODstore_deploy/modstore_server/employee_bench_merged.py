@@ -10,11 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.employee_bench")
 
@@ -154,15 +149,6 @@ async def generate_bench_tasks(
 
 # --- from employee_bench_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_bench")
 
 
 def _derive_bench_execution_ok(raw: _facade().Dict[str, _facade().Any]) -> bool:
@@ -400,15 +386,6 @@ def _weighted_overall(level_scores: _facade().Dict[int, float]) -> float:
 
 # --- from employee_bench_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_bench")
 
 
 def _parse_machine_score_from_text(text: str) -> _facade().Optional[int]:
@@ -797,15 +774,6 @@ def _load_audit_dimension_env_defaults() -> _facade().Dict[str, str]:
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_bench")
-
-
 async def _audit_single_pack(employee_id: str) -> _facade().Dict[str, _facade().Any]:
     """对单个员工包构建 zip 并调沙盒审核，返回原始 audit 结果。"""
     from modstore_server.employee_ai_scaffold import build_employee_pack_zip
@@ -939,15 +907,6 @@ async def _run_five_dim_audit(
 
 # --- from employee_bench_part04.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_bench")
 
 
 async def run_and_score_bench(

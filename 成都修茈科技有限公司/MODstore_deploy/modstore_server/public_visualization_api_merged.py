@@ -10,9 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
 def _facade():
     return importlib.import_module("modstore_server.public_visualization_api")
 
@@ -328,15 +325,6 @@ def _prom_instant(expr: str) -> float | None:
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.public_visualization_api")
-
-
 def _metrics_base_url() -> str:
     return (
         _facade().os.environ.get("XIUCI_VISUALIZATION_METRICS_URL")
@@ -582,12 +570,6 @@ def _coalesce(*values: float | None) -> float | None:
 
 # --- from public_visualization_api_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.public_visualization_api")
 
 
 def _build_monitor_payload(
@@ -981,12 +963,6 @@ def _empty_made_token_metrics() -> dict[str, _facade().Any]:
 # --- from public_visualization_api_part02_part01_part03.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.public_visualization_api")
-
 
 def _read_platform_made_metrics() -> tuple[dict[str, _facade().Any], dict[str, _facade().Any]]:
     """读取管理端同源的「平台制作 Token」公开快照。"""
@@ -1235,12 +1211,6 @@ def _build_public_visualization_data() -> dict[str, _facade().Any]:
 # --- from public_visualization_api_part02_part02.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.public_visualization_api")
-
 
 def clear_public_visualization_cache() -> None:
     """Clear the per-process cache; exposed for tests and controlled reloads."""
@@ -1252,13 +1222,6 @@ def clear_public_visualization_cache() -> None:
 
 # --- from public_visualization_api_part03.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.public_visualization_api")
 
 
 def get_public_visualization_data() -> dict[str, _facade().Any]:

@@ -10,11 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.employee_executor")
 
@@ -55,13 +50,6 @@ def _emp_im_notify_boss(employee_id: str, manifest: _facade().Any, body: str, ho
 
 # --- from employee_executor_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
 
 
 def _is_all_hands_cognition_context(inp: _facade().Any) -> bool:
@@ -130,15 +118,6 @@ def _resolve_metric_user_id(session: _facade().Any, user_id: object) -> int:
 
 # --- from employee_executor_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
 
 
 def _executor_max_concurrent() -> int:
@@ -567,15 +546,6 @@ def _perception_web_rankings(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
-
-
 _PARA_FIRST_PLANNING_EMPLOYEES = frozenset(
     {"vibe-coding-maintainer", "change-request-auditor", "test-qa-runner"}
 )
@@ -951,15 +921,6 @@ def _cognition_sync(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
-
-
 def _action_wechat_notify(
     actions_cfg: _facade().Dict[str, _facade().Any],
     reasoning: _facade().Dict[str, _facade().Any],
@@ -1289,15 +1250,6 @@ def _trusted_system_duty_contract_execution(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
-
-
 def _action_agent_runner(
     actions_cfg: _facade().Dict[str, _facade().Any],
     reasoning: _facade().Dict[str, _facade().Any],
@@ -1572,15 +1524,6 @@ def _action_agent_runner(
 
 # --- from employee_executor_part05_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
 
 
 def _employee_pack_extract_root(
@@ -1870,15 +1813,6 @@ def _filter_handlers_vibe_coding_maintainer(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
-
-
 def _actions_real(
     config: _facade().Dict[str, _facade().Any],
     reasoning: _facade().Dict[str, _facade().Any],
@@ -2139,15 +2073,6 @@ def _extract_token_count(reasoning: _facade().Dict[str, _facade().Any]) -> int:
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
-
-
 def _auto_wrap_execution_result_to_change_requests(
     employee_id: str,
     user_id: int,
@@ -2367,15 +2292,6 @@ def _evaluate_employee_risk_gate(
 """Employee execution transaction phase."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
-
-
 def _execute_employee_phase_01(state):
     state["pack"] = _facade().load_employee_pack_resolved(state["session"], state["employee_id"])
     state["manifest"], burn_in_eligibility = (state["pack"].get("manifest") or {}, {})
@@ -2584,15 +2500,6 @@ def _execute_employee_phase_01(state):
 """Employee execution transaction phase."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
-
-
 def _execute_employee_phase_04(state):
     if not state["handler_ok"]:
         state["suppress_lifecycle_events"] = isinstance(state["payload"], dict) and str(
@@ -2773,15 +2680,6 @@ def _execute_employee_phase_04(state):
 """Employee execution transaction phase."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
-
-
 def _execute_employee_phase_03(state):
     state["duration_ms"] = round((_facade().time.perf_counter() - state["t0"]) * 1000, 3)
     state["llm_tokens"] = (
@@ -2901,15 +2799,6 @@ def _execute_employee_phase_03(state):
 
 # --- from employee_executor_part07_phase02.py ---
 """Employee execution transaction phase."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
 
 
 def _execute_employee_phase_02(state):
@@ -3196,15 +3085,6 @@ def _execute_employee_phase_02(state):
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
-
-
 def execute_employee_task(
     employee_id: str,
     task: str,
@@ -3363,15 +3243,6 @@ def get_employee_status(employee_id: str) -> _facade().Dict[str, _facade().Any]:
 
 # --- from employee_executor_part08.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_executor")
 
 
 def list_employees() -> _facade().List[_facade().Dict[str, _facade().Any]]:

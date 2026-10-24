@@ -11,9 +11,6 @@ from modstore_server.time_rail_workflow_derive_tail import _derive_from_sources_
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
 def _facade():
     return importlib.import_module("modstore_server.time_rail_workflow")
 
@@ -277,13 +274,6 @@ def _line_total_sections(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.time_rail_workflow")
-
-
 def _ensure_non_triggered_time_rail_decisions(
     derived: _facade().Dict[str, _facade().Dict[str, _facade().Any]],
     *,
@@ -516,13 +506,6 @@ def _retention_metric() -> _facade().Optional[_facade().Any]:
 
 # --- from time_rail_workflow_part02_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.time_rail_workflow")
 
 
 def collect_node_runtime_status(
@@ -791,15 +774,6 @@ def graph_api_payload() -> _facade().Dict[str, _facade().Any]:
 
 # --- from time_rail_workflow_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.time_rail_workflow")
 
 
 from modstore_server.time_rail_workflow_derive_tail import _derive_from_sources_tail

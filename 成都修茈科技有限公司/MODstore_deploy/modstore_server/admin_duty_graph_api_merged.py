@@ -10,11 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.admin_duty_graph_api")
 
@@ -417,12 +412,6 @@ def _topo_sort(
 # --- from admin_duty_graph_api_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.admin_duty_graph_api")
-
 
 def _serialize_run(session: _facade().Session, run_id: int) -> _facade().Dict[str, _facade().Any]:
     run = session.get(_facade().DutyGraphRun, int(run_id))
@@ -654,15 +643,6 @@ def get_duty_graph_no_key_employees(
 
 # --- from admin_duty_graph_api_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.admin_duty_graph_api")
 
 
 def execute_duty_graph_programmatic(

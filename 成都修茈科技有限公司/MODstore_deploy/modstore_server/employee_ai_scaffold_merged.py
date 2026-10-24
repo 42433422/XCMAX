@@ -8,9 +8,6 @@ import importlib
 """Employee scaffold helpers split by generation responsibility."""
 
 
-import importlib
-
-
 def _facade():
     return importlib.import_module("modstore_server.employee_ai_scaffold")
 
@@ -445,13 +442,6 @@ def _normalize_action_handlers(raw_handlers: _facade().Any) -> _facade().List[st
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_ai_scaffold")
-
-
 def _strip_json_fence(text: str) -> str:
     t = (text or "").strip()
     if t.startswith("```"):
@@ -776,13 +766,6 @@ def append_employee_stub_files_to_zip(
 
 # --- from employee_ai_scaffold_part_2_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_ai_scaffold")
 
 
 def build_employee_pack_zip(

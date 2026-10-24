@@ -8,9 +8,6 @@ from typing import Any, Dict
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -305,13 +302,6 @@ async def butler_daily_digest_artifacts(
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.agent_butler_api")
 
 
 def _butler_tools_for_user(
@@ -521,13 +511,6 @@ class CorpTranslateDTO(_facade().BaseModel):
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.agent_butler_api")
 
 
 class ButlerActionDTO(_facade().BaseModel):
@@ -968,11 +951,6 @@ async def butler_corp_tts(request: _facade().Request, body: CorpTtsDTO):
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.agent_butler_api")
 
 
 class CorpIntakeFillDTO(_facade().BaseModel):
@@ -982,14 +960,7 @@ class CorpIntakeFillDTO(_facade().BaseModel):
 
 
 "Implementation extracted from the public facade module."
-import importlib
 from typing import Any, Dict
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.agent_butler_api")
 
 
 def _clip_text(val: _facade().Any, max_len: int) -> str:
@@ -1426,13 +1397,6 @@ async def update_butler_skill_active(
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.agent_butler_api")
 
 
 @_facade().router.post("/orchestrate")
@@ -1823,13 +1787,6 @@ async def butler_all_hands_report_session_start(
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.agent_butler_api")
 
 
 @_facade().router.post("/all-hands-report")

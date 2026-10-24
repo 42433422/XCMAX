@@ -10,9 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
 def _facade():
     return importlib.import_module("modstore_server.research_tools")
 
@@ -65,15 +62,6 @@ def _resolve_counter_key(
 
 # --- from research_tools_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.research_tools")
 
 
 def _request_error_fragment(exc: BaseException) -> str:
@@ -555,13 +543,6 @@ async def web_search_with_fallback(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.research_tools")
-
-
 def _company_name_key(name: str) -> str:
     return _facade().re.sub("\\s+", "", (name or "").strip().casefold())
 
@@ -697,15 +678,6 @@ def contact_web_company_search_enabled() -> bool:
 
 # --- from research_tools_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.research_tools")
 
 
 def clean_web_company_candidate(title: str, query: str = "") -> str:
@@ -1056,15 +1028,6 @@ async def github_repo_snapshot_tool(
 
 # --- from research_tools_part04_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.research_tools")
 
 
 async def build_research_context(

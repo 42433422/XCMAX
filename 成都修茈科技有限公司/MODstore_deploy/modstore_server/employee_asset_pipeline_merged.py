@@ -14,9 +14,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
 def _facade():
     return importlib.import_module("modstore_server.employee_asset_pipeline")
 
@@ -125,16 +122,10 @@ def _runtime_package_name(pack_id: str, employee_id: str = "") -> str:
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
 from modstore_server.infrastructure.private_asset_storage import (
     draft_asset_directory,
     reset_draft_directory,
 )
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_asset_pipeline")
 
 
 def _infer_accepted_extensions(
@@ -389,13 +380,6 @@ def _preflight_scaffold_write_access(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_asset_pipeline")
-
-
 def build_rule_spec(
     brief: str,
     asset_manifest: _facade().Dict[str, _facade().Any],
@@ -636,13 +620,6 @@ def _employee_id_from_pack_id(pack_id: str) -> str:
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_asset_pipeline")
-
-
 def _normalize_manifest(
     manifest: _facade().Dict[str, _facade().Any],
     brief: str,
@@ -797,13 +774,6 @@ def _sanitize_workflow_bundles(manifest: _facade().Dict[str, _facade().Any]) -> 
 
 # --- from employee_asset_pipeline_part03.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_asset_pipeline")
 
 
 def _fallback_manifest(
@@ -1266,15 +1236,6 @@ def _fallback_manifest(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_asset_pipeline")
-
-
 def reconcile_employee_pack_manifest(
     pack_dir: _facade().Path, *, brief: str = ""
 ) -> _facade().Dict[str, _facade().Any]:
@@ -1703,15 +1664,6 @@ def render_build_xcemp_py(pack_id: str) -> str:
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_asset_pipeline")
-
-
 def _extract_python_code(text: str) -> str:
     raw = (text or "").strip()
     if not raw:
@@ -2135,13 +2087,6 @@ def manifest_expects_word_runtime(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_asset_pipeline")
-
-
 def pack_has_direct_python_runtime(pack_dir: _facade().Path) -> bool:
     """Disk pack contains vendor convert and/or rule_spec for asset/direct_python employees."""
     rs = pack_dir / "rule_spec.json"
@@ -2180,15 +2125,6 @@ def pack_has_direct_python_runtime(pack_dir: _facade().Path) -> bool:
 
 # --- from employee_asset_pipeline_part06_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_asset_pipeline")
 
 
 def persist_manifest_to_pack_dir(
@@ -2476,12 +2412,6 @@ def validate_asset_employee_pack(
 
 # --- from employee_asset_pipeline_part06_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_asset_pipeline")
 
 
 async def run_asset_employee_scaffold_async(

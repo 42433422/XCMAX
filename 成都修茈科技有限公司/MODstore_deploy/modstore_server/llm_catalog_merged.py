@@ -7,8 +7,6 @@ import importlib
 # --- from llm_catalog_part01.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
 
 def _facade():
     return importlib.import_module("modstore_server.llm_catalog")
@@ -21,12 +19,6 @@ def clear_all_catalog_cache() -> None:
 
 # --- from llm_catalog_part02.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.llm_catalog")
 
 
 async def _fetch_openai_compatible_records(
@@ -286,12 +278,6 @@ def _models_detailed(
 # --- from llm_catalog_part03.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.llm_catalog")
-
 
 async def get_models_for_provider(
     session, user_id: int, provider: str, *, force_refresh: bool = False
@@ -429,12 +415,6 @@ async def get_models_for_credentials(
 
 # --- from llm_catalog_part04.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.llm_catalog")
 
 
 async def _probe_one_provider_list(

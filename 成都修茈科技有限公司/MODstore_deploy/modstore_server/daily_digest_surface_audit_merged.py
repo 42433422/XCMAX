@@ -7,7 +7,6 @@ import importlib
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 "Implementation extracted from the public facade module."
-import importlib
 
 
 def _facade():
@@ -22,11 +21,6 @@ def _internal_api_base() -> str:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest_surface_audit")
 
 
 @_facade().dataclass(frozen=True)
@@ -41,11 +35,6 @@ class SurfaceTarget:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest_surface_audit")
 
 
 def _base_url() -> str:
@@ -376,11 +365,6 @@ def _build_pw_full_targets(
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest_surface_audit")
 
 
 def build_digest_surface_targets() -> _facade().List[SurfaceTarget]:
@@ -544,13 +528,6 @@ def _save_dir(day: str) -> _facade().Optional[_facade().Path]:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest_surface_audit")
 
 
 def _path_needs_market_auth(path: str) -> bool:
@@ -934,13 +911,6 @@ async def _goto_with_retry(page: _facade().Any, url: str, *, timeout_ms: int) ->
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest_surface_audit")
 
 
 def _surface_capture_retry_count() -> int:
@@ -1106,13 +1076,6 @@ async def _capture_one(
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest_surface_audit")
 
 
 def lane_employee_ids(lane: str, *, limit: int = 6) -> _facade().List[str]:
@@ -1191,13 +1154,6 @@ def _build_lane_analysis_user_content(
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest_surface_audit")
 
 
 async def analyze_surface_lanes(
@@ -1427,13 +1383,6 @@ async def _capture_surface_target_async(
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest_surface_audit")
 
 
 async def run_surface_audit_async() -> _facade().Dict[str, _facade().Any]:
@@ -1817,11 +1766,6 @@ def _lane_count_overview_html(results: _facade().List[_facade().Dict[str, _facad
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest_surface_audit")
 
 
 def _surface_audit_badge(

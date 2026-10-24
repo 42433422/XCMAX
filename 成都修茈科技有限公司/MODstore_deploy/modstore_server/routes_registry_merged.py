@@ -9,8 +9,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 # --- from routes_registry_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
 
 def _facade():
     return importlib.import_module("modstore_server.routes_registry")
@@ -362,15 +360,6 @@ def api_mod_workflow_employee_scaffold(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.routes_registry")
-
-
 @_facade().api_router.get("/api/mods/{mod_id}/export-employee-pack", tags=["authoring"])
 def api_export_workflow_employee_pack(
     mod_id: str,
@@ -639,15 +628,6 @@ async def api_mod_ai_scaffold(
 
 # --- from routes_registry_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.routes_registry")
 
 
 @_facade().api_router.post("/api/mods/{mod_id}/frontend/regenerate", tags=["authoring"])
@@ -1022,13 +1002,6 @@ def _include_optional(app: _facade().FastAPI, module_path: str) -> None:
 
 # --- from routes_registry_part03.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.routes_registry")
 
 
 def _maybe_mount_dev_docs(app: _facade().FastAPI) -> None:

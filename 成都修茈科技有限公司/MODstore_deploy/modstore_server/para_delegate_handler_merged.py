@@ -21,11 +21,6 @@ from modstore_server.para_delegate_task_payloads import (
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.para_delegate_handler")
 
@@ -476,15 +471,9 @@ def _first_para_error(snapshot: _facade().Dict[str, _facade().Any]) -> str:
 """Implementation extracted from the public facade module."""
 
 
-import importlib
 from typing import Any
 
 from modstore_server.customer_issue_delivery_contract import execution_requires_reconciliation
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.para_delegate_handler")
 
 
 def _fallback_order_tools() -> list[str]:
@@ -758,15 +747,8 @@ def _post_para_api(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
 import json
 import re
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.para_delegate_handler")
 
 
 def _independent_check_plan(req):
@@ -1242,20 +1224,13 @@ def _para_subtask_title(req: _facade().Dict[str, _facade().Any], index: int, tot
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
 from modstore_server.dot_ticket_dispatch import prepare_dolt_ticket_payload
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.para_delegate_task_payloads import (
     PreparedTaskGroup,
     prepare_task_group,
     task_payload_options,
     validated_check_units,
 )
-
-
-def _facade():
-    return importlib.import_module("modstore_server.para_delegate_handler")
 
 
 def _attach_credential_grant(prompt: str, task_id: str) -> _facade().Any:

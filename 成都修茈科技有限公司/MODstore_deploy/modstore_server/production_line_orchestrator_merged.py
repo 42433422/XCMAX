@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 
 "Implementation extracted from the public facade module."
-import importlib
 
 
 def _facade():
@@ -64,11 +63,6 @@ class FlowStep:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.production_line_orchestrator")
 
 
 def _bind_step_executors(steps: _facade().List[FlowStep]) -> _facade().List[FlowStep]:
@@ -79,11 +73,6 @@ def _bind_step_executors(steps: _facade().List[FlowStep]) -> _facade().List[Flow
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.production_line_orchestrator")
 
 
 @_facade().dataclass
@@ -96,15 +85,10 @@ class StepResult:
 
 
 "Implementation extracted from the public facade module."
-import importlib
 
 from modstore_server.production_line_orchestrator_productionlineorchestrator_mixin01 import (
     _ProductionLineOrchestratorPart01Mixin,
 )
-
-
-def _facade():
-    return importlib.import_module("modstore_server.production_line_orchestrator")
 
 
 class ProductionLineOrchestrator(_ProductionLineOrchestratorPart01Mixin):
@@ -123,11 +107,6 @@ class FiveLineDefinition:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.production_line_orchestrator")
 
 
 def _step_status_map(pipeline: _facade().Dict[str, _facade().Any]) -> _facade().Dict[str, str]:
@@ -183,11 +162,6 @@ def get_five_line_status() -> _facade().Dict[str, _facade().Any]:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.production_line_orchestrator")
 
 
 def get_production_line_orchestrator() -> ProductionLineOrchestrator:

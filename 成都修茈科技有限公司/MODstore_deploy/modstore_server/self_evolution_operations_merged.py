@@ -10,11 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.self_evolution_knowledge")
 
@@ -421,15 +416,6 @@ def _knowledge_query(
 
 # --- from self_evolution_operations_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.self_evolution_knowledge")
 
 
 def build_self_evolution_context(

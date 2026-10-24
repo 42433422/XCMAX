@@ -7,7 +7,6 @@ import importlib
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 "Implementation extracted from the public facade module."
-import importlib
 
 
 def _facade():
@@ -36,13 +35,6 @@ class _CredsState:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.butler_qq_bridge")
 
 
 def _load_creds_from_pool() -> _facade().Optional[_facade().Dict[str, _facade().Any]]:
@@ -275,13 +267,6 @@ class _TokenState:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.butler_qq_bridge")
 
 
 async def get_access_token(force_refresh: bool = False) -> str:
@@ -327,11 +312,6 @@ async def get_access_token(force_refresh: bool = False) -> str:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.butler_qq_bridge")
 
 
 class _SeqRegistry:
@@ -353,13 +333,6 @@ class _SeqRegistry:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.butler_qq_bridge")
 
 
 async def _send(
@@ -515,13 +488,6 @@ class _BotContext:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.butler_qq_bridge")
 
 
 def invalidate_bot_ctx_cache() -> None:
@@ -666,13 +632,6 @@ async def _get_bot_ctx_by_employee(employee_id: str) -> _facade().Optional[_BotC
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.butler_qq_bridge")
 
 
 def _strip_at(text: str) -> str:
@@ -786,11 +745,6 @@ async def _resolve_reply(employee_id: str, user_text: str) -> str:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.butler_qq_bridge")
 
 
 async def _execute_employee_for_qq(employee_id: str, user_text: str) -> str:
@@ -845,13 +799,6 @@ async def _execute_employee_for_qq(employee_id: str, user_text: str) -> str:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.butler_qq_bridge")
 
 
 async def _employee_chat(user_text: str, *, employee_id: str) -> str:
@@ -959,11 +906,6 @@ async def _butler_chat(user_text: str) -> str:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.butler_qq_bridge")
 
 
 class _PushDTO(_facade().BaseModel):
@@ -1037,13 +979,6 @@ async def qq_webhook_probe() -> _facade().JSONResponse:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.butler_qq_bridge")
 
 
 def _specific_app_secret(webhook_key: str) -> str:

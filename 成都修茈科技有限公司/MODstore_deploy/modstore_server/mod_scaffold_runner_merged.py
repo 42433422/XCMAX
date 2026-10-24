@@ -10,11 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.mod_scaffold_runner")
 
@@ -421,15 +416,6 @@ def materialize_employee_pack_if_missing(employee_id: str) -> bool:
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_scaffold_runner")
-
-
 def rehydrate_employee_pack_bundles(
     employee_id: str, *, db: _facade().Session, user: _facade().User
 ) -> bool:
@@ -573,15 +559,6 @@ def employee_pack_consistency_warnings(mod_dir: _facade().Path) -> _facade().Lis
 
 # --- from mod_scaffold_runner_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_scaffold_runner")
 
 
 def global_registered_employee_ids(*, db: _facade().Optional[_facade().Session] = None) -> set[str]:
@@ -1017,15 +994,6 @@ async def run_employee_pack_code_validation_report(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_scaffold_runner")
-
-
 def resolve_llm_provider_model(
     db: _facade().Session,
     user: _facade().User,
@@ -1130,12 +1098,6 @@ async def resolve_llm_provider_model_auto(
 
 # --- from mod_scaffold_runner_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_scaffold_runner")
 
 
 async def generate_workflow_for_intent(
@@ -1500,15 +1462,6 @@ async def generate_mod_suite_blueprint_async(
 
 # --- from mod_scaffold_runner_part03_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_scaffold_runner")
 
 
 def import_mod_suite_repository(
@@ -1944,15 +1897,6 @@ def run_mod_suite_mod_sandbox(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_scaffold_runner")
-
-
 async def run_mod_suite_ai_scaffold_async(
     db: _facade().Session,
     user: _facade().User,
@@ -2321,15 +2265,6 @@ async def attach_nl_workflow_to_employee_pack_dir(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_scaffold_runner")
-
-
 async def run_employee_ai_scaffold_async(
     db: _facade().Session,
     user: _facade().User,
@@ -2538,15 +2473,6 @@ async def run_employee_ai_scaffold_async(
 
 # --- from mod_scaffold_runner_part05_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_scaffold_runner")
 
 
 async def register_mod_employee_packs_async(
@@ -2952,15 +2878,6 @@ def _ensure_workflow_start_end_skeleton(
 
 # --- from mod_scaffold_runner_part05_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_scaffold_runner")
 
 
 def patch_workflow_graph_employee_nodes(

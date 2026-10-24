@@ -8,9 +8,6 @@ import importlib
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
 def _facade():
     return importlib.import_module("modstore_server.strategic_layer_api")
 
@@ -368,13 +365,6 @@ def list_autonomy_rules(
 
 # --- from strategic_layer_api_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.strategic_layer_api")
 
 
 @_facade().router.post("/autonomy/seed", response_model=_facade().Dict[str, _facade().Any])

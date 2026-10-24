@@ -8,9 +8,6 @@ import importlib
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
 def _facade():
     return importlib.import_module("modstore_server.market_catalog_api")
 
@@ -292,13 +289,6 @@ def api_host_foundation_employee_pack_download(
 
 # --- from market_catalog_browse_routes_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.market_catalog_api")
 
 
 @_facade().router.get("/market/catalog/workflow-employee-pack/bundle")

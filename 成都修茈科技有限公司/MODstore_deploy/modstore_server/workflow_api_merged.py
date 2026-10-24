@@ -10,9 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
 def _facade():
     return importlib.import_module("modstore_server.workflow_api")
 
@@ -109,15 +106,6 @@ def _repair_empty_employee_workflow_graph(
 
 # --- from workflow_api_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.workflow_api")
 
 
 class CreateWorkflowBody(_facade().BaseModel):
@@ -491,12 +479,6 @@ async def list_workflows_by_employee(
 
 # --- from workflow_api_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.workflow_api")
 
 
 @_facade().router.get("/{workflow_id}", summary="获取工作流详情")
@@ -876,15 +858,6 @@ async def sandbox_run_workflow(
 
 # --- from workflow_api_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.workflow_api")
 
 
 @_facade().router.post("/{workflow_id}/execute", summary="执行工作流")
@@ -1268,15 +1241,6 @@ async def get_workflow_version(
 
 # --- from workflow_api_part03_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.workflow_api")
 
 
 @_facade().router.post(

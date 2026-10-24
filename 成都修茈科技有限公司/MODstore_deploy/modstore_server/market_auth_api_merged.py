@@ -10,11 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.market_auth_api")
 
@@ -446,15 +441,6 @@ def api_internal_cs_intake_ensure_enterprise_profile(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.market_auth_api")
-
-
 @_facade().router.get(
     "/internal/cs-intake/enterprise-account",
     summary="客服 · 查询企业客户登录账号（服务间，不含密码明文）",
@@ -658,12 +644,6 @@ def _verify_and_consume_verification_code(email: str, code: str) -> None:
 # --- from market_auth_api_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.market_auth_api")
-
 
 class InternalSsoIssueTokenDTO(_facade().BaseModel):
     username: str = _facade().Field(default="", max_length=128)
@@ -750,12 +730,6 @@ def api_avatar_file(
 
 # --- from market_auth_api_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.market_auth_api")
 
 
 class SendPhoneCodeDTO(_facade().BaseModel):

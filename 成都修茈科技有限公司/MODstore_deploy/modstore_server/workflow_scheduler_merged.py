@@ -10,11 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.workflow_scheduler")
 
@@ -323,15 +318,6 @@ def _run_collector_with_timeout(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.workflow_scheduler")
-
-
 def _employee_auto_cron_enabled() -> bool:
     return _facade().os.environ.get("MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED", "1").strip().lower() in (
         "1",
@@ -409,7 +395,6 @@ def _register_employee_cron_jobs() -> None:
         _facade().logger.info("employee auto cron disabled (MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED=0)")
         return
     try:
-        import importlib
 
         task_router = importlib.import_module("modstore_server.task_router")
         employee_runtime = importlib.import_module("modstore_server.employee_runtime")

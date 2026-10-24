@@ -8,9 +8,6 @@ import importlib
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
 def _facade():
     return importlib.import_module("modstore_server.mod_ai_scaffold")
 
@@ -52,13 +49,6 @@ def build_scaffold_zip(
 
 # --- from mod_ai_scaffold_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_ai_scaffold")
 
 
 def _merge_traditional_sidebar(

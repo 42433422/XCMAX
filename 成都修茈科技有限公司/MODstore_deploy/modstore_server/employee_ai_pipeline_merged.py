@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 
 "Implementation extracted from the public facade module."
-import importlib
 
 
 def _facade():
@@ -411,11 +410,6 @@ async def stage_suggest_skills(
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_ai_pipeline")
 
 
 async def stage_suggest_pricing(
@@ -619,11 +613,6 @@ class GeneratedCode:
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_ai_pipeline")
 
 
 async def stage_generate_code(
@@ -970,11 +959,6 @@ async def stage_generate_code(
 
 
 "Implementation extracted from the public facade module."
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_ai_pipeline")
 
 
 async def refine_system_prompt(

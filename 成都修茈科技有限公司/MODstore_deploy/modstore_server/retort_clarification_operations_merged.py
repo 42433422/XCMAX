@@ -10,11 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.retort_clarification_gate")
 
@@ -442,12 +437,6 @@ def _latest_session_for_subject(
 
 # --- from retort_clarification_operations_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.retort_clarification_gate")
 
 
 def evaluate_retort_clarification_gate(

@@ -17,9 +17,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
 def _facade():
     return importlib.import_module("modstore_server.mod_employee_agent_runner")
 
@@ -50,7 +47,6 @@ def _llm_timeout_seconds() -> float:
 """Implementation extracted from the public facade module."""
 
 
-import importlib
 import os
 import stat
 from pathlib import Path
@@ -59,11 +55,6 @@ from modstore_server.employee_change_request_verification import (
     _guard_under_workspace,
     _workspace_fd,
 )
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_employee_agent_runner")
 
 
 def _guard_path(workspace_root: str, path: str) -> str | None:
@@ -384,13 +375,6 @@ async def tool_analyze_project_summary(
 
 # --- from mod_employee_agent_runner_part03.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.mod_employee_agent_runner")
 
 
 class EmployeeAgentRunner(_facade()._EmployeeAgentRunnerPart01Mixin):

@@ -18,9 +18,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-
 def _facade():
     return importlib.import_module("modstore_server.customer_service_orchestrator")
 
@@ -64,15 +61,6 @@ def _parse_domain_clarify_reply(text: str) -> str:
 
 # --- from customer_service_orchestrator_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.customer_service_orchestrator")
 
 
 def extract_fields(
@@ -414,15 +402,6 @@ def _llm_classify_intent(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.customer_service_orchestrator")
-
-
 def _enrich_cs_context(
     user: _facade().User,
     context: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
@@ -502,12 +481,6 @@ def ensure_session(
 
 # --- from customer_service_orchestrator_part02_part01.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.customer_service_orchestrator")
 
 
 def handle_customer_message(
@@ -942,15 +915,6 @@ def handle_customer_message(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.customer_service_orchestrator")
-
-
 def _chat_only_reply(
     text: str,
     *,
@@ -992,15 +956,6 @@ def _chat_only_reply(
 
 # --- from customer_service_orchestrator_part03.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.customer_service_orchestrator")
 
 
 def choose_standard(
@@ -1313,15 +1268,6 @@ def _maybe_dispatch_employee_followup(
 
 # --- from customer_service_orchestrator_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.customer_service_orchestrator")
 
 
 def _looks_like_raw_kb_line(line: str) -> bool:
@@ -1725,12 +1671,6 @@ def resolve_issue_domain(
 # --- from customer_service_orchestrator_part04_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.customer_service_orchestrator")
-
 
 def title_for_intent(intent: str, extracted: _facade().Dict[str, _facade().Any]) -> str:
     domain = str(extracted.get("issue_domain") or "").strip().lower()
@@ -1877,7 +1817,6 @@ def session_payload(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
 from typing import Any
 
 from modstore_server.customer_issue_delivery_contract import (
@@ -1889,10 +1828,6 @@ from modstore_server.customer_issue_delivery_contract import (
 )
 
 CLOSED_CUSTOMER_ISSUE_STATES = frozenset({"resolved", "closed", "done", "rejected", "expired"})
-
-
-def _facade():
-    return importlib.import_module("modstore_server.customer_service_orchestrator")
 
 
 def ticket_lifecycle_stage(status: str | None = None, decision_status: str | None = None) -> int:

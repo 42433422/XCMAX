@@ -8,8 +8,6 @@ from dataclasses import dataclass
 # --- from openapi_connector_runtime_part01.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
 
 def _facade():
     return importlib.import_module("modstore_server.openapi_connector_runtime")
@@ -22,12 +20,7 @@ class OutboundBlocked(RuntimeError):
 # --- from openapi_connector_runtime_part02.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
 from dataclasses import dataclass
-
-
-def _facade():
-    return importlib.import_module("modstore_server.openapi_connector_runtime")
 
 
 def _ip_is_blocked(ip: str) -> bool:
@@ -198,12 +191,6 @@ def _apply_auth(
 # --- from openapi_connector_runtime_part03.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.openapi_connector_runtime")
-
 
 def _oauth_client_credentials_token(cfg: _facade().Mapping[str, _facade().Any]) -> str:
     token_url = str(cfg.get("token_url") or "").strip()
@@ -258,12 +245,6 @@ def _oauth_client_credentials_token(cfg: _facade().Mapping[str, _facade().Any]) 
 
 # --- from openapi_connector_runtime_part04.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.openapi_connector_runtime")
 
 
 def _safe_timeout(value: _facade().Any) -> float:

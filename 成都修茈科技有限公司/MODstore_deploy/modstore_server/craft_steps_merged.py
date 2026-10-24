@@ -10,11 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.craft_steps")
 
@@ -311,15 +306,6 @@ async def _craft_generate(
 
 # --- from craft_steps_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.craft_steps")
 
 
 async def _craft_validate(
@@ -709,15 +695,6 @@ async def _craft_workflow_sandbox(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.craft_steps")
-
-
 async def _craft_mod_sandbox(
     *,
     pack_dir: _facade().Any,
@@ -867,15 +844,6 @@ async def _craft_mod_sandbox(
 
 # --- from craft_steps_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.craft_steps")
 
 
 async def _craft_standalone_smoke(

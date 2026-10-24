@@ -7,8 +7,6 @@ import importlib
 # --- from llm_runtime_autopilot_part01.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
 
 def _facade():
     return importlib.import_module("modstore_server.llm_runtime_autopilot")
@@ -202,12 +200,6 @@ def _quota_by_provider(
 
 # --- from llm_runtime_autopilot_part02.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.llm_runtime_autopilot")
 
 
 async def reconcile_llm_route_autopilot(

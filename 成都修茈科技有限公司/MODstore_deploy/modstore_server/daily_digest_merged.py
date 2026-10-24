@@ -12,11 +12,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.daily_digest")
 
@@ -34,15 +29,6 @@ def digest_calendar_day() -> str:
 
 # --- from daily_digest_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest")
 
 
 def _new_unique_ops_token_plain(
@@ -158,15 +144,6 @@ def count_catalog_employee_packs(session) -> int:
 
 # --- from daily_digest_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest")
 
 
 def _status_pill(text: str, tone: str = "ok") -> str:
@@ -554,14 +531,7 @@ def _digest_commit_display(raw: str) -> str:
 """Implementation extracted from the public facade module."""
 
 
-import importlib
 from collections.abc import Sequence
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest")
 
 
 def _digest_git_branch_and_head(root: _facade().Path) -> _facade().Tuple[str, str]:
@@ -820,12 +790,6 @@ def _digest_product_work_summary_html(
 # --- from daily_digest_part03_part02.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest")
-
 
 def _digest_kpi_cards_html(
     *, met_ok: int, met_fail: int, emp_n: int, ops_n: int, inc_n: int, event_n: int
@@ -952,15 +916,6 @@ def _digest_kpi_cards_html(
 
 # --- from daily_digest_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest")
 
 
 def _meeting_minutes_md_to_html(text: str) -> str:
@@ -1319,14 +1274,7 @@ def _build_meeting_minutes_html_bounded(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
 from modstore_server.daily_digest_metrics import summarize_digest_events
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest")
 
 
 def build_digest_html(
@@ -1665,15 +1613,6 @@ def _build_surface_audit_bundle() -> _facade().Dict[str, _facade().Any]:
 
 # --- from daily_digest_part05.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.daily_digest")
 
 
 def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:

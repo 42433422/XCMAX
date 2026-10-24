@@ -10,11 +10,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
 def _facade():
     return importlib.import_module("modstore_server.employee_autonomy_service")
 
@@ -436,15 +431,6 @@ def _build_subtask_text(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_autonomy_service")
-
-
 @_facade().platform_llm_scoped
 def dispatch_suggestion(
     suggestion_id: int,
@@ -589,15 +575,6 @@ def dispatch_pending_suggestions(limit: int = 20) -> _facade().Dict[str, _facade
 
 # --- from employee_autonomy_service_part02.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_autonomy_service")
 
 
 def _parse_todo_lines(todo_markdown: str) -> _facade().List[str]:
@@ -915,15 +892,6 @@ class _PlatformBenchLlmClient:
 
 # --- from employee_autonomy_service_part03.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_autonomy_service")
 
 
 def _alert_evolution_quota_circuit_break(quota_failures: int, lookback_hours: int) -> None:
@@ -1325,13 +1293,6 @@ def aggregate_admin_suggestion_dashboard(
 
 # --- from employee_autonomy_service_part04.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.employee_autonomy_service")
 
 
 def propose_employee_pack(
