@@ -50,8 +50,9 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
-          # Local model pack: + prefix required; qlpack.yml at pack root.
-          packs: ${{ matrix.language == 'python' && '+./.github/codeql/extensions/xcmax-retort-path-model' || '' }}
+          # Do not pass local +./ packs here: Actions packs: requires scope/name
+          # (published packs). ETL path sinks are covered by _validated_path_component
+          # + codeql[py/path-injection] suppressions; qlpack kept for offline CLI.
 
       - name: Perform CodeQL Analysis
         id: analyze

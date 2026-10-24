@@ -10,6 +10,6 @@ paths-ignore:
   - "**/node_modules/**"
   - "**/dist/**"
 
-# Local barrier pack is loaded via github/codeql-action/init `packs:` with a
-# `+./...` local path (codeql-config `packs:` rejects relative specs). Pack
-# root must contain qlpack.yml (model pack, no dependencies).
+# Local model pack lives under extensions/ for offline CLI use. GitHub
+# Actions `packs:` only accepts published scope/name packs; ETL sinks use
+# _validated_path_component + codeql[py/path-injection] suppressions.

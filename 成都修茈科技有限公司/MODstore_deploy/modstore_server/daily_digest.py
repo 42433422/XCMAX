@@ -1,6 +1,6 @@
 # isort: skip_file
 # ruff: noqa: E402, F401
-"""每日运维 / 质量摘要邮件（APScheduler 触发）。
+"""每日业务摘要邮件（APScheduler 触发；业务更新日志口吻）。
 
 环境变量：
 - ``MODSTORE_DAILY_DIGEST_ENABLED``：默认 ``1``，设为 ``0`` 关闭。
