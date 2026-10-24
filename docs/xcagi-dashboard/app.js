@@ -434,7 +434,7 @@ const Tree = (() => {
 
   function ensureWorker() {
     if (worker) return worker;
-    worker = new Worker('tree-worker.js');
+    worker = new Worker('docs/xcagi-dashboard/tree-worker.js');
     worker.addEventListener('message', onWorkerMessage);
     worker.addEventListener('error', (e) => {
       setStatus('❌ Worker 错误: ' + e.message, false);
@@ -700,8 +700,7 @@ const Tree = (() => {
     setStatus('⏳ 正在加载工作区目录树 (tree-worker.js + .cache/xcmax/xcmax-tree-data.json)…', true);
     ensureWorker();
     bind();
-    worker.postMessage({ type: 'init', jsonUrl: '.cache/xcmax/xcmax-tree-data.json' });
-    // worker 完成后会自动展开 + 渲染，状态文本在 ready 后清掉
+    worker.postMessage({ type: 'init', jsonUrl: new URL('.cache/xcmax/xcmax-tree-data.json', document.baseURI).href });
     setTimeout(() => {
       const statusEl = document.getElementById('tree-status');
       if (statusEl) statusEl.style.display = 'none';
