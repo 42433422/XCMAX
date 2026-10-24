@@ -156,7 +156,7 @@ def _clear_legacy_tool_result_if_reply_has_no_records(reply: _facade().Any) -> N
     if _facade()._reply_has_legacy_tool_records(reply):
         return
     try:
-        from app.legacy.chat.legacy_chat_adapter import clear_last_tool_result
+        from app.application.conversation import clear_last_tool_result
 
         clear_last_tool_result()
     except _facade().RECOVERABLE_ERRORS:
