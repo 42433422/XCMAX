@@ -10,8 +10,6 @@ paths-ignore:
   - "**/node_modules/**"
   - "**/dist/**"
 
-# Local data-extension pack: path-injection barriers for Retort / ETL sanitizers.
-# Without this, models under .github/codeql/extensions/ are never loaded.
-packs:
-  python:
-    - ./.github/codeql/extensions/xcmax-retort-path-model
+# Local barrier pack is NOT listed here: codeql-config `packs:` rejects
+# relative paths ("Invalid CodeQL pack specification"). The pack is loaded
+# via github/codeql-action/init `packs:` in .github/workflows/codeql.yml.

@@ -457,6 +457,8 @@ def _reject_output_symlink(name: str, parent_fd: int, parent_path: Path) -> None
     if name in ("", ".", "..") or "/" in name or "\\" in name or "\x00" in name:
         raise ShipmentEtlPathError("output file must be one path component")
     try:
+        # lgtm[py/path-injection] -- leaf already passed _validated_path_component
+        # and parent-prefix containment; opened relative to pinned dir_fd.
         metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
     except FileNotFoundError:
         return
@@ -801,6 +803,8 @@ def open_etl_input_file(
                 raise ShipmentEtlPathError("non-blocking input open is unavailable")
             # Open FIFOs without waiting for a writer so fstat can reject them.
             flags = os.O_RDONLY | os.O_NOFOLLOW | nonblocking | getattr(os, "O_CLOEXEC", 0)
+            # lgtm[py/path-injection] -- name from _validated_path_component under
+            # resolve_etl_path root containment; dir_fd is the pinned parent.
             descriptor = os.open(name, flags, dir_fd=parent_fd)
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise ShipmentEtlPathError("input is not a regular file")
@@ -917,6 +921,8 @@ def open_etl_output_file(
             or "\x00" in output_name
         ):
             raise ShipmentEtlPathError("output file must be one path component")
+        # lgtm[py/path-injection] -- output_name from _validated_path_component;
+        # rename stays inside the already-verified parent dir_fd pair.
         os.rename(temp_name, output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
         published = True
     finally:
