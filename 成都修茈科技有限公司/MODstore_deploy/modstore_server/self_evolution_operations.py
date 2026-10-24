@@ -33,5 +33,3 @@ from modstore_server.self_evolution_operations_merged import (
     _salvage_kb_files as _salvage_kb_files,
     salvage_kb_from_workspace as salvage_kb_from_workspace,
 )
-
-

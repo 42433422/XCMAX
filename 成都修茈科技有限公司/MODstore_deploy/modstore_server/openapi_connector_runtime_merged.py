@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 import importlib
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ def _facade():
 
 class OutboundBlocked(RuntimeError):
     """用于安全策略拦截出站请求。"""
+
 
 # --- from openapi_connector_runtime_part02.py ---
 """Implementation extracted from the public facade module."""
@@ -191,6 +193,7 @@ def _apply_auth(
             headers.setdefault("Authorization", f"Bearer {token}")
         return
 
+
 # --- from openapi_connector_runtime_part03.py ---
 """Implementation extracted from the public facade module."""
 
@@ -250,6 +253,7 @@ def _oauth_client_credentials_token(cfg: _facade().Mapping[str, _facade().Any]) 
     with _facade()._OAUTH_LOCK:
         _facade()._OAUTH_TOKEN_CACHE[cache_key] = (token, now + max(expires_in, 60))
     return token
+
 
 # --- from openapi_connector_runtime_part04.py ---
 """Implementation extracted from the public facade module."""

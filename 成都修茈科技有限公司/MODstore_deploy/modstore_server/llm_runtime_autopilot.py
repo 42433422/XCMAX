@@ -40,9 +40,6 @@ _LOCK = threading.Lock()
 _MAX_LEDGER_LINES = 500
 
 
-
-
-
 __all__ = [
     "autopilot_enabled",
     "autopilot_ledger_path",

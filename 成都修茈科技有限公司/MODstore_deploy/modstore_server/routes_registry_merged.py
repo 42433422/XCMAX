@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 import importlib
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -354,6 +355,7 @@ def api_mod_workflow_employee_scaffold(
     except ValueError as e:
         raise _facade().HTTPException(400, str(e)) from e
 
+
 # --- from routes_registry_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
@@ -631,6 +633,7 @@ async def api_mod_ai_scaffold(
     if not res.get("ok"):
         raise _facade().HTTPException(400, res.get("error") or "AI 生成 Mod 失败")
     return res
+
 
 # --- from routes_registry_part02.py ---
 """Implementation extracted from the public facade module."""
@@ -1013,6 +1016,7 @@ def _include_optional(app: _facade().FastAPI, module_path: str) -> None:
     hooks = getattr(mod, "workflow_hooks_router", None)
     if hooks is not None:
         app.include_router(hooks)
+
 
 # --- from routes_registry_part03.py ---
 """Implementation extracted from the public facade module."""

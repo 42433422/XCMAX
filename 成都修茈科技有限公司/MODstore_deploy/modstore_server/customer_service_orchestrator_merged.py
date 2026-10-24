@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 import importlib
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -57,6 +58,7 @@ def _parse_domain_clarify_reply(text: str) -> str:
     ):
         return "software"
     return ""
+
 
 # --- from customer_service_orchestrator_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
@@ -404,6 +406,7 @@ def _llm_classify_intent(
     except RECOVERABLE_ERRORS:
         return None
 
+
 # --- from customer_service_orchestrator_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
@@ -492,6 +495,7 @@ def ensure_session(
     )
     return row
 
+
 # --- from customer_service_orchestrator_part02_part01.py ---
 """Implementation extracted from the public facade module."""
 
@@ -500,8 +504,6 @@ import importlib
 
 def _facade():
     return importlib.import_module("modstore_server.customer_service_orchestrator")
-
-
 
 
 def handle_customer_message(
@@ -931,6 +933,7 @@ def handle_customer_message(
         "intent": classified,
     }
 
+
 # --- from customer_service_orchestrator_part02_part02.py ---
 """Implementation extracted from the public facade module."""
 
@@ -980,6 +983,7 @@ def _chat_only_reply(
     if xiaoc:
         return xiaoc
     return "我是小C。已收到你的问题。你可以继续补充细节；若需要平台正式受理，点击「提交工单」即可。"
+
 
 # --- from customer_service_orchestrator_part03.py ---
 """Implementation extracted from the public facade module."""
@@ -1300,6 +1304,7 @@ def _maybe_dispatch_employee_followup(
         action.error = str(exc)[:1000]
         db.flush()
         return action
+
 
 # --- from customer_service_orchestrator_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -1710,6 +1715,7 @@ def resolve_issue_domain(
         return _pack("platform", "rules_product_default")
     return _pack("platform", "default")
 
+
 # --- from customer_service_orchestrator_part04_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
@@ -1859,6 +1865,7 @@ def session_payload(
         "created_at": row.created_at.isoformat() if row.created_at else "",
         "updated_at": row.updated_at.isoformat() if row.updated_at else "",
     }
+
 
 # --- from customer_service_orchestrator_part05.py ---
 """Implementation extracted from the public facade module."""

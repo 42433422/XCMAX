@@ -119,11 +119,7 @@ from modstore_server.daily_digest_merged import (
     cron_trigger_for_digest as cron_trigger_for_digest,
 )
 
-
-
-
 DEFAULT_DIGEST_EMAIL = "1499383833@qq.com"
-
 
 
 # ---------------------------------------------------------------------------
@@ -139,9 +135,3 @@ _DIGEST_TONES: Dict[str, Tuple[str, str, str]] = {
     "info": ("#1d4ed8", "#eff6ff", "#bfdbfe"),
     "muted": ("#475569", "#f1f5f9", "#e2e8f0"),
 }
-
-
-
-
-
-

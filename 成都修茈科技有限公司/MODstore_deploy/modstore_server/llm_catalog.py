@@ -67,10 +67,8 @@ from modstore_server.llm_catalog_merged import (
     probe_first_matching_provider as probe_first_matching_provider,
 )
 
-
 _CACHE_TTL_SEC = 600.0
 _FORCE_REFRESH_MIN_INTERVAL = 45.0
-
 
 
 # cache_key -> {"mono": float, "models": list[str], "error": str|None, "source": str}
@@ -81,9 +79,4 @@ _last_force_refresh: Dict[int, float] = {}
 # 只排除用户私有微调别名，避免混入平台公共能力目录。
 
 
-
-
-
 _PROBE_HTTPX_TIMEOUT = 10.0
-
-

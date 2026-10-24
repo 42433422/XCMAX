@@ -96,9 +96,7 @@ from modstore_server.employee_executor_merged import (
     list_employees as list_employees,
 )
 
-
 _METRIC_TASK_MAX_LEN = 128
-
 
 
 # 员工大会待机：manifest system_prompt 常要求「输出 JSON」，与四段 Markdown 汇报冲突。
@@ -157,18 +155,5 @@ _PHASE_D_PROTOCOL_APPEND = """\
 转交后你仍然要正常完成你能做的部分，不要因为转交就停手。"""
 
 
-
 _executor_sem: threading.Semaphore | None = None
 _executor_sem_n: int = 0
-
-
-
-
-
-
-
-
-
-
-
-

@@ -41,11 +41,7 @@ from modstore_server.time_rail_workflow_merged import (
     graph_api_payload as graph_api_payload,
 )
 
-
 STATUS_CONTRACT_VERSION = "time_rail_runtime_status/v2"
-
-
-
 
 
 __all__ = [

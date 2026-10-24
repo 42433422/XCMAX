@@ -78,8 +78,6 @@ from modstore_server.admin_duty_graph_api_merged import (
     duty_graph_health as duty_graph_health,
 )
 
-
-
 _HIGH_RISK_HANDLERS = frozenset(
     {
         "shell_exec",
@@ -94,7 +92,3 @@ _HIGH_RISK_HANDLERS = frozenset(
 _LLM_FREE_HANDLERS = frozenset({"echo", "webhook"})
 _MAX_RUN_INPUT_BYTES = 100_000
 _MAX_RESULT_BYTES = 60_000
-
-
-
-

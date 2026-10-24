@@ -102,9 +102,6 @@ router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
 
 
-
-
-
 from modstore_server.browser_handoff_api import router as browser_handoff_router
 from modstore_server.market_auth_api_merged import (
     _fhd_cs_bridge_base as _fhd_cs_bridge_base,

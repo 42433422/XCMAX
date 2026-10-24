@@ -72,7 +72,6 @@ from modstore_server.public_visualization_api_merged import (
     public_visualization as public_visualization,
 )
 
-
 _DEFAULT_LOG_GLOB = "/var/log/nginx/xiu-ci.com.access.log*"
 _DEFAULT_CACHE_TTL_SECONDS = 30
 _DEFAULT_TREND_DAYS = 10
@@ -109,12 +108,7 @@ _CACHE_VALUE: dict[str, Any] | None = None
 _CACHE_CREATED_MONOTONIC = 0.0
 
 
-
 _METRIC_LINE_RE = re.compile(
     r"^(?P<name>[a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(?P<labels>[^}]*)\})?\s+(?P<value>[-+0-9.eE]+)\s*$"
 )
 _LABEL_RE = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*)="((?:\\.|[^"\\])*)"')
-
-
-
-

@@ -34,8 +34,6 @@ from modstore_server.craft_steps_merged import (
     register_all_craft_steps as register_all_craft_steps,
 )
 
-
-
 _SPEC_DOMAIN_KEYWORDS = {
     "合同": "合同/法务",
     "法律": "合同/法务",
@@ -59,7 +57,3 @@ _SPEC_DOMAIN_KEYWORDS = {
     "站点": "SEO/站点",
     "sitemap": "SEO/站点",
 }
-
-
-
-

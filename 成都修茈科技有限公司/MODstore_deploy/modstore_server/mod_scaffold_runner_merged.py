@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -416,6 +417,7 @@ def materialize_employee_pack_if_missing(employee_id: str) -> bool:
         _logging.getLogger(__name__).warning("materialize_employee_pack: rehydrate bundles failed")
     return (pack_dir / "manifest.json").is_file()
 
+
 # --- from mod_scaffold_runner_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
@@ -569,6 +571,7 @@ def employee_pack_consistency_warnings(mod_dir: _facade().Path) -> _facade().Lis
                     f"{rel}: manifest.actions.handlers 声明 '{h}'，但员工实现中未见对应分支字面量"
                 )
     return warnings
+
 
 # --- from mod_scaffold_runner_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -1012,6 +1015,7 @@ async def run_employee_pack_code_validation_report(
     report["summary"] = "；".join(parts) if parts else report["status"]
     return report
 
+
 # --- from mod_scaffold_runner_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
@@ -1124,6 +1128,7 @@ async def resolve_llm_provider_model_auto(
         if m0:
             return (p, m0, None)
     return (None, None, "没有找到已配置 API Key 且可用模型目录的 LLM 供应商")
+
 
 # --- from mod_scaffold_runner_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -1493,6 +1498,7 @@ async def generate_mod_suite_blueprint_async(
         "raw_content": raw[:4000],
         "repair_used": repair_used,
     }
+
 
 # --- from mod_scaffold_runner_part03_part01_part02.py ---
 """Implementation extracted from the public facade module."""
@@ -1934,6 +1940,7 @@ def run_mod_suite_mod_sandbox(
     )
     return {"ok": all((bool(c.get("ok")) for c in checks)), "checks": checks}
 
+
 # --- from mod_scaffold_runner_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
@@ -2315,6 +2322,7 @@ async def attach_nl_workflow_to_employee_pack_dir(
         "eskill_count": len(eskill_specs),
     }
 
+
 # --- from mod_scaffold_runner_part04_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
@@ -2537,6 +2545,7 @@ async def run_employee_ai_scaffold_async(
         "package": saved_package,
         "published": bool(publish_to_catalog and saved_package),
     }
+
 
 # --- from mod_scaffold_runner_part05_part01_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -2951,6 +2960,7 @@ def _ensure_workflow_start_end_skeleton(
             )
         notes.append("inserted_end")
     return notes
+
 
 # --- from mod_scaffold_runner_part05_part01_part02.py ---
 """Implementation extracted from the public facade module."""

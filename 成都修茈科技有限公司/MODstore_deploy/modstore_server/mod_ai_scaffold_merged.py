@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 import importlib
 
@@ -46,6 +47,7 @@ def build_scaffold_zip(
         for arc, body in files.items():
             zf.writestr(f"{mod_id}/{arc}", body)
     return buf.getvalue()
+
 
 # --- from mod_ai_scaffold_part02.py ---
 """Implementation extracted from the public facade module."""

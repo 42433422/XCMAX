@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 import importlib
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -102,6 +103,7 @@ def _repair_empty_employee_workflow_graph(
     )
     db.commit()
     return True
+
 
 # --- from workflow_api_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -482,6 +484,7 @@ async def list_workflows_by_employee(
         "manifest_hits": len(manifest_hit_ids),
         "errors": errors,
     }
+
 
 # --- from workflow_api_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
@@ -866,6 +869,7 @@ async def sandbox_run_workflow(
             },
         )
     return report
+
 
 # --- from workflow_api_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -1256,6 +1260,7 @@ async def get_workflow_version(
         "created_at": row.created_at.isoformat(),
         "graph_snapshot": snapshot,
     }
+
 
 # --- from workflow_api_part03_part01_part02.py ---
 """Implementation extracted from the public facade module."""

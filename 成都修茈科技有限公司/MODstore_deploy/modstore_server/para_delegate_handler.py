@@ -95,7 +95,6 @@ _PARA_GUEST_AUTH_CACHE: Dict[str, str] = {}
 DEFAULT_PARA_WAIT_TIMEOUT_SEC = 1800.0
 
 
-
 # ── Para 分级派工：一级=本机单设备，二级=多设备协同（与 FHD super_employee_service 同构） ──
 #
 # loops 后半经此桥接 Para/DevFleet。原先只认单个写死的 MODSTORE_PARA_DEVICE_ID，没配
@@ -105,7 +104,6 @@ DEFAULT_PARA_WAIT_TIMEOUT_SEC = 1800.0
 # device_id 的部署保持原行为不变(零回归)。设备配对+agent 拉起仍属 DevFleet/运维侧。
 
 _SUBTASK_LABELS = ("需求定位与方案", "核心实现", "验证与收尾")
-
 
 
 _VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae", "grok_bot", "dolt")
@@ -137,12 +135,8 @@ _TOOL_NAME_ALIASES: Dict[str, tuple[str, ...]] = {
 }
 
 
-
-
-
 __all__ = [
     "dispatch_para_delegate",
     "para_delegate_enabled",
     "para_delegate_ready_for_dispatch",
 ]
-

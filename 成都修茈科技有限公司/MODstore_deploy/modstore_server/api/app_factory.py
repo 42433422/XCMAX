@@ -65,9 +65,6 @@ from modstore_server.api.app_factory_merged import (
     create_app as create_app,
 )
 
-
-
-
 _FULL_OPTIONAL_MODULES = (
     "modstore_server.public_visualization_api",
     "modstore_server.llm_api",
@@ -152,7 +149,6 @@ _LLM_ONLY_OPTIONAL_MODULES = (
     "modstore_server.openai_llm_gateway_api",
     "modstore_server.health_api",
 )
-
 
 
 __all__ = ["AppConfig", "create_app", "load_default_config"]

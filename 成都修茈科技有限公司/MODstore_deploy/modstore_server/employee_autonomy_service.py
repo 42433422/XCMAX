@@ -78,11 +78,7 @@ from modstore_server.employee_autonomy_service_merged import (
     propose_employee_pack as propose_employee_pack,
 )
 
-
-
-
 _TODO_BULLET_RE = re.compile(r"^\s*(?:[-*•]|(?:\d+[\.\)\、]))\s*(.+?)\s*$")
-
 
 
 # 进化引擎只应对「prompt 可修」的失败做 prompt 优化。配额/限流/鉴权/缺 key 等基建类失败
@@ -120,7 +116,6 @@ _PARA_DELEGATE_EMPLOYEES: Tuple[str, ...] = (
 _GENERIC_HANDLER_FAILURE = "one or more handlers returned ok=false"
 
 
-
 __all__ = [
     "aggregate_admin_suggestion_dashboard",
     "approve_suggestion",
@@ -144,5 +139,3 @@ __all__ = [
 ProposalValidationError = _employee_pack_proposal.ProposalValidationError
 validate_proposal = _employee_pack_proposal.validate_proposal
 _call_llm = _employee_pack_proposal._call_llm
-
-

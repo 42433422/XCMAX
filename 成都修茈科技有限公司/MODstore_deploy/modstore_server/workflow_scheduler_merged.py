@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 import importlib
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -316,6 +317,7 @@ def _run_collector_with_timeout(
         return await _facade().asyncio.wait_for(loop.run_in_executor(None, fn), timeout=timeout)
 
     return _facade().asyncio.run(_wrapped())
+
 
 # --- from workflow_scheduler_part02.py ---
 """Implementation extracted from the public facade module."""

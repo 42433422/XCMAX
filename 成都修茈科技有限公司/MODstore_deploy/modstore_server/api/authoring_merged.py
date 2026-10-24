@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 import importlib
 from modstore_server.api.service_auth import require_admin_user
@@ -354,6 +355,7 @@ def api_capture_mod_snapshot(
     except ValueError as e:
         raise _facade().HTTPException(400, str(e)) from e
     return {"ok": True, "snapshot": snap}
+
 
 # --- from authoring_part02.py ---
 """Implementation extracted from the public facade module."""

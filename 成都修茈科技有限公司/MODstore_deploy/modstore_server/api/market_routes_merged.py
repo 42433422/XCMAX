@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
@@ -433,6 +434,7 @@ class PasswordChangeDTO(_facade().BaseModel):
     current_password: str = _facade().Field(..., min_length=1)
     new_password: str = _facade().Field(..., min_length=6, max_length=128)
 
+
 # --- from market_routes_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
@@ -555,6 +557,7 @@ def api_admin_status(
             "total_catalog_items": total_items,
             "total_users": total_users,
         }
+
 
 # --- from market_routes_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -932,6 +935,7 @@ def api_wallet_ai_preauthorize(
             "hold": _facade()._ai_hold_payload(txn, status="held"),
             "balance": _facade()._wallet_money_str(wallet.balance),
         }
+
 
 # --- from market_routes_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
@@ -1338,6 +1342,7 @@ def api_download_item(
             },
         )
 
+
 # --- from market_routes_part02_part01_part03.py ---
 """Implementation extracted from the public facade module."""
 
@@ -1401,6 +1406,7 @@ def _upload_chunks_dir() -> _facade().Path:
     d = _facade().Path(__file__).resolve().parent / "upload_chunks"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
 
 # --- from market_routes_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -1775,6 +1781,7 @@ def api_complete_upload(
             "file_size": session_info["total_size"],
         }
 
+
 # --- from market_routes_part03_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
@@ -2036,6 +2043,7 @@ def api_admin_purge_all_mods(
         "removed_dir_count": len(removed_dirs),
         "removed_user_mod_rows": int(removed_user_mod_rows or 0),
     }
+
 
 # --- from market_routes_part04.py ---
 """Implementation extracted from the public facade module."""

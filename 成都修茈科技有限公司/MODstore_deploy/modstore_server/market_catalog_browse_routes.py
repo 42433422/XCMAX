@@ -40,5 +40,3 @@ def _facade() -> Any:
 
 
 router = _facade().router
-
-

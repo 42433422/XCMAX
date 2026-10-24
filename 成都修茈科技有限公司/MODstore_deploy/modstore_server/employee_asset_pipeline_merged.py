@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 import importlib
 from modstore_server.infrastructure.private_asset_storage import (
@@ -116,6 +117,7 @@ def _runtime_package_name(pack_id: str, employee_id: str = "") -> str:
     if raw[0].isdigit():
         raw = "e_" + raw
     return raw
+
 
 # --- from employee_asset_pipeline_part02_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -380,6 +382,7 @@ def _preflight_scaffold_write_access(
         errors.append(f"会话资产目录不可写：{draft_root.parent} ({exc})")
     return (not errors, errors, paths_checked)
 
+
 # --- from employee_asset_pipeline_part02_part02.py ---
 """Implementation extracted from the public facade module."""
 
@@ -626,6 +629,7 @@ def _employee_id_from_pack_id(pack_id: str) -> str:
         return pid[: -len("-employee")] or pid
     return pid
 
+
 # --- from employee_asset_pipeline_part03_part01.py ---
 """Implementation extracted from the public facade module."""
 
@@ -787,6 +791,7 @@ def _sanitize_workflow_bundles(manifest: _facade().Dict[str, _facade().Any]) -> 
         raw_desc = str(b.get("description") or "")
         cleaned = _facade()._clean_brief_for_description(raw_desc, 500)
         b["description"] = cleaned or name
+
 
 # --- from employee_asset_pipeline_part03.py ---
 """Implementation extracted from the public facade module."""
@@ -1254,6 +1259,7 @@ def _fallback_manifest(
 
     return _build_fallback_manifest_result(locals())
 
+
 # --- from employee_asset_pipeline_part04_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
@@ -1693,6 +1699,7 @@ def render_build_xcemp_py(pack_id: str) -> str:
     builder = load_repository_module("xcagi_common.employee_pack")
     return builder.render_builder_script(pack_id)
 
+
 # --- from employee_asset_pipeline_part04_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
@@ -2123,6 +2130,7 @@ def manifest_expects_word_runtime(
         return True
     return False
 
+
 # --- from employee_asset_pipeline_part05.py ---
 """Implementation extracted from the public facade module."""
 
@@ -2168,6 +2176,7 @@ def pack_has_direct_python_runtime(pack_dir: _facade().Path) -> bool:
         if "def convert" in text and "_import_runtime" in text:
             return True
     return False
+
 
 # --- from employee_asset_pipeline_part06_part01_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -2462,6 +2471,7 @@ def validate_asset_employee_pack(
         ):
             warnings.append(f"默认模板未打包：{tpl}")
     return warnings
+
 
 # --- from employee_asset_pipeline_part06_part01_part02.py ---
 """Implementation extracted from the public facade module."""

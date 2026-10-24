@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 import importlib
 
@@ -438,6 +439,7 @@ def _normalize_action_handlers(raw_handlers: _facade().Any) -> _facade().List[st
         handlers.append("echo")
     return handlers
 
+
 # --- from employee_ai_scaffold_part_2_part01.py ---
 """Implementation extracted from the public facade module."""
 
@@ -769,6 +771,7 @@ def append_employee_stub_files_to_zip(
     base = f"{pack_id}/backend/employee_stubs".replace("\\", "/")
     zf.writestr(f"{base}/__init__.py", '"""Packaged employee route stubs."""\n')
     zf.writestr(f"{base}/{safe}.py", _facade().stub_module_body(emp_id, safe))
+
 
 # --- from employee_ai_scaffold_part_2_part02.py ---
 """Implementation extracted from the public facade module."""

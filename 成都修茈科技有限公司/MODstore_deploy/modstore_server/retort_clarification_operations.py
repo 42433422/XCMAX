@@ -14,5 +14,3 @@ from modstore_server.retort_clarification_operations_merged import (
     evaluate_retort_clarification_gate as evaluate_retort_clarification_gate,
     clarification_blocks_auto_approve as clarification_blocks_auto_approve,
 )
-
-

@@ -103,8 +103,6 @@ from modstore_server.butler_qq_bridge_merged import (
     _ensure_runtime_ready as _ensure_runtime_ready,
 )
 
-
-
 # ─── 配置读取（账号池优先，ENV 作 fallback） ─────────────────────────
 #
 # 凭证有两种来源：
@@ -123,30 +121,22 @@ _BUTLER_EMPLOYEE_ID = "xc-digital-butler"
 _CREDS_CACHE_TTL_SECONDS = 30
 
 
-
 _creds_state = _CredsState()
-
 
 
 _token_state = _TokenState()
 _TOKEN_REFRESH_LEAD_SECONDS = 300
 
 
-
 # ─── 出站消息客户端 ─────────────────────────────────────────────────
-
-
-
 
 
 _seq_registry = _SeqRegistry()
 
 
-
 # 进程内按 app_id 缓存 BotContext，启动时惰性填充
 _bot_ctx_cache: Dict[str, _BotContext] = {}
 _bot_ctx_lock = asyncio.Lock()
-
 
 
 # ─── 入站 → 多员工分发 ───────────────────────────────────────────────
@@ -160,9 +150,7 @@ _KIND_BY_EVENT: Dict[str, MsgKind] = {
 }
 
 
-
 _QQ_REPLY_MAX_LEN = 800
-
 
 
 _EMPLOYEE_PERSONAS: Dict[str, str] = {
@@ -174,11 +162,7 @@ _EMPLOYEE_PERSONAS: Dict[str, str] = {
 _EMPLOYEE_FALLBACK_PERSONA = "你是 XC AGI 平台 AI 员工，请专业、简洁地回答用户问题。"
 
 
-
 # ─── FastAPI 路由 ───────────────────────────────────────────────────
-
-
-
 
 
 # ─── 已配 QQ 的两位员工：webhook_key → (app_id, employee_id, app_secret) ──
@@ -211,7 +195,6 @@ _SPECIFIC_WEBHOOKS: Dict[str, Dict[str, str]] = {
 
 # 兼容旧调用：仍允许其他模块/测试按 webhook_key 拿 app_id 字符串。
 _SPECIFIC_WEBHOOK_APP_IDS: Dict[str, str] = {k: v["app_id"] for k, v in _SPECIFIC_WEBHOOKS.items()}
-
 
 
 if not _ensure_runtime_ready():

@@ -110,12 +110,8 @@ from modstore_server.daily_digest_surface_audit_merged import (
     build_surface_audit_html_sync as build_surface_audit_html_sync,
 )
 
-
-
-
 _DESKTOP_VIEWPORT = {"width": 1280, "height": 720}
 _MOBILE_VIEWPORT = {"width": 390, "height": 844}
-
 
 
 _STATIC_PW_PAGES: Tuple[Tuple[str, str], ...] = (
@@ -227,14 +223,12 @@ _PW_WORKBENCH_PAGES: Tuple[Tuple[str, str], ...] = (
 )
 
 
-
 _MARKET_AUTH_SKIP_PREFIXES: Tuple[str, ...] = (
     "/market/login",
     "/market/register",
     "/market/login-email",
     "/market/forgot-password",
 )
-
 
 
 _TRANSIENT_NAV_ERROR_MARKERS: Tuple[str, ...] = (
@@ -247,7 +241,6 @@ _TRANSIENT_NAV_ERROR_MARKERS: Tuple[str, ...] = (
     "ERR_QUIC_PROTOCOL_ERROR",
     "net::ERR_FAILED",
 )
-
 
 
 # ─── 三端 lane → 对应在岗员工 ───────────────────────────────────────────────
@@ -279,7 +272,6 @@ _LANE_OWNER_FALLBACK: Dict[str, List[str]] = {
 _LANE_TO_DEPARTMENT = {"P-W": "prod_web", "P-S": "prod_software"}
 
 
-
 _LANE_ANALYSIS_SYSTEM = """你是 MODstore「{lane}」产线在岗 AI 员工（{owners}）。
 数字管家把本产线今天的页面巡检结果交给你，请只用本产线视角，基于给出的 HTTP 状态、
 页面标题、console 报错等**确凿事实**写一段简体中文分析，**不得编造**未给出的内容。
@@ -288,5 +280,3 @@ _LANE_ANALYSIS_SYSTEM = """你是 MODstore「{lane}」产线在岗 AI 员工（{
 现状：<一句话概括本产线页面整体是否健康>
 异常：<逐条列出 HTTP≥400 / 抓取失败 / console 报错；没有则写「无」>
 改进建议：<1-3 条可落地动作，点名本产线相关文件或岗位；信息不足写「待确认」>"""
-
-

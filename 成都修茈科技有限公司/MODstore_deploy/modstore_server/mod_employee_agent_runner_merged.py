@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 import importlib
 import os
@@ -41,6 +42,7 @@ def _llm_timeout_seconds() -> float:
             "MODSTORE_EMPLOYEE_AGENT_LLM_TIMEOUT_SECONDS", 45, minimum=10, maximum=120
         )
     )
+
 
 # --- from mod_employee_agent_runner_part02.py ---
 """Implementation extracted from the public facade module."""
@@ -380,6 +382,7 @@ async def tool_analyze_project_summary(
         "readme_snippet": readme_snippet,
         "note": "workspace no-follow scan",
     }
+
 
 # --- from mod_employee_agent_runner_part03.py ---
 """Implementation extracted from the public facade module."""

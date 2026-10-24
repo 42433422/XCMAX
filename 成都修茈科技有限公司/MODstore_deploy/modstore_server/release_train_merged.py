@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib

@@ -145,14 +145,7 @@ from modstore_server.llm_api_merged import (
     llm_pptx as llm_pptx,
 )
 
-
-
 _BYOK_PLAN_IDS = {"plan_pro", "plan_enterprise"}
 
 
-
 _CATALOG_PROVIDER_TIMEOUT_SEC = 12.0
-
-
-
-

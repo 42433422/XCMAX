@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+
 from __future__ import annotations
 import importlib
 
@@ -362,6 +363,7 @@ def list_autonomy_rules(
         "items": [r.to_dict() for r in rules],
         "default_action_on_unmatched": "require_human",
     }
+
 
 # --- from strategic_layer_api_part02.py ---
 """Implementation extracted from the public facade module."""

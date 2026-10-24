@@ -74,7 +74,6 @@ _DEFAULT_USER_CAP = 40
 _counters: Dict[str, Tuple[date, int]] = {}
 
 
-
 _GH_URL_RE = re.compile(
     r"https?://github\.com/([a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38})/([a-zA-Z0-9._-]+)",
     re.IGNORECASE,
@@ -113,7 +112,6 @@ _DDG_HTML_ENDPOINTS = (
 )
 
 
-
 _COMPANY_SUFFIXES = (
     "股份有限公司",
     "有限责任公司",
@@ -150,7 +148,6 @@ _COMPANY_NAME_RE = re.compile(
 )
 
 
-
 _TITLE_SOURCE_MARKERS = (
     "爱企查",
     "启信宝",
@@ -166,5 +163,3 @@ _TITLE_SOURCE_MARKERS = (
     "查企业",
     "顺企网",
 )
-
-
