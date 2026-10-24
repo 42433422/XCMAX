@@ -1,5 +1,5 @@
 {
   "lines": 2369652,
   "updated": "2026-10-24",
-  "note": "structure-gate ratchet baseline raise routes/legacy for #2544 CodeQL closeout; measured 305/58"
+  "note": "Dockerfile.fhd-api: pin brotli>=1.2.0-r7 for CVE-2026-111497 (container-scan)"
 }
