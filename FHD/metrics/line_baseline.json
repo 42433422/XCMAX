@@ -1,5 +1,5 @@
 {
-  "lines": 2336814,
+  "lines": 2337027,
   "updated": "2026-10-24",
-  "note": "同步主线 bb575dbb，修正 Excel 测试替身并验证唯一调用，保持 AI 修复净删除"
+  "note": "同步主线 84f6d351 的 conversation ports，保持 AI 修复净删除"
 }
