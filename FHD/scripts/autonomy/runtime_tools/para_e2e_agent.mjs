@@ -785,16 +785,15 @@ async function refreshBaseBranchFromOrigin(taskDir, repoUrl, baseBranch) {
 }
 
 async function cloneSourceWorkspace(sourceWorkspace, taskDir, task, root) {
-  // 先尝试从本地 sourceWorkspace clone（快，避免 GitHub 网络延迟）。
-  // 如果 sourceWorkspace 太大或 clone 失败，fallback 到 GitHub repoUrl（带代理）。
+  // 优先本地源；源不可用时回退 GitHub，本机磁盘满则停止重复克隆。
   const repoUrl = String(task?.repo_url || '').trim();
   const baseBranch = String(task?.base_branch || 'main').trim() || 'main';
   try {
     await git(process.cwd(), ['clone', '--shared', sourceWorkspace, taskDir]);
   } catch (cloneErr) {
+    if (!repoUrl || /ENOSPC|no space left on device|disk full/i.test(`${cloneErr.code || ''}\n${cloneErr.stderr || ''}\n${cloneErr}`)) throw cloneErr;
     console.error(`[e2e-agent] clone sourceWorkspace 失败 (${String(cloneErr).slice(0, 200)})，尝试从 GitHub clone`);
-    if (!repoUrl) throw cloneErr;
-    if (!removeOwnWorkspace(taskDir, root)) throw cloneErr; // 失败 clone 可能留下半成品（如磁盘满），只删本任务目录
+    if (!removeOwnWorkspace(taskDir, root)) throw cloneErr; // 只删本任务的半成品目录
     // 从 GitHub clone，用 --depth 1 避免 clone 全部历史
     await git(process.cwd(), ['clone', '--depth', '1', '--single-branch', '--branch', baseBranch, repoUrl, taskDir]);
     // clone 成功后 origin 已经指向 GitHub，不需要再 set-url

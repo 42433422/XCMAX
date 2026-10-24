@@ -1,5 +1,5 @@
 {
-  "lines": 2336396,
+  "lines": 2336417,
   "updated": "2026-10-24",
-  "note": "ticket #53: replace Full-Pipeline iframe-only automation policy with adminTheme AutomationPolicyPanel + six_line SSOT parser/tests/aliases; standalone /automation-policy redirects to overview tab (PR #2610)."
+  "note": "事故85763上一轮磁盘满后重复克隆：两份设备代理各净删1行，新增回归22行、更新说明1行，合计净增21行；按本任务用户要求显式更新基线，候选尚未合入或部署。"
 }

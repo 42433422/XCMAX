@@ -11,6 +11,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { withFailureCleanup } from './e2e_agent_runtime_policy.mjs';
 
 const execFileAsync = promisify(execFile);
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -46,6 +47,27 @@ async function commitFile(repo, name, content, message) {
 }
 
 for (const sourcePath of sources) {
+  test(`${path.basename(sourcePath)} preserves disk-full errors without a remote clone`, async () => {
+    const source = readFileSync(sourcePath, 'utf8');
+    const start = source.indexOf('async function cloneSourceWorkspace');
+    const end = source.indexOf('\nfunction excludeAgentMetadata', start);
+    assert.ok(start >= 0 && end > start);
+    for (const detail of ['No space left on device', 'ENOSPC', 'disk full']) {
+      const failure = Object.assign(new Error('git clone failed'), { stderr: detail });
+      const calls = [], cleaned = [];
+      const clone = Function('git', 'removeOwnWorkspace', 'console', `${source.slice(start, end)}\nreturn cloneSourceWorkspace;`)(
+        async (_cwd, args) => { calls.push(args); throw failure; },
+        () => { throw new Error('must not prepare a fallback clone'); },
+        { error() {} },
+      );
+      await assert.rejects(withFailureCleanup('/work/task', () => clone('/source', '/work/task', {
+        repo_url: 'https://example.invalid/repo.git', base_branch: 'main', work_branch: 'fix',
+      }, '/work'), (dir) => cleaned.push(dir)), (error) => error === failure);
+      assert.deepEqual(calls, [['clone', '--shared', '/source', '/work/task']]);
+      assert.deepEqual(cleaned, ['/work/task']);
+    }
+  });
+
   test(`${path.basename(sourcePath)} starts a worktree from the current remote base`, async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'xcmax-base-refresh-'));
     const remote = path.join(root, 'remote.git');
