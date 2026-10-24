@@ -1,5 +1,5 @@
 {
-  "lines": 2338633,
+  "lines": 2337408,
   "updated": "2026-10-24",
-  "note": "原单RF999短编号与审批前置态回归、Butler真实钱包签名和stream协议及BYOK零收费回归需要263行维护增量；复用现有测试和组件，后台样式本轮净删8行，未修改费率或历史账本。"
+  "note": "PR2581 preserves private delivery across releases and fixes refund failure replies; archive three unregistered superseded historical documents with byte-verified external recovery copies; ratchet decreases and whole PR is net-deleting."
 }

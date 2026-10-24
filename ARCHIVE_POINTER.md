@@ -1,5 +1,9 @@
 # XCMAX 历史与大文件归档指针
 
+2026-10-24 工单交付整理：未登记且已被 v10 指南替代的 `成都修茈科技有限公司/docs/modstore/MOD_AUTHORING_GUIDE.md`（942 行）逐字节校验外置到 `~/XCMAX-archives/docs-20261024-ticket-mod-authoring/`，原文与 SHA256 见 `MANIFEST.json`；现行入口为 `FHD/docs/guides/MOD_AUTHORING_GUIDE.md`。
+
+同轮未登记的六月修复快照 `docs/reports/FIXES.md` 与旧评分路线图 `docs/roadmap/AI_PLATFORM_9_SCORE_ROADMAP.md`（共 1,076 行）校验外置到 `~/XCMAX-archives/docs-20261024-ticket-history/`；完整原文、SHA256 及来源提交见 `MANIFEST.json`。归档保留历史未完事项，不构成修复完成声明；现行合同与评分口径以 SSOT 目录和 `FHD/config/audit_benchmark_ssot.json` 为准。
+
 尽调 **工作区**（`Desktop/XCMAX`）不含下列实体目录；仅保留 `ARCHIVE_POINTER.md` 占位与恢复说明。
 
 ## 离线包（本机默认）

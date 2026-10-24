@@ -112,16 +112,20 @@ def _paid_order(tmp_path, monkeypatch, user_id: int) -> str:
     return order_no
 
 
-def test_customer_service_refund_chat_creates_ticket_action_and_refund(
-    client, tmp_path, monkeypatch
+@pytest.mark.parametrize("order_owner", ["self", "missing", "other"])
+def test_customer_service_refund_chat_reports_real_submission(
+    client, tmp_path, monkeypatch, order_owner
 ):
     from modstore_server import webhook_dispatcher
     from modstore_server.models import RefundRequest
     from modstore_server.models_cs import CustomerServiceTicket
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    monkeypatch.setenv("PAYMENT_BACKEND", "python")
+    monkeypatch.setenv("MODSTORE_PAYMENT_ORDERS_DIR", str(tmp_path / "orders"))
     user = _make_user("cs_user")
-    order_no = _paid_order(tmp_path, monkeypatch, user.id)
+    owner = user if order_owner == "self" else _make_user("other_owner")
+    order_no = "RF999" if order_owner == "missing" else _paid_order(tmp_path, monkeypatch, owner.id)
     monkeypatch.setattr(
         webhook_dispatcher, "dispatch_event", lambda event: {"ok": True, "event": event}
     )
@@ -139,7 +143,12 @@ def test_customer_service_refund_chat_creates_ticket_action_and_refund(
         assert data["ticket"]["intent"] == "refund"
         assert data["decision"]["decision"] == "approved"
         assert data["actions"][0]["action_type"] == "refund.apply"
-        assert data["actions"][0]["status"] == "completed"
+        valid = order_owner == "self"
+        assert data["actions"][0]["status"] == ("completed" if valid else "failed")
+        if not valid:
+            assert data["ticket"]["status"] == "processing"
+            assert "未确认提交成功" in data["message"]["content"]
+            assert "不能视为已退款" in data["message"]["content"]
 
         sf = get_session_factory()
         with sf() as session:
@@ -149,8 +158,9 @@ def test_customer_service_refund_chat_creates_ticket_action_and_refund(
                 .first()
             )
             refund = session.query(RefundRequest).filter(RefundRequest.order_no == order_no).first()
-            assert refund is not None
-            assert refund.status == "pending"
+            assert (refund is not None) is valid
+            if refund:
+                assert refund.status == "pending"
 
 
 def test_customer_service_incomplete_refund_chats_without_ticket(client, monkeypatch):

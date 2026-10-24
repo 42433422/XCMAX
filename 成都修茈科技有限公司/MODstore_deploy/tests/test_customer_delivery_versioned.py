@@ -16,6 +16,295 @@ from pathlib import Path
 import pytest
 
 
+def test_workbench_sessions_survive_release_directory_change(tmp_path, monkeypatch):
+    from modman.repo_config import RepoConfig
+    from modstore_server import mod_scaffold_runner, workbench_api
+    from modstore_server import workbench_api_part01_part01_part01 as storage
+
+    runtime = tmp_path / "runtime"
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime))
+    monkeypatch.setenv("MODMAN_LIBRARY", str(runtime / "library"))
+    monkeypatch.setattr(mod_scaffold_runner, "load_config", lambda: RepoConfig())
+    monkeypatch.setattr(workbench_api, "WORKBENCH_SESSIONS", {})
+    sid = "a" * 24
+    for release in ("b" * 40, "c" * 40):
+        monkeypatch.setattr(storage, "__file__", str(tmp_path / release / "storage.py"))
+        assert workbench_api._workbench_session_store_dir() == runtime / "workbench_sessions"
+        assert mod_scaffold_runner.modstore_library_path() == runtime / "library"
+        if not workbench_api.WORKBENCH_SESSIONS:
+            workbench_api.WORKBENCH_SESSIONS[sid] = {"id": sid, "user_id": 29}
+            workbench_api._persist_workbench_session_unlocked(sid)
+    assert workbench_api._load_workbench_session_unlocked(sid) == {"id": sid, "user_id": 29}
+
+
+@pytest.fixture
+def legacy_delivery_state(tmp_path, monkeypatch):
+    from modman.repo_config import RepoConfig
+    from modstore_server import customer_delivery_sources as sources
+    from modstore_server import customer_delivery_versioned as versioned
+    from modstore_server import mod_scaffold_runner, workbench_api
+    from modstore_server import workbench_api_part01_part01_part01 as storage
+    from tests.customer_delivery_fixture import signed_artifact
+
+    sha, sid = "e" * 40, "d" * 24
+    release = tmp_path / "releases" / sha
+    deploy = release / "成都修茈科技有限公司/MODstore_deploy"
+    deploy.mkdir(parents=True)
+    runner = mod_scaffold_runner.modstore_library_path
+    record = signed_artifact(
+        deploy, monkeypatch, owner=29, ticket=34, mod_id=versioned.MOD_ID, generation=sid
+    )
+    scope = {"owner_user_id": 29, "session_id": sid, "ticket_id": 34}
+    scope_root = deploy / "customer-delivery-sources" / "29" / sid
+    source = scope_root / "library" / versioned.MOD_ID
+    shutil.copytree(deploy / "library" / versioned.MOD_ID, source)
+    (scope_root / "scope.json").write_text(json.dumps(scope))
+    files, digest = versioned.source_fingerprints(source)
+    provenance = {"git_tree": "f" * 40, "sha256": digest, "files": files}
+    (release / ".xcmax-release.json").write_text(
+        json.dumps(
+            {
+                "git_sha": sha,
+                "private_mod_sources": {versioned.MOD_ID: provenance},
+            }
+        )
+    )
+    signing_source = deploy / "library" / versioned.MOD_ID
+    manifest = json.loads((signing_source / "manifest.json").read_text())
+    manifest.update(
+        {
+            "delivery_source_git_sha": sha,
+            "delivery_source_git_tree": provenance["git_tree"],
+            "delivery_source_sha256": digest,
+        }
+    )
+    (signing_source / "manifest.json").write_text(json.dumps(manifest))
+    fhd = Path(__file__).resolve().parents[3] / "FHD"
+    spec = importlib.util.spec_from_file_location(
+        "relocation_fixture_builder", fhd / "scripts/build_mod.py"
+    )
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    package, _ = builder.build_xcemp(
+        signing_source,
+        Path(record["signed_package_path"]).parent,
+        sign=True,
+        private_key=deploy / "synthetic-signing-key.pem",
+    )
+    from modstore_server.customer_delivery_package import verify_delivery_package
+
+    record.update(
+        {
+            "signed_package_path": str(package),
+            "package_sha256": verify_delivery_package(package.read_bytes())["package_sha256"],
+            "source_mode": "versioned_main",
+            "source_git_sha": sha,
+            "source_git_tree": provenance["git_tree"],
+            "source_sha256": digest,
+        }
+    )
+    snapshot = {
+        "id": sid,
+        "user_id": 29,
+        "ticket_id": 34,
+        "status": "done",
+        "intent": "mod",
+        "delivery_source_mode": "versioned_main",
+        "source_scope": scope,
+        "delivery_runtime_identity": {"host": {"git_sha": sha}},
+        "artifact": {"mod_id": versioned.MOD_ID},
+        "verified_artifacts": [record],
+    }
+    session = deploy / "modstore_server/data/workbench_sessions" / f"{sid}.json"
+    session.parent.mkdir(parents=True)
+    session.write_text(json.dumps(snapshot))
+    runtime = tmp_path / "runtime"
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime))
+    monkeypatch.setenv("MODMAN_LIBRARY", str(runtime / "library"))
+    monkeypatch.setattr(mod_scaffold_runner, "modstore_library_path", runner)
+    monkeypatch.setattr(mod_scaffold_runner, "load_config", lambda: RepoConfig())
+    current = tmp_path / "releases" / ("c" * 40)
+    for module in (storage, __import__("modstore_server.customer_delivery_build", fromlist=[""])):
+        monkeypatch.setattr(
+            module,
+            "__file__",
+            str(current / "成都修茈科技有限公司/MODstore_deploy/modstore_server" / "module.py"),
+        )
+    monkeypatch.setattr(workbench_api, "WORKBENCH_SESSIONS", {})
+    return types.SimpleNamespace(
+        deploy=deploy,
+        runtime=runtime,
+        snapshot=snapshot,
+        session=session,
+        record=record,
+        source=source,
+        scope_root=scope_root,
+    )
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        None,
+        "owner",
+        "ticket",
+        "sha",
+        "signature",
+        "escape",
+        "scope",
+        "symlink",
+        "conflict",
+        "package",
+        "source",
+        "manifest_link",
+        "config_link",
+    ],
+)
+def test_private_delivery_relocation_preserves_evidence_or_rejects(legacy_delivery_state, fault):
+    from modstore_server import customer_delivery_build as build
+    from modstore_server import customer_delivery_sources as sources
+    from modstore_server import workbench_api
+
+    state = legacy_delivery_state
+    original_snapshot = state.session.read_bytes()
+    original_package = Path(state.record["signed_package_path"]).read_bytes()
+    if fault in {"owner", "ticket", "sha", "escape"}:
+        field, value = {
+            "owner": ("owner_user_id", 30),
+            "ticket": ("ticket_id", 35),
+            "sha": ("package_sha256", "0" * 64),
+            "escape": ("signed_package_path", "/etc/untrusted.xcmod"),
+        }[fault]
+        state.record[field] = value
+        state.session.write_text(json.dumps(state.snapshot))
+    elif fault == "signature":
+        Path(state.record["signed_package_path"]).write_bytes(original_package[:-16] + b"x" * 16)
+    elif fault == "scope":
+        (state.scope_root / "scope.json").unlink()
+    elif fault == "package":
+        Path(state.record["signed_package_path"]).unlink()
+    elif fault == "source":
+        shutil.rmtree(state.source)
+    elif fault in {"manifest_link", "config_link"}:
+        linked = (
+            state.deploy.parents[1] / ".xcmax-release.json"
+            if fault == "manifest_link"
+            else state.deploy / ".modstore-config.json"
+        )
+        outside = state.deploy.parents[2].parent / f"outside-{fault}.json"
+        outside.write_bytes(linked.read_bytes() if linked.exists() else b'{"library_root":""}')
+        linked.unlink(missing_ok=True)
+        linked.symlink_to(outside)
+    elif fault == "symlink":
+        (state.deploy / "library" / "linked").symlink_to(state.source, target_is_directory=True)
+    elif fault == "conflict":
+        target = state.runtime / "workbench_sessions" / state.session.name
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"different target must survive")
+    if fault:
+        with pytest.raises(ValueError):
+            sources.migrate_private_delivery_state(state.deploy, state.runtime, dry_run=False)
+        assert not (state.runtime / "library").exists()
+        if fault == "conflict":
+            assert target.read_bytes() == b"different target must survive"
+        return
+    plan = sources.migrate_private_delivery_state(state.deploy, state.runtime, dry_run=True)
+    assert plan["ok"] and not state.runtime.exists()
+    report = sources.migrate_private_delivery_state(state.deploy, state.runtime, dry_run=False)
+    assert report["ok"]
+    assert state.session.read_bytes() == original_snapshot
+    stored = state.runtime / "workbench_sessions" / state.session.name
+    assert stored.read_bytes() == original_snapshot
+    assert workbench_api._load_workbench_session_unlocked(state.snapshot["id"]) == state.snapshot
+    raw, _ = build.read_verified_artifact(state.record, owner_id=29, ticket_id=34)
+    assert raw == original_package
+    assert sources.verified_snapshot_library(state.snapshot, 29, state.snapshot["id"], 34).is_dir()
+    assert sources.migrate_private_delivery_state(state.deploy, state.runtime, dry_run=False)["ok"]
+    assert stored.read_bytes() == original_snapshot
+
+
+@pytest.mark.parametrize("fault", ["snapshot_identity", "legacy_symlink"])
+def test_relocated_artifact_cannot_bypass_persisted_identity(legacy_delivery_state, fault):
+    from modstore_server import customer_delivery_build as build
+    from modstore_server import customer_delivery_sources as sources
+
+    state = legacy_delivery_state
+    sources.migrate_private_delivery_state(state.deploy, state.runtime, dry_run=False)
+    stored = state.runtime / "workbench_sessions" / state.session.name
+    if fault == "snapshot_identity":
+        snapshot = json.loads(stored.read_text())
+        snapshot.update(delivery_source_mode="generated", ticket_id=35)
+        stored.write_text(json.dumps(snapshot))
+    else:
+        original = Path(state.record["signed_package_path"])
+        copied = (
+            state.runtime / "customer-delivery-artifacts/29" / state.record["id"] / original.name
+        )
+        original.unlink()
+        original.symlink_to(copied)
+        stored.unlink()
+    with pytest.raises(ValueError):
+        build.read_verified_artifact(state.record, owner_id=29, ticket_id=34)
+
+
+@pytest.mark.parametrize("alias", [True, False], ids=["parent-alias", "another-release"])
+def test_delivery_migration_never_targets_release_tree(legacy_delivery_state, alias):
+    from modstore_server import customer_delivery_sources as sources
+
+    state = legacy_delivery_state
+    releases = state.deploy.parents[2]
+    if alias:
+        ordinary = releases.parent / "ordinary"
+        ordinary.mkdir()
+        destination = ordinary / ".." / "releases" / state.deploy.parents[1].name / "runtime"
+    else:
+        destination = releases / ("c" * 40) / "runtime"
+    with pytest.raises(ValueError):
+        sources.migrate_private_delivery_state(state.deploy, destination, dry_run=False)
+    assert not destination.exists()
+
+
+def test_delivery_migration_rejects_overlapping_identity_roots(legacy_delivery_state):
+    from modstore_server import customer_delivery_sources as sources
+
+    state = legacy_delivery_state
+    (state.deploy / "library" / state.session.name).write_text("different library file")
+    with pytest.raises(ValueError):
+        sources.migrate_private_delivery_state(
+            state.deploy, state.runtime, library=state.runtime / "workbench_sessions", dry_run=False
+        )
+    assert not state.runtime.exists()
+
+
+@pytest.mark.parametrize("private", [False, True], ids=["public-bootstrap", "private-rejected"])
+def test_git_bootstrap_requires_no_private_delivery_state(tmp_path, private):
+    from modstore_server.customer_delivery_sources import migrate_private_delivery_state
+
+    source = tmp_path / "source"
+    source.mkdir()
+    subprocess.run(["git", "init", "-q", str(source)], check=True)
+    deploy = source / "成都修茈科技有限公司/MODstore_deploy"
+    (deploy / "library").mkdir(parents=True)
+    (deploy / "library/public.txt").write_bytes(b"public source library")
+    sessions = deploy / "modstore_server/data/workbench_sessions"
+    sessions.mkdir(parents=True)
+    snapshot = {"id": "a" * 24, "user_id": 29, "status": "done"}
+    if private:
+        snapshot["delivery_source_mode"] = "versioned_main"
+    raw = json.dumps(snapshot).encode()
+    (sessions / ("a" * 24 + ".json")).write_bytes(raw)
+    runtime = tmp_path / "runtime"
+    arguments = dict(bootstrap_source=source, releases_root=tmp_path / "releases", dry_run=False)
+    if private:
+        with pytest.raises(ValueError):
+            migrate_private_delivery_state(deploy, runtime, **arguments)
+        assert not runtime.exists()
+    else:
+        assert migrate_private_delivery_state(deploy, runtime, **arguments)["bootstrap"] is True
+        assert (runtime / "library/public.txt").read_bytes() == b"public source library"
+        assert (runtime / "workbench_sessions" / ("a" * 24 + ".json")).read_bytes() == raw
+
+
 @pytest.fixture
 def pinned_source(tmp_path, monkeypatch):
     from modstore_server import customer_delivery_versioned as versioned

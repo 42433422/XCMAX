@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import shutil
 import stat
+import subprocess
+import tempfile
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -13,6 +17,244 @@ from typing import Any, Iterator, cast
 
 _LIBRARY: ContextVar[Path | None] = ContextVar("private_delivery_source_library", default=None)
 _SESSION_ID = re.compile(r"[0-9a-f]{16,32}\Z")
+
+
+def migrate_private_delivery_state(
+    legacy_deploy: Path,
+    runtime_root: Path,
+    *,
+    library: Path | None = None,
+    legacy_library: Path | None = None,
+    bootstrap_source: Path | None = None,
+    releases_root: Path | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """Copy a caller-selected trusted release after complete validation, never overwrite."""
+    from modstore_server.catalog_publication_policy import stable_version
+    from modstore_server.customer_delivery_build import _verify_artifact_record
+    from modstore_server.customer_delivery_versioned import source_fingerprints
+
+    legacy_deploy, runtime_root = Path(legacy_deploy).absolute(), Path(runtime_root).absolute()
+    library = Path(library).absolute() if library else runtime_root / "library"
+    legacy_library = (
+        Path(legacy_library).absolute() if legacy_library else legacy_deploy / "library"
+    )
+    bootstrap_source = Path(bootstrap_source).absolute() if bootstrap_source else None
+    releases_root = Path(releases_root).absolute() if releases_root else None
+    for path in (
+        legacy_deploy,
+        runtime_root,
+        library,
+        legacy_library,
+        bootstrap_source,
+        releases_root,
+    ):
+        if path is None:
+            continue
+        for member in reversed((path, *path.parents)):
+            if member.is_symlink():
+                raise ValueError(f"迁移目录不接受符号链接: {member}")
+    legacy_deploy, runtime_root, library, legacy_library = (
+        path.resolve() for path in (legacy_deploy, runtime_root, library, legacy_library)
+    )
+    release = legacy_deploy.parents[1]
+    for path in (release, legacy_deploy.parent, legacy_deploy):
+        _require_directory(path)
+    bootstrap = release.parent.name != "releases" or not re.fullmatch(r"[0-9a-f]{40}", release.name)
+    if bootstrap:
+        if (
+            bootstrap_source is None
+            or releases_root is None
+            or bootstrap_source.resolve() != release
+        ):
+            raise ValueError("迁移必须显式指定受信不可变发行目录或原 SOURCE_ROOT")
+        if (release / ".git").is_symlink():
+            raise ValueError("bootstrap Git 元数据不能为链接")
+        git = subprocess.run(
+            ["git", "-C", str(release), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if git.returncode or Path(git.stdout.strip()).resolve() != release:
+            raise ValueError("bootstrap 来源不是原 SOURCE_ROOT Git checkout")
+        manifest = {}
+    else:
+        if releases_root and releases_root.resolve() != release.parent:
+            raise ValueError("旧发行不属于已声明 releases 根")
+        releases_root = release.parent
+        manifest = _read_regular_json(release / ".xcmax-release.json")
+        if manifest.get("git_sha") != release.name:
+            raise ValueError("迁移来源发行身份不匹配")
+    assert releases_root is not None
+    releases_root = releases_root.resolve()
+    if any(
+        path.is_relative_to(releases_root) or "releases" in path.parts
+        for path in (runtime_root, library, library.parent)
+    ):
+        raise ValueError("持久目标不能位于任何发行目录内")
+    config = legacy_deploy / ".modstore-config.json"
+    configured = (
+        _read_regular_json(config).get("library_root")
+        if config.exists() or config.is_symlink()
+        else ""
+    )
+    if configured and Path(configured).expanduser().absolute() != legacy_library:
+        raise ValueError("旧发行显式 library_root 与已核验真实库路径不一致")
+    roots = (
+        (
+            legacy_deploy / "modstore_server/data/workbench_sessions",
+            runtime_root / "workbench_sessions",
+        ),
+        (legacy_library, library),
+        (
+            legacy_library.parent / "customer-delivery-sources",
+            library.parent / "customer-delivery-sources",
+        ),
+        (
+            legacy_library.parent / "customer-delivery-artifacts",
+            library.parent / "customer-delivery-artifacts",
+        ),
+    )
+    targets = [target for _, target in roots]
+    if any(
+        first.is_relative_to(second) or second.is_relative_to(first)
+        for index, first in enumerate(targets)
+        for second in targets[index + 1 :]
+    ):
+        raise ValueError("持久会话、库、私有源码和签包目录不能重叠")
+    pending: list[tuple[Path, Path, str]] = []
+    conflicts = []
+
+    def digest(path: Path) -> str:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(fd, "rb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                raise ValueError("迁移不接受链接或特殊文件")
+            return hashlib.file_digest(handle, "sha256").hexdigest()
+
+    for old, target in roots:
+        if target.is_relative_to(release):
+            raise ValueError("持久目标不能位于发行目录内")
+        for directory in (old, *old.parents, target, *target.parents):
+            if directory.is_symlink():
+                raise ValueError(f"迁移目录不接受符号链接: {directory}")
+        if not old.exists():
+            continue
+        _require_directory(old)
+        for path in sorted(old.rglob("*")):
+            if path.is_symlink() or not (path.is_dir() or path.is_file()):
+                raise ValueError(f"迁移不接受链接或特殊文件: {path}")
+            destination = target / path.relative_to(old)
+            if destination.is_symlink():
+                raise ValueError(f"迁移目标不接受符号链接: {destination}")
+            if path.is_dir():
+                if destination.exists() and not destination.is_dir():
+                    conflicts.append(str(destination))
+                continue
+            source_digest = digest(path)
+            if destination.exists() and (
+                not destination.is_file() or digest(destination) != source_digest
+            ):
+                conflicts.append(str(destination))
+            pending.append((path, destination, source_digest))
+
+    if bootstrap and any(old.exists() and any(old.iterdir()) for old, _ in roots[2:]):
+        raise ValueError("无发行锚的 bootstrap 不能迁移任何私有源码或签包")
+    session_root = roots[0][0]
+    for session in session_root.glob("*.json") if session_root.is_dir() else ():
+        snapshot = _read_regular_json(session)
+        sid = session.stem
+        if (
+            not isinstance(snapshot, dict)
+            or snapshot.get("id") != sid
+            or not _SESSION_ID.fullmatch(sid)
+        ):
+            raise ValueError("迁移会话身份无效")
+        if bootstrap and (
+            snapshot.get("delivery_source_mode") == "versioned_main"
+            or snapshot.get("source_scope")
+            or snapshot.get("verified_artifacts")
+        ):
+            raise ValueError("无发行锚的 bootstrap 不能迁移私有生产会话")
+        if snapshot.get("delivery_source_mode") != "versioned_main":
+            continue
+        owner, ticket = int(snapshot.get("user_id") or 0), int(snapshot.get("ticket_id") or 0)
+        _validate_identity(owner, sid)
+        scope = {"owner_user_id": owner, "session_id": sid, "ticket_id": ticket}
+        source_root = roots[2][0] / str(owner) / sid
+        if (
+            ticket <= 0
+            or snapshot.get("source_scope") != scope
+            or _read_scope(source_root) != scope
+        ):
+            raise ValueError("迁移缺少原账号、工单或私有源码记录")
+        records = snapshot.get("verified_artifacts") or []
+        if snapshot.get("status") != "done" or not records:
+            raise ValueError("主线交付迁移缺少已完成原会话和签名包")
+        for record in records:
+            mod_id, version = str(record.get("id") or ""), str(record.get("version") or "")
+            stable_version(version)
+            if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,127}", mod_id):
+                raise ValueError("迁移产物身份无效")
+            package = roots[3][0] / str(owner) / mod_id / f"{mod_id}-{version}.xcmod"
+            if (
+                record.get("generation") != sid
+                or Path(str(record.get("signed_package_path") or "")) != package
+            ):
+                raise ValueError("迁移产物不属于原会话固定发行路径")
+            if not package.is_file():
+                raise ValueError("迁移缺少原正式签名包")
+            _verify_artifact_record(package.read_bytes(), record, owner_id=owner, ticket_id=ticket)
+            pinned = (manifest.get("private_mod_sources") or {}).get(mod_id) or {}
+            actual_files, actual_hash = source_fingerprints(source_root / "library" / mod_id)
+            if (
+                record.get("source_git_sha") != release.name
+                or record.get("source_git_tree") != pinned.get("git_tree")
+                or record.get("source_sha256") != actual_hash
+                or actual_hash != pinned.get("sha256")
+                or actual_files != pinned.get("files")
+            ):
+                raise ValueError("迁移私有源码与原主线发行指纹不匹配")
+    if conflicts:
+        raise ValueError("持久状态迁移冲突，未复制任何文件: " + ", ".join(conflicts))
+    if not dry_run:
+        staged = []
+        try:
+            for source, destination, expected in pending:
+                if digest(source) != expected:
+                    raise ValueError("迁移期间原文件已变化")
+                if destination.exists():
+                    if digest(destination) != expected:
+                        raise ValueError(f"持久状态迁移冲突: {destination}")
+                    continue
+                destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as handle:
+                    temporary = Path(handle.name)
+                    staged.append((temporary, destination, expected))
+                    fd = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+                    with os.fdopen(fd, "rb") as original:
+                        shutil.copyfileobj(original, handle)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                if digest(temporary) != expected:
+                    raise ValueError("迁移副本与原文件摘要不一致")
+            for _, destination, expected in staged:
+                if destination.exists() and digest(destination) != expected:
+                    raise ValueError(f"持久状态迁移冲突: {destination}")
+            for temporary, destination, expected in staged:
+                if not destination.exists():
+                    os.link(temporary, destination, follow_symlinks=False)
+        finally:
+            for temporary, _, _ in staged:
+                temporary.unlink(missing_ok=True)
+    return {
+        "ok": True,
+        "dry_run": dry_run,
+        "validated_files": len(pending),
+        "source_release": release.name,
+        "bootstrap": bool(bootstrap),
+    }
 
 
 def _validate_identity(owner_id: int, session_id: str) -> None:
@@ -45,6 +287,10 @@ def _read_scope(root: Path) -> dict[str, Any]:
     marker = _child_entry(root, "scope.json")
     if marker is None:
         raise ValueError("私有生产目录记录无效")
+    return _read_regular_json(marker, max_bytes=4096)
+
+
+def _read_regular_json(marker: Path, *, max_bytes: int | None = None) -> dict[str, Any]:
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
         fd = os.open(marker, flags)
@@ -52,7 +298,7 @@ def _read_scope(root: Path) -> dict[str, Any]:
         raise ValueError("私有生产目录记录无效") from None
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
+        if not stat.S_ISREG(info.st_mode) or (max_bytes is not None and info.st_size > max_bytes):
             raise ValueError("私有生产目录记录无效")
         stream = os.fdopen(fd, "r", encoding="utf-8")
     except (OSError, ValueError):
