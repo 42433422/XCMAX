@@ -98,7 +98,7 @@ def test_every_backend_evidence_link_is_indexed_and_has_matching_local_fallback(
     refs = _page_refs()
     assert refs, "详情页应通过后端读取证据原件"
     assert set(refs) == set(INDEX), "页面引用与证据白名单必须一一对应"
-    pointer = SITE / "capabilities/assets/evidence" / "ARCHIVE_POINTER.md"
+    pointer = SITE / "capabilities" / "EVIDENCE_ARCHIVE_POINTER.md"
     archived = pointer.is_file()
     for name, entry in INDEX.items():
         assert entry.get("sha256") and entry.get("size"), name
