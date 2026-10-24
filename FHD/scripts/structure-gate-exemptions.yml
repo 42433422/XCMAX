@@ -1,0 +1,15 @@
+# Structure / legacy retirement exemptions (phase-2)
+version: 1
+exemptions:
+  - id: EX-LEGACY-MOUNTS-001
+    gate: G4.3
+    path: FHD/app/fastapi_routes/mounts/
+    reason: 启动挂载链仍 register_legacy_*；阶段三解耦 mounts 后删除
+    expires: "2026-12-31"
+    owner: platform
+  - id: EX-LEGACY-CHAT-001
+    gate: G4.3
+    path: FHD/app/application/conversation/
+    reason: conversation 临时 infra 适配；阶段三替换实现后删除 legacy/chat
+    expires: "2026-12-31"
+    owner: ai-platform
