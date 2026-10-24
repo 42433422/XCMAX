@@ -1,5 +1,5 @@
 {
-  "lines": 2369235,
+  "lines": 2369226,
   "updated": "2026-10-24",
-  "note": "ruff format shipment_excel_etl_security after CodeQL path-injection closeout; keep SSOT gate green"
+  "note": "ruff format shipment_excel_etl_security (backend-quality); CodeQL path-injection closeout intact"
 }

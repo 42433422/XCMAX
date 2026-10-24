@@ -456,14 +456,12 @@ def _reject_output_symlink(name: str, parent_fd: int, parent_path: Path) -> None
         raise ShipmentEtlPathError("output file escaped its approved directory")
     # Inline fullmatch (same shape as artifact_files.artifact_path): CodeQL
     # models this guard as a path-injection barrier for the following sink.
-    if (
-        not re.fullmatch(r"[^/\\]+", name)
-        or name in (".", "..")
-        or "\x00" in name
-    ):
+    if not re.fullmatch(r"[^/\\]+", name) or name in (".", "..") or "\x00" in name:
         raise ShipmentEtlPathError("output file must be one path component")
     try:
-        metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)  # codeql[py/path-injection]
+        metadata = os.stat(
+            name, dir_fd=parent_fd, follow_symlinks=False
+        )  # codeql[py/path-injection]
     except FileNotFoundError:
         return
     if stat.S_ISLNK(metadata.st_mode):
@@ -482,12 +480,7 @@ def _validated_path_component(value: str) -> str:
     # Reject empty / dot-segments / separators / NUL via a CodeQL-visible guard.
     # Assign from match.group(0) so taint analysis treats the return as sanitized.
     matched = re.fullmatch(r"[^/\\]+", component or "")
-    if (
-        component != value
-        or component in (".", "..")
-        or "\x00" in component
-        or matched is None
-    ):
+    if component != value or component in (".", "..") or "\x00" in component or matched is None:
         raise ShipmentEtlPathError("path contains an invalid component")
     component = matched.group(0)
     if os.name == "nt":
@@ -795,11 +788,7 @@ def open_etl_input_file(
     try:
         name = _validated_path_component(path.name)
         # Inline fullmatch barrier for CodeQL (see artifact_files.artifact_path).
-        if (
-            not re.fullmatch(r"[^/\\]+", name)
-            or name in (".", "..")
-            or "\x00" in name
-        ):
+        if not re.fullmatch(r"[^/\\]+", name) or name in (".", "..") or "\x00" in name:
             raise ShipmentEtlPathError("input file must be one path component")
         if os.name == "nt":
             descriptor = _windows_open_relative(
@@ -813,7 +802,7 @@ def open_etl_input_file(
             nonblocking = getattr(os, "O_NONBLOCK", 0)
             if not nonblocking:
                 raise ShipmentEtlPathError("non-blocking input open is unavailable")
-                        # Open FIFOs without waiting for a writer so fstat can reject them.
+                # Open FIFOs without waiting for a writer so fstat can reject them.
             flags = os.O_RDONLY | os.O_NOFOLLOW | nonblocking | getattr(os, "O_CLOEXEC", 0)
             descriptor = os.open(name, flags, dir_fd=parent_fd)  # codeql[py/path-injection]
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
@@ -931,7 +920,9 @@ def open_etl_output_file(
             or "\x00" in output_name
         ):
             raise ShipmentEtlPathError("output file must be one path component")
-        os.rename(temp_name, output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)  # codeql[py/path-injection]
+        os.rename(
+            temp_name, output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd
+        )  # codeql[py/path-injection]
         published = True
     finally:
         try:
