@@ -6,10 +6,10 @@ import re
 from typing import Any
 
 from app.application.workflow.types import WorkflowNode
-from app.domain.services.conversation.chat_tool_intent import (
+from app.domain.conversation.services.chat_tool_intent import (
     attach_explicit_tenant_id as _attach_explicit_tenant_id,
 )
-from app.domain.services.conversation.chat_tool_intent import (
+from app.domain.conversation.services.chat_tool_intent import (
     looks_like_raw_sql as _looks_like_raw_sql,
 )
 

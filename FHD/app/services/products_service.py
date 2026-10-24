@@ -13,7 +13,7 @@ import logging
 import time
 from typing import Any, cast
 
-from app.application.ports.product_repository import ProductRepository
+from app.domain.product.ports import ProductRepository
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

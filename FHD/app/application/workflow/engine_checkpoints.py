@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .ports.checkpoint import CheckpointStore
+from .ports import CheckpointStore
 from .types import NodeExecutionResult, PlanGraph, WorkflowRunResult
 
 

@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
-from app.application.ports.vector_store import VectorStorePort
+from app.domain.excel.ports import VectorStorePort
 
 logger = logging.getLogger(__name__)
 

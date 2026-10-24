@@ -288,7 +288,7 @@ class PlannedWorkflowDispatch:
 
         tool_registry = get_workflow_tool_registry()
         planner_message = message
-        from app.domain.services.conversation.chat_tool_intent import (
+        from app.domain.conversation.services.chat_tool_intent import (
             references_recent_business_record,
         )
 

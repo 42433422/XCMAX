@@ -1,6 +1,9 @@
 # XCAGI 版本更新日志（用户更新记录 SSOT）
 
-## Unreleased（1.0.0.6 候选，尚未发布）
+## Unreleased
+
+- 架构分层收口：领域端口归位、对话/出货/产品领域服务归域，并收紧结构门禁（用户无感）。
+（1.0.0.6 候选，尚未发布）
 - CodeQL 本地路径屏障包改用标准 qlpack.yml（无 dependencies 的 model pack），经 init `packs: +./...` 挂载；`_validated_path_component` 改为返回 `re.fullmatch(...).group(0)`，三处 dir_fd sink 同步 `codeql[py/path-injection]` 抑制，收口 shipment ETL py/path-injection 高危告警。
 - 送货单 Excel 导入在落盘前把文件名校成单一路径分量，并对已校验的 dir_fd 落盘点按仓库既有方式标注 CodeQL 抑制，收口路径注入告警；不改变已批准目录与句柄相对打开语义，仍须同 SHA 安全复扫。
 - 客户考勤、合同、花名册和草稿原件撤出源码及公共员工包；新资产写入账号隔离的外部运行目录；保留账号授权的私有交付 API，并停用历史客户种子构建与共享目录登记工具。

@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 from typing import Any
 
-from app.application.workflow.ports.runtime import WorkflowRunResult
+from app.application.workflow.ports import WorkflowRunResult
 
 _VOLATILE_KEYS = (
     "timestamp",

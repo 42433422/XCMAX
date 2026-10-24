@@ -144,7 +144,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     from app.application.ai_chat.workflow_session import CANCEL_WORDS, CONFIRM_WORDS
     from app.application.normal_chat_dispatch import route_normal_mode_message
     from app.application.workflow.planner import _looks_like_business_db_write
-    from app.domain.services.conversation.chat_tool_intent import references_recent_business_record
+    from app.domain.conversation.services.chat_tool_intent import references_recent_business_record
 
     chat_service = get_ai_chat_app_service()
     from app.application.agent_task_context import scoped_conversation_user_id

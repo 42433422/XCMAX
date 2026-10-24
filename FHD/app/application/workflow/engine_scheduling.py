@@ -12,7 +12,7 @@ from contextvars import copy_context
 from typing import Any, Protocol
 
 from .engine_checkpoints import save_progress
-from .ports.checkpoint import CheckpointStore
+from .ports import CheckpointStore
 from .types import (
     NodeExecutionResult,
     PlanGraph,
