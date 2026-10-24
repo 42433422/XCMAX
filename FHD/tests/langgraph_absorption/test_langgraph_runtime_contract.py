@@ -499,7 +499,7 @@ class TestLegacyImportGuard:
             from app.application.workflow.types import StateSchema
             import json
             import os.path
-            from ..ports.events import StateUpdateEvent
+            from app.application.workflow.ports import StateUpdateEvent
             """
         )
         assert _legacy_import_offenders(src) == []

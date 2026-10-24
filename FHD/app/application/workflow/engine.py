@@ -40,7 +40,7 @@ from .engine_state import (
     record_result,
     summarize_output,
 )
-from .ports.checkpoint import CheckpointStore
+from .ports import CheckpointStore
 from .types import NodeExecutionResult, PlanGraph, StateSchema, WorkflowNode, WorkflowRunResult
 
 logger = logging.getLogger(__name__)
