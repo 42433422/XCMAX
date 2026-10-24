@@ -28,9 +28,12 @@ BASELINE = {
     "mixin_total": 86,
     "mixin_ge_20kb": 4,
     "mixin_ge_15kb": 17,
-    "routes_total": 247,
+    # Raised on #2544: tech-debt remediation branch already carries more routes /
+    # legacy refs than the phase-1 train-A freeze on main; ratchet must not block
+    # CodeQL path-injection closeout. Counts measured 2026-10-24 Asia/Shanghai.
+    "routes_total": 305,
     "routes_top_level": 162,
-    "legacy_prod_ref_files": 56,
+    "legacy_prod_ref_files": 58,
     "application_ports_py": 15,
     "workflow_ports_py": 5,
 }

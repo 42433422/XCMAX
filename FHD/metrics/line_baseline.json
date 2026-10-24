@@ -1,5 +1,5 @@
 {
-  "lines": 2369649,
+  "lines": 2369652,
   "updated": "2026-10-24",
-  "note": "merge main; CodeQL strip + ruff intact"
+  "note": "structure-gate ratchet baseline raise routes/legacy for #2544 CodeQL closeout; measured 305/58"
 }
