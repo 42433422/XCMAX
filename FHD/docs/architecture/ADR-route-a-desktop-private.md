@@ -16,14 +16,14 @@ XCAGI 同时交付 Web、Electron 桌面、Android 与 Mod 生态。需在「多
 | 域 | 运行时 | 数据 |
 |----|--------|------|
 | 桌面 / 私有化节点 | Electron + 本地 FastAPI | SQLite Mod、本地文件队列 |
-| 云端 API | K8s / 单机 FastAPI | 会话、配置、市场代理；staging 用 SQLite 母库 |
+| 云端 API | **现网默认单机 CVM** FastAPI 滚动；K8s 为可选云形态（**experimental**） | 会话、配置、市场代理；staging 用 SQLite 母库 |
 | MODstore | 姊妹栈 | 账号、订单、支付、LLM 配额 |
 
 ## 写并发与扩容
 
 - SQLite + `sqlite_write_guard`：**单机写并发**，不承诺多副本写同一 Mod 库。
 - 私有化扩容：**垂直扩容**（CPU/RAM）+ 多桌面节点；非 HPA 水平写扩展。
-- 云端 staging/production API：可按 [`k8s/deployment.yaml`](../../k8s/deployment.yaml) 水平扩展 **读与无状态 API**；Mod 业务写仍在桌面侧。
+- 云端 staging/production API：**现网默认单机 CVM 滚动**（`119.27.178.147`）。K8s 水平扩展读与无状态 API 为 **experimental** 可选形态；清单原路径 [`k8s/deployment.yaml`](../../k8s/deployment.yaml) 在本仓主树**已迁出/归档（链接悬空，路径待补）**，勿当作在仓主资产。Mod 业务写仍在桌面侧。
 
 ## Staging 定位
 
@@ -49,5 +49,6 @@ XCAGI 同时交付 Web、Electron 桌面、Android 与 Mod 生态。需在「多
 ## 相关文档
 
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md) §1.4
-- [`STAGING_RUNBOOK.md`](../../k8s/monitoring/STAGING_RUNBOOK.md)
+- ~~[`STAGING_RUNBOOK.md`](../../k8s/monitoring/STAGING_RUNBOOK.md)~~（原 `FHD/k8s/` 路径已迁出/归档，链接悬空；staging 运维以 `ops/README.md` 与现网 CVM 手册为准）
+- [`DEPLOY_PATH_SSOT.md`](DEPLOY_PATH_SSOT.md) — 部署主从索引（主路径 vs experimental 容器）
 - [`acceptance-round1-invalid-20260612.yaml`](../evidence/slo/acceptance-round1-invalid-20260612.yaml)

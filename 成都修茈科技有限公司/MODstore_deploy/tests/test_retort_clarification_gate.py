@@ -4,6 +4,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+import modstore_server.maintenance_loop.config as _maintenance_config
+import modstore_server.maintenance_loop.knowledge_gate as _maintenance_knowledge_gate
+import modstore_server.maintenance_loop.workspace as _maintenance_workspace
 from modstore_server import retort_clarification_gate as gate
 from modstore_server import strategic_council as council
 
@@ -353,6 +356,8 @@ def test_answers_incomplete_rejected_without_freeform() -> None:
 
 
 def test_expire_marks_mirrored_boss_inbox(monkeypatch) -> None:
+    from modstore_server import models
+
     class _Col:
         def __eq__(self, _other):
             return self
@@ -390,7 +395,6 @@ def test_expire_marks_mirrored_boss_inbox(monkeypatch) -> None:
 
     row = _PendingHumanQuestion()
     committed = {"ok": False}
-    import modstore_server.models as models
 
     monkeypatch.setattr(models, "PendingHumanQuestion", _PendingHumanQuestion)
     monkeypatch.setattr(models, "get_session_factory", lambda: lambda: _Session())
@@ -417,16 +421,17 @@ def test_expire_marks_mirrored_boss_inbox(monkeypatch) -> None:
 
 
 def test_self_maintenance_review_gate_blocks_when_pending(monkeypatch, tmp_path) -> None:
-    from modstore_server import self_maintenance_loop_runner as loop
 
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
     monkeypatch.setenv("MODSTORE_RETORT_CLARIFICATION_ENABLED", "1")
     monkeypatch.setenv("MODSTORE_RETORT_CLARIFICATION_LEDGER", str(tmp_path / "clar.json"))
-    monkeypatch.setattr(loop, "_changed_files_for_branch", lambda **_k: ["docs/readme.md"])
+    monkeypatch.setattr(
+        _maintenance_workspace, "_changed_files_for_branch", lambda **_k: ["docs/readme.md"]
+    )
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/fake.git")
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
 
-    result = loop._evaluate_retort_clarification_before_review(
+    result = _maintenance_knowledge_gate._evaluate_retort_clarification_before_review(
         run_id="run-sm-1",
         branch="feature/x",
         para_task_id="para-1",
@@ -438,7 +443,6 @@ def test_self_maintenance_review_gate_blocks_when_pending(monkeypatch, tmp_path)
 
 def test_self_maintenance_review_gate_uses_cleanup_safe_workspace(monkeypatch, tmp_path) -> None:
     from modstore_server import retort_clarification_gate as retort_gate
-    from modstore_server import self_maintenance_loop_runner as loop
 
     runtime_dir = tmp_path / "runtime"
     captured = {}
@@ -455,7 +459,7 @@ def test_self_maintenance_review_gate_uses_cleanup_safe_workspace(monkeypatch, t
         (workspace / "partial-clone").write_text("created", encoding="utf-8")
         return ["app/example.py"]
 
-    monkeypatch.setattr(loop, "_changed_files_for_branch", changed_files)
+    monkeypatch.setattr(_maintenance_workspace, "_changed_files_for_branch", changed_files)
     monkeypatch.setattr(retort_gate, "gate_enabled", lambda: True)
     monkeypatch.setattr(
         retort_gate,
@@ -467,14 +471,14 @@ def test_self_maintenance_review_gate_uses_cleanup_safe_workspace(monkeypatch, t
         },
     )
 
-    result = loop._evaluate_retort_clarification_before_review(
+    result = _maintenance_knowledge_gate._evaluate_retort_clarification_before_review(
         run_id="run-cleanup",
         branch="feature/fix",
         para_task_id="para-1",
         memory={},
     )
 
-    expected_root = runtime_dir / loop.DEFAULT_MERGE_WORKSPACE_ROOT
+    expected_root = runtime_dir / _maintenance_config.DEFAULT_MERGE_WORKSPACE_ROOT
     assert expected_root in captured["workspace"].parents
     assert not captured["workspace"].exists()
     assert result["blocked"] is False

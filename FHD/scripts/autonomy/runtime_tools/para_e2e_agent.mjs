@@ -186,6 +186,7 @@ function resolveCodexAgentBin() {
     if (!isPath || existsSync(configured)) return configured;
   }
   const candidates = [
+    '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
     join(homedir(), '.local/bin/codex'),
     join(homedir(), 'XCMAX-runtime/harmony/command-line-tools/tool/node/bin/codex'),
     '/Applications/Codex.app/Contents/Resources/codex',

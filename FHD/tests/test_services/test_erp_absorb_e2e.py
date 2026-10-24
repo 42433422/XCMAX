@@ -231,8 +231,7 @@ class TestPlannerDeterministicBypassNoLLM:
     在安装 LLM/请求炸弹的前提下，对精确验收句直接返回生产 fallback 计划，绝不触达任何
     LLM completion/context/http 路径。
 
-    炸弹把 ``request_planner_completion``（唯一 LLM completion 网关）与
-    ``_get_planner_http_client``（唯一 LLM 网络请求工厂）改为立即抛错；若确定性 bypass
+    炸弹把 ``request_planner_completion``（统一 Planner 模型入口）改为立即抛错；若确定性 bypass
     失效而落入 ReAct/CoT，炸弹会立即引爆，测试失败。
     """
 
@@ -253,10 +252,6 @@ class TestPlannerDeterministicBypassNoLLM:
             ),
             patch(
                 "app.application.workflow.planner.request_planner_completion",
-                side_effect=_bomb,
-            ),
-            patch(
-                "app.application.workflow.planner._get_planner_http_client",
                 side_effect=_bomb,
             ),
         ):

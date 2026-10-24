@@ -141,7 +141,6 @@ def test_renewal_falls_back_to_register_only_when_cloud_lacks_endpoint(
     import httpx
 
     from app.services import mobile_relay_desktop_client as client_mod
-    from app.services import mobile_relay_desktop_client_part01_part01 as impl
 
     calls: list[str] = []
     fresh = {"relay_id": "r2", "desktop_token": "t2", "pairing_code": "123456"}
@@ -162,6 +161,6 @@ def test_renewal_falls_back_to_register_only_when_cloud_lacks_endpoint(
         "_relay_http_client",
         lambda timeout: httpx.Client(transport=httpx.MockTransport(handler), timeout=timeout),
     )
-    result = impl.register_desktop_relay(host="192.168.1.5", port=17500)
+    result = client_mod.register_desktop_relay(host="192.168.1.5", port=17500)
     assert (result is not None and result["relay_id"] == "r2") is registers
     assert any(p.endswith("/register") for p in calls) is registers

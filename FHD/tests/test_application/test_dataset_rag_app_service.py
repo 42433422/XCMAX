@@ -1060,7 +1060,11 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
         patch(
             "app.application.dataset_rag_app_service.get_dataset_rag_app_service", return_value=svc
         ),
-        _blocked_host_rebuild(),
+        # Keep the queue paused while exercising its HTTP admission/cancellation
+        # contract. Host ownership and wake-up use real workers in the separate
+        # HTTP/Agent lifecycle tests below; unrelated process startup must not
+        # exhaust a fake embedding operation's bounded wait here.
+        patch("app.application.dataset_rag_queue.ensure_host_worker") as wake_host,
     ):
         client.post(
             "/api/knowledge/v1/datasets/route-queue/documents",
@@ -1086,6 +1090,7 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
             headers=headers,
         )
 
+    wake_host.assert_called_once_with()
     assert rebuild.status_code == 200
     assert rebuild.json()["job"]["status"] == "queued"
     assert cancelled.status_code == 200
@@ -1124,7 +1129,9 @@ def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, 
 
     def embed(text):
         started.set()
-        assert release.wait(10), "host rebuild did not receive release"
+        # This fixture spans two subsequent isolated tool calls, each with its
+        # own deadline. Bound the whole scenario; finally always releases it.
+        assert release.wait(60), "host rebuild did not receive release"
         return [float(len(text)), 1.0]
 
     service._embedder = embed
@@ -1271,39 +1278,6 @@ def _host_service():
             return holder[0]
         time.sleep(0.01)
     raise AssertionError("host consumer did not initialize")
-
-
-from contextlib import contextmanager
-
-
-@contextmanager
-def _blocked_host_rebuild():
-    import threading
-
-    from app.application.dataset_rag_queue import stop_host_workers
-
-    service = _host_service()
-    service.ingest_document(
-        dataset_id="occupied-host",
-        source="host.md",
-        text="Hold the host slot.",
-        chunk_strategy="fixed",
-    )
-    started, release = threading.Event(), threading.Event()
-
-    def embed(text):
-        started.set()
-        assert release.wait(10)
-        return [1.0]
-
-    service._embedder = embed
-    service.start_rebuild_index(dataset_id="occupied-host", background=True)
-    assert started.wait(5)
-    try:
-        yield service
-    finally:
-        release.set()
-        assert stop_host_workers()
 
 
 def test_direct_agent_rebuild_wakes_host_without_waiting_for_cold_storage(tmp_path, monkeypatch):

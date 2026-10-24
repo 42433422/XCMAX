@@ -35,7 +35,7 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 
 import pytest
 from fastapi import FastAPI
@@ -1039,7 +1039,7 @@ class TestExcelVectorIngest:
         assert r.status_code == 200
         assert r.json()["success"] is True
 
-    def test_ingest_json_ingest_fails_returns_400(self):
+    def test_ingest_json_ingest_fails_returns_400(self, local_tools):
         mock_svc = MagicMock()
         mock_svc.ingest_excel.return_value = {"success": False, "message": "bad file"}
         with patch(
@@ -1110,7 +1110,7 @@ class TestExcelVectorIngest:
 class TestExcelVectorQuery:
     """Cover ``query_excel_vector`` route."""
 
-    def test_query_success(self):
+    def test_query_success(self, local_tools):
         mock_svc = MagicMock()
         mock_svc.query.return_value = {"success": True, "hits": []}
         with patch(
@@ -1334,6 +1334,11 @@ class TestFinalizeEnterpriseLogin:
             ),
             # 市场身份绑定依赖真实宿主库账号，本用例聚焦“市场成功即保存 token”
             patch("app.application.tenant_rbac_app_service.bind_verified_market_identity"),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new_callable=AsyncMock,
+                return_value={"__proxy_error__": True, "status_code": 503, "payload": {}},
+            ) as market_proxy,
         ):
             out = await finalize_enterprise_login(
                 result=result,
@@ -1345,6 +1350,15 @@ class TestFinalizeEnterpriseLogin:
             )
         mock_save.assert_called_once_with("sess1", "mtok123", "mref456")
         assert out["market_access_token"] == "mtok123"
+        assert market_proxy.await_args_list == [
+            call("GET", "/api/payment/my-plan", authorization="mtok123", return_error_payload=True),
+            call(
+                "GET",
+                "/api/enterprise/entitled-mod-ids",
+                authorization="Bearer mtok123",
+                return_error_payload=True,
+            ),
+        ]
 
     @pytest.mark.asyncio
     async def test_market_failure_no_token(self):

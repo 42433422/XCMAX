@@ -357,9 +357,6 @@ class TestPlanWithLLM:
                 }
             ]
         }
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "test-key"
@@ -368,8 +365,8 @@ class TestPlanWithLLM:
             mock_svc.get_context.return_value = None
             mock_get.return_value = mock_svc
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 planner = LLMWorkflowPlanner()
                 result = planner._plan_with_llm("p1", "u1", "查询产品", get_tool_registry(), {})
@@ -381,9 +378,6 @@ class TestPlanWithLLM:
     def test_llm_http_error_returns_none(self):
         mock_response = Mock()
         mock_response.status_code = 500
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "test-key"
@@ -392,8 +386,8 @@ class TestPlanWithLLM:
             mock_svc.get_context.return_value = None
             mock_get.return_value = mock_svc
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 planner = LLMWorkflowPlanner()
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})

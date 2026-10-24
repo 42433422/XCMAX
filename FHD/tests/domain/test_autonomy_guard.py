@@ -74,8 +74,7 @@ REQUIRED_ACTIVATION_EVIDENCE = {
         'evaluate_risk(\n        "self_heal_pr_merge"',
     ),
     "mod_auto_publish": (
-        REPO_ROOT / "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
-        "workbench_api_part04_part01_part02.py",
+        REPO_ROOT / "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench/vibe_api.py",
         '"mod_auto_publish",',
     ),
     "db_migration": (

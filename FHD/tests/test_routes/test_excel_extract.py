@@ -1,4 +1,4 @@
-"""Comprehensive tests for app.fastapi_routes.excel_extract.
+"""Comprehensive tests for app.fastapi_routes.domains.excel.excel_extract.
 
 Covers: extract, upload, generate, download, import products/customers, logs, preview,
 attendance detail extraction, and all helper functions.
@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.fastapi_routes.excel_extract import (
+from app.fastapi_routes.domains.excel.excel_extract import (
     TEMP_EXCEL_DIR,
     _extract_attendance_detail_roster,
     _extract_from_excel,
@@ -27,6 +28,23 @@ from app.fastapi_routes.excel_extract import (
     import_customers,
     import_products,
 )
+
+
+@pytest.fixture(autouse=True)
+def _configured_etl_workspace(tmp_path, monkeypatch):
+    """Keep fixture inputs/outputs inside operator-configured isolated roots."""
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    named_temporary_file = tempfile.NamedTemporaryFile
+
+    def named_file_in_workspace(*args, **kwargs):
+        kwargs.setdefault("dir", tmp_path)
+        return named_temporary_file(*args, **kwargs)
+
+    monkeypatch.setattr(tempfile, "NamedTemporaryFile", named_file_in_workspace)
+    managed_temp_root = Path(os.environ["XCAGI_DATA_DIR"]) / "temp_excel"
+    managed_temp_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr("app.fastapi_routes.excel_extract.TEMP_EXCEL_DIR", str(managed_temp_root))
+
 
 # ---------------------------------------------------------------------------
 # _extract_from_excel
@@ -118,7 +136,7 @@ class TestExtractFromExcel:
 
     def test_extract_error(self):
         with patch(
-            "app.fastapi_routes.excel_extract._extract_from_excel",
+            "app.fastapi_routes.domains.excel.excel_extract._extract_from_excel",
             side_effect=RuntimeError("corrupt"),
         ):
             # The route handler catches RECOVERABLE_ERRORS
@@ -129,7 +147,7 @@ class TestExtractFromExcel:
 
     def test_extract_error_via_handler(self):
         with patch(
-            "app.fastapi_routes.excel_extract._extract_from_excel",
+            "app.fastapi_routes.domains.excel.excel_extract._extract_from_excel",
             side_effect=RuntimeError("corrupt"),
         ):
             resp = extract_from_excel({"file_path": "/fake/path.xlsx"})

@@ -35,16 +35,23 @@ def test_login_with_phone_code_market_fail(
         {"success": False, "message": "验证码无效"},
         status_code=401,
     )
-    with patch(
-        "app.application.enterprise_login_flow.run_market_first_login",
-        new=AsyncMock(return_value=(None, err_resp)),
-    ) as login:
+    with (
+        patch(
+            "app.application.enterprise_login_flow.run_market_first_login",
+            new=AsyncMock(return_value=(None, err_resp)),
+        ) as login,
+        patch(
+            "app.fastapi_routes.market_account.login_market_with_phone_code",
+            new=AsyncMock(return_value={"success": False, "message": "验证码无效"}),
+        ) as market,
+    ):
         resp = client.post(
             "/api/auth/login-with-phone-code",
             json={"phone": "13800138000", "code": "123456", "account_kind": "enterprise"},
         )
     assert resp.status_code == 401
     assert isinstance(login.call_args.kwargs["background_tasks"], BackgroundTasks)
+    market.assert_awaited_once_with("13800138000", "123456")
 
 
 def test_market_send_phone_code_proxy() -> None:

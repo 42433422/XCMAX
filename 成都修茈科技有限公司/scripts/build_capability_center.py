@@ -8,10 +8,11 @@ import html
 import hashlib
 import json
 import re
+import runpy
 import shutil
 import subprocess
 import sys
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
@@ -34,6 +35,12 @@ EVIDENCE_PUBLIC_COPY_PREFIX = "成都修茈科技有限公司/capabilities/asset
 # 只有截图与录像原件进证据桶；JSON / 日志体积小、页面已逐件展示 SHA-256，继续由站内提供。
 EVIDENCE_COS_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov")
 PROJECT_TIMEZONE = ZoneInfo("Asia/Shanghai")
+_EVIDENCE_ASSETS = runpy.run_path(str(Path(__file__).with_name("evidence_assets.py")))
+
+
+def prepare_evidence_assets() -> int:
+    """Rebuild checksum-pinned public files before serving or reading the site."""
+    return _EVIDENCE_ASSETS["materialize"](REPO_ROOT)
 
 STATUS_META = {
     "verified": {"label": "已验证", "cls": "st-verified", "rank": 3},
@@ -127,7 +134,7 @@ def evidence_paths(value: object) -> set[str]:
         return set().union(*(evidence_paths(v) for v in value.values()))
     if isinstance(value, list):
         return set().union(*(evidence_paths(v) for v in value))
-    return {value} if isinstance(value, str) and Path(value).suffix.lower() in {
+    return {value} if isinstance(value, str) and not urlsplit(value).scheme and Path(value).suffix.lower() in {
         ".json", ".log", ".txt", ".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".mov",
     } else set()
 
@@ -162,11 +169,12 @@ def privacy_exclusions(evidence: dict, feature_id: str = "") -> set[str]:
 
 
 def e(path: str) -> Path:
-    return REPO_ROOT / path
+    return _EVIDENCE_ASSETS["resolve_source"](REPO_ROOT, path)
 
 
 def path_exists(rel: str) -> bool:
-    return e(rel).exists()
+    # External provenance links are not repository files.
+    return bool(rel) and not urlsplit(rel).scheme and e(rel).exists()
 
 
 def check_videos(catalog: dict, ffmpeg: str) -> list[dict]:
@@ -265,8 +273,11 @@ def public_asset_matches(feature: str, rel: str, platform: str | None = None,
                          collisions: set[str] | None = None) -> bool:
     source = e(rel)
     public = EVIDENCE_ASSET_DIR / evidence_asset_name(feature, rel, platform, collisions)
-    return (source.is_file() and public.is_file()
-            and hashlib.sha256(source.read_bytes()).digest() == hashlib.sha256(public.read_bytes()).digest())
+    if public.is_file():
+        return (source.is_file()
+                and hashlib.sha256(source.read_bytes()).digest() == hashlib.sha256(public.read_bytes()).digest())
+    entry = _EVIDENCE_ASSETS["load"](REPO_ROOT)["assets"].get(public.name)
+    return bool(entry and file_digest(rel) == (entry["sha256"], entry["size"]))
 
 
 def platform_asset_collisions(feature: dict) -> set[str]:
@@ -852,7 +863,10 @@ def windows_delivery_panel() -> str:
     root = REPO_ROOT / "FHD" / "docs" / "evidence" / "e2e" / "windows-final-candidate-83939363"
     public = EVIDENCE_ASSET_DIR
     for name in ("windows-delivery-clean.json", "windows-delivery-upgrade.json", "windows-delivery-receipt.json"):
-        if hashlib.sha256((root / name).read_bytes()).digest() != hashlib.sha256((public / name).read_bytes()).digest():
+        published = public / name
+        if not published.exists():
+            published = e(EVIDENCE_PUBLIC_COPY_PREFIX + name)
+        if hashlib.sha256((root / name).read_bytes()).digest() != hashlib.sha256(published.read_bytes()).digest():
             raise ValueError(f"Windows public evidence differs from source: {name}")
     receipt = json.loads((root / "windows-delivery-receipt.json").read_text(encoding="utf-8"))
     runs = {mode: json.loads((root / f"windows-delivery-{mode}.json").read_text(encoding="utf-8"))
@@ -1468,7 +1482,9 @@ def write_outputs(data: dict, domains_full: list[dict]) -> dict[str, str]:
 
 def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
     """Copy only public evidence; never copy assets excluded by privacy review."""
+    prepare_evidence_assets()
     copied = []
+    sources = {}
     EVIDENCE_ASSET_DIR.mkdir(parents=True, exist_ok=True)
 
     def copy(feature: str, path: str, platform: str | None = None,
@@ -1478,7 +1494,9 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
         src = e(path)
         if src.is_file():
             dst = EVIDENCE_ASSET_DIR / evidence_asset_name(feature, path, platform, collisions)
-            shutil.copy2(src, dst)
+            if src.resolve() != dst.resolve():
+                shutil.copy2(src, dst)
+            sources[dst.name] = src.relative_to(REPO_ROOT).as_posix()
             copied.append(str(dst.relative_to(WEBSITE_DIR)))
 
     for d in domains_full:
@@ -1495,10 +1513,13 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
                 for v in f.get("verdicts", []):
                     for p in platform_evidence_paths(v):
                         copy(f["id"], p, v["id"], collisions, excluded)
+    _EVIDENCE_ASSETS["record"](REPO_ROOT, sources)
     return copied
 
 
 def private_generated_assets(remove: bool = False) -> list[Path]:
+    if not EVIDENCE_ASSET_DIR.exists():
+        return []
     sensitive_prefixes = ("base-login-", "ind-attendance-", "erp-sales-order-", "ind-szqsm-")
     private_names = set()
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
@@ -1570,6 +1591,7 @@ def main() -> int:
     ap.add_argument("--ffmpeg", default="ffmpeg")
     ap.add_argument("--video-report", type=Path)
     args = ap.parse_args()
+    _EVIDENCE_ASSETS["verified_sources"](REPO_ROOT, _EVIDENCE_ASSETS["load"](REPO_ROOT))
     if args.check_videos:
         videos = check_videos(json.loads(CATALOG_PATH.read_text(encoding="utf-8")), args.ffmpeg)
         report = {"git_sha": git("rev-parse", "HEAD"), "scope": "video_decode_integrity", "videos": videos,
@@ -1618,6 +1640,7 @@ def main() -> int:
         target.write_text(content, encoding="utf-8")
     copied = copy_evidence_assets(domains_full)
     removed_assets = private_generated_assets(remove=True)
+    _EVIDENCE_ASSETS["record"](REPO_ROOT, {}, {p.name for p in removed_assets})
     removed = prune_stale_generated(outputs)
 
     s = data["stats"]

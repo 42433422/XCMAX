@@ -212,7 +212,7 @@ def _register_shipment_routes(app: FastAPI) -> None:
     """Mount shipment/materials/upload/ocr/print routes."""
     _mount_router(
         app,
-        "app.fastapi_routes.shipment_orders",
+        "app.fastapi_routes.domains.shipment.shipment_orders",
         log_name="shipment_orders (/api/orders*, /api/shipment/shipment-records/*)",
     )
 
@@ -299,7 +299,7 @@ def _register_excel_routes(app: FastAPI) -> None:
 
     _mount_router(
         app,
-        "app.fastapi_routes.excel_extract",
+        "app.fastapi_routes.domains.excel.excel_extract",
         log_name="excel_extract (/api/excel/data/*)",
     )
 

@@ -11,6 +11,7 @@
 | verify_import.py | `scripts/archive/2026-08/verify_import.py` | verify | no | stdlib |
 | check_coverage_ssot.py | `scripts/ci/check_coverage_ssot.py` | ssot | no | stdlib |
 | check_operational_errors_gate.py | `scripts/ci/check_operational_errors_gate.py` | guard | no | stdlib |
+| check_structure_gates.py | `scripts/ci/check_structure_gates.py` | guard | yes | stdlib |
 | guard_temp_scripts.py | `scripts/ci/guard_temp_scripts.py` | guard | no | stdlib |
 | verify_admin_console.py | `scripts/deploy/lib/verify_admin_console.py` | verify | no | stdlib |
 | verify_release_archive.py | `scripts/deploy/lib/verify_release_archive.py` | verify | no | stdlib |
@@ -68,4 +69,4 @@
 | verify_sales_contract_template_env.py | `scripts/verify_sales_contract_template_env.py` | verify | no | stdlib |
 | verify_six_line_event_rail.py | `scripts/verify_six_line_event_rail.py` | verify | no | stdlib |
 
-合计：14 已纳入 ssot / 47 已登记清单 / 0 新游离
+合计：15 已纳入 ssot / 47 已登记清单 / 0 新游离

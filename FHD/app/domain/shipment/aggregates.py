@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from app.domain.shipment.shipment_quantities import resolve_shipment_quantity
-from app.legacy.domain.legacy_vo import ContactInfo, Money, OrderNumber, Quantity
+from app.domain.shipment.value_objects import ContactInfo, Money, OrderNumber, Quantity
 
 
 @dataclass

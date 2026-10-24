@@ -193,7 +193,7 @@ function formatDate(value: string): string {
 </script>
 
 <style scoped>
-.enterprise-roster { margin-bottom: 18px; padding: 17px; border: 1px solid #cbddee; border-radius: 17px; background: rgba(255,255,255,.92); box-shadow: 0 10px 28px rgba(24,58,94,.06); }
+.enterprise-roster { margin-bottom: 18px; padding: 17px; border: 1px solid; }
 .enterprise-roster__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .enterprise-roster__head p { margin: 0 0 4px; color: #3d78bc; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
 .enterprise-roster__head h3 { margin: 0; color: #254663; font-size: 18px; }

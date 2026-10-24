@@ -131,6 +131,86 @@ def test_existing_task_id_is_read_only_and_wrong_identity_never_completes(monkey
     assert execution_requires_reconciliation(result)
 
 
+@pytest.mark.parametrize(
+    "state,expected",
+    [
+        ("running", "para_task_accepted"),
+        ("queued", "para_task_accepted"),
+        ("accepted", "para_task_accepted"),
+        ("completed", "para_task_completed"),
+        ("merged", "para_task_merged"),
+        ("failed", "para_task_failed"),
+        ("merge_conflict", "para_task_merge_conflict"),
+        ("wrong_identity", "para_task_identity_mismatch"),
+        ("missing_child", "para_task_incomplete"),
+        ("failed_child", "para_task_incomplete"),
+        ("wrong_device", "para_task_incomplete"),
+    ],
+)
+def test_existing_task_nonblocking_readback_preserves_real_state(monkeypatch, state, expected):
+    requests = []
+    child = {"id": "child-1", "device_id": "device-1", "status": "completed"}
+    task = {"id": "original", "status": state, "subTasks": [child]}
+    if state in {"wrong_identity", "missing_child", "failed_child", "wrong_device"}:
+        task["status"] = "completed"
+    if state == "wrong_identity":
+        task["id"] = "different"
+    elif state == "missing_child":
+        task["subTasks"] = []
+    elif state == "failed_child":
+        child["status"] = "failed"
+    elif state == "wrong_device":
+        task["subTasks"].append({"id": "child-2", "device_id": "different", "status": "completed"})
+
+    def transport(request):
+        requests.append(request)
+        return httpx.Response(200, json={"task": task})
+
+    _api(monkeypatch, transport)
+    monkeypatch.setattr(para.time, "sleep", lambda _: pytest.fail("Nonblocking readback slept"))
+    result = para._post_para_api_once(
+        {
+            "para_task_id": "original",
+            "request_id": "attempt",
+            "report_only": True,
+            "wait_for_para": False,
+            "required_subtask_ids": ["child-1"],
+            "planned_devices": (
+                ["device-1", "device-2"] if state == "wrong_device" else ["device-1"]
+            ),
+        }
+    )
+    assert [(r.method, r.url.path) for r in requests] == [("GET", "/api/tasks/original")]
+    assert result["task_id"] == "original" and result["status"] == expected
+    assert result["para_result"]["task_status"] == task["status"]
+    assert result["completed"] is (state in {"completed", "merged"})
+    assert execution_succeeded(result) is (state in {"completed", "merged"})
+    assert execution_requires_reconciliation(result) is (
+        state not in {"completed", "merged", "failed", "merge_conflict"}
+    )
+
+
+@pytest.mark.parametrize("wait_flag", [True, None])
+def test_existing_task_explicit_or_default_wait_still_polls_to_completion(monkeypatch, wait_flag):
+    requests = []
+    monkeypatch.setenv("MODSTORE_PARA_WAIT_FOR_COMPLETION", "1")
+
+    def transport(request):
+        requests.append(request)
+        status = "running" if len(requests) == 1 else "completed"
+        return httpx.Response(200, json={"task": {"id": "original", "status": status}})
+
+    _api(monkeypatch, transport)
+    sleep = Mock()
+    monkeypatch.setattr(para.time, "sleep", sleep)
+    result = para._post_para_api_once(
+        {"para_task_id": "original", "report_only": True, "wait_for_para": wait_flag}
+    )
+    assert result["completed"] and result["status"] == "para_task_completed"
+    assert [(r.method, r.url.path) for r in requests] == [("GET", "/api/tasks/original")] * 2
+    sleep.assert_called_once()
+
+
 def test_post_response_loss_retains_unknown_and_never_falls_back(monkeypatch):
     posts = []
 

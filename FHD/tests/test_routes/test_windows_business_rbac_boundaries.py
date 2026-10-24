@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes import dataset_access
-from app.fastapi_routes.excel_extract import router as excel_router
+from app.fastapi_routes.domains.excel.excel_extract import router as excel_router
 from app.fastapi_routes.knowledge_v1 import router as knowledge_router
 from app.infrastructure.auth import dependencies
 from app.infrastructure.auth import shipment_etl_access_gate as shipment_gate

@@ -33,7 +33,7 @@
     "@playwright/test": "^1.64.0",
     "@types/node": "26.6.5",
     "@vitest/coverage-v8": "^5.0.4",
-    "electron": "44.7.1",
+    "electron": "44.9.3",
     "electron-builder": "26.15.3",
     "typescript": "6.0.3",
     "vitest": "^5.0.4"
@@ -50,7 +50,7 @@
     "tar": "7.5.21",
     "postcss": "8.5.25",
     "tmp": "0.2.7",
-    "undici": "6.29.0",
+    "undici": "6.29.1",
     "@xmldom/xmldom": "0.8.15",
     "source-map-js": "1.2.2",
     "@noble/hashes@<2": "1.8.0"
