@@ -1,5 +1,4 @@
-# Structure gate + legacy retirement exemptions (merged A+E)
-# Rules: each entry needs expires + owner; expired → treated as invalid.
+# Structure gate + legacy retirement exemptions (A+E)
 version: 1
 exemptions:
   - id: EX-APP-FIXTURE-001
