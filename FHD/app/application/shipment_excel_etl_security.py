@@ -174,7 +174,7 @@ def _windows_open_anchor(anchor: str) -> int:
             int(handle), os.O_RDONLY | _windows_binary_flag()
         )
         transferred = True
-        return descriptor
+        return int(descriptor)
     finally:
         if not transferred:
             kernel32.CloseHandle(handle)
@@ -197,7 +197,9 @@ def _windows_open_relative(
     name_buffer = ctypes.create_unicode_buffer(name)
     name_bytes = len(name) * ctypes.sizeof(ctypes.c_wchar)
     unicode_name = UnicodeString(
-        name_bytes, name_bytes + ctypes.sizeof(ctypes.c_wchar), name_buffer
+        name_bytes,
+        name_bytes + ctypes.sizeof(ctypes.c_wchar),
+        ctypes.cast(name_buffer, wintypes.LPWSTR),
     )
     attributes = ObjectAttributes(
         ctypes.sizeof(ObjectAttributes),
