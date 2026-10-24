@@ -87,7 +87,7 @@ import {
   bundledAutomationPolicyDoc,
   parseAutomationPolicyDoc,
   type AutomationPolicyDoc,
-} from '@/utils/automationPolicyLines'
+} from '../../utils/automationPolicyLines'
 import { xcmaxAutomationPolicyOpenUrl } from '@/constants/xcmaxDashboardEmbed'
 
 const openUrl = xcmaxAutomationPolicyOpenUrl()
