@@ -1,5 +1,5 @@
 {
-  "lines": 2368787,
+  "lines": 2368796,
   "updated": "2026-10-24",
-  "note": "本次 Windows ETL 原生句柄绑定修复增加 2 行：显式 ctypes.cast 将 UTF-16 缓冲区传入 UnicodeString.Buffer，并显式 int 化 Windows 文件描述符以满足类型与运行时契约；这是安全兼容修复，用户已批准本 PR 登记净增例外。"
+  "note": "本次按最新 CI 真实失败修复增加净 9 行：将否定识别改为有界线性空白扫描（+8 行净增），为 ETL LLM 临时目录测试显式设置隔离 WORKSPACE_ROOT（+1 行），并把客户新增测试契约更新为受控 business_db_write 计划及 upsert 参数（净 0 行）。没有放宽生产路径边界；用户已批准本 PR 登记净增例外。"
 }
