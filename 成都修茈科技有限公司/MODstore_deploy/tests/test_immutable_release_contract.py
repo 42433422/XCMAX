@@ -30,9 +30,7 @@ def test_private_delivery_migration_uses_persistent_library_and_stopped_window()
     stop = script.index("systemctl stop modstore.service modstore-scheduler.service", preflight)
     copied = script.index("migrate_delivery_state false", stop)
     promote = script.index('ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"')
-    # Final live-health approval must run while :9999 is still up (before stop).
-    final_verify = script.rindex("verify_fixed_release_approval", 0, stop)
-    assert preflight < final_verify < stop < copied < promote
+    assert preflight < script.rindex("verify_fixed_release_approval", 0, stop) < stop < copied < promote
     assert "verify_fixed_release_approval" not in script[stop:promote]
     assert (
         'TARGET_SHA="$PREVIOUS_SHA" LIBRARY_DIR="$PREVIOUS_LIBRARY_DIR" write_service_units'
