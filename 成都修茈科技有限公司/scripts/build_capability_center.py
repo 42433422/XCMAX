@@ -172,9 +172,27 @@ def e(path: str) -> Path:
     return _EVIDENCE_ASSETS["resolve_source"](REPO_ROOT, path)
 
 
+def evidence_state(rel: str) -> dict:
+    """Local file or archive-MANIFEST-verified pin (blob may be unmounted)."""
+    if not rel or urlsplit(rel).scheme:
+        return {"exists": False, "path": None, "sha256": None, "size": None}
+    return _EVIDENCE_ASSETS["evidence_file_state"](REPO_ROOT, rel)
+
+
 def path_exists(rel: str) -> bool:
     # External provenance links are not repository files.
-    return bool(rel) and not urlsplit(rel).scheme and e(rel).exists()
+    # Directories (impl roots) use ordinary exists(); media may be archive-only
+    # (MANIFEST-verified, blob not mounted) and still count as present so CI
+    # --check matches a fully materialized tree.
+    if not rel or urlsplit(rel).scheme:
+        return False
+    try:
+        path = e(rel)
+    except ValueError:
+        return False
+    if path.exists():
+        return True
+    return evidence_state(rel)["exists"]
 
 
 def check_videos(catalog: dict, ffmpeg: str) -> list[dict]:
@@ -390,8 +408,8 @@ def reviewed_runs(feat: dict, head: str | None = None) -> list[dict]:
             declared = sum((feat["evidence"].get(k, []) for k in ("screenshots", "videos")), [])
             if not all(m.get("feature") == feat["id"] and m.get("visual_review") == "accepted"
                        and m.get("visible_result") and m.get("reviewed_at") and m["path"] in declared
-                       and e(m["path"]).is_file()
-                       and hashlib.sha256(e(m["path"]).read_bytes()).hexdigest() == m.get("sha256") for m in media):
+                       and (st := evidence_state(m["path"]))["exists"]
+                       and st["sha256"] == m.get("sha256") for m in media):
                 continue
             run["_acceptance_path"] = rel
             run["_acceptance_sha256"] = hashlib.sha256(raw).hexdigest()
@@ -418,7 +436,8 @@ def traceable_pass(feat: dict, platform: str, run: dict) -> tuple[bool, str | No
         run_log = run.get("log")
         run_log_matches = run_log is None or (isinstance(run_log, dict) and any(
             item.get("path") == run_log.get("path") and item.get("sha256") == run_log.get("sha256")
-            and type(run_log.get("bytes")) is int and e(run_log["path"]).stat().st_size == run_log["bytes"]
+            and type(run_log.get("bytes")) is int
+            and evidence_state(run_log["path"])["size"] == run_log["bytes"]
             for item in logs))
         types = {Path(m["path"]).suffix.lower() for m in run["media"]}
         complete = (ident["path"] in assets.get("raw", [])
@@ -429,8 +448,8 @@ def traceable_pass(feat: dict, platform: str, run: dict) -> tuple[bool, str | No
                     and re.fullmatch(r"[0-9a-f]{64}", str(sha or ""))
                     and types & {".png", ".jpg", ".jpeg", ".webp"} and types & {".mp4", ".webm", ".mov"}
                     and run_log_matches
-                    and logs and all(e(log["path"]).is_file() and e(log["path"]).stat().st_size
-                                     and hashlib.sha256(e(log["path"]).read_bytes()).hexdigest() == log["sha256"]
+                    and logs and all((st := evidence_state(log["path"]))["exists"] and (st["size"] or 0)
+                                     and st["sha256"] == log["sha256"]
                                      for log in logs))
         return bool(complete), sha if complete else None
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
@@ -529,8 +548,9 @@ def platform_observations(feat: dict, platform: str, warnings: list[str], head: 
         media_by_kind = {m.get("kind"): m for m in record.get("media", []) if isinstance(m, dict)}
         for asset_spec in spec.get("assets", []) or []:
             path = asset_spec.get("path", "")
-            exists = e(path).is_file()
-            digest = hashlib.sha256(e(path).read_bytes()).hexdigest() if exists else None
+            st = evidence_state(path)
+            exists = st["exists"]
+            digest = st["sha256"]
             expected = asset_spec.get("sha256")
             bound = media_by_kind.get(asset_spec.get("kind"))
             record_path_ref = record.get(asset_spec.get("kind")) if asset_spec.get("kind") in {"screenshot", "video", "log"} else None

@@ -183,6 +183,79 @@ def readable_evidence_source(root: Path, entry: dict) -> Path | None:
     return None
 
 
+
+def _pinned_entry(root: Path, rel: str) -> dict | None:
+    """Find a materialization entry for a repo-relative evidence path or public alias."""
+    data = load(root)
+    norm = rel.replace("\\", "/")
+    prefix = PUBLIC + "/"
+    if norm.startswith(prefix):
+        entry = data.get("assets", {}).get(norm[len(prefix):])
+        if entry:
+            return entry
+    entry = data.get("source_aliases", {}).get(norm)
+    if entry:
+        return entry
+    for section in SECTIONS:
+        for _name, ent in (data.get(section) or {}).items():
+            src = str(ent.get("source") or "").replace("\\", "/")
+            if src == norm:
+                return ent
+    return None
+
+
+def evidence_file_state(root: Path, rel: str) -> dict:
+    """Return availability for an evidence path without requiring archive blobs.
+
+    ``exists`` is True when bytes are readable locally OR the committed archive
+    MANIFEST (+ materialization pin when present) verifies the checksum. CI
+    checkouts without mounted blobs must keep the same verified/pending status
+    as a full archive mount.
+    """
+    empty = {"exists": False, "path": None, "sha256": None, "size": None}
+    if not rel or "://" in rel.split(":", 1)[0]:
+        return empty
+    try:
+        path = resolve_source(root, rel)
+    except ValueError:
+        return empty
+    if path.is_file():
+        return {
+            "exists": True,
+            "path": path,
+            "sha256": digest(path),
+            "size": path.stat().st_size,
+        }
+    try:
+        norm = relative(rel.replace("\\", "/"))
+    except ValueError:
+        return empty
+    entry = _pinned_entry(root, norm)
+    archive_key = relative(entry["source"]) if entry else norm
+    meta = archive_manifest_index().get(archive_key)
+    if entry:
+        if not meta or meta.get("sha256") != entry["sha256"]:
+            return empty
+        if int(meta.get("bytes") or 0) != int(entry["size"]):
+            return empty
+        archive_path = Path(meta["archive_path"])
+        return {
+            "exists": True,
+            "path": archive_path if archive_path.is_file() else None,
+            "sha256": entry["sha256"],
+            "size": int(entry["size"]),
+        }
+    if meta and meta.get("sha256"):
+        archive_path = Path(meta["archive_path"])
+        return {
+            "exists": True,
+            "path": archive_path if archive_path.is_file() else None,
+            "sha256": meta["sha256"],
+            "size": int(meta.get("bytes") or 0),
+        }
+    return empty
+
+
 def verified_sources(root: Path, data: dict) -> dict[str, Path]:
     sources = {}
     archived = 0
