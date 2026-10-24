@@ -309,7 +309,11 @@ def _windows_rename_relative(file_fd: int, parent_fd: int, target_name: str) -> 
     )
     if status < 0:
         win_error = int(ntdll.RtlNtStatusToDosError(status))
-        raise OSError(win_error, ctypes.FormatError(win_error), target_name)
+        raise OSError(
+            win_error,
+            ctypes.FormatError(win_error),  # type: ignore[attr-defined]
+            target_name,
+        )
 
 
 def _windows_set_delete_pending(file_fd: int) -> None:
@@ -348,7 +352,7 @@ def _windows_reject_existing_reparse_leaf(parent_fd: int, name: str) -> None:
 @contextmanager
 def _open_windows_etl_output_file(path: Path, parent_fd: int) -> Iterator[BinaryIO]:
     """Write beside the destination, then rename through the pinned directory handle."""
-    temp_name = f".{path.name}.{secrets.token_hex(12)}.tmp"
+    temp_name = f".etl-{secrets.token_hex(12)}.tmp"
     descriptor: int | None = None
     stream: BinaryIO | None = None
     published = False
@@ -387,8 +391,17 @@ def _open_windows_etl_output_file(path: Path, parent_fd: int) -> Iterator[Binary
             os.close(parent_fd)
 
 
-def _reject_output_symlink(name: str, parent_fd: int) -> None:
+def _reject_output_symlink(name: str, parent_fd: int, parent_path: Path) -> None:
     """Reject an existing leaf link immediately before atomic publication."""
+    name = _validated_path_component(name)
+    candidate_text = os.path.normpath(os.path.join(str(parent_path), name))
+    parent_text = os.path.normpath(str(parent_path))
+    try:
+        common = os.path.commonpath((candidate_text, parent_text))
+    except ValueError as exc:
+        raise ShipmentEtlPathError("output file escaped its approved directory") from exc
+    if os.path.normcase(common) != os.path.normcase(parent_text):
+        raise ShipmentEtlPathError("output file escaped its approved directory")
     try:
         metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
     except FileNotFoundError:
@@ -675,17 +688,20 @@ def open_etl_input_file(
     """Open a regular input file beneath a pinned, trusted directory handle."""
     path = resolve_etl_path(file_path, workspace_root=workspace_root)
     roots = etl_allowed_roots(workspace_root)
-    root = next(
-        (
-            Path(os.path.realpath(str(allowed_root)))
-            for allowed_root in roots
-            if path == Path(os.path.realpath(str(allowed_root)))
-            or Path(os.path.realpath(str(allowed_root))) in path.parents
-        ),
-        None,
-    )
+    path_text = os.path.realpath(os.path.normpath(str(path)))
+    root = None
+    for allowed_root in roots:
+        root_text = os.path.realpath(str(allowed_root))
+        try:
+            common = os.path.commonpath((path_text, root_text))
+        except ValueError:
+            continue
+        if os.path.normcase(common) == os.path.normcase(root_text):
+            root = Path(root_text)
+            break
     if root is None:
         raise ShipmentEtlPathError("path not under allowed dirs")
+    path = Path(path_text)
     parent_fd = _open_directory_under_root(root, path.parent, create=False)
     descriptor: int | None = None
     try:
@@ -717,6 +733,31 @@ def open_etl_input_file(
         os.close(parent_fd)
 
 
+def prepare_etl_output_path(
+    output_path: str | Path,
+    *,
+    workspace_root: str | Path | None = None,
+) -> Path:
+    """Safely create an approved output's parent directories, then return its path."""
+    path = resolve_etl_output_path(output_path, workspace_root=workspace_root)
+    path_text = os.path.normpath(str(path))
+    root = None
+    for allowed_root in etl_allowed_roots(workspace_root):
+        root_text = os.path.realpath(str(allowed_root))
+        try:
+            common = os.path.commonpath((path_text, root_text))
+        except ValueError:
+            continue
+        if os.path.normcase(common) == os.path.normcase(root_text):
+            root = Path(root_text)
+            break
+    if root is None or Path(os.path.realpath(path_text)) != path:
+        raise ShipmentEtlPathError("path not under allowed dirs")
+    parent_fd = _open_directory_under_root(root, path.parent, create=True)
+    os.close(parent_fd)
+    return path
+
+
 @contextmanager
 def open_etl_output_file(
     output_path: str | Path,
@@ -726,17 +767,22 @@ def open_etl_output_file(
     """Open an approved output without following a replaced parent or leaf link."""
     path = resolve_etl_output_path(output_path, workspace_root=workspace_root)
     roots = etl_allowed_roots(workspace_root)
-    root = next(
-        (
-            Path(os.path.realpath(str(allowed_root)))
-            for allowed_root in roots
-            if path.parent == Path(os.path.realpath(str(allowed_root)))
-            or Path(os.path.realpath(str(allowed_root))) in path.parent.parents
-        ),
-        None,
-    )
+    path_text = os.path.normpath(str(path))
+    root = None
+    for allowed_root in roots:
+        root_text = os.path.realpath(str(allowed_root))
+        try:
+            common = os.path.commonpath((path_text, root_text))
+        except ValueError:
+            continue
+        if os.path.normcase(common) == os.path.normcase(root_text):
+            root = Path(root_text)
+            break
     if root is None:
         raise ShipmentEtlPathError("path not under allowed dirs")
+    if Path(os.path.realpath(path_text)) != path:
+        raise ShipmentEtlPathError("output path resolves through a symbolic link")
+    path = Path(path_text)
     if not _secure_output_handles_available():
         raise ShipmentEtlPathError(
             "secure ETL output is unavailable: this platform lacks no-follow directory handles"
@@ -746,7 +792,7 @@ def open_etl_output_file(
         with _open_windows_etl_output_file(path, parent_fd) as output_stream:
             yield output_stream
         return
-    temp_name = f".{path.name}.{secrets.token_hex(12)}.tmp"
+    temp_name = f".etl-{secrets.token_hex(12)}.tmp"
     descriptor: int | None = None
     stream: BinaryIO | None = None
     published = False
@@ -763,7 +809,7 @@ def open_etl_output_file(
         stream = None
         # Rename within the already-open, verified parent. This atomically
         # overwrites an existing regular file without following a leaf link.
-        _reject_output_symlink(path.name, parent_fd)
+        _reject_output_symlink(path.name, parent_fd, path.parent)
         output_name = _validated_path_component(path.name)
         os.rename(temp_name, output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
         published = True

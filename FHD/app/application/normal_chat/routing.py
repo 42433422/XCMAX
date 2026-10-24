@@ -11,6 +11,7 @@ from typing import Any, Protocol
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _MAX_ROUTING_MESSAGE_CHARS = 4096
+_OVERSIZED_SALES_WRITE_MARKERS = ("卖给", "销售给", "出售给")
 _MODEL_CHARS = frozenset("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-")
 _CHINESE_QUANTITY_CHARS = frozenset("一二两三四五六七八九十零〇")
 
@@ -150,13 +151,14 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
         # the bounded linear sales parser to recognize an explicit write request.
         # This preserves whitespace-heavy legacy requests without reopening the
         # unbounded downstream routing surface.
-        sales_write_payload = ports.sales_write(text)
-        if sales_write_payload is not None:
-            return {
-                "intent": "sales_write",
-                "action": "execute_closed_loop",
-                "payload": sales_write_payload,
-            }
+        if any(marker in text for marker in _OVERSIZED_SALES_WRITE_MARKERS):
+            sales_write_payload = ports.sales_write(text)
+            if sales_write_payload is not None:
+                return {
+                    "intent": "sales_write",
+                    "action": "execute_closed_loop",
+                    "payload": sales_write_payload,
+                }
         return {"intent": "unknown", "slots": {}}
     lower = text.lower()
 

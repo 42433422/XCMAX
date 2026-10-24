@@ -22,7 +22,7 @@ from app.application.employee_runtime.loader import (
 )
 from app.application.shipment_excel_etl_security import (
     ShipmentEtlPathError,
-    resolve_etl_output_path,
+    prepare_etl_output_path,
     resolve_etl_path,
 )
 from app.application.tool_execution_deadline import build_http_helpers
@@ -180,7 +180,7 @@ def _action_vendor_convert(
     # the final path under that root.
     requested_root = str(workspace_root or get_app_data_dir()).strip()
     try:
-        output_path = resolve_etl_output_path(
+        output_path = prepare_etl_output_path(
             str(Path(requested_root) / "outputs" / output_name),
             workspace_root=workspace_root,
         )

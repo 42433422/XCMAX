@@ -84,6 +84,29 @@ def test_normal_chat_refuses_oversized_message_before_regex_routing():
     assert route_message("型号 " + "0" * 100_000, ports) == {"intent": "unknown", "slots": {}}
 
 
+def test_oversized_explicit_sales_write_keeps_the_linear_parser_path():
+    payload = {"idempotency_key": "sw-test"}
+    ports = RoutingPorts(
+        database_maintenance=lambda *_args: None,
+        desktop_action=lambda *_args: None,
+        is_negation=lambda *_args, **_kwargs: False,
+        is_negated_action=lambda *_args: False,
+        sales_write=lambda *_args: payload,
+        label_slots=lambda *_args: {},
+        is_full_product_list=lambda *_args: False,
+        llm_route=lambda *_args: None,
+        logger=logging.getLogger(__name__),
+    )
+
+    result = route_message("把产品卖给客户，1箱，单价10元" + " " * 5000, ports)
+
+    assert result == {
+        "intent": "sales_write",
+        "action": "execute_closed_loop",
+        "payload": payload,
+    }
+
+
 def test_workflow_parsers_fail_closed_on_oversized_untrusted_text():
     from app.application.workflow.finance_write_plan import finance_transaction_node
     from app.application.workflow.read_query_plan import (

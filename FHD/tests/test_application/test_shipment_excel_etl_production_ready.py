@@ -457,7 +457,7 @@ def test_etl_output_writer_rejects_leaf_symlink_replaced_after_validation(tmp_pa
         if os.name == "nt":
             parent_fd, name = args
         else:
-            name, parent_fd = args
+            name, parent_fd, _parent_path = args
         if name == destination.name and not inserted_link:
             _create_test_symlink(destination, outside)
             inserted_link = True

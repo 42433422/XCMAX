@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -64,14 +65,39 @@ def _scan(
         root = security.resolve_etl_path(directory, workspace_root=workspace_root, must_exist=True)
     except security.ShipmentEtlPathError:
         return {"success": False, "message": "非法目录", "error_code": "unsafe_path", "files": []}
+    root_text = os.path.realpath(os.path.normpath(str(root)))
+    root_is_allowed = False
+    for allowed_root in security.etl_allowed_roots(workspace_root):
+        allowed_text = os.path.realpath(str(allowed_root))
+        try:
+            common = os.path.commonpath((root_text, allowed_text))
+        except ValueError:
+            continue
+        if os.path.normcase(common) == os.path.normcase(allowed_text):
+            root_is_allowed = True
+            break
+    if not root_is_allowed:
+        return {"success": False, "message": "非法目录", "error_code": "unsafe_path", "files": []}
+    root = Path(root_text)
     if not root.is_dir():
         return {"success": False, "message": f"目录不存在: {root}", "files": []}
     # Match only entry names. Letting a caller-supplied glob reach Path.glob would
-    # allow directory traversal patterns such as ../*.xlsx.
-    return DirectoryFiles(
-        root,
-        sorted(path for path in root.iterdir() if fnmatch.fnmatchcase(path.name, pattern)),
-    )
+    # allow directory traversal patterns such as ../*.xlsx. Revalidate every
+    # selected entry because the directory may change between resolution and scan.
+    paths = []
+    try:
+        for entry in root.iterdir():
+            if not fnmatch.fnmatchcase(entry.name, pattern):
+                continue
+            path = security.resolve_etl_path(
+                entry, workspace_root=workspace_root or root, must_exist=True
+            )
+            if path == root or root not in path.parents:
+                raise security.ShipmentEtlPathError("batch entry escaped selected directory")
+            paths.append(path)
+    except security.ShipmentEtlPathError:
+        return {"success": False, "message": "非法目录项", "error_code": "unsafe_path", "files": []}
+    return DirectoryFiles(root, sorted(paths))
 
 
 def preview_directory(

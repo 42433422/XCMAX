@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+from typing import Any
 
 from modstore_server.customer_issue_delivery_contract import (
     execution_requires_reconciliation,
@@ -129,7 +130,7 @@ def _wait_for_para_task(
 ) -> _facade().Dict[str, _facade().Any]:
     _handler = _facade()
     deadline = _handler.time.monotonic() + _handler._wait_timeout_sec(req)
-    last_body: _handler.Any = {}
+    last_body: Any = {}
     terminal = {"completed", "merged", "failed", "merge_conflict"}
     from modstore_server.customer_issue_delivery_contract import para_task_succeeded
 

@@ -166,6 +166,29 @@ def test_batch_pattern_cannot_escape_the_selected_directory(tmp_path):
         outside.unlink(missing_ok=True)
 
 
+def test_batch_scan_rejects_a_file_symlink_outside_selected_directory(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    selected = workspace / "incoming"
+    selected.mkdir(parents=True)
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+    outside = tmp_path / "private.xlsx"
+    outside.write_bytes(b"private fixture")
+    link = selected / "redirect.xlsx"
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    result = _scan(selected, "*.xlsx", workspace)
+
+    assert result == {
+        "success": False,
+        "message": "非法目录项",
+        "error_code": "unsafe_path",
+        "files": [],
+    }
+
+
 def test_failed_fingerprint_cleanup_does_not_claim_a_rollback_is_retryable(
     import_ports, monkeypatch
 ):

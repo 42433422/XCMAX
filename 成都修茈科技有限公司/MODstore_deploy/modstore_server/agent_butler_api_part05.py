@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+from typing import Any, Dict
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -181,7 +182,7 @@ async def butler_chat(
             try:
                 base = _normalize_openai_base(provider, base_url)
                 url = f"{base}/chat/completions"
-                req_body: _api.Dict[str, _api.Any] = {
+                req_body: Dict[str, Any] = {
                     "model": model,
                     "messages": msgs,
                     "tools": tools_schema,
