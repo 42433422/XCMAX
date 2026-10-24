@@ -131,6 +131,6 @@ jobs:
           set -euo pipefail
           relation="$(gh api "repos/$GITHUB_REPOSITORY/compare/$BUILD_SHA...main" --jq .status)"; case "$relation" in ahead|identical) ;; *) exit 1 ;; esac
           bash scripts/package/publish-macos-download-center.sh "$PRODUCT_VERSION" "$BUILD_SHA" "$PAIR_OUTPUT" --publish
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with: {name: 'mac-frozen-pair-review-${{ inputs.build_sha }}', path: '${{ runner.temp }}/frozen-mac-pair-output', if-no-files-found: error}

@@ -151,7 +151,7 @@ jobs:
           )
           bash FHD/scripts/mobile/stage-release-packages.sh "${args[@]}"
       - name: Upload mobile package artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xcagi-enterprise-mobile-release-packages
           path: |

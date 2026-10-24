@@ -67,7 +67,7 @@ jobs:
             --junitxml=../../delivery-e2e-results.xml
       - name: Upload the exact-run result
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: signed-customer-delivery-${{ github.sha }}
           path: delivery-e2e-results.xml

@@ -126,7 +126,7 @@ jobs:
             --output (Join-Path $dir "WINDOWS-QUARANTINE.json")
 
       - name: Retain quarantined build for controlled test devices
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xcagi-windows-unsigned-quarantine-${{ inputs.release_sha }}
           if-no-files-found: error

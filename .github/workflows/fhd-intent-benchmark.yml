@@ -156,7 +156,7 @@ jobs:
 
       - name: Upload benchmark report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: intent-benchmark-report
           path: |
@@ -359,7 +359,7 @@ jobs:
 
       - name: Upload acceptance benchmark evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: intent-benchmark-acceptance-evidence
           path: |
@@ -429,7 +429,7 @@ jobs:
 
       - name: Upload holdout LLM report
         if: steps.creds.outputs.available == 'true' && always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: intent-holdout-llm-report
           path: FHD/metrics/intent_holdout_latest.json

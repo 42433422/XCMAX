@@ -177,7 +177,7 @@ jobs:
         run: bundle exec fastlane ios build_ipa
 
       - name: Upload IPA artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xcagi-flutter-ios-${{ steps.version.outputs.marketing_version }}-${{ steps.version.outputs.build_number }}
           path: FHD/mobile-flutter-poc/build/ios/ipa/*.ipa

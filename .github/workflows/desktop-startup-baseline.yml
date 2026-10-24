@@ -60,7 +60,7 @@ jobs:
 
       - name: Upload baseline report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: startup-baseline-mac-${{ github.run_id }}
           path: FHD/desktop/metrics/startup-baseline-mac-*.json
@@ -110,7 +110,7 @@ jobs:
 
       - name: Upload baseline report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: startup-baseline-win-${{ github.run_id }}
           path: FHD/desktop/metrics/startup-baseline-win-*.json

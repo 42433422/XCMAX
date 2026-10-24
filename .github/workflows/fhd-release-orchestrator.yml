@@ -165,7 +165,7 @@ jobs:
           test -f templates/vue-dist/index.html
           echo "index=$(grep -oE 'index-[A-Za-z0-9_-]+\.js' templates/vue-dist/index.html | head -1)"
       - name: Upload shared vue-dist artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xcagi-vue-dist
           path: FHD/templates/vue-dist
