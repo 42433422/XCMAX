@@ -11,14 +11,14 @@ import pytest
 def env(monkeypatch, tmp_path):
     from modstore_server import autonomy_scheduler as m
     from modstore_server import scheduler_runtime as runtime
-    from modstore_server import self_maintenance_loop_runner as runner
+    from modstore_server.maintenance_loop import coordinator, store
 
     memory = {"open_items": []}
     ledger = tmp_path / "ledger.jsonl"
-    monkeypatch.setattr(runner, "_load_loop_memory", lambda: memory)
-    monkeypatch.setattr(runner, "ledger_path", lambda: ledger)
+    monkeypatch.setattr(store, "_load_loop_memory", lambda: memory)
+    monkeypatch.setattr(store, "ledger_path", lambda: ledger)
     dispatch = Mock(return_value={"status": "failed", "error": "git_prep_unavailable"})
-    monkeypatch.setattr(runner, "run_self_maintenance_loop", dispatch)
+    monkeypatch.setattr(coordinator, "run_self_maintenance_loop", dispatch)
     monkeypatch.setattr(m, "register_founder_scorecard_job", lambda *_: None)
     monkeypatch.setattr(m, "_reconcile_completed_loop_memory_safely", lambda: None)
     monkeypatch.setattr(m, "_remediation_lineage_by_run_id", lambda: {})
@@ -43,7 +43,14 @@ def env(monkeypatch, tmp_path):
     }
     memory["open_items"] = [item]
     return SimpleNamespace(
-        m=m, runtime=runtime, runner=runner, memory=memory, ledger=ledger, clock=clock, item=item
+        m=m,
+        runtime=runtime,
+        store=store,
+        dispatch=dispatch,
+        memory=memory,
+        ledger=ledger,
+        clock=clock,
+        item=item,
     )
 
 
@@ -68,7 +75,7 @@ def test_limit_stops_real_dispatch_for_both_kinds(env, kind):
         "retry_at": None,
         "scheduler_status": "failed",
     }
-    assert env.runner.run_self_maintenance_loop.call_count == 3
+    assert env.dispatch.call_count == 3
     assert env.ledger.read_bytes() == before
     assert len(env.memory["open_items"]) == 1
 
@@ -80,7 +87,7 @@ def test_switching_kind_does_not_reset_budget(env):
     env.item.update(kind="failed_steps", steps=["code"])
     with pytest.raises(env.m.RemediationBlocked, match="retry_limit"):
         env.m.run_pending_automated_remediation()
-    assert env.runner.run_self_maintenance_loop.call_count == 3
+    assert env.dispatch.call_count == 3
 
 
 @pytest.mark.parametrize(
@@ -92,7 +99,7 @@ def test_new_task_or_generation_has_own_budget(env, change):
         env.clock[0] += timedelta(days=1)
     env.item.update(change)
     attempt(env)
-    assert env.runner.run_self_maintenance_loop.call_count == 4
+    assert env.dispatch.call_count == 4
     assert json.loads(env.ledger.read_text().splitlines()[-1])["attempt"] == 1
 
 
@@ -102,13 +109,13 @@ def test_same_task_other_kind_cannot_hide_stored_limit(env):
     )
     with pytest.raises(env.m.RemediationBlocked, match="retry_limit"):
         env.m.run_pending_automated_remediation()
-    env.runner.run_self_maintenance_loop.assert_not_called()
+    env.dispatch.assert_not_called()
 
 
 def test_other_task_old_count_not_inherited(env):
     env.memory["open_items"].insert(0, {**env.item, "task_id": "old", "retry_count": 15})
     attempt(env)
-    assert env.runner.run_self_maintenance_loop.call_count == 1
+    assert env.dispatch.call_count == 1
 
 
 def test_backoff_exact_boundary_and_exponential_delay(env):
@@ -117,7 +124,7 @@ def test_backoff_exact_boundary_and_exponential_delay(env):
     with pytest.raises(env.m.RemediationBlocked, match="backoff") as ex:
         env.m.run_pending_automated_remediation()
     assert ex.value.receipt["retry_at"] == "2026-10-23T00:15:00+00:00"
-    assert env.runner.run_self_maintenance_loop.call_count == 1
+    assert env.dispatch.call_count == 1
     env.clock[0] += timedelta(microseconds=1)
     attempt(env)
     env.clock[0] += timedelta(minutes=15)
@@ -125,21 +132,19 @@ def test_backoff_exact_boundary_and_exponential_delay(env):
         env.m.run_pending_automated_remediation()
     env.clock[0] += timedelta(minutes=15)
     attempt(env)
-    assert env.runner.run_self_maintenance_loop.call_count == 3
+    assert env.dispatch.call_count == 3
 
 
 def test_reservation_survives_restart_and_dispatch_crash(env):
-    env.runner.run_self_maintenance_loop.side_effect = OSError("worker died")
+    env.dispatch.side_effect = OSError("worker died")
     with pytest.raises(OSError):
         env.m.run_pending_automated_remediation()
     assert json.loads(env.ledger.read_text())["attempt"] == 1
     # No in-memory guard counter exists: reuse the ledger after the worker is replaced.
-    env.runner.run_self_maintenance_loop = Mock(
-        return_value={"status": "failed", "error": "git_prep_unavailable"}
-    )
+    env.dispatch = Mock(return_value={"status": "failed", "error": "git_prep_unavailable"})
     with pytest.raises(env.m.RemediationBlocked, match="backoff"):
         env.m.run_pending_automated_remediation()
-    env.runner.run_self_maintenance_loop.assert_not_called()
+    env.dispatch.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -161,15 +166,15 @@ def test_corrupt_guard_evidence_fails_closed(env, damage):
     env.ledger.write_text(damage)
     with pytest.raises((ValueError, RuntimeError)):
         env.m.run_pending_automated_remediation()
-    env.runner.run_self_maintenance_loop.assert_not_called()
+    env.dispatch.assert_not_called()
     assert env.ledger.read_text() == damage
 
 
 def test_failed_ledger_write_prevents_dispatch(env, monkeypatch):
-    monkeypatch.setattr(env.runner, "ledger_path", lambda: Path("/dev/null/no-ledger"))
+    monkeypatch.setattr(env.store, "ledger_path", lambda: Path("/dev/null/no-ledger"))
     with pytest.raises(OSError):
         env.m.run_pending_automated_remediation()
-    env.runner.run_self_maintenance_loop.assert_not_called()
+    env.dispatch.assert_not_called()
 
 
 @pytest.mark.parametrize("reason", ["retry_limit", "backoff"])
@@ -191,7 +196,7 @@ def test_blocked_job_remains_failed_in_real_runtime_projection(env, monkeypatch,
     )
     assert health["state"] == "failing"
     assert health["last_success_at"] is None
-    assert env.runner.run_self_maintenance_loop.call_count == (reason == "backoff")
+    assert env.dispatch.call_count == (reason == "backoff")
 
 
 def test_unknown_transport_error_not_mislabeled_missing_branch(env):
@@ -205,7 +210,7 @@ def test_legacy_partial_budget_without_timestamp_blocks_instead_of_guessing(env)
     env.item["retry_count"] = 1
     with pytest.raises(env.m.RemediationBlocked, match="retry_history_timestamp_missing"):
         env.m.run_pending_automated_remediation()
-    env.runner.run_self_maintenance_loop.assert_not_called()
+    env.dispatch.assert_not_called()
 
 
 def test_concurrent_ticks_share_one_durable_reservation(env):
@@ -221,7 +226,7 @@ def test_concurrent_ticks_share_one_durable_reservation(env):
         outcomes = list(pool.map(tick, range(8)))
     assert sum("git_prep_unavailable" in x for x in outcomes) == 1
     assert sum("remediation_blocked:backoff" in x for x in outcomes) == 7
-    assert env.runner.run_self_maintenance_loop.call_count == 1
+    assert env.dispatch.call_count == 1
     assert len(env.ledger.read_text().splitlines()) == 1
 
 
@@ -240,7 +245,7 @@ def test_exhausted_legacy_record_cannot_be_reported_as_no_pending_success(env, k
     env.item.update(kind=kind, steps=["code"], retry_count=3)
     with pytest.raises(env.m.RemediationBlocked, match="retry_limit"):
         env.m.run_pending_automated_remediation()
-    env.runner.run_self_maintenance_loop.assert_not_called()
+    env.dispatch.assert_not_called()
 
 
 def test_arbitrary_generation_string_cannot_reset_real_task_budget(env):
@@ -250,7 +255,7 @@ def test_arbitrary_generation_string_cannot_reset_real_task_budget(env):
     env.item["generation"] = "invented-reset"
     with pytest.raises(env.m.RemediationBlocked, match="retry_limit"):
         env.m.run_pending_automated_remediation()
-    assert env.runner.run_self_maintenance_loop.call_count == 3
+    assert env.dispatch.call_count == 3
 
 
 def test_guard_rows_do_not_displace_real_evidence_window(env):
@@ -266,15 +271,17 @@ def test_guard_rows_do_not_displace_real_evidence_window(env):
         "timestamp": env.clock[0].isoformat(),
     }
     env.ledger.write_text(json.dumps(real) + "\n" + (json.dumps(guard) + "\n") * 1000)
-    rows = env.runner._read_ledger(limit=1)
+    from modstore_server.maintenance_loop import store
+
+    rows = store._read_ledger(limit=1)
     assert rows == [real]
-    assert env.runner._select_recent_milestone_rows(rows, now=env.clock[0]) == [real]
+    assert store._select_recent_milestone_rows(rows, now=env.clock[0]) == [real]
 
 
 def test_real_ledger_appender_and_guard_preserve_each_others_rows(env):
     attempt(env)
-    env.runner._append_ledger({"phase": "complete", "run_id": "actual", "status": "failed"})
-    assert env.runner._read_ledger(limit=10) == [
+    env.store._append_ledger({"phase": "complete", "run_id": "actual", "status": "failed"})
+    assert env.store._read_ledger(limit=10) == [
         {
             "phase": "complete",
             "run_id": "actual",
@@ -291,13 +298,15 @@ def test_real_ledger_appender_and_guard_preserve_each_others_rows(env):
 def test_business_reader_keeps_bounded_memory_for_small_requested_window(env):
     import tracemalloc
 
+    from modstore_server.maintenance_loop import store
+
     row = json.dumps({"phase": "complete", "run_id": "real", "payload": "x" * 10000}) + "\n"
     with env.ledger.open("w") as fh:
         for _ in range(1000):
             fh.write(row)
     tracemalloc.start()
     try:
-        rows = env.runner._read_ledger(limit=2)
+        rows = env.store._read_ledger(limit=2)
         _, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
@@ -317,7 +326,7 @@ def test_new_task_success_does_not_greenwash_older_blocked_scope(env, resolved, 
             return {"status": "failed", "error": "retort_clarification_pending"}
         return {"status": "completed_merged"}
 
-    env.runner.run_self_maintenance_loop.side_effect = complete
+    env.dispatch.side_effect = complete
     if resolved:
         result = env.m.run_pending_automated_remediation()
         if deferred:
@@ -327,21 +336,27 @@ def test_new_task_success_does_not_greenwash_older_blocked_scope(env, resolved, 
     else:
         with pytest.raises(env.m.RemediationBlocked, match="other_retry_limit"):
             env.m.run_pending_automated_remediation()
-    assert env.runner.run_self_maintenance_loop.call_count == 1
+    assert env.dispatch.call_count == 1
 
 
 @pytest.mark.parametrize("new_task", ["task-a", "task-b"])
 def test_real_memory_writer_does_not_transfer_retry_count_to_new_task(
     monkeypatch, tmp_path, new_task
 ):
-    from modstore_server import self_maintenance_loop_runner as runner
+    from modstore_server.maintenance_loop import outcomes, store
 
     path = tmp_path / "memory.json"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(path))
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(tmp_path / "ledger.jsonl"))
     monkeypatch.setenv("DEVFLEET_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
-    monkeypatch.setattr(runner, "salvage_kb_from_workspace", lambda **_: {})
-    monkeypatch.setattr(runner, "record_loop_evolution_knowledge", lambda *_: {})
+    monkeypatch.setattr(
+        outcomes.self_evolution_knowledge, "salvage_kb_from_workspace", lambda **_: {}
+    )
+    monkeypatch.setattr(
+        outcomes.self_evolution_knowledge,
+        "record_loop_evolution_knowledge",
+        lambda *_: {},
+    )
     old = {
         "kind": "failed_steps",
         "run_id": "old-run",
@@ -352,7 +367,7 @@ def test_real_memory_writer_does_not_transfer_retry_count_to_new_task(
         "created_at": datetime.now(UTC).isoformat(),
     }
     path.write_text(json.dumps({"open_items": [old], "closed_items": [], "recent_runs": []}))
-    runner._update_loop_memory(
+    outcomes._update_loop_memory(
         {
             "run_id": "new-run",
             "branch": "repair",
@@ -363,7 +378,7 @@ def test_real_memory_writer_does_not_transfer_retry_count_to_new_task(
         },
         {},
     )
-    rows = runner._load_loop_memory()["open_items"]
+    rows = store._load_loop_memory()["open_items"]
     by_task = {row.get("task_id") or row.get("para_task_id"): row for row in rows}
     if new_task == "task-a":
         assert len(rows) == 1 and by_task["task-a"]["retry_count"] == 3
@@ -391,14 +406,20 @@ def test_existing_failure_timestamp_controls_legacy_backoff(env):
 def test_real_memory_writer_does_not_guess_unknown_task_from_branch(
     monkeypatch, tmp_path, old_task, new_task
 ):
-    from modstore_server import self_maintenance_loop_runner as runner
+    from modstore_server.maintenance_loop import outcomes, store
 
     path = tmp_path / "memory.json"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(path))
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(tmp_path / "ledger.jsonl"))
     monkeypatch.setenv("DEVFLEET_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
-    monkeypatch.setattr(runner, "salvage_kb_from_workspace", lambda **_: {})
-    monkeypatch.setattr(runner, "record_loop_evolution_knowledge", lambda *_: {})
+    monkeypatch.setattr(
+        outcomes.self_evolution_knowledge, "salvage_kb_from_workspace", lambda **_: {}
+    )
+    monkeypatch.setattr(
+        outcomes.self_evolution_knowledge,
+        "record_loop_evolution_knowledge",
+        lambda *_: {},
+    )
     old = {
         "kind": "failed_steps",
         "run_id": "old-run",
@@ -419,8 +440,8 @@ def test_real_memory_writer_does_not_guess_unknown_task_from_branch(
     }
     if new_task:
         final["para_task_id"] = new_task
-    runner._update_loop_memory(final, {})
-    memory = runner._load_loop_memory()
+    outcomes._update_loop_memory(final, {})
+    memory = store._load_loop_memory()
     by_run = {row["run_id"]: row for row in memory["open_items"]}
     assert set(by_run) == {"old-run", "new-run"}
     assert by_run["old-run"]["retry_count"] == 15

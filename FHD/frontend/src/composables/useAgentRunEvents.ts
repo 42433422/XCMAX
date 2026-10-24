@@ -6,6 +6,7 @@ import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 import { hasAgentRunExecutionEvidence, hasConfirmedAgentRunExecution } from '@/utils/agentRunExecution'
 import { groupAgentRunsIntoTasks } from '@/utils/agentTaskWorkspaceModel'
 import { bindPendingFirstAiTaskRun, completeFirstAiTaskFromRun } from '@/constants/productFlow'
+import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 
 type UpsertTask = (item: Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string }) => void
 
@@ -132,6 +133,7 @@ export function buildAgentRunTaskUpdate(params: {
 export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
   const lastEventByRunId = new Map<string, string>()
   const eventsByRunId = new Map<string, AgentRunEvent[]>()
+  let lastIdentity = ''
 
   function mergeEvents(runId: string, incoming: AgentRunEvent[]): AgentRunEvent[] {
     const known = eventsByRunId.get(runId) || []
@@ -159,11 +161,19 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
   }
 
   async function syncAgentRunEvents(runId: string, userText = ''): Promise<void> {
+    const identity = resolveChatIdentity()
+    const isCurrent = () => identity === resolveChatIdentity()
+    if (lastIdentity !== identity) {
+      lastEventByRunId.clear()
+      eventsByRunId.clear()
+      lastIdentity = identity
+    }
     const normalizedRunId = String(runId || '').trim()
     if (!normalizedRunId) return
     const afterEventId = lastEventByRunId.get(normalizedRunId)
     try {
       const response = await agentRunsApi.listEvents(normalizedRunId, afterEventId ? { after_event_id: afterEventId } : {})
+      if (!isCurrent()) return
       const incoming = Array.isArray(response?.data) ? response.data : []
       if (!incoming.length) return
       const events = mergeEvents(normalizedRunId, incoming)
@@ -178,6 +188,7 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
       } catch {
         // Older/offline runtimes may expose the event feed before the run detail route.
       }
+      if (!isCurrent()) return
       const durableTask = run ? groupAgentRunsIntoTasks([{ ...run, events }])[0] : null
       if (run) completeFirstAiTaskFromRun(run)
       if (durableTask) {
@@ -187,7 +198,7 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
         syncTaskPanel(normalizedRunId, userText, events)
       }
     } catch {
-      options.removeTask?.(`agent_${normalizedRunId}`)
+      if (isCurrent()) options.removeTask?.(`agent_${normalizedRunId}`)
     }
   }
 

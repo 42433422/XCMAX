@@ -9,18 +9,17 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 
-from modstore_server import self_maintenance_loop_runner as loop_runner
-from modstore_server.self_maintenance_loop_runner import (
+import modstore_server.maintenance_loop.store as _maintenance_store
+from modstore_server.maintenance_loop.config import (
     LOOP_EVICT_AGE_OUT_SECONDS,
     LOOP_EVICT_STUCK_AGE_SECONDS,
     LOOP_EVICT_STUCK_RETRY_THRESHOLD,
     _iso,
-    _load_loop_memory,
-    _read_governance_audit,
-    _update_loop_memory,
     _utc_now,
-    evict_loop_memory_items,
 )
+from modstore_server.maintenance_loop.memory import evict_loop_memory_items
+from modstore_server.maintenance_loop.outcomes import _update_loop_memory
+from modstore_server.maintenance_loop.store import _load_loop_memory, _read_governance_audit
 
 
 def _seed_memory_file(memory_path, *, open_items, evicted_items=None):
@@ -290,7 +289,7 @@ def test_evict_does_not_raise_when_audit_write_fails(monkeypatch, tmp_path):
 
     # Make _append_governance_audit raise
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_store,
         "_append_governance_audit",
         lambda record: (_ for _ in ()).throw(RuntimeError("simulated")),
     )

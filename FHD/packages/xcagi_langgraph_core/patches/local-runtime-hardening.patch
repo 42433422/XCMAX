@@ -1,0 +1,853 @@
+--- a/langgraph/_internal/_config.py
++++ b/langgraph/_internal/_config.py
+@@ -185,7 +185,7 @@
+                 if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
+                     base["recursion_limit"] = config["recursion_limit"]
+             else:
+-                base[key] = config[key]  # type: ignore[literal-required]
++                cast(dict[str, Any], base)[key] = cast(dict[str, Any], config)[key]
+     if CONF not in base:
+         base[CONF] = {}
+     return base
+@@ -403,7 +403,7 @@
+                         else list(cast(list, v))
+                     )
+                 else:
+-                    empty[k] = v  # type: ignore[literal-required]
++                    cast(dict[str, Any], empty)[k] = v
+         for k, v in config.items():
+             if _is_not_empty(v) and k not in CONFIG_KEYS:
+                 empty[CONF][k] = v
+--- /dev/null
++++ b/langgraph/_internal/_exception_policy.py
+@@ -0,0 +1,4 @@
++"""Auditable exception families used by LangGraph runtime boundaries."""
++
++BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
++TERMINATION_ERRORS: tuple[type[BaseException], ...] = (BaseException,)
+--- a/langgraph/_internal/_future.py
++++ b/langgraph/_internal/_future.py
+@@ -8,6 +8,8 @@
+ import types
+ from collections.abc import Awaitable, Coroutine, Generator
+ from typing import TypeVar, cast
++
++from langgraph._internal._exception_policy import TERMINATION_ERRORS
+
+ T = TypeVar("T")
+ AnyFuture = asyncio.Future | concurrent.futures.Future
+@@ -131,7 +133,7 @@
+         return destination
+     except (SystemExit, KeyboardInterrupt):
+         raise
+-    except BaseException as exc:
++    except TERMINATION_ERRORS as exc:
+         if isinstance(destination, concurrent.futures.Future):
+             if destination.set_running_or_notify_cancel():
+                 destination.set_exception(exc)
+@@ -212,7 +214,7 @@
+                 )
+             except (SystemExit, KeyboardInterrupt):
+                 raise
+-            except BaseException as exc:
++            except TERMINATION_ERRORS as exc:
+                 future.set_exception(exc)
+                 raise
+
+--- a/langgraph/_internal/_queue.py
++++ b/langgraph/_internal/_queue.py
+@@ -7,6 +7,8 @@
+ import types
+ from collections import deque
+ from time import monotonic
++
++from langgraph._internal._exception_policy import TERMINATION_ERRORS
+
+
+ class AsyncQueue(asyncio.Queue):
+@@ -25,7 +27,7 @@
+             self._getters.append(getter)
+             try:
+                 await getter
+-            except BaseException:
++            except TERMINATION_ERRORS:
+                 getter.cancel()  # Just in case getter is not done yet.
+                 try:
+                     # Clean self._getters from canceled getters.
+--- a/langgraph/_internal/_runnable.py
++++ b/langgraph/_internal/_runnable.py
+@@ -54,6 +54,7 @@
+     CONFIG_KEY_NODE_ERROR,
+     CONFIG_KEY_RUNTIME,
+ )
++from langgraph._internal._exception_policy import TERMINATION_ERRORS
+ from langgraph._internal._typing import MISSING
+ from langgraph.errors import NodeError
+ from langgraph.types import StreamWriter
+@@ -417,7 +418,7 @@
+                 # run in context
+                 with set_config_context(child_config, run) as context:
+                     ret = context.run(self.func, *args, **kwargs)
+-            except BaseException as e:
++            except TERMINATION_ERRORS as e:
+                 run_manager.on_chain_error(e)
+                 raise
+             else:
+@@ -492,7 +493,7 @@
+                         ret = await asyncio.create_task(coro, context=context)
+                 else:
+                     ret = await coro
+-            except BaseException as e:
++            except TERMINATION_ERRORS as e:
+                 await run_manager.on_chain_error(e)
+                 raise
+             else:
+@@ -685,7 +686,7 @@
+                 else:
+                     input = step.invoke(input, config)
+         # finish the root run
+-        except BaseException as e:
++        except TERMINATION_ERRORS as e:
+             run_manager.on_chain_error(e)
+             raise
+         else:
+@@ -738,7 +739,7 @@
+                 else:
+                     input = await step.ainvoke(input, config)
+         # finish the root run
+-        except BaseException as e:
++        except TERMINATION_ERRORS as e:
+             await run_manager.on_chain_error(e)
+             raise
+         else:
+@@ -799,7 +800,7 @@
+                 output = context.run(_consume_iter, iterator)
+                 # sequence doesn't emit output, yield to mark as generator
+                 yield
+-            except BaseException as e:
++            except TERMINATION_ERRORS as e:
+                 run_manager.on_chain_error(e)
+                 raise
+             else:
+@@ -869,7 +870,7 @@
+                         )
+                         # sequence doesn't emit output, yield to mark as generator
+                         yield
+-                except BaseException as e:
++                except TERMINATION_ERRORS as e:
+                     await run_manager.on_chain_error(e)
+                     raise
+                 else:
+@@ -899,7 +900,7 @@
+                     output = await _consume_aiter(aiterator)
+                     # sequence doesn't emit output, yield to mark as generator
+                     yield
+-            except BaseException as e:
++            except TERMINATION_ERRORS as e:
+                 await run_manager.on_chain_error(e)
+                 raise
+             else:
+--- a/langgraph/_internal/_serde.py
++++ b/langgraph/_internal/_serde.py
+@@ -20,6 +20,8 @@
+ from langgraph.checkpoint.base import BaseCheckpointSaver
+ from pydantic import BaseModel
+ from typing_extensions import NotRequired, Required, is_typeddict
++
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+
+ try:
+     from langgraph.checkpoint.serde._msgpack import (  # noqa: F401
+@@ -221,7 +223,7 @@
+         return get_type_hints(
+             typ, globalns=globalns, localns=localns, include_extras=True
+         )
+-    except Exception:
++    except BOUNDARY_ERRORS:
+         return {}
+
+
+@@ -232,7 +234,7 @@
+         return True
+     try:
+         from pydantic.v1 import BaseModel as BaseModelV1
+-    except Exception:
++    except BOUNDARY_ERRORS:
+         return False
+     return issubclass(typ, BaseModelV1)
+
+--- a/langgraph/channels/binop.py
++++ b/langgraph/channels/binop.py
+@@ -5,6 +5,7 @@
+ from typing_extensions import NotRequired, Required, Self
+
+ from langgraph._internal._constants import OVERWRITE
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+ from langgraph._internal._typing import MISSING
+ from langgraph.channels.base import BaseChannel, Value
+ from langgraph.errors import (
+@@ -88,7 +89,7 @@
+             typ = dict
+         try:
+             self.value = typ()
+-        except Exception:
++        except BOUNDARY_ERRORS:
+             self.value = MISSING
+
+     def __eq__(self, value: object) -> bool:
+--- a/langgraph/graph/_branch.py
++++ b/langgraph/graph/_branch.py
+@@ -24,6 +24,7 @@
+     RunnableLambda,
+ )
+
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+ from langgraph._internal._runnable import (
+     RunnableCallable,
+ )
+@@ -112,7 +113,7 @@
+                     if rtn_type := get_type_hints(func).get("return"):
+                         if get_origin(rtn_type) is Literal:
+                             path_map_ = {name: name for name in get_args(rtn_type)}
+-        except Exception:
++        except BOUNDARY_ERRORS:
+             pass
+         # infer input schema
+         input_schema = _get_branch_path_input_schema(path) if infer_schema else None
+--- a/langgraph/graph/ui.py
++++ b/langgraph/graph/ui.py
+@@ -209,9 +209,10 @@
+                 ids_to_remove.discard(msg_id)
+
+                 if cast(UIMessage, msg).get("metadata", {}).get("merge", False):
+-                    prev_msg = merged[existing_idx]
+-                    msg = msg.copy()
+-                    msg["props"] = {**prev_msg["props"], **msg["props"]}
++                    prev_msg = cast(UIMessage, merged[existing_idx])
++                    ui_msg = cast(UIMessage, msg.copy())
++                    ui_msg["props"] = {**prev_msg["props"], **ui_msg["props"]}
++                    msg = ui_msg
+
+                 merged[existing_idx] = msg
+         else:
+--- a/langgraph/pregel/_algo.py
++++ b/langgraph/pregel/_algo.py
+@@ -62,6 +62,7 @@
+     RETURN,
+     TASKS,
+ )
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+ from langgraph._internal._scratchpad import PregelScratchpad
+ from langgraph._internal._typing import EMPTY_SEQ, MISSING
+ from langgraph.channels.base import BaseChannel
+@@ -644,7 +645,7 @@
+                 )
+                 if val is MISSING:
+                     return
+-            except Exception as exc:
++            except BOUNDARY_ERRORS as exc:
+                 if SUPPORTS_EXC_NOTES:
+                     exc.add_note(
+                         f"Before task with name '{name}' and path '{task_path[:3]}'"
+--- a/langgraph/pregel/_call.py
++++ b/langgraph/pregel/_call.py
+@@ -15,6 +15,7 @@
+ from typing_extensions import ParamSpec
+
+ from langgraph._internal._constants import CONF, CONFIG_KEY_CALL, RETURN
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+ from langgraph._internal._runnable import (
+     RunnableCallable,
+     RunnableSeq,
+@@ -76,7 +77,7 @@
+         try:
+             if _getattribute(module, name)[0] is obj:
+                 return module_name
+-        except Exception:
++        except BOUNDARY_ERRORS:
+             pass
+     return None
+
+--- a/langgraph/pregel/_executor.py
++++ b/langgraph/pregel/_executor.py
+@@ -17,6 +17,7 @@
+ from langchain_core.runnables.config import get_executor_for_config
+ from typing_extensions import ParamSpec
+
++from langgraph._internal._exception_policy import TERMINATION_ERRORS
+ from langgraph._internal._future import CONTEXT_NOT_SUPPORTED, run_coroutine_threadsafe
+ from langgraph.errors import GraphBubbleUp
+
+@@ -82,7 +83,7 @@
+             # This exception is an interruption signal, not an error
+             # so we don't want to re-raise it on exit
+             self.tasks.pop(task)
+-        except BaseException:
++        except TERMINATION_ERRORS:
+             pass
+         else:
+             self.tasks.pop(task)
+--- a/langgraph/pregel/_read.py
++++ b/langgraph/pregel/_read.py
+@@ -11,6 +11,7 @@
+
+ from langgraph._internal._config import merge_configs
+ from langgraph._internal._constants import CONF, CONFIG_KEY_READ
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+ from langgraph._internal._runnable import RunnableCallable, RunnableSeq
+ from langgraph._internal._timeout import coerce_timeout_policy
+ from langgraph.pregel._utils import find_subgraph_pregel
+@@ -184,7 +185,7 @@
+         elif self.bound is not DEFAULT_BOUND:
+             try:
+                 subgraph = find_subgraph_pregel(self.bound)
+-            except Exception:
++            except BOUNDARY_ERRORS:
+                 subgraph = None
+             if subgraph:
+                 self.subgraphs = [subgraph]
+--- a/langgraph/pregel/_remote_run_stream.py
++++ b/langgraph/pregel/_remote_run_stream.py
+@@ -13,6 +13,7 @@
+ from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
+ from langgraph_sdk.stream.decoders import DataDecoder
+
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS, TERMINATION_ERRORS
+ from langgraph.types import Command
+
+ logger = logging.getLogger(__name__)
+@@ -152,7 +153,7 @@
+         self._sdk.__enter__()
+         try:
+             result = self._sdk.run.start(**self._start_kwargs)
+-        except BaseException:
++        except TERMINATION_ERRORS:
+             self._sdk.__exit__(*sys.exc_info())
+             raise
+         self._run_id = result["run_id"]
+@@ -225,11 +226,11 @@
+         if self._run_id is not None:
+             try:
+                 self._client.runs.cancel(self._sdk.thread_id, self._run_id, wait=False)
+-            except Exception:
++            except BOUNDARY_ERRORS:
+                 logger.debug("abort: runs.cancel failed", exc_info=True)
+         try:
+             self._sdk.close()
+-        except Exception:
++        except BOUNDARY_ERRORS:
+             logger.debug("abort: sdk.close failed", exc_info=True)
+
+     def __iter__(self) -> Iterator[Any]:
+@@ -270,7 +271,7 @@
+         await self._sdk.__aenter__()
+         try:
+             result = await self._sdk.run.start(**self._start_kwargs)
+-        except BaseException:
++        except TERMINATION_ERRORS:
+             await self._sdk.__aexit__(*sys.exc_info())
+             raise
+         self._run_id = result["run_id"]
+@@ -355,11 +356,11 @@
+                 await self._client.runs.cancel(
+                     self._sdk.thread_id, self._run_id, wait=False
+                 )
+-            except Exception:
++            except BOUNDARY_ERRORS:
+                 logger.debug("abort: runs.cancel failed", exc_info=True)
+         try:
+             await self._sdk.close()
+-        except Exception:
++        except BOUNDARY_ERRORS:
+             logger.debug("abort: sdk.close failed", exc_info=True)
+
+     def __aiter__(self) -> AsyncIterator[Any]:
+--- a/langgraph/pregel/_retry.py
++++ b/langgraph/pregel/_retry.py
+@@ -35,6 +35,7 @@
+     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
+     NS_SEP,
+ )
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+ from langgraph._internal._runnable import create_task_in_config_context
+ from langgraph._internal._timeout import sync_timeout_unsupported
+ from langgraph.errors import (
+@@ -410,7 +411,7 @@
+ ) -> None:
+     try:
+         callback(event)
+-    except Exception:
++    except BOUNDARY_ERRORS:
+         logger.warning("Timed attempt observer failed", exc_info=True)
+
+
+@@ -638,7 +639,7 @@
+             # regular exception so the pregel runner panics the run instead of
+             # treating the task as a silent tear-down (LSD-1507).
+             raise NodeCancelledError(task.name) from exc
+-        except Exception as exc:
++        except BOUNDARY_ERRORS as exc:
+             if SUPPORTS_EXC_NOTES:
+                 exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
+             if not retry_policy:
+@@ -759,7 +760,7 @@
+                     # this command is for the current graph, handle it
+                     for w in task.writers:
+                         w.invoke(cmd, config)
+-                except Exception as writer_exc:
++                except BOUNDARY_ERRORS as writer_exc:
+                     _finish_timed_attempt(config, attempt_ctx, writer_exc)
+                     raise
+                 _finish_timed_attempt(config, attempt_ctx)
+@@ -792,7 +793,7 @@
+                 raise NodeCancelledError(task.name) from exc
+             _finish_timed_attempt(config, attempt_ctx, exc)
+             raise
+-        except Exception as exc:
++        except BOUNDARY_ERRORS as exc:
+             _finish_timed_attempt(config, attempt_ctx, exc)
+             if SUPPORTS_EXC_NOTES:
+                 exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
+--- a/langgraph/pregel/_runner.py
++++ b/langgraph/pregel/_runner.py
+@@ -37,6 +37,7 @@
+     RESUME,
+     RETURN,
+ )
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+ from langgraph._internal._future import chain_future, run_coroutine_threadsafe
+ from langgraph._internal._scratchpad import PregelScratchpad
+ from langgraph._internal._typing import MISSING
+@@ -219,7 +220,7 @@
+                     },
+                 )
+                 self.commit(t, None)
+-            except Exception as exc:
++            except BOUNDARY_ERRORS as exc:
+                 self.commit(t, exc)
+                 if (
+                     not isinstance(exc, GraphBubbleUp)
+@@ -347,7 +348,7 @@
+                 handled_exception_ids=self._handled_exception_ids,
+                 handled_futures=handled_futures,
+             )
+-        except Exception as exc:
++        except BOUNDARY_ERRORS as exc:
+             if tb := exc.__traceback__:
+                 while tb.tb_next is not None and any(
+                     tb.tb_frame.f_code.co_filename.endswith(name)
+@@ -411,7 +412,7 @@
+                     },
+                 )
+                 self.commit(t, None)
+-            except Exception as exc:
++            except BOUNDARY_ERRORS as exc:
+                 self.commit(t, exc)
+                 if (
+                     not isinstance(exc, GraphBubbleUp)
+@@ -561,7 +562,7 @@
+                 handled_exception_ids=self._handled_exception_ids,
+                 handled_futures=handled_futures,
+             )
+-        except Exception as exc:
++        except BOUNDARY_ERRORS as exc:
+             if tb := exc.__traceback__:
+                 while tb.tb_next is not None and any(
+                     tb.tb_frame.f_code.co_filename.endswith(name)
+@@ -937,5 +938,5 @@
+             chain_future(fut, destination)
+         else:
+             destination.set_exception(RuntimeError("Task not scheduled"))
+-    except Exception as exc:
++    except BOUNDARY_ERRORS as exc:
+         destination.set_exception(exc)
+--- a/langgraph/pregel/debug.py
++++ b/langgraph/pregel/debug.py
+@@ -2,7 +2,7 @@
+
+ from collections.abc import Iterable, Iterator, Mapping, Sequence
+ from dataclasses import asdict
+-from typing import Any
++from typing import Any, cast
+ from uuid import UUID
+
+ from langchain_core.runnables import RunnableConfig
+@@ -112,20 +112,23 @@
+         [stream_keys] if isinstance(stream_keys, str) else stream_keys
+     )
+     task, writes = task_tup
+-    yield {
+-        "id": task.id,
+-        "name": task.name,
+-        "error": next((w[1] for w in writes if w[0] == ERROR), None),
+-        "result": map_task_result_writes(
+-            [w for w in writes if w[0] in stream_channels_list or w[0] == RETURN]
+-        ),
+-        "interrupts": [
+-            asdict(v)
+-            for w in writes
+-            if w[0] == INTERRUPT
+-            for v in (w[1] if isinstance(w[1], Sequence) else [w[1]])
+-        ],
+-    }
++    yield cast(
++        TaskResultPayload,
++        {
++            "id": task.id,
++            "name": task.name,
++            "error": next((w[1] for w in writes if w[0] == ERROR), None),
++            "result": map_task_result_writes(
++                [w for w in writes if w[0] in stream_channels_list or w[0] == RETURN]
++            ),
++            "interrupts": [
++                asdict(v)
++                for w in writes
++                if w[0] == INTERRUPT
++                for v in (w[1] if isinstance(w[1], Sequence) else [w[1]])
++            ],
++        },
++    )
+
+
+ def rm_pregel_keys(config: RunnableConfig | None) -> RunnableConfig | None:
+@@ -173,37 +176,42 @@
+             }
+         }
+
+-    yield {
+-        "config": rm_pregel_keys(patch_checkpoint_map(config, metadata)),
+-        "parent_config": rm_pregel_keys(patch_checkpoint_map(parent_config, metadata)),
+-        "values": read_channels(channels, stream_channels),
+-        "metadata": metadata,
+-        "next": [t.name for t in tasks],
+-        "tasks": [
+-            {
+-                "id": t.id,
+-                "name": t.name,
+-                "error": t.error,
+-                "state": t.state,
+-            }
+-            if t.error
+-            else {
+-                "id": t.id,
+-                "name": t.name,
+-                "result": t.result,
+-                "interrupts": tuple(asdict(i) for i in t.interrupts),
+-                "state": t.state,
+-            }
+-            if t.result
+-            else {
+-                "id": t.id,
+-                "name": t.name,
+-                "interrupts": tuple(asdict(i) for i in t.interrupts),
+-                "state": t.state,
+-            }
+-            for t in tasks_w_writes(tasks, pending_writes, task_states, output_keys)
+-        ],
+-    }
++    yield cast(
++        CheckpointPayload,
++        {
++            "config": rm_pregel_keys(patch_checkpoint_map(config, metadata)),
++            "parent_config": rm_pregel_keys(
++                patch_checkpoint_map(parent_config, metadata)
++            ),
++            "values": read_channels(channels, stream_channels),
++            "metadata": metadata,
++            "next": [t.name for t in tasks],
++            "tasks": [
++                {
++                    "id": t.id,
++                    "name": t.name,
++                    "error": t.error,
++                    "state": t.state,
++                }
++                if t.error
++                else {
++                    "id": t.id,
++                    "name": t.name,
++                    "result": t.result,
++                    "interrupts": tuple(asdict(i) for i in t.interrupts),
++                    "state": t.state,
++                }
++                if t.result
++                else {
++                    "id": t.id,
++                    "name": t.name,
++                    "interrupts": tuple(asdict(i) for i in t.interrupts),
++                    "state": t.state,
++                }
++                for t in tasks_w_writes(tasks, pending_writes, task_states, output_keys)
++            ],
++        },
++    )
+
+
+ def tasks_w_writes(
+--- a/langgraph/pregel/main.py
++++ b/langgraph/pregel/main.py
+@@ -88,6 +88,7 @@
+     PUSH,
+     TASKS,
+ )
++from langgraph._internal._exception_policy import TERMINATION_ERRORS
+ from langgraph._internal._pydantic import create_model
+ from langgraph._internal._queue import (  # type: ignore[attr-defined]
+     AsyncQueue,
+@@ -3015,7 +3016,7 @@
+                 raise GraphDrained(loop.control.drain_reason or "shutdown")
+             # set final channel values as run output
+             run_manager.on_chain_end(loop.output)
+-        except BaseException as e:
++        except TERMINATION_ERRORS as e:
+             if run_manager is not None:
+                 run_manager.on_chain_error(e)
+             raise
+@@ -3496,7 +3497,7 @@
+                 raise GraphDrained(loop.control.drain_reason or "shutdown")
+             # set final channel values as run output
+             await run_manager.on_chain_end(loop.output)
+-        except BaseException as e:
++        except TERMINATION_ERRORS as e:
+             if run_manager is not None:
+                 await asyncio.shield(run_manager.on_chain_error(e))
+             raise
+@@ -4137,10 +4138,9 @@
+         """Clear the cache for the given nodes."""
+         if not self.cache:
+             raise ValueError("No cache is set for this graph. Cannot clear cache.")
+-        nodes = nodes or self.nodes.keys()
+         # collect namespaces to clear
+         namespaces: list[tuple[str, ...]] = []
+-        for node in nodes:
++        for node in nodes or self.nodes:
+             if node in self.nodes:
+                 namespaces.append(
+                     (
+@@ -4156,10 +4156,9 @@
+         """Asynchronously clear the cache for the given nodes."""
+         if not self.cache:
+             raise ValueError("No cache is set for this graph. Cannot clear cache.")
+-        nodes = nodes or self.nodes.keys()
+         # collect namespaces to clear
+         namespaces: list[tuple[str, ...]] = []
+-        for node in nodes:
++        for node in nodes or self.nodes:
+             if node in self.nodes:
+                 namespaces.append(
+                     (
+--- a/langgraph/stream/_mux.py
++++ b/langgraph/stream/_mux.py
+@@ -5,6 +5,7 @@
+ from collections.abc import Awaitable, Callable
+ from typing import Any
+
++from langgraph._internal._exception_policy import TERMINATION_ERRORS
+ from langgraph.stream._types import (
+     ProtocolEvent,
+     StreamTransformer,
+@@ -313,7 +314,7 @@
+         for transformer in self._transformers:
+             try:
+                 transformer.finalize()
+-            except BaseException as e:
++            except TERMINATION_ERRORS as e:
+                 if first_error is None:
+                     first_error = e
+         for ch in self._channels:
+@@ -337,7 +338,7 @@
+         for transformer in self._transformers:
+             try:
+                 transformer.fail(err)
+-            except BaseException:
++            except TERMINATION_ERRORS:
+                 pass
+         for ch in self._channels:
+             if not ch._closed:
+@@ -411,7 +412,7 @@
+         for transformer in self._transformers:
+             try:
+                 await transformer.afinalize()
+-            except BaseException as e:
++            except TERMINATION_ERRORS as e:
+                 if first_error is None:
+                     first_error = e
+         for ch in self._channels:
+@@ -440,7 +441,7 @@
+         for transformer in self._transformers:
+             try:
+                 await transformer.afail(err)
+-            except BaseException:
++            except TERMINATION_ERRORS:
+                 pass
+         for ch in self._channels:
+             if not ch._closed:
+--- a/langgraph/stream/_types.py
++++ b/langgraph/stream/_types.py
+@@ -7,6 +7,8 @@
+ from typing import Any, ClassVar, Literal
+
+ from typing_extensions import NotRequired, TypedDict
++
++from langgraph._internal._exception_policy import TERMINATION_ERRORS
+
+ _logger = logging.getLogger(__name__)
+
+@@ -288,7 +290,7 @@
+             return await coro
+         except asyncio.CancelledError:
+             raise
+-        except BaseException:
++        except TERMINATION_ERRORS:
+             _logger.exception("Scheduled StreamTransformer task failed")
+
+     def _scheduled_task_set(self) -> set[asyncio.Task[Any]]:
+--- a/langgraph/stream/run_stream.py
++++ b/langgraph/stream/run_stream.py
+@@ -7,6 +7,7 @@
+
+ from langchain_core._api import beta
+
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+ from langgraph.stream._convert import convert_to_protocol_event
+ from langgraph.stream._mux import StreamMux
+ from langgraph.stream._types import ProtocolEvent
+@@ -140,7 +141,7 @@
+             self._mux.close()
+             self._exhausted = True
+             return False
+-        except Exception as e:
++        except BOUNDARY_ERRORS as e:
+             self._mux.fail(e)
+             self._exhausted = True
+             return False
+@@ -163,11 +164,11 @@
+         ):
+             try:
+                 close()
+-            except Exception:
++            except BOUNDARY_ERRORS:
+                 pass
+         try:
+             self._mux.close()
+-        except Exception:
++        except BOUNDARY_ERRORS:
+             pass
+
+     def __enter__(self) -> GraphRunStream:
+@@ -472,7 +473,7 @@
+                 self._exhausted = True
+                 await self._mux.aclose()
+                 return False
+-            except Exception as e:
++            except BOUNDARY_ERRORS as e:
+                 self._exhausted = True
+                 await self._mux.afail(e)
+                 return False
+@@ -508,7 +509,7 @@
+             anext_task.cancel()
+             try:
+                 await anext_task
+-            except (asyncio.CancelledError, Exception):
++            except BOUNDARY_ERRORS + (asyncio.CancelledError,):
+                 pass
+         if (
+             graph_aiter is not None
+@@ -516,11 +517,11 @@
+         ):
+             try:
+                 await aclose()
+-            except Exception:
++            except BOUNDARY_ERRORS:
+                 pass
+         try:
+             await self._mux.aclose()
+-        except Exception:
++        except BOUNDARY_ERRORS:
+             pass
+
+     async def __aenter__(self) -> AsyncGraphRunStream:
+--- a/langgraph/stream/stream_channel.py
++++ b/langgraph/stream/stream_channel.py
+@@ -4,6 +4,8 @@
+ from collections import deque
+ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+ from typing import TYPE_CHECKING, Generic, TypeVar
++
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+
+ if TYPE_CHECKING:
+     from langgraph.stream._mux import StreamMux
+@@ -331,7 +333,7 @@
+                     except StopAsyncIteration:
+                         exhausted[0] = True
+                         continue
+-                    except Exception as e:
++                    except BOUNDARY_ERRORS as e:
+                         error[0] = e
+                         exhausted[0] = True
+                         continue
+--- a/langgraph/stream/transformers.py
++++ b/langgraph/stream/transformers.py
+@@ -12,6 +12,7 @@
+ from langchain_protocol.protocol import LifecycleCause, MessagesData
+ from typing_extensions import NotRequired, TypedDict
+
++from langgraph._internal._exception_policy import BOUNDARY_ERRORS, TERMINATION_ERRORS
+ from langgraph.errors import GraphDrained, GraphInterrupt
+ from langgraph.stream._types import ProtocolEvent, StreamTransformer
+ from langgraph.stream.run_stream import AsyncSubgraphRunStream, SubgraphRunStream
+@@ -850,7 +851,7 @@
+         for ns in list(self._open):
+             try:
+                 self._on_terminal(ns, "completed", None)
+-            except BaseException as e:
++            except TERMINATION_ERRORS as e:
+                 if first_error is None:
+                     first_error = e
+         self._open.clear()
+@@ -858,7 +859,7 @@
+             if self._mark_terminal(handle, "completed", None):
+                 try:
+                     self._close_or_fail_handle(handle, "completed", None)
+-                except BaseException as e:
++                except TERMINATION_ERRORS as e:
+                     if first_error is None:
+                         first_error = e
+         return first_error
+@@ -868,7 +869,7 @@
+         for ns in list(self._open):
+             try:
+                 await self._aon_terminal(ns, "completed", None)
+-            except BaseException as e:
++            except TERMINATION_ERRORS as e:
+                 if first_error is None:
+                     first_error = e
+         self._open.clear()
+@@ -876,7 +877,7 @@
+             if self._mark_terminal(handle, "completed", None):
+                 try:
+                     await self._aclose_or_fail_handle(handle, "completed", None)
+-                except BaseException as e:
++                except TERMINATION_ERRORS as e:
+                     if first_error is None:
+                         first_error = e
+         return first_error
+@@ -899,7 +900,7 @@
+             if handle._mux is not None and not handle._mux._events._closed:
+                 try:
+                     handle._mux.fail(err)
+-                except Exception:
++                except BOUNDARY_ERRORS:
+                     _logger.warning(
+                         "Error failing subgraph mini-mux at %s; "
+                         "subscribers may not see the terminal error.",
+@@ -915,7 +916,7 @@
+             if handle._mux is not None and not handle._mux._events._closed:
+                 try:
+                     await handle._mux.afail(err)
+-                except Exception:
++                except BOUNDARY_ERRORS:
+                     _logger.warning(
+                         "Error failing subgraph mini-mux at %s; "
+                         "subscribers may not see the terminal error.",

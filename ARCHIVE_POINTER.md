@@ -81,3 +81,14 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 2026-10-11 发布断点收口：未登记的旧 `FHD/docs/DEPLOYMENT.md`、`deploy/RELEASE_CHECKLIST.md` 和 2026-06-05 已结束的 `ai-agent-v1-plan.md` 外置至 `~/XCMAX-archives/docs-20261011-delivery-breakpoints/`；原文与 SHA256 见 `MANIFEST.json`。旧仓库、K8s 与 demo 完成声明不作为本轮发布依据；当前入口为双端发布和客服工单 SSOT，历史 demo 与证据仍保留。 同轮将未登记旧 `FHD/tools/XcagiInstaller/README.md` 外置到 `~/XCMAX-archives/docs-20261011-delivery-breakpoints/windows-installer-readme/README.md`；原文 SHA256 `dadea781b3b40fe9cd8273bb03cf1f7e64f48cdc3531c863187a1c9e992de5dc`，逐字节校验与恢复指引见同目录 `MANIFEST.json`。
 
 同轮将未登记且仍含旧版安装与首启规则的 `FHD/docs/guides/PRODUCT_USER_FLOW.md` 校验外置到上述归档；唯一设置顺序与权益边界并入既有 `DELIVERABLE_PRODUCT.md`，交付判定统一指向发布与工单 SSOT，原文保留于 `MANIFEST.json`。
+
+## 证据与根目录杂物外置（2026-10-25）
+
+| 包 | 路径 | 说明 |
+|----|------|------|
+| **证据 bulk（非 materialization）** | `~/XCMAX-archives/evidence-bulk-20261025/` | 未登记进 `evidence-materialization.json` 的 `FHD/docs/evidence` 媒体、能力中心 generated 公开副本、`appstore-screenshots/`、`宣传资料/`、成都 ≥512KiB 营销媒体（含 `public/hero-video.mp4`）。已 git rm；校验见 `MANIFEST.json`。 |
+| 临时 symlink | （已删除） | 根目录 `.codex_modstore_archfix` 已从 git 树移除。 |
+
+**与 #2544 共存**：`evidence-materialization.json` 登记的 FHD 源媒体（约 289MB）与 `retained_sources` 仍留在 git，供 `evidence_assets.materialize` 校验/生成公开别名；能力中心运行时仍优先 COS 预签名。
+
+**保留（有意）**：根目录 `XCAGI-*.html`；`太阳鸟/` 说明；`成都修茈科技有限公司/` 活代码；materialization 源媒体。

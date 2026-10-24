@@ -65,11 +65,10 @@ def test_invalid_timeout_never_dispatches(timeout):
 
 
 def test_unknown_outcome_blocks_automatic_repair_without_dispatch():
-    from app.application.agent_orchestrator.orchestrator_agentorchestrator_mixin02 import (
-        _AgentOrchestratorPart02Mixin,
-    )
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 
-    runner = _AgentOrchestratorPart02Mixin()
+    runner = AgentOrchestrator(repository=InMemoryAgentRunRepository())
     run = SimpleNamespace(metadata={"non_retryable": True})
     assert runner._prepare_repair_or_retry(run, _step(), runtime_context={}) is False
 

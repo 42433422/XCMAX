@@ -29,14 +29,14 @@ import math
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, cast
 
-from app.application.workflow.ports.runtime import (
+from app.application.workflow.ports import (
     Callback,
     PlanGraph,
     StateSchema,
+    ToolDispatcher,
     WorkflowRunResult,
     WorkflowRuntime,
 )
-from app.application.workflow.ports.tools import ToolDispatcher
 from app.application.workflow.runtime.shadow_canary_diff import (
     ShadowDiff,
     compute_normalized_diff,

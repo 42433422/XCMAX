@@ -51,7 +51,11 @@ def test_progress_never_writes_raw_error_into_customer_message(client, team_ok):
         db.add(ticket)
         db.flush()
         out = apply_customer_ticket_incident_progress(
-            db, ticket_id=ticket.id, event_id=2389, team_ok=team_ok, team_rows=_rows(team_ok)
+            db,
+            ticket_id=ticket.id,
+            event_id=2389,
+            team_ok=team_ok,
+            team_rows=_rows(team_ok),
         )
         db.commit()
         assert out["ok"] is True

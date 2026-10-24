@@ -27,6 +27,7 @@ import pytest
 from openpyxl import Workbook
 
 from app.application import shipment_excel_etl_app_service as svc_mod
+from app.application import shipment_excel_etl_security as etl_security
 from app.application.shipment_etl_profile import (
     CompiledMetaPatterns,
     ShipmentEtlProfile,
@@ -242,12 +243,12 @@ def _write_ledger_xlsx(path):
     return path
 
 
-def _delivery_note(profile_target="shipment"):
+def _delivery_note(profile_target="shipment", *, order_number="O-1"):
     return {
         "unit_name": "客户A",
         "contact_person": "张三",
         "order_date": "2026-07-24",
-        "order_number": "O-1",
+        "order_number": order_number,
         "source_kind": "delivery_note",
         "profile_target": profile_target,
         "items": [
@@ -1002,6 +1003,7 @@ def test_parse_ledger_sheet_missing_order(monkeypatch, no_llm, no_kb):
 
 def test_parse_delivery_notes_happy(tmp_path, monkeypatch, delivery_profile, no_llm, no_kb):
     path = _write_delivery_xlsx(tmp_path / "del.xlsx")
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     monkeypatch.setattr(f"{MOD}._extract_adjacent_buyer_meta", lambda ws, r: {})
@@ -1015,6 +1017,7 @@ def test_parse_delivery_notes_happy(tmp_path, monkeypatch, delivery_profile, no_
 
 def test_parse_delivery_notes_ledger_only(tmp_path, monkeypatch, delivery_profile, no_llm, no_kb):
     path = _write_ledger_xlsx(tmp_path / "lg.xlsx")
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     res = parse_delivery_notes(path, include_ledger=True)
@@ -1046,6 +1049,7 @@ def test_parse_delivery_notes_mixed_auto(tmp_path, monkeypatch, delivery_profile
     lg["D3"] = 1
     path = tmp_path / "mixed.xlsx"
     wb.save(path)
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     monkeypatch.setattr(f"{MOD}._extract_adjacent_buyer_meta", lambda ws, r: {})
@@ -1081,6 +1085,7 @@ def test_parse_delivery_notes_unsafe_path(tmp_path, monkeypatch, delivery_profil
 
 
 def test_parse_delivery_notes_file_missing(tmp_path, monkeypatch, delivery_profile):
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: tmp_path / "nope.xlsx")
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     res = parse_delivery_notes(tmp_path / "nope.xlsx")
@@ -1103,6 +1108,7 @@ def test_parse_delivery_notes_openpyxl_import_error(tmp_path, monkeypatch, deliv
 
 def test_parse_delivery_notes_load_error(tmp_path, monkeypatch, delivery_profile):
     path = _write_delivery_xlsx(tmp_path / "d.xlsx")
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
 
@@ -1134,6 +1140,7 @@ def test_parse_delivery_notes_ocr_exception_falls_back(
 ):
     OCR = "app.application.shipment_excel_etl_ocr"
     path = _write_delivery_xlsx(tmp_path / "d.xlsx")
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     monkeypatch.setattr(f"{MOD}._extract_adjacent_buyer_meta", lambda ws, r: {})
@@ -1157,6 +1164,7 @@ def test_parse_delivery_notes_no_notes_skipped(
     ws["A2"] = "一些文本"
     path = tmp_path / "quote.xlsx"
     wb.save(path)
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     res = parse_delivery_notes(path)
@@ -1380,7 +1388,7 @@ def test_execute_compensate_on_failure(monkeypatch, delivery_profile, tmp_path):
     ]
     svc.cancel_shipment.return_value = {"success": True}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    notes = [_delivery_note(), _delivery_note()]
+    notes = [_delivery_note(), _delivery_note(order_number="O-2")]
     res = execute_shipment_excel_etl(
         "d.xlsx",
         notes=notes,
@@ -1404,7 +1412,7 @@ def test_execute_compensate_delete_fallback(monkeypatch, delivery_profile, tmp_p
     svc.cancel_shipment.return_value = {"success": False}
     svc.delete_shipment.return_value = {"success": True}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    notes = [_delivery_note(), _delivery_note()]
+    notes = [_delivery_note(), _delivery_note(order_number="O-2")]
     res = execute_shipment_excel_etl(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
@@ -1421,7 +1429,7 @@ def test_execute_compensate_error(monkeypatch, delivery_profile, tmp_path):
     svc.cancel_shipment.return_value = {"success": False}
     svc.delete_shipment.return_value = {"success": False, "message": "del fail"}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    notes = [_delivery_note(), _delivery_note()]
+    notes = [_delivery_note(), _delivery_note(order_number="O-2")]
     res = execute_shipment_excel_etl(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
@@ -1442,7 +1450,7 @@ def test_execute_compensate_exception(monkeypatch, delivery_profile, tmp_path):
 
     svc.cancel_shipment.side_effect = cancel_boom
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    notes = [_delivery_note(), _delivery_note()]
+    notes = [_delivery_note(), _delivery_note(order_number="O-2")]
     res = execute_shipment_excel_etl(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
@@ -1458,7 +1466,7 @@ def test_execute_partial_no_compensate(monkeypatch, delivery_profile, tmp_path):
         {"success": False, "message": "boom"},
     ]
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    notes = [_delivery_note(), _delivery_note()]
+    notes = [_delivery_note(), _delivery_note(order_number="O-2")]
     res = execute_shipment_excel_etl(
         "d.xlsx",
         notes=notes,
@@ -1582,7 +1590,8 @@ _WRITE_CFG = {
 }
 
 
-def test_write_delivery_note_workbook(tmp_path, delivery_profile):
+def test_write_delivery_note_workbook(tmp_path, delivery_profile, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     prof = _make_profile(write=dict(_WRITE_CFG))
     out = tmp_path / "out" / "delivery.xlsx"
     res = write_delivery_note_workbook([_delivery_note()], out, profile=prof)
@@ -1591,7 +1600,8 @@ def test_write_delivery_note_workbook(tmp_path, delivery_profile):
     assert Path(res["file_path"]).is_file()
 
 
-def test_write_delivery_note_workbook_multi_and_demo(tmp_path, delivery_profile):
+def test_write_delivery_note_workbook_multi_and_demo(tmp_path, delivery_profile, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     prof = _make_profile(write=dict(_WRITE_CFG))
     out = tmp_path / "multi.xlsx"
     notes = [
@@ -1607,6 +1617,27 @@ def test_write_delivery_note_workbook_multi_and_demo(tmp_path, delivery_profile)
     assert res2["sheet_count"] == 1
 
 
+def test_write_delivery_note_workbook_rejects_output_outside_trusted_roots(
+    tmp_path, delivery_profile, monkeypatch
+):
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    monkeypatch.setattr(etl_security, "_trusted_base_roots", lambda: [allowed_root])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    outside = tmp_path / "outside" / "delivery.xlsx"
+
+    result = write_delivery_note_workbook(
+        [_delivery_note()], outside, profile=_make_profile(write=dict(_WRITE_CFG))
+    )
+
+    assert result == {
+        "success": False,
+        "message": "非法输出路径",
+        "error_code": "unsafe_path",
+    }
+    assert not outside.parent.exists()
+
+
 def test_write_delivery_note_workbook_import_error(monkeypatch):
     monkeypatch.setitem(sys.modules, "openpyxl", None)
     try:
@@ -1616,7 +1647,8 @@ def test_write_delivery_note_workbook_import_error(monkeypatch):
     assert res["success"] is False
 
 
-def test_write_ledger_workbook(tmp_path, delivery_profile):
+def test_write_ledger_workbook(tmp_path, delivery_profile, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     prof = _make_profile(write=dict(_WRITE_CFG))
     out = tmp_path / "ledger.xlsx"
     rows = [
@@ -1639,6 +1671,25 @@ def test_write_ledger_workbook(tmp_path, delivery_profile):
     res2 = write_ledger_workbook([], tmp_path / "l2.xlsx", profile=prof)
     assert res2["success"] is True
     assert res2["unit_name"] == "unit"
+
+
+def test_write_ledger_workbook_rejects_output_outside_trusted_roots(
+    tmp_path, delivery_profile, monkeypatch
+):
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    monkeypatch.setattr(etl_security, "_trusted_base_roots", lambda: [allowed_root])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    outside = tmp_path / "outside" / "ledger.xlsx"
+
+    result = write_ledger_workbook([], outside, profile=_make_profile(write=dict(_WRITE_CFG)))
+
+    assert result == {
+        "success": False,
+        "message": "非法输出路径",
+        "error_code": "unsafe_path",
+    }
+    assert not outside.parent.exists()
 
 
 def test_write_ledger_workbook_import_error(monkeypatch):

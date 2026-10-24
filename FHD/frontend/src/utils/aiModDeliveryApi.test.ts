@@ -4,11 +4,26 @@ const { apiFetch } = vi.hoisted(() => ({ apiFetch: vi.fn() }))
 vi.mock('@/utils/apiBase', () => ({ apiFetch }))
 
 import { aiModBriefFromChat, generateAndInstallAiMod } from './aiModDeliveryApi'
+import { setRuntimeTenantStorageScopeInput } from './tenantStorageScopeRuntime'
 
 const jsonResponse = (body: unknown, status = 200): Response => Response.json(body, { status })
 
 describe('aiModDeliveryApi', () => {
-  beforeEach(() => apiFetch.mockReset())
+  beforeEach(() => {
+    apiFetch.mockReset()
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+  })
+
+  it.each(['start', 'progress'])('retains generation without installing under a new account after %s', async stage => {
+    const switchOwner = () => setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 2 })
+    apiFetch.mockImplementation(async (path: string) => {
+      if (stage === 'start' || path.endsWith('/sess-1')) switchOwner()
+      return jsonResponse({ data: { session_id: 'sess-1', status: 'done', artifact: { mod_id: 'private-mod' } } })
+    })
+    await expect(generateAndInstallAiMod('生成一个库存 MOD')).rejects.toThrow('账号或 MOD 已切换')
+    expect(apiFetch).toHaveBeenCalledTimes(stage === 'start' ? 1 : 2)
+    expect(apiFetch.mock.calls.some(([path]) => path.endsWith('/install'))).toBe(false)
+  })
 
   it('only intercepts explicit requests to create a self-use module or workflow', () => {
     expect(aiModBriefFromChat('帮我做一个请假审批流')).toBe('帮我做一个请假审批流')

@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
-from unittest.mock import patch
+import sys
+from datetime import UTC, datetime
+from io import BytesIO
+from pathlib import Path
+from unittest.mock import Mock, patch
+from zipfile import ZipFile
 
 import pytest
+from docx import Document
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+from app.services import service_contract_fill as contracts
+from app.services import user_cs_pipeline as pipelines
+from app.services.kitten_ai_document import generate as document_renderer
 from app.services.service_contract_fill import (
     FIELD_SCHEMA,
     build_contract_wechat_hint,
@@ -195,3 +207,199 @@ class TestContractAssetsDir:
         path = contract_assets_dir()
         assert "user_cs_contracts" in str(path)
         assert "assets" in str(path)
+
+
+_CONTRACT_VALUES = {
+    "party_a_name": "合成客户甲 <&>",
+    "total_amount_number": "1280.50",
+    "sign_date": "2026-10-22",
+    "main_function_list": "需求梳理\n接口集成",
+}
+_CONTRACT_TEXT = (
+    "服务合同草案\n甲方：合成客户甲 <&>\n金额：1280.50 元\n"
+    "签署日期：2026-10-22\n功能清单：需求梳理\n接口集成\n"
+)
+_CONTRACT_FILENAME = "contract_8001_20261022_101112.docx"
+
+
+@pytest.fixture
+def _contract_generation(tmp_path, monkeypatch):
+    root = tmp_path / "pipelines"
+    root.mkdir()
+    monkeypatch.setattr(contracts, "_pipeline_roots", lambda: [root])
+    monkeypatch.setattr(pipelines, "_pipeline_roots", lambda: [root])
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 22, 10, 11, 12, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(contracts, "datetime", FixedDateTime)
+
+    def reject_llm(*args, **kwargs):
+        raise AssertionError("Contract rendering must not invoke an LLM")
+
+    monkeypatch.setattr(document_renderer, "draft_document_spec", reject_llm)
+    monkeypatch.setattr(document_renderer, "get_openai_compatible_client", reject_llm)
+    return contracts.generated_contracts_dir()
+
+
+def _contract_text(content):
+    with ZipFile(BytesIO(content)) as package:
+        assert package.testzip() is None
+        assert {"[Content_Types].xml", "_rels/.rels", "word/document.xml"} <= set(
+            package.namelist()
+        )
+    document = Document(BytesIO(content))
+    return "\n".join(paragraph.text for paragraph in document.paragraphs) + "\n"
+
+
+@pytest.fixture
+def _contract_client(_contract_generation, monkeypatch):
+    path = (
+        Path(contracts.__file__).resolve().parents[2]
+        / "mods/xcagi-customer-service-bridge/backend/blueprints.py"
+    )
+    spec = importlib.util.spec_from_file_location("synthetic_contract_artifact_bridge", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+    spec.loader.exec_module(module)
+    app = FastAPI()
+    module.register_fastapi_routes(app, "synthetic-contract-artifacts")
+    with TestClient(app, raise_server_exceptions=False) as client:
+        yield client
+
+
+def test_generated_contract_is_real_ooxml_and_preserves_public_metadata(
+    _contract_generation, monkeypatch
+):
+    merged = Mock(side_effect=AssertionError("Explicit fields must not be replaced"))
+    monkeypatch.setattr(contracts, "build_merged_fields", merged)
+    result = contracts.generate_contract_docx(
+        8001, username="Unused fallback", field_values=dict(_CONTRACT_VALUES)
+    )
+    path = _contract_generation / _CONTRACT_FILENAME
+
+    assert result == {
+        "filename": _CONTRACT_FILENAME,
+        "party_a_name": _CONTRACT_VALUES["party_a_name"],
+        "total_amount_number": "1280.50",
+        "path": str(path),
+    }
+    merged.assert_not_called()
+    assert _contract_text(path.read_bytes()) == _CONTRACT_TEXT
+
+
+@pytest.mark.parametrize("field_values", [None, {}])
+def test_generated_contract_keeps_merged_field_fallback(_contract_generation, field_values):
+    doc = pipelines.load_pipeline(8001, username="Synthetic owner")
+    doc["contract_fields"] = dict(_CONTRACT_VALUES, party_a_name="Original stored name")
+    pipelines.save_pipeline(doc)
+    contracts.save_field_overrides(8001, {"party_a_name": _CONTRACT_VALUES["party_a_name"]})
+
+    result = contracts.generate_contract_docx(
+        8001, username="Synthetic owner", field_values=field_values
+    )
+
+    assert result["party_a_name"] == _CONTRACT_VALUES["party_a_name"]
+    assert result["total_amount_number"] == "1280.50"
+    assert _contract_text(Path(result["path"]).read_bytes()) == _CONTRACT_TEXT
+
+
+@pytest.mark.parametrize("username,party_a", [("合成用户名", "合成用户名"), ("", "客户8001")])
+def test_generated_contract_keeps_party_name_fallback(_contract_generation, username, party_a):
+    result = contracts.generate_contract_docx(
+        8001, username=username, field_values={"total_amount_number": "12"}
+    )
+
+    assert result["party_a_name"] == party_a
+    assert _contract_text(Path(result["path"]).read_bytes()) == (
+        f"服务合同草案\n甲方：{party_a}\n金额：12 元\n签署日期：\n功能清单：\n"
+    )
+
+
+@pytest.mark.parametrize("failure", ["render", "publish"])
+def test_generation_failure_preserves_existing_artifact_and_cleans_temporary_files(
+    _contract_generation, monkeypatch, failure
+):
+    path = _contract_generation / _CONTRACT_FILENAME
+    original = b"previous published artifact"
+    path.write_bytes(original)
+    if failure == "render":
+        monkeypatch.setattr(
+            document_renderer, "build_docx_bytes", Mock(side_effect=OSError("synthetic failure"))
+        )
+    else:
+        original_replace = Path.replace
+
+        def fail_publish(source, destination):
+            if Path(destination) == path:
+                assert _contract_text(source.read_bytes()) == _CONTRACT_TEXT
+                raise OSError("synthetic failure")
+            return original_replace(source, destination)
+
+        monkeypatch.setattr(Path, "replace", fail_publish)
+
+    with pytest.raises(OSError, match="synthetic failure"):
+        contracts.generate_contract_docx(8001, field_values=dict(_CONTRACT_VALUES))
+
+    assert path.read_bytes() == original
+    assert list(_contract_generation.iterdir()) == [path]
+
+
+def test_mod_route_generates_and_downloads_the_actual_word_artifact(
+    _contract_generation, _contract_client
+):
+    doc = pipelines.load_pipeline(8001, username="Synthetic owner")
+    doc["stage"] = "quoted"
+    pipelines.save_pipeline(doc)
+    response = _contract_client.post(
+        "/api/mod/synthetic-contract-artifacts/user-cs/contract/generate",
+        json={"market_user_id": 8001, "username": "Synthetic owner", "values": _CONTRACT_VALUES},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["success"] is True
+    result = response.json()["data"]
+    assert result["filename"] == _CONTRACT_FILENAME
+    downloaded = _contract_client.get(result["download_url"])
+    assert downloaded.status_code == 200
+    assert (
+        downloaded.headers["content-type"]
+        == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert _CONTRACT_FILENAME in downloaded.headers["content-disposition"]
+    assert downloaded.content == (_contract_generation / _CONTRACT_FILENAME).read_bytes()
+    assert _contract_text(downloaded.content) == _CONTRACT_TEXT
+    saved = pipelines.load_pipeline(8001)
+    assert saved["stage"] == "contract_pending"
+    assert saved["contract_filename"] == _CONTRACT_FILENAME
+    assert len(saved["timeline"]) == 1
+    assert saved["timeline"][0]["source"] == "contract_generate"
+
+
+def test_mod_generation_publish_failure_does_not_report_success_or_advance_pipeline(
+    _contract_generation, _contract_client, monkeypatch
+):
+    doc = pipelines.load_pipeline(8001, username="Synthetic owner")
+    doc["stage"] = "quoted"
+    pipelines.save_pipeline(doc)
+    before = pipelines._pipeline_file(8001).read_bytes()
+    target = _contract_generation / _CONTRACT_FILENAME
+    original_replace = Path.replace
+
+    def fail_publish(source, destination):
+        if Path(destination) == target:
+            raise OSError("synthetic publication failure")
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(Path, "replace", fail_publish)
+    response = _contract_client.post(
+        "/api/mod/synthetic-contract-artifacts/user-cs/contract/generate",
+        json={"market_user_id": 8001, "values": _CONTRACT_VALUES},
+    )
+
+    assert response.status_code == 500
+    assert pipelines._pipeline_file(8001).read_bytes() == before
+    assert list(_contract_generation.iterdir()) == []

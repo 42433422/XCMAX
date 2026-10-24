@@ -663,7 +663,7 @@ def test_attach_chat_trace_run_marks_token_waiting(
     assert run.status == "waiting_user"
     assert run.events[-1].event_type == "step.waiting_user"
     if approval_pending:
-        from app.application.agent_orchestrator.chat_trace_part03 import resolve_legacy_approval
+        from app.application.agent_orchestrator.chat_trace import resolve_legacy_approval
 
         context["agent_run_id"] = run.run_id
         if restored:
