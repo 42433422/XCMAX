@@ -1,77 +1,13 @@
-"""Workflow bounded-context ports (canonical).
+"""Workflow bounded-context ports (canonical for checkpoint/events/tools).
 
-Application re-exports via ``app.application.workflow.ports``.
-PlanGraph/StateSchema/WorkflowRunResult come from application.workflow.types.
+``WorkflowRuntime`` stays in ``app.application.workflow.ports`` because it
+references application-layer plan/result types; new non-typed contracts land here.
 """
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
-
-from app.application.workflow.types import PlanGraph, StateSchema, WorkflowRunResult
-
-# Re-export the domain types used by the runtime contract so callers can depend
-# on this single port module.
-__all__ = [
-    "WorkflowRuntime",
-    "PlanGraph",
-    "StateSchema",
-    "WorkflowRunResult",
-]
-
-
-@runtime_checkable
-class Callback(Protocol):
-    """A state event callback (e.g. ``{"type": "state.update", ...}``)."""
-
-    def __call__(self, event: dict[str, Any]) -> None: ...
-
-
-@runtime_checkable
-class WorkflowRuntime(Protocol):
-    """Execute, resume, and replay a workflow plan."""
-
-    def run(
-        self,
-        plan: PlanGraph,
-        runtime_context: dict[str, Any] | None = None,
-        max_retries: int = 1,
-        agentic_loop: bool = False,
-        tool_registry: dict[str, Any] | None = None,
-        user_id: str | None = None,
-        state_schema: StateSchema | None = None,
-        parallel: bool = True,
-        checkpointer: Any | None = None,
-        state_event_callback: Callback | None = None,
-    ) -> WorkflowRunResult:
-        """Execute ``plan`` and return the run result."""
-        ...
-
-    def resume_run(
-        self,
-        plan: PlanGraph,
-        checkpoint_id: str,
-        *,
-        checkpointer: Any,
-        max_retries: int = 1,
-        state_schema: StateSchema | None = None,
-        parallel: bool = True,
-    ) -> WorkflowRunResult:
-        """Resume execution from ``checkpoint_id`` without re-running completed nodes."""
-        ...
-
-    def replay_run(
-        self,
-        plan_id: str,
-        checkpoint_id: str | None = None,
-        *,
-        checkpointer: Any,
-    ) -> WorkflowRunResult:
-        """Read-only replay of executed node outputs from a checkpoint."""
-        ...
-
-
-from typing import Any, Protocol, runtime_checkable
+from dataclasses import dataclass, field
+from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
 
 Checkpoint = dict[str, Any]
 
@@ -105,8 +41,7 @@ class CheckpointStore(Protocol):
         ...
 
 
-from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 StateUpdateStatus = Literal["succeeded", "failed", "running"]
 
