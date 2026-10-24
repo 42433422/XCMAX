@@ -1,5 +1,5 @@
 {
   "lines": 2368931,
   "updated": "2026-10-24",
-  "note": "本PR获批准的净增例外保留为2368931行：合入后修复当前CI，生产代码净增14行（mobile router组合/Mypy、销售长空白线性路由、planner礼貌前缀解析）；测试与契约净增121行，其中临时工作区fixture、拆分后activation/knowledge owner测试校准、公开OpenAPI 568路径契约（净增86行）。此前Windows FILE_READ_ATTRIBUTES修复净增0行。保留main提交f9df1dde9的exact-SHA release clearance（#2606，记录见ops/releases/670dfb1505b041b00ddc640d174b1af2298c01d8.json；security scan 40057904508 paired single-mode）。未改安全门禁、未混入用户材料。"
+  "note": "本PR获批准的净增例外保留为2368931行：合入最新main（含#2610自动化方针/#2606 exact-SHA clearance等）后的基线仍用本PR已披露例外；生产与测试净增说明沿用合入前记录。未改安全门禁、未混入用户材料。"
 }

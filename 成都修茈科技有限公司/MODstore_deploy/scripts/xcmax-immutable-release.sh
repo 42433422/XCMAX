@@ -541,9 +541,6 @@ PY
 fi
 unset BUILD_JWT_SECRET
 
-# mktemp creates the build root with mode 0700. The release stays immutable,
-# but the public-site symlink is served by an unprivileged nginx worker, so the
-# release root itself must remain traversable after both build and reuse paths.
 chmod 0555 "$FINAL_ROOT"
 
 DEPLOY_DIR="$FINAL_ROOT/$MODSTORE_SUBDIR"
@@ -552,10 +549,7 @@ verify_runtime_mod_compiler "$FINAL_ROOT" "$RUNTIME_NODE_BIN" \
 EXPECTED_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact_sha256"])' "$FINAL_ROOT/.xcmax-release.json")"
 [[ "$EXPECTED_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]] || fail "release artifact SHA256 is invalid"
 
-# Apply the exact release's schema before switching the public/runtime symlinks.
-# The helper verifies and stamps the last known pre-Alembic production baseline
-# before applying newer revisions, then proves every declared head is recorded.
-# A migration failure therefore leaves the currently served release untouched.
+# Migrate schema before symlink switch; failure leaves currently served release untouched.
 verify_fixed_release_approval
 log "applying database migrations for $TARGET_SHA"
 (
@@ -981,6 +975,7 @@ print(json.dumps(result, ensure_ascii=False))
 PY
 }
 migrate_delivery_state true
+verify_fixed_release_approval  # live :9999 health; must precede stop
 CATALOG_SERVICES_STOPPED=1
 systemctl stop modstore.service modstore-scheduler.service
 if [[ "$ACTIVE_CATALOG_DIR" != "$(canonical_path "$CATALOG_DIR")" ]]; then
@@ -1024,7 +1019,6 @@ assert isinstance(payload, dict) and isinstance(payload.get("packages"), list)
 PY
 migrate_delivery_state false
 
-verify_fixed_release_approval
 ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
 mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
 RELEASE_SWITCHED=1
