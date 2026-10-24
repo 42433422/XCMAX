@@ -19,8 +19,6 @@ from app.services.conversation.context import ConversationContext
 # ---------------------------------------------------------------------------
 class _ConcreteApi(ApiMixin):
     def __init__(self):
-        self._deepseek_async_client = None
-        self._deepseek_async_loop = None
         self.api_key = "test-key"
         self.api_url = "https://api.example.com/v1/chat/completions"
         self.model = "test-model"

@@ -42,7 +42,7 @@ def llm_client_scope(client: Any, model: str) -> Iterator[None]:
 
 @contextmanager
 def llm_client_factory_scope(factory: Any) -> Iterator[None]:
-    """Bind credentials lazily so deterministic and approval-only paths need no LLM."""
+    """Defer client creation without making a model call at scope entry."""
     token = _scoped_client.set((factory, None))
     try:
         yield
@@ -72,7 +72,7 @@ def _resolved_scoped_client() -> tuple[Any, str] | None:
 def capture_worker_llm_scope(context: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """Copy minimal credentials into spawn arguments, never durable task context."""
     scoped = _scoped_client.get()
-    if scoped is None or scoped[1] is None:
+    if scoped is None:
         owner = (context or {}).get("local_user_id") or (context or {}).get("actor_id")
         if owner:
             return (
@@ -80,7 +80,7 @@ def capture_worker_llm_scope(context: dict[str, Any] | None = None) -> dict[str,
                 if str(owner).isdigit() and int(owner) > 0
                 else {"kind": "unavailable"}
             )
-        return {"kind": "unavailable"} if scoped is not None else None
+        return None
     try:
         scoped = _resolved_scoped_client()
         if scoped is None:

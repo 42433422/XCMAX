@@ -171,8 +171,9 @@ def test_platform_worker_scope_keeps_model_and_credentials_out_of_environment(mo
     )
 
     adapter = ModstorePlatformAdapter(auth_token="fake-owner-a")
-    with routing.llm_client_scope(ModstoreOpenAICompatibleClient(adapter), "owner-a/model"):
-        snapshot = routing.capture_worker_llm_scope()
+    adapter.default_provider, adapter.default_model = "owner-a", "model"
+    with routing.llm_client_factory_scope(lambda: ModstoreOpenAICompatibleClient(adapter)):
+        snapshot = routing.capture_worker_llm_scope({"local_user_id": 17})
     monkeypatch.setenv("MODSTORE_AUTH_TOKEN", "fake-owner-b")
     monkeypatch.setenv("LLM_MODEL", "owner-b/model")
     with routing.llm_client_factory_scope(lambda: routing.restore_worker_llm_client(snapshot)):
