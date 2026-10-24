@@ -1,5 +1,5 @@
 {
-  "lines": 2336768,
+  "lines": 2336474,
   "updated": "2026-10-24",
-  "note": "valid baseline after rebase onto #2611"
+  "note": "同步 main c95257d 后完整维护文件统计，净删除 294 行"
 }
