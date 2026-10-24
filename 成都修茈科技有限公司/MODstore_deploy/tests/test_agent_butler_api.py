@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -64,6 +65,203 @@ def _auth_overrides(app, mock_user, mock_db):
     app.dependency_overrides[_get_current_user] = lambda: mock_user
     app.dependency_overrides[get_db] = lambda: mock_db
     return app
+
+
+@pytest.mark.parametrize(
+    "stream,failed,byok,reported_usage",
+    [
+        pytest.param(
+            stream,
+            failed,
+            byok,
+            True,
+            id=f"{'stream' if stream else 'chat'}-{'release' if failed else 'settle'}-{'byok' if byok else 'platform'}",
+        )
+        for stream in (False, True)
+        for failed in (False, True)
+        for byok in (False, True)
+    ]
+    + [
+        pytest.param(True, False, False, False, id="stream-estimated-full-text"),
+        pytest.param(True, "interrupted", False, True, id="stream-interrupted"),
+    ],
+)
+def test_butler_wallet_contract(
+    monkeypatch, mock_user, mock_db, stream, failed, byok, reported_usage
+):
+    from fastapi import HTTPException, Request
+
+    from modstore_server import agent_butler_api as butler
+    from modstore_server.llm_billing_values import UsageMeter
+    from modstore_server.llm_wallet_client import JavaWalletClient
+
+    monkeypatch.setenv("PAYMENT_BACKEND", "java")
+    wallet = JavaWalletClient()
+    wallet._post = AsyncMock(return_value={"hold": {"hold_no": "test-hold", "amount": "0.05"}})
+    monkeypatch.setattr(butler, "JavaWalletClient", lambda: wallet)
+    monkeypatch.setattr(
+        butler,
+        "_resolve_butler_credentials",
+        lambda *_: ("test", "model", "key", "user_override" if byok else "platform", ""),
+    )
+    messages = [
+        {"role": "system", "content": "private context"},
+        {"role": "user", "content": "old question"},
+        {"role": "assistant", "content": "old answer"},
+        {"role": "user", "content": "controlled prompt"},
+    ]
+    monkeypatch.setattr(butler, "_build_messages", lambda *a, **kw: messages)
+    monkeypatch.setattr(butler, "new_request_id", lambda: "test-request")
+    monkeypatch.setattr(butler, "enforce_risk_limits", lambda *_: None)
+    monkeypatch.setattr(butler, "estimate_preauthorization", lambda *_: Decimal("0.05"))
+    charge_calculator = MagicMock(return_value=Decimal("0.02"))
+    monkeypatch.setattr(butler, "calculate_charge", charge_calculator)
+    expected_charge = 0.0 if byok else 0.02
+    monkeypatch.setattr(butler, "_partition_butler_tool_calls", lambda *a, **kw: ([], ""))
+    conversation = butler.ChatConversation(id=81, user_id=mock_user.id)
+    mock_db.query.return_value.filter.return_value.first.return_value = conversation
+    answer = "answer " * 8
+    upstream = {"ok": True, "content": answer}
+    if reported_usage:
+        upstream["usage"] = {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3}
+    error = RuntimeError("controlled upstream failure")
+    monkeypatch.setattr(
+        butler,
+        "chat_dispatch",
+        AsyncMock(side_effect=error) if failed else AsyncMock(return_value=upstream),
+    )
+
+    async def chunks(
+        provider,
+        *,
+        api_key,
+        base_url,
+        model,
+        messages,
+        max_tokens=None,
+        tools=None,
+        tool_choice=None,
+    ):
+        yield {"type": "delta", "delta": answer[:10]}
+        yield {"type": "delta", "delta": answer[10:]}
+        if upstream.get("usage"):
+            yield {"type": "usage", "usage": upstream["usage"]}
+        if failed == "interrupted":
+            raise error
+        if failed:
+            yield {"type": "error", "error": str(error)}
+
+    stream_dispatch = create_autospec(butler.chat_dispatch_stream, side_effect=chunks)
+    monkeypatch.setattr(butler, "chat_dispatch_stream", stream_dispatch)
+    request = Request({"type": "http", "headers": [(b"authorization", b"Bearer test-only")]})
+    body = butler.ButlerChatDTO(messages=messages, conversation_id=81, max_tokens=16)
+
+    async def invoke():
+        if stream:
+            response = await butler.butler_chat_stream(request, body, db=mock_db, user=mock_user)
+            events = [
+                json.loads(chunk.removeprefix("data: ").strip())
+                async for chunk in response.body_iterator
+            ]
+            assert events[-1]["done"] is True
+            assert sum(event.get("done") is True for event in events) == 1
+            assert "".join(event.get("text", "") for event in events) == answer
+            if failed:
+                assert events[-1]["error"] == str(error)
+                assert "conversation_id" not in events[-1]
+                assert "charge_amount" not in events[-1]
+            else:
+                assert events[-1]["conversation_id"] == 81
+                assert events[-1]["charge_amount"] == expected_charge
+        elif failed:
+            with pytest.raises(HTTPException) as caught:
+                await butler.butler_chat(request, body, db=mock_db, user=mock_user)
+            assert caught.value.status_code == 500
+            assert str(error) in caught.value.detail
+        else:
+            result = await butler.butler_chat(request, body, db=mock_db, user=mock_user)
+            assert result["conversation_id"] == 81
+            assert result["charge_amount"] == expected_charge
+            assert result["billed"] is (not byok)
+
+    asyncio.run(invoke())
+    if stream:
+        stream_dispatch.assert_called_once_with(
+            "test", api_key="key", base_url="", model="model", messages=messages, max_tokens=16
+        )
+    else:
+        stream_dispatch.assert_not_called()
+    if byok:
+        wallet._post.assert_not_awaited()
+    else:
+        assert wallet._post.await_count == 2
+        preauth, final = [call.args for call in wallet._post.await_args_list]
+        assert preauth == (
+            "/api/wallet/ai/preauthorize",
+            "Bearer test-only",
+            {
+                "amount": "0.05",
+                "provider": "test",
+                "model": "model",
+                "request_id": "test-request",
+                "idempotency_key": "test-request:preauth",
+            },
+        )
+        assert final == (
+            f"/api/wallet/ai/{'release' if failed else 'settle'}",
+            "Bearer test-only",
+            {
+                "hold_no": "test-hold",
+                **({"reason": str(error)} if failed else {"actual_amount": "0.02"}),
+                "idempotency_key": f"test-request:{'release' if failed else 'settle'}",
+            },
+        )
+    rows = [call.args[0] for call in mock_db.add.call_args_list]
+    assert not any(isinstance(row, butler.ChatConversation) for row in rows)
+    assistants = [
+        row for row in rows if isinstance(row, butler.ChatMessage) and row.role == "assistant"
+    ]
+    assert len(assistants) == (0 if failed else 1)
+    if assistants:
+        assert assistants[0].content == answer
+        assert assistants[0].conversation_id == 81
+        assert assistants[0].charge_amount == expected_charge
+    new_messages = [row for row in rows if isinstance(row, butler.ChatMessage)]
+    assert [(row.role, row.content) for row in new_messages] == (
+        [] if failed else [("user", "controlled prompt"), ("assistant", answer)]
+    )
+    assert all(row.conversation_id == 81 and row.user_id == mock_user.id for row in new_messages)
+    logs = [row for row in rows if isinstance(row, butler.LlmCallLog)]
+    assert len(logs) == 1
+    assert logs[0].hold_no == ("byok-test-request" if byok else "test-hold")
+    assert logs[0].status == ("failed" if failed else "success")
+    if failed:
+        charge_calculator.assert_not_called()
+    else:
+        expected_usage = (
+            UsageMeter(2, 1, 3, estimated=False)
+            if reported_usage
+            else UsageMeter(16, 15, 31, estimated=True)
+        )
+        if byok:
+            charge_calculator.assert_not_called()
+        else:
+            charge_calculator.assert_called_once_with(mock_db, "test", "model", expected_usage)
+            assert isinstance(charge_calculator.call_args.args[-1], UsageMeter)
+        assert json.loads(assistants[0].usage_json) == expected_usage.__dict__
+        assert (
+            logs[0].prompt_tokens,
+            logs[0].completion_tokens,
+            logs[0].total_tokens,
+            logs[0].estimated,
+        ) == (
+            expected_usage.prompt_tokens,
+            expected_usage.completion_tokens,
+            expected_usage.total_tokens,
+            expected_usage.estimated,
+        )
+        assert logs[0].charge_amount == expected_charge
+    mock_db.commit.assert_called_once()
 
 
 # ─── Tests: /actions ──────────────────────────────────────────────

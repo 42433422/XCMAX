@@ -12,6 +12,7 @@ import logging
 import os
 from typing import Any
 
+import httpx
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -341,7 +342,27 @@ class EnterpriseCsAutomationService:
                 reasoning_enabled=False,
             )
             parsed = parse_json_content(content_from_completion(completion))
-        except RECOVERABLE_ERRORS:
+        except RECOVERABLE_ERRORS as error:
+            failure: dict[str, Any] = {"reason": "completion_failed"}
+            if isinstance(error, httpx.HTTPStatusError):
+                failure["status_code"] = error.response.status_code
+                try:
+                    detail = error.response.json().get("error", {})
+                    if isinstance(detail, dict) and str(detail.get("message", "")).startswith(
+                        "Unsupported model "
+                    ):
+                        failure["reason"] = "unsupported_model"
+                except (ValueError, AttributeError):
+                    pass
+            _audit(
+                actor="enterprise-cs-ai",
+                action="enterprise_cs.ai_failed",
+                payload={
+                    "conversation_id": int(conversation_id),
+                    "customer_message_id": int(message_id),
+                    **failure,
+                },
+            )
             logger.exception("enterprise CS AI completion failed")
             return {
                 "handled": True,

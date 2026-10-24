@@ -192,7 +192,34 @@ class TestOpenAICompatibleAdapter:
         a = OpenAICompatibleAdapter(
             provider="xcauto", api_key="k", base_url="https://token-plan-cn.xiaomimimo.com/v1"
         )
-        assert a.model_name == "mimo-v2.5-pro"
+        assert a.model_name == "mimo-v2.6-pro"
+
+    @pytest.mark.parametrize(
+        "old,current",
+        [
+            ("mimo-v2.5-pro", "mimo-v2.6-pro"),
+            ("mimo-v2.5", "mimo-v2.6-flash"),
+            ("mimo-v2-pro", "mimo-v2.6-pro"),
+            ("mimo-v2.6-pro", "mimo-v2.6-pro"),
+            ("mimo-v2.5-tts", "mimo-v2.5-tts"),
+        ],
+    )
+    def test_xiaomi_retired_models_use_supported_replacement(self, old, current):
+        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        adapter = OpenAICompatibleAdapter(provider="xiaomi", api_key="synthetic-key", model=old)
+        assert adapter.model_name == current
+
+    def test_custom_xiaomi_endpoint_keeps_its_explicit_model(self):
+        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        adapter = OpenAICompatibleAdapter(
+            provider="xiaomi",
+            api_key="synthetic-key",
+            model="mimo-v2.5-pro",
+            base_url="https://models.example.invalid/v1",
+        )
+        assert adapter.model_name == "mimo-v2.5-pro"
 
     def test_xcauto_substring_host_not_matched(self):
         """仅子串包含域名的非小米主机不触发映射（精确主机判定，防 CodeQL REDOS/绕过类问题）。"""

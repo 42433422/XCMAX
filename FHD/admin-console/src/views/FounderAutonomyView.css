@@ -4,13 +4,9 @@
   gap: 20px;
   min-height: 100%; padding: 28px;
   overflow-x: hidden; overflow-y: auto; box-sizing: border-box;
-  color: #10213d;
-  background:
-    radial-gradient(circle at 12% -10%, rgba(36, 99, 235, 0.12), transparent 34%),
-    linear-gradient(180deg, #f7f9fc 0%, #eef3f9 100%);
+  background: linear-gradient(135deg, #edf5fb, #e7eef6);
 }
 .founder-view > * { flex-shrink: 0; }
-.founder-hero,
 .section-heading,
 .section-title-row {
   display: flex;
@@ -19,14 +15,12 @@
   gap: 20px;
 }
 
-.founder-hero h1,
 .section-heading h2,
 .section-title-row h2,
 .truth-card h2 {
   margin: 0;
 }
 
-.founder-hero h1 { font-size: 24px; letter-spacing: 0; }
 .hero-copy { margin: 10px 0 0; color: #58708f; font-size: 15px; }
 .eyebrow,
 .section-kicker { display: block; margin: 0 0 8px; color: #315dd8; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
@@ -68,7 +62,7 @@
 .quick-links small { display: block; }
 .quick-links small { margin-top: 4px; color: #74859d; }
 
-.council-panel { margin-top: 0; padding: 22px; border: 1px solid rgba(82, 112, 158, 0.22); border-radius: 20px; background: linear-gradient(135deg, rgba(255,255,255,0.94), rgba(240,244,252,0.92)); box-shadow: 0 12px 34px rgba(37, 57, 87, 0.08); }
+.council-panel { margin-top: 0; padding: 22px; border: 1px solid var(--admin-border); border-radius: var(--admin-card-radius); background: #fff; box-shadow: var(--admin-card-shadow); }
 .council-panel.ready { border-color: rgba(29, 154, 102, 0.35); }
 .council-state { border-radius: 999px; padding: 6px 10px; color: #9b5e0b; background: #fff2dc; font-size: 11px; font-weight: 800; }
 .council-panel.ready .council-state { color: #18744f; background: #e8f7ef; }
@@ -143,7 +137,7 @@
 
 @media (max-width: 720px) {
   .founder-view { padding: 18px; }
-  .founder-hero,
+  :global(#app .founder-view > .founder-hero),
   .section-heading { flex-direction: column; align-items: stretch; }
   .hero-actions { justify-content: space-between; }
   .dimension-grid,

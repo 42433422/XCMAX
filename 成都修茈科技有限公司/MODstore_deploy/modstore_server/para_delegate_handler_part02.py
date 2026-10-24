@@ -178,6 +178,15 @@ def _wait_for_para_task(
                 "error": "" if ok else _facade()._first_para_error(snapshot),
                 "snapshot": snapshot,
             }
+        # An existing task still needs one readback when completion waiting is disabled.
+        if not _facade()._coerce_bool(
+            req.get("wait_for_para"), _facade()._wait_for_completion_default()
+        ):
+            return {
+                "ok": False,
+                "status": "para_task_accepted",
+                "snapshot": _facade()._task_result_snapshot(body),
+            }
         if _facade().time.monotonic() >= deadline:
             snapshot = _facade()._task_result_snapshot(last_body)
             return {

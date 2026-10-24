@@ -243,6 +243,8 @@ def _digest_product_work_summary_html(
     ticket_outcomes: _facade().Sequence[str],
     pending_decisions: _facade().Sequence[str],
     pending_decision_count: int,
+    pending_tickets: _facade().Sequence[str] = (),
+    pending_ticket_count: int = 0,
 ) -> str:
     """把产品变更、工单结果和待决事项放到日报主摘要。"""
 
@@ -258,4 +260,6 @@ def _digest_product_work_summary_html(
         if pending_decision_count > len(pending_decisions)
         else ""
     )
-    return f"""\n<div style="padding:14px 24px 8px">\n  {_facade()._section_title("产品与客户进展", icon="&#x1F4CA;", accent="#2563eb")}\n  <div style="background:#f8fafc;border-radius:12px;padding:12px 18px;border:1px solid #e6eaf0">\n    <strong>近 24 小时产品更新</strong><ul>{_items(product_updates, "近 24 小时没有新的仓库提交")}</ul>\n    <strong>近 24 小时工单结果</strong><ul>{_items(ticket_outcomes, "没有状态变化记录")}</ul>\n    <strong>待决策（{pending_decision_count} 项）</strong><ul>{pending}{extra}</ul>\n  </div>\n</div>\n"""
+    remaining = max(0, pending_ticket_count - len(pending_tickets))
+    tickets_extra = f"<li>另有 {remaining} 张，请在客服工单查看</li>" if remaining else ""
+    return f"""\n<div style="padding:14px 24px 8px">\n  {_facade()._section_title("产品与客户进展", icon="&#x1F4CA;", accent="#2563eb")}\n  <div style="background:#f8fafc;border-radius:12px;padding:12px 18px;border:1px solid #e6eaf0">\n    <strong>近 24 小时产品更新</strong><ul>{_items(product_updates, "近 24 小时没有新的仓库提交")}</ul>\n    <strong>近 24 小时工单结果</strong><ul>{_items(ticket_outcomes, "没有状态变化记录")}</ul>\n    <strong>接下来要处理的工单（{pending_ticket_count} 张）</strong><ul>{_items(pending_tickets, "当前没有待处理工单")}{tickets_extra}</ul>\n    <strong>待决策（{pending_decision_count} 项）</strong><ul>{pending}{extra}</ul>\n  </div>\n</div>\n"""

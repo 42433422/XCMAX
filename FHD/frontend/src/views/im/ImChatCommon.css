@@ -1,6 +1,7 @@
 .im-chat-head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--xc-color-border, #e6e9ef);

@@ -58,7 +58,13 @@ def _enrich_artifact_skill_aliases(
 
 
 def _workbench_session_store_dir() -> _facade().Path:
-    d = _facade().Path(__file__).resolve().parent / "data" / "workbench_sessions"
+    root = (_facade().os.environ.get("MODSTORE_RUNTIME_DIR") or "").strip()
+    base = (
+        _facade().Path(root).expanduser().resolve()
+        if root
+        else _facade().Path(__file__).resolve().parent / "data"
+    )
+    d = base / "workbench_sessions"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
