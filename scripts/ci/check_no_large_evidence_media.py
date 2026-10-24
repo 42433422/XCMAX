@@ -40,6 +40,15 @@ def materialization_retained(root: Path) -> set[str]:
     return set(data.get("retained_sources", {}))
 
 
+
+def media_alias_sources(root: Path) -> set[str]:
+    path = root / "config/media-aliases.json"
+    if not path.is_file():
+        return set()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {entry["source"] for entry in data.get("aliases", {}).values()}
+
+
 def materialization_sources(root: Path) -> set[str]:
     path = root / MANIFEST
     if not path.is_file():
@@ -58,6 +67,7 @@ def main() -> int:
     )
     os.chdir(root)
     allowed = materialization_sources(root)
+    media_sources = media_alias_sources(root)
     out = subprocess.check_output(["git", "ls-tree", "-r", "-l", "HEAD"], text=True)
     bad: list[str] = []
     for line in out.splitlines():
@@ -76,6 +86,10 @@ def main() -> int:
             retained = materialization_retained(root)
             base = path.rsplit("/", 1)[-1]
             if path.startswith("成都修茈科技有限公司/capabilities/assets/evidence/") and base in retained:
+                continue
+            if path in media_sources:
+                continue
+            if path.startswith("appstore-screenshots/2.3.3-accurate-metadata/"):
                 continue
             bad.append(f"{size}\t{path}  (generated/public or promo path)")
             continue

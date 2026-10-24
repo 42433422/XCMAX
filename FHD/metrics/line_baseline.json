@@ -1,5 +1,5 @@
 {
-  "lines": 2370240,
+  "lines": 2370483,
   "updated": "2026-10-25",
-  "note": "hygiene/evidence-bulk-20261025 rebase onto #2544: keep materialization sources (~289MB); offload unregistered evidence/promo; +pointers/gate/test"
+  "note": "hygiene#2627: restore capability-required FHD evidence + appstore alias sources + SSOT regen"
 }

@@ -271,9 +271,12 @@ FHD/admin-console/.vite-bak/
 成都修茈科技有限公司/capabilities/assets/evidence/**/*.webm
 成都修茈科技有限公司/capabilities/assets/evidence/**/*.mov
 成都修茈科技有限公司/capabilities/assets/evidence/**/*.mkv
-/appstore-screenshots/**/*.png
-/appstore-screenshots/**/*.jpg
-/appstore-screenshots/**/*.jpeg
+# appstore: keep checksum-pinned sources; live/ aliases are generated
+/appstore-screenshots/live/**
+/appstore-screenshots/upload/**
+/appstore-screenshots/upload-ipad-13/**
+/appstore-screenshots/*.png
+/appstore-screenshots/*.jpg
 /宣传资料/**/*.png
 /宣传资料/**/*.jpg
 /宣传资料/**/*.jpeg
