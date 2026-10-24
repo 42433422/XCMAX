@@ -1,21 +1,11 @@
-# Round-2 bulk media (2026-10-25 debt24): keep text evidence; media lives in archives.
-# Archive: ~/XCMAX-archives/evidence-bulk-20261025-round2/ (see ARCHIVE_POINTER.md)
-**/*.png
-**/*.jpg
-**/*.jpeg
-**/*.gif
-**/*.webp
-**/*.mp4
-**/*.webm
-**/*.mov
-**/*.avi
-**/*.mkv
-**/*.wav
-**/*.mp3
-**/*.m4a
-**/*.zip
-# Large binary PDFs under evidence (text reports stay as .md/.json)
-**/*.pdf
+# debt24 round2 (revised): keep capability/e2e canonical still needed by
+# evidence_assets materialization; archive only bulky acceptance videos.
+# Archive batches: ~/XCMAX-archives/evidence-bulk-20261025(-round2)/
+**/feature-acceptance-*/**/video/**
+**/feature-acceptance-*/**/*.mp4
+**/feature-acceptance-*/**/*.webm
+**/windows-real-machine-*/**/videos/**
+**/macos-release-*/**/*.{mp4,webm}
 
 # Exact historical media aliases rebuilt from the reviewed evidence manifest.
 # Canonical files and acceptance JSON records stay tracked.

@@ -38,3 +38,17 @@ git ls-tree -r -l HEAD | awk '{s+=$4} END{printf "tree MiB=%.2f\n", s/1024/1024}
 ```
 
 Do **not** claim a size that has not been re-measured with the commands above.
+
+
+## Archive-backed verification (debt24)
+
+`成都修茈科技有限公司/scripts/evidence_assets.py check` accepts originals that are
+**absent from the git tree** when their `sha256`+size match a local
+`~/XCMAX-archives/evidence-bulk-*/MANIFEST.json` entry (or `$XCMAX_ARCHIVE_ROOT`).
+
+CI runners that lack the archive mounts must either:
+1. restore required batches before `check`, or
+2. rely on the same archive root available to the job.
+
+Capability-center public assets remain COS-served; local git copies are not required
+for every historical acceptance video.

@@ -29,6 +29,60 @@ MEDIA = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov"}
 SECTIONS = ("retained_sources", "source_aliases", "assets")
 
 
+
+@lru_cache(maxsize=1)
+def archive_manifest_index() -> dict[str, dict]:
+    """Map repo-relative evidence paths to archive metadata.
+
+    Supports both MANIFEST shapes used by hygiene trains:
+    - dict path -> {sha256, size}
+    - list of {path, sha256, bytes}
+    See FHD/docs/evidence/ARCHIVE_POINTER.md.
+    """
+    roots: list[Path] = []
+    env = os.environ.get("XCMAX_ARCHIVE_ROOT")
+    if env:
+        roots.append(Path(env))
+    roots.append(Path.home() / "XCMAX-archives")
+    index: dict[str, dict] = {}
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for man in sorted(root.glob("evidence-bulk-*/MANIFEST.json")):
+            try:
+                data = json.loads(man.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            batch = data.get("batch") or man.parent.name
+            files = data.get("files") or []
+            if isinstance(files, dict):
+                iterable = [
+                    (rel, meta.get("sha256"), meta.get("bytes", meta.get("size", 0)))
+                    for rel, meta in files.items()
+                    if isinstance(meta, dict)
+                ]
+            else:
+                iterable = [
+                    (
+                        item.get("path"),
+                        item.get("sha256"),
+                        item.get("bytes", item.get("size", 0)),
+                    )
+                    for item in files
+                    if isinstance(item, dict)
+                ]
+            for rel, sha, nbytes in iterable:
+                rel_s = str(rel or "").replace("\\", "/")
+                if not rel_s or not sha:
+                    continue
+                index[rel_s] = {
+                    "sha256": sha,
+                    "bytes": int(nbytes or 0),
+                    "batch": batch,
+                    "archive_path": str(man.parent / rel_s),
+                }
+    return index
+
 def digest(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
@@ -105,14 +159,31 @@ def resolve_source(root: Path, rel: str) -> Path:
 
 def verified_sources(root: Path, data: dict) -> dict[str, Path]:
     sources = {}
+    archived = 0
+    archive_index = archive_manifest_index()
     for name, entry in entries(data).items():
         source = inside(root, entry["source"])
+        rel = relative(entry["source"])
         if source not in sources:
-            if not source.is_file():
-                raise ValueError(f"missing original evidence: {entry['source']} (alias {name})")
-            sources[source] = (source.stat().st_size, digest(source))
+            if source.is_file():
+                sources[source] = (source.stat().st_size, digest(source))
+            else:
+                meta = archive_index.get(rel)
+                if not meta or meta.get("sha256") != entry["sha256"]:
+                    raise ValueError(
+                        f"missing original evidence: {entry['source']} (alias {name})"
+                    )
+                if int(meta.get("bytes") or 0) != int(entry["size"]):
+                    raise ValueError(
+                        f"archived evidence size mismatch: {entry['source']}"
+                    )
+                # Treat as verified via external archive (not present in git tree).
+                sources[source] = (int(entry["size"]), entry["sha256"])
+                archived += 1
         if sources[source] != (entry["size"], entry["sha256"]):
             raise ValueError(f"original evidence checksum mismatch: {entry['source']}")
+    if archived:
+        print(f"[evidence-assets] INFO: {archived} originals verified via XCMAX-archives manifests")
     return {name: inside(root, entry["source"]) for name, entry in data["assets"].items()}
 
 

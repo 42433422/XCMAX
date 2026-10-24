@@ -1,4 +1,5 @@
 """Core review score matrix (compact JSON-backed cases)."""
+
 from __future__ import annotations
 
 import json
@@ -12,9 +13,9 @@ from retort_engine.pr_review import (
 )
 
 _DATA = json.loads(
-    (Path(__file__).resolve().parent / "data" / "core_review_score_matrix.json").read_text(
-        encoding="utf-8"
-    )
+    (
+        Path(__file__).resolve().parent / "data" / "core_review_score_matrix.json"
+    ).read_text(encoding="utf-8")
 )
 _AXIS_KEYS: list[str] = _DATA["axis_keys"]
 _AXES: dict[str, list[object]] = _DATA["axes"]
@@ -87,7 +88,9 @@ def test_hunk_semantic_review_weight_beats_cross_language_when_confident() -> No
     assert "semantic=92" in _rank_reason(hunk_semantic)
 
 
-def test_core_review_score_summary_proves_cross_language_transfer_is_top_ranked() -> None:
+def test_core_review_score_summary_proves_cross_language_transfer_is_top_ranked() -> (
+    None
+):
     summary = _core_review_score_summary(
         [
             {"capability": "cross_language_transfer", "rank_score": 612},
