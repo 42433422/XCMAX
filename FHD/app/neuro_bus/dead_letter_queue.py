@@ -1,24 +1,10 @@
-# ruff: noqa: E402, F401
-"""
-死信队列 (Dead Letter Queue) - Level 4 可靠性机制
-
-处理无法成功处理的事件：
-- 重试次数耗尽
-- 不可恢复的异常
-- 超时事件
-
-提供：
-- 死信存储
-- 重播机制
-- 告警通知
-- 手动干预接口
-"""
+"""Public dead-letter API with explicit persistence, retry and replay components."""
 
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
+import hashlib as hashlib
+import json as json
 import logging
 import random
 import sqlite3
@@ -28,30 +14,49 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
-from typing import Any
+from pathlib import Path as Path
+from typing import Any, Protocol
 from uuid import uuid4
 
 from app.neuro_bus.events.base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .storage.dead_letter_management import DeadLetterManagement
+from .storage.dead_letter_policies import AlertDelivery, GroupedAlerts, ReplayLedger
+from .storage.dead_letter_replay import ReplayDelivery, ReplaySchedule, ReplaySchedulePorts
+from .storage.dead_letter_repository import (
+    DeadLetterRepository,
+    DeadLetterState,
+    initialize_dead_letters,
+)
+from .storage.replay_claim import ReplayClaim
+from .storage.sqlite import SQLiteOwner, StorageRuntime
+
 logger = logging.getLogger(__name__)
+RETRY_BASE_DELAY = 0.5
+RETRY_MAX_DELAY = 30.0
 
 
-# 指数退避重试默认参数
-RETRY_BASE_DELAY = 0.5  # 基础退避秒数
-RETRY_MAX_DELAY = 30.0  # 最大退避秒数（cap）
+def _runtime() -> StorageRuntime:
+    return StorageRuntime(
+        lambda: datetime,
+        lambda: uuid4().hex[:12],
+        lambda: logger,
+        lambda: RECOVERABLE_ERRORS,
+        lambda seconds: time.sleep(seconds),
+        lambda: time.time(),
+    )
 
 
 class DeadLetterReason(Enum):
     """进入死信队列的原因"""
 
-    RETRY_EXHAUSTED = "retry_exhausted"  # 重试次数耗尽
-    UNRECOVERABLE = "unrecoverable"  # 不可恢复异常
-    TIMEOUT = "timeout"  # 处理超时
-    INVALID_PAYLOAD = "invalid_payload"  # 无效载荷
-    HANDLER_NOT_FOUND = "handler_not_found"  # 找不到处理器
-    CIRCUIT_BREAKER = "circuit_breaker"  # 熔断器开启
+    RETRY_EXHAUSTED = "retry_exhausted"
+    UNRECOVERABLE = "unrecoverable"
+    TIMEOUT = "timeout"
+    INVALID_PAYLOAD = "invalid_payload"
+    HANDLER_NOT_FOUND = "handler_not_found"
+    CIRCUIT_BREAKER = "circuit_breaker"
 
 
 @dataclass
@@ -96,16 +101,9 @@ class DeadLetterEntry:
         }
 
 
-class ReplayDeduplicator:
-    """
-    重播去重器 - 对标 Kafka DLT 幂等键 + 指纹
+class ReplayDeduplicator(ReplayLedger):
+    """Public fingerprint ledger; a supplied connection remains caller-owned."""
 
-    用指纹去重：sha256(entry_id + str(replay_count))
-    - 内存模式：dict 存已重播指纹（TTL 24h）
-    - SQLITE 模式：neuro_dlq_replay_log 表
-    """
-
-    # 默认 TTL 24 小时
     DEFAULT_TTL_SECONDS = 86400.0
 
     def __init__(
@@ -113,244 +111,400 @@ class ReplayDeduplicator:
         conn: sqlite3.Connection | None = None,
         lock: threading.RLock | None = None,
         ttl_seconds: float = DEFAULT_TTL_SECONDS,
-    ):
+    ) -> None:
         """
         Args:
             conn: SQLITE 连接；None 表示内存模式
             lock: 外部 RLock（与 DeadLetterQueue 共享）
             ttl_seconds: 指纹保留时间（秒）
         """
-        self._conn = conn
-        self._lock = lock or threading.RLock()
-        self._ttl_seconds = ttl_seconds
-        # 内存模式: {fingerprint: (entry_id, expires_at_timestamp)}
-        self._memory_log: dict[str, tuple[str, float]] = {}
-        if conn is not None:
-            self._init_sqlite_table(conn)
-
-    def _init_sqlite_table(self, conn: sqlite3.Connection) -> None:
-        """初始化 SQLITE 重播日志表"""
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS neuro_dlq_replay_log (
-                fingerprint TEXT PRIMARY KEY,
-                entry_id TEXT NOT NULL,
-                replayed_at TEXT NOT NULL,
-                expires_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_dlq_replay_expires ON neuro_dlq_replay_log(expires_at)"
-        )
-
-    @staticmethod
-    def fingerprint(entry_id: str, replay_count: int) -> str:
-        """生成指纹: sha256(entry_id + str(replay_count))"""
-        raw = f"{entry_id}:{replay_count}".encode()
-        return hashlib.sha256(raw).hexdigest()
-
-    def is_replayed(self, entry_id: str, replay_count: int) -> bool:
-        """检查是否已重播过（指纹命中且未过期）"""
-        fp = self.fingerprint(entry_id, replay_count)
-        now_ts = time.time()
-
-        if self._conn is not None:
-            with self._lock:
-                now_iso = datetime.fromtimestamp(now_ts).isoformat()
-                cur = self._conn.execute(
-                    "SELECT 1 FROM neuro_dlq_replay_log WHERE fingerprint = ? AND expires_at > ?",
-                    (fp, now_iso),
-                )
-                return cur.fetchone() is not None
-
-        # 内存模式
-        with self._lock:
-            record = self._memory_log.get(fp)
-            if record is None:
-                return False
-            _, expires_at = record
-            if now_ts >= expires_at:
-                del self._memory_log[fp]
-                return False
-            return True
-
-    def mark_replayed(self, entry_id: str, replay_count: int) -> None:
-        """标记为已重播"""
-        fp = self.fingerprint(entry_id, replay_count)
-        now_ts = time.time()
-        expires_at_ts = now_ts + self._ttl_seconds
-
-        if self._conn is not None:
-            with self._lock:
-                now_iso = datetime.fromtimestamp(now_ts).isoformat()
-                expires_iso = datetime.fromtimestamp(expires_at_ts).isoformat()
-                self._conn.execute(
-                    """
-                    INSERT OR REPLACE INTO neuro_dlq_replay_log
-                    (fingerprint, entry_id, replayed_at, expires_at)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (fp, entry_id, now_iso, expires_iso),
-                )
-            return
-
-        with self._lock:
-            self._memory_log[fp] = (entry_id, expires_at_ts)
-
-    def cleanup_expired(self) -> int:
-        """清理过期记录，返回清理数量"""
-        if self._conn is not None:
-            with self._lock:
-                now_iso = datetime.now().isoformat()
-                cur = self._conn.execute(
-                    "DELETE FROM neuro_dlq_replay_log WHERE expires_at <= ?",
-                    (now_iso,),
-                )
-                return cur.rowcount
-
-        now_ts = time.time()
-        with self._lock:
-            expired = [fp for fp, (_, exp) in self._memory_log.items() if now_ts >= exp]
-            for fp in expired:
-                del self._memory_log[fp]
-            return len(expired)
+        super().__init__(_runtime(), conn, lock, ttl_seconds)
 
 
-class AlertSuppressor:
-    """
-    告警抑制器 - 对标 Kafka DLT 分层告警
+class AlertSuppressor(GroupedAlerts):
+    """Public alert policy with the existing patchable wall clock."""
 
-    - 按 (reason, event_type) 分组
-    - 同组 suppress_window 内只告警一次
-    - 支持全局静默
-    """
-
-    def __init__(
-        self,
-        suppress_window: float = 300.0,
-        threshold: int = 1,
-    ):
+    def __init__(self, suppress_window: float = 300.0, threshold: int = 1) -> None:
         """
         Args:
             suppress_window: 抑制窗口（秒，默认 5 分钟）
             threshold: 触发告警的最小事件数
         """
-        self._suppress_window = suppress_window
-        self._threshold = threshold
-        self._lock = threading.RLock()
-        # {group_key: {"last_alert_ts": float, "event_count": int, "first_event_ts": float}}
-        self._groups: dict[str, dict[str, Any]] = {}
-        # 全局静默截止时间戳
-        self._silenced_until: float = 0.0
-        # 统计: {group_key: {"suppressed": N, "fired": M, "total": K}}
-        self._stats: dict[str, dict[str, int]] = {}
+        super().__init__(_runtime(), suppress_window, threshold)
 
     @staticmethod
     def make_key(reason: DeadLetterReason, event_type: str) -> str:
-        """生成分组键"""
-        return f"{reason.value}:{event_type}"
+        """生成分组键。"""
+        return GroupedAlerts.make_key(reason, event_type)
 
     def record_and_check(self, reason: DeadLetterReason, event_type: str) -> tuple[bool, int]:
+        """记录事件并返回是否告警及窗口内同类事件数。"""
+        return super().record_and_check(reason, event_type)
+
+
+class DeadLetterQueue:
+    """Failed event persistence, supervised replay and grouped alert delivery."""
+
+    def __init__(
+        self,
+        max_size: int = 10000,
+        retention_hours: int = 168,
+        storage_path: str | None = None,
+        alert_suppress_window: float = 300.0,
+        alert_threshold: int = 1,
+    ) -> None:
         """
-        记录事件并判断是否应该告警
+        Args:
+            max_size: 最大条目数
+            retention_hours: 保留时间（小时，默认 7 天）
+            storage_path: SQLITE 持久化路径；None 表示纯内存模式（默认）
+            alert_suppress_window: 告警抑制窗口（秒，默认 5 分钟）
+            alert_threshold: 触发告警的最小同类事件数（默认 1）
+        """
+        self._max_size = max_size
+        self._retention_seconds = retention_hours * 3600
+        self._storage_path = storage_path
+        self._lock = threading.RLock()
+        self._storage = SQLiteOwner(self._lock)
+        self._state = DeadLetterState()
+        self._entries = self._state.entries
+        self._stats = self._state.stats
+        self._alert_callbacks: list[Callable[[DeadLetterEntry], None]] = []
+        self._replay_callbacks: list[Callable[[NeuroEvent], None]] = []
+        self._replay_paused = False
+        self._runtime = _runtime()
+        initialized = False
+        try:
+            if storage_path is not None:
+                self._init_sqlite(storage_path)
+            self._deduplicator = ReplayDeduplicator(conn=self._conn, lock=self._lock)
+            self._alert_suppressor = AlertSuppressor(
+                suppress_window=alert_suppress_window, threshold=alert_threshold
+            )
+            self._repository = DeadLetterRepository(
+                self._storage,
+                self._state,
+                self._runtime,
+                max_size,
+                DeadLetterEntry,
+                DeadLetterReason,
+            )
+            self._management = DeadLetterManagement(
+                self._repository, self._retention_seconds, lambda: random.random()
+            )
+            self._alerts = AlertDelivery(
+                self._alert_suppressor, self._alert_callbacks, self._runtime
+            )
+            self._delivery = ReplayDelivery(
+                ReplayClaim(storage_path),
+                lambda entry_id: self.dequeue(entry_id),
+                self._deduplicator,
+                self._replay_callbacks,
+                self._stats,
+                self._lock,
+                self._runtime,
+            )
+            self._schedule = ReplaySchedule(
+                ReplaySchedulePorts(
+                    lambda event_type=None, max_age_seconds=None: self._get_replay_candidates(
+                        event_type, max_age_seconds
+                    ),
+                    lambda entry_id: self.replay(entry_id),
+                    lambda: self._is_replay_paused(),
+                    lambda: self.pause_replay(),
+                    lambda: self._stats["total_entries"],
+                ),
+                self._runtime,
+            )
+            initialized = True
+        finally:
+            if not initialized:
+                self._storage.close()
+        logger.info(
+            "[DeadLetterQueue] 初始化完成 (max_size=%s, retention=%sh, storage=%s, alert_window=%ss, alert_threshold=%s)",
+            max_size,
+            retention_hours,
+            storage_path or "memory",
+            alert_suppress_window,
+            alert_threshold,
+        )
+
+    def _init_sqlite(self, storage_path: str) -> None:
+        """初始化 SQLITE 持久化存储"""
+        self._storage.open(storage_path, initialize_dead_letters, create_parent=True)
+        logger.info("[DeadLetterQueue] SQLITE 持久化已启用: %s", storage_path)
+
+    def _row_to_entry(self, row: sqlite3.Row) -> DeadLetterEntry:
+        """将 SQLITE 行转换为 DeadLetterEntry"""
+        return self._repository.from_row(row)
+
+    def enqueue(
+        self,
+        event: NeuroEvent,
+        reason: DeadLetterReason,
+        error_message: str,
+        retry_count: int,
+        handler_name: str | None = None,
+        error_stack: str | None = None,
+    ) -> str:
+        """
+        将事件加入死信队列
 
         Returns:
-            (should_alert, count_in_window) - 是否告警, 窗口内同类事件数
+            死信条目 ID
         """
-        key = self.make_key(reason, event_type)
-        now = time.time()
-
+        entry = self._repository.prepare(
+            event, reason, error_message, retry_count, handler_name, error_stack
+        )
+        if self._conn is not None:
+            self._enqueue_sqlite(entry)
+        else:
+            self._repository.insert(entry)
         with self._lock:
-            self._stats.setdefault(key, {"suppressed": 0, "fired": 0, "total": 0})
-            self._stats[key]["total"] += 1
+            self._stats["total_entries"] += 1
+        logger.error(
+            "[DeadLetterQueue] 事件进入死信队列: %s (reason=%s, entry_id=%s, retries=%s)",
+            event.event_type,
+            reason.value,
+            entry.entry_id,
+            retry_count,
+        )
+        self._trigger_alert(entry)
+        return entry.entry_id
 
-            group = self._groups.get(key)
-            if group is None:
-                group = {
-                    "last_alert_ts": 0.0,
-                    "event_count": 0,
-                    "first_event_ts": now,
-                }
-                self._groups[key] = group
+    def _enqueue_sqlite(self, entry: DeadLetterEntry) -> None:
+        """SQLITE 模式入队"""
+        self._repository.insert(entry)
 
-            # 窗口外重置计数
-            if now - group["first_event_ts"] > self._suppress_window:
-                group["event_count"] = 0
-                group["first_event_ts"] = now
+    def dequeue(self, entry_id: str) -> DeadLetterEntry | None:
+        """取出条目（不移除）"""
+        return self._repository.get(entry_id)
 
-            group["event_count"] += 1
-            count = group["event_count"]
+    def remove(self, entry_id: str) -> bool:
+        """移除条目"""
+        return self._repository.remove(entry_id)
 
-            # 全局静默检查
-            if now < self._silenced_until:
-                self._stats[key]["suppressed"] += 1
-                return False, count
+    def replay(self, entry_id: str) -> tuple[bool, str]:
+        """
+        重播死信事件
 
-            # 判断是否应该告警:
-            # 1. 达到阈值
-            # 2. 窗口内还没告警过 (last_alert_ts 在窗口外或为 0)
-            should_alert = False
-            if count >= self._threshold:
-                if now - group["last_alert_ts"] >= self._suppress_window:
-                    should_alert = True
-                    group["last_alert_ts"] = now
-                    self._stats[key]["fired"] += 1
-                else:
-                    self._stats[key]["suppressed"] += 1
-            else:
-                self._stats[key]["suppressed"] += 1
+        重播前检查指纹是否已重播，已重播的跳过。
 
-            return should_alert, count
+        Returns:
+            (是否重播, 跳过原因) - 跳过原因为空字符串表示成功重播；
+            找不到条目返回 (False, "entry_not_found")；
+            已重播过返回 (False, "already_replayed")；
+        当前存在同库回放返回 (False, "replay_in_progress")
+        """
+        return self._delivery.replay(entry_id)
 
-    def silence(self, duration_seconds: float) -> None:
-        """全局静默指定时长"""
+    def _get_replay_candidates(
+        self, event_type: str | None = None, max_age_seconds: float | None = None
+    ) -> list[str]:
+        """获取待重播的条目 ID 列表（按筛选条件）"""
+        return self._repository.replay_candidates(event_type, max_age_seconds)
+
+    def replay_all(
+        self,
+        event_type: str | None = None,
+        max_age_seconds: float | None = None,
+        rate_limit_qps: float = 100.0,
+        batch_size: int = 100,
+    ) -> int:
+        """
+        批量重播（分批 + 限流）
+
+        Args:
+            event_type: 筛选特定事件类型
+            max_age_seconds: 最大年龄筛选
+            rate_limit_qps: 重播速率上限（QPS），默认 100
+            batch_size: 每批重播数量，批间 sleep
+
+        Returns:
+            重播数量
+        """
+        return self._schedule.all(event_type, max_age_seconds, rate_limit_qps, batch_size)
+
+    def pause_replay(self) -> None:
+        """暂停重播（影响 replay_all / replay_with_progress / replay_gradual）"""
         with self._lock:
-            self._silenced_until = time.time() + duration_seconds
+            self._replay_paused = True
+        logger.info("[DeadLetterQueue] 重播已暂停")
+
+    def resume_replay(self) -> None:
+        """恢复重播"""
+        with self._lock:
+            self._replay_paused = False
+        logger.info("[DeadLetterQueue] 重播已恢复")
+
+    def _is_replay_paused(self) -> bool:
+        """检查重播是否已暂停"""
+        with self._lock:
+            return self._replay_paused
+
+    def replay_with_progress(
+        self,
+        event_type: str | None = None,
+        max_age_seconds: float | None = None,
+        rate_limit_qps: float = 100.0,
+        batch_size: int = 100,
+    ) -> Iterator[tuple[int, int, str]]:
+        """
+        带进度的重播（生成器）
+
+        支持中途取消（pause_replay 后迭代器会在下一个条目前停止）。
+
+        Args:
+            event_type: 筛选特定事件类型
+            max_age_seconds: 最大年龄筛选
+            rate_limit_qps: 重播速率上限（QPS）
+            batch_size: 每批重播数量，批间 sleep
+
+        Yields:
+            (replayed_count, total_count, current_entry_id)
+        """
+        yield from self._schedule.with_progress(
+            event_type, max_age_seconds, rate_limit_qps, batch_size
+        )
+
+    def replay_gradual(
+        self,
+        event_type: str | None = None,
+        stages: list[float] | None = None,
+        stage_interval: float = 5.0,
+        error_threshold: int = 5,
+    ) -> dict[str, Any]:
+        """
+        灰度重播（分阶段：1% → 10% → 50% → 100%）
+
+        每阶段后检查新增死信数，超阈值自动暂停。
+
+        Args:
+            event_type: 筛选特定事件类型
+            stages: 灰度阶段列表（默认 [0.01, 0.1, 0.5, 1.0]）
+            stage_interval: 阶段间隔秒数
+            error_threshold: 新增死信数阈值，超过则自动暂停
+
+        Returns:
+            执行报告 dict，含 total / stages_executed / replayed / paused / pause_reason
+        """
+        return self._schedule.gradual(event_type, stages, stage_interval, error_threshold)
+
+    def resolve_manually(self, entry_id: str, resolution: str, resolved_by: str) -> bool:
+        """
+        手动解决死信
+
+        用于人工干预后标记为已处理
+        """
+        return self._management.resolve(entry_id, resolution, resolved_by)
+
+    def cleanup_expired(self) -> int:
+        """清理过期条目"""
+        return self._management.cleanup_expired()
+
+    def get_all_entries(self) -> list[DeadLetterEntry]:
+        """获取所有条目"""
+        return self._repository.entries()
+
+    def get_entries_by_reason(self, reason: DeadLetterReason) -> list[DeadLetterEntry]:
+        """按原因筛选"""
+        return self._repository.entries(reason=reason)
+
+    def get_entries_by_event_type(self, event_type: str) -> list[DeadLetterEntry]:
+        """按事件类型筛选"""
+        return self._repository.entries(event_type=event_type)
 
     def get_stats(self) -> dict[str, Any]:
-        """获取告警统计"""
-        with self._lock:
-            now = time.time()
-            return {
-                "groups": {k: dict(v) for k, v in self._stats.items()},
-                "silenced": now < self._silenced_until,
-                "silenced_remaining_seconds": max(0.0, self._silenced_until - now),
-                "suppress_window": self._suppress_window,
-                "threshold": self._threshold,
-            }
+        """获取统计信息"""
+        return self._management.stats()
+
+    def triage_entries(self) -> dict[str, list[str]]:
+        """
+        死信自动分类（对标 Kafka DLT triage）
+
+        按 reason 分类：
+        - retriable: RETRY_EXHAUSTED, TIMEOUT（可重试）
+        - fixable: INVALID_PAYLOAD, HANDLER_NOT_FOUND（需修复后重播）
+        - poison: UNRECOVERABLE, CIRCUIT_BREAKER（毒药消息，不宜重播）
+
+        Returns:
+            {"retriable": [...], "fixable": [...], "poison": [...]}
+        """
+        return self._management.triage()
+
+    def on_alert(self, callback: Callable[[DeadLetterEntry], None]) -> None:
+        """注册告警回调"""
+        self._alert_callbacks.append(callback)
+
+    def on_replay(self, callback: Callable[[NeuroEvent], None]) -> None:
+        """注册重播回调"""
+        self._replay_callbacks.append(callback)
+
+    def _trigger_alert(self, entry: DeadLetterEntry) -> None:
+        """
+        触发告警（含抑制逻辑）
+
+        按 (reason, event_type) 分组，同组 suppress_window 内只告警一次。
+        告警内容含"X 条同类失败"。
+        """
+        self._alerts.trigger(entry)
+
+    def silence_alerts(self, duration_seconds: float) -> None:
+        """
+        手动静默告警指定时长
+
+        Args:
+            duration_seconds: 静默秒数
+        """
+        self._alert_suppressor.silence(duration_seconds)
+        logger.info("[DeadLetterQueue] 告警已静默 %s 秒", duration_seconds)
+
+    def get_alert_stats(self) -> dict[str, Any]:
+        """
+        获取告警统计（按组分类）
+
+        Returns:
+            统计字典，含各组的 fired/suppressed/total 计数、
+            是否处于静默状态、抑制窗口和阈值
+        """
+        return self._alert_suppressor.get_stats()
+
+    def schedule_retry(
+        self, entry_id: str, base: float = RETRY_BASE_DELAY, cap: float = RETRY_MAX_DELAY
+    ) -> float | None:
+        """
+        计算并安排下一次重试的退避时间（Non-blocking retry，参考 Kafka DLT 设计）
+
+        - 退避公式：delay = min(base * (2 ** retry_count), cap) * (0.5 + random() * 0.5)
+        - jitter 范围 ±25%（实际为 0.5x ~ 1.0x 的乘数）
+        - 更新 last_failure_time 和 retry_count
+        - 调用方负责按返回的 delay 秒数调度实际重试
+
+        Args:
+            entry_id: 死信条目 ID
+            base: 基础退避秒数（默认 0.5s）
+            cap: 最大退避秒数（默认 30s）
+
+        Returns:
+            退避秒数；若条目不存在返回 None
+        """
+        return self._management.schedule_retry(entry_id, base, cap)
+
+    def _evict_oldest(self) -> None:
+        """驱逐最老的条目"""
+        self._repository.evict_oldest()
+
+    @property
+    def _conn(self) -> sqlite3.Connection | None:
+        return self._storage.connection
+
+    def close(self) -> None:
+        """Release the owned SQLite connection; subsequent SQLite operations fail."""
+        self._storage.close()
 
 
-from app.neuro_bus.dead_letter_queue_deadletterqueue_mixin01 import _DeadLetterQueuePart01Mixin
-from app.neuro_bus.dead_letter_queue_deadletterqueue_mixin02 import _DeadLetterQueuePart02Mixin
-
-
-class DeadLetterQueue(_DeadLetterQueuePart01Mixin, _DeadLetterQueuePart02Mixin):
-    """
-    死信队列实现
-
-    Level 4 可靠性机制:
-    - 存储失败事件
-    - 支持重播
-    - 提供监控和告警
-    """
-
-    # ========== 核心操作 ==========
-
-    # ========== 重播控制 ==========
-
-    # ========== 管理操作 ==========
-
-    # ========== 查询 ==========
-
-    # ========== 回调注册 ==========
-
-    # ========== 重试调度 ==========
-
-    # ========== 内部方法 ==========
-
-
-# ========== 与 NeuroBus 集成 ==========
+class EventPublisher(Protocol):
+    def publish(self, event: NeuroEvent) -> bool: ...
 
 
 class NeuroBusDLQIntegration:
@@ -369,11 +523,7 @@ class NeuroBusDLQIntegration:
         return self._dlq
 
     def handle_failure(
-        self,
-        event: NeuroEvent,
-        error: Exception,
-        retry_count: int,
-        handler_name: str | None = None,
+        self, event: NeuroEvent, error: Exception, retry_count: int, handler_name: str | None = None
     ) -> str:
         """
         处理失败，决定进入死信队列
@@ -381,7 +531,6 @@ class NeuroBusDLQIntegration:
         Returns:
             死信条目 ID
         """
-        # 判断原因
         if retry_count >= self._max_retries:
             reason = DeadLetterReason.RETRY_EXHAUSTED
         elif isinstance(error, (TimeoutError, asyncio.TimeoutError)):
@@ -390,11 +539,9 @@ class NeuroBusDLQIntegration:
             reason = DeadLetterReason.INVALID_PAYLOAD
         else:
             reason = DeadLetterReason.UNRECOVERABLE
-
         import traceback
 
         error_stack = traceback.format_exc()
-
         return self._dlq.enqueue(
             event=event,
             reason=reason,
@@ -404,16 +551,15 @@ class NeuroBusDLQIntegration:
             error_stack=error_stack,
         )
 
-    def setup_replay_to_bus(self, bus):
+    def setup_replay_to_bus(self, bus: EventPublisher) -> None:
         """设置重播到 NeuroBus"""
 
-        def replay_callback(event: NeuroEvent):
+        def replay_callback(event: NeuroEvent) -> None:
             bus.publish(event)
 
         self._dlq.on_replay(replay_callback)
 
 
-# 全局 DLQ 实例
 _dlq_instance: DeadLetterQueue | None = None
 
 
@@ -434,29 +580,18 @@ def get_dead_letter_queue(storage_path: str | None = None) -> DeadLetterQueue:
     return _dlq_instance
 
 
-# 快捷函数
-
-
 def enqueue_dead_letter(
-    event: NeuroEvent,
-    reason: str,
-    error_message: str,
-    retry_count: int = 0,
+    event: NeuroEvent, reason: str, error_message: str, retry_count: int = 0
 ) -> str:
     """快捷函数：将事件加入死信队列"""
     dlq = get_dead_letter_queue()
-
     reason_enum = DeadLetterReason.UNRECOVERABLE
     try:
         reason_enum = DeadLetterReason(reason)
     except ValueError:
         pass
-
     return dlq.enqueue(
-        event=event,
-        reason=reason_enum,
-        error_message=error_message,
-        retry_count=retry_count,
+        event=event, reason=reason_enum, error_message=error_message, retry_count=retry_count
     )
 
 

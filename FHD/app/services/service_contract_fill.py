@@ -6,6 +6,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 from app.services.user_cs_pipeline import _pipeline_roots, load_pipeline
@@ -104,19 +105,32 @@ def generate_contract_docx(
     username: str = "",
     field_values: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    from app.services.kitten_ai_document.generate import build_docx_bytes
+
     values = field_values or build_merged_fields(int(market_user_id), username=username)
     party_a = str(values.get("party_a_name") or username or f"客户{market_user_id}")
     amount = str(values.get("total_amount_number") or "")
     stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     filename = f"contract_{int(market_user_id)}_{stamp}.docx"
     path = generated_contracts_dir() / filename
-    # 最小占位：写入 UTF-8 文本文件并改扩展名供下载链路；完整 docx 模板后续可替换
     body = (
         f"服务合同草案\n甲方：{party_a}\n金额：{amount} 元\n"
         f"签署日期：{values.get('sign_date') or ''}\n"
         f"功能清单：{values.get('main_function_list') or ''}\n"
     )
-    path.write_text(body, encoding="utf-8")
+    lines = body.splitlines()
+    content, _ = build_docx_bytes({"title": lines[0], "sections": [{"paragraphs": lines[1:]}]})
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="wb", dir=path.parent, prefix=f".{filename}.", suffix=".tmp", delete=False
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(content)
+        temporary_path.replace(path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
     return {
         "filename": filename,
         "party_a_name": party_a,

@@ -130,11 +130,17 @@ def _runtime_context_with_authenticated_actor(
     authenticated session (``resolve_tenant_id``) so the resolved tenant wins.
     """
     context = dict(runtime_context or {})
-    # Remove caller-supplied tenant before session resolution so a missing or
-    # failed resolver cannot accidentally preserve a spoofed tenant id.
-    context.pop("tenant_id", None)
-    context.pop("local_user_id", None)
-    context.pop("actor_id", None)
+    # Every identity field crosses an untrusted HTTP boundary here. A missing
+    # session must not leave a client claim available to downstream services.
+    for key in (
+        "tenant_id",
+        "actor_id",
+        "local_user_id",
+        "authenticated_local_user_id",
+        "authenticated_username",
+        "authenticated_display_name",
+    ):
+        context.pop(key, None)
     try:
         from app.infrastructure.auth.dependencies import resolve_session_user
 

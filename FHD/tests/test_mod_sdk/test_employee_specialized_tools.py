@@ -1072,7 +1072,7 @@ async def test_patch_file_apply_failure(monkeypatch, tmp_path):
     (tmp_path / "f.txt").write_text("old\n")
     fake = _FakeRunCmd()
     fake.results = [
-        {"returncode": 0, "stdout": "", "stderr": "", "ok": True},  # --check ok
+        {"returncode": 0, "stdout": "1\t1\tf.txt\0", "stderr": "", "ok": True},  # --check ok
         {"returncode": 1, "stdout": "", "stderr": "apply boom", "ok": False},  # apply fail
     ]
     monkeypatch.setattr(est, "_run_cmd", fake)
@@ -1087,7 +1087,7 @@ async def test_patch_file_apply_failure(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_patch_file_success(monkeypatch, tmp_path):
     (tmp_path / "f.txt").write_text("old\n")
-    fake = _FakeRunCmd({"returncode": 0, "stdout": "", "stderr": "", "ok": True})
+    fake = _FakeRunCmd({"returncode": 0, "stdout": "1\t1\tf.txt\0", "stderr": "", "ok": True})
     monkeypatch.setattr(est, "_run_cmd", fake)
     r = await est.tool_patch_file(
         {"confirm": True, "path": "f.txt", "patch": "valid diff"},
@@ -1880,9 +1880,8 @@ async def test_query_codex_usage_parses_sessions_and_config(monkeypatch, tmp_pat
             ]
         )
     )
-    # config.toml —— reasoning_effort 行在前，model 行在后，规避
-    # 源码中 "model_reasoning_effort".startswith("model") 会覆盖 model 的怪异行为。
-    (codex / "config.toml").write_text('model_reasoning_effort = "high"\nmodel = "gpt-5"\n')
+    # 顶层 model 与 reasoning effort 是独立的 TOML 配置键。
+    (codex / "config.toml").write_text('model = "gpt-5"\nmodel_reasoning_effort = "high"\n')
     monkeypatch.setenv("HOME", str(tmp_path))
     r = await est.tool_query_codex_usage({"days": 0}, {})
     sess = r["sessions"]

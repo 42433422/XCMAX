@@ -39,6 +39,8 @@ class FixtureExecutor(AgentToolExecutor):
             cognition = _run_async(_chat_completion([]))
             repair = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
             repair._ai_service = None
+            repair._completion = None
+            repair._http_client_factory = None
             critic = repair._critic_repair_with_llm(
                 "fixture", "owner", "test", {}, {}, "invalid", PlanGraph("invalid", "test")
             )

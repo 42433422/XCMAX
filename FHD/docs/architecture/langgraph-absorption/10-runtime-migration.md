@@ -4,7 +4,7 @@
 > 目标结构权威文档：`FHD/docs/architecture/target-structure.md`
 > 前置契约冻结：`FHD/tests/langgraph_absorption/test_legacy_runtime_contract.py`（LG-W0-06）+ `FHD/tests/langgraph_absorption/fixtures/legacy_contract.json`
 > 上游吸收证据：`FHD/XCAGI/kb/absorption/langgraph/absorption_tasks.json`（8 项待吸收能力）
-> vendored 依赖来源：`FHD/packages/xcagi_langgraph_core/`、`.../checkpoint/`、`.../checkpoint_backends/`、`.../prebuilt/`（均含 `PROVENANCE.json`+`MANIFEST.sha256`+`verify_vendor.py`+`LICENSE`）；原始基线 `FHD/third_party/langgraph/`
+> vendored 依赖来源：`FHD/packages/xcagi_langgraph_core/`、`.../checkpoint/`、`.../checkpoint_backends/`、`.../prebuilt/`（均含 `PROVENANCE.json`+`MANIFEST.sha256`+`verify_vendor.py`+`LICENSE`）；上游基线哈希和本地补丁见 `FHD/packages/xcagi_langgraph_core/{UPSTREAM_MANIFEST.sha256,patches/}`
 > 本任务性质：**纯设计文档，不改产品/包/测试文件、不做 `git add/commit/push/reset`、不做 `rm -rf`**。`(TO CREATE)` 标注反映**原始设计时**尚未创建的路径；**当前实现覆盖层**见下方「§0 执行状态」与 §9 各任务个别的实测核对，以日期区分「设计意图」与「实现事实」。
 
 **版本事实（review 钉死）**
@@ -76,7 +76,7 @@
 | vendored backends | `packages/xcagi_langgraph_checkpoint_backends/{checkpoint-sqlite,checkpoint-postgres}/langgraph/` | 持久化桥来源（`langgraph.checkpoint.sqlite.SqliteSaver` / `langgraph.checkpoint.postgres.PostgresSaver`） |
 | vendored prebuilt | `packages/xcagi_langgraph_prebuilt/langgraph/` | `langgraph.prebuilt.tool_node.ToolNode` / `create_react_agent` 等 |
 | **vendored sdk（W0-11，EXISTING AND ACCEPTED）** | `FHD/packages/xcagi_langgraph_sdk/`（已吸收上游 `libs/sdk-py`，源码目录 `langgraph_sdk/`；测试+在线字节校验已过） | `langgraph_sdk.client`；让 core/prebuilt 摆脱 registry `langgraph-sdk` |
-| 原始吸收基线 | `third_party/langgraph/`（`PROVENANCE.json`/`MANIFEST.sha256`/`verify_vendor.py`/`refresh_vendor.py`） | 字节比对基线（W0-01）；网络 tag 校验归 build/CI |
+| 上游基线与本地补丁 | `packages/xcagi_langgraph_core/UPSTREAM_MANIFEST.sha256` + `patches/` | 仅维护一份运行时源码；反向重放必须恢复上游哈希，网络 tag 校验归 build/CI |
 | 手写工作流引擎（legacy） | `app/application/workflow/engine.py`（`WorkflowEngine`） | legacy 路径，经适配器暴露为 `WorkflowRuntime`，待后续移除 |
 | 类型化状态契约（现成，复用） | `app/application/workflow/types.py`（`StateSchema`/`Branch`/`PlanGraph`/`apply_state_schema`/`validate_plan_graph`） | 状态契约，保留 |
 | 手写 checkpoint（legacy） | `app/application/workflow/checkpointer.py`（`DatabaseWorkflowCheckpointer`） | legacy 实现；被 vendored checkpoint 桥替代 |
@@ -155,7 +155,7 @@ from langgraph_sdk.client import LangGraphClient              # vendored sdk (W0
 ### 6.3 boot 校验 vs build/CI 校验（分开）
 
 - **boot（每进程仅本地校验，fail-closed）**：本地 `PROVENANCE.json`（`upstream_commit_sha == 41341457…`、`license == "MIT"`）+ `MANIFEST.sha256` 完整性 + §6.2 模块来源断言。**不联网**。
-- **build/CI（网络 tag 校验归此处）**：`verify_vendor.py`（`FHD/packages/*/` 与 `FHD/third_party/langgraph/`）负责字节级比对与 tag `1.2.10` 的远程校验；`refresh_vendor.py` 负责再吸收。**不在每次 boot 执行**。
+- **build/CI（网络 tag 校验归此处）**：`verify_vendor.py`（`FHD/packages/*/`）负责清单与 tag `1.2.10` 的远程校验；core 先反向重放 `PROVENANCE.json` 登记的补丁恢复上游哈希，升级时同时维护上游清单、补丁和实际运行时清单。**不在每次 boot 执行**。
 
 ### 6.4 provenance / license 边界
 

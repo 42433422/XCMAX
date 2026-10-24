@@ -57,6 +57,31 @@ def baseline_state() -> dict:
 
 
 class SourceGovernanceEvaluateTests(unittest.TestCase):
+    def test_new_fragments_and_renamed_dynamic_facades_are_rejected(self) -> None:
+        for name, item in (
+            ("FHD/app/service_part01.py", 0),
+            ("FHD/app/renamed_service.py", 4),
+        ):
+            current = current_state()
+            current["mechanical_modules"] = {name: item}
+            errors, _ = source_governance.evaluate(current, baseline_state())
+            self.assertTrue(any("new mechanical" in error for error in errors))
+
+    def test_dynamic_coupling_may_only_shrink(self) -> None:
+        path = "FHD/app/service_part01.py"
+        baseline = baseline_state()
+        baseline["mechanical_modules"] = {path: 3}
+        current = current_state()
+        current["mechanical_modules"] = {path: 4}
+        errors, _ = source_governance.evaluate(current, baseline)
+        self.assertTrue(any("coupling grew" in error for error in errors))
+        current["mechanical_modules"] = {}
+        errors, progress = source_governance.evaluate(current, baseline)
+        self.assertEqual(errors, [])
+        self.assertTrue(
+            any("mechanical module debt reduced" in value for value in progress)
+        )
+
     def test_warns_on_growth_in_grandfathered_file(self) -> None:
         current = current_state(
             files=[
@@ -94,6 +119,44 @@ class SourceGovernanceEvaluateTests(unittest.TestCase):
         errors, _ = source_governance.evaluate(current, baseline_state())
         self.assertTrue(any("exact-copy debt grew" in item for item in errors))
         self.assertTrue(any("also ignored by Git" in item for item in errors))
+
+    def test_twenty_route_boundary_still_blocks_beside_size_advisory(self) -> None:
+        rel = "FHD/app/new_routes.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            path = repo_root / rel
+            path.parent.mkdir(parents=True)
+            for count in (20, 21):
+                with self.subTest(routes=count):
+                    path.write_text(
+                        "@router.get('/item')\n" * count
+                        + "# source line\n" * (801 - count),
+                        encoding="utf-8",
+                    )
+                    files, routers = source_governance._measure_sizes(repo_root, [rel])
+                    current = current_state(files=files, routers=routers)
+                    errors, _ = source_governance.evaluate(current, baseline_state())
+                    self.assertEqual(files[0]["soft_cap"], 800)
+                    self.assertTrue(source_governance.size_warnings(current))
+                    if count == 20:
+                        self.assertEqual(routers, [])
+                        self.assertEqual(errors, [])
+                    else:
+                        self.assertEqual(routers[0]["soft_cap"], 20)
+                        self.assertTrue(any("new oversized router" in item for item in errors))
+
+        current = current_state(
+            routers=[
+                {
+                    "file": "FHD/app/routes.py",
+                    "stack": "fhd_backend",
+                    "routes": 31,
+                    "soft_cap": 20,
+                }
+            ]
+        )
+        errors, _ = source_governance.evaluate(current, baseline_state())
+        self.assertTrue(any("oversized router grew" in item for item in errors))
 
     def test_accepts_debt_reduction(self) -> None:
         errors, progress = source_governance.evaluate(current_state(), baseline_state())
@@ -145,7 +208,7 @@ class SourceGovernanceEvaluateTests(unittest.TestCase):
                     ["generated/live.py"],
                 )
 
-    def test_duplicate_candidates_exclude_materialized_langgraph_trees(self) -> None:
+    def test_duplicate_candidates_exclude_only_active_langgraph_packages(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
             content = "VALUE = 'vendored'\n" * 40
@@ -163,7 +226,10 @@ class SourceGovernanceEvaluateTests(unittest.TestCase):
 
             self.assertEqual(
                 [item["file"] for item in candidates],
-                ["FHD/app/runtime.py"],
+                [
+                    "FHD/app/runtime.py",
+                    "FHD/third_party/langgraph/libs/langgraph/langgraph/runtime.py",
+                ],
             )
 
 

@@ -22,7 +22,7 @@ def test_template_contains_only_explicit_synthetic_employee_keys():
         workbook.close()
     runtime = ROOT.parent / (
         "成都修茈科技有限公司/MODstore_deploy/examples/"
-        "taiyangniao-attendance-employee/backend/templates/424/考勤-2026-3月份考勤统计表.xlsx"
+        "taiyangniao-attendance-employee/backend/templates/synthetic/attendance-template.xlsx"
     )
     assert runtime.read_bytes() == path.read_bytes()
 

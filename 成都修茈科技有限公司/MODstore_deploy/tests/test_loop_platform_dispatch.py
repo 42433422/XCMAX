@@ -8,6 +8,7 @@ bench_llm_override 透传到 cognition → use_platform_dispatch=True → chat_d
 import asyncio
 from unittest.mock import MagicMock
 
+import modstore_server.maintenance_loop.dispatch as _maintenance_dispatch
 import modstore_server.services.llm as llm_mod
 from modstore_server import digest_line_executor as dle
 
@@ -36,19 +37,17 @@ def test_digest_override_no_platform_key_returns_none(monkeypatch):
 
 
 def test_self_maintenance_override_enabled(monkeypatch):
-    from modstore_server import self_maintenance_loop_runner as smr
 
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_PLATFORM_LLM", raising=False)
     monkeypatch.setattr(llm_mod, "resolve_platform_bench_llm", lambda: ("openai", "gpt-4o-mini"))
-    assert smr._loop_platform_bench_override() == ("openai", "gpt-4o-mini")
+    assert _maintenance_dispatch._loop_platform_bench_override() == ("openai", "gpt-4o-mini")
 
 
 def test_self_maintenance_override_disabled(monkeypatch):
-    from modstore_server import self_maintenance_loop_runner as smr
 
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_PLATFORM_LLM", "0")
     monkeypatch.setattr(llm_mod, "resolve_platform_bench_llm", lambda: ("openai", "gpt-4o-mini"))
-    assert smr._loop_platform_bench_override() is None
+    assert _maintenance_dispatch._loop_platform_bench_override() is None
 
 
 # ─────────────── orchestrator 透传 bench_llm_override 到 execute_employee_task ───────────────

@@ -480,6 +480,32 @@ class TestRefreshTokenFromSession:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def chat_discovery_http(monkeypatch):
+    """Keep real candidate selection while supplying deterministic remote reads."""
+    import httpx
+
+    monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
+    monkeypatch.setattr("app.services.conversation.modstore_adapter._CATALOG_CACHE", {})
+    calls = []
+    real_client = httpx.Client
+
+    def respond(request):
+        calls.append((request.method, request.url.path))
+        return httpx.Response(200, json={})
+
+    def client(**kwargs):
+        return real_client(**kwargs, transport=httpx.MockTransport(respond))
+
+    monkeypatch.setattr(httpx, "Client", client)
+    yield
+    assert calls == [
+        ("GET", "/api/llm/status"),
+        ("GET", "/api/llm/catalog"),
+        ("GET", "/api/llm/resolve-chat-default"),
+    ]
+
+
 class TestChatCompletion:
     @pytest.mark.asyncio
     async def test_no_platform_url_raises(self, monkeypatch):
@@ -490,7 +516,7 @@ class TestChatCompletion:
             await adapter.chat_completion([{"role": "user", "content": "hi"}])
 
     @pytest.mark.asyncio
-    async def test_http_error_raises(self, monkeypatch):
+    async def test_http_error_raises(self, monkeypatch, chat_discovery_http):
         import httpx
 
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
@@ -502,9 +528,14 @@ class TestChatCompletion:
         adapter._get_client = AsyncMock(return_value=mock_client)
         with pytest.raises(httpx.ConnectError):
             await adapter.chat_completion([{"role": "user", "content": "hi"}])
+        mock_client.post.assert_awaited_once()
+        assert mock_client.post.call_args.args == ("http://example.com/api/llm/chat",)
+        assert mock_client.post.call_args.kwargs["json"]["messages"] == [
+            {"role": "user", "content": "hi"}
+        ]
 
     @pytest.mark.asyncio
-    async def test_success_response(self, monkeypatch):
+    async def test_success_response(self, monkeypatch, chat_discovery_http):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -519,9 +550,14 @@ class TestChatCompletion:
         adapter._client = mock_client
         result = await adapter.chat_completion([{"role": "user", "content": "hi"}])
         assert result["choices"][0]["message"]["content"] == "hello"
+        mock_client.post.assert_awaited_once()
+        assert mock_client.post.call_args.args == ("http://example.com/api/llm/chat",)
+        assert mock_client.post.call_args.kwargs["json"]["messages"] == [
+            {"role": "user", "content": "hi"}
+        ]
 
     @pytest.mark.asyncio
-    async def test_error_status_raises(self, monkeypatch):
+    async def test_error_status_raises(self, monkeypatch, chat_discovery_http):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
         mock_response = MagicMock()
         mock_response.status_code = 500
@@ -532,6 +568,11 @@ class TestChatCompletion:
         adapter._client = mock_client
         with pytest.raises(ValueError, match="500"):
             await adapter.chat_completion([{"role": "user", "content": "hi"}])
+        mock_client.post.assert_awaited_once()
+        assert mock_client.post.call_args.args == ("http://example.com/api/llm/chat",)
+        assert mock_client.post.call_args.kwargs["json"]["messages"] == [
+            {"role": "user", "content": "hi"}
+        ]
 
 
 # ---------------------------------------------------------------------------

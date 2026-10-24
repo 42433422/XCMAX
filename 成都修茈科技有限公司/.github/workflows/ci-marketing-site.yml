@@ -9,6 +9,7 @@ on:
       - 'capabilities/**'
       - 'data/capabilities/**'
       - 'scripts/build_capability_center.py'
+      - 'scripts/evidence_assets.py'
       - 'styles.css'
       - 'main.js'
       - 'assets/**'
@@ -23,6 +24,7 @@ on:
       - 'capabilities/**'
       - 'data/capabilities/**'
       - 'scripts/build_capability_center.py'
+      - 'scripts/evidence_assets.py'
       - 'styles.css'
       - 'main.js'
       - 'assets/**'
@@ -92,6 +94,8 @@ jobs:
           echo "Validating ${#files[@]} capability HTML file(s) with htmlhint..."
           htmlhint "${files[@]}"
 
+      - name: Rebuild checksum-pinned public evidence
+        run: python3 scripts/evidence_assets.py materialize
       - name: Capability acceptance completeness and page integrity gate
         run: python3 scripts/build_capability_center.py --check
       - name: Decode every capability evidence video

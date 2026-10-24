@@ -171,10 +171,14 @@ class TestCriticRepairWithLLM:
             mock_svc.api_key = ""
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
-            result = planner._critic_repair_with_llm(
-                "p1", "u1", "test", get_tool_registry(), {}, "missing params", invalid_plan
-            )
-        assert result is None  # Should return None when no API key
+            with patch(
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=None,
+            ):
+                result = planner._critic_repair_with_llm(
+                    "p1", "u1", "test", get_tool_registry(), {}, "missing params", invalid_plan
+                )
+        assert result is None  # No usable model channel → None
 
 
 # ========================= LLMWorkflowPlanner.plan - extended =============
@@ -233,14 +237,14 @@ class TestLLMWorkflowPlannerPlanExtended:
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
         ):
             result = planner.plan("u1", "添加客户公司A", get_tool_registry(), {})
-        # 2026-09 起 customers 意图按 tool_key 路由到 customers.query（intent_route_customers）。
-        assert result.intent in (
-            "add_customer",
-            "ensure_customer",
-            "generic_workflow",
-            "intent_route_customers",
-            "clarify_ask",
-        )
+        # An explicit customer addition remains a controlled write plan; planning
+        # must not execute the mutation or route it through a read-only query.
+        assert result.intent == "business_db_write"
+        assert len(result.nodes) == 1
+        assert (result.nodes[0].tool_id, result.nodes[0].action) == ("business_db", "write")
+        assert result.nodes[0].params["entity"] == "customers"
+        assert result.nodes[0].params["operation"] == "upsert"
+        assert result.nodes[0].params["payload"]["customer_name"] == "公司A"
 
 
 # ========================= _validate_required_params - extended ===========

@@ -34,6 +34,8 @@ _UNAMBIGUOUS_BUSINESS_DB_MUTATION_KEYWORDS = _BUSINESS_DB_MUTATION_KEYWORDS - {
     "入库",
 }
 
+_MAX_CHAT_INTENT_CHARS = 4096
+
 # 输入先去空白；只认否定词紧邻动作，避免「特别好用」「别的客户」假阳性。
 _NEGATED_ACTION_RE = re.compile(
     r"(?:不要|不用|不需要|不必|不想|不想再|不允许|不准|别再|禁止|千万别|别|不)"
@@ -50,7 +52,17 @@ def is_negated_action_request(text: str) -> bool:
     value = str(text or "")
     if not value:
         return False
-    normalized = re.sub(r"\s+", "", value)
+    # Bound regex work by normalized content, while allowing harmless long runs
+    # of whitespace to remain non-actions. The character scan is linear and
+    # stops as soon as the regex input limit is exceeded.
+    normalized_chars: list[str] = []
+    for character in value:
+        if character.isspace():
+            continue
+        normalized_chars.append(character)
+        if len(normalized_chars) > _MAX_CHAT_INTENT_CHARS:
+            return True
+    normalized = "".join(normalized_chars)
     return bool(_NEGATED_ACTION_RE.search(normalized))
 
 
@@ -92,6 +104,35 @@ def attach_explicit_tenant_id(payload: dict[str, Any], message: str) -> dict[str
     return payload
 
 
+def _is_named_customer_create(value: str) -> bool:
+    """Linear parse for 「新增[一个]客户 …」 / 「…，单位名称为 X」 (no ReDoS regex)."""
+    stripped = value.strip()
+    prefix = re.match(
+        r"^(?:请\s*)?(?:帮我\s*)?(?:新增|添加)\s*(?:一个\s*)?(?:客户|购买单位)",
+        stripped,
+    )
+    if not prefix:
+        return False
+    remainder = stripped[prefix.end() :].lstrip()
+    if remainder.startswith((":", "：")):
+        remainder = remainder[1:].lstrip()
+    end = next((i for i, c in enumerate(remainder) if c in "，,。；; \t\r\n"), len(remainder))
+    if end >= 2:
+        return True
+    search = remainder.lstrip("，, \t")
+    for marker in ("购买单位名称", "客户名称", "单位名称"):
+        at = search.find(marker)
+        if at < 0:
+            continue
+        after = search[at + len(marker) :].lstrip()
+        if after.startswith(("为", "是", ":", "：")):
+            after = after[1:].lstrip()
+        name_end = next((i for i, c in enumerate(after) if c in "，,。；; \t\r\n"), len(after))
+        if name_end >= 2:
+            return True
+    return False
+
+
 def looks_like_business_db_write(message: str, lower: str | None = None) -> bool:
     """Recognize explicit CRUD without requiring users to say database jargon."""
     value = re.sub(
@@ -99,6 +140,9 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
         r"\1的",
         str(message or ""),
     )
+    if len(value) > _MAX_CHAT_INTENT_CHARS:
+        # Fail closed: let oversized requests enter the guarded write/clarification path.
+        return True
     # 原始 SQL 永不进入写规划：安全闸从执行层前移到规划层（审计 safety.raw_sql.reject_021）。
     if looks_like_raw_sql(value):
         return False
@@ -121,16 +165,7 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
         return True
 
     # Explicitly named creates use CRUD; underspecified onboarding remains on its legacy route.
-    stripped_value = value.strip()
-    named_customer_create = re.match(
-        r"^(?:请)?(?:帮我)?\s*(?:新增|添加)\s*(?:一个)?(?:客户|购买单位)"
-        r"(?:\s*[:：]\s*|\s+|\s*[，,]\s*(?:单位名称|客户名称|购买单位名称)[为是:：]?\s*)([^，,。；;\s]{2,})",
-        stripped_value,
-    ) or re.match(
-        r"^(?:请|帮我|请帮我)\s*(?:新增|添加)\s*(?:一个)?(?:客户|购买单位)\s*[:：]?\s*([^，,。；;\s]{2,})",
-        stripped_value,
-    )
-    if named_customer_create and not any(
+    if _is_named_customer_create(value) and not any(
         marker in value for marker in ("产品", "商品", "订单", "报价", "发货", "不要", "别", "取消")
     ):
         return True
@@ -148,6 +183,8 @@ def looks_like_explicit_workflow_tool_intent(text: str) -> bool:
     """Return whether the user explicitly asked for an executable workflow tool."""
     value = str(text or "").strip()
     if not value:
+        return False
+    if len(value) > _MAX_CHAT_INTENT_CHARS:
         return False
     lower = value.lower()
     employee_mentioned = any(k in value for k in ("员工", "调用", "交给")) or "employee" in lower

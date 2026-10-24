@@ -147,10 +147,15 @@ def test_auth_session_validate_ok(mock_get_svc: MagicMock, auth_client: TestClie
         patch.object(auth_routes, "resolve_session_user", return_value=SimpleNamespace(id=1)),
         patch.object(auth_routes, "_session_meta_for_response", return_value={}),
         patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="personal"),
+        patch(
+            "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+            new=AsyncMock(return_value=set()),
+        ) as sync,
     ):
         r = auth_client.get("/api/auth/session/validate")
     assert r.status_code == 200
     assert r.json()["valid"] is True
+    sync.assert_awaited_once_with("sid")
 
 
 def test_runtime_product_sku(auth_client: TestClient) -> None:
@@ -216,12 +221,19 @@ def test_auth_register_disabled_enterprise(
     with (
         patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
         patch.dict("os.environ", {"FHD_ALLOW_OPEN_REGISTRATION": "0"}, clear=False),
+        patch(
+            "app.fastapi_routes.market_account.register_market_user",
+            new=AsyncMock(
+                return_value={"success": False, "message": "fixture registration denied"}
+            ),
+        ) as market,
     ):
         r = auth_client.post(
             "/api/auth/register",
             json={"username": "new", "password": "Secret123!", "email": "n@x.com"},
         )
     assert r.status_code in (200, 400, 403)
+    market.assert_awaited_once_with("new", "Secret123!", "n@x.com", "")
 
 
 def test_auth_oidc_status(auth_client: TestClient) -> None:

@@ -14,6 +14,23 @@ from app.fastapi_routes.domains.excel.excel_extract import (
     _generate_excel,
 )
 
+
+@pytest.fixture(autouse=True)
+def _configured_etl_workspace(tmp_path, monkeypatch):
+    """Keep test workbooks within an explicitly configured, narrow workspace."""
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    named_temporary_file = tempfile.NamedTemporaryFile
+
+    def named_file_in_workspace(*args, **kwargs):
+        kwargs.setdefault("dir", tmp_path)
+        return named_temporary_file(*args, **kwargs)
+
+    monkeypatch.setattr(tempfile, "NamedTemporaryFile", named_file_in_workspace)
+    managed_temp_root = tmp_path / "managed-temp-excel"
+    managed_temp_root.mkdir()
+    monkeypatch.setattr("app.fastapi_routes.excel_extract.TEMP_EXCEL_DIR", str(managed_temp_root))
+
+
 # ========================= _extract_from_excel ===========================
 
 

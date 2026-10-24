@@ -32,6 +32,10 @@ jobs:
         run: python -m unittest scripts.dev.test_change_classifier
       - name: Check cross-stack source debt
         run: python scripts/dev/source_governance.py --top 10
+      - name: Test private-data admission rules
+        run: python scripts/ci/test_private_data.py
+      - name: Reject customer data and embedded runtime snapshots
+        run: python scripts/ci/check_private_data.py
       - name: Check operational exception boundaries
         run: python scripts/ci/check_operational_errors_gate.py
       - name: Check broad exception ratchet

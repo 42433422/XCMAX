@@ -124,10 +124,17 @@ FHD/trae_super_employee/
 太阳鸟/*.exe
 太阳鸟/manifest.json
 
-# 太阳鸟种子数据（纳入版本库，供定制安装包内嵌）
-!FHD/delivery/
-!FHD/delivery/sunbird-seed/
-!FHD/delivery/sunbird-seed/**
+# 客户原件、派生数据与工作台草稿仅存放在受控运行时目录。
+/FHD/delivery/sunbird-seed/*
+!/FHD/delivery/sunbird-seed/README.md
+/FHD/dataset_rag/
+/outputs/
+**/employee_draft_assets/
+**/_conv_*.xlsx
+/FHD/.cursor/*.docx
+/成都修茈科技有限公司/MODstore_deploy/examples/taiyangniao-attendance-employee/backend/templates/424/*.xlsx
+**/taiyangniao-attendance-employee*.xcemp
+**/word-full-read-employee-llm-lab*.xcemp
 
 # 根目录本地素材（非交付树）
 /*.jpg

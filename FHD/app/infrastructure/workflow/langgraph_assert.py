@@ -26,7 +26,7 @@ EXPECTED_PROVENANCE: Final[dict[str, tuple[str | None, str, str | None]]] = {
     "xcagi_langgraph_checkpoint_backends/checkpoint-postgres": (
         None,
         "fcdf520938469c8e0992ca2075d6a9582c33260f",
-        "3.1.3",
+        "3.1.1",
     ),
     "xcagi_langgraph_checkpoint_backends/checkpoint-sqlite": (
         None,
@@ -38,6 +38,17 @@ EXPECTED_PROVENANCE: Final[dict[str, tuple[str | None, str, str | None]]] = {
         "d5f4b2aa960940effc8430165ab3604038e817af",
         "0.4.4",
     ),
+}
+
+EXPECTED_LOCAL_VERSIONS: Final[dict[str, str]] = {
+    "xcagi_langgraph_checkpoint_backends/checkpoint-postgres": "3.1.1+xcagi.1",
+}
+
+EXPECTED_SECURITY_BACKPORTS: Final[dict[str, dict[str, str]]] = {
+    "xcagi_langgraph_checkpoint_backends/checkpoint-postgres": {
+        "upstream_pull_request": "https://github.com/langchain-ai/langgraph/pull/9217",
+        "merged_commit": "bfcfea554ed5c7f7be562cebf8825e911b493ab1",
+    },
 }
 
 # vendored module -> package directory relative to FHD/packages that must own it.
@@ -121,6 +132,23 @@ def _assert_provenance(package_dir: str) -> None:
         raise AssertionError(
             f"{package_dir} PROVENANCE version={actual_version!r} != {expected_version!r}"
         )
+    expected_local_version = EXPECTED_LOCAL_VERSIONS.get(package_dir)
+    if expected_local_version is not None and data.get("local_version") != expected_local_version:
+        raise AssertionError(
+            f"{package_dir} PROVENANCE local_version={data.get('local_version')!r} "
+            f"!= {expected_local_version!r}"
+        )
+    expected_backport = EXPECTED_SECURITY_BACKPORTS.get(package_dir)
+    if expected_backport is not None:
+        actual_backport = data.get("security_backport")
+        if not isinstance(actual_backport, dict):
+            raise AssertionError(f"{package_dir} PROVENANCE 缺少 security_backport")
+        for field, expected_value in expected_backport.items():
+            if actual_backport.get(field) != expected_value:
+                raise AssertionError(
+                    f"{package_dir} PROVENANCE security_backport.{field}="
+                    f"{actual_backport.get(field)!r} != {expected_value!r}"
+                )
     if actual_lic != UPSTREAM_LICENSE:
         raise AssertionError(
             f"{package_dir} PROVENANCE license={actual_lic!r} != {UPSTREAM_LICENSE!r}"

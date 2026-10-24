@@ -31,6 +31,7 @@ def test_list_profiles_default_is_universal(tmp_path, monkeypatch):
 
 
 def test_universal_recognizes_generic_table_without_delivery_title(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
@@ -68,6 +69,7 @@ def test_universal_recognizes_generic_table_without_delivery_title(tmp_path, mon
 
 
 def test_knowledge_base_remembers_and_hits(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     kb_path = tmp_path / "kb.json"
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(kb_path))
     kb = reset_excel_etl_kb_for_tests(kb_path)
@@ -114,6 +116,7 @@ def test_knowledge_base_remembers_and_hits(tmp_path, monkeypatch):
 
 def test_custom_profile_dir_overrides(tmp_path, monkeypatch):
     """把自定义 YAML 丢进 PROFILE_DIR 即可识别新模板。"""
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
@@ -220,6 +223,7 @@ def test_custom_profile_dir_overrides(tmp_path, monkeypatch):
 
 
 def test_universal_write_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
