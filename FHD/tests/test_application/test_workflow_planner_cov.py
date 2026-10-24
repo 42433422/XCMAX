@@ -521,15 +521,19 @@ class TestPlanWithLLM(_PlannerFixture):
         return resp
 
     def _run_planner(self, planner, response, message="test", context=None):
-        with patch("app.application.workflow.planner._get_planner_http_client") as client:
-            client.return_value.post.return_value = response
-            return planner._plan_with_llm(
+        with patch(
+            "app.application.workflow.planner.request_planner_completion",
+            return_value=response.json() if response.status_code < 400 else None,
+        ) as completion:
+            result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
                 message=message,
                 tool_registry=_SAMPLE_REGISTRY,
                 context=context or {},
             )
+            completion.assert_called_once()
+            return result
 
     def test_returns_none_when_no_api_key(self) -> None:
         planner = self._make_planner()

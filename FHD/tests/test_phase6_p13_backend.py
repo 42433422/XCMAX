@@ -277,25 +277,19 @@ class TestIsNumberText:
 class TestResolveExcelPathForImport:
     """Cover _resolve_excel_path_for_import."""
 
-    def test_from_excel_analysis(self) -> None:
-        ea = {"file_path": "/tmp/x.xlsx"}
-        result = AIChatApplicationService._resolve_excel_path_for_import(ea, {})
-        assert result == "/tmp/x.xlsx"
-
-    def test_from_preview_data_when_excel_analysis_empty(self) -> None:
-        ea = {"file_path": ""}
-        pd_ = {"file_path": "/tmp/y.xlsx"}
-        result = AIChatApplicationService._resolve_excel_path_for_import(ea, pd_)
-        assert result == "/tmp/y.xlsx"
+    @pytest.mark.parametrize(
+        "source,whitespace", [("analysis", False), ("preview", False), ("analysis", True)]
+    )
+    def test_path_source_and_whitespace(self, tmp_path, source, whitespace) -> None:
+        path = str(tmp_path / "x.xlsx")
+        value = f"  {path}  " if whitespace else path
+        ea = {"file_path": value if source == "analysis" else ""}
+        preview = {"file_path": value if source == "preview" else ""}
+        assert AIChatApplicationService._resolve_excel_path_for_import(ea, preview) == path
 
     def test_both_empty_returns_empty(self) -> None:
         result = AIChatApplicationService._resolve_excel_path_for_import({}, {})
         assert result == ""
-
-    def test_strips_whitespace(self) -> None:
-        ea = {"file_path": "  /tmp/x.xlsx  "}
-        result = AIChatApplicationService._resolve_excel_path_for_import(ea, {})
-        assert result == "/tmp/x.xlsx"
 
 
 class TestExcelCellLooksLikeProductMeasureUnit:
@@ -1609,9 +1603,6 @@ class TestLLMWorkflowPlannerPlanWithLLM:
     def test_llm_http_error_returns_none(self) -> None:
         mock_response = Mock()
         mock_response.status_code = 500
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1621,8 +1612,8 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is None
@@ -1631,9 +1622,6 @@ class TestLLMWorkflowPlannerPlanWithLLM:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"choices": [{"message": {"content": ""}}]}
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1643,8 +1631,8 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is None
@@ -1653,9 +1641,6 @@ class TestLLMWorkflowPlannerPlanWithLLM:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"choices": [{"message": {"content": "not json{"}}]}
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1665,8 +1650,8 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is None
@@ -1701,9 +1686,6 @@ class TestLLMWorkflowPlannerPlanWithLLM:
                 }
             ]
         }
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1713,8 +1695,8 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is not None
@@ -1852,9 +1834,6 @@ class TestLLMWorkflowPlannerCriticRepair:
     def test_http_error_returns_none(self) -> None:
         mock_response = Mock()
         mock_response.status_code = 500
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1864,8 +1843,8 @@ class TestLLMWorkflowPlannerCriticRepair:
             planner = LLMWorkflowPlanner()
             invalid_plan = PlanGraph(plan_id="p1", intent="test", nodes=[])
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._critic_repair_with_llm(
                     "p1", "u1", "msg", {}, {}, "error", invalid_plan
@@ -1876,9 +1855,6 @@ class TestLLMWorkflowPlannerCriticRepair:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"choices": [{"message": {"content": ""}}]}
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1888,8 +1864,8 @@ class TestLLMWorkflowPlannerCriticRepair:
             planner = LLMWorkflowPlanner()
             invalid_plan = PlanGraph(plan_id="p1", intent="test", nodes=[])
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._critic_repair_with_llm(
                     "p1", "u1", "msg", {}, {}, "error", invalid_plan
