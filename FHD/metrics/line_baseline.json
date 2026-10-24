@@ -1,5 +1,5 @@
 {
-  "lines": 2336728,
-  "updated": "2026-10-24",
-  "note": "remove duplicate marketOverviewMetrics.ts (keep admin-console SSOT + aliases)"
+  "lines": 2336729,
+  "updated": "2026-10-25",
+  "note": "pin libbrotli*>=1.2.0-r7 in Dockerfile.fhd-api for container-scan"
 }
