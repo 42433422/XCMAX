@@ -1,5 +1,5 @@
 {
-  "lines": 2337758,
-  "updated": "2026-10-24",
-  "note": "rebase onto main"
+  "lines": 2337759,
+  "updated": "2026-10-25",
+  "note": "ops bind #2621: capability-center regen (erp-sales-order/erp-shipment) after rebase onto 5b758cc6; +1 line baseline bump for release JSON parity"
 }
