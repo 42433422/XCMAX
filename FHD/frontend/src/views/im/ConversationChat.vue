@@ -3,6 +3,7 @@
     <header class="im-chat-head">
       <span class="im-avatar im-avatar--sm" aria-hidden="true">{{ avatarText(activeTitle) }}</span>
       <span class="im-chat-title">{{ activeTitle }}</span>
+      <slot name="ticket-results" />
       <div v-if="csAutomation" class="im-cs-controls">
         <span :class="['im-cs-status', `is-${csAutomation.cs_status || 'ai_active'}`]">
           {{ csStatusLabel(csAutomation.cs_status) }}

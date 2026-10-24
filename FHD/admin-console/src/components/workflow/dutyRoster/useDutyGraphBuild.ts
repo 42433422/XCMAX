@@ -513,6 +513,7 @@ watch(viewMode, (mode) => {
 const stats = computed(() => ({
   total:     employees.value.length,
   catalogOk: employees.value.filter((e) => e.source === 'catalog').length,
+  catalogKnown: s.rosterHealth.value?.catalogKnown === true,
   v1Only:    employees.value.filter((e) => e.source === 'v1_catalog').length,
   healthy:   employees.value.filter((e) => healthLevel(e.id) === 'healthy').length,
   depEdges:  Object.values(depsMap.value).reduce((s, d) => s + d.length, 0),

@@ -28,6 +28,20 @@ jobs:
           # 仓库历史较大时 fetch-depth: 0 会耗尽本任务的 5 分钟限额。
           fetch-depth: 1
 
+      - name: Evidence source and generated media guard
+        env:
+          EVIDENCE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          evidence_script="成都修茈科技有限公司/scripts/evidence_assets.py"
+          args=()
+          if [ -n "${EVIDENCE_BASE_SHA}" ] && [[ ! "${EVIDENCE_BASE_SHA}" =~ ^0+$ ]]; then
+            git fetch origin "${EVIDENCE_BASE_SHA}" --depth=1
+            args=(--base "${EVIDENCE_BASE_SHA}")
+          fi
+          python3 "${evidence_script}" check
+          python3 "${evidence_script}" guard "${args[@]}"
+
       - name: Test runtime artifact guard
         run: python3 -m unittest discover -s scripts/ci -p test_guard_customer_data.py
 

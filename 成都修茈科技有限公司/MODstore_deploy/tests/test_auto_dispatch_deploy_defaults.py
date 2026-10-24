@@ -4,26 +4,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from modstore_server import self_maintenance_loop_runner as sm
+import modstore_server.maintenance_loop.config as _maintenance_config
+import modstore_server.maintenance_loop.deployment as _maintenance_deployment
 
 
 def test_auto_dispatch_defaults_to_staging(monkeypatch):
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", raising=False)
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", raising=False)
-    assert sm._auto_dispatch_deploy_enabled() is True
-    assert sm._auto_dispatch_deploy_envs() == ["staging"]
+    assert _maintenance_config._auto_dispatch_deploy_enabled() is True
+    assert _maintenance_deployment._auto_dispatch_deploy_envs() == ["staging"]
 
 
 def test_auto_dispatch_explicit_off(monkeypatch):
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", "0")
-    assert sm._auto_dispatch_deploy_enabled() is False
-    assert sm._auto_dispatch_deploy_envs() == []
+    assert _maintenance_config._auto_dispatch_deploy_enabled() is False
+    assert _maintenance_deployment._auto_dispatch_deploy_envs() == []
 
 
 def test_production_requires_explicit_envs(monkeypatch):
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", "1")
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", "staging,production")
-    assert sm._auto_dispatch_deploy_envs() == ["staging", "production"]
+    assert _maintenance_deployment._auto_dispatch_deploy_envs() == ["staging", "production"]
 
 
 def test_force_remote_trigger_outlives_para_wait_budget():

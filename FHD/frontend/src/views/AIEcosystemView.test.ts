@@ -13,6 +13,7 @@ function makeRouter(includeDeliveryCenter = true) {
   const routes = [
     { path: '/', name: 'home', component: { template: '<div />' } },
     { path: '/mod-store', name: 'mod-store', component: { template: '<div />' } },
+    { path: '/market-overview', name: 'market-overview', component: { template: '<div />' } },
     { path: '/ecosystem', name: 'ecosystem', component: AIEcosystemView },
   ]
   if (includeDeliveryCenter) {
@@ -85,12 +86,17 @@ describe('AIEcosystemView.vue', () => {
     const modstore = wrapper.find('[data-tour="ecosystem-launcher-modstore"]')
     expect(modstore.exists()).toBe(true)
   })
-
-  it('hides the forbidden modstore launcher in the admin console', async () => {
+  it('shows market overview launcher instead of modstore in the admin console', async () => {
     vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
-    const { wrapper } = await mountView()
-    expect(wrapper.findAll('.app-launcher')).toHaveLength(3)
+    const { wrapper, router } = await mountView()
+    const pushSpy = vi.spyOn(router, 'push')
+    expect(wrapper.findAll('.app-launcher')).toHaveLength(4)
     expect(wrapper.find('[data-tour="ecosystem-launcher-modstore"]').exists()).toBe(false)
+    const market = wrapper.find('[data-tour="ecosystem-launcher-market-overview"]')
+    expect(market.exists()).toBe(true)
+    expect(market.text()).toContain('市场总览')
+    await market.trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith({ name: 'market-overview', query: {} })
   })
 
   it('hides ecosystem home after entering kitten analyzer', async () => {

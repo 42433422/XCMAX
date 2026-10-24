@@ -17,7 +17,7 @@ from app.application.agent_orchestrator.tool_spec_data.output_schemas import (
     _DEFAULT_OUTPUT_SCHEMA,
     _SPECIAL_OUTPUT_SCHEMAS,
 )
-from app.application.agent_orchestrator.tool_spec_data.test_fixtures import (
+from app.application.agent_orchestrator.tool_spec_data.examples import (
     _SPECIAL_TEST_FIXTURES,
 )
 

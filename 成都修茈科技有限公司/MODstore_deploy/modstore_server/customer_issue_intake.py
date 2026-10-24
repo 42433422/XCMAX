@@ -138,13 +138,17 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "message": "customer issue event missing lineage"}
     with db_outbox.get_session_factory()() as db:
         ticket = db.get(CustomerServiceTicket, int(payload["ticket_id"]))
-        if ticket is not None and ticket.status == "expired":
+        # Fail closed: forged or orphaned lineage must never reach incident publish.
+        if ticket is None:
+            return {"ok": False, "message": "customer issue ticket missing"}
+        if int(ticket.user_id) != int(payload["user_id"]):
+            return {"ok": False, "message": "customer issue ownership mismatch"}
+        if ticket.status == "expired":
             return {"ok": True, "skipped": True, "reason": "ticket_expired"}
-        if ticket is not None and ticket.user_id == int(payload["user_id"]):
-            from modstore_server.customer_issue_shared_repairs import active_shared_repair
+        from modstore_server.customer_issue_shared_repairs import active_shared_repair
 
-            if active_shared_repair(db, ticket):
-                return {"ok": True, "skipped": True, "reason": "shared_repair_reused"}
+        if active_shared_repair(db, ticket):
+            return {"ok": True, "skipped": True, "reason": "shared_repair_reused"}
     if payload.get("intake_source") == "private_mod_rework":
         from modstore_server.customer_issue_private_factory import (
             dispatch_private_rework,

@@ -68,7 +68,7 @@ def test_pending_remediation_requires_executable_branch_and_task(
         ]
     }
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
 
@@ -112,7 +112,7 @@ def test_pending_remediation_normalizes_legacy_target_ref_verdict_hold(
         ],
     }
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
 
@@ -147,7 +147,7 @@ def test_pending_remediation_prefers_latest_executable_failed_review(
         ]
     }
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
 
@@ -183,7 +183,7 @@ def test_pending_remediation_prioritizes_incident_lineage(
         ]
     }
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
     monkeypatch.setattr(
@@ -225,7 +225,7 @@ def test_pending_remediation_keeps_exhausted_failed_step_explicitly_blocked(
     }
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
 
@@ -260,7 +260,7 @@ def test_pending_remediation_resumes_without_force(
         return {"status": "completed_merge_requested", "run_id": "run-43"}
 
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner.run_self_maintenance_loop",
+        "modstore_server.maintenance_loop.coordinator.run_self_maintenance_loop",
         _run_self_maintenance_loop,
     )
 
@@ -293,7 +293,7 @@ def test_pending_retort_clarification_is_deferred_for_scheduler(
         },
     )
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner.run_self_maintenance_loop",
+        "modstore_server.maintenance_loop.coordinator.run_self_maintenance_loop",
         lambda **_kwargs: {
             "status": "failed",
             "error": "retort_clarification_pending",
@@ -320,7 +320,7 @@ def test_pending_unexpected_remediation_failure_still_raises(
         },
     )
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner.run_self_maintenance_loop",
+        "modstore_server.maintenance_loop.coordinator.run_self_maintenance_loop",
         lambda **_kwargs: {"status": "failed", "error": "execution_timeout"},
     )
 
@@ -371,7 +371,7 @@ def test_no_pending_remediation_does_not_start_loop(
     )
     started = MagicMock()
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner.run_self_maintenance_loop",
+        "modstore_server.maintenance_loop.coordinator.run_self_maintenance_loop",
         started,
     )
 

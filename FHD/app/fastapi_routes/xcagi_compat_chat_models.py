@@ -164,7 +164,7 @@ def _xcagi_compat_reply_payload(
             raw.setdefault("tool_params", dict(last_record.get("params") or {}))
             raw["_tool_records"] = reply_records
         else:
-            from app.legacy.chat.legacy_chat_adapter import get_last_tool_result
+            from app.application.conversation import get_last_tool_result
 
             raw = get_last_tool_result()
         if isinstance(raw, dict) and raw:

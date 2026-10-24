@@ -50,8 +50,14 @@ interface UserModsResponse extends Record<string, unknown> {
   mod_ids?: string[]
 }
 
+interface AdminStatusResponse extends Record<string, unknown> {
+  ok?: boolean
+  total_catalog_items?: unknown
+  total_users?: unknown
+}
+
 export const admin = {
-  adminStatus: () => req('/api/admin/status'),
+  adminStatus: () => req<AdminStatusResponse>('/api/admin/status'),
   adminResearchSettings: () => req('/api/admin/research-settings'),
   adminSaveResearchSettings: (data: Record<string, unknown>) =>
     req('/api/admin/research-settings', { method: 'PUT', body: JSON.stringify(data || {}) }),

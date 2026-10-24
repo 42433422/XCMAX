@@ -1,7 +1,7 @@
 <template>
   <div class="page-view admin-entitlements-view">
     <div class="page-content">
-      <header class="admin-entitlements-head">
+      <header class="admin-entitlements-head page-header">
         <div>
           <h2>用户管理</h2>
           <p class="muted">管理用户等级与行业，分配客户 Mod 权益，或进入代管模式代为配置。</p>

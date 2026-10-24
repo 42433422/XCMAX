@@ -760,8 +760,15 @@ class TestMarketAccountRoutes:
         return TestClient(app, raise_server_exceptions=False)
 
     def test_market_status(self, client):
-        resp = client.get("/api/market/status")
+        with patch(
+            "app.fastapi_routes.market_account._proxy_json",
+            new=AsyncMock(return_value={"status": "synthetic-healthy"}),
+        ) as remote:
+            resp = client.get("/api/market/status")
         assert resp.status_code in (200, 401, 403, 502)
+        assert resp.status_code == 200
+        assert resp.json()["data"]["raw"] == {"status": "synthetic-healthy"}
+        remote.assert_awaited_once_with("GET", "/api/health", return_error_payload=True)
 
     def test_market_login_route_empty_body(self, client):
         resp = client.post("/api/market/login", json={})

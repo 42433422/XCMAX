@@ -13,7 +13,16 @@
   "verify_script": "verify_vendor.py",
   "fetch_time_utc": "2026-08-10T00:00:00Z",
   "verification": {
-    "method": "本地吸收副本与远端 tag 1.2.10（无 v 前缀）的锁定 commit 字节级比对 + MANIFEST.sha256 完整性 + LICENSE 校验",
-    "note": "吸收源取自 langgraph 仓库远端 tag 1.2.10 @ commit 41341457342327166d72fc11952ab28fb61ec0bf 的 libs/langgraph/langgraph + LICENSE，字节级一致。version 1.2.10 与 pyproject 一致。"
-  }
+    "method": "Locked upstream commit + UPSTREAM_MANIFEST.sha256, replayable local patches, installed MANIFEST.sha256, and MIT LICENSE verification",
+    "note": "The runtime is the upstream 1.2.10 core plus the recorded local patches. The former third_party/langgraph source snapshot is replaced by its hash manifest; git history retains the original files."
+  },
+  "upstream_sha256_manifest": "UPSTREAM_MANIFEST.sha256",
+  "upstream_manifest_sha256": "51aec75249eca7807ea04bc420eeeb1e78dc51ff14ebb769ae50cc639672df10",
+  "local_patches": [
+    {
+      "path": "patches/local-runtime-hardening.patch",
+      "sha256": "08428a88d6238461970ade81a40b25276c66dfbe9a9f85442f61e5f9d5db0dfc",
+      "description": "Preserve existing named exception boundaries and cache-iteration typing fixes; no upstream runtime changes in this deduplication."
+    }
+  ]
 }

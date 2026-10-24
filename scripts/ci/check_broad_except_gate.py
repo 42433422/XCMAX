@@ -4,8 +4,7 @@
 Named boundary tuples (for example ``BOUNDARY_ERRORS``) remain available for
 real plugin, process, and lifecycle boundaries.  Direct ``Exception`` and
 ``BaseException`` handlers are rejected so every catch-all remains explicit
-and searchable.  The locked upstream LangGraph mirror is measured separately:
-it may improve, but its pinned baseline may not grow unnoticed.  Files under
+and searchable. The vendored runtime uses the same named boundaries. Files under
 ``OWNED_EXCLUDED_PREFIXES`` are exempt from the owned gate: the legal
 document-material generators there are not runtime code and their intentional
 broad handlers (docx failure must not block txt output) stay out of scope.
@@ -19,7 +18,6 @@ import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-VENDOR_BASELINES = {"FHD/third_party/langgraph": 56}
 # FHD/docs/legal/ 为软著鉴别材料生成脚本，非运行时代码；其 broad except（docx 失败不阻塞 txt 产出）属有意豁免。
 # FHD/docs/evidence/audit-benchmark|e2e/ 为外部标杆实测与发版验收复验脚本存档（随版本入库，见 MACOS_RELEASE_SSOT §8-T6），非运行时代码；其 broad except 是"任何异常如实记录"的测量设计，属有意豁免。
 OWNED_EXCLUDED_PREFIXES = ("FHD/docs/legal/", "FHD/docs/evidence/audit-benchmark/", "FHD/docs/evidence/e2e/")
@@ -82,19 +80,12 @@ def _scan(paths: list[Path]) -> list[tuple[str, int]]:
     return hits
 
 
-def _vendor_root(rel: str) -> str | None:
-    return next(
-        (root for root in VENDOR_BASELINES if rel == root or rel.startswith(f"{root}/")),
-        None,
-    )
-
-
 def main() -> int:
     hits = _scan(_python_paths())
     owned = [
         (rel, count)
         for rel, count in hits
-        if _vendor_root(rel) is None and not rel.startswith(OWNED_EXCLUDED_PREFIXES)
+        if not rel.startswith(OWNED_EXCLUDED_PREFIXES)
     ]
     failed = False
 
@@ -105,14 +96,6 @@ def main() -> int:
             print(f"  {rel}: {count}")
         if len(owned) > 80:
             print(f"  ... and {len(owned) - 80} more files")
-
-    for root, baseline in VENDOR_BASELINES.items():
-        current = sum(count for rel, count in hits if _vendor_root(rel) == root)
-        if current > baseline:
-            failed = True
-            print(f"vendor broad except gate FAILED: {root}: {current} > {baseline}")
-        else:
-            print(f"vendor broad except gate OK: {root}: {current} <= {baseline}")
 
     if failed:
         return 1

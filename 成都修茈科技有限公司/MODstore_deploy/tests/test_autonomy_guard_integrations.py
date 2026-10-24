@@ -8,8 +8,12 @@ from types import SimpleNamespace
 
 import pytest
 
+import modstore_server.maintenance_loop.merge as _maintenance_merge
+import modstore_server.maintenance_loop.merge_policy as _maintenance_merge_policy
+import modstore_server.maintenance_loop.store as _maintenance_store
+import modstore_server.maintenance_loop.workspace as _maintenance_workspace
+import modstore_server.self_maintenance_subprocess as _maintenance_self_maintenance_subprocess
 from modstore_server import approval_dispatcher, daily_digest
-from modstore_server import self_maintenance_loop_runner as loop_runner
 from modstore_server.daily_vibe_line_execute_job import run_daily_vibe_line_execute_job
 
 
@@ -181,9 +185,11 @@ def test_loop_never_reaches_git_merge_when_domain_guard_denies(monkeypatch) -> N
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/autonomy-test.git")
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:9")
-    monkeypatch.setattr(loop_runner, "_changed_files_for_branch", lambda **kwargs: ["safe.py"])
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_workspace, "_changed_files_for_branch", lambda **kwargs: ["safe.py"]
+    )
+    monkeypatch.setattr(
+        _maintenance_workspace,
         "_diff_numstat_for_branch",
         lambda **kwargs: {"files": 1, "additions": 1, "deletions": 0},
     )
@@ -193,19 +199,19 @@ def test_loop_never_reaches_git_merge_when_domain_guard_denies(monkeypatch) -> N
         commands.append(command)
         return "diff"
 
-    monkeypatch.setattr(loop_runner, "_run_cmd", fake_command)
-    monkeypatch.setattr(loop_runner, "_run_cmd_excerpt", fake_command)
+    monkeypatch.setattr(_maintenance_workspace, "_run_cmd", fake_command)
+    monkeypatch.setattr(_maintenance_self_maintenance_subprocess, "run_cmd_excerpt", fake_command)
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_workspace,
         "_validate_kb_json_changes_for_auto_merge",
         lambda **kwargs: {"ok": True},
     )
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_merge_policy,
         "_assess_branch_auto_merge_policy",
         lambda *args, **kwargs: {"ok": True, "merge_tier": "L1"},
     )
-    monkeypatch.setattr(loop_runner, "_load_loop_memory", lambda: {})
+    monkeypatch.setattr(_maintenance_store, "_load_loop_memory", lambda: {})
     monkeypatch.setattr(
         "modstore_server.autonomy_guard_delegate.evaluate_risk",
         lambda *args, **kwargs: SimpleNamespace(
@@ -215,7 +221,7 @@ def test_loop_never_reaches_git_merge_when_domain_guard_denies(monkeypatch) -> N
         ),
     )
 
-    result = loop_runner._auto_merge_low_risk_branch(
+    result = _maintenance_merge._auto_merge_low_risk_branch(
         run_id="risk-gate-test",
         task_id="task-1",
         branch="autonomy/test",

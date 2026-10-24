@@ -25,10 +25,11 @@ import json
 import re
 import struct
 import sys
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from build_capability_center import _PRIVATE_EVIDENCE_FEATURES, public_projection
+from build_capability_center import _PRIVATE_EVIDENCE_FEATURES, prepare_evidence_assets, public_projection
 
 SITE_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = SITE_ROOT.parent
@@ -403,8 +404,8 @@ def build_evidence(cases_cfg: dict) -> dict:
     verified_dates = [f["verified_at"] for f in feats if f["verified_at"]]
     if integrity_problems:
         print(
-            f"[public-site] WARN: {len(integrity_problems)} 个证据媒体与 run.json 记录不一致，已拒绝发布并登记"
-            f"（上游数据漂移，需证据责任方修正）:",
+            f"[public-site] WARN: {len(integrity_problems)} 个证据媒体未通过发布策略或哈希校验，已拒绝发布并登记"
+            f"（详见 integrity_problems 中的 reason；原始验收记录保持不变）:",
             file=sys.stderr,
         )
         for p in integrity_problems[:10]:
@@ -464,6 +465,8 @@ def data_updated_at(*candidates: str | None) -> str | None:
 
 
 def build() -> dict:
+    prepare_evidence_assets()
+    subprocess.run(["node", str(REPO_ROOT / "scripts/dev/materialize_media_assets.mjs"), "marketing"], check=True)
     version_ssot = parse_version_md(FHD_ROOT / "VERSION.md")
     plans_cfg = read_json(FHD_ROOT / "config" / "saas_plans.json")
     cases_cfg = read_json(FHD_ROOT / "config" / "public_cases.json")

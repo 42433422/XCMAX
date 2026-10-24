@@ -78,7 +78,7 @@ def _digest_kpi_cards_html(
         cards.append(
             _card(
                 "0",
-                "运维操作",
+                "后台操作",
                 icon="&#x1F6E0;&#xFE0F;",
                 accent="#94a3b8",
                 color="#64748b",
@@ -90,7 +90,7 @@ def _digest_kpi_cards_html(
         cards.append(
             _card(
                 str(ops_n),
-                "运维操作",
+                "后台操作",
                 icon="&#x1F6E0;&#xFE0F;",
                 accent="#2563eb",
                 color="#1d4ed8",

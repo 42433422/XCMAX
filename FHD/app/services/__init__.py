@@ -67,7 +67,6 @@ from app.services.task_agent import TaskAgent, get_task_agent
 from app.services.user_service import UserService, get_user_service
 from app.services.database_service import get_database_service
 from app.utils.async_task.task_context import TaskContextService, get_task_context_service
-from app.utils.user_memory import UserMemoryService, get_user_memory_service
 
 
 from app.services.ai_product_parser import AIProductParser
@@ -81,6 +80,7 @@ if TYPE_CHECKING:
     from app.services.materials_service import MaterialsService
     from app.services.printer_service import PrinterService
     from app.services.product_import_service import ProductImportService
+    from app.services.user_memory_service import UserMemoryService, get_user_memory_service
 
 
 def get_ai_product_parser() -> AIProductParser:
@@ -93,6 +93,14 @@ from app.infrastructure.skills import execute_skill, get_skill_registry
 
 def __getattr__(name: str):
     """Expose migrated application modules through legacy service imports."""
+    if name == "UserMemoryService":
+        from app.services.user_memory_service import UserMemoryService
+
+        return UserMemoryService
+    if name == "get_user_memory_service":
+        from app.services.user_memory_service import get_user_memory_service
+
+        return get_user_memory_service
     if name == "private_mod_delivery":
         from app.application import private_mod_delivery_app
 

@@ -50,7 +50,7 @@ class TestPgVectorStoreDDL:
 
 class TestVectorStorePortImplementation:
     def test_port_methods_present(self):
-        from app.application.ports.vector_store import VectorStorePort
+        from app.domain.excel.ports import VectorStorePort
         from app.infrastructure.persistence.pg_vector_store import PgVectorStore
         from app.infrastructure.persistence.user_memory_vector_store import (
             PgUserMemoryVectorStore,

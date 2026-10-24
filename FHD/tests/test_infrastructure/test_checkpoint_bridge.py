@@ -15,7 +15,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from app.application.workflow.ports.checkpoint import CheckpointStore
+from app.application.workflow.ports import CheckpointStore
 from app.infrastructure.workflow.checkpoint_bridge import LanggraphCheckpointBridge
 
 

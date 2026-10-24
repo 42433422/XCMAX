@@ -1,5 +1,5 @@
 import { type Ref } from 'vue'
-import { readAiSessionIdFromStorage } from '@/utils/xcagiStorageKeys'
+import { readAiSessionIdFromStorage } from '@/utils/chatStorageKeys'
 
 export interface UseChatDbTokenGateDeps {
   sessionId: Ref<string>
