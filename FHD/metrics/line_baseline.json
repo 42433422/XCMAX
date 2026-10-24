@@ -1,5 +1,5 @@
 {
-  "lines": 2337191,
+  "lines": 2337242,
   "updated": "2026-10-24",
-  "note": "rebase onto main"
+  "note": "pin libbrotli CVE-2026-111497"
 }

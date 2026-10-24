@@ -45,7 +45,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN for attempt in 1 2 3; do \
       apk upgrade --no-cache \
-        && apk add --no-cache python-3.11 curl 'ca-certificates-bundle>=20260909-r3' \
+        && apk add --no-cache python-3.11 curl 'ca-certificates-bundle>=20260909-r3' 'libbrotlicommon1>=1.2.0-r7' 'libbrotlidec1>=1.2.0-r7' 'libbrotlienc1>=1.2.0-r7' \
         && break; \
       if [ "$attempt" -eq 3 ]; then exit 1; fi; sleep "$((attempt * 5))"; \
     done \

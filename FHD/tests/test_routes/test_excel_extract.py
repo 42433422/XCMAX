@@ -1,4 +1,4 @@
-"""Comprehensive tests for app.fastapi_routes.excel_extract.
+"""Comprehensive tests for app.fastapi_routes.domains.excel.excel_extract.
 
 Covers: extract, upload, generate, download, import products/customers, logs, preview,
 attendance detail extraction, and all helper functions.
@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.fastapi_routes.excel_extract import (
+from app.fastapi_routes.domains.excel.excel_extract import (
     TEMP_EXCEL_DIR,
     _extract_attendance_detail_roster,
     _extract_from_excel,
@@ -118,7 +118,7 @@ class TestExtractFromExcel:
 
     def test_extract_error(self):
         with patch(
-            "app.fastapi_routes.excel_extract._extract_from_excel",
+            "app.fastapi_routes.domains.excel.excel_extract._extract_from_excel",
             side_effect=RuntimeError("corrupt"),
         ):
             # The route handler catches RECOVERABLE_ERRORS
@@ -129,7 +129,7 @@ class TestExtractFromExcel:
 
     def test_extract_error_via_handler(self):
         with patch(
-            "app.fastapi_routes.excel_extract._extract_from_excel",
+            "app.fastapi_routes.domains.excel.excel_extract._extract_from_excel",
             side_effect=RuntimeError("corrupt"),
         ):
             resp = extract_from_excel({"file_path": "/fake/path.xlsx"})
