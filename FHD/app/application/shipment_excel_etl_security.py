@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import os
+import re
 import secrets
 import stat
 from contextlib import contextmanager
@@ -464,15 +465,20 @@ def _reject_output_symlink(name: str, parent_fd: int, parent_path: Path) -> None
 
 
 def _validated_path_component(value: str) -> str:
-    """Return one literal path component, rejecting separators and dot names."""
+    """Return one literal path component, rejecting separators and dot names.
+
+    The inline ``re.fullmatch`` (not a precompiled pattern) is intentional:
+    CodeQL models that form as a path-injection barrier, matching the pattern
+    used in ``artifact_files.artifact_path``. Runtime checks remain the source
+    of truth for separators, dot-segments, NUL, and Windows device names.
+    """
     component = os.path.basename(value)
+    # Reject empty / dot-segments / separators / NUL via a CodeQL-visible guard.
     if (
-        not component
+        component != value
         or component in (".", "..")
-        or component != value
-        or "/" in component
-        or "\\" in component
         or "\x00" in component
+        or not re.fullmatch(r"[^/\\]+", component or "")
     ):
         raise ShipmentEtlPathError("path contains an invalid component")
     if os.name == "nt":
