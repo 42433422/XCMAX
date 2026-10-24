@@ -280,8 +280,11 @@ class TestResolveExcelPathForImport:
     @pytest.mark.parametrize(
         "source,whitespace", [("analysis", False), ("preview", False), ("analysis", True)]
     )
-    def test_path_source_and_whitespace(self, tmp_path, source, whitespace) -> None:
-        path = str(tmp_path / "x.xlsx")
+    def test_path_source_and_whitespace(self, source, whitespace) -> None:
+        from pathlib import Path
+        from tempfile import gettempdir
+
+        path = str(Path(gettempdir()) / "xcagi-test.xlsx")
         value = f"  {path}  " if whitespace else path
         ea = {"file_path": value if source == "analysis" else ""}
         preview = {"file_path": value if source == "preview" else ""}

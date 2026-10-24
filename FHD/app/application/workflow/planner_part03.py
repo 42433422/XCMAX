@@ -10,17 +10,6 @@ def _facade():
     return importlib.import_module("app.application.workflow.planner")
 
 
-def _get_planner_http_client() -> _facade().httpx.Client:
-    global _planner_http_client
-    if _facade()._planner_http_client is None:
-        _facade()._planner_http_client = _facade().httpx.Client(
-            timeout=_facade().httpx.Timeout(20.0, connect=10.0),
-            limits=_facade().httpx.Limits(max_keepalive_connections=10, max_connections=20),
-            trust_env=False,
-        )
-    return _facade()._planner_http_client
-
-
 def _filter_tool_registry_for_profile(
     tool_registry: dict[str, _facade().Any], profile: str
 ) -> dict[str, _facade().Any]:

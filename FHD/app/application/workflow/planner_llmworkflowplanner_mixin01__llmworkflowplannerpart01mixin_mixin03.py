@@ -106,7 +106,6 @@ class __LLMWorkflowPlannerPart01MixinPart03Mixin:
                 ai_service=self._ai_service,
                 context=context,
                 messages=messages,
-                http_client_factory=_facade()._get_planner_http_client,
                 temperature=0.2,
                 max_tokens=1000,
             )
@@ -239,7 +238,6 @@ class __LLMWorkflowPlannerPart01MixinPart03Mixin:
                 ai_service=self._ai_service,
                 context=context,
                 messages=messages,
-                http_client_factory=_facade()._get_planner_http_client,
             )
             if response_data is None:
                 return None

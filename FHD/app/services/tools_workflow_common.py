@@ -317,26 +317,26 @@ def _remember_business_db_target(
     runtime_context: dict[str, Any],
     entity: str,
     operation: str,
-    payload: dict[str, Any],
     result: dict[str, Any],
 ) -> dict[str, Any]:
-    if not result.get("success") or operation == "delete":
+    verification = result.get("business_verification")
+    if (
+        result.get("success") is not True
+        or operation == "delete"
+        or not isinstance(verification, dict)
+        or verification.get("verified") is not True
+    ):
         return result
-    target_id = (
-        _result_record_id(result.get("business_verification"))
-        or _result_record_id(result)
-        or _result_record_id(payload)
-    )
-    if not target_id and operation in {"create", "ensure_exists", "upsert"}:
-        candidates, _ = _business_db_target_candidates(entity, _business_db_selector(payload))
-        if len(candidates) == 1:
-            target_id = int(candidates[0]["id"])
+    target_id = _result_record_id(verification)
     user_id = str(runtime_context.get("user_id") or "").strip()
     if user_id and target_id:
         from app.application.agent_task_context import scoped_conversation_user_id
 
         user_id = scoped_conversation_user_id(user_id, runtime_context)
-        _RECENT_BUSINESS_DB_TARGETS[user_id] = {"entity": entity, "id": int(target_id)}
+        _RECENT_BUSINESS_DB_TARGETS[user_id] = {
+            "entity": str(verification.get("entity") or entity),
+            "id": target_id,
+        }
     return result
 
 

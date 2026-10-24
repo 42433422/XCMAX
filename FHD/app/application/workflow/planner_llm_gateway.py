@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -42,7 +41,6 @@ def request_planner_completion(
     ai_service: Any,
     context: dict[str, Any] | None,
     messages: list[dict[str, str]],
-    http_client_factory: Callable[[], Any],
     temperature: float = 0.1,
     max_tokens: int = 1200,
 ) -> dict[str, Any] | None:

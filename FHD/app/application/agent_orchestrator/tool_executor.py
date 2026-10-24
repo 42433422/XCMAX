@@ -201,7 +201,6 @@ def execute_with_tool_deadline(
                     context,
                     str(step.params.get("entity") or ""),
                     str(step.params.get("operation") or "create"),
-                    dict(step.params.get("payload") or {}),
                     result,
                 )
             return result

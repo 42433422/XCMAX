@@ -15,7 +15,6 @@ from app.application.workflow.planner import (
     _extract_business_db_write_node,
     _extract_named_slot,
     _filter_tool_registry_for_profile,
-    _get_planner_http_client,
     _infer_business_db_entity,
     _looks_like_business_db_write,
 )
@@ -683,14 +682,3 @@ class TestPlanMethod(_PlannerFixture):
                 context={},
             )
         assert result is not None
-
-
-class TestGetPlannerHttpClient:
-    def test_returns_same_instance(self) -> None:
-        import app.application.workflow.planner as planner_mod
-
-        planner_mod._planner_http_client = None
-        client1 = _get_planner_http_client()
-        client2 = _get_planner_http_client()
-        assert client1 is client2
-        planner_mod._planner_http_client = None

@@ -497,7 +497,6 @@ class TestPlannerGatewayMetering:
             ai_service=object(),
             context={},
             messages=[{"role": "user", "content": "plan this"}],
-            http_client_factory=lambda: pytest.fail("Planner must use the shared provider"),
         )
         entries = _read_ledger(tmp_path)
         if has_response:

@@ -335,10 +335,6 @@ def test_executable_sse_request_uses_real_plan_and_waits_for_approval(
             "app.application.workflow.planner.request_planner_completion",
             side_effect=_bomb,
         ),
-        patch(
-            "app.application.workflow.planner._get_planner_http_client",
-            side_effect=_bomb,
-        ),
     ):
         chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         assert svc._pending_workflows["web_pro_session"]["approval_required"] is True

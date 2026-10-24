@@ -85,7 +85,6 @@ def test_planner_and_agent_share_each_threads_model_without_environment_key(monk
                 ai_service=SimpleNamespace(),
                 context={},
                 messages=[{"role": "user", "content": "test"}],
-                http_client_factory=lambda: pytest.fail("separate planner HTTP route"),
             )
             agent = run_employee_agent_loop(
                 employee_id="test", system_prompt="test", task="test", tools=[]

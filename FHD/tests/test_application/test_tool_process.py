@@ -32,9 +32,7 @@ class FixtureExecutor(AgentToolExecutor):
             from app.application.workflow.planner_llm_gateway import request_planner_completion
             from app.application.workflow.types import PlanGraph
 
-            planner = request_planner_completion(
-                ai_service=None, context={}, messages=[], http_client_factory=None
-            )
+            planner = request_planner_completion(ai_service=None, context={}, messages=[])
             agent = run_employee_agent_loop(
                 employee_id="fixture", system_prompt="test", task="test", tools=[]
             )
@@ -51,7 +49,7 @@ class FixtureExecutor(AgentToolExecutor):
                 "critic_model": critic.intent,
             }
         if step.tool_id == "business_db":
-            return {"success": True, "business_verification": {"record_id": 42}}
+            return {"success": True, "business_verification": {"verified": True, "record_id": 42}}
         if step.action == "typed_result":
             from datetime import date
             from decimal import Decimal
@@ -163,6 +161,37 @@ def test_spawned_write_target_returns_to_owner_and_conversation(monkeypatch):
             )
             is None
         )
+
+
+@pytest.mark.parametrize("receipt", [None, {"verified": False, "record_id": 9}, {"verified": True}])
+def test_follow_up_memory_never_queries_database_or_infers_an_unverified_record(
+    monkeypatch, receipt
+):
+    from types import SimpleNamespace
+
+    from app.services import tools_workflow_common as targets
+
+    monkeypatch.setattr(targets, "_RECENT_BUSINESS_DB_TARGETS", {})
+    monkeypatch.setattr(
+        targets,
+        "_business_db_target_candidates",
+        lambda *_: pytest.fail("memory must not query DB"),
+    )
+    result = {"success": True, "data": {"id": 9}, "business_verification": receipt}
+    executor = SimpleNamespace(execute_with_deadline=lambda *_, **__: result)
+    step = AgentStep(
+        node_id="write",
+        tool_id="business_db",
+        action="write",
+        params={"entity": "customers", "operation": "create", "payload": {"id": 9}},
+    )
+    assert (
+        execute_with_tool_deadline(
+            executor, step, runtime_context={"user_id": "owner"}, timeout_seconds=5
+        )
+        is result
+    )
+    assert targets.get_recent_business_db_target("owner") is None
 
 
 @pytest.mark.parametrize("client_kind", ["openai", "modstore"])

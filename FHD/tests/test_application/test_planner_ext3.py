@@ -2,7 +2,7 @@
 
 Focus: _execute_excel_schema_tool openpyxl fallback, _execute_excel_analysis_tool
 openpyxl fallback, _execute_import_excel_tool branches,
-LLMWorkflowPlanner._validate_required_params, _fallback_plan, _get_planner_http_client,
+LLMWorkflowPlanner._validate_required_params, _fallback_plan, shared planner completion,
 and _WORKFLOW_TOOL_HANDLERS mapping.
 """
 
@@ -433,40 +433,6 @@ class TestGetToolRegistryStructure:
         reg = get_tool_registry()
         for tool_id, tool_def in reg.items():
             assert "actions" in tool_def, f"Tool {tool_id} missing actions"
-
-
-# ========================= _get_planner_http_client ========================
-
-
-class TestGetPlannerHttpClient:
-    def test_returns_client(self):
-        # Reset singleton to ensure httpx.Client is actually invoked.
-        import app.application.workflow.planner as planner_mod
-        from app.application.workflow.planner import _get_planner_http_client
-
-        old_client = planner_mod._planner_http_client
-        planner_mod._planner_http_client = None
-        try:
-            with patch("httpx.Client", return_value=Mock()) as mock_cls:
-                client = _get_planner_http_client()
-            mock_cls.assert_called_once()
-        finally:
-            planner_mod._planner_http_client = old_client
-
-    def test_singleton_reuse(self):
-        # Reset singleton
-        import app.application.workflow.planner as planner_mod
-        from app.application.workflow.planner import _get_planner_http_client, _planner_http_client
-
-        old_client = planner_mod._planner_http_client
-        try:
-            planner_mod._planner_http_client = None
-            with patch("httpx.Client", return_value=Mock()) as mock_cls:
-                client1 = _get_planner_http_client()
-                client2 = _get_planner_http_client()
-            assert mock_cls.call_count == 1
-        finally:
-            planner_mod._planner_http_client = old_client
 
 
 # ========================= _filter_tool_registry_for_profile - edge cases ===
