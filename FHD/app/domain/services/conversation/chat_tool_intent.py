@@ -57,9 +57,17 @@ def is_negated_action_request(text: str) -> bool:
     value = str(text or "")
     if not value:
         return False
-    if len(value) > _MAX_CHAT_INTENT_CHARS:
-        return True
-    normalized = re.sub(r"\s+", "", value)
+    # Bound regex work by normalized content, while allowing harmless long runs
+    # of whitespace to remain non-actions. The character scan is linear and
+    # stops as soon as the regex input limit is exceeded.
+    normalized_chars: list[str] = []
+    for character in value:
+        if character.isspace():
+            continue
+        normalized_chars.append(character)
+        if len(normalized_chars) > _MAX_CHAT_INTENT_CHARS:
+            return True
+    normalized = "".join(normalized_chars)
     return bool(_NEGATED_ACTION_RE.search(normalized))
 
 
