@@ -25,7 +25,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.bootstrap import get_shipment_application_service_core
-from app.fastapi_routes import shipment_agent_runtime as _shipment_agent_runtime
+from app.fastapi_routes.domains.shipment import shipment_agent_runtime as _shipment_agent_runtime
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
@@ -292,7 +292,7 @@ def shipment_orders_get(order_number: str):
     raise HTTPException(status_code=404, detail="订单不存在")
 
 
-_api_order_routes = importlib.import_module("app.fastapi_routes.shipment_api_order_routes")
+_api_order_routes = importlib.import_module("app.fastapi_routes.domains.shipment.shipment_api_order_routes")
 api_orders_list = _api_order_routes.api_orders_list
 api_orders_create = _api_order_routes.api_orders_create
 api_orders_delete_root = _api_order_routes.api_orders_delete_root

@@ -18,7 +18,7 @@ def client(monkeypatch):
     from app.fastapi_routes.domains.excel.excel_extract import router as excel_router
     from app.fastapi_routes.materials import router as material_router
     from app.fastapi_routes.print_routes import router as print_router
-    from app.fastapi_routes.shipment_orders import router as shipment_router
+    from app.fastapi_routes.domains.shipment.shipment_orders import router as shipment_router
     from app.legacy.routes.product.compat_routes import router as product_router
     from app.legacy.routes.sidebar_capability_compat import router as sidebar_router
 

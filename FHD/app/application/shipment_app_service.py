@@ -18,7 +18,7 @@ from app.domain.shipment.shipment_quantities import (
     resolve_shipment_quantity,
     validate_shipment_products,
 )
-from app.legacy.domain.legacy_vo import ContactInfo
+from app.domain.value_objects import ContactInfo
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

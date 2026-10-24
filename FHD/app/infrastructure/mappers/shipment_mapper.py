@@ -4,7 +4,7 @@ from typing import Any
 
 from app.db.models import ShipmentRecord
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
-from app.legacy.domain.legacy_vo import ContactInfo, Money, OrderNumber, Quantity
+from app.domain.value_objects import ContactInfo, Money, OrderNumber, Quantity
 
 
 def shipment_to_domain(db_record: ShipmentRecord) -> Shipment:
