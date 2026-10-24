@@ -25,12 +25,7 @@ def test_tool_write_defers_for_regular_employee(monkeypatch, tmp_path):
     monkeypatch.setenv("MODSTORE_INCIDENT_SYNC_DISPATCH", "1")
     monkeypatch.setattr("modstore_server.incident_bus._dispatch_incident", lambda _eid: None)
 
-    from modstore_server.models import (
-        EmployeeChangeRequest,
-        User,
-        get_session_factory,
-        init_db,
-    )
+    from modstore_server.models import EmployeeChangeRequest, User, get_session_factory, init_db
 
     init_db(db)
     sf = get_session_factory(db)

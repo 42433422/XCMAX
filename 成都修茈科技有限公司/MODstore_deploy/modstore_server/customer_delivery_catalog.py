@@ -13,9 +13,7 @@ from typing import Any
 from modstore_server.catalog_publication_policy import stable_version
 from modstore_server.customer_delivery_package import verify_delivery_package
 from modstore_server.customer_delivery_receipts import canonical_sha256
-from modstore_server.customer_service_delivery_models import (
-    custom_delivery_commerce_blockers,
-)
+from modstore_server.customer_service_delivery_models import custom_delivery_commerce_blockers
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models import get_session_factory, get_user_mod_ids
 from modstore_server.models_cs import CustomerServiceTicket

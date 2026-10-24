@@ -22,10 +22,7 @@ from pydantic import BaseModel
 
 from modstore_server import payment_orders as _po
 from modstore_server.api.auth_deps import require_user
-from modstore_server.eventing.contracts import (
-    SUBSCRIPTION_RENEWAL_FAILED,
-    SUBSCRIPTION_RENEWED,
-)
+from modstore_server.eventing.contracts import SUBSCRIPTION_RENEWAL_FAILED, SUBSCRIPTION_RENEWED
 from modstore_server.models import (
     Entitlement,
     PlanTemplate,

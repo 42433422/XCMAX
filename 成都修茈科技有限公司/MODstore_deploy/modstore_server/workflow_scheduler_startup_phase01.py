@@ -23,9 +23,7 @@ def _register_scheduler_phase_01():
         max_instances=1,
     )
     try:
-        from modstore_server.backup_event_subscriber import (
-            register_backup_event_subscribers,
-        )
+        from modstore_server.backup_event_subscriber import register_backup_event_subscribers
 
         register_backup_event_subscribers()
     except RECOVERABLE_ERRORS:

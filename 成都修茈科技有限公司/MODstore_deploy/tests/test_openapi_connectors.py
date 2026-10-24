@@ -144,10 +144,7 @@ def test_codegen_writes_runtime_callable_module(tmp_path: Path) -> None:
 
 
 def test_outbound_safety_blocks_loopback_and_schemes() -> None:
-    from modstore_server.openapi_connector_runtime import (
-        OutboundBlocked,
-        assert_url_outbound_safe,
-    )
+    from modstore_server.openapi_connector_runtime import OutboundBlocked, assert_url_outbound_safe
 
     with pytest.raises(OutboundBlocked):
         assert_url_outbound_safe("file:///etc/passwd")
@@ -183,10 +180,7 @@ def test_outbound_target_pins_validated_ip_and_preserves_tls_authority() -> None
 
 
 def test_outbound_target_rejects_mixed_public_and_private_dns_answers() -> None:
-    from modstore_server.openapi_connector_runtime import (
-        OutboundBlocked,
-        pin_url_outbound_safe,
-    )
+    from modstore_server.openapi_connector_runtime import OutboundBlocked, pin_url_outbound_safe
 
     answers = [
         (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443)),

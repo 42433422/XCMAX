@@ -1,6 +1,7 @@
 """Auto-merged part* modules (debt24)."""
 
 from __future__ import annotations
+
 import importlib
 
 # --- from strategic_layer_api_part01.py ---

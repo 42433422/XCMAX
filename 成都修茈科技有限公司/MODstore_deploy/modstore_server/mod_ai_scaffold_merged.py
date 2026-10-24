@@ -1,6 +1,7 @@
 """Auto-merged part* modules (debt24)."""
 
 from __future__ import annotations
+
 import importlib
 
 # --- from mod_ai_scaffold_part01.py ---

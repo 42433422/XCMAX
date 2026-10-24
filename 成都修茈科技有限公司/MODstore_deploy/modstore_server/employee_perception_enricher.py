@@ -203,9 +203,7 @@ def enrich_perception(
     forbidden_globs = [str(x) for x in (wp.get("forbidden_globs") or []) if str(x).strip()]
     if not scope_globs and not forbidden_globs and manifest:
         try:
-            from modstore_server.employee_scope_policy import (
-                workspace_policy_from_manifest,
-            )
+            from modstore_server.employee_scope_policy import workspace_policy_from_manifest
 
             _sg, _fg, _ag = workspace_policy_from_manifest(manifest)
             scope_globs = _sg or []

@@ -14,9 +14,7 @@ from sqlalchemy.orm import Session
 from modstore_server.api.deps import get_current_user, get_db, require_admin
 from modstore_server.db.work_orders import WorkOrderEvent
 from modstore_server.models import User
-from modstore_server.work_order_core import (
-    WO_TRACKS,
-)
+from modstore_server.work_order_core import WO_TRACKS
 from modstore_server.work_order_core import _json_object as _loads
 from modstore_server.work_order_core import (
     acceptance_plan,

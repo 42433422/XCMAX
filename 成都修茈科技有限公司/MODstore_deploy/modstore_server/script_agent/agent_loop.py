@@ -13,11 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
-from modstore_server.script_agent.brief import (
-    AgentEvent,
-    Brief,
-    Verdict,
-)
+from modstore_server.script_agent.brief import AgentEvent, Brief, Verdict
 from modstore_server.script_agent.code_writer import write_code
 from modstore_server.script_agent.context_collector import collect_context
 from modstore_server.script_agent.llm_client import LlmClient

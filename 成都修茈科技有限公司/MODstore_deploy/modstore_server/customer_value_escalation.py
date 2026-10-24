@@ -18,11 +18,7 @@ from sqlalchemy.exc import IntegrityError
 
 from modstore_server.customer_value_evidence import build_customer_value_evidence
 from modstore_server.db.strategic import StrategicActionItem, StrategicDecision
-from modstore_server.strategic_layer import (
-    DecisionProposer,
-    DecisionType,
-    StrategicDecisionLedger,
-)
+from modstore_server.strategic_layer import DecisionProposer, DecisionType, StrategicDecisionLedger
 
 ESCALATION_SCHEMA = "xcagi.customer_value_escalation/v1"
 ESCALATION_SCOPE = "global"

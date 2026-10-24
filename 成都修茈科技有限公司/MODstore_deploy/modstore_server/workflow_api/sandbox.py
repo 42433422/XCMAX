@@ -6,10 +6,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
-from modstore_server.models import (
-    User,
-    Workflow,
-)
+from modstore_server.models import User, Workflow
 from modstore_server.workflow_api.schemas import SandboxRunBody
 from modstore_server.workflow_sandbox_state import (
     record_workflow_sandbox_run,

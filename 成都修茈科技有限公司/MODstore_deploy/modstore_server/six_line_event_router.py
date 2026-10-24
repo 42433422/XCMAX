@@ -422,9 +422,7 @@ def get_event_rail_status() -> Dict[str, Any]:
 
 def install_orchestrator_hooks() -> None:
     """注册 cross_line 回调到全局 ProductionLineOrchestrator。"""
-    from modstore_server.production_line_orchestrator import (
-        get_production_line_orchestrator,
-    )
+    from modstore_server.production_line_orchestrator import get_production_line_orchestrator
 
     orch = get_production_line_orchestrator()
 

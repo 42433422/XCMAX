@@ -10,24 +10,13 @@ import uuid
 from pathlib import Path
 from typing import Dict, Optional
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Query,
-    Response,
-    UploadFile,
-)
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from modstore_server.api.deps import _get_current_user, require_admin
-from modstore_server.duty_roster import (
-    employee_partition_meta,
-)
+from modstore_server.duty_roster import employee_partition_meta
 from modstore_server.employee_api_support import (
     _annotate_employee_list_row as _annotate_employee_list_row,
 )
@@ -80,13 +69,9 @@ from modstore_server.employee_api_uploads import (
 from modstore_server.employee_api_uploads import (
     _suffix_allowed_for_employee as _suffix_allowed_for_employee,
 )
-from modstore_server.employee_executor import (
-    get_employee_status,
-)
+from modstore_server.employee_executor import get_employee_status
 from modstore_server.employee_executor import list_employees as list_employees_exec
-from modstore_server.employee_runtime import (
-    library_manifest_fallback_enabled,
-)
+from modstore_server.employee_runtime import library_manifest_fallback_enabled
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import CatalogItem, User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS

@@ -102,9 +102,7 @@ def custom_delivery_gate(
                     or snapshot.get("delivery_source_mode") != "versioned_main"
                 ):
                     return False, "主线交付缺少当前账号、原工单或生产轮次上下文"
-                from modstore_server.customer_delivery_sources import (
-                    verified_snapshot_library,
-                )
+                from modstore_server.customer_delivery_sources import verified_snapshot_library
 
                 verified_snapshot_library(snapshot, owner_id, generation, ticket_id)
             _, signed = read_verified_artifact(

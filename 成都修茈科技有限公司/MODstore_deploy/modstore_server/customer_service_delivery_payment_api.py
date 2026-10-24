@@ -11,9 +11,7 @@ from sqlalchemy.orm import Session
 from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.customer_service_api import _visible_ticket_or_404
 from modstore_server.customer_service_delivery_api import _start_custom_delivery_run
-from modstore_server.customer_service_delivery_completion import (
-    complete_delivery_if_ready,
-)
+from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryPaymentCheckoutBody,
     custom_delivery_commerce_blockers,

@@ -18,9 +18,7 @@ from modstore_server.customer_delivery_workbench_start import (
     _start_custom_delivery_run as _start_custom_delivery_run,
 )
 from modstore_server.customer_service_api import _visible_ticket_or_404
-from modstore_server.customer_service_delivery_completion import (
-    complete_delivery_if_ready,
-)
+from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryDecisionBody,
     CustomDeliveryInstallReceiptBody,
@@ -30,9 +28,7 @@ from modstore_server.customer_service_delivery_models import (
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_evidence as _custom_delivery_evidence,
 )
-from modstore_server.customer_service_delivery_models import (
-    custom_delivery_pricing_mode,
-)
+from modstore_server.customer_service_delivery_models import custom_delivery_pricing_mode
 from modstore_server.customer_service_delivery_quality import custom_delivery_gate
 from modstore_server.customer_service_orchestrator import audit, ticket_payload
 from modstore_server.customer_service_tools import json_dumps
@@ -258,9 +254,7 @@ async def decide_custom_delivery(
         raise HTTPException(404, "定制交付工单不存在")
     evidence = _custom_delivery_evidence(ticket)
     if body.source_mode:
-        from modstore_server.customer_delivery_versioned import (
-            select_main_rework_source,
-        )
+        from modstore_server.customer_delivery_versioned import select_main_rework_source
 
         try:
             select_main_rework_source(evidence, int(ticket.user_id), body.action)
@@ -450,9 +444,7 @@ async def download_custom_delivery_artifact(
         }
     )
     evidence["download_grants"] = grants[-20:]
-    from modstore_server.customer_delivery_entitlements import (
-        grant_verified_delivery_access,
-    )
+    from modstore_server.customer_delivery_entitlements import grant_verified_delivery_access
 
     grant_verified_delivery_access(db, ticket, evidence, manifest, owner_id=int(user.id))
     ticket.evidence_json = json_dumps(evidence)

@@ -13,10 +13,7 @@ import pytest
 def reader_case(client, monkeypatch, tmp_path):
     from modstore_server.customer_ticket_reader import SCOPE
     from modstore_server.models import User, get_session_factory
-    from modstore_server.models_cs import (
-        CustomerServiceAction,
-        CustomerServiceAuditLog,
-    )
+    from modstore_server.models_cs import CustomerServiceAction, CustomerServiceAuditLog
     from tests.test_customer_service_api import _make_ticket
 
     token = "cst_ro_" + "test-only-not-a-live-credential" * 2

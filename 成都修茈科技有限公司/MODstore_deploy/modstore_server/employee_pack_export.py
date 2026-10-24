@@ -224,9 +224,7 @@ def _render_employee_py_for_manifest(
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
     handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
     if "direct_python" in handlers:
-        from modstore_server.employee_asset_pipeline import (
-            render_direct_python_asset_worker,
-        )
+        from modstore_server.employee_asset_pipeline import render_direct_python_asset_worker
 
         runtime_mod = re.sub(r"[^a-z0-9_]+", "_", employee_id.lower()).strip("_")
         if runtime_mod.endswith("_employee"):
@@ -336,9 +334,7 @@ def _build_employee_pack_zip_with_source(
             for mod_name, mod_src in vendor_modules.items():
                 zf.writestr(f"{pack_id}/backend/vendor/{runtime_mod_name}/{mod_name}", mod_src)
         elif is_direct_python:
-            from modstore_server.employee_asset_pipeline import (
-                render_runtime_modules,
-            )
+            from modstore_server.employee_asset_pipeline import render_runtime_modules
 
             direct_cfg = (
                 actions.get("direct_python")

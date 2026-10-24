@@ -1,15 +1,18 @@
 """Auto-merged part* modules (debt24)."""
 
 from __future__ import annotations
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # --- from release_train_part01.py ---
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():

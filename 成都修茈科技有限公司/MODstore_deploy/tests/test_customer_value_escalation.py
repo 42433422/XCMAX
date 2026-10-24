@@ -6,9 +6,7 @@ import pytest
 from sqlalchemy import select
 
 import modstore_server.models as models
-from modstore_server.customer_value_escalation import (
-    ensure_customer_value_gap_escalation,
-)
+from modstore_server.customer_value_escalation import ensure_customer_value_gap_escalation
 from modstore_server.db.strategic import StrategicActionItem, StrategicDecision
 from modstore_server.strategic_layer.decision_ledger import (
     DecisionLifecycleError,

@@ -9,10 +9,7 @@ from pathlib import Path
 import pytest
 
 import modstore_server.models as models
-from modstore_server.customer_issue_delivery_contract import (
-    execution_pending,
-    execution_succeeded,
-)
+from modstore_server.customer_issue_delivery_contract import execution_pending, execution_succeeded
 from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.incident_team_orchestrator import dispatch_incident_team
 from tests.test_para_first_no_planning_llm import fresh_db as fresh_db

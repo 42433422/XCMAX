@@ -14,10 +14,7 @@ from typing import Any, Awaitable, Callable, Dict, List
 
 import pytest
 
-from modstore_server.script_agent.agent_loop import (
-    DEFAULT_MAX_ITERATIONS,
-    run_agent_loop,
-)
+from modstore_server.script_agent.agent_loop import DEFAULT_MAX_ITERATIONS, run_agent_loop
 from modstore_server.script_agent.brief import Brief, BriefInputFile
 from modstore_server.script_agent.llm_client import StubLlmClient
 from modstore_server.script_agent.sandbox_runner import SandboxResult

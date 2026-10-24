@@ -96,9 +96,7 @@ class JavaWalletClient:
                 timeout=20.0,
             )
         except httpx.HTTPError as error:
-            from modstore_server.application.payment_gateway import (
-                java_payment_unreachable_message,
-            )
+            from modstore_server.application.payment_gateway import java_payment_unreachable_message
 
             raise HTTPException(502, java_payment_unreachable_message(error)) from error
         if response.status_code >= 400:

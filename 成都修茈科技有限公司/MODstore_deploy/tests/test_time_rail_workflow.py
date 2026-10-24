@@ -56,10 +56,7 @@ def test_collect_node_runtime_status_shape(tmp_path, monkeypatch):
 
 
 def test_ensure_p2_line_mappings_fills_web_and_retention_nodes():
-    from modstore_server.time_rail_workflow import (
-        _ensure_p2_line_mappings,
-        _node_status_shell,
-    )
+    from modstore_server.time_rail_workflow import _ensure_p2_line_mappings, _node_status_shell
 
     derived = {
         "PW": _node_status_shell(

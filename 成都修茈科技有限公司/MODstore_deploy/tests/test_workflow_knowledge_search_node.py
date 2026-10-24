@@ -92,12 +92,7 @@ def test_knowledge_search_node_runs_against_authorized_collection(tmp_path, monk
 
 def test_knowledge_search_validator_requires_query(tmp_path, monkeypatch):
     models, ve, rag, we = _bootstrap(tmp_path, monkeypatch)
-    from modstore_server.models import (
-        User,
-        Workflow,
-        WorkflowNode,
-        get_session_factory,
-    )
+    from modstore_server.models import User, Workflow, WorkflowNode, get_session_factory
     from modstore_server.workflow_engine import WorkflowValidator
 
     sf = get_session_factory()

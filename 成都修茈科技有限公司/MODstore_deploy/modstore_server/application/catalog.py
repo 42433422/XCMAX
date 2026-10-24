@@ -255,9 +255,7 @@ class CatalogApplicationService:
     ) -> dict[str, Any]:
         """Audit 通过后：落盘 JSON 包、在同一 DB 事务内 upsert ``catalog_items``、发 ``catalog.package_published``。"""
 
-        from modstore_server.infrastructure.catalog_repository import (
-            SqlCatalogRepository,
-        )
+        from modstore_server.infrastructure.catalog_repository import SqlCatalogRepository
 
         saved = self._storage.append_package(package_record, package_file)
         domain_item = CatalogDomainItem(

@@ -6,9 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from modstore_server import auth_service
-from modstore_server.customer_service_delivery_models import (
-    custom_delivery_commerce_blockers,
-)
+from modstore_server.customer_service_delivery_models import custom_delivery_commerce_blockers
 from modstore_server.db.delivery_commerce import UpdateInstallationReceipt
 from modstore_server.models import Base, Entitlement, PlanTemplate, User, UserPlan
 from modstore_server.standard_delivery_api import (

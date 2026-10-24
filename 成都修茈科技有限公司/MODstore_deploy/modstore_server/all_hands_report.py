@@ -6,9 +6,7 @@ import asyncio as asyncio
 from typing import Any, Dict, List, Optional, Tuple
 
 from modstore_server.all_hands_bench import AllHandsBench
-from modstore_server.all_hands_context import (
-    AllHandsContext,
-)
+from modstore_server.all_hands_context import AllHandsContext
 from modstore_server.all_hands_context import (
     _snapshot_employee_cron_overview as _snapshot_employee_cron_overview,
 )

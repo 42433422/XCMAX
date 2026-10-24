@@ -268,10 +268,7 @@ async def platform_quota_snapshot(
 ) -> dict[str, Any]:
     """Return exact provider quota when available, otherwise explicit inference."""
 
-    from modstore_server.llm_runtime_route import (
-        platform_model_catalog,
-        probe_runtime_route,
-    )
+    from modstore_server.llm_runtime_route import platform_model_catalog, probe_runtime_route
     from modstore_server.services.llm import _BENCH_DEFAULT_MODELS
 
     model_catalog = catalog or await platform_model_catalog(refresh=False)

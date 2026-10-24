@@ -75,10 +75,7 @@ def test_rank_contact_serp_rows_prefers_query_hit() -> None:
 
 
 def test_web_search_result_titles() -> None:
-    from modstore_server.research_tools import (
-        clean_web_company_candidate,
-        web_search_result_titles,
-    )
+    from modstore_server.research_tools import clean_web_company_candidate, web_search_result_titles
 
     titles = web_search_result_titles(
         [

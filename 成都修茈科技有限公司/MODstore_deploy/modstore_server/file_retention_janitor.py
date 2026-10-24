@@ -21,9 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from modstore_server.file_retention_support import build_report_md as _build_report_md
 from modstore_server.file_retention_support import format_bytes as _format_bytes
-from modstore_server.file_retention_support import (
-    prune_notifications,
-)
+from modstore_server.file_retention_support import prune_notifications
 from modstore_server.file_retention_support import (
     record_retention_runtime as _record_retention_runtime,
 )
@@ -476,9 +474,7 @@ def _cli() -> int:
 def cleanup_employee_workspaces() -> Dict[str, Any]:
     """清理过期员工工作区文件（由定时任务或 janitor 主流程调用）。"""
     try:
-        from modstore_server.employee_workspace_manager import (
-            cleanup_expired_workspaces,
-        )
+        from modstore_server.employee_workspace_manager import cleanup_expired_workspaces
 
         result = cleanup_expired_workspaces()
         logger.info("janitor: workspace cleanup completed")

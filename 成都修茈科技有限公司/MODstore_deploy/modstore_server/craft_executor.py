@@ -76,10 +76,7 @@ async def dispatch_craft_step(
     step_id: str,
     **kwargs: Any,
 ) -> Any:
-    from modstore_server.craft_failure_signals import (
-        emit_craft_step_failure,
-        resolve_craft_step_id,
-    )
+    from modstore_server.craft_failure_signals import emit_craft_step_failure, resolve_craft_step_id
 
     resolved_step, employee_id = resolve_craft_step_id(step_id)
     fn = _step_registry.get(resolved_step)

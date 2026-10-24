@@ -1,7 +1,9 @@
 """Auto-merged part* modules (debt24)."""
 
 from __future__ import annotations
+
 import importlib
+
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # --- from workflow_scheduler_part01.py ---
@@ -278,9 +280,7 @@ def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> No
     ):
         return
     try:
-        from modstore_server.maintenance_loop.coordinator import (
-            run_self_maintenance_loop,
-        )
+        from modstore_server.maintenance_loop.coordinator import run_self_maintenance_loop
 
         result = run_self_maintenance_loop(
             triggered_by="incident_event",
@@ -419,9 +419,7 @@ def _register_employee_cron_jobs() -> None:
             contract_schedule,
             workforce_contract_map,
         )
-        from modstore_server.employee_cron_registration import (
-            build_employee_cron_candidates,
-        )
+        from modstore_server.employee_cron_registration import build_employee_cron_candidates
         from modstore_server.employee_cron_registration_ledger import (
             defer_employee_cron_if_approval_required,
             reconcile_employee_cron_registrations,
@@ -489,9 +487,7 @@ def _register_employee_cron_jobs() -> None:
             schedule_source: str = schedule_source_local,
         ) -> None:
             try:
-                from modstore_server.employee_duty_cron_runtime import (
-                    execute_employee_cron_duty,
-                )
+                from modstore_server.employee_duty_cron_runtime import execute_employee_cron_duty
 
                 execute_employee_cron_duty(
                     employee_id=eid,

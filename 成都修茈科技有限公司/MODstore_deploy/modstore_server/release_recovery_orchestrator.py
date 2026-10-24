@@ -38,9 +38,7 @@ def _looks_release_related(event_type: str, payload: Dict[str, Any]) -> bool:
 
 def build_recovery_plan(*, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        from modstore_server.adaptive_release_controller import (
-            build_adaptive_release_plan,
-        )
+        from modstore_server.adaptive_release_controller import build_adaptive_release_plan
 
         adaptive = build_adaptive_release_plan(event_type=event_type, payload=payload)
     except RECOVERABLE_ERRORS as exc:

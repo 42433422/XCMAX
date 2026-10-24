@@ -1,10 +1,12 @@
 """Auto-merged part* modules (debt24)."""
 
 from __future__ import annotations
+
 import importlib
 import os
 import stat
 from pathlib import Path
+
 from modstore_server.employee_change_request_verification import (
     _guard_under_workspace,
     _workspace_fd,
@@ -77,9 +79,7 @@ async def tool_read_workspace_file(
     rr = ctx.get("ops_readonly_repo_root")
     if rr:
         try:
-            from modstore_server.integrations.ops_action_handlers import (
-                ops_path_allowed,
-            )
+            from modstore_server.integrations.ops_action_handlers import ops_path_allowed
 
             root = _facade().Path(str(rr)).resolve()
             norm = path.replace("\\", "/").lstrip("./")
@@ -160,9 +160,7 @@ async def tool_write_workspace_file(
         ok_sc, msg_sc = validate_agent_repo_write(rel_repo, sg, fg)
         if not ok_sc:
             try:
-                from modstore_server.employee_autonomy_service import (
-                    create_employee_suggestion,
-                )
+                from modstore_server.employee_autonomy_service import create_employee_suggestion
 
                 create_employee_suggestion(
                     source_employee_id=str(ctx.get("employee_id") or "unknown"),

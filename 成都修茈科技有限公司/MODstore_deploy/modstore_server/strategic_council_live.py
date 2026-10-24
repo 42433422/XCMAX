@@ -113,9 +113,7 @@ def live_veto_state(*, run_id: str, loop_run_id: str) -> dict[str, Any]:
     """Read the existing redline channel and immutable autonomy audit."""
     council = _council_module()
     try:
-        from modstore_server.autonomy_decision_audit import (
-            build_autonomy_decision_evidence,
-        )
+        from modstore_server.autonomy_decision_audit import build_autonomy_decision_evidence
         from modstore_server.redline_approval_gate import get_pending_redline_requests
 
         pending = get_pending_redline_requests()

@@ -11,10 +11,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from modstore_server.duty_roster import (
-    employee_partition_meta,
-    is_planned_duty_employee_pack,
-)
+from modstore_server.duty_roster import employee_partition_meta, is_planned_duty_employee_pack
 
 
 def duty_registry_path() -> Path:

@@ -9,6 +9,7 @@
 """
 
 from __future__ import annotations
+
 import base64
 import ipaddress
 import json
@@ -21,7 +22,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 from urllib.parse import quote, urljoin, urlparse, urlunparse
+
 import httpx
+
 from modstore_server.llm_crypto import decrypt_secret, encrypt_secret
 from modstore_server.models import (
     OpenApiCallLog,
@@ -48,27 +51,49 @@ _OAUTH_LOCK = threading.Lock()
 _TIMEOUT_MIN = 1.0
 _TIMEOUT_MAX = 60.0
 
+from modstore_server.openapi_connector_runtime_merged import CredentialPayload as CredentialPayload
+from modstore_server.openapi_connector_runtime_merged import OutboundBlocked as OutboundBlocked
 from modstore_server.openapi_connector_runtime_merged import (
-    OutboundBlocked as OutboundBlocked,
-    CredentialPayload as CredentialPayload,
     PinnedOutboundTarget as PinnedOutboundTarget,
-    _apply_auth as _apply_auth,
-    _ip_is_blocked as _ip_is_blocked,
-    assert_url_outbound_safe as assert_url_outbound_safe,
-    decrypt_credential_payload as decrypt_credential_payload,
-    encrypt_credential_payload as encrypt_credential_payload,
-    pin_url_outbound_safe as pin_url_outbound_safe,
-    _oauth_client_credentials_token as _oauth_client_credentials_token,
+)
+from modstore_server.openapi_connector_runtime_merged import _apply_auth as _apply_auth
+from modstore_server.openapi_connector_runtime_merged import (
     _apply_path_params as _apply_path_params,
+)
+from modstore_server.openapi_connector_runtime_merged import (
     _format_path_value as _format_path_value,
+)
+from modstore_server.openapi_connector_runtime_merged import _ip_is_blocked as _ip_is_blocked
+from modstore_server.openapi_connector_runtime_merged import (
     _load_runtime_context as _load_runtime_context,
-    _record_log as _record_log,
-    _redact_headers as _redact_headers,
-    _resolve_full_url as _resolve_full_url,
-    _safe_timeout as _safe_timeout,
-    _split_params as _split_params,
+)
+from modstore_server.openapi_connector_runtime_merged import (
+    _oauth_client_credentials_token as _oauth_client_credentials_token,
+)
+from modstore_server.openapi_connector_runtime_merged import _record_log as _record_log
+from modstore_server.openapi_connector_runtime_merged import _redact_headers as _redact_headers
+from modstore_server.openapi_connector_runtime_merged import _resolve_full_url as _resolve_full_url
+from modstore_server.openapi_connector_runtime_merged import _safe_timeout as _safe_timeout
+from modstore_server.openapi_connector_runtime_merged import _split_params as _split_params
+from modstore_server.openapi_connector_runtime_merged import (
     _summarize_request as _summarize_request,
+)
+from modstore_server.openapi_connector_runtime_merged import (
     _summarize_response as _summarize_response,
-    _truncate as _truncate,
+)
+from modstore_server.openapi_connector_runtime_merged import _truncate as _truncate
+from modstore_server.openapi_connector_runtime_merged import (
+    assert_url_outbound_safe as assert_url_outbound_safe,
+)
+from modstore_server.openapi_connector_runtime_merged import (
     call_generated_operation as call_generated_operation,
+)
+from modstore_server.openapi_connector_runtime_merged import (
+    decrypt_credential_payload as decrypt_credential_payload,
+)
+from modstore_server.openapi_connector_runtime_merged import (
+    encrypt_credential_payload as encrypt_credential_payload,
+)
+from modstore_server.openapi_connector_runtime_merged import (
+    pin_url_outbound_safe as pin_url_outbound_safe,
 )

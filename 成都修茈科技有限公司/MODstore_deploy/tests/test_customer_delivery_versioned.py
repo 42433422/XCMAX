@@ -401,9 +401,7 @@ def test_probe_runtime_identity_uses_modstore_release_without_git_or_fhd_identit
 def test_probe_runtime_identity_rejects_modstore_release_identity_drift(
     pinned_source, monkeypatch, key, value
 ):
-    from modstore_server.customer_delivery_build import (
-        versioned_sunbird_probe_runtime_identity,
-    )
+    from modstore_server.customer_delivery_build import versioned_sunbird_probe_runtime_identity
 
     _root, _source, provenance = pinned_source
     monkeypatch.setenv(key, value)
@@ -486,9 +484,7 @@ def test_create_request_blocks_unentitled_owner_and_unpinned_release(monkeypatch
     import modstore_server.customer_service_api  # noqa: F401 - initializes its router imports
     from modstore_server import customer_delivery_versioned as versioned
     from modstore_server import customer_service_delivery_create_api as create_api
-    from modstore_server.customer_service_delivery_models import (
-        CustomDeliveryCreateBody,
-    )
+    from modstore_server.customer_service_delivery_models import CustomDeliveryCreateBody
 
     body = CustomDeliveryCreateBody(
         kind="module",
@@ -678,11 +674,7 @@ def test_sunbird_signed_package_preserves_legacy_entitlement_and_source_hash(tmp
     from cryptography.hazmat.primitives import serialization
 
     from modstore_server import customer_delivery_build as build
-    from modstore_server.customer_delivery_versioned import (
-        LEGACY_ID,
-        MOD_ID,
-        source_sha256,
-    )
+    from modstore_server.customer_delivery_versioned import LEGACY_ID, MOD_ID, source_sha256
     from tests.customer_delivery_fixture import persist_private_source, signed_artifact
 
     signed_artifact(tmp_path, monkeypatch, owner=81, ticket=82)
@@ -967,11 +959,7 @@ def test_signed_sunbird_probe_executes_real_probe_and_binds_report(
 
 def test_versioned_quality_gate_requires_report_bound_to_signed_package(tmp_path, monkeypatch):
     import modstore_server.customer_service_api  # noqa: F401 - initializes its router imports
-    from modstore_server import (
-        customer_delivery_build,
-        customer_delivery_sources,
-        workbench_api,
-    )
+    from modstore_server import customer_delivery_build, customer_delivery_sources, workbench_api
     from modstore_server.customer_service_delivery_quality import custom_delivery_gate
 
     record = {
@@ -1182,9 +1170,7 @@ def test_versioned_quality_gate_requires_report_bound_to_signed_package(tmp_path
     from fastapi import HTTPException
 
     from modstore_server import customer_service_delivery_api as api
-    from modstore_server.customer_service_delivery_models import (
-        CustomDeliveryDecisionBody,
-    )
+    from modstore_server.customer_service_delivery_models import CustomDeliveryDecisionBody
 
     ticket = types.SimpleNamespace(
         id=82,
@@ -1223,9 +1209,7 @@ def test_original_ticket_main_rework_rejects_before_start_or_commit(monkeypatch,
     import modstore_server.customer_service_api  # noqa: F401
     from modstore_server import customer_delivery_versioned as versioned
     from modstore_server import customer_service_delivery_api as api
-    from modstore_server.customer_service_delivery_models import (
-        CustomDeliveryDecisionBody,
-    )
+    from modstore_server.customer_service_delivery_models import CustomDeliveryDecisionBody
 
     evidence = {"kind": "module", "suggested_id": versioned.MOD_ID}
     ticket = types.SimpleNamespace(id=34, user_id=29, intent="custom_delivery")
@@ -1271,9 +1255,7 @@ def test_original_ticket_rework_preserves_identity_and_source_choice(
     import modstore_server.customer_service_api  # noqa: F401
     from modstore_server import customer_delivery_versioned as versioned
     from modstore_server import customer_service_delivery_api as api
-    from modstore_server.customer_service_delivery_models import (
-        CustomDeliveryDecisionBody,
-    )
+    from modstore_server.customer_service_delivery_models import CustomDeliveryDecisionBody
 
     evidence = {
         "kind": "module",

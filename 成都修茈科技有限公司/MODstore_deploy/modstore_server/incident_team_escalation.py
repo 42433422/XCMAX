@@ -229,9 +229,7 @@ def _reconcile_one(event_id: int, key: str, *, base: str, fetcher) -> bool:
 
 def reconcile_incident_escalations(*, event_id=None, limit=20, fetcher=None) -> dict:
     """Called by the existing team completion job, including settled team events."""
-    from modstore_server.maintenance_loop.para_client import (
-        _fetch_para_task_state,
-    )
+    from modstore_server.maintenance_loop.para_client import _fetch_para_task_state
     from modstore_server.para_delegate_handler import _api_base
 
     global _CURSOR

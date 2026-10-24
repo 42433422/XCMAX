@@ -37,9 +37,7 @@ def _resume_review_qa_candidate(
                 over_retry_items.append(item)
         if over_retry_items:
             try:
-                from modstore_server.human_uncertainty_queue import (
-                    enqueue_uncertain_item,
-                )
+                from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
 
                 for item in over_retry_items:
                     steps = memory_domain._open_item_steps(item)

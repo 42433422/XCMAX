@@ -40,10 +40,7 @@ def test_build_quant_summary():
 
 @pytest.mark.asyncio
 async def test_convert_file_writes_html(tmp_path: Path):
-    from modstore_server.json_report_runtime import (
-        build_json_quant_report_rule_spec,
-        convert_file,
-    )
+    from modstore_server.json_report_runtime import build_json_quant_report_rule_spec, convert_file
     from modstore_server.word_generate_runtime import minimal_document_full_json
 
     src = tmp_path / "document_full.json"

@@ -8,11 +8,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
-from modstore_server.models import (
-    User,
-    Workflow,
-    WorkflowVersion,
-)
+from modstore_server.models import User, Workflow, WorkflowVersion
 from modstore_server.workflow_api.helpers import (
     _restore_workflow_from_snapshot,
     _serialize_workflow_snapshot,

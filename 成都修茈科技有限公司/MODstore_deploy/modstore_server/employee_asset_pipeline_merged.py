@@ -1,7 +1,9 @@
 """Auto-merged part* modules (debt24)."""
 
 from __future__ import annotations
+
 import importlib
+
 from modstore_server.infrastructure.private_asset_storage import (
     draft_asset_directory,
     reset_draft_directory,
@@ -1264,8 +1266,9 @@ def _fallback_manifest(
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -1438,9 +1441,7 @@ async def enrich_manifest_productivity_fields(
     model: _facade().Optional[str],
 ) -> _facade().Tuple[_facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]]:
     """轻量 LLM：仅补 description / panel_summary / behavior_rules，与模板落盘并行，不阻塞 convert。"""
-    from modstore_server.employee_pipeline_routing import (
-        is_direct_python_template_runtime,
-    )
+    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
 
     runtime_kind = str(rule_spec.get("runtime_kind") or "")
     if not is_direct_python_template_runtime(runtime_kind):
@@ -1524,9 +1525,7 @@ async def design_asset_employee_manifest(
     provider: _facade().Optional[str],
     model: _facade().Optional[str],
 ) -> _facade().Tuple[_facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]]:
-    from modstore_server.employee_pipeline_routing import (
-        is_direct_python_template_runtime,
-    )
+    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
 
     runtime_kind = str(rule_spec.get("runtime_kind") or "")
     if is_direct_python_template_runtime(runtime_kind):
@@ -1704,8 +1703,9 @@ def render_build_xcemp_py(pack_id: str) -> str:
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -2182,8 +2182,9 @@ def pack_has_direct_python_runtime(pack_dir: _facade().Path) -> bool:
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -2497,16 +2498,12 @@ async def run_asset_employee_scaffold_async(
     force_llm_codegen: bool = False,
     payload: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
-    from modstore_server.artifact_generator_blueprint import (
-        artifact_generator_preflight,
-    )
+    from modstore_server.artifact_generator_blueprint import artifact_generator_preflight
     from modstore_server.craft_failure_signals import (
         _employee_trigger_limits,
         emit_craft_step_failure,
     )
-    from modstore_server.employee_pipeline_routing import (
-        is_direct_python_template_runtime,
-    )
+    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
     from modstore_server.vibecoding_convert_loop import (
         is_llm_codegen_source,
         run_vibecoding_codegen_loop,

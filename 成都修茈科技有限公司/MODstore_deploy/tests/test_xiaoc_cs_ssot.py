@@ -219,10 +219,7 @@ class TestVisitorIdentity:
         from types import SimpleNamespace
         from unittest.mock import MagicMock
 
-        from modstore_server.xiaoc_cs_ssot import (
-            format_visitor_block,
-            resolve_user_identity,
-        )
+        from modstore_server.xiaoc_cs_ssot import format_visitor_block, resolve_user_identity
 
         user = SimpleNamespace(
             id=9,
@@ -248,10 +245,7 @@ class TestVisitorIdentity:
         from types import SimpleNamespace
         from unittest.mock import MagicMock
 
-        from modstore_server.xiaoc_cs_ssot import (
-            format_visitor_block,
-            resolve_user_identity,
-        )
+        from modstore_server.xiaoc_cs_ssot import format_visitor_block, resolve_user_identity
 
         user = SimpleNamespace(
             id=3, username="newbie", email="", is_admin=False, is_enterprise=False

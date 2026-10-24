@@ -9,12 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, func, or_, select
 
-from modstore_server.models import (
-    EmployeeExecutionMetric,
-    Notification,
-    User,
-    get_session_factory,
-)
+from modstore_server.models import EmployeeExecutionMetric, Notification, User, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

@@ -12,10 +12,7 @@ from typing import Any, Dict, Optional
 
 from modstore_server.catalog_store import employee_pack_records_from_store, files_dir
 from modstore_server.duty_employee_registry import get_duty_employee_record
-from modstore_server.duty_roster import (
-    employee_partition_meta,
-    is_planned_duty_employee_pack,
-)
+from modstore_server.duty_roster import employee_partition_meta, is_planned_duty_employee_pack
 from modstore_server.employee_config_v2_adapter import (
     needs_executor_translation,
     translate_v2_to_executor_config,

@@ -7,10 +7,7 @@ from decimal import Decimal
 from modstore_server.auth_service import decode_access_token
 from modstore_server.db.billing import Entitlement
 from modstore_server.db.catalog import CatalogItem, Purchase
-from modstore_server.db.delivery_commerce import (
-    AssetInstallCommand,
-    UpdateInstallationReceipt,
-)
+from modstore_server.db.delivery_commerce import AssetInstallCommand, UpdateInstallationReceipt
 from modstore_server.models import User, get_session_factory
 
 

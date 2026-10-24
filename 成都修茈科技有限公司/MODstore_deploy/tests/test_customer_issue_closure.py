@@ -70,10 +70,7 @@ def test_o7_error_and_lineage(monkeypatch):
         lambda *args: None,
     )
     from modstore_server import employee_orchestrator
-    from modstore_server.production_line_orchestrator import (
-        ProductionLineOrchestrator,
-        StepStatus,
-    )
+    from modstore_server.production_line_orchestrator import ProductionLineOrchestrator, StepStatus
 
     orch = ProductionLineOrchestrator()
     orch._release_train_subset = True
@@ -228,9 +225,7 @@ def test_bundle_waits_for_wrapped_employee_runtime_on_same_client(receipt_case, 
 
 def test_install_is_not_complete_and_retry_can_verify_release(receipt_case, monkeypatch):
     from modstore_server import customer_delivery_receipts as receipts
-    from modstore_server.customer_service_delivery_completion import (
-        complete_delivery_if_ready,
-    )
+    from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
 
     ticket, evidence, body = receipt_case
     record_receipt(ticket, evidence, body, owner_id=11)

@@ -120,9 +120,7 @@ def test_skip_can_be_disabled_and_ignores_non_para_roles(monkeypatch):
         "modstore_server.para_delegate_handler.para_delegate_ready_for_dispatch",
         lambda: True,
     )
-    from modstore_server.employee_executor import (
-        _para_first_skip_cognition,
-    )
+    from modstore_server.employee_executor import _para_first_skip_cognition
 
     assert _para_first_skip_cognition("vibe-coding-maintainer", ["agent"], {}) is True
     assert _para_first_skip_cognition("customer-service-agent", ["agent"], {}) is False

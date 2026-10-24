@@ -65,11 +65,7 @@ def test_track_job_run_failure_reraises_and_records(db_ready):
 
 
 def test_track_job_run_records_expected_policy_hold_as_deferred(db_ready):
-    from modstore_server.scheduler_runtime import (
-        DeferredJobRun,
-        get_runtime_status,
-        track_job_run,
-    )
+    from modstore_server.scheduler_runtime import DeferredJobRun, get_runtime_status, track_job_run
 
     job_id = _job("policy_hold")
     with track_job_run(job_id):
@@ -208,11 +204,7 @@ def test_recovery_clears_consecutive_failures(db_ready):
 
 
 def test_skip_is_not_a_failure(db_ready):
-    from modstore_server.scheduler_runtime import (
-        get_runtime_status,
-        record_job_run,
-        record_skip,
-    )
+    from modstore_server.scheduler_runtime import get_runtime_status, record_job_run, record_skip
 
     job_id = _job("skip")
     now = datetime.now(timezone.utc)

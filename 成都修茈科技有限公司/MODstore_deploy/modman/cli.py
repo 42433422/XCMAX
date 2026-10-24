@@ -9,11 +9,7 @@ from modman import __version__
 from modman.catalog_publish import main_publish
 from modman.db_bundle import collect_sources_from_dir, copy_databases_into_mod
 from modman.fhd_shell_export import build_fhd_shell_mod_rows, write_fhd_shell_mods_json
-from modman.manifest_util import (
-    patch_manifest_fields,
-    read_manifest,
-    validate_manifest_dict,
-)
+from modman.manifest_util import patch_manifest_fields, read_manifest, validate_manifest_dict
 from modman.scaffold import create_mod
 from modman.store import (
     default_library,

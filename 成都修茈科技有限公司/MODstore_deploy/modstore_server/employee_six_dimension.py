@@ -8,9 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from modstore_server.employee_brief_utils import compact_routing_brief
-from modstore_server.employee_six_dimension_report import (
-    SIX_DIMENSION_KEYS,
-)
+from modstore_server.employee_six_dimension_report import SIX_DIMENSION_KEYS
 from modstore_server.employee_six_dimension_report import clamp_score as _clamp_score
 from modstore_server.employee_six_dimension_report import dim_entry as _dim_entry
 from modstore_server.employee_six_dimension_report import (
@@ -303,9 +301,7 @@ def _score_domain_delivery(
                 reasons.append(f"黄金未达标 parity={parity}")
         if isinstance(runtime_generation, dict):
             try:
-                from modstore_server.vibecoding_convert_loop import (
-                    is_llm_codegen_source,
-                )
+                from modstore_server.vibecoding_convert_loop import is_llm_codegen_source
 
                 if is_llm_codegen_source(runtime_generation):
                     reasons.append("convert 为 LLM 生成")

@@ -31,9 +31,7 @@ from modstore_server.employee_change_request_verification import (
 from modstore_server.employee_change_request_verification import (
     _run_post_apply_verification as _run_post_apply_verification,
 )
-from modstore_server.employee_change_request_verification import (
-    _workspace_fd,
-)
+from modstore_server.employee_change_request_verification import _workspace_fd
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -125,10 +123,7 @@ def apply_employee_change_request(
         merge_strategy = os.environ.get("MODSTORE_CR_MERGE_STRATEGY", "overwrite").strip().lower()
         if merge_strategy in ("fail_on_conflict", "llm_merge"):
             try:
-                from modstore_server.change_merge import (
-                    detect_conflict,
-                    resolve_conflict,
-                )
+                from modstore_server.change_merge import detect_conflict, resolve_conflict
 
                 has_conflict, conflicting_ids = detect_conflict(int(change_request_id), rel)
                 if has_conflict:
@@ -295,10 +290,7 @@ def apply_employee_change_request(
     apply_commit_out: Dict[str, Any] = {"ok": False, "reason": "skipped"}
     pr_out: Dict[str, Any] = {"ok": False, "reason": "skipped"}
     try:
-        from modstore_server.cr_git_pipeline import (
-            commit_cr_apply,
-            maybe_open_pr_for_cr,
-        )
+        from modstore_server.cr_git_pipeline import commit_cr_apply, maybe_open_pr_for_cr
 
         apply_commit_out = commit_cr_apply(
             int(change_request_id), src or "unknown", rel_repo or rel

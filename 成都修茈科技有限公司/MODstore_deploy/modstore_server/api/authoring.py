@@ -3,12 +3,15 @@
 """Authoring / blueprint / employee pack routes."""
 
 from __future__ import annotations
+
 import io
 import tempfile
 from pathlib import Path
 from typing import Any, Dict
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+
 from modman.manifest_util import read_manifest, save_manifest_validated
 from modstore_server import authoring_inspection
 from modstore_server.api.auth_deps import assert_user_owns_mod, require_user
@@ -45,19 +48,45 @@ router = APIRouter(tags=["authoring"])
 
 from modstore_server.api.authoring_merged import (
     _slug_workflow_employee_id as _slug_workflow_employee_id,
+)
+from modstore_server.api.authoring_merged import (
     api_attach_catalog_employee as api_attach_catalog_employee,
+)
+from modstore_server.api.authoring_merged import (
     api_authoring_extension_surface as api_authoring_extension_surface,
-    api_capture_mod_snapshot as api_capture_mod_snapshot,
-    api_export_workflow_employee_pack as api_export_workflow_employee_pack,
-    api_list_mod_snapshots as api_list_mod_snapshots,
-    api_mod_authoring_summary as api_mod_authoring_summary,
-    api_mod_blueprint_routes as api_mod_blueprint_routes,
-    api_mod_workflow_employee_scaffold as api_mod_workflow_employee_scaffold,
-    api_register_workflow_employee_catalog as api_register_workflow_employee_catalog,
-    api_workflow_employee_closure as api_workflow_employee_closure,
+)
+from modstore_server.api.authoring_merged import (
     api_bump_mod_manifest_patch_version as api_bump_mod_manifest_patch_version,
-    api_mod_ai_scaffold as api_mod_ai_scaffold,
+)
+from modstore_server.api.authoring_merged import (
+    api_capture_mod_snapshot as api_capture_mod_snapshot,
+)
+from modstore_server.api.authoring_merged import (
+    api_export_workflow_employee_pack as api_export_workflow_employee_pack,
+)
+from modstore_server.api.authoring_merged import api_list_mod_snapshots as api_list_mod_snapshots
+from modstore_server.api.authoring_merged import api_mod_ai_scaffold as api_mod_ai_scaffold
+from modstore_server.api.authoring_merged import (
+    api_mod_authoring_summary as api_mod_authoring_summary,
+)
+from modstore_server.api.authoring_merged import (
+    api_mod_blueprint_routes as api_mod_blueprint_routes,
+)
+from modstore_server.api.authoring_merged import (
     api_mod_frontend_regenerate as api_mod_frontend_regenerate,
+)
+from modstore_server.api.authoring_merged import (
+    api_mod_workflow_employee_scaffold as api_mod_workflow_employee_scaffold,
+)
+from modstore_server.api.authoring_merged import (
     api_patch_workflow_employee_nodes as api_patch_workflow_employee_nodes,
+)
+from modstore_server.api.authoring_merged import (
+    api_register_workflow_employee_catalog as api_register_workflow_employee_catalog,
+)
+from modstore_server.api.authoring_merged import (
     api_restore_mod_snapshot as api_restore_mod_snapshot,
+)
+from modstore_server.api.authoring_merged import (
+    api_workflow_employee_closure as api_workflow_employee_closure,
 )

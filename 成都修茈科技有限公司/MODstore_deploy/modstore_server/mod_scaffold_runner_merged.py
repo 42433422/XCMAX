@@ -1,15 +1,18 @@
 """Auto-merged part* modules (debt24)."""
 
 from __future__ import annotations
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # --- from mod_scaffold_runner_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -129,9 +132,7 @@ def _resolve_workflow_entry_pack_id(
     workflow_index: int,
 ) -> tuple[str, str, _facade().Optional[_facade().Dict[str, _facade().Any]]]:
     """返回 (expected_pack_id, error_message, pack_manifest_or_none)。"""
-    from modstore_server.employee_pack_export import (
-        build_employee_pack_manifest_from_workflow,
-    )
+    from modstore_server.employee_pack_export import build_employee_pack_manifest_from_workflow
 
     catalog_pkg_id = str(entry.get("catalog_pkg_id") or "").strip()
     if catalog_pkg_id:
@@ -384,9 +385,7 @@ def materialize_employee_pack_if_missing(employee_id: str) -> bool:
     if not (pack_dir / "manifest.json").is_file():
         return False
     try:
-        from modstore_server.employee_pack_workflow_bundle import (
-            rehydrate_workflow_bundles,
-        )
+        from modstore_server.employee_pack_workflow_bundle import rehydrate_workflow_bundles
         from modstore_server.models import get_session_factory
 
         mf_path = pack_dir / "manifest.json"
@@ -422,8 +421,9 @@ def materialize_employee_pack_if_missing(employee_id: str) -> bool:
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -449,9 +449,7 @@ def rehydrate_employee_pack_bundles(
     if not mf_path.is_file():
         return False
     try:
-        from modstore_server.employee_pack_workflow_bundle import (
-            rehydrate_workflow_bundles,
-        )
+        from modstore_server.employee_pack_workflow_bundle import rehydrate_workflow_bundles
 
         raw = _facade().json.loads(mf_path.read_text(encoding="utf-8"))
         if raw.get("workflow_bundles") or raw.get("script_workflow_bundles"):
@@ -577,8 +575,9 @@ def employee_pack_consistency_warnings(mod_dir: _facade().Path) -> _facade().Lis
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -990,9 +989,7 @@ async def run_employee_pack_code_validation_report(
         report["status"] = "fail"
         if xcemp.get("escalate_to_human"):
             try:
-                from modstore_server.craft_failure_signals import (
-                    _employee_escalate_to_human,
-                )
+                from modstore_server.craft_failure_signals import _employee_escalate_to_human
 
                 if _employee_escalate_to_human("code-validator"):
                     report["xcemp_validation"]["escalate_to_human"] = True
@@ -1020,8 +1017,9 @@ async def run_employee_pack_code_validation_report(
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -1504,8 +1502,9 @@ async def generate_mod_suite_blueprint_async(
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -1945,8 +1944,9 @@ def run_mod_suite_mod_sandbox(
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -2195,9 +2195,7 @@ async def attach_nl_workflow_to_employee_pack_dir(
             pass
     eskill_specs: list[dict] = []
     try:
-        from modstore_server.employee_skill_register import (
-            register_employee_pack_as_eskills,
-        )
+        from modstore_server.employee_skill_register import register_employee_pack_as_eskills
 
         eskill_specs = await register_employee_pack_as_eskills(
             db,
@@ -2296,9 +2294,7 @@ async def attach_nl_workflow_to_employee_pack_dir(
         ],
     }
     try:
-        from modstore_server.employee_pack_workflow_bundle import (
-            embed_workflow_bundles_in_manifest,
-        )
+        from modstore_server.employee_pack_workflow_bundle import embed_workflow_bundles_in_manifest
 
         embed_workflow_bundles_in_manifest(db, raw)
     except RECOVERABLE_ERRORS as _bundle_exc:
@@ -2307,9 +2303,7 @@ async def attach_nl_workflow_to_employee_pack_dir(
         )
     mf.write_text(_facade().json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     try:
-        from modstore_server.employee_asset_pipeline import (
-            reconcile_employee_pack_manifest,
-        )
+        from modstore_server.employee_asset_pipeline import reconcile_employee_pack_manifest
 
         reconcile_employee_pack_manifest(pack_dir, brief=(brief or "").strip())
     except RECOVERABLE_ERRORS as _rec_exc:
@@ -2327,8 +2321,9 @@ async def attach_nl_workflow_to_employee_pack_dir(
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -2357,10 +2352,7 @@ async def run_employee_ai_scaffold_async(
         return {"ok": False, "error": "描述过短"}
     from modstore_server.csv_tabular_runtime import is_csv_full_read, is_csv_generate
     from modstore_server.employee_brief_utils import extract_routing_brief
-    from modstore_server.excel_tabular_runtime import (
-        is_excel_full_read,
-        is_excel_generate,
-    )
+    from modstore_server.excel_tabular_runtime import is_excel_full_read, is_excel_generate
     from modstore_server.pdf_extract_runtime import is_pdf_full_read, is_pdf_generate
     from modstore_server.txt_extract_runtime import is_txt_full_read, is_txt_generate
     from modstore_server.word_extract_runtime import is_word_full_extract
@@ -2420,10 +2412,7 @@ async def run_employee_ai_scaffold_async(
     manifest, perr = _facade().parse_employee_pack_llm_json(str(result.get("content") or ""))
     if perr or not manifest:
         return {"ok": False, "error": perr or "无法解析模型输出"}
-    from modstore_server.employee_ai_scaffold import (
-        _is_template_brief,
-        _validate_skill_quality,
-    )
+    from modstore_server.employee_ai_scaffold import _is_template_brief, _validate_skill_quality
 
     _v2 = (
         manifest.get("employee_config_v2")
@@ -2551,8 +2540,9 @@ async def run_employee_ai_scaffold_async(
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -2578,9 +2568,7 @@ async def register_mod_employee_packs_async(
     """
     from modman.manifest_util import read_manifest
     from modstore_server.catalog_store import append_package
-    from modstore_server.employee_pack_export import (
-        build_employee_pack_zip_from_workflow,
-    )
+    from modstore_server.employee_pack_export import build_employee_pack_zip_from_workflow
     from modstore_server.models import CatalogItem
     from modstore_server.pack_registration_guards import (
         audit_failure_error_payload,
@@ -2966,8 +2954,9 @@ def _ensure_workflow_start_end_skeleton(
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():

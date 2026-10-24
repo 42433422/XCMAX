@@ -15,10 +15,7 @@ from modstore_server.customer_issue_delivery_contract import (
     para_task_succeeded,
     team_succeeded,
 )
-from modstore_server.incident_team_handler_digest import (
-    handler_output_digest,
-    redact_text,
-)
+from modstore_server.incident_team_handler_digest import handler_output_digest, redact_text
 from modstore_server.models import IncidentEvent, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -31,9 +28,7 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
         apply_customer_ticket_incident_progress,
     )
     from modstore_server.incident_team_execution import locked_ticket_repair
-    from modstore_server.maintenance_loop.para_client import (
-        _fetch_para_task_state,
-    )
+    from modstore_server.maintenance_loop.para_client import _fetch_para_task_state
     from modstore_server.para_delegate_handler import (
         _api_base,
         _first_para_error,

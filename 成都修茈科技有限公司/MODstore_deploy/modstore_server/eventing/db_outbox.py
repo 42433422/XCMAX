@@ -23,11 +23,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from modstore_server.eventing.contracts import (
-    canonical_event_name,
-    event_version,
-    validate_payload,
-)
+from modstore_server.eventing.contracts import canonical_event_name, event_version, validate_payload
 from modstore_server.eventing.events import DomainEvent, new_event
 from modstore_server.eventing.global_bus import neuro_bus
 from modstore_server.models import OutboxDeadLetter, OutboxEvent, get_session_factory

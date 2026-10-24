@@ -52,10 +52,7 @@ def test_employee_runtime_loads_manifest_from_registered_zip(tmp_path, monkeypat
     from modstore_server import models
     from modstore_server.catalog_store import append_package
     from modstore_server.employee_ai_scaffold import build_employee_pack_zip
-    from modstore_server.employee_runtime import (
-        load_employee_pack,
-        parse_employee_config_v2,
-    )
+    from modstore_server.employee_runtime import load_employee_pack, parse_employee_config_v2
     from modstore_server.models import CatalogItem
 
     models._engine = None

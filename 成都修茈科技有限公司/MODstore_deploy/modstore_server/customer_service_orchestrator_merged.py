@@ -1,9 +1,10 @@
 """Auto-merged part* modules (debt24)."""
 
 from __future__ import annotations
+
 import importlib
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from typing import Any
+
 from modstore_server.customer_issue_delivery_contract import (
     projected_dispatch_status,
     record_team_progress,
@@ -11,6 +12,7 @@ from modstore_server.customer_issue_delivery_contract import (
     team_action_state,
     team_succeeded,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # --- from customer_service_orchestrator_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -64,8 +66,9 @@ def _parse_domain_clarify_reply(text: str) -> str:
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -411,8 +414,9 @@ def _llm_classify_intent(
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -938,8 +942,9 @@ def handle_customer_message(
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -1310,8 +1315,9 @@ def _maybe_dispatch_employee_followup(
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():

@@ -1,7 +1,9 @@
 """Auto-merged part* modules (debt24)."""
 
 from __future__ import annotations
+
 import importlib
+
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # --- from routes_registry_part01_part01_part01.py ---
@@ -360,8 +362,9 @@ def api_mod_workflow_employee_scaffold(
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -428,6 +431,7 @@ async def api_register_workflow_employee_catalog(
     if summary and summary.get("pass") is False:
         raise _facade().HTTPException(400, "五维审核未通过，禁止登记")
     import tempfile
+
     from modstore_server.catalog_store import append_package
     from modstore_server.models import CatalogItem
 
@@ -436,9 +440,7 @@ async def api_register_workflow_employee_catalog(
     )
     if manifest_err or not manifest_zip:
         raise _facade().HTTPException(400, manifest_err or "生成员工包失败")
-    from modstore_server.employee_pack_export import (
-        build_employee_pack_manifest_from_workflow,
-    )
+    from modstore_server.employee_pack_export import build_employee_pack_manifest_from_workflow
 
     manifest, manifest_build_err = build_employee_pack_manifest_from_workflow(
         mod_id, data, entry, workflow_index=idx

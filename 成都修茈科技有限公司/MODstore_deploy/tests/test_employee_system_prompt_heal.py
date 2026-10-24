@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from modstore_server.mod_employee_impl_scaffold import (
-    _employee_py_paths_missing_system_prompt,
-)
+from modstore_server.mod_employee_impl_scaffold import _employee_py_paths_missing_system_prompt
 
 
 def test_missing_system_prompt_paths_detected(tmp_path):

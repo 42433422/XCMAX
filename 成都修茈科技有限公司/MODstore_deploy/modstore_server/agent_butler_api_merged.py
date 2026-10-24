@@ -1,12 +1,15 @@
 """Auto-merged part* modules (debt24)."""
 
 from __future__ import annotations
+
 import importlib
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from typing import Any, Dict
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 "Implementation extracted from the public facade module."
 import importlib
+
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -303,6 +306,7 @@ async def butler_daily_digest_artifacts(
 
 "Implementation extracted from the public facade module."
 import importlib
+
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -518,6 +522,7 @@ class CorpTranslateDTO(_facade().BaseModel):
 
 "Implementation extracted from the public facade module."
 import importlib
+
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -979,6 +984,7 @@ class CorpIntakeFillDTO(_facade().BaseModel):
 "Implementation extracted from the public facade module."
 import importlib
 from typing import Any, Dict
+
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -1420,8 +1426,9 @@ async def update_butler_skill_active(
 
 
 "Implementation extracted from the public facade module."
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -1816,8 +1823,9 @@ async def butler_all_hands_report_session_start(
 
 
 "Implementation extracted from the public facade module."
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():

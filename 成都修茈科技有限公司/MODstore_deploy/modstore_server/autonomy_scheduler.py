@@ -371,9 +371,7 @@ def run_pending_automated_remediation() -> dict[str, Any]:
     if pending is None:
         return {"ok": True, "status": "skipped_no_pending_remediation"}
 
-    from modstore_server.maintenance_loop.coordinator import (
-        run_self_maintenance_loop,
-    )
+    from modstore_server.maintenance_loop.coordinator import run_self_maintenance_loop
 
     blocked = _reserve_remediation_attempt(pending)
     result = run_self_maintenance_loop(
