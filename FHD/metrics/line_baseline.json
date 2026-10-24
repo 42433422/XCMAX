@@ -1,5 +1,5 @@
 {
-  "lines": 2337241,
+  "lines": 2337242,
   "updated": "2026-10-24",
-  "note": "G2.2 exclude compat shims"
+  "note": "pin libbrotli CVE-2026-111497"
 }
