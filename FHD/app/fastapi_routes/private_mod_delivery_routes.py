@@ -296,10 +296,3 @@ async def mod_store_install_private_delivery_request(
         message=str(data.get("message") or "定制产物已安装"),
         data=data,
     )
-
-
-from app.fastapi_routes.private_mod_delivery_progress_routes import (
-    router as progress_router,
-)
-
-router.include_router(progress_router)

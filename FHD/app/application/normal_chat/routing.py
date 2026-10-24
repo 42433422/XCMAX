@@ -146,6 +146,17 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
     """普通版轻量槽位提取与任务分流。"""
     text = (message or "").strip()
     if len(text) > _MAX_ROUTING_MESSAGE_CHARS:
+        # Keep oversized messages off the general regex/LLM path, while allowing
+        # the bounded linear sales parser to recognize an explicit write request.
+        # This preserves whitespace-heavy legacy requests without reopening the
+        # unbounded downstream routing surface.
+        sales_write_payload = ports.sales_write(text)
+        if sales_write_payload is not None:
+            return {
+                "intent": "sales_write",
+                "action": "execute_closed_loop",
+                "payload": sales_write_payload,
+            }
         return {"intent": "unknown", "slots": {}}
     lower = text.lower()
 

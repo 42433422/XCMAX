@@ -304,9 +304,13 @@ def _ai_mod_market_auth(request: Request) -> str:
 
 from app.fastapi_routes.delivery_sync_routes import router as delivery_sync_router
 from app.fastapi_routes.issue_runtime_routes import router as issue_runtime_router
+from app.fastapi_routes.private_mod_delivery_progress_routes import (
+    router as private_delivery_progress_router,
+)
 from app.fastapi_routes.private_mod_delivery_routes import router as private_delivery_router
 
 router.include_router(private_delivery_router)
+router.include_router(private_delivery_progress_router)
 router.include_router(issue_runtime_router)
 router.include_router(delivery_sync_router)
 

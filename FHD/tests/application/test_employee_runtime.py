@@ -118,6 +118,10 @@ def test_employee_override_trust(
     from app.infrastructure.mods.package import compute_directory_hash
     from app.mod_sdk import edition_policy
 
+    # The configured operator root makes this isolated workspace a valid input
+    # root for the perception sandbox; an arbitrary payload root alone is not trusted.
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     user_pack = _write_csv_read_pack(employee_mods_root)
     bundled_mods = tmp_path / "bundled-mods"
     bundled_pack = _write_csv_read_pack(bundled_mods)

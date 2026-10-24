@@ -55,7 +55,8 @@ sys.meta_path.insert(0, NoRoots())
 socket.socket.connect = no_network
 socket.create_connection = no_network
 for name in json.loads(sys.argv[1]):
-    importlib.import_module('app.fastapi_routes.' + name)
+    module_name = name if name.startswith('app.') else 'app.fastapi_routes.' + name
+    importlib.import_module(module_name)
 assert not blocked.intersection(sys.modules)
 print('domain owners imported independently')
 """
@@ -341,7 +342,7 @@ def test_included_knowledge_routes_keep_real_desktop_authentication_gate(
 
 
 @pytest.mark.parametrize(
-    ("root", "namespace", "count"), [(knowledge_v1, "knowledge", 24), (mod_store, "mod_store", 26)]
+    ("root", "namespace", "count"), [(knowledge_v1, "knowledge", 22), (mod_store, "mod_store", 26)]
 )
 def test_public_function_exports_are_the_registered_owned_endpoints(root, namespace, count) -> None:
     endpoints = [
@@ -354,3 +355,15 @@ def test_public_function_exports_are_the_registered_owned_endpoints(root, namesp
     assert len(endpoints) == count
     for endpoint in endpoints:
         assert getattr(root, endpoint.__name__) is endpoint
+
+
+def test_legacy_knowledge_compat_endpoints_remain_mounted() -> None:
+    from app.fastapi_routes import knowledge_v1
+
+    endpoints = [
+        route.endpoint
+        for route, _context in _iter_routes_with_context(knowledge_v1.router.routes)
+        if isinstance(route, APIRoute)
+        and route.endpoint.__module__ == "app.legacy.knowledge.legacy_routes"
+    ]
+    assert endpoints == [knowledge_v1.ingest, knowledge_v1.query]

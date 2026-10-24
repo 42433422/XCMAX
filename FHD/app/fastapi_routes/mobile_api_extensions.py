@@ -50,7 +50,6 @@ from app.application.trae_super_employee_service import (
     TraeSuperEmployeeService as TraeSuperEmployeeService,
 )
 from app.fastapi_routes.mobile_api import get_mobile_user as get_mobile_user
-from app.fastapi_routes.mobile_api import router as _mobile_router
 from app.fastapi_routes.mobile_extensions import backends as backends
 from app.fastapi_routes.mobile_extensions import ports as contracts
 from app.fastapi_routes.mobile_extensions.access import MobileAccess as MobileAccess
@@ -753,4 +752,9 @@ extension_router.include_router(_sync.router)
 extension_router.include_router(_conversations_router)
 extension_router.include_router(_auth_router)
 
-cast(APIRouter, _mobile_router).include_router(extension_router)
+# Import the completed route owner only after this module has finished building
+# its extension router. Keeping mobile_api free of an eager reverse import makes
+# cold import order deterministic and avoids registering a partially populated router.
+from app.fastapi_routes.mobile_api import router as _mobile_router  # noqa: E402
+
+_mobile_router.include_router(extension_router)

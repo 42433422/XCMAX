@@ -206,9 +206,8 @@ def sales_quote_node(
         if not recognized:
             return None
         if single_request:
-            if message[:order_offset].strip() or any(
-                token in order_text for token in ("然后", "同时", "再导出", "再删除")
-            ):
+            prefix = _strip_polite(message[:order_offset]).strip(" ：:，,")
+            if prefix or any(token in order_text for token in ("然后", "同时", "再导出", "再删除")):
                 return None
             if "。" in order_text and not any(
                 token in order_text
