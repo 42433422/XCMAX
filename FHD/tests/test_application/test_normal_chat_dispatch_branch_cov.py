@@ -862,16 +862,27 @@ class TestBuildCustomersQueryResponseDict:
         result = build_customers_query_response_dict({"intent": "shipment", "slots": {}})
         assert result is None
 
-    @pytest.mark.parametrize("customer_id", ["10", "-1", "0", "10.5", "unknown", ""])
-    def test_explicit_customer_id_never_lists_other_customers(self, monkeypatch, customer_id):
+    @pytest.mark.parametrize(
+        "customer_id,response_kind",
+        [(value, "mapping") for value in ["10", "-1", "0", "10.5", "unknown", ""]]
+        + [("10", "json"), ("10", "memoryview")],
+    )
+    def test_explicit_customer_id_never_lists_other_customers(
+        self, monkeypatch, customer_id, response_kind
+    ):
         from types import SimpleNamespace
 
-        exact = MagicMock(
-            return_value={
-                "success": True,
-                "data": {"id": 10, "customer_name": "AI闭环验收", "contact_person": "验收员"},
-            }
-        )
+        payload = {
+            "success": True,
+            "data": {"id": 10, "customer_name": "AI闭环验收", "contact_person": "验收员"},
+        }
+        if response_kind != "mapping":
+            from starlette.responses import JSONResponse
+
+            payload = JSONResponse(payload)
+            if response_kind == "memoryview":
+                payload.body = memoryview(payload.body)
+        exact = MagicMock(return_value=payload)
         listing = MagicMock()
         dispatch = MagicMock(return_value=None)
         monkeypatch.setattr(

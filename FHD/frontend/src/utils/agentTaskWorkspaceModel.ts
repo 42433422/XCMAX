@@ -20,6 +20,13 @@ function timestamp(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+export function retainTaskHistory(tasks: TaskItem[], limit: number): TaskItem[] {
+  const terminal = new Set<TaskStatus>(['success', 'failed', 'cancelled'])
+  const recent = [...tasks].sort((a, b) => (b.updatedAt || b.startedAt || 0) - (a.updatedAt || a.startedAt || 0))
+  const ongoing = recent.filter((task) => !terminal.has(task.status))
+  return [...ongoing, ...recent.filter((task) => terminal.has(task.status)).slice(0, Math.max(0, limit - ongoing.length))]
+}
+
 function taskContextOf(run: AgentRun): AgentTaskContext {
   const metadata = asRecord(run.metadata)
   const raw = asRecord(metadata.task_context)

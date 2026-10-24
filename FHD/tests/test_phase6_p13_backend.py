@@ -2248,9 +2248,11 @@ class TestHandleExcelAnalysis:
         p = tmp_path / "data.xlsx"
         pd.DataFrame({"a": [1, 2]}).to_excel(p, index=False)
         result = handle_excel_analysis(
-            {"file_path": str(p), "action": "aggregate"}, workspace_root=str(tmp_path)
+            {"file_path": str(p), "action": "aggregate", "metrics": [{"column": "a", "op": "sum"}]},
+            workspace_root=str(tmp_path),
         )
         assert result["success"] is True
+        assert result["records"] == [{"a_sum": 3}]
 
     def test_action_aggregate_invalid_metrics(self, tmp_path: Path) -> None:
         p = tmp_path / "data.xlsx"
@@ -2264,7 +2266,8 @@ class TestHandleExcelAnalysis:
             },
             workspace_root=str(tmp_path),
         )
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["error"] == "invalid_aggregation_metrics"
 
     def test_action_statistics(self, tmp_path: Path) -> None:
         p = tmp_path / "data.xlsx"

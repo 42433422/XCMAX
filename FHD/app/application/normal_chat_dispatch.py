@@ -217,7 +217,7 @@ def build_customers_query_response_dict(
                     else customers_list(request, page=1, per_page=50, keyword=keyword or None)
                 )
         if isinstance(result, JSONResponse):
-            result = json.loads(result.body)
+            result = json.loads(bytes(result.body))
         if customer_id is not None and isinstance(result, dict) and result.get("success"):
             record = result.get("data")
             if not isinstance(record, dict) or record.get("id") != customer_id:

@@ -68,6 +68,7 @@ class TestConversationServiceUncoveredBranches:
         mock_query = MagicMock()
         existing_session = MagicMock()
         existing_session.message_count = 0
+        existing_session.user_id = 7
         mock_query.filter.return_value.first.return_value = existing_session
         mock_db.query.return_value = mock_query
         conversation = MagicMock()
@@ -129,6 +130,7 @@ class TestConversationServiceUncoveredBranches:
         svc = ConversationService()
         mock_db = MagicMock()
         mock_db.flush.side_effect = RuntimeError("flush failed")
+        mock_db.query.return_value.filter.return_value.first.return_value.user_id = 1
 
         with (
             patch(
@@ -214,7 +216,7 @@ class TestConversationServiceUncoveredBranches:
         svc = ConversationService()
         mock_db = MagicMock()
         mock_query = MagicMock()
-        mock_query.filter.return_value.delete.return_value = 0
+        session = mock_query.filter.return_value.first.return_value
         mock_db.query.return_value = mock_query
 
         with patch(
@@ -224,7 +226,8 @@ class TestConversationServiceUncoveredBranches:
             result = svc.delete_session("s1")
 
         assert result is True
-        assert mock_db.query.call_count == 2
+        mock_db.delete.assert_called_once_with(session)
+        mock_db.commit.assert_called_once()
 
     def test_create_session_title_none(self):
         from app.services.conversation_service import ConversationService

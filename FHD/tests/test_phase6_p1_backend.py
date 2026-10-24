@@ -619,6 +619,7 @@ class TestConversationSaveMessage:
         mock_query = MagicMock()
         existing_session = MagicMock()
         existing_session.message_count = 5
+        existing_session.user_id = 123
         mock_query.filter.return_value.first.return_value = existing_session
         mock_db.query.return_value = mock_query
 
@@ -643,6 +644,7 @@ class TestConversationSaveMessage:
         svc = ConversationService()
         mock_db = MagicMock()
         mock_db.commit.side_effect = RuntimeError("commit failed")
+        mock_db.query.return_value.filter.return_value.first.return_value.user_id = 123
 
         with (
             patch(
@@ -860,7 +862,7 @@ class TestConversationDeleteSession:
         svc = ConversationService()
         mock_db = MagicMock()
         mock_query = MagicMock()
-        mock_query.filter.return_value.delete.return_value = 1
+        session = mock_query.filter.return_value.first.return_value
         mock_db.query.return_value = mock_query
 
         with patch(
@@ -870,8 +872,7 @@ class TestConversationDeleteSession:
             result = svc.delete_session("s1")
 
         assert result is True
-        # Two queries: AIConversation + AIConversationSession
-        assert mock_db.query.call_count == 2
+        mock_db.delete.assert_called_once_with(session)
         mock_db.commit.assert_called_once()
 
     def test_db_error_propagates_and_rolls_back(self) -> None:

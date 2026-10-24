@@ -7,6 +7,9 @@ import json
 from types import SimpleNamespace as NS
 
 import pytest
+from fastapi import Request
+
+from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody
 
 SERVICE = "app.application.planner_compat_service"
 STREAM = "app.fastapi_routes.xcagi_compat_chat_stream"
@@ -60,13 +63,11 @@ def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide, message):
 
     monkeypatch.setattr(stream, "_classify_and_submit_client_issue_async", _fake_intake_async)
 
-    body = NS(message=message, context={}, user_id="1", source="test", system_prompt="x")
-    request = NS(
-        state=NS(tutorial_active=False),
-        headers={},
-        cookies={},
-        url=NS(path="/api/ai/chat/stream"),
-        method="POST",
+    body = XcagiCompatChatBody(
+        message=message, context={}, user_id="1", source="test", system_prompt="x"
+    )
+    request = Request(
+        {"type": "http", "headers": [], "method": "POST", "path": "/api/ai/chat/stream"}
     )
     chunks = _collect(service.compat_chat_stream_async(request, body, ai_tier="basic"))
     text = "".join(
