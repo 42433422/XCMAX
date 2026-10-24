@@ -250,7 +250,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                 availability=str(
                     action_meta.get("availability") or tool_meta.get("availability") or "shared"
                 ),
-                contract_samples=deepcopy(test_fixtures),
+                contract_samples=deepcopy(contract_samples),
             )
             specs[(spec.tool_id, spec.action)] = spec
     _add_aiopen_tool_specs(specs)

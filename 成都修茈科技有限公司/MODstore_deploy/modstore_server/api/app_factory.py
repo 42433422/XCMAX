@@ -49,6 +49,9 @@ from modstore_server.api.app_diagnostics import (
     register_neurobus_diagnostics as _register_neurobus_diagnostics,
 )
 from modstore_server.api.app_metadata import OPENAPI_TAGS as _OPENAPI_TAGS
+
+logger = logging.getLogger(__name__)
+
 from modstore_server.api.app_factory_merged import (
     _include_optional as _include_optional,
     _iter_route_method_signatures as _iter_route_method_signatures,
@@ -62,7 +65,6 @@ from modstore_server.api.app_factory_merged import (
     create_app as create_app,
 )
 
-logger = logging.getLogger(__name__)
 
 
 

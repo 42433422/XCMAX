@@ -30,6 +30,9 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Response
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+
+router = APIRouter(tags=["public-data"])
+
 from modstore_server.public_visualization_api_merged import (
     _positive_int_env as _positive_int_env,
     _cache_ttl_seconds as _cache_ttl_seconds,
@@ -69,7 +72,6 @@ from modstore_server.public_visualization_api_merged import (
     public_visualization as public_visualization,
 )
 
-router = APIRouter(tags=["public-data"])
 
 _DEFAULT_LOG_GLOB = "/var/log/nginx/xiu-ci.com.access.log*"
 _DEFAULT_CACHE_TTL_SECONDS = 30

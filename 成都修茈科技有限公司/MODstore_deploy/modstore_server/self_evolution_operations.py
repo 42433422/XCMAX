@@ -2,6 +2,11 @@
 """Search, metrics, and salvage operations for self-evolution knowledge."""
 
 from __future__ import annotations
+
+# Keep limits local so *_merged defaults can resolve before knowledge↔operations import cycle.
+DEFAULT_FIX_LIMIT = 5
+DEFAULT_PATTERN_LIMIT = 8
+
 from modstore_server.self_evolution_operations_merged import (
     _facade as _facade,
     _search_docs as _search_docs,

@@ -44,6 +44,9 @@ from modstore_server.llm_key_resolver import (
 )
 from modstore_server.llm_model_taxonomy import build_models_detailed
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
+
 from modstore_server.llm_catalog_merged import (
     clear_all_catalog_cache as clear_all_catalog_cache,
     _fetch_openai_compatible_records as _fetch_openai_compatible_records,
@@ -64,7 +67,6 @@ from modstore_server.llm_catalog_merged import (
     probe_first_matching_provider as probe_first_matching_provider,
 )
 
-logger = logging.getLogger(__name__)
 
 _CACHE_TTL_SEC = 600.0
 _FORCE_REFRESH_MIN_INTERVAL = 45.0

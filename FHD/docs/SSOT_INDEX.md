@@ -14,6 +14,7 @@
 
 | 领域 | SSOT 文档 | 说明 |
 |------|----------|------|
+| 产品版本四层口径 | [`docs/architecture/PRODUCT_VERSION_SSOT.md`](architecture/PRODUCT_VERSION_SSOT.md) | VERSION.md 数字 + 已发布/候选/构建/运行分层 |
 | audit-benchmark（18 领域对标审计） | [AUDIT_BENCHMARK_SSOT.md](AUDIT_BENCHMARK_SSOT.md) | JSON 为规范源、本文生成；商业 90 / 开源 60 锚点、证据等级与新旧分隔离 |
 | coverage（覆盖率） | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 后端/前端覆盖率基线、目标、棘轮 floor |
 | ci（CI/CD） | [../../docs/CI_SSOT.md](../../docs/CI_SSOT.md) | 根仓 .github/workflows/ 唯一调度入口 |

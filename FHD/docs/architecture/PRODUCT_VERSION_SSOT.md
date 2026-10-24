@@ -1,6 +1,6 @@
 # PRODUCT_VERSION_SSOT
 
-> 版本叙事单一入口。数字权威仍是 [`FHD/VERSION.md`](../../VERSION.md)；本文件裁定**已发布 / 候选 / 构建 / 客户运行**四层关系，并挂漂移检测。
+> **SSOT（唯一真相源）**：版本叙事单一入口。数字权威仍是 [`FHD/VERSION.md`](../../VERSION.md)；本文件裁定**已发布 / 候选 / 构建 / 客户运行**四层关系，并挂漂移检测。
 
 更新：2026-10-25（Asia/Shanghai）— debt24 closeout
 

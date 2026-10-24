@@ -437,12 +437,6 @@ class PasswordChangeDTO(_facade().BaseModel):
 """Implementation extracted from the public facade module."""
 
 import importlib
-from modstore_server.api.market_routes_part01_part01_part01 import (
-    AdminResetUserPasswordDTO,
-)
-from modstore_server.api.market_routes_part01_part01_part01 import PasswordChangeDTO
-from modstore_server.api.market_routes_part01_part01_part01 import ProfileUpdateDTO
-from modstore_server.api.market_routes_part01_part01_part01 import RefreshTokenDTO
 
 
 def _facade():
@@ -568,11 +562,6 @@ def api_admin_status(
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
-from modstore_server.api.market_routes_part01_part01_part01 import AdminSelfCreditDTO
-from modstore_server.api.market_routes_part01_part01_part01 import (
-    AiWalletPreauthorizeDTO,
-)
-from modstore_server.api.market_routes_part01_part01_part01 import RechargeDTO
 
 
 def _facade():
@@ -948,9 +937,6 @@ def api_wallet_ai_preauthorize(
 """Implementation extracted from the public facade module."""
 
 import importlib
-from modstore_server.api.market_routes_part01_part01_part01 import AiWalletRefundDTO
-from modstore_server.api.market_routes_part01_part01_part01 import AiWalletReleaseDTO
-from modstore_server.api.market_routes_part01_part01_part01 import AiWalletSettleDTO
 
 
 def _facade():

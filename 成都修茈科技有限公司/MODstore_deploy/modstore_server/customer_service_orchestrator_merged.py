@@ -502,10 +502,6 @@ def _facade():
     return importlib.import_module("modstore_server.customer_service_orchestrator")
 
 
-from modstore_server.customer_service_orchestrator_part02_part01_part01 import (
-    _enrich_cs_context as _enrich_cs_context,
-    ensure_session as ensure_session,
-)
 
 
 def handle_customer_message(

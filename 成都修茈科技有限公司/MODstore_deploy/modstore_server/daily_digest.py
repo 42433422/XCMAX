@@ -71,6 +71,9 @@ from modstore_server.models import (
 )
 from modstore_server.models_cs import CustomerServiceTicket
 from modstore_server.db.strategic import StrategicDecision
+
+logger = logging.getLogger(__name__)
+
 from modstore_server.daily_digest_merged import (
     digest_calendar_day as digest_calendar_day,
     _new_unique_ops_token_plain as _new_unique_ops_token_plain,
@@ -116,7 +119,6 @@ from modstore_server.daily_digest_merged import (
     cron_trigger_for_digest as cron_trigger_for_digest,
 )
 
-logger = logging.getLogger(__name__)
 
 
 

@@ -91,7 +91,7 @@ def record_fix_knowledge(
 
 
 def search_fix_knowledge(
-    query: str, *, limit: int = _facade().DEFAULT_FIX_LIMIT
+    query: str, *, limit: int = 5
 ) -> _facade().List[_facade().Dict[str, _facade().Any]]:
     docs = _facade()._load_kb_docs("fixes")
     return _facade()._search_docs(
@@ -127,7 +127,7 @@ def record_code_pattern(
 
 
 def search_code_patterns(
-    query: str, *, limit: int = _facade().DEFAULT_PATTERN_LIMIT
+    query: str, *, limit: int = 8
 ) -> _facade().List[_facade().Dict[str, _facade().Any]]:
     docs = _facade()._load_kb_docs("patterns")
     return _facade()._search_docs(

@@ -4,7 +4,7 @@
 
 | 级别 | 入口 | 说明 |
 |------|------|------|
-| 官方主路径 | 桌面私有化 + 单 CVM 云端（见 DEPLOY_PATH_SSOT） | 签约交付 |
+| 官方主路径 | 桌面私有化 + 单 CVM 云端（见 `DEPLOY_PATH_SSOT.md`） | 签约交付 |
 | 官方 Web | FastAPI + Vue SPA（FHD/app） | 签约 |
 | 兼容 | `app.legacy.routes.*` mounts/compat | 兼容，待迁 |
 | 实验/遗留 | Docker / Compose / K8s 资产 | 非主路径 |

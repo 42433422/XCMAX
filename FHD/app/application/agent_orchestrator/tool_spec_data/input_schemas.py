@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
 
 _BUSINESS_ENTITIES = ["customers", "products", "materials", "shipment_records"]

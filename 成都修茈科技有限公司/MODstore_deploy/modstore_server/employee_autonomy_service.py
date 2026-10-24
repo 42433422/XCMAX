@@ -42,6 +42,9 @@ from modstore_server.models import (
     get_session_factory,
 )
 from modstore_server.platform_llm_scope import platform_llm_scoped
+
+logger = logging.getLogger(__name__)
+
 from modstore_server.employee_autonomy_service_merged import (
     _jloads as _jloads,
     _jdumps as _jdumps,
@@ -75,7 +78,6 @@ from modstore_server.employee_autonomy_service_merged import (
     propose_employee_pack as propose_employee_pack,
 )
 
-logger = logging.getLogger(__name__)
 
 
 

@@ -35,6 +35,13 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/agent/butler/qq", tags=["butler-qq"])
+
+
+MsgKind = Literal["group", "c2c", "channel"]
+
 from modstore_server.butler_qq_bridge_merged import (
     _env as _env,
     _bridge_user_id as _bridge_user_id,
@@ -96,7 +103,6 @@ from modstore_server.butler_qq_bridge_merged import (
     _ensure_runtime_ready as _ensure_runtime_ready,
 )
 
-logger = logging.getLogger(__name__)
 
 
 # ─── 配置读取（账号池优先，ENV 作 fallback） ─────────────────────────
@@ -130,7 +136,6 @@ _TOKEN_REFRESH_LEAD_SECONDS = 300
 # ─── 出站消息客户端 ─────────────────────────────────────────────────
 
 
-MsgKind = Literal["group", "c2c", "channel"]
 
 
 
@@ -173,7 +178,6 @@ _EMPLOYEE_FALLBACK_PERSONA = "你是 XC AGI 平台 AI 员工，请专业、简�
 # ─── FastAPI 路由 ───────────────────────────────────────────────────
 
 
-router = APIRouter(prefix="/api/agent/butler/qq", tags=["butler-qq"])
 
 
 

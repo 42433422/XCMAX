@@ -44,6 +44,9 @@ from modstore_server.llm_failure_classifier import (
 from modstore_server.models import EmployeeExecutionMetric, User, get_session_factory
 from modstore_server.runtime_async import run_coro_sync as _run_coro_sync
 from modstore_server.services.llm import chat_dispatch_via_session
+
+logger = logging.getLogger(__name__)
+
 from modstore_server.employee_executor_merged import (
     _emp_im_notify_boss as _emp_im_notify_boss,
     _is_all_hands_cognition_context as _is_all_hands_cognition_context,
@@ -92,7 +95,6 @@ from modstore_server.employee_executor_merged import (
     list_employees as list_employees,
 )
 
-logger = logging.getLogger(__name__)
 
 _METRIC_TASK_MAX_LEN = 128
 

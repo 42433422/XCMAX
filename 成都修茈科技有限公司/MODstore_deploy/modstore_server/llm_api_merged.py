@@ -609,7 +609,6 @@ def _price_row_to_dict(r: _facade().AiModelPrice) -> _facade().Dict[str, _facade
 """Implementation extracted from the public facade module."""
 
 import importlib
-from modstore_server.llm_api_part02_part01_part01 import LlmPriceDTO
 
 
 def _facade():

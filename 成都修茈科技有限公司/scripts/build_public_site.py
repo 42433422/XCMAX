@@ -53,20 +53,19 @@ def read_json(path: Path) -> dict:
 
 def resolve_media_local(name: str, feature: str | None = None) -> Path | None:
     """run.json 中的媒体名（如 03-postlogin-screen.png）→ 站点副本路径（如 base-login-03-postlogin-screen.png）。"""
-    candidates: list[Path] = []
-    direct = EVIDENCE_DIR / name
-    if direct.exists():
-        candidates.append(direct)
     if feature:
         prefixed = EVIDENCE_DIR / f"{feature}-{name}"
         if prefixed.exists():
-            candidates.append(prefixed)
-    if not candidates:
-        candidates = sorted(EVIDENCE_DIR.glob(f"*-{name}"))
-    uniq = sorted(set(candidates))
-    if len(uniq) > 1:
-        die(f"证据媒体名歧义: {name} → {[m.name for m in uniq]}")
-    return uniq[0] if uniq else None
+            return prefixed
+    direct = EVIDENCE_DIR / name
+    if direct.exists():
+        return direct
+    # Glob fallback only when uniquely resolvable; archive-backed trees often
+    # materialize many feature-prefixed twins for the same short basename.
+    matches = sorted(EVIDENCE_DIR.glob(f"*-{name}"))
+    if len(matches) == 1:
+        return matches[0]
+    return None
 
 
 def sha256_file(path: Path) -> str:

@@ -37,6 +37,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
+
 from modstore_server.daily_digest_surface_audit_merged import (
     _internal_api_base as _internal_api_base,
     SurfaceTarget as SurfaceTarget,
@@ -107,7 +110,6 @@ from modstore_server.daily_digest_surface_audit_merged import (
     build_surface_audit_html_sync as build_surface_audit_html_sync,
 )
 
-logger = logging.getLogger(__name__)
 
 
 

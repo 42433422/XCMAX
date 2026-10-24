@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
+
 from modstore_server.time_rail_workflow_merged import (
     _repo_root as _repo_root,
     graph_json_path as graph_json_path,
@@ -38,7 +41,6 @@ from modstore_server.time_rail_workflow_merged import (
     graph_api_payload as graph_api_payload,
 )
 
-logger = logging.getLogger(__name__)
 
 STATUS_CONTRACT_VERSION = "time_rail_runtime_status/v2"
 

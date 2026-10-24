@@ -49,6 +49,10 @@ from modstore_server.models import (
     get_session_factory,
 )
 from modstore_server.services.employee import get_default_employee_client
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/admin", tags=["admin-duty-graph"])
+
 from modstore_server.admin_duty_graph_api_merged import (
     _json_dumps as _json_dumps,
     _json_loads as _json_loads,
@@ -74,9 +78,7 @@ from modstore_server.admin_duty_graph_api_merged import (
     duty_graph_health as duty_graph_health,
 )
 
-logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/admin", tags=["admin-duty-graph"])
 
 _HIGH_RISK_HANDLERS = frozenset(
     {

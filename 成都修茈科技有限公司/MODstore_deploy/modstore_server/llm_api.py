@@ -84,6 +84,10 @@ from modstore_server.multimodal_llm import (
     validate_multimodal_payload_size,
 )
 from modstore_server.pptx_export import build_pptx_from_markdown
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/llm", tags=["llm"])
+
 from modstore_server.llm_api_merged import (
     resolve_default_llm_route as resolve_default_llm_route,
     _membership_meta as _membership_meta,
@@ -141,9 +145,7 @@ from modstore_server.llm_api_merged import (
     llm_pptx as llm_pptx,
 )
 
-logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/llm", tags=["llm"])
 
 _BYOK_PLAN_IDS = {"plan_pro", "plan_enterprise"}
 

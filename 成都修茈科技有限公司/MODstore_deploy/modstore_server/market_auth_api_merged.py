@@ -652,16 +652,6 @@ def _verify_and_consume_verification_code(email: str, code: str) -> None:
 """Implementation extracted from the public facade module."""
 
 import importlib
-from modstore_server.market_auth_api_part01_part01_part02 import (
-    AdminResetUserPasswordDTO,
-)
-from modstore_server.market_auth_api_part01_part01_part02 import LoginDTO
-from modstore_server.market_auth_api_part01_part01_part02 import LoginWithCodeDTO
-from modstore_server.market_auth_api_part01_part01_part02 import PasswordChangeDTO
-from modstore_server.market_auth_api_part01_part01_part02 import ProfileUpdateDTO
-from modstore_server.market_auth_api_part01_part01_part02 import RegisterDTO
-from modstore_server.market_auth_api_part01_part01_part02 import ResetPasswordDTO
-from modstore_server.market_auth_api_part01_part01_part02 import SendCodeDTO
 
 
 def _facade():
@@ -754,7 +744,6 @@ def api_avatar_file(
 """Implementation extracted from the public facade module."""
 
 import importlib
-from modstore_server.market_auth_api_part01_part01_part02 import RefreshTokenDTO
 
 
 def _facade():

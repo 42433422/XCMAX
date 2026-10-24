@@ -28,6 +28,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session
 
 from modstore_server.models import User
+
+logger = logging.getLogger(__name__)
+
 from modstore_server.employee_bench_merged import (
     _strip_fence as _strip_fence,
     _parse_task_list as _parse_task_list,
@@ -60,7 +63,6 @@ from modstore_server.employee_bench_merged import (
     run_and_score_bench as run_and_score_bench,
 )
 
-logger = logging.getLogger(__name__)
 
 # ── 权重：越低难度级别权重越高 ──────────────────────────────────────────
 _LEVEL_WEIGHTS = {1: 3.0, 2: 2.5, 3: 2.0, 4: 1.5, 5: 1.0}

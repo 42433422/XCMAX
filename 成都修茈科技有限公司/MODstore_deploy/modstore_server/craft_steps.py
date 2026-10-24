@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from modstore_server.craft_executor import register_craft_step
+
+logger = logging.getLogger(__name__)
+
 from modstore_server.craft_steps_merged import (
     _craft_spec as _craft_spec,
     _craft_employee_plan as _craft_employee_plan,
@@ -31,7 +34,6 @@ from modstore_server.craft_steps_merged import (
     register_all_craft_steps as register_all_craft_steps,
 )
 
-logger = logging.getLogger(__name__)
 
 
 _SPEC_DOMAIN_KEYWORDS = {
