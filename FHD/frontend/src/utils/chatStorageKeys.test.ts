@@ -4,10 +4,8 @@ import {
   buildChatSessionMetaKey,
   extractSessionIdForActiveMod,
   CHAT_MESSAGES_STORAGE_PREFIX,
-  readAiSessionIdFromStorage,
-  writeAiSessionIdToStorage,
 } from './chatStorageKeys'
-import { writeActiveExtensionModIdToStorage } from './xcagiStorageKeys'
+import { writeActiveExtensionModIdToStorage, readAiSessionIdFromStorage, writeAiSessionIdToStorage } from './xcagiStorageKeys'
 import { setTenantStorageScopeCache } from './tenantStorageScope'
 import { setRuntimeTenantStorageScopeInput } from './tenantStorageScopeRuntime'
 import { persistExcelAnalysisContext, readPersistedExcelAnalysisContext } from '@/composables/useChatPersistence'

@@ -25,3 +25,4 @@ export function writeActiveExtensionModIdToStorage(modId: string | null | undefi
   if (next) writeTenantScopedStorageItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY, next, scope)
   else removeTenantScopedStorageItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY, scope)
 }
+export { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from './chatStorageKeys'
