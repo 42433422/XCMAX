@@ -43,7 +43,7 @@ export const SIDEBAR_ROUTE_NAME_MAP: Record<string, string> = {
   '/customer-service-tickets': 'customer-service-tickets',
   '/customer-service-tickets/:ticketId(\\d+)': 'customer-service-tickets',
   '/xcmax-admin': 'xcmax-admin',
-  '/automation-policy': 'automation-policy',
+  '/automation-policy': 'xcmax-admin',
   '/duty-time-architecture': 'duty-time-architecture',
   '/duty-roster-graph': 'duty-roster-graph',
   '/server-functions': 'server-functions',

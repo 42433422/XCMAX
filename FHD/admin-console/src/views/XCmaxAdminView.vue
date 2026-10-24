@@ -263,10 +263,7 @@
       <XCmaxAdminDutyTab />
     </div>
     <div v-show="activeTab === 'automation-policy'" class="page-content admin-tab-panel">
-      <div class="page-header">
-        <h2>自动化方针</h2>
-      </div>
-      <XcmaxDashboardEmbed :src="automationEmbedUrl" title="自动化方针" />
+      <AutomationPolicyPanel />
     </div>
     <div v-show="activeTab === 'duty-time-architecture'" class="page-content admin-tab-panel">
       <div class="page-header">
@@ -284,18 +281,17 @@ export default { name: 'XCmaxAdminView' }
 </script>
 
 <script setup>
-import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
+import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import XCmaxAdminInfraTab from '@/components/admin/XCmaxAdminInfraTab.vue'
 import XCmaxAdminDutyTab from '@/components/admin/XCmaxAdminDutyTab.vue'
 import XCmaxAdminAutonomyTab from '@/components/admin/XCmaxAdminAutonomyTab.vue'
 import XCmaxAdminOrdersTab from '@/components/admin/XCmaxAdminOrdersTab.vue'
 import AdminReleaseStatusCard from '../components/admin/AdminReleaseStatusCard.vue'
 import XcmaxDashboardEmbed from '@/components/admin/XcmaxDashboardEmbed.vue'
+import AutomationPolicyPanel from '@/components/admin/AutomationPolicyPanel.vue'
 import AdminDeployUpdateModal from '@host/components/admin/AdminDeployUpdateModal.vue'
-import {
-  xcmaxAutomationPolicyEmbedUrl,
-  xcmaxDutyTimeArchitectureEmbedUrl,
-} from '@/constants/xcmaxDashboardEmbed'
+import { xcmaxDutyTimeArchitectureEmbedUrl } from '@/constants/xcmaxDashboardEmbed'
 import { useXcmaxOverview } from './xcmaxAdmin/useXcmaxOverview'
 import { useXcmaxSync } from './xcmaxAdmin/useXcmaxSync'
 import { useXcmaxAutonomyHealth } from './xcmaxAdmin/useXcmaxAutonomyHealth'
@@ -309,9 +305,16 @@ const adminTabs = [
   { id: 'automation-policy', label: '自动化方针' },
   { id: 'duty-time-architecture', label: '同时完成时间架构' },
 ]
+const route = useRoute()
 const activeTab = ref('overview')
-const automationEmbedUrl = xcmaxAutomationPolicyEmbedUrl()
 const timeArchEmbedUrl = xcmaxDutyTimeArchitectureEmbedUrl()
+
+const TAB_IDS = new Set(adminTabs.map((t) => t.id))
+function applyTabFromRoute() {
+  const tab = String(route.query.tab || '').trim()
+  if (tab && TAB_IDS.has(tab)) activeTab.value = tab
+}
+watch(() => route.query.tab, applyTabFromRoute, { immediate: true })
 
 const {
   syncingEmployees,
