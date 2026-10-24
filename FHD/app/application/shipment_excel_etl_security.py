@@ -402,10 +402,11 @@ def _reject_output_symlink(name: str, parent_fd: int, parent_path: Path) -> None
         raise ShipmentEtlPathError("output file escaped its approved directory") from exc
     if os.path.normcase(common) != os.path.normcase(parent_text):
         raise ShipmentEtlPathError("output file escaped its approved directory")
-    candidate_key = os.path.normcase(os.path.normpath(candidate_text))
-    parent_key = os.path.normcase(os.path.normpath(parent_text))
-    if not candidate_key.startswith(parent_key.rstrip(os.sep) + os.sep):
+    parent_prefix = os.path.normcase(parent_text.rstrip(os.sep) + os.sep)
+    if not os.path.normcase(candidate_text).startswith(parent_prefix):
         raise ShipmentEtlPathError("output file escaped its approved directory")
+    if name in ("", ".", "..") or "/" in name or "\\" in name or "\x00" in name:
+        raise ShipmentEtlPathError("output file must be one path component")
     try:
         metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
     except FileNotFoundError:
@@ -702,10 +703,11 @@ def open_etl_input_file(
             common = os.path.commonpath((path_text, root_text))
         except ValueError:
             continue
-        path_key = os.path.normcase(os.path.normpath(path_text))
-        root_key = os.path.normcase(os.path.normpath(root_text))
-        root_prefix = root_key.rstrip(os.sep) + os.sep
-        if os.path.normcase(common) == root_key and path_key.startswith(root_prefix):
+        root_prefix = os.path.normcase(root_text.rstrip(os.sep) + os.sep)
+        path_key = os.path.normcase(path_text)
+        if os.path.normcase(common) == os.path.normcase(root_text) and path_key.startswith(
+            root_prefix
+        ):
             root = Path(root_text)
             break
     if root is None:
@@ -715,6 +717,8 @@ def open_etl_input_file(
     descriptor: int | None = None
     try:
         name = _validated_path_component(path.name)
+        if name in ("", ".", "..") or "/" in name or "\\" in name or "\x00" in name:
+            raise ShipmentEtlPathError("input file must be one path component")
         if os.name == "nt":
             descriptor = _windows_open_relative(
                 parent_fd,
@@ -757,10 +761,11 @@ def prepare_etl_output_path(
             common = os.path.commonpath((path_text, root_text))
         except ValueError:
             continue
-        path_key = os.path.normcase(os.path.normpath(path_text))
-        root_key = os.path.normcase(os.path.normpath(root_text))
-        root_prefix = root_key.rstrip(os.sep) + os.sep
-        if os.path.normcase(common) == root_key and path_key.startswith(root_prefix):
+        root_prefix = os.path.normcase(root_text.rstrip(os.sep) + os.sep)
+        path_key = os.path.normcase(path_text)
+        if os.path.normcase(common) == os.path.normcase(root_text) and path_key.startswith(
+            root_prefix
+        ):
             root = Path(root_text)
             break
     if root is None or Path(os.path.realpath(path_text)) != path:
@@ -793,10 +798,11 @@ def open_etl_output_file(
             common = os.path.commonpath((path_text, root_text))
         except ValueError:
             continue
-        path_key = os.path.normcase(os.path.normpath(path_text))
-        root_key = os.path.normcase(os.path.normpath(root_text))
-        root_prefix = root_key.rstrip(os.sep) + os.sep
-        if os.path.normcase(common) == root_key and path_key.startswith(root_prefix):
+        root_prefix = os.path.normcase(root_text.rstrip(os.sep) + os.sep)
+        path_key = os.path.normcase(path_text)
+        if os.path.normcase(common) == os.path.normcase(root_text) and path_key.startswith(
+            root_prefix
+        ):
             root = Path(root_text)
             break
     if root is None:
@@ -832,6 +838,13 @@ def open_etl_output_file(
         # overwrites an existing regular file without following a leaf link.
         _reject_output_symlink(path.name, parent_fd, path.parent)
         output_name = _validated_path_component(path.name)
+        if (
+            output_name in ("", ".", "..")
+            or "/" in output_name
+            or "\\" in output_name
+            or "\x00" in output_name
+        ):
+            raise ShipmentEtlPathError("output file must be one path component")
         os.rename(temp_name, output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
         published = True
     finally:
