@@ -103,13 +103,26 @@ def _safe_under_roots(raw: str, roots: list[Path]) -> Path:
         raise ShipmentEtlPathError("path not under allowed dirs")
     for root in root_paths:
         candidate = requested if requested.is_absolute() else root / requested
+        normalized = os.path.normpath(str(candidate))
+        root_text = os.path.normpath(str(root))
+        # Normalize first, then enforce a component-boundary prefix before any
+        # filesystem operation. The second check protects against `/root-other`
+        # while the following realpath check rejects symlink escapes.
+        if not normalized.startswith(root_text):
+            continue
+        if normalized != root_text and not normalized.startswith(root_text + os.sep):
+            continue
         # realpath removes traversal and resolves symlinks before the boundary
         # check. Keep the separator in the prefix test so `/root-other` is not
         # treated as a child of `/root`.
-        resolved = Path(os.path.realpath(str(candidate)))
-        root_text = str(root)
+        resolved = Path(os.path.realpath(normalized))
+        resolved_root_text = os.path.realpath(root_text)
         resolved_text = str(resolved)
-        if resolved_text != root_text and not resolved_text.startswith(root_text + os.sep):
+        if not resolved_text.startswith(resolved_root_text):
+            continue
+        if resolved_text != resolved_root_text and not resolved_text.startswith(
+            resolved_root_text + os.sep
+        ):
             continue
         return resolved
     raise ShipmentEtlPathError("path not under allowed dirs")

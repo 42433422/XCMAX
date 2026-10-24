@@ -1,5 +1,5 @@
 {
-  "lines": 2367884,
-  "updated": "2026-10-23",
-  "note": "Approved PR #2544 exceptions: previous clean count 2,367,667 was +30,202 vs main baseline 2,337,465 (+30,027 merged-main lines and 175 PR lines), including the prior approved +8-line WORKSPACE_ROOT containment fix. This approved clean increment is +217 lines for Postgres direct-batch namespace validation backported from LangGraph PR #9217, sync/async positive-negative regressions, replayable vendor provenance, and SSOT router-cast module-scope regressions. New count 2,367,884; user legal/eval working-tree edits excluded."
+  "lines": 2367901,
+  "updated": "2026-10-24",
+  "note": "PR #2544 CodeQL 路径边界修复：2,367,884 行基线增加 17 行（生产路径规范化及路径组件边界校验 +13、合法根/相似前缀回归 +4）；未混入其他工作树材料。"
 }

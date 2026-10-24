@@ -344,6 +344,10 @@ def test_etl_path_resolver_rejects_traversal_and_symlink_escape(tmp_path, monkey
     outside.mkdir()
     secret = outside / "private.xlsx"
     secret.write_bytes(b"not an ETL workbook")
+    prefix_sibling = tmp_path / "allowed-other"
+    prefix_sibling.mkdir()
+    sibling_file = prefix_sibling / "private.xlsx"
+    sibling_file.write_bytes(b"not an allowed-root file")
     link = allowed / "linked.xlsx"
     link.symlink_to(secret)
     (allowed / "input.xlsx").write_bytes(b"inside")
@@ -352,7 +356,7 @@ def test_etl_path_resolver_rejects_traversal_and_symlink_escape(tmp_path, monkey
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
 
     assert security.resolve_etl_path("input.xlsx") == allowed / "input.xlsx"
-    for raw in ("../outside/private.xlsx", str(secret), str(link)):
+    for raw in ("../outside/private.xlsx", str(secret), str(sibling_file), str(link)):
         with pytest.raises(security.ShipmentEtlPathError):
             security.resolve_etl_path(raw)
 
