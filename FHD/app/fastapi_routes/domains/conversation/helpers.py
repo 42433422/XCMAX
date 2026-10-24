@@ -27,6 +27,9 @@ from app.application.agent_orchestrator.chat_trace import (
 from app.application.chat_reply_safety import (
     sanitize_model_chat_reply as sanitize_model_chat_reply,
 )
+from app.application.conversation import (
+    chat_stream_sse_events as chat_stream_sse_events,
+)
 from app.application.modstore_conversation_app import (
     create_modstore_openai_client_from_request as create_modstore_openai_client_from_request,
 )
@@ -43,9 +46,6 @@ from app.domain.context.session_context import (
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode  # noqa: F401
-from app.application.conversation import (
-    chat_stream_sse_events as chat_stream_sse_events,
-)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
