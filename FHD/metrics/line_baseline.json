@@ -1,5 +1,5 @@
 {
-  "lines": 2337345,
+  "lines": 2337346,
   "updated": "2026-10-25",
-  "note": "同步主线 2ad88b72 发布台账，业务源代码与已通过全部必需门禁的 56a2ebec 保持一致"
+  "note": "ops bind exact-SHA 7e2f0e29 main HEAD (brotli+arch)"
 }
