@@ -9,7 +9,7 @@ from fastapi import Body, Query, Request
 
 
 def _facade() -> Any:
-    return sys.modules["app.fastapi_routes.shipment_orders"]
+    return sys.modules["app.fastapi_routes.domains.shipment.shipment_orders"]
 
 
 router = _facade().router
