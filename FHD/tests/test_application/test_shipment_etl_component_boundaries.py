@@ -333,6 +333,13 @@ def test_batch_scan_windows_directory_page_parser_accepts_multiple_entries():
     assert _parse_windows_directory_page(bytes(page)) == [first_name, "second.xlsx"]
 
 
+def test_batch_scan_windows_directory_information_class_values():
+    from app.application.shipment_etl import directory_listing
+
+    assert directory_listing._FILE_ID_BOTH_DIRECTORY_INFO == 10
+    assert directory_listing._FILE_ID_BOTH_DIRECTORY_RESTART_INFO == 11
+
+
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [

@@ -7,6 +7,8 @@ import struct
 
 _FILE_ID_BOTH_DIRECTORY_INFO_NAME_OFFSET = 104
 _FILE_ID_BOTH_DIRECTORY_INFO_NAME_LENGTH_OFFSET = 60
+_FILE_ID_BOTH_DIRECTORY_INFO = 10
+_FILE_ID_BOTH_DIRECTORY_RESTART_INFO = 11
 
 
 def _parse_windows_directory_page(data: bytes) -> list[str]:
@@ -59,14 +61,14 @@ def _windows_directory_names(directory_fd: int) -> list[str]:
     handle = wintypes.HANDLE(msvcrt.get_osfhandle(directory_fd))  # type: ignore[attr-defined]
     buffer = ctypes.create_string_buffer(64 * 1024)
     names: list[str] = []
-    info_class = 38  # FileIdBothDirectoryRestartInfo for the first page.
+    info_class = _FILE_ID_BOTH_DIRECTORY_RESTART_INFO
     while True:
         if not kernel32.GetFileInformationByHandleEx(handle, info_class, buffer, len(buffer)):
             error = ctypes.get_last_error()  # type: ignore[attr-defined]
             if error == 18:  # ERROR_NO_MORE_FILES
                 return names
             raise ctypes.WinError(error)  # type: ignore[attr-defined]
-        info_class = 37  # FileIdBothDirectoryInfo continues the pinned enumeration.
+        info_class = _FILE_ID_BOTH_DIRECTORY_INFO
         page = ctypes.string_at(ctypes.addressof(buffer), len(buffer))
         names.extend(_parse_windows_directory_page(page))
 
