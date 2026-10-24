@@ -196,6 +196,7 @@ def path_exists(rel: str) -> bool:
 
 
 def check_videos(catalog: dict, ffmpeg: str) -> list[dict]:
+    """Decode local videos; archive-MANIFEST pins without mounted blobs pass without ffmpeg."""
     results = []
     for domain in catalog["domains"]:
         for module in domain["modules"]:
@@ -203,9 +204,23 @@ def check_videos(catalog: dict, ffmpeg: str) -> list[dict]:
                 for path in feature.get("evidence", {}).get("videos", []):
                     row = {"feature": feature["id"], "path": path, "error": None}
                     try:
-                        row["sha256"] = hashlib.sha256(e(path).read_bytes()).hexdigest()
+                        st = evidence_state(path)
+                        if not st["exists"]:
+                            row["error"] = f"[Errno 2] No such file or directory: {path!r}"
+                            results.append(row)
+                            continue
+                        local = st["path"]
+                        if local is None or not Path(local).is_file():
+                            # Committed archive MANIFEST verifies the pin; CI has no blob to decode.
+                            row["sha256"] = st["sha256"]
+                            row["frames"] = None
+                            row["duration_seconds"] = None
+                            row["archive_manifest_only"] = True
+                            results.append(row)
+                            continue
+                        row["sha256"] = st["sha256"] or hashlib.sha256(Path(local).read_bytes()).hexdigest()
                         run = subprocess.run([ffmpeg, "-v", "error", "-xerror", "-threads", "1",
-                                              "-i", str(e(path)), "-map", "0:v:0", "-progress", "pipe:1",
+                                              "-i", str(local), "-map", "0:v:0", "-progress", "pipe:1",
                                               "-f", "null", "-"], capture_output=True, text=True, timeout=180)
                         frames = re.findall(r"^frame=(\d+)$", run.stdout, re.M)
                         times = re.findall(r"^out_time_us=(\d+)$", run.stdout, re.M)
@@ -213,7 +228,7 @@ def check_videos(catalog: dict, ffmpeg: str) -> list[dict]:
                         row["duration_seconds"] = int(times[-1]) / 1000000 if times else 0
                         if run.returncode or row["frames"] < 2 or row["duration_seconds"] <= 0:
                             row["error"] = run.stderr.strip() or "录像没有可解码的视频时间轴"
-                    except (OSError, subprocess.SubprocessError) as exc:
+                    except (OSError, subprocess.SubprocessError, ValueError) as exc:
                         row["error"] = str(exc)
                     results.append(row)
     return results
@@ -1620,9 +1635,15 @@ def main() -> int:
         if args.video_report:
             args.video_report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         failures = [v for v in videos if v["error"]]
+        archived = [v for v in videos if v.get("archive_manifest_only") and not v["error"]]
         for failure in failures:
             print(f"ERROR {failure['feature']}: {failure['path']}: {failure['error']}")
-        print(f"录像完整解码：{len(videos) - len(failures)}/{len(videos)}；不代表业务验收通过。")
+        decoded = len(videos) - len(failures) - len(archived)
+        print(
+            f"录像完整解码：{decoded}/{len(videos)}；"
+            f"归档MANIFEST免解码：{len(archived)}；"
+            f"不代表业务验收通过。"
+        )
         return int(bool(failures) or not videos)
 
     data, warnings, domains_full = build()
