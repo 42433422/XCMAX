@@ -25,6 +25,7 @@ SAMPLE_DIR = Path("/Users/a4243342/Desktop/新建文件夹 (4)/产品文件夹/�
 
 @pytest.fixture(autouse=True)
 def _etl_universal_kb(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
     monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)

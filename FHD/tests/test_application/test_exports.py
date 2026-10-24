@@ -9,8 +9,16 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.application import shipment_excel_etl_security as etl_security
 from app.application.tools import exports
+
+
+@pytest.fixture(autouse=True)
+def _configured_workspace_root(tmp_path, monkeypatch):
+    """Run file-export tests inside the same explicit root used by production."""
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
 
 
 class TestHandlePriceListExport:
