@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 from typing import Any, cast
 
 from fastapi import HTTPException, Request
@@ -51,23 +52,6 @@ from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.legacy.chat.legacy_chat_adapter import chat as run_agent_chat
 from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
-
-_COMPAT_PATCH_EXPORTS: tuple[Any, ...] = (
-    json,
-    cast,
-    HTTPException,
-    finalize_legacy_chat_run,
-    start_legacy_chat_run,
-)
-_COMPAT_PATCH_EXPORTS += (assert_p2_elevated_claim_or_raise, runtime_context_with_tier)
-_COMPAT_PATCH_EXPORTS += (
-    planner_workflow_interrupt_reply,
-    runtime_context_after_workflow_interrupt,
-)
-_COMPAT_PATCH_EXPORTS += (_ensure_chat_db_read_authorized, _ensure_vector_index_if_needed)
-_COMPAT_PATCH_EXPORTS += (_message_requires_db_read_token, _xcagi_chat_http_exc)
-_COMPAT_PATCH_EXPORTS += (_xcagi_chat_timeout_error_payload, _xcagi_chat_timeout_seconds)
-_COMPAT_PATCH_EXPORTS += (set_llm_mode, run_agent_chat, create_modstore_openai_client_from_request)
 
 logger = logging.getLogger(__name__)
 
@@ -137,12 +121,40 @@ from app.application.planner_compat_service_part03 import (
 )
 
 
+def _prepare_compat_chat_body(request: Request, body: XcagiCompatChatBody) -> XcagiCompatChatBody:
+    context = _runtime_context_with_authenticated_actor(request, body.context)
+    if not str(context.get("turn_id") or "").strip():
+        context["turn_id"] = uuid.uuid4().hex
+    return body.model_copy(update={"context": context})
+
+
+def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]) -> None:
+    from app.application import get_ai_chat_app_service
+    from app.application.task_conversation_store import durable_user_id
+
+    context = body.context or {}
+    owner = durable_user_id(context.get("local_user_id"))
+    if (
+        owner is None
+        or context.get("tenant_id") is None
+        or not (context.get("session_id") or context.get("conversation_id"))
+    ):
+        return
+    try:
+        get_ai_chat_app_service()._persist_chat_turn(str(owner), body.message, context, payload)
+    except RECOVERABLE_ERRORS:
+        logger.warning("compat chat history persistence failed", exc_info=True)
+
+
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> dict[str, Any]:
     """Run the extracted implementation against this facade's patchable globals."""
     token = set_facade_globals(globals())
     try:
+        body = _prepare_compat_chat_body(request, body)
         with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
-            return await _execute_compat_chat_impl(request, body)
+            payload = await _execute_compat_chat_impl(request, body)
+        _persist_compat_chat_turn(body, payload)
+        return payload
     finally:
         reset_facade_globals(token)
 
@@ -165,7 +177,32 @@ async def compat_chat_stream_async(
     """Keep stream helpers bound to this facade while iterating the async generator."""
     token = set_facade_globals(globals())
     try:
-        async for chunk in _compat_chat_stream_async_impl(request, body, ai_tier=ai_tier):
-            yield chunk
+        body = _prepare_compat_chat_body(request, body)
+        pending = b""
+        with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+            async for chunk in _compat_chat_stream_async_impl(request, body, ai_tier=ai_tier):
+                pending += chunk
+                while b"\n\n" in pending:
+                    event, pending = pending.split(b"\n\n", 1)
+                    for line in event.splitlines():
+                        if not line.startswith(b"data: "):
+                            continue
+                        try:
+                            item = json.loads(line[6:])
+                        except (ValueError, UnicodeError):
+                            continue
+                        if not isinstance(item, dict):
+                            continue
+                        if item.get("type") == "done" and isinstance(item.get("result"), dict):
+                            _persist_compat_chat_turn(body, item["result"])
+                        elif item.get("type") == "error":
+                            _persist_compat_chat_turn(
+                                body,
+                                {
+                                    "success": False,
+                                    "response": str(item.get("message") or "对话执行失败"),
+                                },
+                            )
+                yield chunk
     finally:
         reset_facade_globals(token)

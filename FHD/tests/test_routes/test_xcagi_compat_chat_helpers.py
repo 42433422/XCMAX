@@ -189,6 +189,8 @@ def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts(
         (" NO. ", False, True, "normal"),
         ("确认", True, True, "normal"),
         ("下一步", True, True, "normal"),
+        ("刚才修改的测试客户，联系人现在是谁？请查询实际记录后回答。", False, True, "normal"),
+        ("查询刚才那个客户", False, True, "normal"),
         ("你好，帮我写首诗", False, False, "pro"),
     ],
 )

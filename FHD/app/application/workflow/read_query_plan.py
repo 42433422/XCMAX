@@ -23,6 +23,17 @@ def customer_read_node(
     ):
         return None
     text = message.strip().rstrip("。？！?!")
+    slots = route.get("slots") or {}
+    if "id" in slots:
+        return WorkflowNode(
+            node_id="query_customers",
+            tool_id="customers",
+            action="query",
+            params={"id": slots["id"]},
+            risk="low",
+            idempotent=True,
+            description="按 ID 查询客户信息",
+        )
     listing = re.fullmatch(
         r"(?:请|帮我)?(?:查询|查一下|查看|看看|看下)?\s*(?:全部|所有)?\s*(?:客户|购买单位|买家)(?:列表|清单|有哪些|都有谁)",
         text,

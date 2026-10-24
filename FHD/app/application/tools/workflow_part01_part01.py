@@ -144,32 +144,36 @@ def handle_excel_analysis(
     if action == "aggregate":
         group_by = [str(x) for x in args.get("group_by") or [] if str(x)]
         metrics = args.get("metrics") or []
-        if group_by and isinstance(metrics, list):
-            agg_map: dict[str, list[str]] = {}
-            for m in metrics:
-                if not isinstance(m, dict):
-                    continue
-                col = str(m.get("column") or "").strip()
-                op = str(m.get("op") or "").strip()
-                if col and op:
-                    agg_map.setdefault(col, []).append(op)
-            if agg_map:
-                out_df = df.groupby(group_by, dropna=False).agg(agg_map).reset_index()
-                out_df.columns = [
-                    "_".join([str(c) for c in x if str(c) != ""]).strip("_")
-                    if isinstance(x, tuple)
-                    else str(x)
-                    for x in out_df.columns
-                ]
-            else:
-                out_df = df
+        agg_map: dict[str, list[str]] = {}
+        for metric in metrics if isinstance(metrics, list) else []:
+            if not isinstance(metric, dict):
+                continue
+            col, op = str(metric.get("column") or ""), str(metric.get("op") or "")
+            if col not in df.columns or op not in {"sum", "mean", "count", "min", "max"}:
+                return {"success": False, "error": "invalid_aggregation_metrics"}
+            agg_map.setdefault(col, []).append(op)
+        if not agg_map:
+            return {"success": False, "error": "missing_aggregation_metrics"}
+        if any(col not in df.columns for col in group_by):
+            return {"success": False, "error": "invalid_group_by"}
+        if group_by:
+            out_df = df.groupby(group_by, dropna=False).agg(agg_map).reset_index()
+            out_df.columns = [
+                "_".join(str(c) for c in x if str(c)).strip("_") if isinstance(x, tuple) else str(x)
+                for x in out_df.columns
+            ]
         else:
-            out_df = df
+            out_df = _facade().pd.DataFrame(
+                [{f"{col}_{op}": df[col].agg(op) for col, ops in agg_map.items() for op in ops}]
+            )
         return {
             "success": True,
             "action": "aggregate",
             "file_path": file_path,
             "row_count": int(len(out_df)),
+            "source_row_count": int(len(df)),
+            "returned_rows": min(len(out_df), 200),
+            "truncated": len(out_df) > 200,
             "records": _facade().json.loads(
                 out_df.head(200).replace({float("nan"): None}).to_json(orient="records")
             ),

@@ -90,6 +90,9 @@ def test_fallback_planner_routes_customer_db_write_without_llm(message):
     assert node.params["entity"] == "customers"
     assert node.params["operation"] == "upsert"
     assert node.params["payload"]["unit_name"] == "星光贸易"
+    if "不填写" in message:
+        assert "contact_phone" not in node.params["payload"]
+        assert "contact_address" not in node.params["payload"]
 
 
 def test_fallback_planner_routes_product_db_write_without_llm():
@@ -1478,3 +1481,40 @@ def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(local_tools):
     assert run.status == "completed"
     assert "step.approved" in [event.event_type for event in run.events]
     mock_dispatch.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("message", "labels", "expected"),
+    [
+        ("不填写电话和地址", ("联系电话", "电话"), ""),
+        ("不要 提供 电话 13800000000", ("电话",), ""),
+        ("地址不用填写", ("地址",), ""),
+        ("地址「上海」", ("地址",), "上海"),
+        ("联系人 张三，不填写电话和地址", ("联系人",), "张三"),
+        ("电话 13800000000", ("电话",), "13800000000"),
+        ("联系人不二", ("联系人",), "不二"),
+    ],
+)
+def test_business_fields_only_use_explicit_non_negated_assignments(message, labels, expected):
+    from app.application.workflow.planner import _extract_marked_value
+
+    assert _extract_marked_value(message, labels) == expected
+
+
+@pytest.mark.parametrize("customer_id", [10, 0, -1, "10.5", "unknown"])
+def test_customer_workflow_read_never_expands_explicit_id(monkeypatch, customer_id):
+    from unittest.mock import MagicMock
+
+    from app.application.workflow.planner import _execute_customers_tool
+
+    service = MagicMock()
+    service.get_by_id.return_value = {"success": True, "data": {"id": 10}}
+    monkeypatch.setattr("app.bootstrap.get_customer_app_service", lambda: service)
+    result = _execute_customers_tool({"id": customer_id})
+    service.get_all.assert_not_called()
+    if customer_id == 10:
+        assert result["success"] is True
+        service.get_by_id.assert_called_once_with(10)
+    else:
+        assert result["success"] is False
+        service.get_by_id.assert_not_called()

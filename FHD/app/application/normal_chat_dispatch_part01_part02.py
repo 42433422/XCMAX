@@ -182,7 +182,9 @@ def _request_tenant_id(request: _facade().Any | None) -> int | None:
     曾盖掉本地会话时中间件写入 None 导致 ORM fail-closed。
     """
     if request is None:
-        return None
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        return current_tenant_id()
     try:
         value = getattr(getattr(request, "state", None), "tenant_id", None)
         if value is not None:

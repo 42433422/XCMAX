@@ -14,8 +14,8 @@ REFUSAL_MESSAGE = "不能直接执行数据库 SQL。请使用具体的业务操
 def database_maintenance_request(message: str) -> tuple[str, str] | None:
     command = (
         r"^\s*(?:(?:请|麻烦|你|帮我|现在|先|只|立即)\s*)*"
-        r"(?:(恢复|还原|备份)(?:一次)?(?:本机|本地)?数据库"
-        r"|(?:创建|生成|做)(?:一次|一份)?(?:本机|本地)?数据库备份)"
+        r"(?:(恢复|还原|备份)(?:一次)?(?:当前)?(?:本机|本地)?数据库"
+        r"|(?:创建|生成|做)(?:一次|一份)?(?:当前)?(?:本机|本地)?数据库备份)"
     )
     match = re.match(command, message)
     if not match:

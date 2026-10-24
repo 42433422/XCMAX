@@ -110,6 +110,8 @@ class ConversationService(NeuroEventPublisherMixin):
                 normalized_user_id = self._normalize_user_id(user_id)
 
                 if session:
+                    if normalized_user_id is not None and session.user_id != normalized_user_id:
+                        raise PermissionError("conversation session belongs to another user")
                     session.message_count += 1
                     session.last_message_at = datetime.now()
                 else:
@@ -248,7 +250,9 @@ class ConversationService(NeuroEventPublisherMixin):
                 logger.error("获取会话列表失败: %s", e)
                 raise
 
-    def update_session_title(self, session_id: str, title: str) -> bool:
+    def update_session_title(
+        self, session_id: str, title: str, *, user_id: str | None = None
+    ) -> bool:
         """
         更新会话标题
 
@@ -261,11 +265,12 @@ class ConversationService(NeuroEventPublisherMixin):
         """
         with get_db() as db:
             try:
-                session = (
-                    db.query(AIConversationSession)
-                    .filter(AIConversationSession.session_id == session_id)
-                    .first()
+                query = db.query(AIConversationSession).filter(
+                    AIConversationSession.session_id == session_id
                 )
+                if user_id is not None:
+                    query = query.filter(AIConversationSession.user_id == user_id)
+                session = query.first()
 
                 if session:
                     session.title = title
@@ -277,7 +282,7 @@ class ConversationService(NeuroEventPublisherMixin):
                 logger.error("更新会话标题失败: %s", e)
                 raise
 
-    def delete_session(self, session_id: str) -> bool:
+    def delete_session(self, session_id: str, *, user_id: str | None = None) -> bool:
         """
         删除会话
 
@@ -289,16 +294,15 @@ class ConversationService(NeuroEventPublisherMixin):
         """
         with get_db() as db:
             try:
-                # 删除会话的所有消息
-                db.query(AIConversation).filter(AIConversation.session_id == session_id).delete()
-
-                # 删除会话
-                (
-                    db.query(AIConversationSession)
-                    .filter(AIConversationSession.session_id == session_id)
-                    .delete()
+                query = db.query(AIConversationSession).filter(
+                    AIConversationSession.session_id == session_id
                 )
-
+                if user_id is not None:
+                    query = query.filter(AIConversationSession.user_id == user_id)
+                session = query.first()
+                if session is None:
+                    return False
+                db.delete(session)
                 db.commit()
                 return True
             except RECOVERABLE_ERRORS as e:

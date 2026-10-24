@@ -5,14 +5,9 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.fastapi_routes.domains.misc.helpers import (
-    _message_to_dict,
-    _session_to_dict,
-)
-from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -61,34 +56,31 @@ def _trace_ai_message_save(payload: dict, *, body: dict) -> dict:
         return payload
 
 
-@router.get("/api/conversations/{session_id}")
-def conversations_get(session_id: str, limit: int = Query(default=50)):
-    try:
-        from app.application.facades.conversation_facade import get_conversation_service
+def _history_actor(request: Request) -> str:
+    from app.application.task_conversation_store import durable_user_id
+    from app.infrastructure.auth.dependencies import resolve_session_user
 
-        service = get_conversation_service()
-        messages = service.get_session_messages(session_id, limit)
-        sessions = service.get_sessions(user_id=None, limit=1000)
-        session_info = None
-        for s in sessions:
-            current = _session_to_dict(s)
-            if current.get("session_id") == session_id:
-                session_info = current
-                break
-        result = [_message_to_dict(m) for m in messages]
-        return json_safe({"success": True, "session": session_info, "messages": result})
-    except RECOVERABLE_ERRORS as e:
-        logger.error("conversations get: %s", e)
-        return JSONResponse({"success": False, "message": "会话列表暂时不可用"}, status_code=500)
+    actor = durable_user_id(getattr(resolve_session_user(request), "id", None))
+    if actor is None:
+        raise HTTPException(status_code=401, detail="请先登录后再访问会话。")
+    return str(actor)
+
+
+@router.get("/api/conversations/{session_id}")
+def conversations_get(request: Request, session_id: str, limit: int = Query(default=50)):
+    from app.legacy.routes.conversation.compat_extra import conversations_get as read_history
+
+    return read_history(request, session_id, user_id=_history_actor(request), mod_id="")
 
 
 @router.delete("/api/conversations/{session_id}")
-def conversations_delete(session_id: str):
+def conversations_delete(request: Request, session_id: str):
+    owner = _history_actor(request)
     try:
         from app.application.facades.conversation_facade import get_conversation_service
 
         service = get_conversation_service()
-        success = service.delete_session(session_id)
+        success = service.delete_session(session_id, user_id=owner)
         return {"success": success}
     except RECOVERABLE_ERRORS as e:
         logger.error("conversations delete: %s", e)
@@ -96,7 +88,9 @@ def conversations_delete(session_id: str):
 
 
 @router.put("/api/conversations/{session_id}/title")
-def conversations_title_put(session_id: str, body: dict = Body(default_factory=dict)):
+def conversations_title_put(
+    request: Request, session_id: str, body: dict = Body(default_factory=dict)
+):
     from app.application.facades.conversation_facade import (
         get_conversation_service as get_conversation_app_service,
     )
@@ -104,7 +98,7 @@ def conversations_title_put(session_id: str, body: dict = Body(default_factory=d
     service = get_conversation_app_service()
     data = body or {}
     title = data.get("title", "")
-    success = service.update_session_title(session_id, title)
+    success = service.update_session_title(session_id, title, user_id=_history_actor(request))
     return {"success": success}
 
 
@@ -141,7 +135,7 @@ def ai_analyze_export(export_id: str):
 
 
 @router.post("/api/ai/message/save")
-def ai_message_save(body: dict = Body(default_factory=dict)):
+def ai_message_save(request: Request, body: dict = Body(default_factory=dict)):
     from app.application.facades.conversation_facade import (
         get_conversation_service as get_conversation_app_service,
     )
@@ -150,7 +144,6 @@ def ai_message_save(body: dict = Body(default_factory=dict)):
     if not body:
         return JSONResponse({"success": False, "message": "请求数据不能为空"}, status_code=400)
     session_id = body.get("session_id")
-    user_raw = body.get("user_id", "default")
     role = body.get("role")
     content = body.get("content")
     intent = body.get("intent", "")
@@ -166,10 +159,13 @@ def ai_message_save(body: dict = Body(default_factory=dict)):
     if not content:
         return JSONResponse({"success": False, "message": "消息内容不能为空"}, status_code=400)
 
-    user_id_str = str(user_raw) if user_raw is not None else "default"
+    user_id_str = _history_actor(request)
+    body = {**body, "user_id": user_id_str}
     try:
         message_id = service.save_message(session_id, user_id_str, role, content, intent, metadata)
         return _trace_ai_message_save({"success": True, "message_id": message_id}, body=body)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="无权写入该会话。") from exc
     except RECOVERABLE_ERRORS:
         logger.exception("conversation message save failed")
         traced = _trace_ai_message_save({"success": False, "message": "消息保存失败"}, body=body)

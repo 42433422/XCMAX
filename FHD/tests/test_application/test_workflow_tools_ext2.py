@@ -172,7 +172,8 @@ class TestHandleExcelAnalysisDeep:
                     "metrics": [],
                 }
             )
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["error"] == "missing_aggregation_metrics"
 
     def test_statistics_action(self, tmp_path):
         import pandas as pd

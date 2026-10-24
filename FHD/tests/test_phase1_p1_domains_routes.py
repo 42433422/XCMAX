@@ -194,9 +194,17 @@ def test_ai_analyze_query_only(mock_get: MagicMock, excel_client: TestClient) ->
 
 
 @pytest.fixture
-def conversation_client() -> TestClient:
+def conversation_client(monkeypatch) -> TestClient:
     from app.fastapi_routes.domains.conversation import routes as conv_routes
 
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda request: SimpleNamespace(id=1),
+    )
+    monkeypatch.setattr(
+        "app.legacy.routes.conversation.compat_extra.task_conversation_store.get_conversation",
+        lambda **kwargs: {"session": None, "messages": []},
+    )
     app = FastAPI()
     app.include_router(conv_routes.router)
     return TestClient(app, raise_server_exceptions=False)
@@ -241,11 +249,12 @@ def test_ai_message_save_ok(mock_get: MagicMock, conversation_client: TestClient
             "session_id": "s1",
             "role": "user",
             "content": "hi",
-            "user_id": 1,
+            "user_id": 999,
         },
     )
     assert r.status_code == 200
     assert r.json()["message_id"] == 99
+    assert mock_get.return_value.save_message.call_args.args[1] == "1"
 
 
 @patch("app.application.facades.conversation_facade.get_conversation_service")

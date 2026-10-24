@@ -86,6 +86,13 @@ def _extract_business_db_id(message: str) -> int | None:
 
 def _extract_marked_value(message: str, labels: tuple[str, ...], *, clean: bool = True) -> str:
     label_pattern = "|".join(_facade().re.escape(label) for label in labels)
+    negation = r"(?:(?:不要|无需|不用|不|别)\s*(?:填(?:写)?|提供|设置|录入|留(?:下)?|修改|更改)|不要|无需|不用)"
+    message = _facade().re.sub(
+        rf"{negation}\s*(?:{label_pattern})|(?:{label_pattern})\s*{negation}",
+        "",
+        message,
+        flags=_facade().re.I,
+    )
     quoted = _facade().re.search(
         rf"""(?:{label_pattern})\s*[:：是为]?\s*(?:「([^」]*)」|“([^”]*)”|"([^"]*)"|'([^']*)')""",
         message,

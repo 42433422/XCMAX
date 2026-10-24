@@ -19,23 +19,54 @@ def build_customers_query_response_dict(
     """
     if route_result.get("intent") != "customers_query":
         return None
-    keyword = str((route_result.get("slots") or {}).get("keyword") or "").strip()
-    tool_params: dict[str, _facade().Any] = {"page": 1, "per_page": 50}
+    slots = route_result.get("slots") or {}
+    keyword = str(slots.get("keyword") or "").strip()
+    customer_id = None
+    if "id" in slots:
+        raw_id = str(slots["id"]).strip()
+        if not _facade().re.fullmatch(r"[1-9]\d*", raw_id):
+            return {"success": False, "response": "请提供一个有效的客户 ID（正整数）。", "data": {}}
+        customer_id = int(raw_id)
+    tool_params: dict[str, _facade().Any] = (
+        {"id": customer_id} if customer_id is not None else {"page": 1, "per_page": 50}
+    )
     if keyword:
         tool_params["keyword"] = keyword
     try:
+        from starlette.responses import JSONResponse
+
         from app.infrastructure.tenant_scope import tenant_scope
+        from app.mod_sdk.erp_customers_facade import customers_get
         from app.mod_sdk.erp_customers_facade import customers_list as customers_list_via_service
         from app.mod_sdk.erp_domain_dispatch import try_invoke_erp_domain_handler
 
         with tenant_scope(_facade()._request_tenant_id(request)):
             result = try_invoke_erp_domain_handler(
-                "customers", "list", request=request, page=1, per_page=50, keyword=keyword or None
+                "customers",
+                "get" if customer_id is not None else "list",
+                request=request,
+                **(
+                    {"customer_id": customer_id}
+                    if customer_id is not None
+                    else {"page": 1, "per_page": 50, "keyword": keyword or None}
+                ),
             )
             if result is None:
-                result = customers_list_via_service(
-                    request, page=1, per_page=50, keyword=keyword or None
+                result = (
+                    customers_get(request, customer_id)
+                    if customer_id is not None
+                    else customers_list_via_service(
+                        request, page=1, per_page=50, keyword=keyword or None
+                    )
                 )
+        if isinstance(result, JSONResponse):
+            result = _facade().json.loads(result.body)
+        if customer_id is not None and isinstance(result, dict) and result.get("success"):
+            record = result.get("data")
+            if not isinstance(record, dict) or record.get("id") != customer_id:
+                result = {"success": False, "message": "客户查询工具未返回指定 ID 的记录。"}
+            else:
+                result = {**result, "data": [record], "total": 1}
         if isinstance(result, dict) and result.get("success") is False:
             msg = str(result.get("message") or result.get("response") or "客户查询工具执行失败")
             tool_record = {
@@ -63,6 +94,14 @@ def build_customers_query_response_dict(
         )
         if not customers:
             msg = f"没有查到与「{keyword}」匹配的客户。" if keyword else "当前客户库暂无数据。"
+        elif customer_id is not None:
+            record = customers[0]
+            msg = (
+                f"客户 ID {customer_id}：{record.get('customer_name', '')}\n"
+                f"联系人：{record.get('contact_person') or '未填写'}\n"
+                f"电话：{record.get('contact_phone') or '未填写'}\n"
+                f"地址：{record.get('contact_address') or '未填写'}"
+            )
         else:
             lines = [
                 f"- {c.get('customer_name', '')} {c.get('contact_person', '')}".rstrip()

@@ -247,6 +247,11 @@ def _execute_customers_tool(params: dict[str, _facade().Any]) -> dict[str, _faca
         page = int(params.get("page", 1))
         per_page = int(params.get("per_page", 20))
         svc = get_customer_app_service()
+        if "id" in params or "customer_id" in params:
+            customer_id = str(params.get("id", params.get("customer_id"))).strip()
+            if not _facade().re.fullmatch(r"[1-9]\d*", customer_id):
+                raise ValueError("客户 ID 必须为正整数")
+            return svc.get_by_id(int(customer_id))
         return _facade().cast(
             "dict[str, Any]",
             svc.get_all(keyword=str(keyword).strip() or None, page=page, per_page=per_page),

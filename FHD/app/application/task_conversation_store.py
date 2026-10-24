@@ -125,7 +125,9 @@ class TaskConversationStore:
                 return {"session": None, "messages": []}
             messages = (
                 db.query(AIConversation)
-                .filter(AIConversation.session_id == session_id)
+                .filter(
+                    AIConversation.session_id == session_id, AIConversation.user_id == str(user_id)
+                )
                 .order_by(AIConversation.created_at.asc(), AIConversation.id.asc())
                 .all()
             )
