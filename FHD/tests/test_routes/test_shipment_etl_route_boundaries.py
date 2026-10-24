@@ -39,6 +39,7 @@ def etl_adapters(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Mock:
     service.preview.return_value = {"success": True, "notes": []}
     service.execute.return_value = {"success": True, "shipment_created": 1}
     service.batch_execute.return_value = {"success": True, "shipment_created": 1}
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setattr(api, "TEMP_EXCEL_DIR", str(tmp_path))
     monkeypatch.setattr(
         "app.application.shipment_excel_etl_app_service.get_shipment_excel_etl_app_service",

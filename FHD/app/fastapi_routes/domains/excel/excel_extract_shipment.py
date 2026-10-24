@@ -79,6 +79,53 @@ def _temporary_upload_path(prefix: str, original_name: str, allowed_suffixes: se
     return str(Path(TEMP_EXCEL_DIR) / f"{prefix}_{uuid4().hex}{suffix}")
 
 
+
+def _build_etl_http():
+    """Compose shipment_etl HTTP adapters (upload ownership + public errors)."""
+    from datetime import datetime as _dt
+
+    from app.application.office_template_ingest_app_service import (
+        attach_template_ingest_to_etl_result,
+    )
+    from app.application.shipment_excel_etl_app_service import (
+        get_shipment_excel_etl_app_service,
+        preview_shipment_excel_etl,
+    )
+    from app.application.shipment_excel_etl_ocr import parse_ocr_document
+    from app.application.shipment_excel_etl_security import (
+        resolve_etl_output_path,
+        resolve_etl_path,
+    )
+    from app.bootstrap import get_extract_log_service
+    from app.fastapi_routes.shipment_etl.history import HistoryViews
+    from app.fastapi_routes.shipment_etl.imports import ShipmentImports
+    from app.fastapi_routes.shipment_etl.ocr import OcrPreview
+    from app.fastapi_routes.shipment_etl.responses import EtlResponses
+    from app.fastapi_routes.shipment_etl.templates import TemplateOutputs
+    from app.fastapi_routes.shipment_etl.uploads import UploadStager
+
+    responses = EtlResponses(sanitize=_safe_failed_etl_result, logger=logger)
+    uploads = UploadStager(_temporary_upload_path, logger)
+    imports = ShipmentImports(
+        get_shipment_excel_etl_app_service,
+        attach_template_ingest_to_etl_result,
+        uploads,
+        responses,
+    )
+    ocr = OcrPreview(parse_ocr_document, preview_shipment_excel_etl, uploads, responses)
+    history = HistoryViews(get_extract_log_service, responses)
+    templates = TemplateOutputs(
+        get_shipment_excel_etl_app_service,
+        resolve_etl_path,
+        resolve_etl_output_path,
+        lambda: TEMP_EXCEL_DIR,
+        _dt.now,
+        responses,
+    )
+    return imports, ocr, history, templates
+
+
+
 from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
     shipment_etl_batch_execute as shipment_etl_batch_execute,
 )
