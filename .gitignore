@@ -252,3 +252,45 @@ FHD/admin-console/.vite-bak/
 
 # Filled office documents do not belong in editor scratch state.
 /FHD/.cursor/*.docx
+
+# ============================================================================
+
+# ============================================================================
+# Evidence media bulk (2026-10-25 hygiene) — coexist with #2544 materialization
+# Why prior ignore failed: already-tracked files ignore .gitignore; old rules only
+# covered narrow e2e subpaths. Policy: capability-center PUBLIC copies + appstore/
+# promo binaries stay out of git; FHD/docs/evidence originals required by
+# evidence-materialization.json remain trackable; CI forbids unregistered media.
+# ============================================================================
+成都修茈科技有限公司/capabilities/assets/evidence/**/*.png
+成都修茈科技有限公司/capabilities/assets/evidence/**/*.jpg
+成都修茈科技有限公司/capabilities/assets/evidence/**/*.jpeg
+成都修茈科技有限公司/capabilities/assets/evidence/**/*.gif
+成都修茈科技有限公司/capabilities/assets/evidence/**/*.webp
+成都修茈科技有限公司/capabilities/assets/evidence/**/*.mp4
+成都修茈科技有限公司/capabilities/assets/evidence/**/*.webm
+成都修茈科技有限公司/capabilities/assets/evidence/**/*.mov
+成都修茈科技有限公司/capabilities/assets/evidence/**/*.mkv
+/appstore-screenshots/**/*.png
+/appstore-screenshots/**/*.jpg
+/appstore-screenshots/**/*.jpeg
+/宣传资料/**/*.png
+/宣传资料/**/*.jpg
+/宣传资料/**/*.jpeg
+/宣传资料/**/*.pptx
+/宣传资料/**/*.pdf
+.codex_modstore_archfix
+.codex_*/
+/成都修茈科技有限公司/public/hero-video.mp4
+/成都修茈科技有限公司/marketing-assets/**/*.mp4
+/成都修茈科技有限公司/marketing-assets/**/*.webm
+# retained_sources (evidence-materialization.json) must stay trackable
+!成都修茈科技有限公司/capabilities/assets/evidence/base-mac-client-99-final-state.png
+!成都修茈科技有限公司/capabilities/assets/evidence/base-mac-client-M2-shell-running.png
+!成都修茈科技有限公司/capabilities/assets/evidence/base-mac-client-base-mac-client-macos-20260929-095942.webm
+!成都修茈科技有限公司/capabilities/assets/evidence/dt-mac-control-00-login-form.png
+!成都修茈科技有限公司/capabilities/assets/evidence/dt-mac-control-D1-mac-control-fleet.png
+!成都修茈科技有限公司/capabilities/assets/evidence/dt-mac-control-D2-mac-control-create-list.png
+!成都修茈科技有限公司/capabilities/assets/evidence/dt-mac-control-D3-mac-control-detail.png
+!成都修茈科技有限公司/capabilities/assets/evidence/dt-mac-control-D4-mac-control-cancel.png
+!成都修茈科技有限公司/capabilities/assets/evidence/dt-mac-control-dt-mac-control-macos-20260929-094829.webm

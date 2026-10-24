@@ -30,23 +30,32 @@ def rebuild_publication_files():
     MODULE.prepare_evidence_assets()
 
 
-def test_media_routes_through_backend_and_other_files_stay_local() -> None:
+def test_media_routes_through_backend_and_other_files_stay_local(tmp_path, monkeypatch) -> None:
     MODULE._EVIDENCE_INDEX.clear()
-    png = "FHD/docs/evidence/capabilities/ai-employee-pack-01-employee-market.png"
-    assert MODULE.evidence_url("x-shot.png", png) == API + "x-shot.png"
-    assert MODULE._EVIDENCE_INDEX["x-shot.png"]["key"] == png
-    assert (
-        MODULE._EVIDENCE_INDEX["x-shot.png"]["sha256"]
-        == hashlib.sha256((ROOT / png).read_bytes()).hexdigest()
-    )
+    # 媒体已外置：用临时 png 验证 COS 登记路径；缺失源文件仍回退站内路径。
+    monkeypatch.setattr(MODULE, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(MODULE, "e", lambda rel: tmp_path / rel)
+    png_rel = "FHD/docs/evidence/capabilities/ai-employee-pack-01-employee-market.png"
+    png_path = tmp_path / png_rel
+    png_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = b"fake-evidence-png"
+    png_path.write_bytes(payload)
+    MODULE._SHA_CACHE.clear()
+    assert MODULE.evidence_url("x-shot.png", png_rel) == API + "x-shot.png"
+    assert MODULE._EVIDENCE_INDEX["x-shot.png"]["key"] == png_rel
+    assert MODULE._EVIDENCE_INDEX["x-shot.png"]["sha256"] == hashlib.sha256(payload).hexdigest()
     # JSON / 日志不进桶，仍由站内提供；缺失的源文件也不登记。
-    run_json = next(SITE.glob("capabilities/assets/evidence/*.json")).relative_to(ROOT).as_posix()
-    assert MODULE.evidence_url("x.json", run_json) == "/capabilities/assets/evidence/x.json"
+    json_rel = "成都修茈科技有限公司/capabilities/assets/evidence/sample-run.json"
+    json_path = tmp_path / json_rel
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text("{}", encoding="utf-8")
+    assert MODULE.evidence_url("x.json", json_rel) == "/capabilities/assets/evidence/x.json"
     assert (
         MODULE.evidence_url("gone.png", "FHD/docs/evidence/does-not-exist.png")
         == "/capabilities/assets/evidence/gone.png"
     )
     MODULE._EVIDENCE_INDEX.clear()
+    MODULE._SHA_CACHE.clear()
 
 
 def test_cos_key_uses_repo_path_or_public_copy() -> None:
@@ -89,8 +98,16 @@ def test_every_backend_evidence_link_is_indexed_and_has_matching_local_fallback(
     refs = _page_refs()
     assert refs, "详情页应通过后端读取证据原件"
     assert set(refs) == set(INDEX), "页面引用与证据白名单必须一一对应"
+    pointer = SITE / "capabilities/assets/evidence" / "ARCHIVE_POINTER.md"
+    archived = pointer.is_file()
     for name, entry in INDEX.items():
+        assert entry.get("sha256") and entry.get("size"), name
+        assert len(entry["sha256"]) == 64, name
         local = SITE / "capabilities/assets/evidence" / name
+        if not local.is_file():
+            # 2026-10-25：媒体已外置；白名单 + COS 预签名仍是权威，本地回退可选。
+            assert archived, f"missing local fallback without archive pointer: {name}"
+            continue
         raw = local.read_bytes()
         assert len(raw) == entry["size"], name
         assert hashlib.sha256(raw).hexdigest() == entry["sha256"], name

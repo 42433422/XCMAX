@@ -1,5 +1,5 @@
 {
-  "lines": 2370073,
+  "lines": 2370240,
   "updated": "2026-10-25",
-  "note": "merge origin/main (#2626) into #2544 after market/etl isolation fixes"
+  "note": "hygiene/evidence-bulk-20261025 rebase onto #2544: keep materialization sources (~289MB); offload unregistered evidence/promo; +pointers/gate/test"
 }
