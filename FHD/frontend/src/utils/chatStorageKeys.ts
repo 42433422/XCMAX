@@ -23,8 +23,9 @@ export function resolveChatStorageScope(): string {
   const identity = getRuntimeTenantStorageScopeInput()
   const tenant = resolveTenantStorageScopeFromRuntime(true)
   const owner = identity?.localUserId ?? identity?.marketUserId ?? identity?.marketUsername
-  return tenant.startsWith('tenant:') && owner != null && String(owner).trim()
-    ? `${tenant}:owner:${encodeURIComponent(String(owner))}` : tenant
+  if (!tenant.startsWith('tenant:')) return tenant
+  return owner != null && String(owner).trim()
+    ? `${tenant}:owner:${encodeURIComponent(String(owner))}` : `${tenant}:owner-pending`
 }
 
 export function resolveChatIdentity(modId = readActiveModIdFromStorage()): string {

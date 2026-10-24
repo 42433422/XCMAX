@@ -35,6 +35,18 @@ describe('chatStorageKeys tenant isolation', () => {
     expect(readAiSessionIdFromStorage()).toBe('')
   })
 
+  it('does not recover tenant-only history while the authenticated owner is unresolved', () => {
+    const legacy = buildChatMessagesKey('legacy-session', 'taiyangniao-pro', 'tenant:9')
+    const legacyCurrent = legacy.replace('xcagi_chat_messages_', 'ai_session_id_').replace('legacy-session', 'current') + ':local'
+    localStorage.setItem(legacy, JSON.stringify([{ content: 'unowned legacy message' }]))
+    localStorage.setItem(legacyCurrent, 'legacy-session')
+    expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, legacy)).toBeNull()
+    expect(readAiSessionIdFromStorage()).toBe('')
+    expect(localStorage.getItem(legacy)).toContain('unowned legacy message')
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
+    expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, legacy)).toBeNull()
+  })
+
   it('isolates the same session and Excel context between users within one tenant', () => {
     setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
     const key = buildChatMessagesKey('same-session', 'm')
@@ -116,8 +128,9 @@ describe('chatStorageKeys tenant isolation', () => {
   })
 
   it('resolves runtime scope when no scope argument is provided', () => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
     writeActiveExtensionModIdToStorage('', 'tenant:9')
-    const key = `${CHAT_MESSAGES_STORAGE_PREFIX}tenant:9:sess-noscope`
+    const key = `${CHAT_MESSAGES_STORAGE_PREFIX}tenant:9:owner:1:sess-noscope`
     expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, key, undefined)).toBe('sess-noscope')
   })
 
