@@ -43,7 +43,7 @@ jobs:
         env:
           SECRET_KEY: isolated-process-contract-not-production
           DATABASE_URL: sqlite://
-      - run: python -m pytest --noconftest -o addopts= tests/test_application/test_shipment_excel_etl_production_ready.py -k "etl_output_writer or etl_output_resolver" -q -rP
+      - run: python -m pytest --noconftest -o addopts= tests/test_application/test_shipment_excel_etl_production_ready.py -k "etl_output_writer or etl_output_resolver or etl_input" -q -rP
         env:
           SECRET_KEY: isolated-etl-output-contract-not-production
           DATABASE_URL: sqlite://
