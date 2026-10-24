@@ -149,9 +149,7 @@ async def butler_chat(
 ):
     """非流式 Butler 对话。"""
     _api = _facade()
-    provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(
-        db, user.id
-    )
+    provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(db, user.id)
     is_byok = key_source == "user_override"
     msgs = _api._build_messages(body, body.page_context, user=user, db=db)
     if not msgs:
@@ -300,9 +298,7 @@ async def butler_chat_stream(
             yield f"data: {_api.json.dumps({'text': '', 'done': True, 'conversation_id': result.get('conversation_id'), 'charge_amount': result.get('charge_amount'), 'tool_calls': result.get('tool_calls') or []}, ensure_ascii=False)}\n\n"
 
         return _api.StreamingResponse(admin_event_stream(), media_type="text/event-stream")
-    provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(
-        db, user.id
-    )
+    provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(db, user.id)
     msgs = _api._build_messages(body, body.page_context, user=user, db=db)
     is_byok = key_source == "user_override"
     if not msgs:
@@ -371,9 +367,7 @@ async def butler_chat_stream(
             )
             yield f"data: {_api.json.dumps({'text': '', 'done': True, 'conversation_id': conv.id, 'charge_amount': float(charge)}, ensure_ascii=False)}\n\n"
         except RECOVERABLE_ERRORS as exc:
-            await wallet.release(
-                _api.authorization_header(request), hold, str(exc), request_id
-            )
+            await wallet.release(_api.authorization_header(request), hold, str(exc), request_id)
             _api.save_failure_log(
                 db,
                 user_id=user.id,

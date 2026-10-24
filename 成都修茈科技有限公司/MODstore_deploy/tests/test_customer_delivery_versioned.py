@@ -122,7 +122,10 @@ def legacy_delivery_state(tmp_path, monkeypatch):
     monkeypatch.setattr(mod_scaffold_runner, "modstore_library_path", runner)
     monkeypatch.setattr(mod_scaffold_runner, "load_config", lambda: RepoConfig())
     current = tmp_path / "releases" / ("c" * 40)
-    for module in (workbench_api, __import__("modstore_server.customer_delivery_build", fromlist=[""])):
+    for module in (
+        workbench_api,
+        __import__("modstore_server.customer_delivery_build", fromlist=[""]),
+    ):
         monkeypatch.setattr(
             module,
             "__file__",

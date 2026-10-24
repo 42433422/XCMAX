@@ -122,9 +122,9 @@ def build_digest_html(
     product_updates = (
         [
             line.strip()
-            for line in _digest
-            ._git_line(["log", "--since=24 hours ago", "--format=%s", "-n", "5"], root)
-            .splitlines()
+            for line in _digest._git_line(
+                ["log", "--since=24 hours ago", "--format=%s", "-n", "5"], root
+            ).splitlines()
             if line.strip()
         ]
         if _digest._git_worktree_root(root)
