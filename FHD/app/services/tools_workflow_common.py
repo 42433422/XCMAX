@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 _BUSINESS_DB_ENTITY_ALIASES = {
     "customer": "customers",
     "customers": "customers",

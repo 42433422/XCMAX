@@ -19,8 +19,6 @@ AGENT_LOOP_PATH = "app.application.employee_runtime.agent_loop.run_employee_agen
 
 
 class TestRunAsync:
-    """_run_async：在同步上下文中调度协程。"""
-
     def test_no_running_loop_uses_asyncio_run(self):
         async def coro() -> int:
             return 42
@@ -28,8 +26,6 @@ class TestRunAsync:
         assert _run_async(coro()) == 42
 
     def test_running_loop_uses_thread_pool(self):
-        """已在事件循环内时，通过 ThreadPoolExecutor 在新线程里跑 asyncio.run。"""
-
         async def inner() -> str:
             return "from-thread"
 
@@ -93,10 +89,7 @@ class TestChatCompletion:
 
 
 class TestRunAgentHandler:
-    """run_agent_handler：参数解析与委托调用。"""
-
     def test_basic_delegation_with_full_reasoning(self):
-        """reasoning 携带 system_prompt / input / reasoning 时全部解析并透传。"""
         captured: dict[str, Any] = {}
 
         def fake_loop(**kwargs: Any) -> dict[str, Any]:

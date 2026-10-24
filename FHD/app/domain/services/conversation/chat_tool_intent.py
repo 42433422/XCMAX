@@ -123,11 +123,11 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
     # Explicitly named creates use CRUD; underspecified onboarding remains on its legacy route.
     stripped_value = value.strip()
     named_customer_create = re.match(
-        r"^(?:请)?(?:帮我)?\s*(?:新增|添加)\s*(?:客户|购买单位)"
-        r"(?:\s*[:：]\s*|\s+)([^，,。；;\s]{2,})",
+        r"^(?:请)?(?:帮我)?\s*(?:新增|添加)\s*(?:一个)?(?:客户|购买单位)"
+        r"(?:\s*[:：]\s*|\s+|\s*[，,]\s*(?:单位名称|客户名称|购买单位名称)[为是:：]?\s*)([^，,。；;\s]{2,})",
         stripped_value,
     ) or re.match(
-        r"^(?:请|帮我|请帮我)\s*(?:新增|添加)\s*(?:客户|购买单位)\s*[:：]?\s*([^，,。；;\s]{2,})",
+        r"^(?:请|帮我|请帮我)\s*(?:新增|添加)\s*(?:一个)?(?:客户|购买单位)\s*[:：]?\s*([^，,。；;\s]{2,})",
         stripped_value,
     )
     if named_customer_create and not any(

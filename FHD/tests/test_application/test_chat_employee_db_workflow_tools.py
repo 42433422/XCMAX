@@ -56,7 +56,14 @@ def test_fallback_planner_can_route_to_named_employee_without_llm():
     assert plan.nodes[0].params["employee_id"] == "quality-validator"
 
 
-def test_fallback_planner_routes_customer_db_write_without_llm():
+@pytest.mark.parametrize(
+    "message",
+    [
+        "请把客户 星光贸易 写入数据库",
+        "新增一个客户，单位名称为 星光贸易，不填写电话和地址。只操作这条测试记录，不操作其他记录。",
+    ],
+)
+def test_fallback_planner_routes_customer_db_write_without_llm(message):
     from app.application.workflow.planner import LLMWorkflowPlanner
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
@@ -72,7 +79,7 @@ def test_fallback_planner_routes_customer_db_write_without_llm():
         planner = LLMWorkflowPlanner()
         plan = planner.plan(
             "u1",
-            "请把客户 星光贸易 写入数据库",
+            message,
             get_workflow_tool_registry(),
         )
 
