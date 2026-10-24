@@ -97,7 +97,7 @@ modman = "modman.cli:main"
 xcmax-terminal = "modstore_server.diagnostic_terminal_cli:main"
 
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
