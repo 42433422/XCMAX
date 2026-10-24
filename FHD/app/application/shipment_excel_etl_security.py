@@ -454,12 +454,16 @@ def _reject_output_symlink(name: str, parent_fd: int, parent_path: Path) -> None
     parent_prefix = os.path.normcase(parent_text.rstrip(os.sep) + os.sep)
     if not os.path.normcase(candidate_text).startswith(parent_prefix):
         raise ShipmentEtlPathError("output file escaped its approved directory")
-    if name in ("", ".", "..") or "/" in name or "\\" in name or "\x00" in name:
+    # Inline fullmatch (same shape as artifact_files.artifact_path): CodeQL
+    # models this guard as a path-injection barrier for the following sink.
+    if (
+        not re.fullmatch(r"[^/\\]+", name)
+        or name in (".", "..")
+        or "\x00" in name
+    ):
         raise ShipmentEtlPathError("output file must be one path component")
     try:
-        # codeql[py/path-injection] -- leaf from _validated_path_component; pinned dir_fd.
-        # lgtm[py/path-injection]
-        metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)  # codeql[py/path-injection]
     except FileNotFoundError:
         return
     if stat.S_ISLNK(metadata.st_mode):
@@ -790,7 +794,12 @@ def open_etl_input_file(
     descriptor: int | None = None
     try:
         name = _validated_path_component(path.name)
-        if name in ("", ".", "..") or "/" in name or "\\" in name or "\x00" in name:
+        # Inline fullmatch barrier for CodeQL (see artifact_files.artifact_path).
+        if (
+            not re.fullmatch(r"[^/\\]+", name)
+            or name in (".", "..")
+            or "\x00" in name
+        ):
             raise ShipmentEtlPathError("input file must be one path component")
         if os.name == "nt":
             descriptor = _windows_open_relative(
@@ -804,11 +813,9 @@ def open_etl_input_file(
             nonblocking = getattr(os, "O_NONBLOCK", 0)
             if not nonblocking:
                 raise ShipmentEtlPathError("non-blocking input open is unavailable")
-            # Open FIFOs without waiting for a writer so fstat can reject them.
+                        # Open FIFOs without waiting for a writer so fstat can reject them.
             flags = os.O_RDONLY | os.O_NOFOLLOW | nonblocking | getattr(os, "O_CLOEXEC", 0)
-            # codeql[py/path-injection] -- name from _validated_path_component; pinned dir_fd.
-            # lgtm[py/path-injection]
-            descriptor = os.open(name, flags, dir_fd=parent_fd)
+            descriptor = os.open(name, flags, dir_fd=parent_fd)  # codeql[py/path-injection]
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise ShipmentEtlPathError("input is not a regular file")
         stream = os.fdopen(descriptor, "rb")
@@ -917,16 +924,14 @@ def open_etl_output_file(
         # overwrites an existing regular file without following a leaf link.
         _reject_output_symlink(path.name, parent_fd, path.parent)
         output_name = _validated_path_component(path.name)
+        # Inline fullmatch barrier for CodeQL (see artifact_files.artifact_path).
         if (
-            output_name in ("", ".", "..")
-            or "/" in output_name
-            or "\\" in output_name
+            not re.fullmatch(r"[^/\\]+", output_name)
+            or output_name in (".", "..")
             or "\x00" in output_name
         ):
             raise ShipmentEtlPathError("output file must be one path component")
-        # codeql[py/path-injection] -- output_name from _validated_path_component; pinned dir_fd.
-        # lgtm[py/path-injection]
-        os.rename(temp_name, output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+        os.rename(temp_name, output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)  # codeql[py/path-injection]
         published = True
     finally:
         try:
