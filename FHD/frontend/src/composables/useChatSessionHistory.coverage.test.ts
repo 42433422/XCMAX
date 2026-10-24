@@ -7,12 +7,7 @@ import type { TaskItem, LinkedExcelSheet } from './useChatPersistence'
 import type { ShipmentTask } from './useShipmentTask'
 import type { ChatMessage } from './useChatMessages'
 
-// Mock 外部边界
-
-// vi.hoisted runs before vi.mock factories; used for shared mock objects.
 const { chatApiMock, writeAiSessionIdToStorageMock, activeModIdRef } = vi.hoisted(() => {
-  // Create a simple reactive-like object. We'll wrap with Vue's ref later
-  // in beforeEach to enable watch reactivity.
   return {
     chatApiMock: {
       getConversations: vi.fn(),
@@ -30,20 +25,13 @@ vi.mock('../api/chat', () => ({
   default: chatApiMock,
 }))
 
-// writeAiSessionIdToStorage 是真实模块的简单写入；用 stub 避免拉起 tenantStorageScope 链
 vi.mock('@/utils/xcagiStorageKeys', () => ({
   writeAiSessionIdToStorage: (...args: unknown[]) => writeAiSessionIdToStorageMock(...args),
 }))
 
-// modsStore stub：activeModId 由测试控制。
-// 使用 getter 返回 activeModIdRef.value，使 watch(() => modsStore.activeModId) 能响应。
-// 注意：由于 activeModIdRef 是普通对象（非 Vue ref），watch 不会自动追踪。
-// 我们在 beforeEach 中用 Vue ref 替换 activeModIdRef 的 value 访问。
 vi.mock('@/stores/mods', async () => {
   const { ref } = await import('vue')
-  // Create a Vue ref that syncs with activeModIdRef
   const vueRef = ref(activeModIdRef.value)
-  // Override activeModIdRef to use the Vue ref for reactivity
   Object.defineProperty(activeModIdRef, 'value', {
     get: () => vueRef.value,
     set: (v: string) => {
@@ -60,7 +48,6 @@ vi.mock('@/stores/mods', async () => {
   }
 })
 
-// chatStorageKeys stub：避免拉起 tenantStorageScope 解析链（外部边界）
 vi.mock('@/utils/chatStorageKeys', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/utils/chatStorageKeys')>(),
   CHAT_MESSAGES_STORAGE_PREFIX: 'xcagi_chat_messages_',
@@ -74,8 +61,6 @@ vi.mock('@/utils/chatStorageKeys', async (importOriginal) => ({
     return rest || null
   },
 }))
-
-// 测试工具
 
 interface DepsOverrides {
   sessionId?: string

@@ -254,26 +254,6 @@ async def _execute_ai_chat_mainline(
     return _facade()._merge_kitten_attachments(payload, kitten_extra)
 
 
-async def execute_compat_chat(
-    request: _facade().Request, body: _facade().XcagiCompatChatBody
-) -> dict[str, _facade().Any]:
-    token = _facade().set_facade_globals(globals())
-    try:
-        return await _facade()._execute_compat_chat_impl(request, body)
-    finally:
-        _facade().reset_facade_globals(token)
-
-
-async def execute_compat_chat_batch(
-    request: _facade().Request, body: _facade().XcagiCompatChatBatchBody
-) -> dict[str, _facade().Any]:
-    token = _facade().set_facade_globals(globals())
-    try:
-        return await _facade()._execute_compat_chat_batch_impl(request, body)
-    finally:
-        _facade().reset_facade_globals(token)
-
-
 def _recent_history(svc, user_id: str) -> list[dict]:
     """从对话服务里尽力读取该用户最近历史（供 persona L2/L3 周期推断使用）。
 

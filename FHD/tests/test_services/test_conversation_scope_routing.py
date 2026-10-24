@@ -127,3 +127,28 @@ async def test_follow_up_cache_separates_owners_history_and_models(monkeypatch):
     with llm_client_scope(object(), "different-model"):
         assert (await service._call_ai("刚才的客户呢", first, {}))["text"] == "new-model"
     assert service.call_llm_api.await_count == 4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("suffix", ["", "_batch"])
+async def test_json_chat_routes_bind_request_credentials_lazily(monkeypatch, suffix):
+    import asyncio
+
+    from app.application import planner_compat_service as service
+    from app.infrastructure.llm.client import get_llm_client
+
+    request, body, client = object(), object(), object()
+    factory = MagicMock(return_value=client)
+    monkeypatch.setattr(service, "create_modstore_openai_client_from_request", factory)
+
+    async def execute(actual_request, actual_body):
+        assert (actual_request, actual_body) == (request, body)
+        factory.assert_not_called()
+        assert await asyncio.to_thread(get_llm_client) is client
+        return {"success": True}
+
+    monkeypatch.setattr(service, f"_execute_compat_chat{suffix}_impl", execute)
+    assert await getattr(service, f"execute_compat_chat{suffix}")(request, body) == {
+        "success": True
+    }
+    factory.assert_called_once_with(request)
