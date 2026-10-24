@@ -1,5 +1,5 @@
 {
-  "lines": 2369226,
+  "lines": 2369254,
   "updated": "2026-10-24",
-  "note": "ruff format shipment_excel_etl_security (backend-quality); CodeQL path-injection closeout intact"
+  "note": "merge main after #2620 ownership dispatch; CodeQL path-injection + ruff format intact"
 }
