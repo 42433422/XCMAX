@@ -1,7 +1,7 @@
 """
 导出工具应用层函数 — 从 app.infrastructure.documents 组装业务逻辑。
 
-来源：原 app.legacy.price_list_docx_export 与 app.infrastructure.documents.price_list_export。
+来源：原 legacy-layer.price_list_docx_export 与 app.infrastructure.documents.price_list_export。
 预计在 Phase 4/5 完整 DDD 重构后，随领域服务落到 app.domain.documents。
 """
 

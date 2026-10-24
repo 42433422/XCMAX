@@ -24,12 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
-
-_PARA_GUEST_AUTH_CACHE: Dict[str, str] = {}
-DEFAULT_PARA_WAIT_TIMEOUT_SEC = 1800.0
-
-
-from modstore_server.para_delegate_handler_part01 import (
+from modstore_server.para_delegate_handler_merged import (
     insert_before_loop_context as insert_before_loop_context,
     _env_bool as _env_bool,
     para_delegate_enabled as para_delegate_enabled,
@@ -55,7 +50,49 @@ from modstore_server.para_delegate_handler_part01 import (
     _git_preflight_branch as _git_preflight_branch,
     _task_result_snapshot as _task_result_snapshot,
     _first_para_error as _first_para_error,
+    _fallback_order_tools as _fallback_order_tools,
+    _dev_tool as _dev_tool,
+    _customer_ticket_cloud_route as _customer_ticket_cloud_route,
+    _ticket_route_hops as _ticket_route_hops,
+    _ticket_hop_should_handoff as _ticket_hop_should_handoff,
+    _post_ticket_route as _post_ticket_route,
+    _normalize_tool_name as _normalize_tool_name,
+    _tool_fallback_allowed as _tool_fallback_allowed,
+    _excluded_tools as _excluded_tools,
+    _tool_candidates as _tool_candidates,
+    _is_cli_runtime_failure as _is_cli_runtime_failure,
+    _device_discovery_enabled as _device_discovery_enabled,
+    _safe_json as _safe_json,
+    _device_tool_entry as _device_tool_entry,
+    _device_has_capability as _device_has_capability,
+    _device_eligible as _device_eligible,
+    _selected_tool_for_device as _selected_tool_for_device,
+    _with_selected_tool as _with_selected_tool,
+    _select_local_device_with_fallback as _select_local_device_with_fallback,
+    _select_fleet_devices_with_fallback as _select_fleet_devices_with_fallback,
+    _filter_executor_ready as _filter_executor_ready,
+    _resolve_tier as _resolve_tier,
+    _max_fleet_devices as _max_fleet_devices,
+    _select_local_device as _select_local_device,
+    _select_fleet_devices as _select_fleet_devices,
+    _fetch_devices as _fetch_devices,
+    _resolve_dispatch_devices as _resolve_dispatch_devices,
+    _multi_device_prompt as _multi_device_prompt,
+    _para_subtask_title as _para_subtask_title,
+    _post_para_api_once as _post_para_api_once,
+    _coerce_bool as _coerce_bool,
+    _post_webhook as _post_webhook,
+    dispatch_para_delegate as dispatch_para_delegate,
+    _wait_for_para_task as _wait_for_para_task,
+    _post_para_api as _post_para_api,
+    _req_with_excluded_tools as _req_with_excluded_tools,
+    _attach_tool_fallback_meta as _attach_tool_fallback_meta,
 )
+
+_PARA_GUEST_AUTH_CACHE: Dict[str, str] = {}
+DEFAULT_PARA_WAIT_TIMEOUT_SEC = 1800.0
+
+
 
 # ── Para 分级派工：一级=本机单设备，二级=多设备协同（与 FHD super_employee_service 同构） ──
 #
@@ -68,14 +105,6 @@ from modstore_server.para_delegate_handler_part01 import (
 _SUBTASK_LABELS = ("需求定位与方案", "核心实现", "验证与收尾")
 
 
-from modstore_server.para_delegate_handler_part02 import (
-    _fallback_order_tools as _fallback_order_tools,
-    _dev_tool as _dev_tool,
-    _customer_ticket_cloud_route as _customer_ticket_cloud_route,
-    _ticket_route_hops as _ticket_route_hops,
-    _ticket_hop_should_handoff as _ticket_hop_should_handoff,
-    _post_ticket_route as _post_ticket_route,
-)
 
 _VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae", "grok_bot", "dolt")
 _TOOL_INPUT_ALIASES = {
@@ -106,39 +135,8 @@ _TOOL_NAME_ALIASES: Dict[str, tuple[str, ...]] = {
 }
 
 
-from modstore_server.para_delegate_handler_part03 import (
-    _normalize_tool_name as _normalize_tool_name,
-    _tool_fallback_allowed as _tool_fallback_allowed,
-    _excluded_tools as _excluded_tools,
-    _tool_candidates as _tool_candidates,
-    _is_cli_runtime_failure as _is_cli_runtime_failure,
-    _device_discovery_enabled as _device_discovery_enabled,
-    _safe_json as _safe_json,
-    _device_tool_entry as _device_tool_entry,
-    _device_has_capability as _device_has_capability,
-    _device_eligible as _device_eligible,
-    _selected_tool_for_device as _selected_tool_for_device,
-    _with_selected_tool as _with_selected_tool,
-    _select_local_device_with_fallback as _select_local_device_with_fallback,
-    _select_fleet_devices_with_fallback as _select_fleet_devices_with_fallback,
-    _filter_executor_ready as _filter_executor_ready,
-    _resolve_tier as _resolve_tier,
-    _max_fleet_devices as _max_fleet_devices,
-    _select_local_device as _select_local_device,
-    _select_fleet_devices as _select_fleet_devices,
-    _fetch_devices as _fetch_devices,
-    _resolve_dispatch_devices as _resolve_dispatch_devices,
-    _multi_device_prompt as _multi_device_prompt,
-    _para_subtask_title as _para_subtask_title,
-)
 
 
-from modstore_server.para_delegate_handler_part04 import (
-    _post_para_api_once as _post_para_api_once,
-    _coerce_bool as _coerce_bool,
-    _post_webhook as _post_webhook,
-    dispatch_para_delegate as dispatch_para_delegate,
-)
 
 __all__ = [
     "dispatch_para_delegate",
@@ -146,9 +144,3 @@ __all__ = [
     "para_delegate_ready_for_dispatch",
 ]
 
-from modstore_server.para_delegate_handler_part02 import (
-    _wait_for_para_task as _wait_for_para_task,
-    _post_para_api as _post_para_api,
-    _req_with_excluded_tools as _req_with_excluded_tools,
-    _attach_tool_fallback_meta as _attach_tool_fallback_meta,
-)

@@ -219,7 +219,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "list_change_requests": ("app.services.user_cs_change_request", "list_change_requests"),
     "list_field_schema": ("app.services.service_contract_fill", "list_field_schema"),
     "list_keys_endpoint": ("app.fastapi_routes.lan_admin_routes", "list_keys_endpoint"),
-    "list_lan_facade_registry": ("app.legacy.lan.lan_compat", "list_lan_facade_registry"),
+    "list_lan_facade_registry": ("legacy-layer.lan.lan_compat", "list_lan_facade_registry"),
     "list_pipeline_client_summaries": (
         "app.services.user_cs_pipeline",
         "list_pipeline_client_summaries",
@@ -264,20 +264,20 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.fastapi_routes.domains.shipment.shipment_orders",
         "orders_next_number_under_api",
     ),
-    "products_add": ("app.legacy.routes.product.compat_routes", "products_add"),
+    "products_add": ("legacy-layer.routes.product.compat_routes", "products_add"),
     "products_batch": ("app.fastapi_routes.domains.product.routes", "products_batch"),
     "products_batch_delete": (
-        "app.legacy.routes.product.compat_routes",
+        "legacy-layer.routes.product.compat_routes",
         "products_batch_delete",
     ),
     "products_delete": (
-        "app.legacy.routes.product.compat_routes",
+        "legacy-layer.routes.product.compat_routes",
         "products_delete",
     ),
     "products_export_xlsx": ("app.fastapi_routes.domains.product.routes", "products_export_xlsx"),
     "products_export_docx": ("app.fastapi_routes.xcagi_compat_product", "products_export_docx"),
     "products_get_by_id": (
-        "app.legacy.routes.product.compat_routes",
+        "legacy-layer.routes.product.compat_routes",
         "products_get_by_id",
     ),
     "products_product_names": (
@@ -289,7 +289,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "products_product_names_search",
     ),
     "products_update": (
-        "app.legacy.routes.product.compat_routes",
+        "legacy-layer.routes.product.compat_routes",
         "products_update",
     ),
     "publish_neuro_event": (
@@ -301,7 +301,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "pull_external_crm_for_market_user",
     ),
     "purchase_units_list": (
-        "app.legacy.routes.product.compat_routes",
+        "legacy-layer.routes.product.compat_routes",
         "purchase_units_list",
     ),
     "push_external_crm_for_market_user": (
@@ -365,7 +365,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "shipment_download",
     ),
     "shipment_records_units": (
-        "app.legacy.routes.product.compat_routes",
+        "legacy-layer.routes.product.compat_routes",
         "shipment_records_units",
     ),
     "status": ("app.fastapi_routes.lan_routes", "status"),

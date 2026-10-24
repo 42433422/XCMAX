@@ -10,7 +10,7 @@ from app.application.agent_orchestrator.tool_spec_data import (  # noqa: F401
     _DEFAULT_OUTPUT_SCHEMA,
     _SPECIAL_INPUT_SCHEMAS,
     _SPECIAL_OUTPUT_SCHEMAS,
-    _SPECIAL_TEST_FIXTURES,
+    _SPECIAL_TOOL_CONTRACTS,
 )
 from app.application.agent_orchestrator.tool_spec_data.constants import (
     AIOPEN_DEFAULT_RISK,
@@ -48,7 +48,13 @@ class ToolActionSpecV2:
     idempotent: bool = False
     required_params: list[str] = field(default_factory=list)
     availability: str = "shared"
-    test_fixtures: list[dict[str, Any]] = field(default_factory=list)
+    contract_samples: list[dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def test_fixtures(self) -> list[dict[str, Any]]:
+        """Compat alias for contract_samples (historical name)."""
+        return self.contract_samples
+
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -65,7 +71,8 @@ class ToolActionSpecV2:
             "idempotent": self.idempotent,
             "required_params": self.required_params,
             "availability": self.availability,
-            "test_fixtures": self.test_fixtures,
+            "contract_samples": self.contract_samples,
+            "test_fixtures": self.contract_samples,  # compat alias
         }
 
 
@@ -194,7 +201,7 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
             idempotent=idempotent,
             required_params=required_params,
             availability="aiopen",
-            test_fixtures=deepcopy(fixture),
+            contract_samples=deepcopy(fixture),
         )
 
 
@@ -223,7 +230,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                 (str(tool_id), normalized_action),
                 _DEFAULT_OUTPUT_SCHEMA,
             )
-            test_fixtures = _SPECIAL_TEST_FIXTURES.get(
+            contract_samples = _SPECIAL_TOOL_CONTRACTS.get(
                 (str(tool_id), normalized_action),
                 _default_fixture(str(tool_id), normalized_action, input_schema, output_schema),
             )
@@ -243,7 +250,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                 availability=str(
                     action_meta.get("availability") or tool_meta.get("availability") or "shared"
                 ),
-                test_fixtures=deepcopy(test_fixtures),
+                contract_samples=deepcopy(test_fixtures),
             )
             specs[(spec.tool_id, spec.action)] = spec
     _add_aiopen_tool_specs(specs)
@@ -374,10 +381,10 @@ def validate_tool_spec_fixtures() -> dict[str, list[str]]:
     errors: dict[str, list[str]] = {}
     for (tool_id, action), spec in build_tool_specs_v2().items():
         key = f"{tool_id}.{action}"
-        if not spec.test_fixtures:
-            errors.setdefault(key, []).append("missing test_fixtures")
+        if not spec.contract_samples:
+            errors.setdefault(key, []).append("missing contract_samples")
             continue
-        for index, fixture in enumerate(spec.test_fixtures):
+        for index, fixture in enumerate(spec.contract_samples):
             name = str(fixture.get("name") or f"fixture_{index}")
             input_payload = fixture.get("input")
             if not isinstance(input_payload, dict):

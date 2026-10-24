@@ -1,6 +1,6 @@
 # XCAGI 当前版本
 
-> 本文件是版本域的**单一事实来源（SSOT）**。完整发布说明见 [`CHANGELOG.md`](CHANGELOG.md)。
+> 本文件是版本**数字**的单一事实来源（SSOT）。已发布/候选/客户运行四层关系见 [`docs/architecture/PRODUCT_VERSION_SSOT.md`](docs/architecture/PRODUCT_VERSION_SSOT.md)。完整发布说明见 [`CHANGELOG.md`](CHANGELOG.md)。
 > 若 README、发布工作流或下载清单与本文件不一致，必须先修正再发布。
 
 ---

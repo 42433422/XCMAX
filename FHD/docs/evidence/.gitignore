@@ -1,3 +1,22 @@
+# Round-2 bulk media (2026-10-25 debt24): keep text evidence; media lives in archives.
+# Archive: ~/XCMAX-archives/evidence-bulk-20261025-round2/ (see ARCHIVE_POINTER.md)
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.webp
+**/*.mp4
+**/*.webm
+**/*.mov
+**/*.avi
+**/*.mkv
+**/*.wav
+**/*.mp3
+**/*.m4a
+**/*.zip
+# Large binary PDFs under evidence (text reports stay as .md/.json)
+**/*.pdf
+
 # Exact historical media aliases rebuilt from the reviewed evidence manifest.
 # Canonical files and acceptance JSON records stay tracked.
 /capabilities/ch-im-cs-02-customer-service.png

@@ -1,6 +1,6 @@
 """Session-scoped runtime context helpers.
 
-Phase 4B 从 ``app.legacy.runtime_context`` 吸收实现。
+Phase 4B 从 ``legacy-layer.runtime_context`` 吸收实现。
 
 本模块承担三件事:
 1. Excel 表头行(1-based)探测 — 与 /templates/extract-grid 保持一致

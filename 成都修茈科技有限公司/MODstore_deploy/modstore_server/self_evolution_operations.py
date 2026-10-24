@@ -2,9 +2,7 @@
 """Search, metrics, and salvage operations for self-evolution knowledge."""
 
 from __future__ import annotations
-
-
-from modstore_server.self_evolution_operations_part01 import (
+from modstore_server.self_evolution_operations_merged import (
     _facade as _facade,
     _search_docs as _search_docs,
     record_fix_knowledge as record_fix_knowledge,
@@ -30,3 +28,5 @@ from modstore_server.self_evolution_operations_part01 import (
     _salvage_kb_files as _salvage_kb_files,
     salvage_kb_from_workspace as salvage_kb_from_workspace,
 )
+
+

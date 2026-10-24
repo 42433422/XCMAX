@@ -13,6 +13,23 @@ from pathlib import Path
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from modstore_server.craft_executor import register_craft_step
+from modstore_server.craft_steps_merged import (
+    _craft_spec as _craft_spec,
+    _craft_employee_plan as _craft_employee_plan,
+    _craft_generate as _craft_generate,
+    _craft_validate as _craft_validate,
+    _craft_script_workflow as _craft_script_workflow,
+    _craft_embed_script as _craft_embed_script,
+    _craft_workflow as _craft_workflow,
+    _craft_register_pack as _craft_register_pack,
+    _craft_workflow_sandbox as _craft_workflow_sandbox,
+    _craft_mod_sandbox as _craft_mod_sandbox,
+    _craft_standalone_smoke as _craft_standalone_smoke,
+    _standalone_smoke_auto_repair as _standalone_smoke_auto_repair,
+    _craft_host_check as _craft_host_check,
+    _craft_six_dim_gate as _craft_six_dim_gate,
+    register_all_craft_steps as register_all_craft_steps,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,24 +59,5 @@ _SPEC_DOMAIN_KEYWORDS = {
 }
 
 
-from modstore_server.craft_steps_part01 import (
-    _craft_spec as _craft_spec,
-    _craft_employee_plan as _craft_employee_plan,
-    _craft_generate as _craft_generate,
-    _craft_validate as _craft_validate,
-    _craft_script_workflow as _craft_script_workflow,
-    _craft_embed_script as _craft_embed_script,
-    _craft_workflow as _craft_workflow,
-    _craft_register_pack as _craft_register_pack,
-    _craft_workflow_sandbox as _craft_workflow_sandbox,
-    _craft_mod_sandbox as _craft_mod_sandbox,
-)
 
 
-from modstore_server.craft_steps_part02 import (
-    _craft_standalone_smoke as _craft_standalone_smoke,
-    _standalone_smoke_auto_repair as _standalone_smoke_auto_repair,
-    _craft_host_check as _craft_host_check,
-    _craft_six_dim_gate as _craft_six_dim_gate,
-    register_all_craft_steps as register_all_craft_steps,
-)

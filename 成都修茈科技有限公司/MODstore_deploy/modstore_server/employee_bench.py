@@ -28,6 +28,37 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session
 
 from modstore_server.models import User
+from modstore_server.employee_bench_merged import (
+    _strip_fence as _strip_fence,
+    _parse_task_list as _parse_task_list,
+    _fallback_tasks as _fallback_tasks,
+    generate_bench_tasks as generate_bench_tasks,
+    _derive_bench_execution_ok as _derive_bench_execution_ok,
+    _extract_output_preview as _extract_output_preview,
+    _parse_rubric_scores as _parse_rubric_scores,
+    _align_rubric_keys as _align_rubric_keys,
+    _llm_rubric_scores_platform as _llm_rubric_scores_platform,
+    _level_scores_from_entries as _level_scores_from_entries,
+    _efficiency_factor as _efficiency_factor,
+    _run_single_task as _run_single_task,
+    _score_level as _score_level,
+    _weighted_overall as _weighted_overall,
+    _parse_machine_score_from_text as _parse_machine_score_from_text,
+    _peer_review_gate_enabled as _peer_review_gate_enabled,
+    _peer_review_min_score as _peer_review_min_score,
+    _run_pack_peer_review_optional as _run_pack_peer_review_optional,
+    _read_employee_brief as _read_employee_brief,
+    _collect_reviewer_candidate_ids as _collect_reviewer_candidate_ids,
+    _snapshot_reviewer_candidate as _snapshot_reviewer_candidate,
+    _dimensions_still_open as _dimensions_still_open,
+    _llm_assign_reviewers_to_dimensions as _llm_assign_reviewers_to_dimensions,
+    _parse_router_json as _parse_router_json,
+    resolve_auto_dimension_reviewers as resolve_auto_dimension_reviewers,
+    _load_audit_dimension_env_defaults as _load_audit_dimension_env_defaults,
+    _audit_single_pack as _audit_single_pack,
+    _run_five_dim_audit as _run_five_dim_audit,
+    run_and_score_bench as run_and_score_bench,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,12 +102,6 @@ _TASK_GEN_SYSTEM = """\
 """
 
 
-from modstore_server.employee_bench_part01 import (
-    _strip_fence as _strip_fence,
-    _parse_task_list as _parse_task_list,
-    _fallback_tasks as _fallback_tasks,
-    generate_bench_tasks as generate_bench_tasks,
-)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 2. 执行 + 量化打分
@@ -93,18 +118,6 @@ _RUBRIC_SYSTEM = """\
 必须覆盖输入中的每一个 task_id，不得遗漏。"""
 
 
-from modstore_server.employee_bench_part02 import (
-    _derive_bench_execution_ok as _derive_bench_execution_ok,
-    _extract_output_preview as _extract_output_preview,
-    _parse_rubric_scores as _parse_rubric_scores,
-    _align_rubric_keys as _align_rubric_keys,
-    _llm_rubric_scores_platform as _llm_rubric_scores_platform,
-    _level_scores_from_entries as _level_scores_from_entries,
-    _efficiency_factor as _efficiency_factor,
-    _run_single_task as _run_single_task,
-    _score_level as _score_level,
-    _weighted_overall as _weighted_overall,
-)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 3. 五维审核
@@ -132,28 +145,9 @@ _MAX_REVIEWER_CANDIDATES = 48
 _MACHINE_SCORE_LINE = re.compile(r"^MACHINE_SCORE\s*=\s*(\d{1,3})\s*$", re.MULTILINE)
 
 
-from modstore_server.employee_bench_part03 import (
-    _parse_machine_score_from_text as _parse_machine_score_from_text,
-    _peer_review_gate_enabled as _peer_review_gate_enabled,
-    _peer_review_min_score as _peer_review_min_score,
-    _run_pack_peer_review_optional as _run_pack_peer_review_optional,
-    _read_employee_brief as _read_employee_brief,
-    _collect_reviewer_candidate_ids as _collect_reviewer_candidate_ids,
-    _snapshot_reviewer_candidate as _snapshot_reviewer_candidate,
-    _dimensions_still_open as _dimensions_still_open,
-    _llm_assign_reviewers_to_dimensions as _llm_assign_reviewers_to_dimensions,
-    _parse_router_json as _parse_router_json,
-    resolve_auto_dimension_reviewers as resolve_auto_dimension_reviewers,
-    _load_audit_dimension_env_defaults as _load_audit_dimension_env_defaults,
-    _audit_single_pack as _audit_single_pack,
-    _run_five_dim_audit as _run_five_dim_audit,
-)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 4. 公开入口
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
-from modstore_server.employee_bench_part04 import (
-    run_and_score_bench as run_and_score_bench,
-)

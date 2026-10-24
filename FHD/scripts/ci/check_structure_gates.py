@@ -4,7 +4,8 @@
 Read-only scan of a local XCMAX checkout. Does NOT modify the repo.
 Wired into CI via source-governance (structure-gates job).
 Ratchet baseline breaches are ERROR (block worsening).
-G7/G8/G9 added for mechanical fragments, noisy basenames, app/domain ratio.
+G7/G8/G9 mechanical/noisy/ratio; G3 hardened vs test-fixture escape;
+G10 MODstore part ratchet; G11 py>40KB ratchet.
 
 Exit codes:
   0 — no errors (warnings may be printed)
@@ -32,7 +33,7 @@ BASELINE = {
     "mixin_ge_15kb": 1,
     "routes_total": 305,
     "routes_top_level": 115,
-    "legacy_prod_ref_files": 54,
+    "legacy_prod_ref_files": 23,
     "application_ports_py": 1,
     "workflow_ports_py": 1,
     # G7: mechanical (part|mixin)\d+ filenames under FHD/app
@@ -41,6 +42,11 @@ BASELINE = {
     "noisy_basename_files": 0,  # app tree: blueprints/parser/mapper/rules/mapping/build_xcemp/convert — expect 0
     # G9 info: application/domain py ratio ceiling (warn if worse)
     "app_domain_ratio_x100": 450,  # 4.50:1 — current ~4.25
+    # G10: MODstore_deploy mechanical part* files (ratchet down; forbid growth)
+    "modstore_part_files": 0,
+    # G11: repo-wide *.py > 40KB (ratchet; especially tests)
+    "py_gt_40kb": 175,
+    "py_gt_40kb_testish": 123,
 }
 
 # G3: no stock fixtures under application after rename to examples/contract_samples
@@ -103,7 +109,7 @@ def count_legacy_prod_refs(repo: Path) -> list[Path]:
             if any(x in p.parts for x in ("tests", "evals", "test_legacy")):
                 continue
             # exclude this gate script and peers that document the pattern
-            if p.name == "check_structure_gates.py":
+            if p.name in {"check_structure_gates.py", "legacy_usage_report.py"}:
                 continue
             try:
                 text = p.read_text(encoding="utf-8", errors="ignore")
@@ -115,22 +121,70 @@ def count_legacy_prod_refs(repo: Path) -> list[Path]:
 
 
 def scan_app_fixtures(app_application: Path, repo: Path) -> list[Path]:
+    """Filename + content escape hatch detection under application/.
+
+    Forbids pytest-style names and symbols like _SPECIAL_TEST_FIXTURES that
+    previously survived a rename-only "fix" of G3.
+    """
     bad: list[Path] = []
     if not app_application.is_dir():
         return bad
+    forbidden_sym = re.compile(
+        r"\b_?SPECIAL_TEST_FIXTURES\b|\bTEST_FIXTURES\s*="
+    )
     for p in app_application.rglob("*"):
         if not p.is_file() or p.suffix != ".py":
             continue
         name = p.name
+        r = rel(repo, p)
+        if r in EXEMPT_APP_FIXTURES:
+            continue
         if (
             "fixture" in name.lower()
             or name.startswith("test_")
             or name.endswith("_test.py")
         ):
-            r = rel(repo, p)
-            if r not in EXEMPT_APP_FIXTURES:
-                bad.append(p)
+            bad.append(p)
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if forbidden_sym.search(text):
+            bad.append(p)
     return bad
+
+
+def count_modstore_parts(repo: Path) -> list[Path]:
+    roots = list(repo.rglob("MODstore_deploy"))
+    pat = re.compile(r"_part_?\d+", re.I)  # mechanical split suffix only
+    hits: list[Path] = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for p in root.rglob("*.py"):
+            if pat.search(p.name):
+                hits.append(p)
+    return sorted(set(hits))
+
+
+def count_py_gt_40kb(repo: Path) -> tuple[list[Path], list[Path]]:
+    big: list[Path] = []
+    testish: list[Path] = []
+    skip = {".venv", "node_modules", "__pycache__", ".git"}
+    for p in repo.rglob("*.py"):
+        if any(x in p.parts for x in skip):
+            continue
+        try:
+            if p.stat().st_size <= 40_000:
+                continue
+        except OSError:
+            continue
+        big.append(p)
+        s = str(p).replace("\\", "/").lower()
+        if "test" in p.name.lower() or "/tests/" in s or s.startswith("tests/"):
+            testish.append(p)
+    return sorted(big), sorted(testish)
 
 
 def new_ports_in_application(repo: Path) -> tuple[int, int, list[str]]:
@@ -244,7 +298,7 @@ def main() -> int:
     app_application = app / "application"
     bad_fix = scan_app_fixtures(app_application, repo)
     for p in bad_fix:
-        errors.append(f"G3.1: non-exempt fixture/test under application: {rel(repo, p)}")
+        errors.append(f"G3.1: fixture/test name or TEST_FIXTURES symbol under application: {rel(repo, p)}")
     infos.append(
         f"G3 exempt fixtures still present: {len(EXEMPT_APP_FIXTURES)} allowed paths"
     )
@@ -296,7 +350,7 @@ def main() -> int:
     )
 
     # --- G7 mechanical fragments (part|mixin digits) ---
-    frag_re = re.compile(r"(?:part|mixin)\d+", re.I)
+    frag_re = re.compile(r"(?:part|mixin)_?\d+", re.I)
     frags = [
         p
         for p in app.rglob("*.py")
@@ -371,6 +425,33 @@ def main() -> int:
     if len(domain_ctx_ports) < 7:
         warns.append(
             f"G5.3: domain/<ctx>/ports.py count {len(domain_ctx_ports)} < expected 7"
+        )
+
+    # --- G10 MODstore part fragments ---
+    mod_parts = count_modstore_parts(repo)
+    infos.append(
+        f"MODstore part files={len(mod_parts)} (baseline {BASELINE['modstore_part_files']})"
+    )
+    if len(mod_parts) > BASELINE["modstore_part_files"]:
+        errors.append(
+            f"G10: MODstore part files {len(mod_parts)} > "
+            f"baseline {BASELINE['modstore_part_files']}"
+        )
+
+    # --- G11 py > 40KB ratchet ---
+    big_py, big_test = count_py_gt_40kb(repo)
+    infos.append(
+        f"py>40KB={len(big_py)} testish={len(big_test)} "
+        f"(baselines {BASELINE['py_gt_40kb']}/{BASELINE['py_gt_40kb_testish']})"
+    )
+    if len(big_py) > BASELINE["py_gt_40kb"]:
+        errors.append(
+            f"G11: py>40KB {len(big_py)} > baseline {BASELINE['py_gt_40kb']}"
+        )
+    if len(big_test) > BASELINE["py_gt_40kb_testish"]:
+        errors.append(
+            f"G11: py>40KB testish {len(big_test)} > "
+            f"baseline {BASELINE['py_gt_40kb_testish']}"
         )
 
     # --- G6 docs ---

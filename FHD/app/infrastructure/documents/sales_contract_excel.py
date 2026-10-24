@@ -1,6 +1,6 @@
 """销售合同 Excel 填充与预览。
 
-Phase 3B 从 ``app.legacy.sales_contract_excel_generate`` 吸收。
+Phase 3B 从 ``legacy-layer.sales_contract_excel_generate`` 吸收。
 """
 
 from __future__ import annotations

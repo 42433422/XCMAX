@@ -2,9 +2,7 @@
 """Mutation and decision operations for clarification sessions."""
 
 from __future__ import annotations
-
-
-from modstore_server.retort_clarification_operations_part01 import (
+from modstore_server.retort_clarification_operations_merged import (
     _facade as _facade,
     answer_clarification as answer_clarification,
     cancel_clarification as cancel_clarification,
@@ -16,3 +14,5 @@ from modstore_server.retort_clarification_operations_part01 import (
     evaluate_retort_clarification_gate as evaluate_retort_clarification_gate,
     clarification_blocks_auto_approve as clarification_blocks_auto_approve,
 )
+
+

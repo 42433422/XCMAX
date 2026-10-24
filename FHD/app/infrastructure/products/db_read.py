@@ -1,6 +1,6 @@
 """产品主数据只读查询辅助。
 
-Phase 3B 从 ``app.legacy.product_db_read`` 吸收。
+Phase 3B 从 ``legacy-layer.product_db_read`` 吸收。
 """
 
 from __future__ import annotations

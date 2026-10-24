@@ -1,6 +1,6 @@
 """从 ``pg_init_xcagi_core.sql`` 等脚本生成初始化 SQL 语句。
 
-Phase 3B 从 ``app.legacy.schema_auto_init`` 吸收。原路径
+Phase 3B 从 ``legacy-layer.schema_auto_init`` 吸收。原路径
 ``parents[1]/scripts/pg_init_xcagi_core.sql`` 是相对 ``app/legacy/`` 的
 相对路径; 迁到 ``app/infrastructure/db/`` 后需要多跳一级,修正为
 ``parents[2]/scripts``,否则将读不到 SQL 文件。

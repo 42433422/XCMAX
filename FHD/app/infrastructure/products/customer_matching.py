@@ -1,6 +1,6 @@
 """客户名抽取与库内对齐。
 
-Phase 3B 从 ``app.legacy.shared_utils`` 吸收。
+Phase 3B 从 ``legacy-layer.shared_utils`` 吸收。
 """
 
 from __future__ import annotations

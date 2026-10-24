@@ -44,26 +44,8 @@ from modstore_server.llm_key_resolver import (
 )
 from modstore_server.llm_model_taxonomy import build_models_detailed
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
-
-logger = logging.getLogger(__name__)
-
-_CACHE_TTL_SEC = 600.0
-_FORCE_REFRESH_MIN_INTERVAL = 45.0
-
-
-from modstore_server.llm_catalog_part01 import (
+from modstore_server.llm_catalog_merged import (
     clear_all_catalog_cache as clear_all_catalog_cache,
-)
-
-# cache_key -> {"mono": float, "models": list[str], "error": str|None, "source": str}
-_cache: Dict[str, Dict[str, Any]] = {}
-_last_force_refresh: Dict[int, float] = {}
-
-# 能力目录需保留 TTS/STT/嵌入/图像/视频等非对话模型；
-# 只排除用户私有微调别名，避免混入平台公共能力目录。
-
-
-from modstore_server.llm_catalog_part02 import (
     _fetch_openai_compatible_records as _fetch_openai_compatible_records,
     _fetch_openai_compatible as _fetch_openai_compatible,
     _fetch_anthropic_compatible_records as _fetch_anthropic_compatible_records,
@@ -75,19 +57,31 @@ from modstore_server.llm_catalog_part02 import (
     _merge_fallback as _merge_fallback,
     _metadata_by_model as _metadata_by_model,
     _models_detailed as _models_detailed,
-)
-
-
-from modstore_server.llm_catalog_part03 import (
     get_models_for_provider as get_models_for_provider,
     get_models_for_credentials as get_models_for_credentials,
     resolve_catalog_credentials as resolve_catalog_credentials,
+    _probe_one_provider_list as _probe_one_provider_list,
+    probe_first_matching_provider as probe_first_matching_provider,
 )
+
+logger = logging.getLogger(__name__)
+
+_CACHE_TTL_SEC = 600.0
+_FORCE_REFRESH_MIN_INTERVAL = 45.0
+
+
+
+# cache_key -> {"mono": float, "models": list[str], "error": str|None, "source": str}
+_cache: Dict[str, Dict[str, Any]] = {}
+_last_force_refresh: Dict[int, float] = {}
+
+# 能力目录需保留 TTS/STT/嵌入/图像/视频等非对话模型；
+# 只排除用户私有微调别名，避免混入平台公共能力目录。
+
+
+
+
 
 _PROBE_HTTPX_TIMEOUT = 10.0
 
 
-from modstore_server.llm_catalog_part04 import (
-    _probe_one_provider_list as _probe_one_provider_list,
-    probe_first_matching_provider as probe_first_matching_provider,
-)

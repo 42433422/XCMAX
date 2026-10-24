@@ -102,7 +102,11 @@ router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
 
 
-from modstore_server.market_auth_api_part01 import (
+
+
+
+from modstore_server.browser_handoff_api import router as browser_handoff_router
+from modstore_server.market_auth_api_merged import (
     _fhd_cs_bridge_base as _fhd_cs_bridge_base,
     _cs_bridge_mod_id as _cs_bridge_mod_id,
     _default_cs_intake_webhook_url as _default_cs_intake_webhook_url,
@@ -136,10 +140,6 @@ from modstore_server.market_auth_api_part01 import (
     _delete_unused_verification_code as _delete_unused_verification_code,
     _background_send_verification_email as _background_send_verification_email,
     _verify_and_consume_verification_code as _verify_and_consume_verification_code,
-)
-
-
-from modstore_server.market_auth_api_part02 import (
     InternalSsoIssueTokenDTO as InternalSsoIssueTokenDTO,
     api_internal_sso_issue_token as api_internal_sso_issue_token,
     api_upload_avatar as api_upload_avatar,
@@ -156,7 +156,5 @@ from modstore_server.market_auth_api_part02 import (
     api_account_delete as api_account_delete,
     api_account_export as api_account_export,
 )
-
-from modstore_server.browser_handoff_api import router as browser_handoff_router
 
 router.include_router(browser_handoff_router)

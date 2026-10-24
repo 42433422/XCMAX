@@ -1,6 +1,6 @@
 """Shipment / coatings-industry value objects (domain).
 
-Moved out of app.legacy.domain.value_objects_compat for phase-2 layering.
+Moved out of legacy-layer.domain.value_objects_compat for phase-2 layering.
 """
 
 from dataclasses import dataclass

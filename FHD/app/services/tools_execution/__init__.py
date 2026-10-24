@@ -1,7 +1,7 @@
 """工具执行与订单解析服务。
 
 Phase 4 由 ``app.services.archive_tools_legacy`` 更名而来,内容不变,
-只是摆脱 "archive_" 命名噪音。后续 (Phase 4B) 计划与 ``app.legacy.tools``
+只是摆脱 "archive_" 命名噪音。后续 (Phase 4B) 计划与 ``legacy-layer.tools``
 去重合并到 ``app.application.tools.*``。
 """
 

@@ -44,15 +44,59 @@ from modstore_server.llm_failure_classifier import (
 from modstore_server.models import EmployeeExecutionMetric, User, get_session_factory
 from modstore_server.runtime_async import run_coro_sync as _run_coro_sync
 from modstore_server.services.llm import chat_dispatch_via_session
+from modstore_server.employee_executor_merged import (
+    _emp_im_notify_boss as _emp_im_notify_boss,
+    _is_all_hands_cognition_context as _is_all_hands_cognition_context,
+    _build_all_hands_cognition_user_message as _build_all_hands_cognition_user_message,
+    _metric_task_preview as _metric_task_preview,
+    _flag_enabled as _flag_enabled,
+    _resolve_metric_user_id as _resolve_metric_user_id,
+    _executor_max_concurrent as _executor_max_concurrent,
+    _get_executor_semaphore as _get_executor_semaphore,
+    _executor_extra_cognition_retries as _executor_extra_cognition_retries,
+    _executor_detail_log_enabled as _executor_detail_log_enabled,
+    _is_transient_llm_error as _is_transient_llm_error,
+    _run_cognition_with_transient_retries as _run_cognition_with_transient_retries,
+    _get_section as _get_section,
+    _perception_excel as _perception_excel,
+    _extract_vision_data_urls as _extract_vision_data_urls,
+    _perception_image as _perception_image,
+    _memory_long_term_chroma as _memory_long_term_chroma,
+    _perception_real as _perception_real,
+    _perception_document as _perception_document,
+    _perception_web_rankings as _perception_web_rankings,
+    _memory_real as _memory_real,
+    _cognition_real as _cognition_real,
+    _cognition_sync as _cognition_sync,
+    _action_wechat_notify as _action_wechat_notify,
+    _action_openapi_tool as _action_openapi_tool,
+    _tpl_str as _tpl_str,
+    _tpl_obj as _tpl_obj,
+    _action_fhd_business as _action_fhd_business,
+    _merge_original_input_into_reasoning as _merge_original_input_into_reasoning,
+    _trusted_system_burn_in_project_root as _trusted_system_burn_in_project_root,
+    _trusted_system_duty_contract_execution as _trusted_system_duty_contract_execution,
+    _action_agent_runner as _action_agent_runner,
+    _employee_pack_extract_root as _employee_pack_extract_root,
+    _action_direct_python as _action_direct_python,
+    _prefer_para_with_local_fallback as _prefer_para_with_local_fallback,
+    _filter_handlers_vibe_coding_maintainer as _filter_handlers_vibe_coding_maintainer,
+    _actions_real as _actions_real,
+    _extract_token_count as _extract_token_count,
+    _auto_wrap_execution_result_to_change_requests as _auto_wrap_execution_result_to_change_requests,
+    _handlers_execution_ok as _handlers_execution_ok,
+    _handler_failure_detail as _handler_failure_detail,
+    _evaluate_employee_risk_gate as _evaluate_employee_risk_gate,
+    execute_employee_task as execute_employee_task,
+    get_employee_status as get_employee_status,
+    list_employees as list_employees,
+)
 
 logger = logging.getLogger(__name__)
 
 _METRIC_TASK_MAX_LEN = 128
 
 
-from modstore_server.employee_executor_part01 import (
-    _emp_im_notify_boss as _emp_im_notify_boss,
-)
 
 # 员工大会待机：manifest system_prompt 常要求「输出 JSON」，与四段 Markdown 汇报冲突。
 _ALL_HANDS_COGNITION_SYSTEM_APPEND = """\
@@ -110,76 +154,18 @@ _PHASE_D_PROTOCOL_APPEND = """\
 转交后你仍然要正常完成你能做的部分，不要因为转交就停手。"""
 
 
-from modstore_server.employee_executor_part02 import (
-    _is_all_hands_cognition_context as _is_all_hands_cognition_context,
-    _build_all_hands_cognition_user_message as _build_all_hands_cognition_user_message,
-    _metric_task_preview as _metric_task_preview,
-    _flag_enabled as _flag_enabled,
-    _resolve_metric_user_id as _resolve_metric_user_id,
-)
 
 _executor_sem: threading.Semaphore | None = None
 _executor_sem_n: int = 0
 
 
-from modstore_server.employee_executor_part03 import (
-    _executor_max_concurrent as _executor_max_concurrent,
-    _get_executor_semaphore as _get_executor_semaphore,
-    _executor_extra_cognition_retries as _executor_extra_cognition_retries,
-    _executor_detail_log_enabled as _executor_detail_log_enabled,
-    _is_transient_llm_error as _is_transient_llm_error,
-    _run_cognition_with_transient_retries as _run_cognition_with_transient_retries,
-    _get_section as _get_section,
-    _perception_excel as _perception_excel,
-    _extract_vision_data_urls as _extract_vision_data_urls,
-    _perception_image as _perception_image,
-    _memory_long_term_chroma as _memory_long_term_chroma,
-    _perception_real as _perception_real,
-    _perception_document as _perception_document,
-    _perception_web_rankings as _perception_web_rankings,
-    _memory_real as _memory_real,
-    _cognition_real as _cognition_real,
-    _cognition_sync as _cognition_sync,
-)
 
 
-from modstore_server.employee_executor_part04 import (
-    _action_wechat_notify as _action_wechat_notify,
-    _action_openapi_tool as _action_openapi_tool,
-    _tpl_str as _tpl_str,
-    _tpl_obj as _tpl_obj,
-    _action_fhd_business as _action_fhd_business,
-    _merge_original_input_into_reasoning as _merge_original_input_into_reasoning,
-    _trusted_system_burn_in_project_root as _trusted_system_burn_in_project_root,
-    _trusted_system_duty_contract_execution as _trusted_system_duty_contract_execution,
-    _action_agent_runner as _action_agent_runner,
-)
 
 
-from modstore_server.employee_executor_part05 import (
-    _employee_pack_extract_root as _employee_pack_extract_root,
-    _action_direct_python as _action_direct_python,
-    _prefer_para_with_local_fallback as _prefer_para_with_local_fallback,
-    _filter_handlers_vibe_coding_maintainer as _filter_handlers_vibe_coding_maintainer,
-    _actions_real as _actions_real,
-    _extract_token_count as _extract_token_count,
-)
 
 
-from modstore_server.employee_executor_part06 import (
-    _auto_wrap_execution_result_to_change_requests as _auto_wrap_execution_result_to_change_requests,
-    _handlers_execution_ok as _handlers_execution_ok,
-    _handler_failure_detail as _handler_failure_detail,
-    _evaluate_employee_risk_gate as _evaluate_employee_risk_gate,
-)
 
 
-from modstore_server.employee_executor_part07 import (
-    execute_employee_task as execute_employee_task,
-    get_employee_status as get_employee_status,
-)
 
 
-from modstore_server.employee_executor_part08 import (
-    list_employees as list_employees,
-)
