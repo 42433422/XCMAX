@@ -53,12 +53,6 @@ def _scan(
     pattern: str,
     workspace_root: str | Path | None,
 ) -> DirectoryFiles | dict[str, Any]:
-    try:
-        root = security.resolve_etl_path(directory, workspace_root=workspace_root, must_exist=True)
-    except security.ShipmentEtlPathError:
-        return {"success": False, "message": "非法目录", "error_code": "unsafe_path", "files": []}
-    if not root.is_dir():
-        return {"success": False, "message": f"目录不存在: {root}", "files": []}
     if not pattern or any(char in pattern for char in ("/", "\\", "\x00")):
         return {
             "success": False,
@@ -66,6 +60,12 @@ def _scan(
             "error_code": "unsafe_pattern",
             "files": [],
         }
+    try:
+        root = security.resolve_etl_path(directory, workspace_root=workspace_root, must_exist=True)
+    except security.ShipmentEtlPathError:
+        return {"success": False, "message": "非法目录", "error_code": "unsafe_path", "files": []}
+    if not root.is_dir():
+        return {"success": False, "message": f"目录不存在: {root}", "files": []}
     # Match only entry names. Letting a caller-supplied glob reach Path.glob would
     # allow directory traversal patterns such as ../*.xlsx.
     return DirectoryFiles(

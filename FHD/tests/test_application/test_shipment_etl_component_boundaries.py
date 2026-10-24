@@ -131,6 +131,7 @@ def test_fingerprint_failure_does_not_claim_a_completed_write_is_safe_to_repeat(
 def test_batch_does_not_report_success_when_a_file_is_rejected_before_writing(
     import_ports, tmp_path, monkeypatch
 ):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     source = tmp_path / "synthetic.xlsx"
     source.write_bytes(b"synthetic placeholder; parsing is replaced below")
     monkeypatch.setattr(

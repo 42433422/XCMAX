@@ -1,5 +1,5 @@
 {
-  "lines": 2368774,
+  "lines": 2368785,
   "updated": "2026-10-24",
-  "note": "PR #2544 cross-platform ETL output safety: replace the Windows path fallback with handle-relative no-reparse traversal and atomic same-directory replace; add explicit managed app-data/outputs root, narrow temporary-workspace test fixtures, failure-cleanup coverage, and Windows/macOS CI coverage. Current exact net increase: 654 maintained lines. PR body was not changed."
+  "note": "PR #2544 follow-up to cross-platform ETL path hardening: explicitly configure isolated WORKSPACE_ROOT roots in temporary-file employee/Excel/ETL tests, and validate batch glob syntax before directory resolution while retaining unsafe_path behavior for valid patterns. Exact additional net increase: 11 maintained lines. PR body remains unchanged per instruction."
 }
