@@ -239,35 +239,38 @@ async def butler_chat(
         if readonly_brief:
             text = ((text or "").strip() + "\n\n" + readonly_brief).strip()
     except RECOVERABLE_ERRORS as exc:
-        await wallet.release(hold)
-        _facade().save_failure_log(db, user.id, provider, model, request_id, str(exc), conv.id)
+        await wallet.release(_facade().authorization_header(request), hold, str(exc), request_id)
+        _facade().save_failure_log(
+            db,
+            user_id=user.id,
+            provider=provider,
+            model=model,
+            error=str(exc),
+            hold_no=hold.hold_no,
+        )
         raise _facade().HTTPException(500, f"LLM 调用失败：{exc}")
-    usage_obj = _facade().usage_from_response({"usage": usage}, msgs, [text])
-    charge = _facade().calculate_charge(db, provider, model, usage_obj)
+    usage_obj = _facade().usage_from_response(usage, msgs, text)
+    charge = _facade().Decimal("0")
     if not is_byok:
+        charge = _facade().calculate_charge(db, provider, model, usage_obj)
         await wallet.settle(
-            hold,
             _facade().authorization_header(request),
+            hold,
             charge,
-            provider,
-            model,
             request_id,
         )
     _facade().save_success_log(
-        db, user.id, provider, model, request_id, usage_obj, float(charge), conv.id
+        db,
+        user_id=user.id,
+        provider=provider,
+        model=model,
+        messages=[m for m in msgs if m.get("role") == "user"][-1:],
+        content=text,
+        usage=usage_obj,
+        charge=charge,
+        hold_no=hold.hold_no,
+        conversation_id=conv.id,
     )
-    db.add(
-        _facade().ChatMessage(
-            conversation_id=conv.id,
-            user_id=user.id,
-            role="assistant",
-            content=text,
-            provider=provider,
-            model=model,
-            charge_amount=float(charge),
-        )
-    )
-    db.commit()
     return {
         "text": text,
         "tool_calls": tool_calls,
@@ -322,58 +325,61 @@ async def butler_chat_stream(
 
     async def event_stream():
         collected = []
+        usage = {}
         try:
             async for chunk in _facade().chat_dispatch_stream(
                 provider,
-                api_key,
-                model,
-                msgs,
+                api_key=api_key,
+                model=model,
+                messages=msgs,
                 base_url=base_url,
                 max_tokens=body.max_tokens,
             ):
-                if isinstance(chunk, str):
-                    collected.append(chunk)
-                    yield f"data: {_facade().json.dumps({'text': chunk, 'done': False}, ensure_ascii=False)}\n\n"
-                elif isinstance(chunk, dict) and chunk.get("done"):
+                if chunk.get("type") == "error":
+                    raise RuntimeError(str(chunk.get("error") or "upstream error"))
+                if chunk.get("type") == "usage":
                     usage = chunk.get("usage") or {}
-                    usage_obj = _facade().usage_from_response({"usage": usage}, msgs, collected)
-                    charge = _facade().calculate_charge(db, provider, model, usage_obj)
-                    if not is_byok:
-                        await wallet.settle(
-                            hold,
-                            _facade().authorization_header(request),
-                            charge,
-                            provider,
-                            model,
-                            request_id,
-                        )
-                    full_text = "".join(collected)
-                    _facade().save_success_log(
-                        db,
-                        user.id,
-                        provider,
-                        model,
-                        request_id,
-                        usage_obj,
-                        float(charge),
-                        conv.id,
-                    )
-                    db.add(
-                        _facade().ChatMessage(
-                            conversation_id=conv.id,
-                            user_id=user.id,
-                            role="assistant",
-                            content=full_text,
-                            provider=provider,
-                            model=model,
-                            charge_amount=float(charge),
-                        )
-                    )
-                    db.commit()
-                    yield f"data: {_facade().json.dumps({'text': '', 'done': True, 'conversation_id': conv.id, 'charge_amount': float(charge)}, ensure_ascii=False)}\n\n"
+                elif chunk.get("type") == "delta":
+                    text = str(chunk.get("delta") or "")
+                    if text:
+                        collected.append(text)
+                        yield f"data: {_facade().json.dumps({'text': text, 'done': False}, ensure_ascii=False)}\n\n"
+            full_text = "".join(collected)
+            usage_obj = _facade().usage_from_response(usage, msgs, full_text)
+            charge = _facade().Decimal("0")
+            if not is_byok:
+                charge = _facade().calculate_charge(db, provider, model, usage_obj)
+                await wallet.settle(
+                    _facade().authorization_header(request),
+                    hold,
+                    charge,
+                    request_id,
+                )
+            _facade().save_success_log(
+                db,
+                user_id=user.id,
+                provider=provider,
+                model=model,
+                messages=[m for m in msgs if m.get("role") == "user"][-1:],
+                content=full_text,
+                usage=usage_obj,
+                charge=charge,
+                hold_no=hold.hold_no,
+                conversation_id=conv.id,
+            )
+            yield f"data: {_facade().json.dumps({'text': '', 'done': True, 'conversation_id': conv.id, 'charge_amount': float(charge)}, ensure_ascii=False)}\n\n"
         except RECOVERABLE_ERRORS as exc:
-            await wallet.release(hold)
-            _facade().save_failure_log(db, user.id, provider, model, request_id, str(exc), conv.id)
+            await wallet.release(
+                _facade().authorization_header(request), hold, str(exc), request_id
+            )
+            _facade().save_failure_log(
+                db,
+                user_id=user.id,
+                provider=provider,
+                model=model,
+                error=str(exc),
+                hold_no=hold.hold_no,
+            )
             yield f"data: {_facade().json.dumps({'error': str(exc), 'done': True}, ensure_ascii=False)}\n\n"
 
     return _facade().StreamingResponse(event_stream(), media_type="text/event-stream")

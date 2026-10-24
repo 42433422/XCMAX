@@ -133,6 +133,18 @@ describe('DeliveryCenterView', () => {
     appConfirm.mockResolvedValue(true)
   })
 
+  it.each(['rework', 'delivered', 'future_stage', ''])('explains the current stage and next step without inventing progress (%s)', async stage => {
+    const ticket = structuredClone(delivery)
+    ticket.custom_delivery.stage = stage; ticket.custom_delivery.stage_label = ''
+    listCustomDeliveries.mockResolvedValue({ items: [ticket] })
+    const wrapper = mount(DeliveryCenterView); await flushPromises()
+    expect(wrapper.get('.delivery-next-step').text()).toContain('下一步：')
+    if (stage === 'rework') expect(wrapper.get('.delivery-next-step').text()).toContain('核对本轮失败原因')
+    else if (stage === 'delivered') expect(wrapper.get('.delivery-next-step').text()).toContain('客户验收回执')
+    else { expect(wrapper.get('.delivery-next-step').text()).toContain('阶段待核实'); expect(wrapper.find('[aria-current="step"]').exists()).toBe(false) }
+    wrapper.unmount()
+  })
+
   it.each([[true, true, true], [true, true, false], [false, false, true]])(
     'separates commerce %s, acceptance %s and artifacts %s', async (commerce, accepted, artifacts) => {
       const ticket = structuredClone(delivery)

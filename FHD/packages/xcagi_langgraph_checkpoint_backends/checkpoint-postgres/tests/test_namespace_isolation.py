@@ -73,6 +73,23 @@ def test_postgres_direct_batch_validates_every_namespace_operation(operation) ->
         _group_ops([operation])
 
 
+@pytest.mark.parametrize(
+    "namespace", [("tenant.other",), ("tenant", ""), ("tenant", 1)]
+)
+@pytest.mark.parametrize("kind", ["get", "put", "delete", "search", "prefix", "suffix"])
+def test_postgres_batch_grouping_rejects_invalid_labels(namespace, kind) -> None:
+    operation = {
+        "get": GetOp(namespace, "key"),
+        "put": PutOp(namespace, "key", {}),
+        "delete": PutOp(namespace, "key", None),
+        "search": SearchOp(namespace),
+        "prefix": ListNamespacesOp((MatchCondition("prefix", namespace),)),
+        "suffix": ListNamespacesOp((MatchCondition("suffix", namespace),)),
+    }[kind]
+    with pytest.raises(InvalidNamespaceError):
+        _group_ops([PutOp(("valid",), "key", {}), operation])
+
+
 def test_sync_batch_accepts_nested_namespaces_and_rejects_aliases(monkeypatch) -> None:
     from contextlib import contextmanager
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from app.application.shipment_excel_etl_app_service import (
     write_ledger_workbook,
 )
 from app.application.shipment_excel_etl_ocr import (
+    _load_image_arrays,
     grid_to_workbook_path,
     text_blocks_to_grid,
 )
@@ -179,6 +181,29 @@ def test_ocr_text_blocks_to_grid_and_parse(tmp_path, monkeypatch):
     assert "OCR" in note["unit_name"] or note["items"][0]["model_number"] == "OCR-01"
     assert note["items"][0]["model_number"] == "OCR-01"
     assert note["items"][0]["quantity_tins"] == 2
+
+
+def test_ocr_image_loader_accepts_a_secure_binary_stream():
+    from PIL import Image
+
+    image_bytes = BytesIO()
+    Image.new("RGB", (2, 3), color="white").save(image_bytes, format="PNG")
+    image_bytes.seek(0)
+
+    arrays = _load_image_arrays(image_bytes, suffix=".png")
+    assert len(arrays) == 1
+    assert arrays[0].shape == (3, 2, 3)
+
+
+def test_ocr_image_loader_keeps_path_caller_behind_secure_open(tmp_path):
+    from PIL import Image
+
+    image_path = tmp_path / "safe.png"
+    Image.new("RGB", (2, 3), color="white").save(image_path)
+
+    arrays = _load_image_arrays(image_path)
+    assert len(arrays) == 1
+    assert arrays[0].shape == (3, 2, 3)
 
 
 def test_direct_execute_requires_env(tmp_path, monkeypatch):

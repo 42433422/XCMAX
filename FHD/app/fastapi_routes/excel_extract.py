@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.application.shipment_excel_etl_security import (
     ShipmentEtlPathError,
+    open_etl_input_file,
     open_etl_output_file,
     resolve_etl_output_path,
     resolve_etl_path,
@@ -63,48 +64,50 @@ def _extract_from_excel(file_path, sheet_name=None, header_row=1) -> tuple[dict,
         from openpyxl.utils import get_column_letter
 
         safe_file_path = resolve_etl_path(file_path)
-        if not safe_file_path.is_file():
-            return {"success": False, "message": "文件不存在"}, 404
+        with open_etl_input_file(safe_file_path) as source_file:
+            wb = load_workbook(source_file, data_only=True)
+            try:
+                if sheet_name and sheet_name in wb.sheetnames:
+                    ws = wb[sheet_name]
+                else:
+                    ws = wb[wb.sheetnames[0]]
 
-        wb = load_workbook(safe_file_path, data_only=True)
+                headers: list[dict[str, Any]] = []
+                for c in range(1, ws.max_column + 1):
+                    v = ws.cell(header_row, c).value
+                    if v is not None:
+                        headers.append(
+                            {
+                                "column": get_column_letter(c),
+                                "column_index": c,
+                                "value": str(v).strip() if v else "",
+                            }
+                        )
 
-        if sheet_name and sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
-        else:
-            ws = wb[wb.sheetnames[0]]
+                rows = []
+                for r in range(header_row + 1, ws.max_row + 1):
+                    row_data: dict[str, Any] = {}
+                    for h in headers:
+                        v = ws.cell(r, h["column_index"]).value
+                        row_data[h["value"]] = v
+                    if any(v is not None and v != "" for v in row_data.values()):
+                        rows.append(row_data)
 
-        headers: list[dict[str, Any]] = []
-        for c in range(1, ws.max_column + 1):
-            v = ws.cell(header_row, c).value
-            if v is not None:
-                headers.append(
-                    {
-                        "column": get_column_letter(c),
-                        "column_index": c,
-                        "value": str(v).strip() if v else "",
-                    }
-                )
-
-        rows = []
-        for r in range(header_row + 1, ws.max_row + 1):
-            row_data: dict[str, Any] = {}
-            for h in headers:
-                v = ws.cell(r, h["column_index"]).value
-                row_data[h["value"]] = v
-            if any(v is not None and v != "" for v in row_data.values()):
-                rows.append(row_data)
-
-        return {
-            "success": True,
-            "file": safe_file_path.name,
-            "sheet": ws.title,
-            "header_row": header_row,
-            "headers": headers,
-            "rows": rows,
-            "total_rows": len(rows),
-        }, 200
+                return {
+                    "success": True,
+                    "file": safe_file_path.name,
+                    "sheet": ws.title,
+                    "header_row": header_row,
+                    "headers": headers,
+                    "rows": rows,
+                    "total_rows": len(rows),
+                }, 200
+            finally:
+                wb.close()
 
     except ShipmentEtlPathError:
+        return {"success": False, "message": "文件不存在"}, 404
+    except FileNotFoundError:
         return {"success": False, "message": "文件不存在"}, 404
     except RECOVERABLE_ERRORS:
         logger.exception("提取 Excel 数据失败")
@@ -170,60 +173,60 @@ def _extract_attendance_detail_roster(
         from openpyxl import load_workbook
 
         safe_file_path = resolve_etl_path(file_path)
-        if not safe_file_path.is_file():
-            return {"success": False, "message": "文件不存在"}, 404
-
         header_rows = 3
         block_rows = 6
 
-        wb = load_workbook(safe_file_path, data_only=True)
-        try:
-            if sheet_name and sheet_name in wb.sheetnames:
-                ws = wb[sheet_name]
-            elif "明细" in wb.sheetnames:
-                ws = wb["明细"]
-            else:
-                ws = wb[wb.sheetnames[0]]
+        with open_etl_input_file(safe_file_path) as source_file:
+            wb = load_workbook(source_file, data_only=True)
+            try:
+                if sheet_name and sheet_name in wb.sheetnames:
+                    ws = wb[sheet_name]
+                elif "明细" in wb.sheetnames:
+                    ws = wb["明细"]
+                else:
+                    ws = wb[wb.sheetnames[0]]
 
-            rows_out: list[dict[str, Any]] = []
-            for base_row in range(header_rows + 1, ws.max_row + 1, block_rows):
-                raw_name = ws.cell(base_row, 3).value
-                if raw_name in (None, ""):
-                    continue
-                name = str(raw_name).strip()
-                if not name:
-                    continue
-                dept = str(ws.cell(base_row, 1).value or "").strip()
-                nature = str(ws.cell(base_row, 2).value or "").strip()
-                rows_out.append(
-                    {
-                        "product_code": "",
-                        "product_name": name,
-                        "specification": nature,
-                        "unit": dept or "个",
-                        "unit_price": 0,
-                        "remark": "__from_attendance_detail__",
-                    }
-                )
+                rows_out: list[dict[str, Any]] = []
+                for base_row in range(header_rows + 1, ws.max_row + 1, block_rows):
+                    raw_name = ws.cell(base_row, 3).value
+                    if raw_name in (None, ""):
+                        continue
+                    name = str(raw_name).strip()
+                    if not name:
+                        continue
+                    dept = str(ws.cell(base_row, 1).value or "").strip()
+                    nature = str(ws.cell(base_row, 2).value or "").strip()
+                    rows_out.append(
+                        {
+                            "product_code": "",
+                            "product_name": name,
+                            "specification": nature,
+                            "unit": dept or "个",
+                            "unit_price": 0,
+                            "remark": "__from_attendance_detail__",
+                        }
+                    )
 
-            headers = [
-                {"column": "A", "column_index": 1, "value": "部门"},
-                {"column": "B", "column_index": 2, "value": "性质"},
-                {"column": "C", "column_index": 3, "value": "姓名"},
-            ]
-            return {
-                "success": True,
-                "file": safe_file_path.name,
-                "sheet": ws.title,
-                "header_row": header_rows,
-                "headers": headers,
-                "rows": rows_out,
-                "total_rows": len(rows_out),
-                "parse_mode": "attendance_detail",
-            }, 200
-        finally:
-            wb.close()
+                headers = [
+                    {"column": "A", "column_index": 1, "value": "部门"},
+                    {"column": "B", "column_index": 2, "value": "性质"},
+                    {"column": "C", "column_index": 3, "value": "姓名"},
+                ]
+                return {
+                    "success": True,
+                    "file": safe_file_path.name,
+                    "sheet": ws.title,
+                    "header_row": header_rows,
+                    "headers": headers,
+                    "rows": rows_out,
+                    "total_rows": len(rows_out),
+                    "parse_mode": "attendance_detail",
+                }, 200
+            finally:
+                wb.close()
     except ShipmentEtlPathError:
+        return {"success": False, "message": "文件不存在"}, 404
+    except FileNotFoundError:
         return {"success": False, "message": "文件不存在"}, 404
     except RECOVERABLE_ERRORS:
         logger.exception("考勤明细人员提取失败")

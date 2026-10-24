@@ -187,6 +187,7 @@ def _windows_open_relative(
     directory: bool,
     create: bool,
     for_output: bool = False,
+    for_input: bool = False,
 ) -> int:
     """Open/create one child relative to a pinned directory handle."""
     import msvcrt
@@ -224,6 +225,12 @@ def _windows_open_relative(
         disposition = 3 if create else 1  # OPEN_IF / OPEN
         options = 0x1 | 0x00200000 | 0x20  # DIRECTORY | OPEN_REPARSE_POINT | SYNCHRONOUS
         attributes_on_create = 0x10
+        fd_flags = os.O_RDONLY | _windows_binary_flag()
+    elif for_input:
+        access = 0x1 | 0x80 | 0x100000  # READ_DATA | READ_ATTRIBUTES | SYNCHRONIZE
+        disposition = 1
+        options = 0x40 | 0x00200000 | 0x20
+        attributes_on_create = 0
         fd_flags = os.O_RDONLY | _windows_binary_flag()
     else:
         access, disposition = 0x80 | 0x100000, 1
@@ -648,6 +655,57 @@ def resolve_etl_output_path(
     parent_fd = _open_directory_under_root(root, parent_path, create=True)
     os.close(parent_fd)
     return candidate
+
+
+@contextmanager
+def open_etl_input_file(
+    file_path: str | Path,
+    *,
+    workspace_root: str | Path | None = None,
+) -> Iterator[BinaryIO]:
+    """Open a regular input file beneath a pinned, trusted directory handle."""
+    path = resolve_etl_path(file_path, workspace_root=workspace_root)
+    roots = etl_allowed_roots(workspace_root)
+    root = next(
+        (
+            Path(os.path.realpath(str(allowed_root)))
+            for allowed_root in roots
+            if path == Path(os.path.realpath(str(allowed_root)))
+            or Path(os.path.realpath(str(allowed_root))) in path.parents
+        ),
+        None,
+    )
+    if root is None:
+        raise ShipmentEtlPathError("path not under allowed dirs")
+    parent_fd = _open_directory_under_root(root, path.parent, create=False)
+    descriptor: int | None = None
+    try:
+        name = _validated_path_component(path.name)
+        if os.name == "nt":
+            descriptor = _windows_open_relative(
+                parent_fd,
+                name,
+                directory=False,
+                create=False,
+                for_input=True,
+            )
+        else:
+            flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+            descriptor = os.open(name, flags, dir_fd=parent_fd)
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise ShipmentEtlPathError("input is not a regular file")
+        stream = os.fdopen(descriptor, "rb")
+        descriptor = None
+        with stream:
+            yield stream
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise ShipmentEtlPathError("input path contains a link or non-file") from exc
+        raise
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        os.close(parent_fd)
 
 
 @contextmanager

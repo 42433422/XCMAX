@@ -170,6 +170,7 @@ describe('ImMessengerView.vue', () => {
     await enterpriseCs!.trigger('click')
     await flushPromises()
     expect(fetchEnterpriseCsThread).toHaveBeenCalled()
+    expect(wrapper.get('.im-chat-head').findComponent(SharedIssueAcceptancePanel).exists()).toBe(true)
     expect(fetchImMessages).not.toHaveBeenCalled()
 
     await wrapper.find('.im-compose-input').setValue('测试消息')
@@ -210,7 +211,7 @@ describe('ImMessengerView.vue', () => {
     })
     await flushPromises()
     expect(wrapper.find('.im-messenger').exists()).toBe(true)
-    expect(wrapper.findComponent(SharedIssueAcceptancePanel).exists()).toBe(true)
+    expect(wrapper.findComponent(SharedIssueAcceptancePanel).exists()).toBe(false)
     expect(wrapper.text()).not.toContain('固定联系人')
     expect(wrapper.text()).toContain('企业专属客服')
     expect(wrapper.text()).not.toContain('还没有会话')
@@ -218,6 +219,10 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.find('.im-conv-item--pinned').exists()).toBe(true)
     expect(wrapper.find('.im-channel-entry').exists()).toBe(true)
     expect(wrapper.text()).toContain('客户消息 · 客来来')
+    await wrapper.findAll('.im-conv-item--pinned').find(item => item.text().includes('企业专属客服'))!.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.im-chat-head').findComponent(SharedIssueAcceptancePanel).exists()).toBe(true)
+    wrapper.unmount()
   })
 
   it('opens Kellai customer conversations inside the client IM', async () => {

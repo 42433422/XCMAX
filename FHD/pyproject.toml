@@ -7,9 +7,9 @@ requires-python = ">=3.11"
 # 运行时依赖见 optional-dependencies；CI/生产安装：requirements-server-api.txt（与 server-api extra 对齐）
 dependencies = [
     "langgraph==1.2.10",
-    "langgraph-checkpoint==4.1.1",
-    "langgraph-checkpoint-sqlite==3.1.1",
-    "langgraph-checkpoint-postgres==3.1.1",
+    "langgraph-checkpoint==4.3.0",
+    "langgraph-checkpoint-sqlite==3.1.2",
+    "langgraph-checkpoint-postgres==3.1.3",
     "langgraph-prebuilt==1.1.0",
     "langgraph-sdk==0.4.4",
 ]

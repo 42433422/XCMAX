@@ -78,6 +78,19 @@ def build_digest_html(
             .group_by(_facade().CustomerServiceTicket.status)
             .all()
         )
+        pending_tickets = session.query(_facade().CustomerServiceTicket).filter(
+            _facade().CustomerServiceTicket.status.in_(
+                ["open", "processing", "awaiting_customer", "reopened"]
+            )
+        )
+        pending_ticket_count = pending_tickets.count()
+        pending_ticket_rows = [
+            (row.id, row.title, row.status)
+            for row in pending_tickets.order_by(
+                _facade().CustomerServiceTicket.created_at.asc(),
+                _facade().CustomerServiceTicket.id.asc(),
+            ).limit(5)
+        ]
         pending_decision_count = (
             session.query(_facade().func.count(_facade().StrategicDecision.id))
             .filter(_facade().StrategicDecision.status == "proposed")
@@ -109,7 +122,7 @@ def build_digest_html(
         [
             line.strip()
             for line in _facade()
-            ._git_line(["log", "--since=24 hours ago", "--format=%h %s", "-n", "5"], root)
+            ._git_line(["log", "--since=24 hours ago", "--format=%s", "-n", "5"], root)
             .splitlines()
             if line.strip()
         ]
@@ -119,8 +132,11 @@ def build_digest_html(
     ticket_status_labels = {
         "open": "待受理",
         "processing": "处理中",
-        "resolved": "已解决",
-        "closed": "已关闭",
+        "awaiting_customer": "待客户反馈",
+        "reopened": "重新处理",
+        "resolved": "标记已解决",
+        "closed": "标记已关闭",
+        "expired": "已过期",
         "rejected": "已拒绝",
     }
     ticket_outcomes = [
@@ -132,6 +148,11 @@ def build_digest_html(
         ticket_outcomes=ticket_outcomes,
         pending_decisions=pending_decisions,
         pending_decision_count=int(pending_decision_count),
+        pending_tickets=[
+            f"#{ticket_id} {(title or '未命名工单')[:100]}（{ticket_status_labels.get(status, status)}）"
+            for ticket_id, title, status in pending_ticket_rows
+        ],
+        pending_ticket_count=pending_ticket_count,
     )
     briefs_block = ""
     if (employee_briefs_html or "").strip():

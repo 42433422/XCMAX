@@ -9,6 +9,7 @@ RELEASES_DIR="${RELEASE_BASE%/}/releases"
 CURRENT_LINK="${XCMAX_CURRENT_LINK:-${RELEASE_BASE}/current}"
 CLI_LAUNCHER_PATH="${XCMAX_CLI_LAUNCHER_PATH:-/usr/local/bin/xcmax-terminal}"
 RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"
+LIBRARY_DIR="${MODMAN_LIBRARY:-${RUNTIME_DIR%/}/library}"
 CATALOG_DIR="${MODSTORE_CATALOG_DIR:-${RUNTIME_DIR%/}/catalog}"
 SITE_LINK="${XCMAX_SITE_LINK:-/root/成都修茈科技有限公司}"
 PUBLIC_SITE_STATE_DIR="${XCMAX_PUBLIC_SITE_STATE_DIR:-/var/lib/xcmax-public}"
@@ -29,6 +30,40 @@ RELEASES_TO_KEEP="${XCMAX_RELEASES_TO_KEEP:-4}"
 
 log() { printf '[xcmax-release] %s\n' "$*"; }
 fail() { log "ERROR: $*" >&2; exit 1; }
+
+persistent_path() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+from pathlib import Path
+
+path, releases = map(Path, sys.argv[1:])
+for member in reversed((path, *path.parents)):
+    if member.is_symlink():
+        raise SystemExit("persistent state cannot traverse symlinks")
+path = path.resolve()
+if path.is_relative_to(releases.resolve()):
+    raise SystemExit("persistent state must survive release pruning")
+print(path)
+PY
+}
+
+select_library_target() {
+  python3 - "$1" "$2" "$3" "$4" <<'PY'
+import sys
+from pathlib import Path
+
+wanted, active, previous, releases = map(Path, sys.argv[1:])
+for member in reversed((active, *active.parents)):
+    if member.is_symlink():
+        raise SystemExit("active library cannot traverse symlinks")
+active, previous, releases = active.resolve(), previous.resolve(), releases.resolve()
+if not active.is_relative_to(previous):
+    if active.is_relative_to(releases) or "releases" in active.parts:
+        raise SystemExit("active library points into another release")
+    wanted = active
+print(wanted)
+PY
+}
 
 resolve_java_home() {
   local candidate=""
@@ -109,9 +144,16 @@ case "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" in 0|1) ;; *) fail "XCMAX_PRESERVE_R
 [[ "$RELEASE_BASE" == /* ]] || fail "XCMAX_RELEASE_BASE must be an absolute path"
 [[ "$CLI_LAUNCHER_PATH" == /* ]] || fail "XCMAX_CLI_LAUNCHER_PATH must be an absolute path"
 [[ "$RUNTIME_DIR" == /* ]] || fail "MODSTORE_RUNTIME_DIR must be an absolute path"
+[[ "$LIBRARY_DIR" == /* ]] || fail "MODMAN_LIBRARY must be an absolute path"
+[[ "$RUNTIME_DIR" != "$RELEASES_DIR" && "$RUNTIME_DIR" != "$RELEASES_DIR/"* ]] \
+  || fail "MODSTORE_RUNTIME_DIR must survive release pruning"
+[[ "$LIBRARY_DIR" != "$RELEASES_DIR" && "$LIBRARY_DIR" != "$RELEASES_DIR/"* ]] \
+  || fail "MODMAN_LIBRARY must survive release pruning"
 [[ "$CATALOG_DIR" == /* ]] || fail "MODSTORE_CATALOG_DIR must be an absolute path"
 [[ "$RELEASES_TO_KEEP" =~ ^[0-9]+$ ]] && (( RELEASES_TO_KEEP >= 2 )) \
   || fail "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2"
+RUNTIME_DIR="$(persistent_path "$RUNTIME_DIR" "$RELEASES_DIR")" || fail "invalid persistent runtime directory"
+LIBRARY_DIR="$(persistent_path "$LIBRARY_DIR" "$RELEASES_DIR")" || fail "invalid persistent library directory"
 if [[ -n "$GITHUB_REPOSITORY_SLUG" ]] \
   && ! [[ "$GITHUB_REPOSITORY_SLUG" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
   fail "XCMAX_GITHUB_REPOSITORY must be an owner/repository slug when set"
@@ -602,6 +644,7 @@ write_service_units() {
     "$RUNTIME_DIR" "$CATALOG_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" \
     "$TARGET_SHA" "$PRODUCT_VERSION" > "${release_env}.tmp"
   printf 'MODSTORE_NODE_EXECUTABLE=%s\n' "$RUNTIME_NODE_BIN" >> "${release_env}.tmp"
+  printf 'MODMAN_LIBRARY=%s\n' "$LIBRARY_DIR" >> "${release_env}.tmp"
   chmod 644 "${release_env}.tmp"
   mv -f "${release_env}.tmp" "$release_env"
 
@@ -812,6 +855,31 @@ elif [[ -d "$PREVIOUS_ROOT/.git" ]]; then
   PREVIOUS_SHA="$(git -C "$PREVIOUS_ROOT" rev-parse HEAD 2>/dev/null || true)"
 fi
 [[ -z "$PREVIOUS_SHA" || "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "previous runtime Git SHA is invalid"
+PREVIOUS_LIBRARY_DIR="$(python3 - "${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}" "$(systemctl show modstore.service -p MainPID --value)" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+deploy, pid = sys.argv[1:]
+value = ""
+if pid.isdigit() and int(pid) > 0:
+    try:
+        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
+        value = next((e.partition(b"=")[2].decode() for e in entries if e.startswith(b"MODMAN_LIBRARY=")), "")
+    except OSError:
+        pass
+config = Path(deploy) / ".modstore-config.json"
+if config.is_symlink():
+    raise SystemExit("previous library configuration cannot be a symlink")
+if config.is_file():
+    value = json.loads(config.read_text()).get("library_root") or value
+print(Path(value or str(Path(deploy) / "library")).expanduser().absolute())
+PY
+)"
+LIBRARY_DIR="$(select_library_target "$LIBRARY_DIR" "$PREVIOUS_LIBRARY_DIR" "$PREVIOUS_ROOT" "$RELEASES_DIR")" \
+  || fail "active library directory requires explicit reconciliation"
+LIBRARY_DIR="$(persistent_path "$LIBRARY_DIR" "$RELEASES_DIR")" || fail "invalid persistent library directory"
 
 rollback() {
   log "promotion failed; rolling current back to $PREVIOUS_ROOT"
@@ -822,7 +890,7 @@ rollback() {
     mv -Tf "${SITE_LINK}.rollback" "$SITE_LINK"
   fi
   if [[ "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-    TARGET_SHA="$PREVIOUS_SHA" write_service_units
+    TARGET_SHA="$PREVIOUS_SHA" LIBRARY_DIR="$PREVIOUS_LIBRARY_DIR" write_service_units
   fi
   systemctl daemon-reload
   systemctl restart modstore-payment.service 2>/dev/null || true
@@ -881,6 +949,40 @@ recover_catalog_migration() {
   fi
 }
 trap recover_catalog_migration EXIT
+migrate_delivery_state() {
+  PYTHONPATH="$DEPLOY_DIR" "$DEPLOY_DIR/.venv/bin/python" - \
+    "${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}" "$RUNTIME_DIR" "$LIBRARY_DIR" "$PREVIOUS_LIBRARY_DIR" "$1" "$ENV_FILE" "$DEPLOY_DIR" "$SOURCE_ROOT" "$RELEASES_DIR" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+from modstore_server.customer_delivery_sources import migrate_private_delivery_state
+
+previous, runtime, library, previous_library, mode, environment, candidate, source_root, releases = sys.argv[1:]
+load_dotenv(environment, override=False)
+config = Path(candidate) / ".modstore-config.json"
+if config.is_symlink():
+    raise SystemExit("candidate library configuration cannot be a symlink")
+if config.is_file():
+    configured = json.loads(config.read_text()).get("library_root")
+    if configured and Path(configured).expanduser().absolute() != Path(library):
+        raise SystemExit("candidate library_root conflicts with persistent MODMAN_LIBRARY")
+try:
+    result = migrate_private_delivery_state(
+        Path(previous), Path(runtime), library=Path(library),
+        legacy_library=Path(previous_library), dry_run=mode == "true",
+        bootstrap_source=Path(source_root), releases_root=Path(releases),
+    )
+except (OSError, ValueError) as error:
+    print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))
+    raise SystemExit(1) from error
+print(json.dumps(result, ensure_ascii=False))
+PY
+}
+migrate_delivery_state true
+CATALOG_SERVICES_STOPPED=1
+systemctl stop modstore.service modstore-scheduler.service
 if [[ "$ACTIVE_CATALOG_DIR" != "$(canonical_path "$CATALOG_DIR")" ]]; then
   CATALOG_SERVICES_STOPPED=1
   systemctl stop modstore.service modstore-scheduler.service
@@ -920,6 +1022,7 @@ with open(sys.argv[1], encoding="utf-8") as handle:
     payload = json.load(handle)
 assert isinstance(payload, dict) and isinstance(payload.get("packages"), list)
 PY
+migrate_delivery_state false
 
 verify_fixed_release_approval
 ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"

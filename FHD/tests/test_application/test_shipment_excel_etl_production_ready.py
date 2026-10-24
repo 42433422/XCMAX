@@ -371,6 +371,50 @@ def test_etl_path_resolver_rejects_traversal_and_symlink_escape(tmp_path, monkey
             security.resolve_etl_path(raw)
 
 
+def test_etl_input_opens_only_regular_files_beneath_the_trusted_root(tmp_path, monkeypatch):
+    from app.application import shipment_excel_etl_security as security
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    safe_file = allowed / "input.xlsx"
+    safe_file.write_bytes(b"trusted workbook")
+    outside = tmp_path / "private.xlsx"
+    outside.write_bytes(b"private workbook")
+    monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+
+    with security.open_etl_input_file(safe_file) as stream:
+        assert stream.read() == b"trusted workbook"
+    with pytest.raises(security.ShipmentEtlPathError):
+        with security.open_etl_input_file(outside):
+            pytest.fail("an outside file must not be opened")
+
+
+def test_etl_input_rejects_a_leaf_symlink_swapped_after_resolution(tmp_path, monkeypatch):
+    from app.application import shipment_excel_etl_security as security
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    source = allowed / "input.xlsx"
+    source.write_bytes(b"trusted workbook")
+    outside = tmp_path / "private.xlsx"
+    outside.write_bytes(b"private workbook")
+    monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    resolve = security.resolve_etl_path
+
+    def replace_after_resolve(path, **kwargs):
+        resolved = resolve(path, **kwargs)
+        source.unlink()
+        _create_test_symlink(source, outside)
+        return resolved
+
+    monkeypatch.setattr(security, "resolve_etl_path", replace_after_resolve)
+    with pytest.raises((security.ShipmentEtlPathError, OSError)):
+        with security.open_etl_input_file(source) as stream:
+            pytest.fail(f"must not read swapped private input: {stream.read()!r}")
+
+
 def test_etl_output_resolver_rejects_symlink_escape_without_writing(tmp_path, monkeypatch):
     """An existing output alias cannot redirect a workbook write outside the root."""
     from app.application import shipment_excel_etl_security as security

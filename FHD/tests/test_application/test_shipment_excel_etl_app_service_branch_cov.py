@@ -1003,6 +1003,7 @@ def test_parse_ledger_sheet_missing_order(monkeypatch, no_llm, no_kb):
 
 def test_parse_delivery_notes_happy(tmp_path, monkeypatch, delivery_profile, no_llm, no_kb):
     path = _write_delivery_xlsx(tmp_path / "del.xlsx")
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     monkeypatch.setattr(f"{MOD}._extract_adjacent_buyer_meta", lambda ws, r: {})
@@ -1016,6 +1017,7 @@ def test_parse_delivery_notes_happy(tmp_path, monkeypatch, delivery_profile, no_
 
 def test_parse_delivery_notes_ledger_only(tmp_path, monkeypatch, delivery_profile, no_llm, no_kb):
     path = _write_ledger_xlsx(tmp_path / "lg.xlsx")
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     res = parse_delivery_notes(path, include_ledger=True)
@@ -1047,6 +1049,7 @@ def test_parse_delivery_notes_mixed_auto(tmp_path, monkeypatch, delivery_profile
     lg["D3"] = 1
     path = tmp_path / "mixed.xlsx"
     wb.save(path)
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     monkeypatch.setattr(f"{MOD}._extract_adjacent_buyer_meta", lambda ws, r: {})
@@ -1082,6 +1085,7 @@ def test_parse_delivery_notes_unsafe_path(tmp_path, monkeypatch, delivery_profil
 
 
 def test_parse_delivery_notes_file_missing(tmp_path, monkeypatch, delivery_profile):
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: tmp_path / "nope.xlsx")
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     res = parse_delivery_notes(tmp_path / "nope.xlsx")
@@ -1104,6 +1108,7 @@ def test_parse_delivery_notes_openpyxl_import_error(tmp_path, monkeypatch, deliv
 
 def test_parse_delivery_notes_load_error(tmp_path, monkeypatch, delivery_profile):
     path = _write_delivery_xlsx(tmp_path / "d.xlsx")
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
 
@@ -1135,6 +1140,7 @@ def test_parse_delivery_notes_ocr_exception_falls_back(
 ):
     OCR = "app.application.shipment_excel_etl_ocr"
     path = _write_delivery_xlsx(tmp_path / "d.xlsx")
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     monkeypatch.setattr(f"{MOD}._extract_adjacent_buyer_meta", lambda ws, r: {})
@@ -1158,6 +1164,7 @@ def test_parse_delivery_notes_no_notes_skipped(
     ws["A2"] = "一些文本"
     path = tmp_path / "quote.xlsx"
     wb.save(path)
+    monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     res = parse_delivery_notes(path)

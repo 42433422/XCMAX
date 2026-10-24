@@ -112,16 +112,20 @@ def _paid_order(tmp_path, monkeypatch, user_id: int) -> str:
     return order_no
 
 
-def test_customer_service_refund_chat_creates_ticket_action_and_refund(
-    client, tmp_path, monkeypatch
+@pytest.mark.parametrize("order_owner", ["self", "missing", "other"])
+def test_customer_service_refund_chat_reports_real_submission(
+    client, tmp_path, monkeypatch, order_owner
 ):
     from modstore_server import webhook_dispatcher
     from modstore_server.models import RefundRequest
     from modstore_server.models_cs import CustomerServiceTicket
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    monkeypatch.setenv("PAYMENT_BACKEND", "python")
+    monkeypatch.setenv("MODSTORE_PAYMENT_ORDERS_DIR", str(tmp_path / "orders"))
     user = _make_user("cs_user")
-    order_no = _paid_order(tmp_path, monkeypatch, user.id)
+    owner = user if order_owner == "self" else _make_user("other_owner")
+    order_no = "RF999" if order_owner == "missing" else _paid_order(tmp_path, monkeypatch, owner.id)
     monkeypatch.setattr(
         webhook_dispatcher, "dispatch_event", lambda event: {"ok": True, "event": event}
     )
@@ -139,7 +143,12 @@ def test_customer_service_refund_chat_creates_ticket_action_and_refund(
         assert data["ticket"]["intent"] == "refund"
         assert data["decision"]["decision"] == "approved"
         assert data["actions"][0]["action_type"] == "refund.apply"
-        assert data["actions"][0]["status"] == "completed"
+        valid = order_owner == "self"
+        assert data["actions"][0]["status"] == ("completed" if valid else "failed")
+        if not valid:
+            assert data["ticket"]["status"] == "processing"
+            assert "未确认提交成功" in data["message"]["content"]
+            assert "不能视为已退款" in data["message"]["content"]
 
         sf = get_session_factory()
         with sf() as session:
@@ -149,8 +158,9 @@ def test_customer_service_refund_chat_creates_ticket_action_and_refund(
                 .first()
             )
             refund = session.query(RefundRequest).filter(RefundRequest.order_no == order_no).first()
-            assert refund is not None
-            assert refund.status == "pending"
+            assert (refund is not None) is valid
+            if refund:
+                assert refund.status == "pending"
 
 
 def test_customer_service_incomplete_refund_chats_without_ticket(client, monkeypatch):
@@ -901,6 +911,32 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
         assert paid["custom_delivery"]["crm"]["payment"]["status"] == "paid"
         assert paid["custom_delivery"]["commerce_ready"] is True
         assert paid["custom_delivery"]["stage"] == "production"
+
+
+@pytest.mark.parametrize(
+    "message,expected",
+    [
+        ("订单号 RF999 想退款，原因是重复购买", "RF999"),
+        ("订单号 RF123456 想退款，原因是重复购买", "RF123456"),
+        ("order_no: RF999 refund duplicate purchase", "RF999"),
+        ("ORDER NO：A1 想退款", "A1"),
+        ("订单 RF999 想退款", "RF999"),
+        ("订单 123456 想退款", "123456"),
+        ("订单号 ABCDEF 想退款", "ABCDEF"),
+        ("我有123456元余额，想退款", None),
+        ("RF999 想退款", None),
+        ("订单号 abc 想退款", None),
+        ("订单号 12345 想退款", None),
+        ("订单没有编号，想退款", None),
+        ("订单号：" + "R" * 64, "R" * 64),
+        ("订单号：" + "R" * 65, None),
+    ],
+)
+def test_order_field_extract_keeps_short_mixed_ids_and_rejects_ambiguous_text(message, expected):
+    from modstore_server.customer_service_orchestrator import extract_fields
+
+    assert extract_fields(message, {}).get("order_no") == expected
+    assert extract_fields(message, {"order_no": "CONTEXT-123"})["order_no"] == "CONTEXT-123"
 
 
 def test_infer_intent_order_no_alone_is_not_refund():

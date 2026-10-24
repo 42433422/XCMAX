@@ -253,6 +253,7 @@ class WorkbookReader:
     ) -> dict[str, Any]:
         from app.application.shipment_excel_etl_security import (
             ShipmentEtlPathError,
+            open_etl_input_file,
             resolve_etl_path,
         )
 
@@ -269,7 +270,7 @@ class WorkbookReader:
             try:
                 from app.application.shipment_excel_etl_ocr import is_ocr_source, parse_ocr_document
 
-                if path.is_file() and is_ocr_source(path):
+                if is_ocr_source(path):
                     return parse_ocr_document(
                         path,
                         include_ledger=include_ledger,
@@ -279,64 +280,82 @@ class WorkbookReader:
             except RECOVERABLE_ERRORS:
                 self._logger.debug("ocr auto-route skipped", exc_info=True)
         profiles = self._ports.profiles(profile, profile_id)
-        if not path.is_file():
-            return {"success": False, "message": "文件不存在", "notes": []}
         try:
             from openpyxl import load_workbook
         except ImportError:
             return {"success": False, "message": "缺少 openpyxl，无法解析 Excel", "notes": []}
         try:
-            workbook = load_workbook(str(path), data_only=True)
+            with open_etl_input_file(path) as source_file:
+                workbook = load_workbook(source_file, data_only=True)
+                try:
+                    fallback = (unit_name_hint or path.stem).strip() or path.stem
+                    parsed = ParsedSheets()
+                    for sheet in workbook.worksheets:
+                        self._read_sheet(sheet, profiles, fallback, min_score, parsed)
+                    notes, mode = parsed.select(include_ledger)
+                    delivery_count = sum(
+                        1 for note in notes if note.get("source_kind") == "delivery_note"
+                    )
+                    ledger_count = sum(
+                        1 for note in notes if note.get("source_kind") == "shipment_ledger"
+                    )
+                    used_profiles = sorted(
+                        {
+                            str(note.get("profile_id") or "")
+                            for note in notes
+                            if note.get("profile_id")
+                        }
+                    )
+                    result_profile = (
+                        used_profiles[0]
+                        if len(used_profiles) == 1
+                        else profiles[0].id
+                        if len(profiles) == 1
+                        else "auto"
+                    )
+                    return {
+                        "success": True,
+                        "file_path": str(path),
+                        "file_name": path.name,
+                        "profile_id": result_profile,
+                        "profile_ids": used_profiles,
+                        "profiles_available": [p.id for p in profiles],
+                        "profile_hits": parsed.profile_hits,
+                        "sheet_roles": parsed.roles,
+                        "mixed_workbook": len({r.get("role") for r in parsed.roles}) > 1,
+                        "note_count": len(notes),
+                        "delivery_note_count": delivery_count,
+                        "ledger_note_count": ledger_count,
+                        "ledger_available_count": len(parsed.ledger),
+                        "include_ledger_mode": mode if mode in (True, False) else "auto",
+                        "notes": notes,
+                        "skipped_sheets": parsed.skipped,
+                        "assist": {
+                            "used_llm": any(
+                                bool(a.get("used_llm") and a.get("ok")) for a in parsed.assists
+                            ),
+                            "sheets": parsed.assists,
+                        },
+                        "message": (
+                            f"识别到 {len(notes)} 张单据（主表 {delivery_count} / 流水分组 {ledger_count}）"
+                            + (f"；profile={','.join(used_profiles)}" if used_profiles else "")
+                        )
+                        if notes
+                        else "未识别到可匹配的单据模板（可自定义 YAML profile）",
+                    }
+                finally:
+                    workbook.close()
+        except FileNotFoundError:
+            return {"success": False, "message": "文件不存在", "notes": []}
+        except ShipmentEtlPathError:
+            return {
+                "success": False,
+                "message": "非法文件路径",
+                "notes": [],
+                "error_code": "unsafe_path",
+            }
         except RECOVERABLE_ERRORS:
             return {"success": False, "message": "无法读取 Excel 文件", "notes": []}
-        fallback = (unit_name_hint or path.stem).strip() or path.stem
-        parsed = ParsedSheets()
-        try:
-            for sheet in workbook.worksheets:
-                self._read_sheet(sheet, profiles, fallback, min_score, parsed)
-        finally:
-            workbook.close()
-        notes, mode = parsed.select(include_ledger)
-        delivery_count = sum(1 for note in notes if note.get("source_kind") == "delivery_note")
-        ledger_count = sum(1 for note in notes if note.get("source_kind") == "shipment_ledger")
-        used_profiles = sorted(
-            {str(note.get("profile_id") or "") for note in notes if note.get("profile_id")}
-        )
-        result_profile = (
-            used_profiles[0]
-            if len(used_profiles) == 1
-            else profiles[0].id
-            if len(profiles) == 1
-            else "auto"
-        )
-        return {
-            "success": True,
-            "file_path": str(path),
-            "file_name": path.name,
-            "profile_id": result_profile,
-            "profile_ids": used_profiles,
-            "profiles_available": [p.id for p in profiles],
-            "profile_hits": parsed.profile_hits,
-            "sheet_roles": parsed.roles,
-            "mixed_workbook": len({r.get("role") for r in parsed.roles}) > 1,
-            "note_count": len(notes),
-            "delivery_note_count": delivery_count,
-            "ledger_note_count": ledger_count,
-            "ledger_available_count": len(parsed.ledger),
-            "include_ledger_mode": mode if mode in (True, False) else "auto",
-            "notes": notes,
-            "skipped_sheets": parsed.skipped,
-            "assist": {
-                "used_llm": any(bool(a.get("used_llm") and a.get("ok")) for a in parsed.assists),
-                "sheets": parsed.assists,
-            },
-            "message": (
-                f"识别到 {len(notes)} 张单据（主表 {delivery_count} / 流水分组 {ledger_count}）"
-                + (f"；profile={','.join(used_profiles)}" if used_profiles else "")
-            )
-            if notes
-            else "未识别到可匹配的单据模板（可自定义 YAML profile）",
-        }
 
 
 def preview(

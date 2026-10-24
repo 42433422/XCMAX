@@ -1,5 +1,6 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { captureMessageScroll } from './useChatSession'
 import {
   fetchEnterpriseCsThread,
   type ImConversationSummary,
@@ -12,7 +13,7 @@ type Options = {
   activeConversationId: Ref<number | null>
   messages: Ref<ImMessage[]>
   playIncoming: (body: string) => void | Promise<void>
-  scrollToBottom: () => void
+  scrollEl: Ref<HTMLElement | null>
 }
 
 /** Poll the canonical production CS thread while the local fixed contact is open. */
@@ -54,6 +55,7 @@ export function useEnterpriseCsBridge(options: Options) {
       const oldIds = new Set(options.messages.value.map((item) => item.id))
       const thread = await fetchEnterpriseCsThread()
       if (!current()) return
+      const restoreScroll = captureMessageScroll(options.scrollEl)
       enterpriseCsReadError.value = ''
       options.messages.value = thread.messages
       const local = options.conversations.value.find((item) => item.id === localId)
@@ -69,7 +71,7 @@ export function useEnterpriseCsBridge(options: Options) {
       const incoming = thread.messages.find((item) => !oldIds.has(item.id) && !item.is_self)
       if (notifyIncoming && incoming) void options.playIncoming(incoming.body)
       await nextTick()
-      options.scrollToBottom()
+      if (current()) restoreScroll()
     } catch (error) {
       if (current()) enterpriseCsReadError.value = error instanceof Error ? error.message : '企业专属客服读取失败'
       if (!notifyIncoming) throw error

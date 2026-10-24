@@ -134,34 +134,36 @@
             <h3>模块注册表</h3>
             <span class="status-badge badge-info">{{ modules.length }} 个模块</span>
           </div>
-          <table class="module-table" v-if="modules.length">
-            <thead>
-              <tr>
-                <th>模块 ID</th>
-                <th>名称</th>
-                <th>版本</th>
-                <th>来源</th>
-                <th>状态</th>
-                <th>同步范围</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="mod in modules" :key="mod.module_id">
-                <td class="mono">{{ mod.module_id }}</td>
-                <td>{{ mod.display_name }}</td>
-                <td class="mono">{{ mod.version || '—' }}</td>
-                <td>
-                  <span class="source-badge" :class="`source-${mod.source}`">{{ sourceLabel(mod.source) }}</span>
-                </td>
-                <td>
-                  <span class="status-badge" :class="mod.active ? 'badge-ok' : 'badge-dim'">
-                    {{ mod.active ? '启用' : '禁用' }}
-                  </span>
-                </td>
-                <td class="mono small">{{ mod.sync_scope || '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-if="modules.length" class="module-table-scroll">
+            <table class="module-table">
+              <thead>
+                <tr>
+                  <th>模块 ID</th>
+                  <th>名称</th>
+                  <th>版本</th>
+                  <th>来源</th>
+                  <th>状态</th>
+                  <th>同步范围</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="mod in modules" :key="mod.module_id">
+                  <td class="mono">{{ mod.module_id }}</td>
+                  <td>{{ mod.display_name }}</td>
+                  <td class="mono">{{ mod.version || '—' }}</td>
+                  <td>
+                    <span class="source-badge" :class="`source-${mod.source}`">{{ sourceLabel(mod.source) }}</span>
+                  </td>
+                  <td>
+                    <span class="status-badge" :class="mod.active ? 'badge-ok' : 'badge-dim'">
+                      {{ mod.active ? '启用' : '禁用' }}
+                    </span>
+                  </td>
+                  <td class="mono small">{{ mod.sync_scope || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p v-else class="empty-hint">暂无已注册模块，可点右上角「刷新状态」重试</p>
         </div>
 
@@ -177,20 +179,22 @@
               {{ syncingEmployees ? '同步中...' : '同步服务器员工' }}
             </button>
           </div>
-          <table class="module-table" v-if="remoteEmployees.length">
-            <thead>
-              <tr><th>ID</th><th>名称</th><th>职能域</th><th>区域</th><th>版本</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="emp in remoteEmployees" :key="emp.employee_id">
-                <td class="mono small">{{ emp.employee_id }}</td>
-                <td>{{ emp.name }}</td>
-                <td class="small">{{ emp.domain || '—' }}</td>
-                <td>{{ emp.area || '—' }}</td>
-                <td class="mono">{{ emp.version || '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-if="remoteEmployees.length" class="module-table-scroll">
+            <table class="module-table">
+              <thead>
+                <tr><th>ID</th><th>名称</th><th>职能域</th><th>区域</th><th>版本</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="emp in remoteEmployees" :key="emp.employee_id">
+                  <td class="mono small">{{ emp.employee_id }}</td>
+                  <td>{{ emp.name }}</td>
+                  <td class="small">{{ emp.domain || '—' }}</td>
+                  <td>{{ emp.area || '—' }}</td>
+                  <td class="mono">{{ emp.version || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p v-else class="empty-hint">暂无远端员工信息，点击上方按钮同步</p>
         </div>
 
@@ -204,26 +208,28 @@
           <div class="card-actions" style="margin-bottom:12px">
             <button class="btn btn-secondary btn-sm" @click="loadConflicts">刷新冲突列表</button>
           </div>
-          <table class="module-table" v-if="conflicts.length">
-            <thead>
-              <tr><th>ID</th><th>实体类型</th><th>实体 ID</th><th>操作</th><th>冲突说明</th><th>收到时间</th><th>处理</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="c in conflicts" :key="c.id">
-                <td class="mono">{{ c.id }}</td>
-                <td>{{ c.entity_type }}</td>
-                <td class="mono small">{{ c.entity_id }}</td>
-                <td>{{ c.operation }}</td>
-                <td class="small">{{ c.conflict_note || '—' }}</td>
-                <td class="small">{{ c.received_at }}</td>
-                <td>
-                  <button class="btn btn-sm btn-primary" @click="resolveConflict(c.id,'apply')">应用</button>
-                  &nbsp;
-                  <button class="btn btn-sm btn-secondary" @click="resolveConflict(c.id,'skip')">跳过</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-if="conflicts.length" class="module-table-scroll">
+            <table class="module-table">
+              <thead>
+                <tr><th>ID</th><th>实体类型</th><th>实体 ID</th><th>操作</th><th>冲突说明</th><th>收到时间</th><th>处理</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in conflicts" :key="c.id">
+                  <td class="mono">{{ c.id }}</td>
+                  <td>{{ c.entity_type }}</td>
+                  <td class="mono small">{{ c.entity_id }}</td>
+                  <td>{{ c.operation }}</td>
+                  <td class="small">{{ c.conflict_note || '—' }}</td>
+                  <td class="small">{{ c.received_at }}</td>
+                  <td>
+                    <button class="btn btn-sm btn-primary" @click="resolveConflict(c.id,'apply')">应用</button>
+                    &nbsp;
+                    <button class="btn btn-sm btn-secondary" @click="resolveConflict(c.id,'skip')">跳过</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p v-else class="empty-hint">点击「刷新冲突列表」加载详情</p>
         </div>
 
