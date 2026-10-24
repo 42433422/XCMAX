@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from modstore_server.release_train_digest import attach_release_train_to_digest
+from modstore_server.release_train_digest import (
+    attach_release_train_to_digest,
+)
 from modstore_server.release_train_digest import (
     release_train_context_for_digest as _release_train_context_for_digest,
 )

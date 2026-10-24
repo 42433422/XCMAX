@@ -28,7 +28,9 @@ from modstore_server.customer_service_delivery_models import (
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_evidence as _custom_delivery_evidence,
 )
-from modstore_server.customer_service_delivery_models import custom_delivery_pricing_mode
+from modstore_server.customer_service_delivery_models import (
+    custom_delivery_pricing_mode,
+)
 from modstore_server.customer_service_delivery_quality import custom_delivery_gate
 from modstore_server.customer_service_orchestrator import audit, ticket_payload
 from modstore_server.customer_service_tools import json_dumps

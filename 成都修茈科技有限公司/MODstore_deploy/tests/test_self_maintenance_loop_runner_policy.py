@@ -78,7 +78,9 @@ from modstore_server.maintenance_loop.store import (
 from modstore_server.self_maintenance_para_merge_remediation import (
     classify_para_merge_review_detail,
 )
-from modstore_server.self_maintenance_quality_gate import matches_black_check_command
+from modstore_server.self_maintenance_quality_gate import (
+    matches_black_check_command,
+)
 from modstore_server.self_maintenance_quality_gate import (
     matches_focused_test_command as _matches_focused_test_command,
 )

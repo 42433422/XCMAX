@@ -31,7 +31,9 @@ from modstore_server.employee_change_request_verification import (
 from modstore_server.employee_change_request_verification import (
     _run_post_apply_verification as _run_post_apply_verification,
 )
-from modstore_server.employee_change_request_verification import _workspace_fd
+from modstore_server.employee_change_request_verification import (
+    _workspace_fd,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

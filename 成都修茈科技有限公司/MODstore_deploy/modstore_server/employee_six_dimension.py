@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from modstore_server.employee_brief_utils import compact_routing_brief
-from modstore_server.employee_six_dimension_report import SIX_DIMENSION_KEYS
+from modstore_server.employee_six_dimension_report import (
+    SIX_DIMENSION_KEYS,
+)
 from modstore_server.employee_six_dimension_report import clamp_score as _clamp_score
 from modstore_server.employee_six_dimension_report import dim_entry as _dim_entry
 from modstore_server.employee_six_dimension_report import (

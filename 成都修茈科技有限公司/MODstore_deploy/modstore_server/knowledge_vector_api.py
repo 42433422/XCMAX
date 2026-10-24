@@ -23,7 +23,9 @@ from modstore_server.knowledge_vector_store import (
     search,
 )
 from modstore_server.knowledge_vector_store import status as vector_status
-from modstore_server.knowledge_vector_store import upsert_document
+from modstore_server.knowledge_vector_store import (
+    upsert_document,
+)
 from modstore_server.models import User, get_session_factory
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])

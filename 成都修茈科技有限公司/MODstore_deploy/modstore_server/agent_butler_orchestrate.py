@@ -15,7 +15,9 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-from modstore_server.agent_butler_models import ButlerOrchestrateBody
+from modstore_server.agent_butler_models import (
+    ButlerOrchestrateBody,
+)
 from modstore_server.agent_butler_models import (
     butler_orchestrate_steps as _butler_orchestrate_steps,
 )

@@ -33,7 +33,9 @@ from modstore_server.customer_value_payment_source import (
 from modstore_server.customer_value_payment_source import (
     load_java_payment_orders as _load_java_payment_orders,
 )
-from modstore_server.customer_value_payment_source import payment_evidence_marker
+from modstore_server.customer_value_payment_source import (
+    payment_evidence_marker,
+)
 from modstore_server.models import (
     CustomerValueReceipt,
     UpdateInstallationReceipt,
