@@ -1,5 +1,5 @@
 {
-  "lines": 2336728,
-  "updated": "2026-10-24",
-  "note": "remove duplicate marketOverviewMetrics.ts (keep admin-console SSOT + aliases)"
+  "lines": 2336729,
+  "updated": "2026-10-25",
+  "note": "ops: brotli pin on 1df901ac tip for container-scan CVE-2026-111497 (+1 changelog)"
 }

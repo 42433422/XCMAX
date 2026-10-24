@@ -1,6 +1,7 @@
 # XCAGI 版本更新日志（用户更新记录 SSOT）
 
 ## Unreleased（1.0.0.6 候选，尚未发布）
+- fix(security): Wolfi 运行时钉死 libbrotli*>=1.2.0-r7（CVE-2026-111497，container-scan）
 
 - 安全门禁依赖升级：filelock、setuptools、Electron、undici 与市场端 happy-dom 升到已修复版本；并补齐根目录 package-lock 的 happy-dom≥21.0.4 与 FHD/XCAGI/requirements.lock.txt 的 filelock≥4.2.1（对齐 uv.lock 4.2.4），清零 Dependabot 高危告警 687/674；合入后仍须对新的主线提交重跑安全扫描。
 - 工单 #61/#65：每日摘要主文案改为业务更新日志口吻（今天做了什么 / 还要处理什么），弱化运维日志式标题与 KPI 用词；管理端新增「市场总览」正式 Vue 入口与 adminTheme 指标卡片（经 market-proxy 读 /api/admin/status），智能生态在管理端展示市场总览入口而非隐藏员工商店；不以 Full-Pipeline iframe 作为主内容。待合入部署与生产只读复验。
