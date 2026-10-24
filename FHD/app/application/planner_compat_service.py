@@ -79,6 +79,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _xcagi_compat_reply_payload,
     _xcagi_planner_stream_bytes_async,
 )
+from app.infrastructure.llm.client import llm_client_factory_scope
 from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.legacy.chat.legacy_chat_adapter import chat as run_agent_chat
 from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
@@ -297,12 +298,24 @@ def _application() -> CompatChatApplication:
     )
 
 
-async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:
+async def _execute_compat_chat_impl(request: Request, body: XcagiCompatChatBody) -> Payload:
     return await _application().single(request, body)
 
 
-async def execute_compat_chat_batch(request: Request, body: XcagiCompatChatBatchBody) -> Payload:
+async def _execute_compat_chat_batch_impl(
+    request: Request, body: XcagiCompatChatBatchBody
+) -> Payload:
     return await _application().batch(request, body)
+
+
+async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:
+    with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+        return await _execute_compat_chat_impl(request, body)
+
+
+async def execute_compat_chat_batch(request: Request, body: XcagiCompatChatBatchBody) -> Payload:
+    with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+        return await _execute_compat_chat_batch_impl(request, body)
 
 
 async def compat_chat_stream_async(
