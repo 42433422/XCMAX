@@ -84,6 +84,7 @@
 | neuro-bus-events | `FHD/config/neuro_bus_events.yaml` | blocking |
 | runtime-inventory | `FHD/config/service_topology.yaml` | blocking |
 | repository-ssot | `FHD/app/infrastructure/repositories/` | blocking |
+| structure-gates | `FHD/scripts/ci/check_structure_gates.py` | blocking |
 | dev-inventory | `FHD/scripts/dev/` | blocking |
 | dev-guards | `FHD/scripts/dev/` | blocking |
 | net-deletion | `FHD/metrics/line_baseline.json` | blocking |
