@@ -293,9 +293,7 @@ def test_dispatch_issue_event_rejects_forged_and_missing_ticket_ownership(client
         {"id": "missing-ticket", "data": {"ticket_id": tid + 10_000_000, "user_id": user.id}}
     )
     assert missing == {"ok": False, "message": "customer issue ticket missing"}
-    ok = dispatch_issue_event(
-        {"id": "owner-ok", "data": {"ticket_id": tid, "user_id": user.id}}
-    )
+    ok = dispatch_issue_event({"id": "owner-ok", "data": {"ticket_id": tid, "user_id": user.id}})
     assert ok.get("ok") is True and ok.get("published") is True
     assert len(published) == 1
     assert published[0][0][0] == "ops.intake.customer_ticket"
