@@ -1,5 +1,5 @@
 {
-  "lines": 2336768,
+  "lines": 2336796,
   "updated": "2026-10-24",
-  "note": "valid baseline after rebase onto #2611"
+  "note": "merge main #2617 + ticket-event ownership fail-closed dispatch; disclosed net+ for SSOT gate"
 }

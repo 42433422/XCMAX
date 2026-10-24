@@ -275,6 +275,30 @@ def test_dispatch_failure_written_to_same_owner_only(client, monkeypatch):
         assert evidence["resolution"]["state"] == "dispatch_failed"
 
 
+def test_dispatch_issue_event_rejects_forged_and_missing_ticket_ownership(client, monkeypatch):
+    """Forged user_id or missing ticket must not publish into the incident bus."""
+    from modstore_server.customer_issue_intake import dispatch_issue_event
+
+    user, tid = make_ticket(client, monkeypatch)
+    published = []
+    monkeypatch.setattr(
+        "modstore_server.incident_bus.publish",
+        lambda *a, **k: published.append((a, k)) or True,
+    )
+    forged = dispatch_issue_event(
+        {"id": "forge-owner", "data": {"ticket_id": tid, "user_id": user.id + 999}}
+    )
+    assert forged == {"ok": False, "message": "customer issue ownership mismatch"}
+    missing = dispatch_issue_event(
+        {"id": "missing-ticket", "data": {"ticket_id": tid + 10_000_000, "user_id": user.id}}
+    )
+    assert missing == {"ok": False, "message": "customer issue ticket missing"}
+    ok = dispatch_issue_event({"id": "owner-ok", "data": {"ticket_id": tid, "user_id": user.id}})
+    assert ok.get("ok") is True and ok.get("published") is True
+    assert len(published) == 1
+    assert published[0][0][0] == "ops.intake.customer_ticket"
+
+
 def test_bundle_selects_exact_module_after_employee_wrapping(client, monkeypatch, tmp_path):
     from modstore_server import customer_service_delivery_api as deliveries
     from modstore_server.models import UserMod, get_session_factory
