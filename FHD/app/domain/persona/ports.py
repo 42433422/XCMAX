@@ -1,4 +1,4 @@
-"""Persona 画像仓储接口 (Port)。"""
+"""Persona bounded-context ports (canonical)."""
 
 from __future__ import annotations
 

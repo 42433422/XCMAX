@@ -24,9 +24,12 @@ from app.application.extract_log_app_service import ExtractLogApplicationService
 from app.application.material_app_service import MaterialApplicationService
 from app.application.product_app_service import ProductApplicationService
 from app.application.shipment_app_service import ShipmentApplicationService
-from app.domain.services.pricing_engine import CustomerType, PricingEngine
-from app.domain.services.product_import_validator import ProductImportValidator, ValidationResult
-from app.domain.services.shipment_rules_engine import ShipmentRulesEngine
+from app.domain.product.services.pricing_engine import CustomerType, PricingEngine
+from app.domain.product.services.product_import_validator import (
+    ProductImportValidator,
+    ValidationResult,
+)
+from app.domain.shipment.services.shipment_rules_engine import ShipmentRulesEngine
 
 
 class TestProductApplicationService:

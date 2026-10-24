@@ -1,5 +1,5 @@
 {
-  "lines": 2370485,
+  "lines": 2370555,
   "updated": "2026-10-25",
-  "note": "hygiene#2627: +2 lines from ind-szqsm materialization pin"
+  "note": "架构债18-31 rebase onto hygiene#2627(f1fa12791)：ports/services归域+门禁G1-G9；行数相对合入后main重测"
 }
