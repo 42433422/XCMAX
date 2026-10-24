@@ -24,6 +24,10 @@ export function resolveChatStorageScope(): string {
     ? `${tenant}:owner:${encodeURIComponent(String(owner))}` : tenant
 }
 
+export function resolveChatIdentity(modId = readActiveModIdFromStorage()): string {
+  return JSON.stringify([resolveChatStorageScope(), modId])
+}
+
 export function buildChatMessagesKey(sessionId: string, modId?: string, scope?: string): string {
   return buildChatScopedKey(CHAT_MESSAGES_STORAGE_PREFIX, sessionId, modId, scope)
 }

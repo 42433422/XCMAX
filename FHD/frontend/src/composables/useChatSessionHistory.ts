@@ -32,6 +32,7 @@ export interface UseChatSessionHistoryDeps {
   clearPersistedTaskPanelState: (sid: string) => void
   generateSessionId: () => string
   normalizeServerContentToHtml: (raw: unknown) => string
+  onIdentityChange?: () => void
 }
 
 export type HistorySessionItem = {
@@ -310,6 +311,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       () => JSON.stringify([String(modsStore.activeModId || ''), resolveChatStorageScope()]),
       () => {
         requestEpoch += 1
+        deps.onIdentityChange?.()
         historyLoading.value = false
         historyError.value = ''
         resetConversationView()

@@ -889,17 +889,22 @@ describe('useChatSessionHistory — coverage ramp', () => {
   })
   it('clears the view on owner change but keeps it on an identical identity refresh', async () => {
     const { deps } = makeDeps()
+    const onIdentityChange = vi.fn()
+    deps.onIdentityChange = onIdentityChange
     const history = makeHistory(deps)
     history.registerHistoryModWatch(async () => {})
     setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
     await nextTick()
     const cleared = vi.mocked(deps.clearMessages).mock.calls.length
+    const identityChanges = onIdentityChange.mock.calls.length
     setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
     await nextTick()
     expect(deps.clearMessages).toHaveBeenCalledTimes(cleared)
+    expect(onIdentityChange).toHaveBeenCalledTimes(identityChanges)
     setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 2 })
     await nextTick()
     expect(deps.clearMessages).toHaveBeenCalledTimes(cleared + 1)
+    expect(onIdentityChange).toHaveBeenCalledTimes(identityChanges + 1)
     expect(deps.taskList.value).toEqual([])
   })
 
