@@ -3,7 +3,6 @@
 自归档 health 蓝图迁移，路径保持 /health/*。主从见 docs/architecture/DEPLOY_PATH_SSOT.md。
 """
 
-
 from __future__ import annotations
 
 import logging
