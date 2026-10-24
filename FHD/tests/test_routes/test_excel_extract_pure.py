@@ -1,4 +1,4 @@
-"""Tests for app.fastapi_routes.excel_extract — pure helper functions."""
+"""Tests for app.fastapi_routes.domains.excel.excel_extract — pure helper functions."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.fastapi_routes.excel_extract import (
+from app.fastapi_routes.domains.excel.excel_extract import (
     TEMP_EXCEL_DIR,
     _extract_from_excel,
     _generate_excel,
