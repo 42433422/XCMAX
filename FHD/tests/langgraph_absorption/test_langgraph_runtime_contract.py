@@ -40,8 +40,8 @@ from pathlib import Path
 import pytest
 from langgraph.graph.state import StateGraph
 
-from app.application.workflow.ports.events import StateUpdateEvent
-from app.application.workflow.ports.runtime import WorkflowRuntime
+from app.application.workflow.ports import StateUpdateEvent
+from app.application.workflow.ports import WorkflowRuntime
 from app.application.workflow.types import (
     Branch,
     NodeExecutionResult,
@@ -495,7 +495,7 @@ class TestLegacyImportGuard:
     def test_clean_imports_pass(self):
         src = textwrap.dedent(
             """\
-            from app.application.workflow.ports.runtime import WorkflowRuntime
+            from app.application.workflow.ports import WorkflowRuntime
             from app.application.workflow.types import StateSchema
             import json
             import os.path

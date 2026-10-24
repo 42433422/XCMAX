@@ -29,10 +29,10 @@ from app.application.normal_chat.sales_intent import (
     _sales_write_idempotency_key as _sales_write_idempotency_key,
 )
 from app.application.product_query_context import is_full_product_list_phrase
-from app.domain.services.conversation.chat_tool_intent import (
+from app.domain.conversation.services.chat_tool_intent import (
     is_negated_action_request as _is_negated_action_request,
 )
-from app.domain.services.conversation.chat_tool_intent import (
+from app.domain.conversation.services.chat_tool_intent import (
     looks_like_explicit_workflow_tool_intent,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS

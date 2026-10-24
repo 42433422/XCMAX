@@ -11,7 +11,7 @@ from app.domain.shipment.aggregates import Shipment, ShipmentItem
 from app.infrastructure.documents.shipment_document_generator_impl import (
     LegacyShipmentDocumentGenerator,
 )
-from app.legacy.domain.legacy_vo import ContactInfo, Money, Quantity
+from app.domain.shipment.value_objects import ContactInfo, Money, Quantity
 
 
 class DummyRepo:

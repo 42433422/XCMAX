@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
-from app.application.workflow.ports.checkpoint import CheckpointStore
-from app.application.workflow.ports.events import StateEventPublisher, StateUpdateEvent
+from app.application.workflow.ports import CheckpointStore
+from app.application.workflow.ports import StateEventPublisher, StateUpdateEvent
 from app.application.workflow.types import (
     NodeExecutionResult,
     PlanGraph,

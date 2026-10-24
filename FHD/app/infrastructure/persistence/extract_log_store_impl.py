@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from app.application.ports.extract_log_store import ExtractLogStorePort
+from app.domain.excel.ports import ExtractLogStorePort
 from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

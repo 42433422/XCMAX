@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.application.ports.purchase_unit_query import PurchaseUnitQueryPort
+from app.domain.shipment.ports import PurchaseUnitQueryPort
 from app.db.models import PurchaseUnit
 from app.db.session import get_db
 from app.infrastructure.tenant_scope import apply_tenant_filter

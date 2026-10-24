@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from app.application.ports.persona_repository import PersonaProfileRepository
+from app.domain.persona.ports import PersonaProfileRepository
 from app.domain.persona.entities import PersonaProfile
 from app.domain.persona.value_objects import PersonaAxes
 from app.services.persona.axes_fuser import AxesFuser

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from app.application.excel_vector_app_service import HashEmbedder
-from app.application.ports.vector_store import VectorStorePort
+from app.domain.excel.ports import VectorStorePort
 from app.infrastructure.persistence.user_memory_vector_store import get_user_memory_vector_store
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

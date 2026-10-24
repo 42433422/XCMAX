@@ -17,7 +17,7 @@ except ImportError as _pil_import_error:
     _PIL_AVAILABLE = False
     _PIL_IMPORT_ERROR = str(_pil_import_error)
 
-from app.application.ports.shipment_document_generator import ShipmentDocumentGeneratorPort
+from app.domain.shipment.ports import ShipmentDocumentGeneratorPort
 from app.db.models import Product
 from app.db.session import get_db
 from app.domain.shipment.shipment_product_parser import prepare_parsed_products

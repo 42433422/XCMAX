@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.domain.services.shipment_rules_engine import ShipmentRulesEngine, get_shipment_rules_engine
+from app.domain.shipment.services.shipment_rules_engine import ShipmentRulesEngine, get_shipment_rules_engine
 
 
 def _valid_shipment() -> dict:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from app.application.ports.material_repository import MaterialRepository
+from app.domain.product.ports import MaterialRepository
 from app.db.models.material import Material
 from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS

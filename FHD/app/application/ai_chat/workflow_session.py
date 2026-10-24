@@ -13,8 +13,8 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 if TYPE_CHECKING:
     from app.application.agent_orchestrator.run_models import AgentRun
     from app.application.workflow.approval_service import ApprovalService
-    from app.application.workflow.ports.checkpoint import CheckpointStore
-    from app.application.workflow.ports.runtime import WorkflowRuntime
+    from app.application.workflow.ports import CheckpointStore
+    from app.application.workflow.ports import WorkflowRuntime
     from app.application.workflow.types import PlanGraph, WorkflowRunResult
 
 logger = logging.getLogger(__name__)

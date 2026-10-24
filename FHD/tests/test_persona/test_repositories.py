@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.application.ports.persona_repository import PersonaProfileRepository
+from app.domain.persona.ports import PersonaProfileRepository
 from app.domain.persona.entities import PersonaProfile
 from app.domain.persona.value_objects import PersonaAxes, PersonaIdentity, RapportScore
 from app.infrastructure.persona.persona_repository_impl import PersonaRepositoryImpl
