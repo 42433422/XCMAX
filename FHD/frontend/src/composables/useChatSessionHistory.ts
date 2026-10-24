@@ -1,6 +1,5 @@
 import { getCurrentScope, onScopeDispose, ref, watch, type Ref } from 'vue'
 import { useModsStore } from '@/stores/mods'
-import { writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
 import chatApi from '../api/chat'
 import {
   persistExcelAnalysisContext,
@@ -13,7 +12,7 @@ import type { ShipmentTask } from './useShipmentTask'
 import { chatMessageExtrasFromServerRow, type ChatMessage } from './useChatMessages'
 import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
-import { resolveChatStorageScope } from '@/utils/chatStorageKeys'
+import { resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 
 export interface UseChatSessionHistoryDeps {
   sessionId: Ref<string>

@@ -25,10 +25,6 @@ vi.mock('../api/chat', () => ({
   default: chatApiMock,
 }))
 
-vi.mock('@/utils/xcagiStorageKeys', () => ({
-  writeAiSessionIdToStorage: (...args: unknown[]) => writeAiSessionIdToStorageMock(...args),
-}))
-
 vi.mock('@/stores/mods', async () => {
   const { ref } = await import('vue')
   const vueRef = ref(activeModIdRef.value)
@@ -50,6 +46,7 @@ vi.mock('@/stores/mods', async () => {
 
 vi.mock('@/utils/chatStorageKeys', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/utils/chatStorageKeys')>(),
+  writeAiSessionIdToStorage: (...args: unknown[]) => writeAiSessionIdToStorageMock(...args),
   CHAT_MESSAGES_STORAGE_PREFIX: 'xcagi_chat_messages_',
   CHAT_SESSION_META_PREFIX: 'xcagi_chat_session_meta_',
   buildChatMessagesKey: (sid: string, _modId?: string) => `xcagi_chat_messages_${sid}`,

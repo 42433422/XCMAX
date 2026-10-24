@@ -4,6 +4,8 @@ import {
   buildChatSessionMetaKey,
   extractSessionIdForActiveMod,
   CHAT_MESSAGES_STORAGE_PREFIX,
+  readAiSessionIdFromStorage,
+  writeAiSessionIdToStorage,
 } from './chatStorageKeys'
 import { writeActiveExtensionModIdToStorage } from './xcagiStorageKeys'
 import { setTenantStorageScopeCache } from './tenantStorageScope'
@@ -12,9 +14,27 @@ import { persistExcelAnalysisContext, readPersistedExcelAnalysisContext } from '
 
 describe('chatStorageKeys tenant isolation', () => {
   beforeEach(() => {
+    localStorage.clear()
     setRuntimeTenantStorageScopeInput({ tenantId: 9 })
     setTenantStorageScopeCache('tenant:9')
     writeActiveExtensionModIdToStorage('taiyangniao-pro', 'tenant:9')
+  })
+
+  it('restores current sessions only for their owner and Mod after reopening', () => {
+    const cases = [[1, 'a', 'owner-a'], [2, 'a', 'owner-b'], [1, 'b', 'mod-b']] as const
+    for (const [owner, mod, sid] of cases) {
+      setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: owner })
+      writeActiveExtensionModIdToStorage(mod)
+      expect(readAiSessionIdFromStorage()).toBe('')
+      writeAiSessionIdToStorage(' ' + sid + ' ')
+    }
+    for (const [owner, mod, sid] of cases) {
+      setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: owner })
+      writeActiveExtensionModIdToStorage(mod)
+      expect(readAiSessionIdFromStorage()).toBe(sid)
+    }
+    writeAiSessionIdToStorage(null)
+    expect(readAiSessionIdFromStorage()).toBe('')
   })
 
   it('isolates the same session and Excel context between users within one tenant', () => {

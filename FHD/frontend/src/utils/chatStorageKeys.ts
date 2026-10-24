@@ -1,5 +1,8 @@
 import { readActiveExtensionModIdFromStorage, XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
-import { resolveTenantStorageScopeFromRuntime, tenantScopedKeySegment } from '@/utils/tenantStorageScope'
+import {
+  resolveTenantStorageScopeFromRuntime, tenantScopedKeySegment, readTenantScopedStorageItem,
+  writeTenantScopedStorageItem, removeTenantScopedStorageItem,
+} from '@/utils/tenantStorageScope'
 import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 
 export const CHAT_MESSAGES_STORAGE_PREFIX = 'xcagi_chat_messages_'
@@ -39,6 +42,17 @@ export function buildChatSessionMetaKey(sessionId: string, modId?: string, scope
 export function buildChatScopedKey(prefix: string, sessionId: string, modId?: string, scope?: string): string {
   const mod = typeof modId === 'string' ? modId : readActiveModIdFromStorage(scope)
   return `${prefix}${scopedSuffix(sessionId, mod, scope)}`
+}
+
+export function readAiSessionIdFromStorage(): string {
+  return String(readTenantScopedStorageItem(buildChatScopedKey('ai_session_id_', 'current'), 'local') || '').trim()
+}
+
+export function writeAiSessionIdToStorage(sessionId: string | null | undefined): void {
+  const key = buildChatScopedKey('ai_session_id_', 'current')
+  const next = String(sessionId || '').trim()
+  if (next) writeTenantScopedStorageItem(key, next, 'local')
+  else removeTenantScopedStorageItem(key, 'local')
 }
 
 function stripTenantSegment(suffix: string, scope?: string): string | null {

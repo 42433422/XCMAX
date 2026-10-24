@@ -193,7 +193,9 @@ class __AIChatApplicationServicePart02MixinPart03Mixin(_DynamicWorkflowPendingRe
 
         tool_registry = get_workflow_tool_registry()
         planner_message = message
-        if "刚才" in str(message or "") and any(
+        if _facade().re.search(
+            r"刚才(?:[的那这]|新增|创建|修改|更新|查询|查到|读取|导入)", str(message or "")
+        ) and any(
             token in str(message or "")
             for token in ("客户", "产品", "原材料", "物料", "记录", "那条", "这条")
         ):
