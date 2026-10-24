@@ -2,6 +2,8 @@
 
 ## Unreleased（1.0.0.6 候选，尚未发布）
 
+- 自动修复准备工作区时，磁盘写满或配额耗尽会保留原始失败并停止重复下载仓库；仍需释放空间后重试原任务，尚未部署。
+
 - 架构：补充 Legacy 退役看板与删除门禁说明；本迭代不删除 legacy 文件。
 
 - 安全门禁依赖升级：filelock、setuptools、Electron、undici 与市场端 happy-dom 升到已修复版本；并补齐根目录 package-lock 的 happy-dom≥21.0.4 与 FHD/XCAGI/requirements.lock.txt 的 filelock≥4.2.1（对齐 uv.lock 4.2.4），清零 Dependabot 高危告警 687/674；合入后仍须对新的主线提交重跑安全扫描。

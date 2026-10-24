@@ -46,6 +46,45 @@ async function commitFile(repo, name, content, message) {
 }
 
 for (const sourcePath of sources) {
+  test(`${path.basename(sourcePath)} preserves storage failures without retrying a network clone`, async () => {
+    const source = readFileSync(sourcePath, 'utf8');
+    const start = source.indexOf('async function cloneSourceWorkspace');
+    const end = source.indexOf('\nfunction excludeAgentMetadata', start);
+    assert.ok(start >= 0 && end > start);
+    for (const detail of [
+      { code: 'ENOSPC' },
+      { code: 'EDQUOT' },
+      { code: 128, stderr: 'fatal: write error: No space left on device' },
+      { message: 'fatal: Disk quota exceeded' },
+      { stderr: 'fatal: repository not found' },
+    ]) {
+      const error = Object.assign(new Error('local clone failed'), detail);
+      const calls = [];
+      let cleaned = false;
+      const clone = Function('git', 'gitMaybe', 'removeOwnWorkspace', 'console',
+        `${source.slice(start, end)}\nreturn cloneSourceWorkspace;`)(
+        async (_cwd, args) => {
+          calls.push(args);
+          if (calls.length === 1) throw error;
+        },
+        async () => {},
+        () => { cleaned = true; return true; },
+        { error() {} },
+      );
+      const pending = clone('/source', '/root/task', { repo_url: 'https://example.invalid/repo', work_branch: 'fix' }, '/root');
+      if (detail.stderr === 'fatal: repository not found') {
+        await pending;
+        assert.equal(calls.length, 2);
+        assert.ok(calls[1].includes('--depth'));
+        assert.equal(cleaned, true);
+      } else {
+        await assert.rejects(pending, (actual) => actual === error);
+        assert.equal(calls.length, 1);
+        assert.equal(cleaned, false);
+      }
+    }
+  });
+
   test(`${path.basename(sourcePath)} starts a worktree from the current remote base`, async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'xcmax-base-refresh-'));
     const remote = path.join(root, 'remote.git');
