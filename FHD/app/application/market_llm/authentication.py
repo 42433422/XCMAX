@@ -67,15 +67,17 @@ def resolve_credential(
         return Credential(explicit, "kwargs")
     # Session-bound calls must not silently inherit a process-wide env token
     # (#2619 request-model isolation).
-    if environment and not (session_id or request):
+    bound = bool(session_id or request)
+    if environment and not bound:
         return Credential(environment, "env")
-    if not session_id and not request:
+    if not bound:
         return Credential(environment or "", "env")
+    empty = Credential("", "session")
     try:
         ports = load()
         sid = session_id or (ports.session_id(cast(Request, request)) if request else "")
         if not sid:
-            return Credential("", "env")
+            return empty
         token = ports.token(sid)
         if token:
             return Credential(token, "session")
@@ -90,7 +92,7 @@ def resolve_credential(
         logger.error("无法导入market_account模块: %s", exc)
     except RECOVERABLE_ERRORS as exc:
         logger.error("从Session获取Token失败: %s", exc, exc_info=True)
-    return Credential("", "env")
+    return empty
 
 
 def refresh_credential(

@@ -102,10 +102,15 @@ class ModstorePlatformAdapter:
         self.platform_url = (
             platform_url or os.environ.get("MODSTORE_PLATFORM_URL", "http://localhost:8000")
         ).rstrip("/")
+        # None → env fallback; explicit "" means "no token" (session-bound isolation).
         self.auth_token = _strip_bearer_prefix(
-            auth_token or os.environ.get("MODSTORE_AUTH_TOKEN", "")
+            os.environ.get("MODSTORE_AUTH_TOKEN", "") if auth_token is None else auth_token
         )
-        self.user_id = user_id or self._parse_user_id(os.environ.get("MODSTORE_USER_ID", ""))
+        self.user_id = (
+            self._parse_user_id(os.environ.get("MODSTORE_USER_ID", ""))
+            if user_id is None
+            else user_id
+        )
         self.default_provider = os.environ.get("LLM_PROVIDER", default_provider).lower()
         self.default_model = os.environ.get("LLM_MODEL", default_model)
         self.timeout = timeout
@@ -155,6 +160,9 @@ class ModstorePlatformAdapter:
             },
         )
         instance._source = credential.source
+        # Request/session scoped construction must not inherit the host account id.
+        if (session_id or request) and "user_id" not in kwargs:
+            instance.user_id = None
         return instance
 
     @classmethod

@@ -46,7 +46,9 @@ _PUBLIC_ETL_ERRORS = {
 
 def _safe_failed_etl_result(result: dict[str, Any], fallback: str) -> dict[str, Any]:
     """Keep operational failure metadata without exposing internal exception text."""
-    if result.get("success") or result.get("dry_run"):
+    # Failed dry-runs still carry private paths in message/errors; only success
+    # previews may pass through unchanged.
+    if result.get("success"):
         return result
     requested_code = str(result.get("error_code") or "").strip()
     error_code = requested_code if requested_code in _PUBLIC_ETL_ERRORS else "operation_failed"
@@ -56,6 +58,7 @@ def _safe_failed_etl_result(result: dict[str, Any], fallback: str) -> dict[str, 
         "error_code": error_code,
     }
     for key in (
+        "dry_run",
         "note_count",
         "ledger_note_count",
         "shipment_created",
