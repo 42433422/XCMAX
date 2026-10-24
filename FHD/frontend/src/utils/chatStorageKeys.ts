@@ -5,13 +5,7 @@ import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRun
 export const CHAT_MESSAGES_STORAGE_PREFIX = 'xcagi_chat_messages_'
 export const CHAT_SESSION_META_PREFIX = 'xcagi_chat_session_meta_'
 
-/**
- * 聊天记录按 **租户 + 扩展（Mod）** 隔离。
- *
- * - 有租户且有 Mod：``xcagi_chat_messages_tenant:42:mod:<modId>:<sessionId>``
- * - 有租户无 Mod：``xcagi_chat_messages_tenant:42:<sessionId>``
- * - 未绑定租户（local 域）时与旧版格式兼容。
- */
+/** Chat state belongs to an authenticated owner, tenant and active Mod. */
 export function readActiveModIdFromStorage(scope?: string): string {
   return readActiveExtensionModIdFromStorage(scope)
 }
@@ -45,7 +39,7 @@ export function buildChatScopedKey(prefix: string, sessionId: string, modId?: st
 
 function stripTenantSegment(suffix: string, scope?: string): string | null {
   const s = scope || resolveChatStorageScope()
-  if (s === 'local') return suffix
+  if (s === 'local') return /^(?:tenant|user|session|platform):/.test(suffix) ? null : suffix
   const needle = `${s}:`
   if (!suffix.startsWith(needle)) return null
   return suffix.slice(needle.length)

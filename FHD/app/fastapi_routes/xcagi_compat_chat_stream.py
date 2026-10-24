@@ -149,7 +149,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     from app.application.workflow.planner import _looks_like_business_db_write
 
     chat_service = get_ai_chat_app_service()
-    from app.services.conversation.context import scoped_conversation_user_id
+    from app.application.agent_task_context import scoped_conversation_user_id
 
     runtime_context.setdefault(
         "conversation_id", runtime_context.get("session_id") or str(body.user_id or "default")

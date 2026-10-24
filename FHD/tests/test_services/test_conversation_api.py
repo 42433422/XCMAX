@@ -617,59 +617,10 @@ class TestContextWindowManagerIntegration:
 
 
 # ---------------------------------------------------------------------------
-# _call_deepseek_legacy
-# ---------------------------------------------------------------------------
-class TestCallDeepseekLegacy:
-    @pytest.mark.asyncio
-    async def test_returns_none_without_api_key(self):
-        svc = _ConcreteApi()
-        svc.api_key = ""
-        result = await svc._call_deepseek_legacy([{"role": "user", "content": "hi"}])
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_returns_result_on_success(self):
-        svc = _ConcreteApi()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "hello"}}],
-        }
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client.aclose = AsyncMock()
-
-        with patch.object(
-            svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client
-        ):
-            result = await svc._call_deepseek_legacy([{"role": "user", "content": "hi"}])
-        assert result is not None
-        assert result["choices"][0]["message"]["content"] == "hello"
-
-    @pytest.mark.asyncio
-    async def test_returns_none_on_empty_choices(self):
-        svc = _ConcreteApi()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"choices": []}
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client.aclose = AsyncMock()
-
-        with patch.object(
-            svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client
-        ):
-            result = await svc._call_deepseek_legacy([{"role": "user", "content": "hi"}])
-        assert result is None
-
-
-# ---------------------------------------------------------------------------
 # token 用量持久化到本地账本（record_model_usage）
 # ---------------------------------------------------------------------------
 class TestTokenUsagePersisted:
-    """验证 call_llm_api 和 _call_deepseek_legacy 会把 token 用量写入账本。"""
+    """验证统一模型路由会把 token 用量写入账本。"""
 
     @pytest.mark.asyncio
     async def test_call_llm_api_persists_token_usage(self):
@@ -736,38 +687,6 @@ class TestTokenUsagePersisted:
         # 主流程不受影响，result 正常返回
         assert result is not None
         assert result["choices"][0]["message"]["content"] == "hi"
-
-    @pytest.mark.asyncio
-    async def test_deepseek_legacy_persists_token_usage(self):
-        """_call_deepseek_legacy 调用后 record_model_usage 被调用，参数含真实 token。"""
-        svc = _ConcreteApi()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "hello"}}],
-            "usage": {"prompt_tokens": 8, "completion_tokens": 12, "total_tokens": 20},
-        }
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client.aclose = AsyncMock()
-
-        with (
-            patch.object(
-                svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client
-            ),
-            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"),
-            patch("app.infrastructure.billing.model_usage.record_model_usage") as mock_record,
-        ):
-            await svc._call_deepseek_legacy([{"role": "user", "content": "hi"}])
-
-        mock_record.assert_called_once()
-        kwargs = mock_record.call_args.kwargs
-        assert kwargs["prompt_tokens"] == 8
-        assert kwargs["completion_tokens"] == 12
-        assert kwargs["total_tokens"] == 20
-        assert kwargs["provider"] == "deepseek"
-        assert kwargs["source"] == "conversation_service.deepseek_legacy"
 
     @pytest.mark.asyncio
     async def test_end_to_end_token_usage_queryable(self, tmp_path, monkeypatch):

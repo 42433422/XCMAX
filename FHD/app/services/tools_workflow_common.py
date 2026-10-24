@@ -333,7 +333,7 @@ def _remember_business_db_target(
             target_id = int(candidates[0]["id"])
     user_id = str(runtime_context.get("user_id") or "").strip()
     if user_id and target_id:
-        from app.services.conversation.context import scoped_conversation_user_id
+        from app.application.agent_task_context import scoped_conversation_user_id
 
         user_id = scoped_conversation_user_id(user_id, runtime_context)
         _RECENT_BUSINESS_DB_TARGETS[user_id] = {"entity": entity, "id": int(target_id)}

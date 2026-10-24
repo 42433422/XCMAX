@@ -6,8 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.application.agent_task_context import scoped_conversation_user_id
 from app.services.conversation.api import ApiMixin
-from app.services.conversation.context import ConversationContext, scoped_conversation_user_id
+from app.services.conversation.context import ConversationContext
 from app.services.conversation.prompts import PromptsMixin
 
 
@@ -160,3 +161,40 @@ async def test_json_chat_routes_bind_request_credentials_lazily(monkeypatch, suf
         "success": True
     }
     factory.assert_called_once_with(request)
+
+
+def test_platform_worker_scope_keeps_model_and_credentials_out_of_environment(monkeypatch):
+    from app.infrastructure.llm import client as routing
+    from app.services.conversation.modstore_adapter import (
+        ModstoreOpenAICompatibleClient,
+        ModstorePlatformAdapter,
+    )
+
+    adapter = ModstorePlatformAdapter(auth_token="fake-owner-a")
+    with routing.llm_client_scope(ModstoreOpenAICompatibleClient(adapter), "owner-a/model"):
+        snapshot = routing.capture_worker_llm_scope()
+    monkeypatch.setenv("MODSTORE_AUTH_TOKEN", "fake-owner-b")
+    monkeypatch.setenv("LLM_MODEL", "owner-b/model")
+    with routing.llm_client_factory_scope(lambda: routing.restore_worker_llm_client(snapshot)):
+        assert routing.get_llm_client().adapter.auth_token == "fake-owner-a"
+        assert routing.resolve_chat_model() == "owner-a/model"
+    with routing.llm_client_factory_scope(
+        lambda: routing.restore_worker_llm_client({"kind": "unavailable"})
+    ):
+        with pytest.raises(RuntimeError, match="不能回退"):
+            routing.get_llm_client()
+
+
+def test_resumed_worker_resolves_only_the_authenticated_tasks_account(monkeypatch):
+    from app.fastapi_routes import market_account
+    from app.infrastructure.llm import client as routing
+
+    reader = MagicMock(return_value="fake-task-owner")
+    monkeypatch.setattr(market_account, "latest_session_market_token", reader)
+    snapshot = routing.capture_worker_llm_scope({"local_user_id": 17})
+    assert snapshot == {"kind": "account", "owner": 17}
+    assert routing.restore_worker_llm_client(snapshot)[0].adapter.auth_token == "fake-task-owner"
+    reader.assert_called_once_with(user_id=17)
+    reader.return_value = ""
+    with pytest.raises(RuntimeError, match="重新登录"):
+        routing.restore_worker_llm_client(snapshot)

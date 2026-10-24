@@ -196,7 +196,7 @@ def test_stream_controls_and_business_writes_use_stateful_mainline(
     message, pending, use_app, source
 ):
     service = MagicMock()
-    from app.services.conversation.context import scoped_conversation_user_id
+    from app.application.agent_task_context import scoped_conversation_user_id
 
     owner_key = scoped_conversation_user_id("web_pro_session", {"local_user_id": 17})
     service._pending_workflows = {owner_key: {"agent_run_id": "original"}} if pending else {}

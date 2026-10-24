@@ -20,20 +20,7 @@ class __ModstorePlatformAdapterPart01MixinPart01Mixin:
         default_model: str = "mimo-v2.5-pro",
         timeout: float = 60.0,
     ):
-        """
-        初始化平台代理适配器
-
-        Args:
-            platform_url: 修茈市场服务URL (如 http://localhost:8000)
-                         环境变量: MODSTORE_PLATFORM_URL
-            auth_token: 用户认证Token (用于身份验证)
-                        环境变量: MODSTORE_AUTH_TOKEN
-            user_id: 用户ID (可选，用于BYOK和计费)
-                     环境变量: MODSTORE_USER_ID
-            default_provider: 默认供应商 (环境变量: LLM_PROVIDER)
-            default_model: 默认模型 (环境变量: LLM_MODEL)
-            timeout: 请求超时时间(秒)
-        """
+        """Initialize platform transport and default model from host configuration."""
         self.platform_url = (
             platform_url
             or _facade().os.environ.get("MODSTORE_PLATFORM_URL", "http://localhost:8000")
@@ -71,34 +58,7 @@ class __ModstorePlatformAdapterPart01MixinPart01Mixin:
     def from_session(
         cls, session_id: str | None = None, request: _facade().Any = None, **kwargs
     ) -> _facade().Self:
-        """
-        从FHD登录Session创建适配器（自动获取平台Token）
-
-        这是推荐的使用方式，可以自动利用用户登录时获取的平台Token，
-        无需手动配置MODSTORE_AUTH_TOKEN环境变量。
-
-        Args:
-            session_id: FHD Session ID（从cookie或X-Session-ID header获取）
-            request: FastAPI Request对象（可选，可从中自动提取session_id）
-            **kwargs: 其他传递给__init__的参数
-
-        Returns:
-            配置好Token的适配器实例
-
-        使用示例：
-            # 在FastAPI路由中使用
-            @router.post("/api/ai/chat")
-            async def chat(request: Request, ...):
-                adapter = ModstorePlatformAdapter.from_session(
-                    request=request  # 自动从request提取session和token
-                )
-                result = await adapter.chat_completion(messages)
-
-            # 手动指定session_id
-            adapter = ModstorePlatformAdapter.from_session(
-                session_id="abc123"
-            )
-        """
+        """Resolve this session token; fallback requires a known owner of that session."""
         platform_url = (
             kwargs.get("platform_url")
             or _facade().os.environ.get("XCAGI_MARKET_BASE_URL")
@@ -110,7 +70,7 @@ class __ModstorePlatformAdapterPart01MixinPart01Mixin:
         if kwargs.get("auth_token"):
             auth_token = kwargs["auth_token"]
             token_source = "kwargs"
-        elif env_token:
+        elif env_token and not (session_id or request):
             auth_token = env_token
             token_source = "env"
         if not auth_token and (session_id or request):
@@ -130,74 +90,37 @@ class __ModstorePlatformAdapterPart01MixinPart01Mixin:
                     if token_from_session:
                         auth_token = token_from_session
                         token_source = "session"
-                        _facade().logger.debug(
-                            "从FHD Session [%s...] 获取到平台Token (长度: %s)",
-                            effective_session_id[:8],
-                            len(auth_token),
-                        )
-                    else:
-                        _facade().logger.warning(
-                            "FHD Session [%s...] 未找到平台Token（用户可能未绑定市场账号）",
-                            effective_session_id[:8],
-                        )
-                else:
-                    _facade().logger.warning("无法获取有效的Session ID")
                 if not auth_token:
                     fallback_user_id = _user_id_from_session(effective_session_id)
-                    if effective_session_id or fallback_user_id is not None:
+                    if fallback_user_id is not None:
                         latest_token = latest_session_market_token(user_id=fallback_user_id)
                         if latest_token:
                             auth_token = latest_token
                             token_source = "session"
-                            _facade().logger.debug(
-                                "使用最近一次持久化的修茈市场Token作为模型服务凭据"
-                            )
-            except ImportError as e:
-                _facade().logger.error("无法导入market_account模块: %s", e)
-            except _facade().RECOVERABLE_ERRORS as e:
-                _facade().logger.error("从Session获取Token失败: %s", e, exc_info=True)
+            except _facade().RECOVERABLE_ERRORS:
+                _facade().logger.warning("当前模型会话凭据读取失败")
         instance = cls(
             platform_url=platform_url,
             auth_token=auth_token,
             **{k: v for k, v in kwargs.items() if k not in ("platform_url", "auth_token")},
         )
-        instance._source = token_source if auth_token else "env"
+        if session_id or request:
+            if not auth_token:
+                instance.auth_token = ""
+                token_source = "session"
+            instance.user_id = kwargs.get("user_id")
+        instance._source = token_source
         return instance
 
     @classmethod
     def from_request(cls, request: _facade().Any, **kwargs) -> _facade().Self:
-        """
-        从FastAPI Request对象创建适配器（便捷方法）
-
-        自动从Request中提取：
-        - Session ID (Cookie / Header)
-        - Authorization Header
-        - 平台Token
-
-        Args:
-            request: FastAPI Request对象
-            **kwargs: 其他参数
-
-        Returns:
-            配置好的适配器实例
-        """
+        """Resolve model credentials from the authenticated request session."""
         return cls.from_session(request=request, **kwargs)
 
     def refresh_token_from_session(
         self, session_id: str | None = None, request: _facade().Any = None
     ) -> bool:
-        """
-        刷新当前适配器的Token（从Session重新获取）
-
-        用于长时间运行的会话中Token可能过期的情况。
-
-        Args:
-            session_id: FHD Session ID
-            request: FastAPI Request对象
-
-        Returns:
-            是否成功刷新Token
-        """
+        """Refresh only from the specified request session."""
         try:
             from app.fastapi_routes.market_account import (
                 session_id_from_request,

@@ -28,6 +28,10 @@ describe('chatStorageKeys tenant isolation', () => {
     setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
     expect(readPersistedExcelAnalysisContext('same-session')).toEqual({ file_path: '/owner-a/test.xlsx' })
     setRuntimeTenantStorageScopeInput(null)
+    expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, key, '', 'local')).toBeNull()
+    for (const scope of ['tenant:9', 'user:1', 'session:1', 'platform:admin']) {
+      expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, `${CHAT_MESSAGES_STORAGE_PREFIX}${scope}:s`, '', 'local')).toBeNull()
+    }
   })
 
   it('embeds tenant and mod in chat message key', () => {

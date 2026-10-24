@@ -326,7 +326,7 @@ class AIConversationService(
         context: dict[str, Any] | None = None,
         source: str | None = None,
     ) -> dict[str, Any]:
-        from app.services.conversation.context import scoped_conversation_user_id
+        from app.application.agent_task_context import scoped_conversation_user_id
 
         user_id = scoped_conversation_user_id(user_id, context)
         try:

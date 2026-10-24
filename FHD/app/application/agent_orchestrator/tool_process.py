@@ -9,6 +9,7 @@ import os
 import shutil
 import tempfile
 import time
+from contextlib import nullcontext
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -30,8 +31,9 @@ def _json_scalar(value):
     raise TypeError("unsupported tool result value")
 
 
-def _worker(executor_type, payload, folder, ready, start, done, deadline):
+def _worker(executor_type, payload, folder, ready, start, done, deadline, llm_scope=None):
     from app.application.agent_orchestrator.run_models import agent_step_from_dict
+    from app.infrastructure.llm.client import llm_client_factory_scope, restore_worker_llm_client
 
     if os.name != "nt":
         os.setsid()
@@ -40,7 +42,12 @@ def _worker(executor_type, payload, folder, ready, start, done, deadline):
         return
     try:
         data = json.loads(payload)
-        with invocation_deadline(deadline) as budget:
+        with (
+            invocation_deadline(deadline) as budget,
+            llm_client_factory_scope(lambda: restore_worker_llm_client(llm_scope))
+            if llm_scope is not None
+            else nullcontext(),
+        ):
             output = executor_type().execute(
                 agent_step_from_dict(data["step"]), runtime_context=data["context"]
             )
@@ -115,6 +122,8 @@ def _reap(process) -> bool:
 
 
 def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
+    from app.infrastructure.llm.client import capture_worker_llm_scope
+
     try:
         payload = json.dumps({"step": step.to_dict(), "context": context}, allow_nan=False)
     except (ValueError, TypeError):
@@ -129,7 +138,17 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
     ready, start, done = (ctx.Event() for _ in range(3))
     folder = tempfile.mkdtemp(prefix="xcagi-tool-")
     process = ctx.Process(
-        target=_worker, args=(type(executor), payload, folder, ready, start, done, deadline)
+        target=_worker,
+        args=(
+            type(executor),
+            payload,
+            folder,
+            ready,
+            start,
+            done,
+            deadline,
+            capture_worker_llm_scope(context),
+        ),
     )
     armed = False
     clean = True

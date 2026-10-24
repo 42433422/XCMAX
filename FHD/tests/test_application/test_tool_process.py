@@ -25,6 +25,23 @@ def _step(action="read", **params):
 
 class FixtureExecutor(AgentToolExecutor):
     def execute(self, step, *, runtime_context):
+        if step.action == "llm":
+            from app.application.employee_runtime.agent_loop import run_employee_agent_loop
+            from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
+            from app.application.workflow.planner_llm_gateway import request_planner_completion
+
+            planner = request_planner_completion(
+                ai_service=None, context={}, messages=[], http_client_factory=None
+            )
+            agent = run_employee_agent_loop(
+                employee_id="fixture", system_prompt="test", task="test", tools=[]
+            )
+            cognition = _run_async(_chat_completion([]))
+            return {
+                "success": agent["ok"],
+                "planner_model": planner["model"],
+                "cognition_model": cognition["model"],
+            }
         if step.tool_id == "business_db":
             return {"success": True, "business_verification": {"record_id": 42}}
         if step.action == "typed_result":
@@ -104,8 +121,8 @@ def test_child_unknown_io_cannot_be_hidden_by_successful_tool():
 
 
 def test_spawned_write_target_returns_to_owner_and_conversation(monkeypatch):
+    from app.application.agent_task_context import scoped_conversation_user_id
     from app.services import tools_workflow_common as targets
-    from app.services.conversation.context import scoped_conversation_user_id
 
     monkeypatch.setattr(targets, "_RECENT_BUSINESS_DB_TARGETS", {})
     context = {
@@ -138,6 +155,91 @@ def test_spawned_write_target_returns_to_owner_and_conversation(monkeypatch):
             )
             is None
         )
+
+
+@pytest.mark.parametrize("client_kind", ["openai", "modstore"])
+def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_credentials(
+    monkeypatch, client_kind
+):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from openai import OpenAI
+
+    from app.infrastructure.llm.client import llm_client_scope
+
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost")
+    monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
+    seen = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_POST(self):
+            payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            seen.append((self.headers["Authorization"], payload["model"]))
+            reply = {
+                "id": "fixture",
+                "object": "chat.completion",
+                "created": 0,
+                "model": payload["model"],
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "done"},
+                    }
+                ],
+            }
+            data = json.dumps(reply).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        def execute(owner):
+            from app.services.conversation.modstore_adapter import (
+                ModstoreOpenAICompatibleClient,
+                ModstorePlatformAdapter,
+            )
+
+            base = f"http://127.0.0.1:{server.server_port}"
+            client = (
+                OpenAI(api_key=f"fake-{owner}", base_url=f"{base}/v1")
+                if client_kind == "openai"
+                else ModstoreOpenAICompatibleClient(
+                    ModstorePlatformAdapter(platform_url=base, auth_token=f"fake-{owner}")
+                )
+            )
+            try:
+                with llm_client_scope(client, owner):
+                    result = execute_with_tool_deadline(
+                        FixtureExecutor(),
+                        _step("llm"),
+                        runtime_context={"user_id": owner},
+                        timeout_seconds=15,
+                    )
+            finally:
+                if client_kind == "openai":
+                    client.close()
+            assert result == {"success": True, "planner_model": owner, "cognition_model": owner}
+
+        try:
+            with ThreadPoolExecutor(max_workers=2) as workers:
+                list(workers.map(execute, ["owner-a", "owner-b"]))
+        finally:
+            server.shutdown()
+            thread.join()
+    assert sorted(seen) == [
+        (f"Bearer fake-{owner}", owner) for owner in ["owner-a", "owner-b"] for _ in range(3)
+    ]
 
 
 def test_default_adapter_refuses_unserializable_or_expired_start_without_dispatch():

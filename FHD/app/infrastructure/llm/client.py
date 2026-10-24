@@ -15,6 +15,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Literal, cast
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _mode_lock = threading.Lock()
@@ -52,6 +54,10 @@ def _resolved_scoped_client() -> tuple[Any, str] | None:
     scoped = _scoped_client.get()
     if scoped is not None and scoped[1] is None:
         client = scoped[0]()
+        if isinstance(client, tuple):
+            client, model = client
+            _scoped_client.set((client, model))
+            return client, model
         from app.infrastructure.llm.providers.credentials import resolve_default_chat_model
 
         model = resolve_default_chat_model()
@@ -61,6 +67,79 @@ def _resolved_scoped_client() -> tuple[Any, str] | None:
         scoped = (client, model)
         _scoped_client.set(scoped)
     return cast("tuple[Any, str] | None", scoped)
+
+
+def capture_worker_llm_scope(context: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """Copy minimal credentials into spawn arguments, never durable task context."""
+    scoped = _scoped_client.get()
+    if scoped is None or scoped[1] is None:
+        owner = (context or {}).get("local_user_id") or (context or {}).get("actor_id")
+        if owner:
+            return (
+                {"kind": "account", "owner": int(owner)}
+                if str(owner).isdigit() and int(owner) > 0
+                else {"kind": "unavailable"}
+            )
+        return {"kind": "unavailable"} if scoped is not None else None
+    try:
+        scoped = _resolved_scoped_client()
+        if scoped is None:
+            return {"kind": "unavailable"}
+        client, model = scoped
+        if getattr(client, "is_modstore_openai_compatible", False) is True:
+            adapter = client.adapter
+            config = {
+                "kind": "modstore",
+                "platform_url": adapter.platform_url,
+                "auth_token": adapter.auth_token,
+                "user_id": adapter.user_id,
+                "default_provider": adapter.default_provider,
+                "default_model": adapter.default_model,
+                "timeout": adapter.timeout,
+            }
+        else:
+            if not isinstance(client.api_key, str) or not client.api_key:
+                raise ValueError("unsupported scoped client")
+            config = {"kind": "openai", "api_key": client.api_key, "base_url": str(client.base_url)}
+        config["model"] = model
+        json.dumps(config)
+        return config
+    except RECOVERABLE_ERRORS + (AttributeError, TypeError):
+        return {"kind": "unavailable"}
+
+
+def restore_worker_llm_client(config: dict[str, Any]) -> tuple[Any, str]:
+    client: Any
+    if config["kind"] in {"modstore", "account"}:
+        from app.services.conversation.modstore_adapter import (
+            ModstoreOpenAICompatibleClient,
+            ModstorePlatformAdapter,
+        )
+
+        if config["kind"] == "account":
+            from app.fastapi_routes.market_account import latest_session_market_token
+
+            token = latest_session_market_token(user_id=config["owner"])
+            if not token:
+                raise RuntimeError("任务所属账号没有可用的模型登录凭据，请重新登录")
+            adapter = ModstorePlatformAdapter.from_session(auth_token=token)
+            adapter.user_id = None
+            return ModstoreOpenAICompatibleClient(
+                adapter
+            ), f"{adapter.default_provider}/{adapter.default_model}"
+        adapter = ModstorePlatformAdapter(
+            **{k: v for k, v in config.items() if k not in {"kind", "model"}}
+        )
+        for field in ("auth_token", "user_id", "default_provider", "default_model"):
+            setattr(adapter, field, config[field])
+        client = ModstoreOpenAICompatibleClient(adapter)
+    elif config["kind"] == "openai":
+        from openai import OpenAI
+
+        client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
+    else:
+        raise RuntimeError("当前请求的模型不可用，不能回退到其他账号")
+    return client, str(config["model"])
 
 
 def _env_mode() -> Literal["online", "offline"] | None:
