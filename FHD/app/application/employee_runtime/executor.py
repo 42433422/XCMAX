@@ -22,6 +22,7 @@ from app.application.employee_runtime.loader import (
 )
 from app.application.shipment_excel_etl_security import (
     ShipmentEtlPathError,
+    open_etl_input_file,
     prepare_etl_output_path,
     resolve_etl_path,
 )
@@ -105,9 +106,11 @@ def _resolve_file_path(args: dict[str, Any], workspace_root: str | None) -> Path
         return None
     try:
         candidate = resolve_etl_path(raw, workspace_root=workspace_root)
-    except ShipmentEtlPathError:
+        with open_etl_input_file(candidate, workspace_root=workspace_root):
+            pass
+    except (OSError, ShipmentEtlPathError):
         return None
-    return candidate if candidate.is_file() else None  # lgtm[py/path-injection]
+    return candidate
 
 
 def _import_module_from_path(module_path: Path, module_label: str):

@@ -415,6 +415,24 @@ def test_etl_input_rejects_a_leaf_symlink_swapped_after_resolution(tmp_path, mon
             pytest.fail(f"must not read swapped private input: {stream.read()!r}")
 
 
+def test_prepare_etl_output_path_rejects_existing_leaf_symlink(tmp_path, monkeypatch):
+    from app.application import shipment_excel_etl_security as security
+
+    allowed = tmp_path / "allowed"
+    output_dir = allowed / "outputs"
+    output_dir.mkdir(parents=True)
+    outside = tmp_path / "private.json"
+    outside.write_text("private", encoding="utf-8")
+    link = output_dir / "data.json"
+    _create_test_symlink(link, outside)
+    monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+
+    with pytest.raises(security.ShipmentEtlPathError):
+        security.prepare_etl_output_path(link)
+    assert outside.read_text(encoding="utf-8") == "private"
+
+
 def test_etl_output_resolver_rejects_symlink_escape_without_writing(tmp_path, monkeypatch):
     """An existing output alias cannot redirect a workbook write outside the root."""
     from app.application import shipment_excel_etl_security as security

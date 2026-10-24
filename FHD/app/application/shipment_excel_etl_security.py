@@ -754,7 +754,13 @@ def prepare_etl_output_path(
     if root is None or Path(os.path.realpath(path_text)) != path:
         raise ShipmentEtlPathError("path not under allowed dirs")
     parent_fd = _open_directory_under_root(root, path.parent, create=True)
-    os.close(parent_fd)
+    try:
+        if os.name == "nt":
+            _windows_reject_existing_reparse_leaf(parent_fd, path.name)
+        else:
+            _reject_output_symlink(path.name, parent_fd, path.parent)
+    finally:
+        os.close(parent_fd)
     return path
 
 

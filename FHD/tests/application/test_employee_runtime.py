@@ -200,6 +200,23 @@ def test_untrusted_writable_employee_python_is_blocked(employee_mods_root, tmp_p
     assert outputs[0].get("error_code") == "employee_python_pack_untrusted"
 
 
+def test_employee_csv_input_rejects_symlink_to_outside_workspace(tmp_path, monkeypatch):
+    from app.application.employee_runtime.executor import _resolve_file_path
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+    outside = tmp_path / "private.csv"
+    outside.write_text("private data", encoding="utf-8")
+    link = workspace / "redirect.csv"
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    assert _resolve_file_path({"file_path": str(link)}, str(workspace)) is None
+
+
 def test_workflow_registry_includes_employee_tools(employee_mods_root):
     _write_csv_read_pack(employee_mods_root)
     from app.application.tools.workflow import (
