@@ -7,7 +7,7 @@ import importlib
 
 
 def _facade():
-    return importlib.import_module("app.fastapi_routes.excel_extract_shipment")
+    return importlib.import_module("app.fastapi_routes.domains.excel.excel_extract_shipment")
 
 
 @_facade().router.post(

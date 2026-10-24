@@ -299,7 +299,7 @@ def _register_excel_routes(app: FastAPI) -> None:
 
     _mount_router(
         app,
-        "app.fastapi_routes.excel_extract",
+        "app.fastapi_routes.domains.excel.excel_extract",
         log_name="excel_extract (/api/excel/data/*)",
     )
 

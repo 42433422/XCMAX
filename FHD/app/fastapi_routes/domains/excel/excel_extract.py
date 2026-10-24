@@ -467,33 +467,33 @@ def import_customers(data: dict[str, Any] = Body(default_factory=dict)):
         )
 
 
-from app.fastapi_routes.excel_extract_shipment import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     get_extract_log as get_extract_log,
 )
-from app.fastapi_routes.excel_extract_shipment import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     get_extract_logs as get_extract_logs,
 )
-from app.fastapi_routes.excel_extract_shipment import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     get_preview as get_preview,
 )
-from app.fastapi_routes.excel_extract_shipment import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     shipment_etl_batch_execute as shipment_etl_batch_execute,
 )
-from app.fastapi_routes.excel_extract_shipment import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     shipment_etl_batch_preview as shipment_etl_batch_preview,
 )
-from app.fastapi_routes.excel_extract_shipment import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     shipment_etl_execute as shipment_etl_execute,
 )
-from app.fastapi_routes.excel_extract_shipment import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     shipment_etl_generate_template as shipment_etl_generate_template,
 )
-from app.fastapi_routes.excel_extract_shipment import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     shipment_etl_ocr_preview as shipment_etl_ocr_preview,
 )
-from app.fastapi_routes.excel_extract_shipment import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     shipment_etl_preview as shipment_etl_preview,
 )
-from app.fastapi_routes.excel_extract_shipment import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     shipment_etl_regenerate as shipment_etl_regenerate,
 )

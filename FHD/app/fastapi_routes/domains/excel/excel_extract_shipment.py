@@ -12,7 +12,7 @@ from uuid import uuid4
 from fastapi import Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.excel_extract import (
+from app.fastapi_routes.domains.excel.excel_extract import (
     TEMP_EXCEL_DIR,
     _form_include_ledger,
     _form_truthy,
@@ -79,33 +79,33 @@ def _temporary_upload_path(prefix: str, original_name: str, allowed_suffixes: se
     return str(Path(TEMP_EXCEL_DIR) / f"{prefix}_{uuid4().hex}{suffix}")
 
 
-from app.fastapi_routes.excel_extract_shipment_part01 import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
     shipment_etl_batch_execute as shipment_etl_batch_execute,
 )
-from app.fastapi_routes.excel_extract_shipment_part01 import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
     shipment_etl_batch_preview as shipment_etl_batch_preview,
 )
-from app.fastapi_routes.excel_extract_shipment_part01 import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
     shipment_etl_execute as shipment_etl_execute,
 )
-from app.fastapi_routes.excel_extract_shipment_part01 import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
     shipment_etl_ocr_preview as shipment_etl_ocr_preview,
 )
-from app.fastapi_routes.excel_extract_shipment_part01 import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
     shipment_etl_preview as shipment_etl_preview,
 )
-from app.fastapi_routes.excel_extract_shipment_part02 import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment_part02 import (
     get_extract_log as get_extract_log,
 )
-from app.fastapi_routes.excel_extract_shipment_part02 import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment_part02 import (
     get_extract_logs as get_extract_logs,
 )
-from app.fastapi_routes.excel_extract_shipment_part02 import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment_part02 import (
     get_preview as get_preview,
 )
-from app.fastapi_routes.excel_extract_shipment_part02 import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment_part02 import (
     shipment_etl_generate_template as shipment_etl_generate_template,
 )
-from app.fastapi_routes.excel_extract_shipment_part02 import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment_part02 import (
     shipment_etl_regenerate as shipment_etl_regenerate,
 )
