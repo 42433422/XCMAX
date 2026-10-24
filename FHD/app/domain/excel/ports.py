@@ -31,12 +31,14 @@ class ExtractLogStorePort(ABC):
     def clear_old(self, days: int = 30) -> dict[str, Any]:
         raise NotImplementedError
 
+
 class FileAnalysisPort(ABC):
     """文件分析端口"""
 
     @abstractmethod
     def analyze_file(self, upload_file, purpose: str = "general") -> dict[str, Any]:
         raise NotImplementedError
+
 
 class VectorStorePort(ABC):
     """向量存储端口。"""

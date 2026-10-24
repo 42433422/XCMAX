@@ -26,6 +26,7 @@ class ShipmentDocumentGeneratorPort(ABC):
     ) -> dict[str, Any]:
         raise NotImplementedError
 
+
 class ShipmentRecordCommandPort(ABC):
     """shipment_records 写操作端口（Command side）。"""
 
@@ -51,6 +52,7 @@ class ShipmentRecordCommandPort(ABC):
     @abstractmethod
     def delete_record(self, record_id: int) -> dict[str, Any]:
         raise NotImplementedError
+
 
 class ShipmentRecordQueryPort(ABC):
     """出货记录查询端口（Read side）。"""
@@ -102,6 +104,7 @@ class ShipmentRecordQueryPort(ABC):
         """获取 shipment_records 列表（用于后台管理接口）。"""
         raise NotImplementedError
 
+
 class ShipmentRecordStorePort(ABC):
     """出货记录写入端口（Port）。
 
@@ -120,6 +123,7 @@ class ShipmentRecordStorePort(ABC):
     ) -> dict[str, Any]:
         """记录一次发货单生成对应的出货记录。"""
         raise NotImplementedError
+
 
 class ShipmentRepository(ABC):
     """发货单仓储接口 (Port)。"""
@@ -151,6 +155,7 @@ class ShipmentRepository(ABC):
     @abstractmethod
     def count(self) -> int:
         raise NotImplementedError
+
 
 class PurchaseUnitQueryPort(ABC):
     """购买单位只读查询端口（用于后台管理/下拉列表）。"""

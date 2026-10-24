@@ -110,5 +110,3 @@ class ProcessingResult:
     text: str
     data: dict[str, Any]
     pending_intent: PendingIntent | None = None
-
-

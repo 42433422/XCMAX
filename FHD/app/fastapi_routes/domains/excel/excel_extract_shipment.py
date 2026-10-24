@@ -127,7 +127,6 @@ def _build_etl_http():
     return imports, ocr, history, templates
 
 
-
 # --- shipment ETL HTTP handlers (formerly part01/part02; no dynamic facade) ---
 @router.post(
     "/shipment-etl/preview",
@@ -268,6 +267,7 @@ async def shipment_etl_batch_execute(
         import_shipments=_form_truthy(import_shipments, True),
         dry_run=_form_truthy(dry_run, False),
     )
+
 
 @router.post(
     "/shipment-etl/generate-template",

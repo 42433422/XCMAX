@@ -65,6 +65,7 @@ class ProductRepository(ABC):
     ) -> dict[str, Any]:
         raise NotImplementedError
 
+
 class MaterialRepository(ABC):
     """原材料仓储接口 (Port)"""
 

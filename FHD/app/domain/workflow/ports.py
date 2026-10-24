@@ -72,6 +72,7 @@ class WorkflowRuntime(Protocol):
         """Read-only replay of executed node outputs from a checkpoint."""
         ...
 
+
 from typing import Any, Protocol, runtime_checkable
 
 Checkpoint = dict[str, Any]
@@ -104,6 +105,7 @@ class CheckpointStore(Protocol):
     def latest_checkpoint(self, plan_id: str) -> Checkpoint | None:
         """Return the most advanced checkpoint for ``plan_id``, or ``None``."""
         ...
+
 
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
@@ -160,6 +162,7 @@ class EventBusPort(Protocol):
     def publish(self, event: StateUpdateEvent | StateUpdatePayload | dict[str, Any]) -> None:
         """Publish an event; accepts a typed event or a raw state-update dict."""
         ...
+
 
 from typing import Any, Protocol, runtime_checkable
 
