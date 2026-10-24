@@ -292,7 +292,9 @@ def shipment_orders_get(order_number: str):
     raise HTTPException(status_code=404, detail="订单不存在")
 
 
-_api_order_routes = importlib.import_module("app.fastapi_routes.domains.shipment.shipment_api_order_routes")
+_api_order_routes = importlib.import_module(
+    "app.fastapi_routes.domains.shipment.shipment_api_order_routes"
+)
 api_orders_list = _api_order_routes.api_orders_list
 api_orders_create = _api_order_routes.api_orders_create
 api_orders_delete_root = _api_order_routes.api_orders_delete_root

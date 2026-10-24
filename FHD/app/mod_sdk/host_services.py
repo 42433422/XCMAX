@@ -360,7 +360,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     ),
     "set_pipeline_stage": ("app.services.user_cs_pipeline", "set_pipeline_stage"),
     "setup_neuro_bus": ("app.neuro_bus.bus_setup", "setup_neuro_bus"),
-    "shipment_download": ("app.fastapi_routes.domains.shipment.shipment_orders", "shipment_download"),
+    "shipment_download": (
+        "app.fastapi_routes.domains.shipment.shipment_orders",
+        "shipment_download",
+    ),
     "shipment_records_units": (
         "app.legacy.routes.product.compat_routes",
         "shipment_records_units",
